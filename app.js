@@ -21,12 +21,9 @@ const state = {
   adminSettings: null,
   mode: 'accrue',
   qr: null,
-  qrTimer: null,
   resolvedClient: null,
-  pending: null,
-  staffPendingId: null,
-  pendingPoll: null,
-  mePoll: null
+  saleBusy: false,
+  operationResultTimer: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -35,8 +32,172 @@ const fmt = (number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 
 const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
 const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
-
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
+
+
+function enhanceDom() {
+  const topbar = $('.topbar');
+  if (topbar) {
+    const brandBlock = topbar.firstElementChild;
+    if (brandBlock) {
+      brandBlock.classList.add('brand-lockup');
+      const title = $('#brandTitle');
+      if (title && !title.parentElement.classList.contains('brand-line')) {
+        const line = document.createElement('div');
+        line.className = 'brand-line';
+        title.before(line);
+        line.append(title);
+        line.insertAdjacentHTML('beforeend', '<span class="beta-badge">закрытая бета</span>');
+      }
+    }
+  }
+  if (topbar && !$('#networkBadge')) {
+    const actions = document.createElement('div');
+    actions.className = 'topbar-actions';
+    actions.innerHTML = '<span class="network-badge" id="networkBadge"><i></i><span>онлайн</span></span>';
+    const refresh = $('#refreshButton');
+    if (refresh) actions.append(refresh);
+    topbar.append(actions);
+  }
+
+  const heroCard = $('.hero-card');
+  if (heroCard && !heroCard.querySelector('.hero-glow')) heroCard.insertAdjacentHTML('afterbegin', '<div class="hero-glow" aria-hidden="true"></div>');
+
+  const progress = $('.hero-card .progress');
+  if (progress && !$('#nextRewardText')) {
+    const insights = document.createElement('div');
+    insights.className = 'hero-insights';
+    insights.innerHTML = '<div><span>Начисление</span><strong id="bonusPercentMirror">—</strong></div><div><span>До нового статуса</span><strong id="nextRewardText">—</strong></div>';
+    progress.after(insights);
+  }
+
+  const hero = $('.hero-card');
+  if (hero && !$('.client-tip')) {
+    const tip = document.createElement('div');
+    tip.className = 'client-tip';
+    tip.innerHTML = '<span class="client-tip-icon">⌗</span><div><b>Один личный код</b><small>QR постоянный. Не отправляйте его посторонним.</small></div>';
+    hero.after(tip);
+  }
+
+  const scan = $('#scanClient');
+  if (scan && !$('#manualCodeButton')) {
+    const manual = document.createElement('button');
+    manual.id = 'manualCodeButton';
+    manual.type = 'button';
+    manual.className = 'secondary full manual-code-button';
+    manual.textContent = 'Ввести короткий код';
+    scan.after(manual);
+  }
+
+  const foundMeta = $('#foundMeta');
+  if (foundMeta && !$('#foundCode')) {
+    const code = document.createElement('small');
+    code.id = 'foundCode';
+    code.className = 'found-code';
+    foundMeta.after(code);
+  }
+
+  const createSaleButton = $('#createSale');
+  if (createSaleButton && !$('#operationResult')) {
+    const result = document.createElement('div');
+    result.id = 'operationResult';
+    result.className = 'operation-result hidden';
+    createSaleButton.before(result);
+  }
+
+  const staffCards = $$('[data-screen="staff"] .card');
+  staffCards.forEach((card, index) => {
+    card.classList.add('staff-step');
+    const heading = card.querySelector(':scope > h3');
+    if (heading && !heading.parentElement.classList.contains('step-heading')) {
+      const raw = heading.textContent.replace(/^\d+\.\s*/, '');
+      const descriptions = ['Введите полную сумму покупки', 'Сканируйте QR или введите код', 'Выберите начисление или списание'];
+      const wrap = document.createElement('div');
+      wrap.className = 'step-heading';
+      wrap.innerHTML = `<span>${index + 1}</span><div><h3>${raw}</h3><small>${descriptions[index] || ''}</small></div>`;
+      heading.replaceWith(wrap);
+    }
+  });
+  $$('.mode').forEach((button) => {
+    const label = button.textContent.trim();
+    if (!button.querySelector('b')) button.innerHTML = `<b>${label}</b><small>${label === 'Списание' ? 'Сразу уменьшает баланс' : 'Начисляет бонусы за чек'}</small>`;
+  });
+  $('#createSale')?.classList.add('operation-button');
+
+  const waitBox = $('#waitBox');
+  if (waitBox) waitBox.classList.add('hidden');
+  const redeemHint = $('#redeemHint');
+  if (redeemHint) redeemHint.textContent = 'Списание проводится сразу после нажатия сотрудником';
+
+  const metrics = $$('.metric-grid .metric');
+  if (metrics.length >= 4 && !$('#metricSuspicious')) {
+    metrics[3].classList.add('metric-alert');
+    metrics[3].innerHTML = '<span>На проверке</span><strong id="metricSuspicious">0</strong><small>операций свыше 3 000 ₽</small>';
+  }
+
+  const qrSheet = $('#qrModal .qr-sheet');
+  if (qrSheet && !$('#copyQrCode')) {
+    const title = qrSheet.querySelector('h2');
+    if (title) title.textContent = 'Личная бонусная карта';
+    const qrParagraph = qrSheet.querySelector('p');
+    if (qrParagraph) qrParagraph.innerHTML = 'Код постоянный и принадлежит только вам.';
+    const copy = document.createElement('button');
+    copy.id = 'copyQrCode';
+    copy.type = 'button';
+    copy.className = 'secondary full copy-code copy-code-button';
+    copy.textContent = 'Скопировать короткий код';
+    const qrImage = $('#qrImage');
+    if (qrImage && !qrImage.parentElement.classList.contains('qr-frame')) {
+      const frame = document.createElement('div');
+      frame.className = 'qr-frame';
+      qrImage.before(frame);
+      frame.append(qrImage);
+    }
+    const token = $('#qrToken');
+    if (token) token.after(copy);
+    const warning = document.createElement('p');
+    warning.className = 'qr-warning';
+    warning.textContent = 'Передача QR или скриншота даёт доступ к вашему бонусному счёту.';
+    qrSheet.append(warning);
+  }
+
+  const help = $('#helpModal');
+  if (help) {
+    help.innerHTML = help.innerHTML
+      .replace('подтвердите запрос в приложении, если подтверждение включено в текущей версии', 'сообщите сумму списания сотруднику — бонусы списываются сразу')
+      .replace('Если в текущей версии включено подтверждение, клиент получает запрос и завершает списание в приложении. При отказе или истечении времени операция не проводится.', 'После сканирования QR сотрудник указывает сумму бонусов и проводит списание сразу. Результат сохраняется в истории операций.')
+      .replace('Если QR не читается, обновите экран и попробуйте снова.', 'QR является постоянным. Если он не читается, сотрудник может ввести короткий код вручную.')
+      .replace('Версия документа: бета 0.1', 'Версия документа: бета 0.2');
+  }
+
+  const pending = $('#pendingModal');
+  if (pending) pending.remove();
+
+  if (!$('#consentModal')) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal consent-modal" id="consentModal" aria-hidden="true">
+      <div class="modal-sheet consent-sheet">
+        <span class="consent-mark">П</span>
+        <span class="muted">Закрытая бета</span>
+        <h2>Добро пожаловать в «Пивник»</h2>
+        <p>Продолжая, вы принимаете правила бонусной программы и условия обработки данных для работы приложения.</p>
+        <button class="text-btn consent-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
+        <button class="primary full" id="acceptTerms" type="button">Принять и продолжить</button>
+      </div>
+    </div>`);
+  }
+}
+
+enhanceDom();
+
+function requestId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 async function finishBoot() {
   const elapsed = performance.now() - bootStartedAt;
@@ -57,12 +218,20 @@ setTimeout(() => {
   $('#bootText').textContent = 'Соединение заняло больше времени обычного…';
 }, BOOT_FAILSAFE_MS);
 
+function updateNetworkBadge() {
+  const badge = $('#networkBadge');
+  if (!badge) return;
+  const online = navigator.onLine;
+  badge.classList.toggle('offline', !online);
+  badge.lastChild.textContent = online ? 'онлайн' : 'нет сети';
+}
+
 function toast(text) {
   const element = $('#toast');
   element.textContent = text;
   element.classList.add('show');
   clearTimeout(element._timer);
-  element._timer = setTimeout(() => element.classList.remove('show'), 2600);
+  element._timer = setTimeout(() => element.classList.remove('show'), 2800);
 }
 
 function haptic(type = 'light') {
@@ -85,12 +254,14 @@ async function api(path, options = {}) {
 
 function openModal(id) {
   const modal = $(`#${id}`);
+  if (!modal) return;
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
 }
 
 function closeModal(id) {
   const modal = $(`#${id}`);
+  if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
 }
@@ -98,6 +269,7 @@ function closeModal(id) {
 function switchScreen(target) {
   $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
   $$('.bottom-nav button').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
 }
 
@@ -122,7 +294,7 @@ function applyDesign(design) {
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
-  $('#showQrButton').textContent = design.texts?.qrButton || 'Показать QR';
+  $('#showQrButton').lastChild.textContent = design.texts?.qrButton || 'Показать QR';
   $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
@@ -143,6 +315,7 @@ function renderProfile() {
   $('#clientBalance').textContent = fmt(profile.balance);
   $('#statusName').textContent = profile.status.name;
   $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
+  if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   $('#profileAvatar').textContent = (profile.firstName || 'П').slice(0, 1).toUpperCase();
   $('#staffName').textContent = profile.firstName || 'Бармен';
 
@@ -150,11 +323,14 @@ function renderProfile() {
   const next = profile.status.nextSpend;
   if (next) {
     const percentage = Math.max(0, Math.min(100, ((profile.spend12m - min) / (next - min)) * 100));
+    const remaining = Math.max(0, next - profile.spend12m);
     $('#statusProgress').style.width = `${percentage}%`;
     $('#statusProgressText').textContent = `${fmt(profile.spend12m)} / ${fmt(next)} ₽`;
+    $('#nextRewardText').textContent = `ещё ${fmt(remaining)} ₽`;
   } else {
     $('#statusProgress').style.width = '100%';
     $('#statusProgressText').textContent = 'Максимальный статус';
+    $('#nextRewardText').textContent = 'максимум';
   }
 
   $('#staffNav').classList.toggle('hidden', !roleCanStaff(profile.role));
@@ -174,7 +350,7 @@ function renderStatuses() {
     return `<article class="status-level ${current ? 'current' : ''} ${reached ? 'reached' : ''}">
       <div class="status-rank">${index + 1}</div>
       <div class="status-level-copy">
-        <div class="status-level-head"><b>${level.name}</b>${current ? '<span>Ваш статус</span>' : ''}</div>
+        <div class="status-level-head"><b>${escapeHtml(level.name)}</b>${current ? '<span>Ваш статус</span>' : ''}</div>
         <small>от ${fmt(level.min)} ₽ за 12 месяцев</small>
         <p>${level.bonusPercent}% бонусами${level.discountPercent ? ` · скидка ${level.discountPercent}%` : ''}</p>
       </div>
@@ -184,29 +360,32 @@ function renderStatuses() {
 }
 
 function renderTransaction(transaction) {
-  const mode = transaction.mode === 'redeem' ? 'Списание' : transaction.mode === 'adjustment' ? 'Коррекция' : 'Начисление';
-  const statusText = {
-    pending: 'ожидает подтверждения', completed: 'выполнено', declined: 'отклонено', expired: 'истекло', cancelled: 'отменено'
-  }[transaction.status] || transaction.status;
+  const isRedeem = transaction.mode === 'redeem';
+  const mode = isRedeem ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+  const icon = isRedeem ? '−' : transaction.mode === 'adjustment' ? '±' : '+';
   const primary = transaction.mode === 'adjustment'
     ? `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`
     : `${fmt(transaction.checkAmount)} ₽`;
-  const detail = transaction.mode === 'redeem'
-    ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б`
+  const detail = isRedeem
+    ? `Списано ${transaction.bonusSpent} Б · начислено ${transaction.bonusEarned} Б`
     : transaction.mode === 'adjustment'
       ? transaction.reason || 'Ручная корректировка'
-      : `+${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽`;
-  return `<div class="op-row">
-    <b>${mode}</b><strong>${primary}</strong>
-    <small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${statusText}<br>${detail}</small>
+      : `Начислено ${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽`;
+  const suspicious = transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : '';
+  return `<div class="op-row ${transaction.isSuspicious ? 'suspicious' : ''}">
+    <span class="op-icon">${icon}</span>
+    <div><b>${mode}${suspicious}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')}<br>${escapeHtml(detail)}</small></div>
+    <strong>${primary}</strong>
   </div>`;
 }
 
 async function refreshMe() {
   const data = await api('/api/me');
   state.profile = data.profile;
+  state.statuses = data.statuses || state.statuses;
   applyDesign(data.design);
   renderProfile();
+  renderStatuses();
 }
 
 async function authenticate() {
@@ -221,6 +400,10 @@ async function authenticate() {
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
+}
+
+function showConsentIfNeeded() {
+  if (!state.profile?.termsAccepted) openModal('consentModal');
 }
 
 async function boot() {
@@ -244,11 +427,24 @@ async function boot() {
     $('#bootText').textContent = 'Собираем данные профиля…';
     renderProfile();
     renderStatuses();
-    startPendingPolling();
     await finishBoot();
+    showConsentIfNeeded();
   } catch (error) {
     $('#bootText').textContent = error.message;
     $('#bootScreen').classList.add('error');
+  }
+}
+
+async function acceptTerms() {
+  const button = $('#acceptTerms');
+  button.disabled = true;
+  try {
+    const data = await api('/api/me/consent', { method: 'POST', body: '{}' });
+    state.profile = data.profile;
+    closeModal('consentModal');
+    toast('Правила приняты');
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -257,20 +453,21 @@ async function createQr() {
   state.qr = data;
   $('#qrImage').src = data.image;
   $('#qrToken').textContent = data.shortCode;
-  const expires = new Date(data.expiresAt).getTime();
-  clearInterval(state.qrTimer);
-  const tick = () => {
-    const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
-    $('#qrCountdown').textContent = seconds;
-    if (seconds <= 0) createQr().catch((error) => toast(error.message));
-  };
-  tick();
-  state.qrTimer = setInterval(tick, 1000);
 }
 
 async function showQr() {
   openModal('qrModal');
   await createQr();
+}
+
+async function copyQrCode() {
+  const code = state.qr?.shortCode || $('#qrToken').textContent;
+  try {
+    await navigator.clipboard.writeText(code);
+    toast('Короткий код скопирован');
+  } catch {
+    toast(`Код: ${code}`);
+  }
 }
 
 async function showHistory() {
@@ -282,11 +479,13 @@ async function showHistory() {
 
 async function resolveQr(payload) {
   const data = await api('/api/staff/qr/resolve', { method: 'POST', body: JSON.stringify({ payload }) });
-  state.resolvedClient = { qrToken: data.qrToken, profile: data.client };
+  state.resolvedClient = { qrToken: data.qrToken, shortCode: data.shortCode, profile: data.client };
   $('#scanClient').classList.add('hidden');
+  $('#manualCodeButton').classList.add('hidden');
   $('#clientFound').classList.remove('hidden');
   $('#foundName').textContent = `${data.client.firstName} · ${data.client.status.name}`;
-  $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}%`;
+  $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}% начисление`;
+  $('#foundCode').textContent = data.shortCode || data.client.qrShortCode || '';
   $('#foundAvatar').textContent = data.client.firstName.slice(0, 1).toUpperCase();
   updateCalculation();
   haptic('medium');
@@ -296,19 +495,27 @@ function scanQr() {
   if (tg?.showScanQrPopup) {
     tg.showScanQrPopup({ text: 'Наведите камеру на QR-код клиента' }, (text) => {
       if (!text) return false;
-      resolveQr(text).then(() => tg.closeScanQrPopup()).catch((error) => toast(error.message));
+      resolveQr(text)
+        .then(() => tg.closeScanQrPopup())
+        .catch((error) => toast(error.message));
       return true;
     });
     return;
   }
-  const code = prompt('Введите шестизначный код клиента:');
-  if (code) resolveQr(code).catch((error) => toast(error.message));
+  manualCode();
+}
+
+function manualCode() {
+  const code = prompt('Введите короткий код клиента, например PVK-AB12-CD34:');
+  if (code?.trim()) resolveQr(code.trim()).catch((error) => toast(error.message));
 }
 
 function clearResolvedClient() {
   state.resolvedClient = null;
   $('#scanClient').classList.remove('hidden');
+  $('#manualCodeButton').classList.remove('hidden');
   $('#clientFound').classList.add('hidden');
+  hideOperationResult();
   updateCalculation();
 }
 
@@ -326,107 +533,63 @@ function updateCalculation() {
       const max = Math.min(client.balance, Math.floor(amount * 0.30));
       const requested = Math.min(max, Math.max(0, Math.floor(Number($('#bonusToSpend').value || max))));
       $('#bonusToSpend').max = String(max);
-      $('#redeemHint').textContent = `Доступно максимум ${fmt(max)} бонусов`;
+      $('#redeemHint').textContent = `Можно списать до ${fmt(max)} бонусов`;
       cash = amount - requested;
       earn = Math.floor(cash * client.status.bonusPercent / 100);
     }
   }
-  $('#cashDue').textContent = `${fmt(cash)} ₽`;
+  $('#cashDue').textContent = `${fmt(Math.max(0, cash))} ₽`;
   $('#bonusEarn').textContent = `+${fmt(earn)}`;
-  $('#createSale').disabled = !(amount > 0 && client && !state.staffPendingId);
+  $('#createSale').disabled = !(amount > 0 && client && !state.saleBusy);
+  $('#createSale').textContent = state.saleBusy
+    ? 'Проводим…'
+    : state.mode === 'redeem' ? 'Списать бонусы' : 'Начислить бонусы';
+}
+
+function showOperationResult(transaction, client) {
+  const element = $('#operationResult');
+  const isRedeem = transaction.mode === 'redeem';
+  const title = isRedeem ? 'Бонусы списаны' : 'Бонусы начислены';
+  const detail = isRedeem
+    ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б`
+    : `+${transaction.bonusEarned} Б`;
+  element.innerHTML = `<span class="result-check">✓</span><div><b>${title}</b><small>${escapeHtml(client.firstName)} · ${detail}<br>Новый баланс: ${fmt(client.balance)} Б</small></div>`;
+  element.classList.remove('hidden');
+  clearTimeout(state.operationResultTimer);
+  state.operationResultTimer = setTimeout(() => element.classList.add('hidden'), 6500);
+}
+
+function hideOperationResult() {
+  $('#operationResult')?.classList.add('hidden');
 }
 
 async function createSale() {
+  if (state.saleBusy || !state.resolvedClient) return;
   const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
-  const requestKey = crypto.randomUUID();
-  const data = await api('/api/staff/transactions', {
-    method: 'POST',
-    body: JSON.stringify({
-      qrToken: state.resolvedClient.qrToken,
-      amount,
-      mode: state.mode,
-      bonusToSpend: Number($('#bonusToSpend').value || 0),
-      requestKey
-    })
-  });
-  if (data.transaction.status === 'pending') {
-    state.staffPendingId = data.transaction.id;
-    $('#waitBox').classList.remove('hidden');
-    $('#createSale').disabled = true;
-    pollStaffPending();
-    toast('Запрос отправлен клиенту');
-  } else {
-    toast(`Начислено ${data.transaction.bonusEarned} бонусов`);
-    resetSaleForm();
-  }
-  haptic('medium');
-}
-
-function resetSaleForm() {
-  clearInterval(state.pendingPoll);
-  state.staffPendingId = null;
-  $('#waitBox').classList.add('hidden');
-  $('#saleAmount').value = '';
-  $('#bonusToSpend').value = '';
-  clearResolvedClient();
+  state.saleBusy = true;
   updateCalculation();
-}
-
-function pollStaffPending() {
-  clearInterval(state.pendingPoll);
-  state.pendingPoll = setInterval(async () => {
-    if (!state.staffPendingId) return;
-    try {
-      const data = await api(`/api/staff/transactions/${state.staffPendingId}`);
-      if (data.transaction.status !== 'pending') {
-        clearInterval(state.pendingPoll);
-        toast(data.transaction.status === 'completed' ? 'Клиент подтвердил списание' : 'Списание не подтверждено');
-        resetSaleForm();
-      }
-    } catch (error) {
-      clearInterval(state.pendingPoll);
-      toast(error.message);
-      resetSaleForm();
-    }
-  }, 2000);
-}
-
-async function checkPending() {
-  const data = await api('/api/me/pending');
-  if (!data.pending) {
-    if (state.pending) closeModal('pendingModal');
-    state.pending = null;
-    return;
+  try {
+    const data = await api('/api/staff/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        qrToken: state.resolvedClient.qrToken,
+        amount,
+        mode: state.mode,
+        bonusToSpend: Number($('#bonusToSpend').value || 0),
+        requestKey: requestId()
+      })
+    });
+    showOperationResult(data.transaction, data.client);
+    toast(state.mode === 'redeem' ? `Списано ${data.transaction.bonusSpent} бонусов` : `Начислено ${data.transaction.bonusEarned} бонусов`);
+    haptic('medium');
+    $('#saleAmount').value = '';
+    $('#bonusToSpend').value = '';
+    state.resolvedClient = { ...state.resolvedClient, profile: data.client };
+    $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}% начисление`;
+  } finally {
+    state.saleBusy = false;
+    updateCalculation();
   }
-  if (state.pending?.id === data.pending.id) return;
-  state.pending = data.pending;
-  $('#pendingSummary').innerHTML = `
-    <span>Чек <b>${fmt(data.pending.checkAmount)} ₽</b></span>
-    <span>Списать <b>${fmt(data.pending.bonusSpent)} бонусов</b></span>
-    <span>Начислится <b>${fmt(data.pending.bonusEarned)} бонусов</b></span>
-    <span>Оплатить <b>${fmt(data.pending.cashPaid)} ₽</b></span>`;
-  openModal('pendingModal');
-  haptic('heavy');
-}
-
-function startPendingPolling() {
-  clearInterval(state.mePoll);
-  checkPending().catch(() => {});
-  state.mePoll = setInterval(() => checkPending().catch(() => {}), 3000);
-}
-
-async function decidePending(approved) {
-  if (!state.pending) return;
-  const data = await api(`/api/me/pending/${state.pending.id}/decision`, {
-    method: 'POST', body: JSON.stringify({ approved })
-  });
-  closeModal('pendingModal');
-  state.pending = null;
-  if (approved && data.profile) {
-    state.profile = data.profile;
-    renderProfile();
-    toast('Списание подтверждено');
-  } else toast('Списание отклонено');
 }
 
 function fillDesignForm(design) {
@@ -469,9 +632,11 @@ async function publishDesign() {
 function adminTransactionHtml(transaction) {
   const client = transaction.clientName || 'Клиент';
   const staff = transaction.staffName || 'Система';
-  return `<div class="op-row">
-    <b>${client}</b><strong>${fmt(transaction.checkAmount)} ₽</strong>
-    <small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${staff}<br>${transaction.status} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б</small>
+  const type = transaction.mode === 'redeem' ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+  return `<div class="op-row admin-op ${transaction.isSuspicious ? 'suspicious' : ''}">
+    <span class="op-icon">${transaction.mode === 'redeem' ? '−' : transaction.mode === 'adjustment' ? '±' : '+'}</span>
+    <div><b>${escapeHtml(client)}${transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : ''}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${escapeHtml(staff)}<br>${type} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б</small></div>
+    <strong>${fmt(transaction.checkAmount)} ₽</strong>
   </div>`;
 }
 
@@ -483,6 +648,7 @@ async function loadAdmin() {
   $('#metricIssued').textContent = fmt(summaryData.summary.issued);
   $('#metricToday').textContent = `${fmt(summaryData.summary.todayCheck)} ₽`;
   $('#metricTodayOps').textContent = `${summaryData.summary.todayOperations} операций`;
+  $('#metricSuspicious').textContent = fmt(summaryData.summary.suspiciousOperations);
   $('#adminOperations').className = `operation-list${summaryData.operations.length ? '' : ' empty-state'}`;
   $('#adminOperations').innerHTML = summaryData.operations.length ? summaryData.operations.map(adminTransactionHtml).join('') : 'Операций пока нет';
   fillDesignForm(summaryData.settings.draft);
@@ -499,11 +665,12 @@ function renderUsers(users) {
             <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Бармен</option>
             <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Просмотр админки</option>
           </select>
-          <button class="text-btn" data-adjust-user="${user.id}">Баланс</button>
+          <button class="text-btn" data-adjust-user="${user.id}" type="button">Баланс</button>
+          <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
         </div>`
-      : `<small>${user.role}</small>`;
+      : `<small>${escapeHtml(user.role)}</small>`;
     return `<div class="user-row">
-      <div><b>${user.name}</b><small>${user.telegramId}${user.username ? ` · @${user.username}` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')}</small></div>
       <strong>${fmt(user.balance)} Б</strong>
       ${controls}
     </div>`;
@@ -515,14 +682,24 @@ function renderUsers(users) {
       toast('Роль обновлена');
     } catch (error) { toast(error.message); }
   }));
+
   $$('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
     const amount = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
     if (amount === null) return;
-    const reason = prompt('Причина корректировки:', 'Тестовая корректировка');
-    if (!reason) return;
+    const reason = prompt('Причина корректировки:', 'Корректировка владельца');
+    if (!reason?.trim()) return;
     try {
-      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason }) });
+      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason: reason.trim() }) });
       toast('Баланс изменён');
+      await loadAdmin();
+    } catch (error) { toast(error.message); }
+  }));
+
+  $$('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
+    if (!confirm('Перевыпустить личный QR? Старый код перестанет работать.')) return;
+    try {
+      const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' });
+      toast(`Новый код: ${data.shortCode}`);
       await loadAdmin();
     } catch (error) { toast(error.message); }
   }));
@@ -530,12 +707,17 @@ function renderUsers(users) {
 
 $$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
-$$('.modal').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
+$$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#showHistoryButton').addEventListener('click', () => showHistory().catch((error) => toast(error.message)));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
+$('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
+$('#openTermsFromConsent').addEventListener('click', () => openModal('helpModal'));
+$('#acceptTerms').addEventListener('click', () => acceptTerms().catch((error) => toast(error.message)));
+$('#copyQrCode').addEventListener('click', () => copyQrCode());
 $('#refreshButton').addEventListener('click', () => refreshMe().then(() => toast('Данные обновлены')).catch((error) => toast(error.message)));
 $('#scanClient').addEventListener('click', scanQr);
+$('#manualCodeButton').addEventListener('click', manualCode);
 $('#clearClient').addEventListener('click', clearResolvedClient);
 $('#saleAmount').addEventListener('input', updateCalculation);
 $('#bonusToSpend').addEventListener('input', updateCalculation);
@@ -543,11 +725,10 @@ $$('.mode').forEach((button) => button.addEventListener('click', () => {
   state.mode = button.dataset.mode;
   $$('.mode').forEach((item) => item.classList.toggle('active', item === button));
   $('#redeemControls').classList.toggle('hidden', state.mode !== 'redeem');
+  hideOperationResult();
   updateCalculation();
 }));
 $('#createSale').addEventListener('click', () => createSale().catch((error) => toast(error.message)));
-$('#approvePending').addEventListener('click', () => decidePending(true).catch((error) => toast(error.message)));
-$('#declinePending').addEventListener('click', () => decidePending(false).catch((error) => toast(error.message)));
 $('#saveDraft').addEventListener('click', () => saveDraft().catch((error) => toast(error.message)));
 $('#publishDesign').addEventListener('click', () => publishDesign().catch((error) => toast(error.message)));
 $('#reloadAdmin').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
@@ -556,5 +737,7 @@ $$('[data-design-color], [data-design-text], [data-design-section], [data-design
   if (input.matches('[data-design-radius]')) $('#radiusValue').textContent = input.value;
   if (state.adminSettings) applyDesign(readDesignForm());
 }));
-
+window.addEventListener('online', updateNetworkBadge);
+window.addEventListener('offline', updateNetworkBadge);
+updateNetworkBadge();
 boot();

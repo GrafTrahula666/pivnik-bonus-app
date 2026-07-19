@@ -49,6 +49,11 @@ const STATUS_LEVELS = [
   { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
 ];
 
+const PERSONAL_QR_PREFIX = 'PIVNIK:';
+const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
+const TERMS_VERSION = 'beta-0.2';
+const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
 const DEFAULT_DESIGN = {
   colors: {
     background: '#0e0c0a',
@@ -78,6 +83,40 @@ const DEFAULT_DESIGN = {
     imageUrl: ''
   }
 };
+
+function makeShortCode() {
+  const chars = Array.from({ length: 8 }, () => QR_ALPHABET[crypto.randomInt(0, QR_ALPHABET.length)]).join('');
+  return `PVK-${chars.slice(0, 4)}-${chars.slice(4)}`;
+}
+
+async function ensurePersonalQr(db, userId, force = false) {
+  if (!force) {
+    const current = await db.query('SELECT qr_token, qr_short_code FROM users WHERE id = $1', [userId]);
+    if (current.rowCount && current.rows[0].qr_token && current.rows[0].qr_short_code) {
+      return current.rows[0];
+    }
+  }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const token = crypto.randomBytes(24).toString('base64url');
+    const shortCode = makeShortCode();
+    try {
+      const result = await db.query(
+        `UPDATE users
+         SET qr_token = $1, qr_short_code = $2, updated_at = NOW()
+         WHERE id = $3
+         RETURNING qr_token, qr_short_code`,
+        [token, shortCode, userId]
+      );
+      if (!result.rowCount) throw new Error('Пользователь для QR-кода не найден.');
+      return result.rows[0];
+    } catch (error) {
+      if (error.code === '23505') continue;
+      throw error;
+    }
+  }
+  throw new Error('Не удалось создать уникальный QR-код.');
+}
 
 function getStatus(spendCents) {
   return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
@@ -175,6 +214,13 @@ async function initDatabase() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_token TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_short_code TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_token_unique ON users(qr_token) WHERE qr_token IS NOT NULL');
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_short_unique ON users(qr_short_code) WHERE qr_short_code IS NOT NULL');
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS wallets (
         user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -212,6 +258,14 @@ async function initDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query(`
+      UPDATE transactions
+      SET status = 'cancelled', completed_at = COALESCE(completed_at, NOW()),
+          reason = COALESCE(reason, 'Отменено при переходе на мгновенное списание')
+      WHERE status = 'pending'
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_settings (
         id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -230,6 +284,8 @@ async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_qr_expiry ON qr_sessions(expires_at)');
+    const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
+    for (const row of usersWithoutQr.rows) await ensurePersonalQr(client, row.id);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -273,6 +329,10 @@ async function getProfile(userId, db = pool) {
     photoUrl: row.photo_url,
     role: row.role,
     balance: Number(row.balance || 0),
+    qrShortCode: row.qr_short_code,
+    termsAccepted: Boolean(row.terms_accepted_at),
+    termsAcceptedAt: row.terms_accepted_at,
+    termsVersion: row.terms_version,
     spend12m: rubles(spend12mCents),
     status: {
       name: status.name,
@@ -341,7 +401,8 @@ function transactionResponse(row) {
     completedAt: row.completed_at,
     createdAt: row.created_at,
     clientName: row.client_name,
-    staffName: row.staff_name
+    staffName: row.staff_name,
+    isSuspicious: Boolean(row.is_suspicious)
   };
 }
 
@@ -397,6 +458,7 @@ app.post('/api/auth', async (req, res, next) => {
       );
       const userId = userResult.rows[0].id;
       await client.query('INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
+      await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
       const profile = await getProfile(userId);
@@ -423,20 +485,29 @@ app.get('/api/me', authRequired, async (req, res, next) => {
   }
 });
 
+app.post('/api/me/consent', authRequired, async (req, res, next) => {
+  try {
+    await pool.query(
+      'UPDATE users SET terms_accepted_at = NOW(), terms_version = $1, updated_at = NOW() WHERE id = $2',
+      [TERMS_VERSION, req.user.id]
+    );
+    res.json({ ok: true, profile: await getProfile(req.user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/me/qr', authRequired, async (req, res, next) => {
   try {
-    await pool.query('DELETE FROM qr_sessions WHERE expires_at < NOW() - INTERVAL \'10 minutes\'');
-    const token = crypto.randomBytes(18).toString('base64url');
-    const shortCode = String(crypto.randomInt(100000, 1000000));
-    const expiresAt = new Date(Date.now() + 30_000);
-    await pool.query('DELETE FROM qr_sessions WHERE user_id = $1 AND used_at IS NULL', [req.user.id]);
-    await pool.query(
-      'INSERT INTO qr_sessions (token, short_code, user_id, expires_at) VALUES ($1, $2, $3, $4)',
-      [token, shortCode, req.user.id, expiresAt]
-    );
-    const payload = `PIVNIK:${token}`;
-    const image = await QRCode.toDataURL(payload, { width: 320, margin: 1, errorCorrectionLevel: 'M' });
-    res.json({ payload, shortCode, expiresAt: expiresAt.toISOString(), image });
+    const qr = await ensurePersonalQr(pool, req.user.id);
+    const payload = `${PERSONAL_QR_PREFIX}${qr.qr_token}`;
+    const image = await QRCode.toDataURL(payload, {
+      width: 360,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#18100b', light: '#fffaf2' }
+    });
+    res.json({ payload, shortCode: qr.qr_short_code, permanent: true, image });
   } catch (error) {
     next(error);
   }
@@ -459,108 +530,20 @@ app.get('/api/me/transactions', authRequired, async (req, res, next) => {
   }
 });
 
-app.get('/api/me/pending', authRequired, async (req, res, next) => {
-  try {
-    await pool.query(
-      `UPDATE transactions SET status = 'expired'
-       WHERE client_id = $1 AND status = 'pending' AND expires_at < NOW()`,
-      [req.user.id]
-    );
-    const result = await pool.query(
-      `SELECT t.*, CONCAT_WS(' ', s.first_name, s.last_name) AS staff_name
-       FROM transactions t
-       LEFT JOIN users s ON s.id = t.staff_id
-       WHERE t.client_id = $1 AND t.status = 'pending'
-       ORDER BY t.created_at DESC
-       LIMIT 1`,
-      [req.user.id]
-    );
-    res.json({ pending: result.rowCount ? transactionResponse(result.rows[0]) : null });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/me/pending/:id/decision', authRequired, async (req, res, next) => {
-  const approved = Boolean(req.body?.approved);
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const txResult = await client.query(
-      `SELECT t.*, u.telegram_id
-       FROM transactions t
-       JOIN users u ON u.id = t.client_id
-       WHERE t.id = $1 AND t.client_id = $2
-       FOR UPDATE`,
-      [req.params.id, req.user.id]
-    );
-    if (!txResult.rowCount) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Операция не найдена.' });
-    }
-    const tx = txResult.rows[0];
-    if (tx.status !== 'pending') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Операция уже обработана.' });
-    }
-    if (new Date(tx.expires_at).getTime() < Date.now()) {
-      await client.query("UPDATE transactions SET status = 'expired' WHERE id = $1", [tx.id]);
-      await client.query('COMMIT');
-      return res.status(410).json({ error: 'Время подтверждения истекло.' });
-    }
-
-    if (!approved) {
-      await client.query("UPDATE transactions SET status = 'declined', completed_at = NOW() WHERE id = $1", [tx.id]);
-      await client.query('COMMIT');
-      return res.json({ status: 'declined' });
-    }
-
-    const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [req.user.id]);
-    const balance = Number(walletResult.rows[0].balance || 0);
-    if (balance < Number(tx.bonus_spent)) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'На счёте уже недостаточно бонусов.' });
-    }
-    const newBalance = balance - Number(tx.bonus_spent) + Number(tx.bonus_earned);
-    await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, req.user.id]);
-    const completed = await client.query(
-      `UPDATE transactions
-       SET status = 'completed', balance_after = $1, completed_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [newBalance, tx.id]
-    );
-    await client.query('COMMIT');
-
-    await sendTelegramMessage(
-      tx.telegram_id,
-      `Покупка в баре «Пивник»\n\nЧек: ${rubles(tx.check_amount_cents).toFixed(2)} ₽\nСписано: ${tx.bonus_spent} бонусов\nНачислено: ${tx.bonus_earned} бонусов\nБаланс: ${newBalance} бонусов`
-    );
-    res.json({ transaction: transactionResponse(completed.rows[0]), profile: await getProfile(req.user.id) });
-  } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
-    next(error);
-  } finally {
-    client.release();
-  }
-});
-
 app.post('/api/staff/qr/resolve', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
-    const raw = String(req.body?.payload || '').trim();
-    const token = raw.startsWith('PIVNIK:') ? raw.slice(7) : null;
+    const raw = String(req.body?.payload || '').trim().toUpperCase();
+    const token = raw.startsWith(PERSONAL_QR_PREFIX) ? String(req.body.payload).trim().slice(PERSONAL_QR_PREFIX.length) : null;
     const result = await pool.query(
-      `SELECT q.token, q.short_code, q.expires_at, q.used_at, q.user_id
-       FROM qr_sessions q
-       WHERE (${token ? 'q.token = $1' : 'q.short_code = $1'})
+      `SELECT id, qr_token, qr_short_code
+       FROM users
+       WHERE ${token ? 'qr_token = $1' : 'UPPER(qr_short_code) = $1'}
        LIMIT 1`,
       [token || raw]
     );
-    if (!result.rowCount) return res.status(404).json({ error: 'QR-код не найден.' });
-    const qr = result.rows[0];
-    if (qr.used_at) return res.status(409).json({ error: 'QR-код уже использован.' });
-    if (new Date(qr.expires_at).getTime() < Date.now()) return res.status(410).json({ error: 'QR-код истёк.' });
-    res.json({ qrToken: qr.token, client: await getProfile(qr.user_id) });
+    if (!result.rowCount) return res.status(404).json({ error: 'Персональный код не найден.' });
+    const user = result.rows[0];
+    res.json({ qrToken: user.qr_token, shortCode: user.qr_short_code, client: await getProfile(user.id) });
   } catch (error) {
     next(error);
   }
@@ -582,27 +565,25 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       await client.query('ROLLBACK');
       return res.json({ transaction: transactionResponse(existing.rows[0]) });
     }
-    const qrResult = await client.query(
-      `SELECT * FROM qr_sessions WHERE token = $1 FOR UPDATE`,
+
+    const userResult = await client.query(
+      `SELECT id, telegram_id, first_name, last_name, qr_short_code
+       FROM users WHERE qr_token = $1 FOR UPDATE`,
       [qrToken]
     );
-    if (!qrResult.rowCount) {
+    if (!userResult.rowCount) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'QR-код не найден.' });
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
-    const qr = qrResult.rows[0];
-    if (qr.used_at) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'QR-код уже использован.' });
-    }
-    if (new Date(qr.expires_at).getTime() < Date.now()) {
-      await client.query('ROLLBACK');
-      return res.status(410).json({ error: 'QR-код истёк.' });
-    }
+    const targetUser = userResult.rows[0];
 
-    const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [qr.user_id]);
+    const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [targetUser.id]);
+    if (!walletResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Бонусный счёт клиента не найден.' });
+    }
     const balance = Number(walletResult.rows[0].balance || 0);
-    const spend12mCents = await getRollingSpend(client, qr.user_id);
+    const spend12mCents = await getRollingSpend(client, targetUser.id);
     const status = getStatus(spend12mCents);
 
     let discountCents = 0;
@@ -619,41 +600,54 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       }
     }
 
-    const cashPaidCents = amountCents - discountCents - bonusSpent * 100;
+    const cashPaidCents = Math.max(0, amountCents - discountCents - bonusSpent * 100);
     const bonusEarned = Math.max(0, Math.floor((cashPaidCents * status.bonusPercent) / 10_000));
-    const txStatus = mode === 'redeem' ? 'pending' : 'completed';
-    const expiresAt = mode === 'redeem' ? new Date(Date.now() + 60_000) : null;
-    const balanceAfter = mode === 'accrue' ? balance + bonusEarned : null;
+    const balanceAfter = balance - bonusSpent + bonusEarned;
+    const isSuspicious = amountCents > SUSPICIOUS_THRESHOLD_CENTS;
 
     const txResult = await client.query(
       `INSERT INTO transactions (
          request_key, client_id, staff_id, mode, status,
          check_amount_cents, discount_cents, bonus_spent, bonus_earned,
-         cash_paid_cents, balance_after, expires_at, completed_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $5 = 'completed' THEN NOW() ELSE NULL END)
+         cash_paid_cents, balance_after, is_suspicious, completed_at
+       ) VALUES ($1,$2,$3,$4,'completed',$5,$6,$7,$8,$9,$10,$11,NOW())
        RETURNING *`,
-      [requestKey, qr.user_id, req.user.id, mode, txStatus, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, expiresAt]
+      [requestKey, targetUser.id, req.user.id, mode, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, isSuspicious]
     );
-    await client.query('UPDATE qr_sessions SET used_at = NOW() WHERE token = $1', [qrToken]);
-    if (mode === 'accrue') {
-      await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, qr.user_id]);
-    }
-    const telegramResult = await client.query('SELECT telegram_id FROM users WHERE id = $1', [qr.user_id]);
+    await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, targetUser.id]);
     await client.query('COMMIT');
 
     const tx = txResult.rows[0];
-    if (mode === 'accrue') {
+    const operationText = mode === 'redeem'
+      ? `Списано: ${bonusSpent} бонусов
+Начислено: ${bonusEarned} бонусов`
+      : `Начислено: ${bonusEarned} бонусов`;
+    await sendTelegramMessage(
+      targetUser.telegram_id,
+      `Операция в баре «Пивник»
+
+Чек: ${rubles(amountCents).toFixed(2)} ₽
+${operationText}
+К оплате: ${rubles(cashPaidCents).toFixed(2)} ₽
+Баланс: ${balanceAfter} бонусов
+
+Если вы не совершали эту операцию, обратитесь к администратору.`
+    );
+
+    if (isSuspicious && ownerTelegramId) {
+      const clientName = [targetUser.first_name, targetUser.last_name].filter(Boolean).join(' ');
       await sendTelegramMessage(
-        telegramResult.rows[0].telegram_id,
-        `Покупка в баре «Пивник»\n\nЧек: ${rubles(amountCents).toFixed(2)} ₽\nСкидка: ${rubles(discountCents).toFixed(2)} ₽\nНачислено: ${bonusEarned} бонусов\nБаланс: ${balanceAfter} бонусов`
-      );
-    } else {
-      await sendTelegramMessage(
-        telegramResult.rows[0].telegram_id,
-        `Подтвердите списание в приложении «Пивник».\n\nЧек: ${rubles(amountCents).toFixed(2)} ₽\nК списанию: ${bonusSpent} бонусов\nК оплате: ${rubles(cashPaidCents).toFixed(2)} ₽`
+        ownerTelegramId,
+        `⚠️ Подозрительная операция свыше 3000 ₽
+
+Клиент: ${clientName || targetUser.telegram_id}
+Сотрудник: ${req.user.firstName}
+Тип: ${mode === 'redeem' ? 'списание' : 'начисление'}
+Чек: ${rubles(amountCents).toFixed(2)} ₽`
       );
     }
-    res.json({ transaction: transactionResponse(tx), client: await getProfile(qr.user_id) });
+
+    res.json({ transaction: transactionResponse(tx), client: await getProfile(targetUser.id) });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     next(error);
@@ -685,7 +679,8 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
         (SELECT COUNT(*)::int FROM users) AS clients,
         (SELECT COALESCE(SUM(bonus_earned),0)::bigint FROM transactions WHERE status='completed') AS issued,
         (SELECT COUNT(*)::int FROM transactions WHERE created_at::date = CURRENT_DATE) AS today_ops,
-        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE) AS today_check_cents
+        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE) AS today_check_cents,
+        (SELECT COUNT(*)::int FROM transactions WHERE is_suspicious = TRUE) AS suspicious_ops
     `);
     const opsResult = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name,
@@ -702,7 +697,8 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
         clients: summaryResult.rows[0].clients,
         issued: Number(summaryResult.rows[0].issued || 0),
         todayOperations: summaryResult.rows[0].today_ops,
-        todayCheck: rubles(summaryResult.rows[0].today_check_cents)
+        todayCheck: rubles(summaryResult.rows[0].today_check_cents),
+        suspiciousOperations: summaryResult.rows[0].suspicious_ops
       },
       operations: opsResult.rows.map(transactionResponse),
       settings: settingsResult.rows[0]
@@ -715,7 +711,7 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
 app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, w.balance
+      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, w.balance
        FROM users u
        JOIN wallets w ON w.user_id = u.id
        ORDER BY u.created_at DESC
@@ -728,6 +724,7 @@ app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async 
       name: [row.first_name, row.last_name].filter(Boolean).join(' '),
       role: row.role,
       balance: Number(row.balance || 0),
+      qrShortCode: row.qr_short_code,
       createdAt: row.created_at
     })) });
   } catch (error) {
@@ -744,6 +741,15 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
     if (String(target.rows[0].telegram_id) === ownerTelegramId) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
     await pool.query('UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2', [role, req.params.id]);
     res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/users/:id/reissue-qr', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const qr = await ensurePersonalQr(pool, req.params.id, true);
+    res.json({ ok: true, shortCode: qr.qr_short_code });
   } catch (error) {
     next(error);
   }
@@ -824,9 +830,9 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
   }
 });
 
-app.get('/styles.css', (_req, res) => res.sendFile(path.join(__dirname, 'styles.css')));
-app.get('/app.js', (_req, res) => res.sendFile(path.join(__dirname, 'app.js')));
-app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
+app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
+app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));
 app.use((_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.use((error, _req, res, _next) => {
