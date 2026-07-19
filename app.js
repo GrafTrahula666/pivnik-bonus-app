@@ -1,256 +1,531 @@
-// Telegram Mini App bootstrap. In an ordinary browser the demo still works normally.
-const telegramApp = window.Telegram?.WebApp ?? null;
-if (telegramApp) {
-  telegramApp.ready();
-  telegramApp.expand();
+const tg = window.Telegram?.WebApp ?? null;
+if (tg) {
+  tg.ready();
+  tg.expand();
   try {
-    telegramApp.setHeaderColor('#15110e');
-    telegramApp.setBackgroundColor('#0e0c0a');
+    tg.setHeaderColor('#15110e');
+    tg.setBackgroundColor('#0e0c0a');
+    tg.setBottomBarColor('#120e0b');
   } catch (_) {}
-
-  const firstName = telegramApp.initDataUnsafe?.user?.first_name;
-  const eyebrow = document.querySelector('.eyebrow');
-  if (firstName && eyebrow) eyebrow.textContent = `Telegram Mini App · ${firstName}`;
 }
 
-const initialState = {
-  balance: 1840,
-  spend12m: 38400,
-  shiftOpen: false,
-  selectedClient: false,
+const state = {
+  token: localStorage.getItem('pivnik_session') || '',
+  profile: null,
+  statuses: [],
+  design: null,
+  adminSettings: null,
   mode: 'accrue',
-  cancellations: 0,
-  operations: [],
-  alerts: []
+  qr: null,
+  qrTimer: null,
+  resolvedClient: null,
+  pending: null,
+  staffPendingId: null,
+  pendingPoll: null,
+  mePoll: null
 };
-let state = JSON.parse(localStorage.getItem('pivnik_demo_state') || 'null') || structuredClone(initialState);
-let qrTimer = null;
-let qrSeconds = 30;
-let qrToken = '';
-let pendingSale = null;
 
-const statusLevels = [
-  {min:0,name:'Путник',bonus:.05,discount:0,next:10000},
-  {min:10000,name:'Странник',bonus:.06,discount:.01,next:30000},
-  {min:30000,name:'Гость таверны',bonus:.07,discount:.02,next:70000},
-  {min:70000,name:'Завсегдатай',bonus:.08,discount:.03,next:100000},
-  {min:100000,name:'Местный пьяница',bonus:.09,discount:.04,next:150000},
-  {min:150000,name:'Легендарный пьяница',bonus:.10,discount:.05,next:500000},
-  {min:500000,name:'Король Пивника',bonus:.20,discount:.10,next:null}
-];
-function currentStatus(){ return [...statusLevels].reverse().find(x=>state.spend12m>=x.min); }
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+const fmt = (number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Number(number || 0));
+const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
+const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
+const roleCanWrite = (role) => role === 'admin';
 
-const $ = (s) => document.querySelector(s);
-const $$ = (s) => [...document.querySelectorAll(s)];
-const fmt = (n) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
-const save = () => localStorage.setItem('pivnik_demo_state', JSON.stringify(state));
-
-function toast(text){
-  const el=$('#toast'); el.textContent=text; el.classList.add('show');
-  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2200);
+function toast(text) {
+  const element = $('#toast');
+  element.textContent = text;
+  element.classList.add('show');
+  clearTimeout(element._timer);
+  element._timer = setTimeout(() => element.classList.remove('show'), 2600);
 }
 
-function drawPseudoQr(canvas, token){
-  const ctx=canvas.getContext('2d'); const size=29; const cell=canvas.width/size;
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
-  let seed=[...token].reduce((a,c)=>((a*31+c.charCodeAt(0))>>>0),2166136261);
-  const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
-  const matrix=Array.from({length:size},()=>Array(size).fill(false));
-  function finder(x,y){for(let r=0;r<7;r++)for(let c=0;c<7;c++){const edge=r===0||r===6||c===0||c===6;const core=r>=2&&r<=4&&c>=2&&c<=4;matrix[y+r][x+c]=edge||core;}}
-  finder(1,1);finder(size-8,1);finder(1,size-8);
-  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-    const inFinder=(x>=1&&x<8&&y>=1&&y<8)||(x>=size-8&&x<size-1&&y>=1&&y<8)||(x>=1&&x<8&&y>=size-8&&y<size-1);
-    if(!inFinder) matrix[y][x]=rand()>.52;
+function haptic(type = 'light') {
+  try { tg?.HapticFeedback?.impactOccurred(type); } catch (_) {}
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
+      ...(options.headers || {})
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
+  return data;
+}
+
+function openModal(id) {
+  const modal = $(`#${id}`);
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeModal(id) {
+  const modal = $(`#${id}`);
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function switchScreen(target) {
+  $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
+  $$('.bottom-nav button').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
+}
+
+function currentLevelIndex() {
+  return Math.max(0, state.statuses.findIndex((level) => level.name === state.profile?.status?.name));
+}
+
+function applyDesign(design) {
+  if (!design) return;
+  state.design = structuredClone(design);
+  const root = document.documentElement;
+  const colors = design.colors || {};
+  root.style.setProperty('--bg', colors.background || '#0e0c0a');
+  root.style.setProperty('--header', colors.header || '#15110e');
+  root.style.setProperty('--surface', colors.surface || '#1c1612');
+  root.style.setProperty('--card', colors.card || '#231a14');
+  root.style.setProperty('--text', colors.text || '#f7eee5');
+  root.style.setProperty('--muted', colors.muted || '#a99580');
+  root.style.setProperty('--gold', colors.accent || '#e9a83b');
+  root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
+  root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
+
+  $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
+  $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
+  $('#showQrButton').textContent = design.texts?.qrButton || 'Показать QR';
+  $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
+
+  Object.entries(design.sections || {}).forEach(([key, visible]) => {
+    if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);
+    else document.querySelectorAll(`[data-config-section="${key}"]`).forEach((element) => element.classList.toggle('hidden', !visible));
+  });
+
+  try {
+    tg?.setHeaderColor(colors.header || '#15110e');
+    tg?.setBackgroundColor(colors.background || '#0e0c0a');
+  } catch (_) {}
+}
+
+function renderProfile() {
+  const profile = state.profile;
+  if (!profile) return;
+  $('#eyebrow').textContent = `${profile.firstName}${profile.username ? ` · @${profile.username}` : ''}`;
+  $('#clientBalance').textContent = fmt(profile.balance);
+  $('#statusName').textContent = profile.status.name;
+  $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
+  $('#profileAvatar').textContent = (profile.firstName || 'П').slice(0, 1).toUpperCase();
+  $('#staffName').textContent = profile.firstName || 'Бармен';
+
+  const min = Number(profile.status.minSpend || 0);
+  const next = profile.status.nextSpend;
+  if (next) {
+    const percentage = Math.max(0, Math.min(100, ((profile.spend12m - min) / (next - min)) * 100));
+    $('#statusProgress').style.width = `${percentage}%`;
+    $('#statusProgressText').textContent = `${fmt(profile.spend12m)} / ${fmt(next)} ₽`;
+  } else {
+    $('#statusProgress').style.width = '100%';
+    $('#statusProgressText').textContent = 'Максимальный статус';
   }
-  ctx.fillStyle='#111';for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(matrix[y][x])ctx.fillRect(x*cell,y*cell,Math.ceil(cell),Math.ceil(cell));
-}
-function newQr(){
-  qrToken=String(Math.floor(100000+Math.random()*900000)); qrSeconds=30;
-  $('#qrToken').textContent=qrToken; $('#qrCountdown').textContent=qrSeconds;
-  drawPseudoQr($('#bigQr'),qrToken); drawPseudoQr($('#miniQr'),qrToken);
-}
-function startQrTimer(){
-  clearInterval(qrTimer); newQr();
-  qrTimer=setInterval(()=>{qrSeconds--;$('#qrCountdown').textContent=qrSeconds;if(qrSeconds<=0)newQr();},1000);
+
+  $('#staffNav').classList.toggle('hidden', !roleCanStaff(profile.role));
+  $('#adminNav').classList.toggle('hidden', !roleCanAdmin(profile.role));
+  if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
+  if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
+  $('#adminRoleBadge').textContent = profile.role === 'viewer' ? 'VIEW' : 'ADMIN';
+  $('#adminAccessLabel').textContent = profile.role === 'viewer' ? 'Только просмотр' : 'Полный доступ';
+  $$('.admin-write-only').forEach((element) => element.classList.toggle('hidden', !roleCanWrite(profile.role)));
 }
 
-function switchScreen(target){
-  $$('.screen').forEach(s=>s.classList.toggle('active',s.dataset.screen===target));
-  $$('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.target===target));
-}
-$$('.bottom-nav button').forEach(b=>b.addEventListener('click',()=>switchScreen(b.dataset.target)));
-
-function openModal(id){$('#'+id).classList.add('open');$('#'+id).setAttribute('aria-hidden','false')}
-function closeModal(id){$('#'+id).classList.remove('open');$('#'+id).setAttribute('aria-hidden','true')}
-$$('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
-$$('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
-$('#openQr').onclick=$('#showQrButton').onclick=()=>{openModal('qrModal');startQrTimer()};
-
-function renderStatusLevels(){
-  const active=currentStatus();
-  $('#statusLevelsList').innerHTML=statusLevels.map((level,index)=>{
-    const isCurrent=level.name===active.name;
-    const isReached=state.spend12m>=level.min;
-    const discount=level.discount
-      ? ` · скидка ${Math.round(level.discount*100)}%`
-      : '';
-    return `<article class="status-level ${isCurrent?'current':''} ${isReached?'reached':''}">
-      <div class="status-rank">${index+1}</div>
+function renderStatuses() {
+  const activeIndex = currentLevelIndex();
+  $('#statusLevelsList').innerHTML = state.statuses.map((level, index) => {
+    const reached = index <= activeIndex;
+    const current = index === activeIndex;
+    return `<article class="status-level ${current ? 'current' : ''} ${reached ? 'reached' : ''}">
+      <div class="status-rank">${index + 1}</div>
       <div class="status-level-copy">
-        <div class="status-level-head">
-          <b>${level.name}</b>
-          ${isCurrent?'<span>Ваш статус</span>':''}
-        </div>
+        <div class="status-level-head"><b>${level.name}</b>${current ? '<span>Ваш статус</span>' : ''}</div>
         <small>от ${fmt(level.min)} ₽ за 12 месяцев</small>
-        <p>${Math.round(level.bonus*100)}% бонусами${discount}</p>
+        <p>${level.bonusPercent}% бонусами${level.discountPercent ? ` · скидка ${level.discountPercent}%` : ''}</p>
       </div>
-      <div class="status-level-mark">${isCurrent?'●':isReached?'✓':'○'}</div>
+      <div class="status-level-mark">${current ? '●' : reached ? '✓' : '○'}</div>
     </article>`;
   }).join('');
 }
 
-$('#openStatuses').onclick=()=>{
-  renderStatusLevels();
-  openModal('statusesModal');
-};
-
-$$('.promo-card').forEach(card=>card.onclick=()=>{
-  $('#detailTitle').textContent=card.querySelector('h3').textContent;
-  $('#detailText').textContent=card.dataset.detail;
-  openModal('detailModal');
-});
-$('#shopFeature').onclick=()=>{
-  $('#detailTitle').textContent='Коллекционная кружка 001';
-  $('#detailText').textContent='Покупается полностью за бонусы. После покупки товар исчезает из магазина, а заказ получает статус «Ожидает согласования». Дизайнер связывается с клиентом, после чего кружка изготавливается и отправляется или выдаётся в баре.';
-  openModal('detailModal');
-};
-$$('[data-open="history"]').forEach(b=>b.onclick=()=>{switchScreen('admin');toast('В MVP история показана в журнале операций')});
-
-function startShift(){
-  state.shiftOpen=true; save(); render(); toast('Геолокация подтверждена. Смена открыта');
-}
-$('#startShift').onclick=startShift;
-
-$('#scanClient').onclick=()=>{
-  if(!state.shiftOpen)return toast('Сначала откройте смену');
-  state.selectedClient=true;save();render();toast('Тестовый клиент найден');
-};
-
-$$('.mode').forEach(btn=>btn.onclick=()=>{
-  state.mode=btn.dataset.mode; save(); renderModes(); calculate();
-});
-$('#saleAmount').addEventListener('input',calculate);
-
-function renderModes(){
-  $$('.mode').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));
-}
-function getAmount(){return Math.max(0,Number(String($('#saleAmount').value).replace(',','.'))||0)}
-function calculate(){
-  const amount=getAmount();
-  let cash=amount, earn=0, spend=0;
-  if(state.mode==='accrue'){
-    const st=currentStatus(); const discount=amount*st.discount; cash=amount-discount; earn=cash*st.bonus;
-  }else{
-    const st=currentStatus(); spend=Math.min(state.balance,amount*.30);cash=amount-spend;earn=cash*st.bonus;
-  }
-  $('#cashDue').textContent=fmt(cash)+' ₽';$('#bonusEarn').textContent='+'+fmt(earn);
-  $('#createSale').disabled=!(amount>0&&state.selectedClient&&state.shiftOpen);
-  return {amount,cash,earn,spend};
-}
-
-$('#createSale').onclick=()=>{
-  const calc=calculate();
-  if(state.mode==='redeem'){
-    pendingSale=calc;
-    $('#confirmSummary').innerHTML=`<span>Сумма чека <b>${fmt(calc.amount)} ₽</b></span><span>Списать <b>${fmt(calc.spend)} бонусов</b></span><span>Оплатить <b>${fmt(calc.cash)} ₽</b></span>`;
-    openModal('confirmModal');
-  }else completeSale(calc);
-};
-$('#declineRedeem').onclick=()=>{closeModal('confirmModal');pendingSale=null;toast('Клиент отклонил списание')};
-$('#approveRedeem').onclick=()=>{closeModal('confirmModal');completeSale(pendingSale);pendingSale=null};
-
-function completeSale(calc){
-  const suspicious=calc.amount>3000;
-  state.balance=Math.max(0,state.balance-calc.spend+Math.round(calc.earn));
-  state.spend12m+=calc.cash;
-  const op={
-    id:Date.now(),time:new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}),
-    amount:calc.amount,cash:calc.cash,earn:Math.round(calc.earn),spend:Math.round(calc.spend),
-    employee:'Аня',client:'Кирилл',cancelled:false,suspicious
-  };
-  state.operations.unshift(op);
-  if(suspicious)state.alerts.unshift({id:op.id,text:`Крупная операция ${fmt(op.amount)} ₽ · Аня · Кирилл`});
-  state.selectedClient=false;save();$('#saleAmount').value='';render();toast('Операция проведена');
-}
-
-function cancelOperation(id){
-  const op=state.operations.find(o=>o.id===id);
-  if(!op||op.cancelled)return;
-  if(state.cancellations>=2){
-    state.alerts.unshift({id:Date.now(),text:`Запрошена 3-я отмена за смену · требуется подтверждение владельца`});save();render();toast('Лимит исчерпан. Запрос отправлен владельцу');return;
-  }
-  const reason=prompt('Причина корректировки (обязательно):','Неверно введена сумма');
-  if(!reason||!reason.trim())return toast('Без причины отмена невозможна');
-  op.cancelled=true;op.cancelReason=reason.trim();state.cancellations++;
-  state.balance=Math.max(0,state.balance+op.spend-op.earn);
-  state.spend12m=Math.max(0,state.spend12m-op.cash);
-  state.alerts.unshift({id:Date.now(),text:`Отмена ${fmt(op.amount)} ₽ · Аня · причина: ${op.cancelReason}`});
-  save();render();toast('Создана обратная операция');
-}
-window.cancelOperation=cancelOperation;
-
-function operationHtml(op,staff=false){
+function renderTransaction(transaction) {
+  const mode = transaction.mode === 'redeem' ? 'Списание' : transaction.mode === 'adjustment' ? 'Коррекция' : 'Начисление';
+  const statusText = {
+    pending: 'ожидает подтверждения', completed: 'выполнено', declined: 'отклонено', expired: 'истекло', cancelled: 'отменено'
+  }[transaction.status] || transaction.status;
+  const primary = transaction.mode === 'adjustment'
+    ? `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`
+    : `${fmt(transaction.checkAmount)} ₽`;
+  const detail = transaction.mode === 'redeem'
+    ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б`
+    : transaction.mode === 'adjustment'
+      ? transaction.reason || 'Ручная корректировка'
+      : `+${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽`;
   return `<div class="op-row">
-    <b>${op.cancelled?'ОТМЕНЕНО · ':''}${op.client}</b><strong>${fmt(op.amount)} ₽</strong>
-    <small>${op.time} · ${op.employee}${op.spend?` · списано ${fmt(op.spend)}`:` · +${fmt(op.earn)} бонусов`}</small>
-    ${staff&&!op.cancelled?`<button onclick="cancelOperation(${op.id})">Отменить</button>`:''}
+    <b>${mode}</b><strong>${primary}</strong>
+    <small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${statusText}<br>${detail}</small>
   </div>`;
 }
 
-function render(){
-  const st=currentStatus();
-  $('#clientBalance').textContent=fmt(state.balance);
-  $('#statusName').textContent=st.name;
-  document.querySelector('.status-row .pill').textContent=Math.round(st.bonus*100)+'% бонусами';
-  if(st.next){
-    const pct=Math.max(0,Math.min(100,(state.spend12m-st.min)/(st.next-st.min)*100));
-    $('#statusProgress').style.width=pct+'%';
-    $('#statusProgressText').textContent=fmt(state.spend12m)+' / '+fmt(st.next)+' ₽';
-  }else{
-    $('#statusProgress').style.width='100%';
-    $('#statusProgressText').textContent='Максимальный статус';
-  }
-  $('#shiftCard').classList.toggle('hidden',state.shiftOpen);
-  $('#saleCard').classList.toggle('hidden',!state.shiftOpen);
-  $('#staffOpsCard').classList.toggle('hidden',!state.shiftOpen);
-  $('#shiftBadge').textContent=state.shiftOpen?'Смена открыта':'Смена закрыта';
-  $('#shiftBadge').className='shift-badge '+(state.shiftOpen?'on':'off');
-  $('#clientFound').classList.toggle('hidden',!state.selectedClient);
-  $('#scanClient').classList.toggle('hidden',state.selectedClient);
-  $('#cancelCounter').textContent=`Отмен: ${state.cancellations}/2`;
-  $('#onShiftMetric').textContent=state.shiftOpen?'1':'0';
-  const activeOps=state.operations.filter(o=>!o.cancelled);
-  const total=activeOps.reduce((s,o)=>s+o.amount,0);
-  $('#todayMetric').textContent=fmt(total)+' ₽';$('#todayOpsMetric').textContent=activeOps.length+' операций';
-  $('#issuedMetric').textContent=fmt(18420+activeOps.reduce((s,o)=>s+o.earn,0));
-  $('#staffOperations').className='operation-list'+(state.operations.length?'':' empty-state');
-  $('#staffOperations').innerHTML=state.operations.length?state.operations.map(o=>operationHtml(o,true)).join(''):'Операций пока нет';
-  $('#adminOperations').className='operation-list'+(state.operations.length?'':' empty-state');
-  $('#adminOperations').innerHTML=state.operations.length?state.operations.map(o=>operationHtml(o,false)).join(''):'Операций пока нет';
-  $('#alertCount').textContent=state.alerts.length;
-  $('#alertsList').className=state.alerts.length?'':'empty-state';
-  $('#alertsList').innerHTML=state.alerts.length?state.alerts.map(a=>`<div class="alert-item">${a.text}</div>`).join(''):'Новых событий нет';
-  renderStatusLevels();
-  renderModes();calculate();
+async function refreshMe() {
+  const data = await api('/api/me');
+  state.profile = data.profile;
+  applyDesign(data.design);
+  renderProfile();
 }
 
-$('#resetDemo').onclick=()=>{
-  if(confirm('Сбросить все операции и вернуть исходный баланс?')){
-    state=structuredClone(initialState);save();render();switchScreen('client');toast('Демо сброшено');
+async function authenticate() {
+  const initData = tg?.initData || '';
+  const payload = { initData };
+  if (!initData && new URLSearchParams(location.search).get('demo') === '1') payload.demoTelegramId = '999000111';
+  const data = await api('/api/auth', { method: 'POST', body: JSON.stringify(payload), headers: { authorization: '' } });
+  state.token = data.token;
+  localStorage.setItem('pivnik_session', state.token);
+  state.profile = data.profile;
+  state.statuses = data.statuses || [];
+  applyDesign(data.design);
+  renderProfile();
+  renderStatuses();
+}
+
+async function boot() {
+  try {
+    if (state.token) {
+      try {
+        const me = await api('/api/me');
+        state.profile = me.profile;
+        state.statuses = me.statuses || [];
+        applyDesign(me.design);
+      } catch {
+        state.token = '';
+        localStorage.removeItem('pivnik_session');
+      }
+    }
+    if (!state.token) await authenticate();
+    renderProfile();
+    renderStatuses();
+    $('#bootScreen').classList.add('hidden');
+    $('#appShell').classList.remove('hidden');
+    startPendingPolling();
+  } catch (error) {
+    $('#bootText').textContent = error.message;
+    $('#bootScreen').classList.add('error');
   }
-};
-$('#exportLog').onclick=()=>{
-  const blob=new Blob([JSON.stringify({generatedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pivnik-demo-log.json';a.click();URL.revokeObjectURL(a.href);toast('Журнал выгружен');
-};
-newQr();render();
+}
+
+async function createQr() {
+  const data = await api('/api/me/qr', { method: 'POST', body: '{}' });
+  state.qr = data;
+  $('#qrImage').src = data.image;
+  $('#qrToken').textContent = data.shortCode;
+  const expires = new Date(data.expiresAt).getTime();
+  clearInterval(state.qrTimer);
+  const tick = () => {
+    const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+    $('#qrCountdown').textContent = seconds;
+    if (seconds <= 0) createQr().catch((error) => toast(error.message));
+  };
+  tick();
+  state.qrTimer = setInterval(tick, 1000);
+}
+
+async function showQr() {
+  openModal('qrModal');
+  await createQr();
+}
+
+async function showHistory() {
+  const data = await api('/api/me/transactions');
+  $('#historyList').className = `operation-list${data.transactions.length ? '' : ' empty-state'}`;
+  $('#historyList').innerHTML = data.transactions.length ? data.transactions.map(renderTransaction).join('') : 'Операций пока нет';
+  openModal('historyModal');
+}
+
+async function resolveQr(payload) {
+  const data = await api('/api/staff/qr/resolve', { method: 'POST', body: JSON.stringify({ payload }) });
+  state.resolvedClient = { qrToken: data.qrToken, profile: data.client };
+  $('#scanClient').classList.add('hidden');
+  $('#clientFound').classList.remove('hidden');
+  $('#foundName').textContent = `${data.client.firstName} · ${data.client.status.name}`;
+  $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}%`;
+  $('#foundAvatar').textContent = data.client.firstName.slice(0, 1).toUpperCase();
+  updateCalculation();
+  haptic('medium');
+}
+
+function scanQr() {
+  if (tg?.showScanQrPopup) {
+    tg.showScanQrPopup({ text: 'Наведите камеру на QR-код клиента' }, (text) => {
+      if (!text) return false;
+      resolveQr(text).then(() => tg.closeScanQrPopup()).catch((error) => toast(error.message));
+      return true;
+    });
+    return;
+  }
+  const code = prompt('Введите шестизначный код клиента:');
+  if (code) resolveQr(code).catch((error) => toast(error.message));
+}
+
+function clearResolvedClient() {
+  state.resolvedClient = null;
+  $('#scanClient').classList.remove('hidden');
+  $('#clientFound').classList.add('hidden');
+  updateCalculation();
+}
+
+function updateCalculation() {
+  const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
+  const client = state.resolvedClient?.profile;
+  let cash = amount;
+  let earn = 0;
+  if (client && amount > 0) {
+    if (state.mode === 'accrue') {
+      const discount = amount * client.status.discountPercent / 100;
+      cash = amount - discount;
+      earn = Math.floor(cash * client.status.bonusPercent / 100);
+    } else {
+      const max = Math.min(client.balance, Math.floor(amount * 0.30));
+      const requested = Math.min(max, Math.max(0, Math.floor(Number($('#bonusToSpend').value || max))));
+      $('#bonusToSpend').max = String(max);
+      $('#redeemHint').textContent = `Доступно максимум ${fmt(max)} бонусов`;
+      cash = amount - requested;
+      earn = Math.floor(cash * client.status.bonusPercent / 100);
+    }
+  }
+  $('#cashDue').textContent = `${fmt(cash)} ₽`;
+  $('#bonusEarn').textContent = `+${fmt(earn)}`;
+  $('#createSale').disabled = !(amount > 0 && client && !state.staffPendingId);
+}
+
+async function createSale() {
+  const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
+  const requestKey = crypto.randomUUID();
+  const data = await api('/api/staff/transactions', {
+    method: 'POST',
+    body: JSON.stringify({
+      qrToken: state.resolvedClient.qrToken,
+      amount,
+      mode: state.mode,
+      bonusToSpend: Number($('#bonusToSpend').value || 0),
+      requestKey
+    })
+  });
+  if (data.transaction.status === 'pending') {
+    state.staffPendingId = data.transaction.id;
+    $('#waitBox').classList.remove('hidden');
+    $('#createSale').disabled = true;
+    pollStaffPending();
+    toast('Запрос отправлен клиенту');
+  } else {
+    toast(`Начислено ${data.transaction.bonusEarned} бонусов`);
+    resetSaleForm();
+  }
+  haptic('medium');
+}
+
+function resetSaleForm() {
+  clearInterval(state.pendingPoll);
+  state.staffPendingId = null;
+  $('#waitBox').classList.add('hidden');
+  $('#saleAmount').value = '';
+  $('#bonusToSpend').value = '';
+  clearResolvedClient();
+  updateCalculation();
+}
+
+function pollStaffPending() {
+  clearInterval(state.pendingPoll);
+  state.pendingPoll = setInterval(async () => {
+    if (!state.staffPendingId) return;
+    try {
+      const data = await api(`/api/staff/transactions/${state.staffPendingId}`);
+      if (data.transaction.status !== 'pending') {
+        clearInterval(state.pendingPoll);
+        toast(data.transaction.status === 'completed' ? 'Клиент подтвердил списание' : 'Списание не подтверждено');
+        resetSaleForm();
+      }
+    } catch (error) {
+      clearInterval(state.pendingPoll);
+      toast(error.message);
+      resetSaleForm();
+    }
+  }, 2000);
+}
+
+async function checkPending() {
+  const data = await api('/api/me/pending');
+  if (!data.pending) {
+    if (state.pending) closeModal('pendingModal');
+    state.pending = null;
+    return;
+  }
+  if (state.pending?.id === data.pending.id) return;
+  state.pending = data.pending;
+  $('#pendingSummary').innerHTML = `
+    <span>Чек <b>${fmt(data.pending.checkAmount)} ₽</b></span>
+    <span>Списать <b>${fmt(data.pending.bonusSpent)} бонусов</b></span>
+    <span>Начислится <b>${fmt(data.pending.bonusEarned)} бонусов</b></span>
+    <span>Оплатить <b>${fmt(data.pending.cashPaid)} ₽</b></span>`;
+  openModal('pendingModal');
+  haptic('heavy');
+}
+
+function startPendingPolling() {
+  clearInterval(state.mePoll);
+  checkPending().catch(() => {});
+  state.mePoll = setInterval(() => checkPending().catch(() => {}), 3000);
+}
+
+async function decidePending(approved) {
+  if (!state.pending) return;
+  const data = await api(`/api/me/pending/${state.pending.id}/decision`, {
+    method: 'POST', body: JSON.stringify({ approved })
+  });
+  closeModal('pendingModal');
+  state.pending = null;
+  if (approved && data.profile) {
+    state.profile = data.profile;
+    renderProfile();
+    toast('Списание подтверждено');
+  } else toast('Списание отклонено');
+}
+
+function fillDesignForm(design) {
+  if (!design) return;
+  $$('[data-design-color]').forEach((input) => input.value = design.colors?.[input.dataset.designColor] || '#000000');
+  $$('[data-design-text]').forEach((input) => input.value = design.texts?.[input.dataset.designText] || '');
+  $$('[data-design-section]').forEach((input) => input.checked = Boolean(design.sections?.[input.dataset.designSection]));
+  $('[data-design-radius]').value = String(design.radius || 20);
+  $('#radiusValue').textContent = String(design.radius || 20);
+}
+
+function readDesignForm() {
+  const design = structuredClone(state.adminSettings?.draft || state.design);
+  design.colors ||= {};
+  design.texts ||= {};
+  design.sections ||= {};
+  $$('[data-design-color]').forEach((input) => design.colors[input.dataset.designColor] = input.value);
+  $$('[data-design-text]').forEach((input) => design.texts[input.dataset.designText] = input.value.trim());
+  $$('[data-design-section]').forEach((input) => design.sections[input.dataset.designSection] = input.checked);
+  design.radius = Number($('[data-design-radius]').value || 20);
+  return design;
+}
+
+async function saveDraft() {
+  const design = readDesignForm();
+  await api('/api/admin/design/draft', { method: 'PUT', body: JSON.stringify({ design }) });
+  state.adminSettings.draft = design;
+  applyDesign(design);
+  toast('Черновик сохранён');
+}
+
+async function publishDesign() {
+  await saveDraft();
+  const data = await api('/api/admin/design/publish', { method: 'POST', body: '{}' });
+  state.adminSettings.published = data.design;
+  applyDesign(data.design);
+  toast('Дизайн опубликован для всех');
+}
+
+function adminTransactionHtml(transaction) {
+  const client = transaction.clientName || 'Клиент';
+  const staff = transaction.staffName || 'Система';
+  return `<div class="op-row">
+    <b>${client}</b><strong>${fmt(transaction.checkAmount)} ₽</strong>
+    <small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${staff}<br>${transaction.status} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б</small>
+  </div>`;
+}
+
+async function loadAdmin() {
+  if (!roleCanAdmin(state.profile?.role)) return;
+  const [summaryData, usersData] = await Promise.all([api('/api/admin/summary'), api('/api/admin/users')]);
+  state.adminSettings = summaryData.settings;
+  $('#metricClients').textContent = fmt(summaryData.summary.clients);
+  $('#metricIssued').textContent = fmt(summaryData.summary.issued);
+  $('#metricToday').textContent = `${fmt(summaryData.summary.todayCheck)} ₽`;
+  $('#metricTodayOps').textContent = `${summaryData.summary.todayOperations} операций`;
+  $('#adminOperations').className = `operation-list${summaryData.operations.length ? '' : ' empty-state'}`;
+  $('#adminOperations').innerHTML = summaryData.operations.length ? summaryData.operations.map(adminTransactionHtml).join('') : 'Операций пока нет';
+  fillDesignForm(summaryData.settings.draft);
+  renderUsers(usersData.users);
+}
+
+function renderUsers(users) {
+  $('#usersList').className = `operation-list${users.length ? '' : ' empty-state'}`;
+  $('#usersList').innerHTML = users.map((user) => {
+    const controls = roleCanWrite(state.profile.role) && user.role !== 'admin'
+      ? `<div class="user-actions">
+          <select data-role-user="${user.id}">
+            <option value="client" ${user.role === 'client' ? 'selected' : ''}>Клиент</option>
+            <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Бармен</option>
+            <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Просмотр админки</option>
+          </select>
+          <button class="text-btn" data-adjust-user="${user.id}">Баланс</button>
+        </div>`
+      : `<small>${user.role}</small>`;
+    return `<div class="user-row">
+      <div><b>${user.name}</b><small>${user.telegramId}${user.username ? ` · @${user.username}` : ''}</small></div>
+      <strong>${fmt(user.balance)} Б</strong>
+      ${controls}
+    </div>`;
+  }).join('');
+
+  $$('[data-role-user]').forEach((select) => select.addEventListener('change', async () => {
+    try {
+      await api(`/api/admin/users/${select.dataset.roleUser}/role`, { method: 'POST', body: JSON.stringify({ role: select.value }) });
+      toast('Роль обновлена');
+    } catch (error) { toast(error.message); }
+  }));
+  $$('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
+    const amount = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
+    if (amount === null) return;
+    const reason = prompt('Причина корректировки:', 'Тестовая корректировка');
+    if (!reason) return;
+    try {
+      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason }) });
+      toast('Баланс изменён');
+      await loadAdmin();
+    } catch (error) { toast(error.message); }
+  }));
+}
+
+$$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
+$$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
+$$('.modal').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
+$('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));
+$('#showHistoryButton').addEventListener('click', () => showHistory().catch((error) => toast(error.message)));
+$('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
+$('#refreshButton').addEventListener('click', () => refreshMe().then(() => toast('Данные обновлены')).catch((error) => toast(error.message)));
+$('#scanClient').addEventListener('click', scanQr);
+$('#clearClient').addEventListener('click', clearResolvedClient);
+$('#saleAmount').addEventListener('input', updateCalculation);
+$('#bonusToSpend').addEventListener('input', updateCalculation);
+$$('.mode').forEach((button) => button.addEventListener('click', () => {
+  state.mode = button.dataset.mode;
+  $$('.mode').forEach((item) => item.classList.toggle('active', item === button));
+  $('#redeemControls').classList.toggle('hidden', state.mode !== 'redeem');
+  updateCalculation();
+}));
+$('#createSale').addEventListener('click', () => createSale().catch((error) => toast(error.message)));
+$('#approvePending').addEventListener('click', () => decidePending(true).catch((error) => toast(error.message)));
+$('#declinePending').addEventListener('click', () => decidePending(false).catch((error) => toast(error.message)));
+$('#saveDraft').addEventListener('click', () => saveDraft().catch((error) => toast(error.message)));
+$('#publishDesign').addEventListener('click', () => publishDesign().catch((error) => toast(error.message)));
+$('#reloadAdmin').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$('#reloadUsers').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$$('[data-design-color], [data-design-text], [data-design-section], [data-design-radius]').forEach((input) => input.addEventListener('input', () => {
+  if (input.matches('[data-design-radius]')) $('#radiusValue').textContent = input.value;
+  if (state.adminSettings) applyDesign(readDesignForm());
+}));
+
+boot();

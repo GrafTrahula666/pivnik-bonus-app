@@ -1,6 +1,6 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Telegram Mini App программы лояльности бара Пивник",
@@ -9,12 +9,14 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "check": "node --check server.js && node --check app.js"
   },
   "dependencies": {
-    "compression": "^1.7.5",
-    "express": "^4.21.2",
-    "helmet": "^8.0.0",
-    "pg": "^8.13.1"
+    "compression": "^1.8.1",
+    "express": "^4.22.2",
+    "helmet": "^8.1.0",
+    "pg": "^8.22.0",
+    "qrcode": "^1.5.4"
   }
 }
