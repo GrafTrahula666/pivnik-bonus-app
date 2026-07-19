@@ -122,10 +122,8 @@ function applyDesign(design) {
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
-  const brand = design.texts?.brand || 'Пивник';
   $('#showQrButton').textContent = design.texts?.qrButton || 'Показать QR';
   $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
-  $$('#bootSignGlitch span').forEach((element) => element.textContent = brand);
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
     if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);

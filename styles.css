@@ -137,90 +137,52 @@ img { max-width: 100%; }
 
 .boot-sign-glitch {
   position: absolute;
-  left: 70.7%;
-  top: 58.8%;
-  width: 15.8%;
-  height: 3.7%;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: clamp(12px, 2.2vw, 18px);
-  text-shadow: 0 0 8px rgba(255,255,255,.45);
+  left: 67.48%;
+  top: 56.52%;
+  width: 16.47%;
+  height: 5.38%;
+  overflow: hidden;
+  filter: drop-shadow(0 0 5px rgba(255,255,255,.25));
 }
-.boot-sign-glitch span {
+.sign-layer {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  letter-spacing: -.03em;
-  animation: signGlitch 7.4s infinite steps(1, end);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.boot-sign-glitch span:nth-child(2) {
-  color: rgba(255, 95, 95, .8);
-  transform: translateX(-1px);
+.sign-main { animation: signMainGlitch 9s infinite steps(1, end); }
+.sign-red {
+  opacity: 0;
+  mix-blend-mode: screen;
+  filter: sepia(1) saturate(8) hue-rotate(320deg) contrast(1.2);
   clip-path: inset(0 0 55% 0);
-  animation-delay: .14s;
+  animation: signRedGlitch 9s infinite steps(1, end);
 }
-.boot-sign-glitch span:nth-child(3) {
-  color: rgba(102, 214, 255, .8);
-  transform: translateX(1px);
+.sign-cyan {
+  opacity: 0;
+  mix-blend-mode: screen;
+  filter: sepia(1) saturate(8) hue-rotate(145deg) contrast(1.2);
   clip-path: inset(48% 0 0 0);
-  animation-delay: .28s;
+  animation: signCyanGlitch 9s infinite steps(1, end);
 }
-
-.boot-walker {
+.boot-person {
   position: absolute;
-  left: 15.9%;
-  top: 58.9%;
-  width: 2.3%;
-  height: 4.9%;
-  transform-origin: bottom center;
-  animation: walkerShift 9s ease-in-out infinite;
-  filter: drop-shadow(0 0 2px rgba(255,255,255,.55));
+  left: 15.41%;
+  top: 52.51%;
+  width: 6.06%;
+  height: 10.41%;
+  object-fit: contain;
+  transform-origin: 50% 100%;
+  animation: personWalk 8.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 2px rgba(255,255,255,.16));
 }
-.boot-walker span {
-  position: absolute;
-  display: block;
-  background: rgba(255,255,255,.9);
-  border-radius: 999px;
-}
-.walker-head {
-  width: 34%;
-  height: 14%;
-  left: 33%;
-  top: 4%;
-  border-radius: 50%;
-}
-.walker-body {
-  width: 14%;
-  height: 41%;
-  left: 43%;
-  top: 17%;
-}
-.walker-leg {
-  width: 12%;
-  height: 36%;
-  top: 57%;
-  transform-origin: top center;
-}
-.leg-left { left: 35%; animation: legWalk 2.6s ease-in-out infinite; }
-.leg-right { left: 53%; animation: legWalk 2.6s ease-in-out infinite reverse; }
-.walker-arm {
-  width: 11%;
-  height: 28%;
-  top: 24%;
-  transform-origin: top center;
-}
-.arm-left { left: 30%; transform: rotate(18deg); animation: armWalk 2.6s ease-in-out infinite reverse; }
-.arm-right { left: 58%; transform: rotate(-18deg); animation: armWalk 2.6s ease-in-out infinite; }
-
 .boot-smoke {
   position: absolute;
-  left: 17.9%;
-  top: 59.1%;
-  width: 8.5%;
-  height: 10.5%;
+  left: 18.8%;
+  top: 53.2%;
+  width: 9%;
+  height: 10%;
   pointer-events: none;
 }
 .boot-smoke i {
@@ -566,27 +528,31 @@ img { max-width: 100%; }
   93% { opacity: .95; }
   100% { opacity: 0; transform: translate3d(-120px, 95px, 0) scale(1) rotate(-24deg); }
 }
-@keyframes signGlitch {
-  0%, 87%, 100% { opacity: .94; transform: translate(0, 0); filter: brightness(1); }
-  88% { opacity: .85; transform: translate(-1px, 0); }
-  89% { opacity: 1; transform: translate(1px, 0); filter: brightness(1.2); }
-  90% { opacity: .75; transform: translate(0, -1px); }
-  91% { opacity: 1; transform: translate(0, 0); filter: brightness(1.35); }
-  92% { opacity: .9; }
+@keyframes signMainGlitch {
+  0%, 88%, 100% { transform: translate(0, 0); opacity: 1; filter: brightness(1); }
+  89% { transform: translate(-1px, 0); opacity: .92; }
+  90% { transform: translate(1px, -1px); filter: brightness(1.18); }
+  91% { transform: translate(0, 1px); opacity: .84; }
+  92% { transform: translate(0, 0); opacity: 1; filter: brightness(1.28); }
+  93% { filter: brightness(1); }
 }
-@keyframes walkerShift {
-  0%, 100% { transform: translateX(0) translateY(0); }
-  25% { transform: translateX(1px) translateY(0); }
-  50% { transform: translateX(3px) translateY(-1px); }
-  75% { transform: translateX(1px) translateY(0); }
+@keyframes signRedGlitch {
+  0%, 88%, 93%, 100% { opacity: 0; transform: translate(0, 0); }
+  89%, 91% { opacity: .58; transform: translate(-2px, 0); }
+  90%, 92% { opacity: .25; transform: translate(1px, 1px); }
 }
-@keyframes legWalk {
-  0%, 100% { transform: rotate(10deg); }
-  50% { transform: rotate(-14deg); }
+@keyframes signCyanGlitch {
+  0%, 88%, 93%, 100% { opacity: 0; transform: translate(0, 0); }
+  89%, 91% { opacity: .42; transform: translate(2px, 0); }
+  90%, 92% { opacity: .2; transform: translate(-1px, -1px); }
 }
-@keyframes armWalk {
-  0%, 100% { transform: rotate(14deg); }
-  50% { transform: rotate(-16deg); }
+@keyframes personWalk {
+  0%, 15%, 100% { transform: translateX(0) rotate(0deg); }
+  28% { transform: translateX(2px) rotate(.35deg); }
+  42% { transform: translateX(4px) rotate(-.35deg); }
+  56% { transform: translateX(3px) rotate(.2deg); }
+  72% { transform: translateX(1px) rotate(-.15deg); }
+  86% { transform: translateX(0) rotate(0deg); }
 }
 @keyframes smokeFloat {
   0% { opacity: 0; transform: translate(0, 0) scale(.45); }
