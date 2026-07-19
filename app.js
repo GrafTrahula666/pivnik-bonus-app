@@ -23,12 +23,19 @@ const state = {
   qr: null,
   resolvedClient: null,
   saleBusy: false,
-  operationResultTimer: null
+  selectedGiftLiters: 0.5,
+  operationResultTimer: null,
+  currentShift: null,
+  shiftStaff: [],
+  staffSession: localStorage.getItem('pivnik_staff_session') || '',
+  activeStaff: null,
+  staffAvailable: []
 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const fmt = (number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Number(number || 0));
+const fmtLiters = (number) => new Intl.NumberFormat('ru-RU', { minimumFractionDigits: Number(number) % 1 ? 1 : 0, maximumFractionDigits: 2 }).format(Number(number || 0));
 const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
 const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
@@ -244,6 +251,7 @@ async function api(path, options = {}) {
     headers: {
       'content-type': 'application/json',
       ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
+      ...(state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
       ...(options.headers || {})
     }
   });
@@ -308,6 +316,198 @@ function applyDesign(design) {
   } catch (_) {}
 }
 
+function renderBeer(profile = state.profile) {
+  const beer = profile?.beer;
+  if (!beer) return;
+  const target = Number(beer.paidTargetLiters || 14);
+  const progress = Number(beer.progressLiters || 0);
+  const remaining = Math.max(0, Number(beer.nextGiftLiters ?? target));
+  const gifts = Number(beer.giftLitersBalance || 0);
+  const percentage = Math.max(0, Math.min(100, (progress / target) * 100));
+  $('#beerProgressBar').style.width = `${percentage}%`;
+  $('#beerProgressText').textContent = `${fmtLiters(progress)} из ${fmtLiters(target)} л`;
+  $('#beerRemainingText').textContent = remaining > 0 ? `ещё ${fmtLiters(remaining)} л` : 'подарок готов';
+  $('#beerGiftBalance').textContent = fmtLiters(gifts);
+  $('#beerGiftReady').textContent = gifts > 0 ? `Доступно ${fmtLiters(gifts)} л` : 'Подарков пока нет';
+  $('#beerLoyaltyCard')?.classList.toggle('gift-ready', gifts > 0);
+}
+
+function updateResolvedBeer(profile = state.resolvedClient?.profile) {
+  const beer = profile?.beer;
+  if (!beer) return;
+  $('#foundBeer').textContent = `До подарка: ${fmtLiters(beer.nextGiftLiters)} л · доступно ${fmtLiters(beer.giftLitersBalance)} л`;
+  $('#staffGiftBalance').textContent = `${fmtLiters(beer.giftLitersBalance)} л`;
+  $$('.gift-volume').forEach((button) => {
+    const liters = Number(button.dataset.giftLiters || 0);
+    button.disabled = liters > Number(beer.giftLitersBalance || 0);
+  });
+}
+
+function renderCurrentShift() {
+  const shift = state.currentShift;
+  const container = $('#currentShiftTeam');
+  if (container) {
+    if (!shift?.members?.length) {
+      container.innerHTML = '<div class="person"><span class="avatar">П</span><div><b>Команда Пивника</b><small>Смена пока не выбрана владельцем.</small></div></div>';
+    } else {
+      const members = shift.members.map((member) => `<div class="shift-person">
+        <span class="avatar">${escapeHtml((member.firstName || member.name || 'П').slice(0, 1).toUpperCase())}</span>
+        <div><b>${escapeHtml(member.name || member.firstName || 'Сотрудник')}</b><small>сегодня на смене</small></div>
+      </div>`).join('');
+      const note = shift.note ? `<div class="shift-team-note">${escapeHtml(shift.note)}</div>` : '';
+      container.innerHTML = `<div class="shift-team-grid">${members}</div>${note}`;
+    }
+  }
+
+  const badge = $('#staffShiftBadge');
+  if (badge) {
+    const memberIds = new Set((shift?.members || []).map((member) => String(member.id)));
+    const onShift = Boolean(state.profile?.id && memberIds.has(String(state.profile.id)));
+    badge.classList.toggle('on', onShift);
+    badge.classList.toggle('off', !onShift);
+    const label = badge.querySelector('span');
+    if (label) label.textContent = !shift ? 'смена не выбрана' : onShift ? 'вы на смене' : 'не в составе смены';
+  }
+}
+
+async function loadCurrentShift() {
+  const data = await api('/api/shift/current');
+  state.currentShift = data.shift || null;
+  renderCurrentShift();
+  return state.currentShift;
+}
+
+function renderShiftAdmin(data) {
+  state.currentShift = data.shift || null;
+  state.shiftStaff = data.staff || [];
+  renderCurrentShift();
+  const selected = new Set((state.currentShift?.members || []).map((member) => String(member.id)));
+  const options = $('#shiftStaffOptions');
+  if (options) {
+    options.className = `shift-staff-options${state.shiftStaff.length ? '' : ' empty-state'}`;
+    options.innerHTML = state.shiftStaff.length ? state.shiftStaff.map((staff) => `<label class="shift-staff-option">
+      <input type="checkbox" value="${escapeHtml(staff.id)}" ${selected.has(String(staff.id)) ? 'checked' : ''} ${roleCanWrite(state.profile?.role) ? '' : 'disabled'} />
+      <span class="avatar">${escapeHtml((staff.firstName || staff.name || 'П').slice(0, 1).toUpperCase())}</span>
+      <span><b>${escapeHtml(staff.name || staff.firstName || 'Сотрудник')}</b><small>${staff.role === 'admin' ? 'владелец / админ' : 'сотрудник'}</small></span>
+    </label>`).join('') : 'Сначала назначьте сотрудникам роль «Бармен» в разделе пользователей.';
+  }
+  if ($('#shiftNote')) {
+    $('#shiftNote').value = state.currentShift?.note || '';
+    $('#shiftNote').disabled = !roleCanWrite(state.profile?.role);
+  }
+  const badge = $('#shiftStatusBadge');
+  if (badge) {
+    badge.textContent = state.currentShift?.members?.length ? `${state.currentShift.members.length} на смене` : 'смена не выбрана';
+    badge.classList.toggle('active', Boolean(state.currentShift?.members?.length));
+  }
+  const meta = $('#shiftMeta');
+  if (meta) {
+    meta.textContent = state.currentShift
+      ? `Начата ${new Date(state.currentShift.startedAt).toLocaleString('ru-RU')}. Последнее изменение: ${new Date(state.currentShift.updatedAt).toLocaleString('ru-RU')}.`
+      : 'Состав ещё не выбран. Клиенты видят нейтральную заглушку.';
+  }
+  $('#endShift')?.toggleAttribute('disabled', !roleCanWrite(state.profile?.role) || !state.currentShift);
+  $('#saveShift')?.toggleAttribute('disabled', !roleCanWrite(state.profile?.role));
+}
+
+async function loadShiftAdmin() {
+  if (!roleCanAdmin(state.profile?.role)) return;
+  const data = await api('/api/admin/shift');
+  renderShiftAdmin(data);
+}
+
+async function saveShift() {
+  const staffIds = $$('#shiftStaffOptions input[type="checkbox"]:checked').map((input) => input.value);
+  if (!staffIds.length) throw new Error('Выберите хотя бы одного сотрудника или нажмите «Завершить смену».');
+  const data = await api('/api/admin/shift', {
+    method: 'PUT',
+    body: JSON.stringify({ staffIds, note: $('#shiftNote')?.value?.trim() || '' })
+  });
+  state.currentShift = data.shift || null;
+  await loadShiftAdmin();
+  await loadStaffSession();
+  toast('Состав смены сохранён');
+  haptic('medium');
+}
+
+async function endShift() {
+  if (!state.currentShift) return;
+  if (!confirm('Завершить текущую смену? Клиентский блок будет очищен.')) return;
+  await api('/api/admin/shift', { method: 'PUT', body: JSON.stringify({ staffIds: [], note: '' }) });
+  state.currentShift = null;
+  await loadShiftAdmin();
+  await loadStaffSession();
+  toast('Смена завершена');
+}
+
+function activeStaffName() {
+  const source = state.activeStaff || state.profile;
+  return [source?.firstName, source?.lastName].filter(Boolean).join(' ') || 'Бармен';
+}
+
+function renderStaffSession() {
+  const staffName = $('#staffName');
+  if (staffName) staffName.textContent = activeStaffName();
+  const button = $('#changeStaffButton');
+  if (button) button.textContent = state.activeStaff ? 'Сменить сотрудника / PIN' : 'Сотрудник / PIN';
+  const list = $('#staffSessionList');
+  if (list) {
+    list.className = `staff-session-list${state.staffAvailable.length ? '' : ' empty-state'}`;
+    list.innerHTML = state.staffAvailable.length ? state.staffAvailable.map((staff) => {
+      const active = String(state.activeStaff?.id || '') === String(staff.id);
+      const disabled = !staff.pinConfigured;
+      return `<label class="staff-session-option ${disabled ? 'disabled' : ''}">
+        <input type="radio" name="staff-session-user" value="${escapeHtml(staff.id)}" ${active ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
+        <span class="avatar">${escapeHtml((staff.firstName || staff.name || 'П').slice(0, 1).toUpperCase())}</span>
+        <div><b>${escapeHtml(staff.name || staff.firstName || 'Сотрудник')}</b><small>${disabled ? 'PIN ещё не задан владельцем' : 'PIN настроен'}</small></div>
+      </label>`;
+    }).join('') : 'В текущей смене нет сотрудников с ролью «Бармен».';
+  }
+  const clearButton = $('#clearStaffButton');
+  if (clearButton) clearButton.classList.toggle('hidden', !state.activeStaff);
+}
+
+async function loadStaffSession() {
+  if (!roleCanStaff(state.profile?.role)) return;
+  const data = await api('/api/staff/session');
+  state.staffAvailable = data.available || [];
+  state.activeStaff = data.activeStaff || null;
+  if (!state.activeStaff && state.staffSession) {
+    state.staffSession = '';
+    localStorage.removeItem('pivnik_staff_session');
+  }
+  renderStaffSession();
+}
+
+async function activateStaff() {
+  const selected = $('#staffSessionList input[name="staff-session-user"]:checked');
+  const pin = $('#staffPinInput')?.value?.trim() || '';
+  if (!selected) throw new Error('Выберите сотрудника.');
+  if (!/^\d{4,6}$/.test(pin)) throw new Error('Введите PIN из 4–6 цифр.');
+  const data = await api('/api/staff/activate', {
+    method: 'POST',
+    body: JSON.stringify({ userId: selected.value, pin }),
+    headers: { 'x-staff-session': '' }
+  });
+  state.staffSession = data.token;
+  state.activeStaff = data.staff;
+  localStorage.setItem('pivnik_staff_session', state.staffSession);
+  $('#staffPinInput').value = '';
+  renderStaffSession();
+  closeModal('staffLoginModal');
+  toast(`Смена: ${activeStaffName()}`);
+  haptic('medium');
+}
+
+function clearStaffSession() {
+  state.staffSession = '';
+  state.activeStaff = null;
+  localStorage.removeItem('pivnik_staff_session');
+  renderStaffSession();
+  closeModal('staffLoginModal');
+  toast('Используется текущий Telegram-аккаунт');
+}
+
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
@@ -317,7 +517,8 @@ function renderProfile() {
   $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   $('#profileAvatar').textContent = (profile.firstName || 'П').slice(0, 1).toUpperCase();
-  $('#staffName').textContent = profile.firstName || 'Бармен';
+  $('#staffName').textContent = activeStaffName();
+  renderBeer(profile);
 
   const min = Number(profile.status.minSpend || 0);
   const next = profile.status.nextSpend;
@@ -340,6 +541,7 @@ function renderProfile() {
   $('#adminRoleBadge').textContent = profile.role === 'viewer' ? 'VIEW' : 'ADMIN';
   $('#adminAccessLabel').textContent = profile.role === 'viewer' ? 'Только просмотр' : 'Полный доступ';
   $$('.admin-write-only').forEach((element) => element.classList.toggle('hidden', !roleCanWrite(profile.role)));
+  renderCurrentShift();
 }
 
 function renderStatuses() {
@@ -361,16 +563,24 @@ function renderStatuses() {
 
 function renderTransaction(transaction) {
   const isRedeem = transaction.mode === 'redeem';
-  const mode = isRedeem ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
-  const icon = isRedeem ? '−' : transaction.mode === 'adjustment' ? '±' : '+';
-  const primary = transaction.mode === 'adjustment'
-    ? `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`
-    : `${fmt(transaction.checkAmount)} ₽`;
-  const detail = isRedeem
-    ? `Списано ${transaction.bonusSpent} Б · начислено ${transaction.bonusEarned} Б`
+  const isGift = transaction.mode === 'beer_gift';
+  const mode = isGift ? 'Подарочный литр' : isRedeem ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+  const icon = isGift ? '🍺' : isRedeem ? '−' : transaction.mode === 'adjustment' ? '±' : '+';
+  const primary = isGift
+    ? `${fmtLiters(transaction.beerGiftSpentLiters)} л`
     : transaction.mode === 'adjustment'
-      ? transaction.reason || 'Ручная корректировка'
-      : `Начислено ${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽`;
+      ? `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`
+      : `${fmt(transaction.checkAmount)} ₽`;
+  const beerDetails = transaction.beerLiters > 0
+    ? ` · пиво ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
+    : '';
+  const detail = isGift
+    ? `Бесплатно выдано ${fmtLiters(transaction.beerGiftSpentLiters)} л разливного пива`
+    : isRedeem
+      ? `Списано ${transaction.bonusSpent} Б · начислено ${transaction.bonusEarned} Б${beerDetails}`
+      : transaction.mode === 'adjustment'
+        ? transaction.reason || 'Ручная корректировка'
+        : `Начислено ${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽${beerDetails}`;
   const suspicious = transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : '';
   return `<div class="op-row ${transaction.isSuspicious ? 'suspicious' : ''}">
     <span class="op-icon">${icon}</span>
@@ -386,6 +596,8 @@ async function refreshMe() {
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
+  await loadCurrentShift();
+  if (roleCanStaff(state.profile?.role)) await loadStaffSession();
 }
 
 async function authenticate() {
@@ -427,6 +639,9 @@ async function boot() {
     $('#bootText').textContent = 'Собираем данные профиля…';
     renderProfile();
     renderStatuses();
+    $('#bootText').textContent = 'Проверяем текущую смену…';
+    await loadCurrentShift();
+    if (roleCanStaff(state.profile?.role)) await loadStaffSession();
     await finishBoot();
     showConsentIfNeeded();
   } catch (error) {
@@ -487,6 +702,7 @@ async function resolveQr(payload) {
   $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}% начисление`;
   $('#foundCode').textContent = data.shortCode || data.client.qrShortCode || '';
   $('#foundAvatar').textContent = data.client.firstName.slice(0, 1).toUpperCase();
+  updateResolvedBeer(data.client);
   updateCalculation();
   haptic('medium');
 }
@@ -522,9 +738,10 @@ function clearResolvedClient() {
 function updateCalculation() {
   const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
   const client = state.resolvedClient?.profile;
-  let cash = amount;
+  const isGift = state.mode === 'beerGift';
+  let cash = isGift ? 0 : amount;
   let earn = 0;
-  if (client && amount > 0) {
+  if (client && amount > 0 && !isGift) {
     if (state.mode === 'accrue') {
       const discount = amount * client.status.discountPercent / 100;
       cash = amount - discount;
@@ -538,22 +755,38 @@ function updateCalculation() {
       earn = Math.floor(cash * client.status.bonusPercent / 100);
     }
   }
-  $('#cashDue').textContent = `${fmt(Math.max(0, cash))} ₽`;
-  $('#bonusEarn').textContent = `+${fmt(earn)}`;
-  $('#createSale').disabled = !(amount > 0 && client && !state.saleBusy);
+  $('#cashDue').textContent = isGift ? '0 ₽' : `${fmt(Math.max(0, cash))} ₽`;
+  $('#bonusEarn').textContent = isGift ? 'подарок' : `+${fmt(earn)}`;
+  const giftAvailable = Number(client?.beer?.giftLitersBalance || 0) >= Number(state.selectedGiftLiters || 0.5);
+  $('#createSale').disabled = isGift
+    ? !(client && giftAvailable && !state.saleBusy)
+    : !(amount > 0 && client && !state.saleBusy);
   $('#createSale').textContent = state.saleBusy
     ? 'Проводим…'
-    : state.mode === 'redeem' ? 'Списать бонусы' : 'Начислить бонусы';
+    : isGift ? `Выдать ${fmtLiters(state.selectedGiftLiters)} л бесплатно`
+      : state.mode === 'redeem' ? 'Списать бонусы' : 'Начислить бонусы';
+  $('#saleAmount').disabled = isGift;
+  $('#beerLiters').disabled = isGift;
+  $('.staff-step')?.classList.toggle('gift-operation-active', isGift);
 }
 
 function showOperationResult(transaction, client) {
   const element = $('#operationResult');
   const isRedeem = transaction.mode === 'redeem';
-  const title = isRedeem ? 'Бонусы списаны' : 'Бонусы начислены';
-  const detail = isRedeem
-    ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б`
-    : `+${transaction.bonusEarned} Б`;
-  element.innerHTML = `<span class="result-check">✓</span><div><b>${title}</b><small>${escapeHtml(client.firstName)} · ${detail}<br>Новый баланс: ${fmt(client.balance)} Б</small></div>`;
+  const isGift = transaction.mode === 'beer_gift';
+  const title = isGift ? 'Подарок выдан' : isRedeem ? 'Бонусы списаны' : 'Операция проведена';
+  const beerLine = transaction.beerLiters > 0
+    ? `<br>Учтено пива: ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
+    : '';
+  const detail = isGift
+    ? `−${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
+    : isRedeem
+      ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б${beerLine}`
+      : `+${transaction.bonusEarned} Б${beerLine}`;
+  const footer = isGift
+    ? `Осталось подарочного объёма: ${fmtLiters(client.beer?.giftLitersBalance)} л`
+    : `Новый баланс: ${fmt(client.balance)} Б`;
+  element.innerHTML = `<span class="result-check">✓</span><div><b>${title}</b><small>${escapeHtml(client.firstName)} · ${detail}<br>${footer}</small></div>`;
   element.classList.remove('hidden');
   clearTimeout(state.operationResultTimer);
   state.operationResultTimer = setTimeout(() => element.classList.add('hidden'), 6500);
@@ -566,26 +799,46 @@ function hideOperationResult() {
 async function createSale() {
   if (state.saleBusy || !state.resolvedClient) return;
   const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
+  const beerLiters = Number(String($('#beerLiters').value || '').replace(',', '.')) || 0;
+  const isGift = state.mode === 'beerGift';
   state.saleBusy = true;
   updateCalculation();
   try {
-    const data = await api('/api/staff/transactions', {
+    const data = await api(isGift ? '/api/staff/beer-gift' : '/api/staff/transactions', {
       method: 'POST',
-      body: JSON.stringify({
+      body: JSON.stringify(isGift ? {
+        qrToken: state.resolvedClient.qrToken,
+        giftLiters: state.selectedGiftLiters,
+        requestKey: requestId()
+      } : {
         qrToken: state.resolvedClient.qrToken,
         amount,
+        beerLiters,
         mode: state.mode,
         bonusToSpend: Number($('#bonusToSpend').value || 0),
         requestKey: requestId()
       })
     });
     showOperationResult(data.transaction, data.client);
-    toast(state.mode === 'redeem' ? `Списано ${data.transaction.bonusSpent} бонусов` : `Начислено ${data.transaction.bonusEarned} бонусов`);
+    const message = isGift
+      ? `Выдано ${fmtLiters(data.transaction.beerGiftSpentLiters)} л бесплатно`
+      : state.mode === 'redeem'
+        ? `Списано ${data.transaction.bonusSpent} бонусов`
+        : data.transaction.beerGiftEarnedLiters
+          ? `Начислено ${data.transaction.bonusEarned} Б и ${fmtLiters(data.transaction.beerGiftEarnedLiters)} л подарка`
+          : `Начислено ${data.transaction.bonusEarned} бонусов`;
+    toast(message);
     haptic('medium');
     $('#saleAmount').value = '';
+    $('#beerLiters').value = '';
     $('#bonusToSpend').value = '';
     state.resolvedClient = { ...state.resolvedClient, profile: data.client };
     $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}% начисление`;
+    updateResolvedBeer(data.client);
+    if (state.profile?.id === data.client.id) {
+      state.profile = data.client;
+      renderProfile();
+    }
   } finally {
     state.saleBusy = false;
     updateCalculation();
@@ -632,17 +885,21 @@ async function publishDesign() {
 function adminTransactionHtml(transaction) {
   const client = transaction.clientName || 'Клиент';
   const staff = transaction.staffName || 'Система';
-  const type = transaction.mode === 'redeem' ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+  const isGift = transaction.mode === 'beer_gift';
+  const type = isGift ? 'Подарочный литр' : transaction.mode === 'redeem' ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+  const beerInfo = isGift
+    ? ` · −${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
+    : transaction.beerLiters ? ` · ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · +${fmtLiters(transaction.beerGiftEarnedLiters)} л подарка` : ''}` : '';
   return `<div class="op-row admin-op ${transaction.isSuspicious ? 'suspicious' : ''}">
-    <span class="op-icon">${transaction.mode === 'redeem' ? '−' : transaction.mode === 'adjustment' ? '±' : '+'}</span>
-    <div><b>${escapeHtml(client)}${transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : ''}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${escapeHtml(staff)}<br>${type} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б</small></div>
-    <strong>${fmt(transaction.checkAmount)} ₽</strong>
+    <span class="op-icon">${isGift ? '🍺' : transaction.mode === 'redeem' ? '−' : transaction.mode === 'adjustment' ? '±' : '+'}</span>
+    <div><b>${escapeHtml(client)}${transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : ''}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${escapeHtml(staff)}<br>${type} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б${beerInfo}</small></div>
+    <strong>${isGift ? `${fmtLiters(transaction.beerGiftSpentLiters)} л` : `${fmt(transaction.checkAmount)} ₽`}</strong>
   </div>`;
 }
 
 async function loadAdmin() {
   if (!roleCanAdmin(state.profile?.role)) return;
-  const [summaryData, usersData] = await Promise.all([api('/api/admin/summary'), api('/api/admin/users')]);
+  const [summaryData, usersData, shiftData] = await Promise.all([api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift')]);
   state.adminSettings = summaryData.settings;
   $('#metricClients').textContent = fmt(summaryData.summary.clients);
   $('#metricIssued').textContent = fmt(summaryData.summary.issued);
@@ -653,6 +910,7 @@ async function loadAdmin() {
   $('#adminOperations').innerHTML = summaryData.operations.length ? summaryData.operations.map(adminTransactionHtml).join('') : 'Операций пока нет';
   fillDesignForm(summaryData.settings.draft);
   renderUsers(usersData.users);
+  renderShiftAdmin(shiftData);
 }
 
 function renderUsers(users) {
@@ -666,11 +924,12 @@ function renderUsers(users) {
             <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Просмотр админки</option>
           </select>
           <button class="text-btn" data-adjust-user="${user.id}" type="button">Баланс</button>
+          ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button>` : ''}
           <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
         </div>`
       : `<small>${escapeHtml(user.role)}</small>`;
     return `<div class="user-row">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${fmt(user.balance)} Б</strong>
       ${controls}
     </div>`;
@@ -680,6 +939,7 @@ function renderUsers(users) {
     try {
       await api(`/api/admin/users/${select.dataset.roleUser}/role`, { method: 'POST', body: JSON.stringify({ role: select.value }) });
       toast('Роль обновлена');
+      await loadAdmin();
     } catch (error) { toast(error.message); }
   }));
 
@@ -691,6 +951,19 @@ function renderUsers(users) {
     try {
       await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason: reason.trim() }) });
       toast('Баланс изменён');
+      await loadAdmin();
+    } catch (error) { toast(error.message); }
+  }));
+
+  $$('[data-pin-user]').forEach((button) => button.addEventListener('click', async () => {
+    const pin = prompt('Новый PIN сотрудника: 4–6 цифр');
+    if (pin === null) return;
+    if (!/^\d{4,6}$/.test(pin.trim())) return toast('PIN должен содержать 4–6 цифр');
+    const confirmPin = prompt('Повторите PIN:');
+    if (confirmPin !== pin) return toast('PIN-коды не совпадают');
+    try {
+      await api(`/api/admin/users/${button.dataset.pinUser}/pin`, { method: 'POST', body: JSON.stringify({ pin }) });
+      toast('PIN сотрудника сохранён');
       await loadAdmin();
     } catch (error) { toast(error.message); }
   }));
@@ -720,11 +993,23 @@ $('#scanClient').addEventListener('click', scanQr);
 $('#manualCodeButton').addEventListener('click', manualCode);
 $('#clearClient').addEventListener('click', clearResolvedClient);
 $('#saleAmount').addEventListener('input', updateCalculation);
+$('#beerLiters').addEventListener('input', updateCalculation);
+$$('[data-beer-liters]').forEach((button) => button.addEventListener('click', () => {
+  $('#beerLiters').value = button.dataset.beerLiters;
+  updateCalculation();
+}));
+$$('.gift-volume').forEach((button) => button.addEventListener('click', () => {
+  state.selectedGiftLiters = Number(button.dataset.giftLiters || 0.5);
+  $$('.gift-volume').forEach((item) => item.classList.toggle('active', item === button));
+  updateCalculation();
+}));
 $('#bonusToSpend').addEventListener('input', updateCalculation);
 $$('.mode').forEach((button) => button.addEventListener('click', () => {
   state.mode = button.dataset.mode;
   $$('.mode').forEach((item) => item.classList.toggle('active', item === button));
   $('#redeemControls').classList.toggle('hidden', state.mode !== 'redeem');
+  $('#beerGiftControls').classList.toggle('hidden', state.mode !== 'beerGift');
+  if (state.mode === 'beerGift') updateResolvedBeer();
   hideOperationResult();
   updateCalculation();
 }));
@@ -733,6 +1018,12 @@ $('#saveDraft').addEventListener('click', () => saveDraft().catch((error) => toa
 $('#publishDesign').addEventListener('click', () => publishDesign().catch((error) => toast(error.message)));
 $('#reloadAdmin').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
 $('#reloadUsers').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$('#saveShift').addEventListener('click', () => saveShift().catch((error) => toast(error.message)));
+$('#endShift').addEventListener('click', () => endShift().catch((error) => toast(error.message)));
+$('#changeStaffButton').addEventListener('click', () => { renderStaffSession(); openModal('staffLoginModal'); });
+$('#activateStaffButton').addEventListener('click', () => activateStaff().catch((error) => toast(error.message)));
+$('#clearStaffButton').addEventListener('click', clearStaffSession);
+$('#staffPinInput').addEventListener('input', (event) => { event.target.value = event.target.value.replace(/\D/g, '').slice(0, 6); });
 $$('[data-design-color], [data-design-text], [data-design-section], [data-design-radius]').forEach((input) => input.addEventListener('input', () => {
   if (input.matches('[data-design-radius]')) $('#radiusValue').textContent = input.value;
   if (state.adminSettings) applyDesign(readDesignForm());

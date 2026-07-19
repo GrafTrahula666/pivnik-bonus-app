@@ -51,7 +51,10 @@ const STATUS_LEVELS = [
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
-const TERMS_VERSION = 'beta-0.2';
+const TERMS_VERSION = 'beta-0.3';
+const BEER_PAID_TARGET_ML = 14_000;
+const BEER_GIFT_ML = 1_000;
+const MAX_BEER_ML_PER_TRANSACTION = 100_000;
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 const DEFAULT_DESIGN = {
@@ -87,6 +90,22 @@ const DEFAULT_DESIGN = {
 function makeShortCode() {
   const chars = Array.from({ length: 8 }, () => QR_ALPHABET[crypto.randomInt(0, QR_ALPHABET.length)]).join('');
   return `PVK-${chars.slice(0, 4)}-${chars.slice(4)}`;
+}
+
+function normalizeStaffPin(value) {
+  const pin = String(value || '').trim();
+  return /^\d{4,6}$/.test(pin) ? pin : '';
+}
+
+function createStaffPinHash(pin, salt = crypto.randomBytes(16).toString('hex')) {
+  return { salt, hash: crypto.scryptSync(pin, salt, 32).toString('hex') };
+}
+
+function verifyStaffPin(pin, salt, expectedHash) {
+  if (!pin || !salt || !expectedHash) return false;
+  const actual = Buffer.from(crypto.scryptSync(pin, salt, 32).toString('hex'), 'hex');
+  const expected = Buffer.from(expectedHash, 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 async function ensurePersonalQr(db, userId, force = false) {
@@ -131,6 +150,18 @@ function centsFromInput(value) {
 
 function rubles(cents) {
   return Number(cents || 0) / 100;
+}
+
+function mlFromLiters(value) {
+  const normalized = String(value ?? '').replace(',', '.').trim();
+  if (!normalized) return 0;
+  const liters = Number(normalized);
+  if (!Number.isFinite(liters) || liters < 0) return 0;
+  return Math.min(MAX_BEER_ML_PER_TRANSACTION, Math.round(liters * 1000));
+}
+
+function litersFromMl(ml) {
+  return Number(ml || 0) / 1000;
 }
 
 function signSession(payload) {
@@ -218,6 +249,9 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_short_code TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_salt TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_updated_at TIMESTAMPTZ');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_token_unique ON users(qr_token) WHERE qr_token IS NOT NULL');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_short_unique ON users(qr_short_code) WHERE qr_short_code IS NOT NULL');
 
@@ -225,6 +259,14 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS wallets (
         user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS beer_loyalty (
+        user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        paid_ml_total BIGINT NOT NULL DEFAULT 0 CHECK (paid_ml_total >= 0),
+        gift_ml_balance INTEGER NOT NULL DEFAULT 0 CHECK (gift_ml_balance >= 0),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
@@ -259,12 +301,38 @@ async function initDatabase() {
       )
     `);
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_ml INTEGER NOT NULL DEFAULT 0');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_gift_earned_ml INTEGER NOT NULL DEFAULT 0');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_gift_spent_ml INTEGER NOT NULL DEFAULT 0');
+    await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_mode_check');
+    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift'))");
     await client.query(`
       UPDATE transactions
       SET status = 'cancelled', completed_at = COALESCE(completed_at, NOW()),
           reason = COALESCE(reason, 'Отменено при переходе на мгновенное списание')
       WHERE status = 'pending'
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shifts (
+        id BIGSERIAL PRIMARY KEY,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ended_at TIMESTAMPTZ,
+        note TEXT,
+        created_by BIGINT REFERENCES users(id),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shift_members (
+        shift_id BIGINT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        position SMALLINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (shift_id, user_id)
+      )
+    `);
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_shifts_single_active ON shifts ((1)) WHERE ended_at IS NULL');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_shift_members_user ON shift_members(user_id, shift_id)');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_settings (
@@ -284,6 +352,7 @@ async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_qr_expiry ON qr_sessions(expires_at)');
+    await client.query('INSERT INTO beer_loyalty (user_id) SELECT id FROM users ON CONFLICT (user_id) DO NOTHING');
     const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
     for (const row of usersWithoutQr.rows) await ensurePersonalQr(client, row.id);
     await client.query('COMMIT');
@@ -293,6 +362,42 @@ async function initDatabase() {
   } finally {
     client.release();
   }
+}
+
+async function getCurrentShift(db = pool) {
+  const shiftResult = await db.query(
+    `SELECT id, started_at, ended_at, note, updated_at
+     FROM shifts
+     WHERE ended_at IS NULL
+     ORDER BY started_at DESC
+     LIMIT 1`
+  );
+  if (!shiftResult.rowCount) return null;
+  const shift = shiftResult.rows[0];
+  const membersResult = await db.query(
+    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.role, sm.position
+     FROM shift_members sm
+     JOIN users u ON u.id = sm.user_id
+     WHERE sm.shift_id = $1
+     ORDER BY sm.position, u.first_name, u.id`,
+    [shift.id]
+  );
+  return {
+    id: String(shift.id),
+    startedAt: shift.started_at,
+    updatedAt: shift.updated_at,
+    note: shift.note || '',
+    members: membersResult.rows.map((row) => ({
+      id: String(row.id),
+      telegramId: String(row.telegram_id),
+      username: row.username,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      photoUrl: row.photo_url,
+      role: row.role
+    }))
+  };
 }
 
 async function getRollingSpend(client, userId) {
@@ -310,9 +415,10 @@ async function getRollingSpend(client, userId) {
 
 async function getProfile(userId, db = pool) {
   const userResult = await db.query(
-    `SELECT u.*, w.balance
+    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance
      FROM users u
      JOIN wallets w ON w.user_id = u.id
+     LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
      WHERE u.id = $1`,
     [userId]
   );
@@ -334,6 +440,18 @@ async function getProfile(userId, db = pool) {
     termsAcceptedAt: row.terms_accepted_at,
     termsVersion: row.terms_version,
     spend12m: rubles(spend12mCents),
+    beer: {
+      paidMlTotal: Number(row.paid_ml_total || 0),
+      paidLitersTotal: litersFromMl(row.paid_ml_total),
+      progressMl: Number(row.paid_ml_total || 0) % BEER_PAID_TARGET_ML,
+      progressLiters: litersFromMl(Number(row.paid_ml_total || 0) % BEER_PAID_TARGET_ML),
+      paidTargetMl: BEER_PAID_TARGET_ML,
+      paidTargetLiters: litersFromMl(BEER_PAID_TARGET_ML),
+      giftMlBalance: Number(row.gift_ml_balance || 0),
+      giftLitersBalance: litersFromMl(row.gift_ml_balance),
+      nextGiftMl: BEER_PAID_TARGET_ML - (Number(row.paid_ml_total || 0) % BEER_PAID_TARGET_ML),
+      nextGiftLiters: litersFromMl(BEER_PAID_TARGET_ML - (Number(row.paid_ml_total || 0) % BEER_PAID_TARGET_ML))
+    },
     status: {
       name: status.name,
       bonusPercent: status.bonusPercent,
@@ -366,6 +484,18 @@ function requireRole(...roles) {
     }
     next();
   };
+}
+
+async function resolveActingStaff(req) {
+  const raw = String(req.headers['x-staff-session'] || '').trim();
+  if (!raw) return req.user;
+  const payload = verifySession(raw);
+  if (!payload || payload.kind !== 'staff' || String(payload.terminalUid) !== String(req.user.id)) return null;
+  const profile = await getProfile(payload.staffUid);
+  if (!profile || !['staff', 'admin'].includes(profile.role)) return null;
+  const shift = await getCurrentShift();
+  if (shift?.members?.length && !shift.members.some((member) => String(member.id) === String(profile.id))) return null;
+  return profile;
 }
 
 async function sendTelegramMessage(telegramId, text) {
@@ -402,7 +532,13 @@ function transactionResponse(row) {
     createdAt: row.created_at,
     clientName: row.client_name,
     staffName: row.staff_name,
-    isSuspicious: Boolean(row.is_suspicious)
+    isSuspicious: Boolean(row.is_suspicious),
+    beerMl: Number(row.beer_ml || 0),
+    beerLiters: litersFromMl(row.beer_ml),
+    beerGiftEarnedMl: Number(row.beer_gift_earned_ml || 0),
+    beerGiftEarnedLiters: litersFromMl(row.beer_gift_earned_ml),
+    beerGiftSpentMl: Number(row.beer_gift_spent_ml || 0),
+    beerGiftSpentLiters: litersFromMl(row.beer_gift_spent_ml)
   };
 }
 
@@ -458,6 +594,7 @@ app.post('/api/auth', async (req, res, next) => {
       );
       const userId = userResult.rows[0].id;
       await client.query('INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
+      await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
@@ -530,6 +667,56 @@ app.get('/api/me/transactions', authRequired, async (req, res, next) => {
   }
 });
 
+app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
+  try {
+    const shift = await getCurrentShift();
+    const shiftIds = shift?.members?.length ? shift.members.map((member) => member.id) : [];
+    const result = await pool.query(
+      `SELECT id, telegram_id, username, first_name, last_name, role,
+              (staff_pin_hash IS NOT NULL AND staff_pin_salt IS NOT NULL) AS pin_configured
+       FROM users
+       WHERE role IN ('staff','admin')
+       ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 0 END, first_name, id`
+    );
+    const available = result.rows
+      .filter((row) => !shiftIds.length || shiftIds.includes(String(row.id)))
+      .map((row) => ({
+        id: String(row.id), telegramId: String(row.telegram_id), username: row.username,
+        firstName: row.first_name, lastName: row.last_name,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' '), role: row.role,
+        pinConfigured: Boolean(row.pin_configured)
+      }));
+    const activeStaff = await resolveActingStaff(req);
+    res.json({ shift, available, activeStaff: activeStaff ? { id: activeStaff.id, firstName: activeStaff.firstName, lastName: activeStaff.lastName, role: activeStaff.role } : null });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/staff/activate', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
+  try {
+    const userId = String(req.body?.userId || '');
+    const pin = normalizeStaffPin(req.body?.pin);
+    if (!userId || !pin) return res.status(400).json({ error: 'Введите PIN сотрудника из 4–6 цифр.' });
+    const result = await pool.query(
+      `SELECT id, first_name, last_name, role, staff_pin_hash, staff_pin_salt
+       FROM users WHERE id = $1 AND role IN ('staff','admin')`,
+      [userId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Сотрудник не найден.' });
+    const row = result.rows[0];
+    if (!verifyStaffPin(pin, row.staff_pin_salt, row.staff_pin_hash)) return res.status(403).json({ error: 'Неверный PIN сотрудника.' });
+    const shift = await getCurrentShift();
+    if (shift?.members?.length && !shift.members.some((member) => String(member.id) === String(row.id))) {
+      return res.status(403).json({ error: 'Этот сотрудник не выбран в текущей смене.' });
+    }
+    const token = signSession({ kind: 'staff', terminalUid: String(req.user.id), staffUid: String(row.id), exp: Date.now() + 16 * 60 * 60 * 1000 });
+    res.json({ token, staff: { id: String(row.id), firstName: row.first_name, lastName: row.last_name, role: row.role } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/staff/qr/resolve', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
     const raw = String(req.body?.payload || '').trim().toUpperCase();
@@ -552,10 +739,13 @@ app.post('/api/staff/qr/resolve', authRequired, requireRole('staff', 'admin'), a
 app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   const mode = req.body?.mode === 'redeem' ? 'redeem' : 'accrue';
   const amountCents = centsFromInput(req.body?.amount);
+  const beerMl = mlFromLiters(req.body?.beerLiters);
   const qrToken = String(req.body?.qrToken || '');
   const requestKey = String(req.body?.requestKey || crypto.randomUUID());
   if (!amountCents) return res.status(400).json({ error: 'Введите сумму чека.' });
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
+  const actingStaff = await resolveActingStaff(req);
+  if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
 
   const client = await pool.connect();
   try {
@@ -563,7 +753,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
     if (existing.rowCount) {
       await client.query('ROLLBACK');
-      return res.json({ transaction: transactionResponse(existing.rows[0]) });
+      return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
     }
 
     const userResult = await client.query(
@@ -583,6 +773,17 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       return res.status(404).json({ error: 'Бонусный счёт клиента не найден.' });
     }
     const balance = Number(walletResult.rows[0].balance || 0);
+    const beerResult = await client.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [targetUser.id]);
+    if (!beerResult.rowCount) {
+      await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [targetUser.id]);
+    }
+    const beerWallet = beerResult.rows[0] || { paid_ml_total: 0, gift_ml_balance: 0 };
+    const previousPaidMl = Number(beerWallet.paid_ml_total || 0);
+    const newPaidMl = previousPaidMl + beerMl;
+    const previousGiftCount = Math.floor(previousPaidMl / BEER_PAID_TARGET_ML);
+    const newGiftCount = Math.floor(newPaidMl / BEER_PAID_TARGET_ML);
+    const beerGiftEarnedMl = Math.max(0, newGiftCount - previousGiftCount) * BEER_GIFT_ML;
+    const newGiftBalanceMl = Number(beerWallet.gift_ml_balance || 0) + beerGiftEarnedMl;
     const spend12mCents = await getRollingSpend(client, targetUser.id);
     const status = getStatus(spend12mCents);
 
@@ -609,19 +810,29 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       `INSERT INTO transactions (
          request_key, client_id, staff_id, mode, status,
          check_amount_cents, discount_cents, bonus_spent, bonus_earned,
-         cash_paid_cents, balance_after, is_suspicious, completed_at
-       ) VALUES ($1,$2,$3,$4,'completed',$5,$6,$7,$8,$9,$10,$11,NOW())
+         cash_paid_cents, balance_after, is_suspicious,
+         beer_ml, beer_gift_earned_ml, completed_at
+       ) VALUES ($1,$2,$3,$4,'completed',$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
        RETURNING *`,
-      [requestKey, targetUser.id, req.user.id, mode, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, isSuspicious]
+      [requestKey, targetUser.id, actingStaff.id, mode, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, isSuspicious, beerMl, beerGiftEarnedMl]
     );
     await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, targetUser.id]);
+    await client.query(
+      'UPDATE beer_loyalty SET paid_ml_total = $1, gift_ml_balance = $2, updated_at = NOW() WHERE user_id = $3',
+      [newPaidMl, newGiftBalanceMl, targetUser.id]
+    );
     await client.query('COMMIT');
 
     const tx = txResult.rows[0];
+    const beerText = beerMl > 0
+      ? `
+Разливное: ${litersFromMl(beerMl).toFixed(2).replace(/\.00$/, '')} л${beerGiftEarnedMl ? `
+Подарок начислен: ${litersFromMl(beerGiftEarnedMl)} л` : ''}`
+      : '';
     const operationText = mode === 'redeem'
       ? `Списано: ${bonusSpent} бонусов
-Начислено: ${bonusEarned} бонусов`
-      : `Начислено: ${bonusEarned} бонусов`;
+Начислено: ${bonusEarned} бонусов${beerText}`
+      : `Начислено: ${bonusEarned} бонусов${beerText}`;
     await sendTelegramMessage(
       targetUser.telegram_id,
       `Операция в баре «Пивник»
@@ -641,7 +852,7 @@ ${operationText}
         `⚠️ Подозрительная операция свыше 3000 ₽
 
 Клиент: ${clientName || targetUser.telegram_id}
-Сотрудник: ${req.user.firstName}
+Сотрудник: ${actingStaff.firstName}
 Тип: ${mode === 'redeem' ? 'списание' : 'начисление'}
 Чек: ${rubles(amountCents).toFixed(2)} ₽`
       );
@@ -656,19 +867,175 @@ ${operationText}
   }
 });
 
+app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
+  const qrToken = String(req.body?.qrToken || '');
+  const requestKey = String(req.body?.requestKey || crypto.randomUUID());
+  const giftMl = mlFromLiters(req.body?.giftLiters);
+  if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
+  if (![500, 1000].includes(giftMl)) return res.status(400).json({ error: 'Можно выдать 0,5 или 1 литр подарка.' });
+  const actingStaff = await resolveActingStaff(req);
+  if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
+    if (existing.rowCount) {
+      await client.query('ROLLBACK');
+      return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
+    }
+
+    const userResult = await client.query(
+      `SELECT id, telegram_id, first_name, last_name
+       FROM users WHERE qr_token = $1 FOR UPDATE`,
+      [qrToken]
+    );
+    if (!userResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
+    const targetUser = userResult.rows[0];
+    const beerResult = await client.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [targetUser.id]);
+    if (!beerResult.rowCount || Number(beerResult.rows[0].gift_ml_balance || 0) < giftMl) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'На счету недостаточно подарочных литров.' });
+    }
+    const newGiftBalance = Number(beerResult.rows[0].gift_ml_balance) - giftMl;
+    const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1', [targetUser.id]);
+    const txResult = await client.query(
+      `INSERT INTO transactions (
+         request_key, client_id, staff_id, mode, status,
+         check_amount_cents, cash_paid_cents, balance_after,
+         beer_gift_spent_ml, reason, completed_at
+       ) VALUES ($1,$2,$3,'beer_gift','completed',0,0,$4,$5,$6,NOW())
+       RETURNING *`,
+      [requestKey, targetUser.id, actingStaff.id, Number(walletResult.rows[0]?.balance || 0), giftMl, `Выдан подарочный объём ${litersFromMl(giftMl)} л`]
+    );
+    await client.query('UPDATE beer_loyalty SET gift_ml_balance = $1, updated_at = NOW() WHERE user_id = $2', [newGiftBalance, targetUser.id]);
+    await client.query('COMMIT');
+
+    await sendTelegramMessage(
+      targetUser.telegram_id,
+      `Подарок в баре «Пивник»
+
+Выдано бесплатно: ${litersFromMl(giftMl)} л разливного пива.
+Осталось подарочного объёма: ${litersFromMl(newGiftBalance)} л.`
+    );
+    res.json({ transaction: transactionResponse(txResult.rows[0]), client: await getProfile(targetUser.id) });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/staff/transactions/:id', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
+    const actingStaff = await resolveActingStaff(req);
+    if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
     const result = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name
        FROM transactions t
        JOIN users c ON c.id = t.client_id
        WHERE t.id = $1 AND t.staff_id = $2`,
-      [req.params.id, req.user.id]
+      [req.params.id, actingStaff.id]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'Операция не найдена.' });
     res.json({ transaction: transactionResponse(result.rows[0]) });
   } catch (error) {
     next(error);
+  }
+});
+
+app.get('/api/shift/current', authRequired, async (_req, res, next) => {
+  try {
+    res.json({ shift: await getCurrentShift() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/admin/shift', authRequired, requireRole('viewer', 'admin'), async (_req, res, next) => {
+  try {
+    const staffResult = await pool.query(
+      `SELECT id, telegram_id, username, first_name, last_name, photo_url, role
+       FROM users
+       WHERE role IN ('staff','admin')
+       ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 0 END, first_name, id`
+    );
+    res.json({
+      shift: await getCurrentShift(),
+      staff: staffResult.rows.map((row) => ({
+        id: String(row.id),
+        telegramId: String(row.telegram_id),
+        username: row.username,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        photoUrl: row.photo_url,
+        role: row.role
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res, next) => {
+  const staffIds = [...new Set((Array.isArray(req.body?.staffIds) ? req.body.staffIds : []).map(String))].slice(0, 20);
+  const note = String(req.body?.note || '').trim().slice(0, 120);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const activeResult = await client.query(
+      `SELECT id FROM shifts WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1 FOR UPDATE`
+    );
+
+    if (!staffIds.length) {
+      if (activeResult.rowCount) {
+        await client.query('UPDATE shifts SET ended_at = NOW(), updated_at = NOW() WHERE id = $1', [activeResult.rows[0].id]);
+      }
+      await client.query('COMMIT');
+      return res.json({ ok: true, shift: null });
+    }
+
+    const validResult = await client.query(
+      `SELECT id FROM users WHERE id = ANY($1::bigint[]) AND role IN ('staff','admin')`,
+      [staffIds]
+    );
+    const validIds = validResult.rows.map((row) => String(row.id));
+    if (validIds.length !== staffIds.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'В составе смены есть пользователь без роли сотрудника.' });
+    }
+
+    let shiftId;
+    if (activeResult.rowCount) {
+      shiftId = activeResult.rows[0].id;
+      await client.query('UPDATE shifts SET note = $1, updated_at = NOW() WHERE id = $2', [note || null, shiftId]);
+      await client.query('DELETE FROM shift_members WHERE shift_id = $1', [shiftId]);
+    } else {
+      const shiftResult = await client.query(
+        'INSERT INTO shifts (note, created_by) VALUES ($1,$2) RETURNING id',
+        [note || null, req.user.id]
+      );
+      shiftId = shiftResult.rows[0].id;
+    }
+
+    for (let index = 0; index < staffIds.length; index += 1) {
+      await client.query(
+        'INSERT INTO shift_members (shift_id, user_id, position) VALUES ($1,$2,$3)',
+        [shiftId, staffIds[index], index]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, shift: await getCurrentShift() });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    next(error);
+  } finally {
+    client.release();
   }
 });
 
@@ -711,9 +1078,12 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
 app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, w.balance
+      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, w.balance,
+              bl.paid_ml_total, bl.gift_ml_balance,
+              (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users u
        JOIN wallets w ON w.user_id = u.id
+       LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
        ORDER BY u.created_at DESC
        LIMIT 200`
     );
@@ -725,6 +1095,9 @@ app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async 
       role: row.role,
       balance: Number(row.balance || 0),
       qrShortCode: row.qr_short_code,
+      beerPaidLitersTotal: litersFromMl(row.paid_ml_total),
+      beerGiftLitersBalance: litersFromMl(row.gift_ml_balance),
+      pinConfigured: Boolean(row.pin_configured),
       createdAt: row.created_at
     })) });
   } catch (error) {
@@ -740,6 +1113,24 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
     if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
     if (String(target.rows[0].telegram_id) === ownerTelegramId) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
     await pool.query('UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2', [role, req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/users/:id/pin', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const pin = normalizeStaffPin(req.body?.pin);
+    if (!pin) return res.status(400).json({ error: 'PIN должен содержать 4–6 цифр.' });
+    const target = await pool.query('SELECT id, role FROM users WHERE id = $1', [req.params.id]);
+    if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
+    if (!['staff','admin'].includes(target.rows[0].role)) return res.status(400).json({ error: 'PIN можно назначить только сотруднику.' });
+    const { salt, hash } = createStaffPinHash(pin);
+    await pool.query(
+      'UPDATE users SET staff_pin_hash = $1, staff_pin_salt = $2, staff_pin_updated_at = NOW(), updated_at = NOW() WHERE id = $3',
+      [hash, salt, req.params.id]
+    );
     res.json({ ok: true });
   } catch (error) {
     next(error);

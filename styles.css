@@ -1107,3 +1107,467 @@ button:active { transform: translateY(1px) scale(.995); }
   .hero-insights { grid-template-columns: 1fr; }
   .sale-mode { grid-template-columns: 1fr; }
 }
+
+/* V7: литровая акция — каждый 15-й литр в подарок */
+.beer-loyalty-card {
+  position: relative;
+  overflow: hidden;
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid rgba(255, 201, 107, .16);
+  background:
+    radial-gradient(circle at 92% 8%, rgba(255, 201, 107, .15), transparent 25%),
+    linear-gradient(145deg, rgba(46, 31, 21, .98), rgba(20, 16, 13, .98));
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .2);
+}
+.beer-loyalty-card::after {
+  content: "15";
+  position: absolute;
+  right: 10px;
+  bottom: -26px;
+  color: rgba(255, 255, 255, .025);
+  font-size: 112px;
+  line-height: 1;
+  font-weight: 900;
+  pointer-events: none;
+}
+.beer-loyalty-card.gift-ready {
+  border-color: rgba(114, 215, 154, .32);
+  background:
+    radial-gradient(circle at 90% 8%, rgba(114, 215, 154, .17), transparent 27%),
+    linear-gradient(145deg, rgba(35, 48, 32, .98), rgba(20, 16, 13, .98));
+}
+.beer-card-top,
+.beer-progress-head,
+.beer-card-foot,
+.field-caption,
+.gift-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.beer-card-top { align-items: flex-start; }
+.beer-card-top > div:first-child { min-width: 0; }
+.beer-kicker {
+  display: inline-block;
+  margin-bottom: 7px;
+  color: var(--gold2);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.beer-card-top h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -.02em;
+}
+.beer-card-top p {
+  max-width: 260px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.beer-gift-counter {
+  flex: 0 0 auto;
+  width: 74px;
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-radius: 20px;
+  background: rgba(233, 168, 59, .09);
+  border: 1px solid rgba(233, 168, 59, .2);
+}
+.beer-gift-counter strong {
+  color: var(--gold2);
+  font-size: 26px;
+  line-height: 1;
+}
+.beer-gift-counter small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+.gift-ready .beer-gift-counter {
+  background: rgba(114, 215, 154, .1);
+  border-color: rgba(114, 215, 154, .25);
+}
+.gift-ready .beer-gift-counter strong,
+.gift-ready #beerGiftReady { color: var(--success); }
+.beer-progress-head {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.beer-progress-head b { color: var(--text); font-size: 10px; }
+.beer-progress {
+  height: 9px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .35);
+  border: 1px solid rgba(255, 255, 255, .035);
+}
+.beer-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d27d17, var(--gold2));
+  box-shadow: 0 0 18px rgba(233, 168, 59, .26);
+  transition: width .35s ease;
+}
+.beer-card-foot {
+  position: relative;
+  z-index: 1;
+  margin-top: 10px;
+  align-items: flex-end;
+}
+.beer-card-foot span {
+  max-width: 245px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+.beer-card-foot strong {
+  color: var(--gold2);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.beer-volume-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .055);
+}
+.field-caption span { color: var(--text); font-size: 11px; font-weight: 700; }
+.field-caption small { color: var(--muted); font-size: 9px; }
+.volume-input {
+  display: flex;
+  align-items: center;
+  margin-top: 9px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: #0d0a08;
+  border: 1px solid var(--line);
+}
+.volume-input input {
+  min-width: 0;
+  flex: 1;
+  padding: 11px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 800;
+}
+.volume-input span { color: var(--muted); }
+.volume-presets,
+.gift-volume-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-top: 8px;
+}
+.volume-presets button,
+.gift-volume {
+  min-height: 36px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  background: rgba(255, 255, 255, .025);
+  color: #d7c4b0;
+  font-size: 10px;
+}
+.volume-presets button:active,
+.gift-volume.active {
+  color: #2a1809;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  border-color: transparent;
+}
+#foundBeer {
+  color: #cdb08d;
+  font-size: 9px;
+}
+.three-modes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.three-modes .mode { min-width: 0; padding: 10px; }
+.three-modes .mode b { font-size: 12px; }
+.three-modes .mode small { font-size: 8px; }
+.beer-gift-controls {
+  margin: 12px 0;
+  padding: 14px;
+  border-radius: 15px;
+  border: 1px solid rgba(233, 168, 59, .16);
+  background: linear-gradient(145deg, rgba(233, 168, 59, .07), rgba(0, 0, 0, .12));
+}
+.gift-summary {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .055);
+}
+.gift-summary span { color: var(--muted); font-size: 10px; }
+.gift-summary strong { color: var(--gold2); font-size: 16px; }
+.beer-gift-controls label { margin: 0 0 7px; }
+.gift-volume-options { grid-template-columns: repeat(2, 1fr); }
+.gift-volume { min-height: 44px; font-size: 13px; font-weight: 800; }
+.gift-volume:disabled { opacity: .28; }
+.money-input input:disabled,
+.volume-input input:disabled { opacity: .35; }
+.gift-operation-active .money-input,
+.gift-operation-active .beer-volume-block { opacity: .58; }
+
+@media (max-width: 390px) {
+  .beer-card-top { display: grid; grid-template-columns: 1fr auto; }
+  .beer-card-top h2 { font-size: 18px; }
+  .beer-gift-counter { width: 66px; min-height: 66px; }
+  .three-modes { grid-template-columns: 1fr; }
+  .three-modes .mode { min-height: 58px; }
+}
+
+/* v8: shift management and loader hardening */
+.boot-image,
+.sign-layer,
+.boot-person {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.boot-scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 15%, transparent 0 52%, rgba(0,0,0,.12) 100%);
+  z-index: 1;
+}
+.boot-overlay,
+.boot-copy { z-index: 2; }
+
+.shift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.shift-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 4px rgba(169,149,128,.08);
+}
+.shift-badge.on {
+  color: var(--green);
+  background: rgba(114,215,154,.09);
+  border-color: rgba(114,215,154,.25);
+}
+.shift-badge.on i {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(114,215,154,.1), 0 0 12px rgba(114,215,154,.45);
+}
+.shift-badge.off {
+  color: #d3ae87;
+  background: rgba(211,174,135,.08);
+  border-color: rgba(211,174,135,.2);
+}
+.shift-badge.off i { background: #d3ae87; }
+
+#currentShiftTeam {
+  display: grid;
+  gap: 10px;
+}
+.shift-team-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.shift-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+.shift-person .avatar {
+  flex: 0 0 42px;
+  background: linear-gradient(145deg, rgba(233,168,59,.24), rgba(91,57,24,.45));
+}
+.shift-person > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.shift-person b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.shift-person small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.shift-team-note {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(233,168,59,.07);
+  border: 1px solid rgba(233,168,59,.14);
+  color: #d8c0a3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.shift-admin-card .card-head {
+  align-items: flex-start;
+}
+.shift-admin-card .card-head h3 { margin-bottom: 3px; }
+.shift-admin-card .card-head p { margin: 0; max-width: 270px; }
+.shift-staff-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  padding: 4px 0 0;
+}
+.shift-staff-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  margin: 0 !important;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #15100c;
+  color: var(--text) !important;
+  cursor: pointer;
+}
+.shift-staff-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.shift-staff-option .avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+}
+.shift-staff-option > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.shift-staff-option b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.shift-staff-option small { color: var(--muted); font-size: 9px; }
+.shift-staff-option:has(input:checked) {
+  border-color: rgba(233,168,59,.62);
+  background: linear-gradient(145deg, rgba(233,168,59,.16), rgba(255,201,107,.05));
+  box-shadow: inset 0 0 0 1px rgba(255,201,107,.08);
+}
+.shift-staff-option:has(input:checked)::after {
+  content: "✓";
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  color: var(--gold2);
+  font-size: 11px;
+  font-weight: 900;
+}
+.shift-note-label { margin-top: 14px !important; }
+.shift-meta {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+#shiftStatusBadge.active {
+  color: var(--green);
+  background: rgba(114,215,154,.09);
+  border-color: rgba(114,215,154,.25);
+}
+
+@media (max-width: 380px) {
+  .shift-team-grid,
+  .shift-staff-options { grid-template-columns: 1fr; }
+}
+
+/* v8: common terminal staff PIN */
+.staff-switch-button {
+  display: inline-flex;
+  margin-top: 4px;
+  padding: 0;
+  font-size: 11px;
+}
+.staff-login-sheet > p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.staff-session-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+.staff-session-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #15100c;
+  cursor: pointer;
+}
+.staff-session-option input {
+  position: absolute;
+  opacity: 0;
+}
+.staff-session-option > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.staff-session-option b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staff-session-option small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.staff-session-option:has(input:checked) {
+  border-color: rgba(233,168,59,.62);
+  background: linear-gradient(145deg, rgba(233,168,59,.16), rgba(255,201,107,.05));
+}
+.staff-session-option.disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+.staff-pin-input {
+  letter-spacing: .35em;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 900;
+}
+#clearStaffButton {
+  margin-top: 10px;
+  text-align: center;
+}
+.user-pin-state {
+  color: var(--muted);
+  font-size: 10px;
+}
