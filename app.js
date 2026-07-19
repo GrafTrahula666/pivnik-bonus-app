@@ -9,6 +9,10 @@ if (tg) {
   } catch (_) {}
 }
 
+const BOOT_MIN_MS = 1800;
+const BOOT_FAILSAFE_MS = 12000;
+const bootStartedAt = performance.now();
+
 const state = {
   token: localStorage.getItem('pivnik_session') || '',
   profile: null,
@@ -31,6 +35,27 @@ const fmt = (number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 
 const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
 const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function finishBoot() {
+  const elapsed = performance.now() - bootStartedAt;
+  if (elapsed < BOOT_MIN_MS) await delay(BOOT_MIN_MS - elapsed);
+  $('#bootScreen').classList.add('hidden');
+  $('#appShell').classList.remove('hidden');
+}
+
+setTimeout(() => {
+  const bootScreen = $('#bootScreen');
+  if (!bootScreen || bootScreen.classList.contains('hidden')) return;
+  $('#bootText').textContent = 'Почти готово…';
+}, BOOT_FAILSAFE_MS / 2);
+
+setTimeout(() => {
+  const bootScreen = $('#bootScreen');
+  if (!bootScreen || bootScreen.classList.contains('hidden')) return;
+  $('#bootText').textContent = 'Соединение заняло больше времени обычного…';
+}, BOOT_FAILSAFE_MS);
 
 function toast(text) {
   const element = $('#toast');
@@ -97,8 +122,10 @@ function applyDesign(design) {
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
+  const brand = design.texts?.brand || 'Пивник';
   $('#showQrButton').textContent = design.texts?.qrButton || 'Показать QR';
   $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
+  $$('#bootSignGlitch span').forEach((element) => element.textContent = brand);
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
     if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);
@@ -200,6 +227,7 @@ async function authenticate() {
 
 async function boot() {
   try {
+    $('#bootText').textContent = 'Подключаем бонусный счёт…';
     if (state.token) {
       try {
         const me = await api('/api/me');
@@ -211,12 +239,15 @@ async function boot() {
         localStorage.removeItem('pivnik_session');
       }
     }
-    if (!state.token) await authenticate();
+    if (!state.token) {
+      $('#bootText').textContent = 'Проверяем доступ в Telegram…';
+      await authenticate();
+    }
+    $('#bootText').textContent = 'Собираем данные профиля…';
     renderProfile();
     renderStatuses();
-    $('#bootScreen').classList.add('hidden');
-    $('#appShell').classList.remove('hidden');
     startPendingPolling();
+    await finishBoot();
   } catch (error) {
     $('#bootText').textContent = error.message;
     $('#bootScreen').classList.add('error');

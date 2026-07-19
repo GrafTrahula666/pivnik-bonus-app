@@ -6,16 +6,38 @@
   <meta name="theme-color" content="#15110e" />
   <title>Пивник | Бонусы</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=4" />
 </head>
 <body>
-  <div id="bootScreen" class="boot-screen">
-    <div class="boot-stars boot-stars-back" aria-hidden="true"></div>
-    <div class="boot-stars boot-stars-front" aria-hidden="true"></div>
-    <div class="boot-content">
-      <div class="boot-mark">П</div>
-      <h1>Пивник</h1>
-      <p id="bootText">Подключаем бонусный счёт…</p>
+  <div id="bootScreen" class="boot-screen" aria-live="polite">
+    <div class="boot-scene">
+      <img class="boot-image" src="assets/boot-splash-pivnik.webp" alt="Ночной город Пивник" />
+      <div class="boot-overlay" aria-hidden="true">
+        <span class="shooting-star star-a"></span>
+        <span class="shooting-star star-b"></span>
+        <span class="shooting-star star-c"></span>
+        <div class="boot-sign-glitch" id="bootSignGlitch">
+          <span>Пивник</span>
+          <span>Пивник</span>
+          <span>Пивник</span>
+        </div>
+        <div class="boot-walker">
+          <span class="walker-head"></span>
+          <span class="walker-body"></span>
+          <span class="walker-leg leg-left"></span>
+          <span class="walker-leg leg-right"></span>
+          <span class="walker-arm arm-left"></span>
+          <span class="walker-arm arm-right"></span>
+        </div>
+        <div class="boot-smoke">
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+      <div class="boot-copy">
+        <div class="boot-badge">Пивник | Бонусы</div>
+        <h1>Загружаем приложение</h1>
+        <p id="bootText">Подключаем бонусный счёт…</p>
+      </div>
     </div>
   </div>
 
@@ -212,7 +234,7 @@
   <div class="modal" id="pendingModal" aria-hidden="true">
     <div class="modal-sheet">
       <span class="muted">Подтверждение списания</span>
-      <h2>Списать бонусы?</h2>
+      <h2>Провести списание?</h2>
       <div class="confirm-summary" id="pendingSummary"></div>
       <div class="two-buttons">
         <button class="secondary" id="declinePending">Отказаться</button>
@@ -222,6 +244,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

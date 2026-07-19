@@ -824,6 +824,9 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
   }
 });
 
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
+app.use('/docs', express.static(path.join(__dirname, 'docs')));
+
 app.get('/styles.css', (_req, res) => res.sendFile(path.join(__dirname, 'styles.css')));
 app.get('/app.js', (_req, res) => res.sendFile(path.join(__dirname, 'app.js')));
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
