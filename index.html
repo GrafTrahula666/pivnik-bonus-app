@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#15110e" />
+  <meta name="theme-color" content="#0b0e13" />
   <title>Пивник | Бонусы</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -98,20 +98,34 @@
           <div class="beer-card-foot"><span>Учитывается объём, указанный сотрудником при оплате.</span><strong id="beerGiftReady">Подарков пока нет</strong></div>
         </article>
 
-        <div class="section-block" data-config-section="promos">
-          <div class="section-title"><h2>Акции</h2><span>готовим запуск</span></div>
-          <div class="promo-carousel">
-            <article class="promo-card"><div class="promo-visual visual-one"><span>×2</span><small>бонусов</small></div><div><h3>Усиленные дни</h3><b>скоро</b></div></article>
-            <article class="promo-card"><div class="promo-visual visual-two"><span>★</span><small>подарок</small></div><div><h3>Персональные награды</h3><b>скоро</b></div></article>
+        <div class="section-block home-hub" data-config-section="promos">
+          <div class="section-title"><h2>Для вас</h2><span>без лишних поисков</span></div>
+          <div class="home-action-grid">
+            <button class="home-action-card promo-entry-card" id="openPromosButton" type="button">
+              <span class="home-action-kicker">ДЕЙСТВУЕТ</span>
+              <span class="home-action-mark">100</span>
+              <span class="home-action-copy"><b>Акции</b><small>Приветственные бонусы, литры и будущие награды</small></span>
+              <i>›</i>
+            </button>
+            <button class="home-action-card shop-entry-card" id="openShopButton" type="button">
+              <span class="home-action-kicker">ЛАВКА</span>
+              <span class="home-action-mark">□</span>
+              <span class="home-action-copy"><b>Магазин</b><small>Крафт и товары за бонусы</small></span>
+              <i>›</i>
+            </button>
           </div>
         </div>
 
-        <div class="section-block" data-config-section="featured">
-          <div class="section-title"><h2>Лавка Пивника</h2><span>коллекции</span></div>
-          <article class="shop-feature">
-            <div class="product-art"><span>01</span><small>серия</small></div>
-            <div class="grow"><h3>Коллекционная кружка</h3><p>Лимитированные вещи, подарки и специальные выпуски.</p><b>Скоро</b></div>
-          </article>
+        <div class="section-block" data-config-section="leaderboard">
+          <button class="leaderboard-entry" id="openLeaderboardButton" type="button">
+            <div class="leaderboard-entry-head"><span>ЛИГА ПИВНИКА</span><small id="leaderboardMonth">текущий месяц</small></div>
+            <div class="leaderboard-podium-mini" id="leaderboardPreview">
+              <span><i>1</i><b>Пока свободно</b></span>
+              <span><i>2</i><b>Пока свободно</b></span>
+              <span><i>3</i><b>Пока свободно</b></span>
+            </div>
+            <div class="leaderboard-entry-foot"><span id="leaderboardMe">Ваше место появится после первой покупки</span><i>›</i></div>
+          </button>
         </div>
 
         <div class="section-block" data-config-section="team">
@@ -171,10 +185,11 @@
 
         <div class="staff-step card">
           <div class="step-heading"><span>3</span><div><h3>Операция</h3><small>Бонусы и подарочные литры сохраняются в журнале</small></div></div>
-          <div class="sale-mode three-modes">
+          <div class="sale-mode four-modes">
             <button class="mode active" data-mode="accrue" type="button"><b>Начислить</b><small>Бонусы и литры</small></button>
-            <button class="mode" data-mode="redeem" type="button"><b>Списать</b><small>Использовать бонусы</small></button>
+            <button class="mode" data-mode="redeem" type="button"><b>Списать</b><small>До 30% чека</small></button>
             <button class="mode" data-mode="beerGift" type="button"><b>Подарок</b><small>Бесплатное пиво</small></button>
+            <button class="mode" data-mode="shop" type="button"><b>Магазин</b><small>Товар за бонусы</small></button>
           </div>
           <div id="redeemControls" class="hidden">
             <label>Сколько бонусов списать</label>
@@ -190,6 +205,10 @@
             </div>
             <small class="muted">Подарок можно выдать любым сортом разливного пива.</small>
           </div>
+          <div id="shopControls" class="staff-shop-controls hidden">
+            <div class="field-caption"><span>Товар из магазина</span><small>полная стоимость списывается бонусами</small></div>
+            <div id="staffShopItems" class="staff-shop-items empty-state">Загрузка каталога…</div>
+          </div>
           <div class="calc-box">
             <span>К оплате</span><strong id="cashDue">0 ₽</strong>
             <span>Начислится</span><strong id="bonusEarn">+0</strong>
@@ -197,11 +216,16 @@
           <button class="primary full operation-button" id="createSale" disabled>Провести операцию</button>
           <div class="operation-result hidden" id="operationResult"></div>
         </div>
+
+        <div class="card staff-recent-card">
+          <div class="card-head"><div><h3>Операции этой смены</h3><p id="staffCancelQuota">До 3 отмен за смену</p></div><button class="text-btn" id="reloadStaffRecent" type="button">Обновить</button></div>
+          <div id="staffRecentOperations" class="operation-list empty-state">Операций пока нет</div>
+        </div>
       </section>
 
       <section class="screen" data-screen="admin">
         <div class="admin-head">
-          <div><span class="muted" id="adminAccessLabel">Управление</span><h2>Панель владельца</h2></div>
+          <div><span class="muted" id="adminAccessLabel">Управление</span><h2 id="adminPanelTitle">Панель владельца</h2></div>
           <span class="pill danger" id="adminRoleBadge">ADMIN</span>
         </div>
 
@@ -210,6 +234,7 @@
           <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>
           <div class="metric"><span>Сегодня</span><strong id="metricToday">0 ₽</strong><small id="metricTodayOps">0 операций</small></div>
           <div class="metric metric-alert"><span>Требуют внимания</span><strong id="metricSuspicious">0</strong><small>операций свыше 3000 ₽</small></div>
+          <div class="metric"><span>Отменено сегодня</span><strong id="metricCancelled">0</strong><small>с указанием причины</small></div>
         </div>
 
         <div class="card shift-admin-card">
@@ -228,7 +253,7 @@
           <small class="shift-meta" id="shiftMeta">Состав ещё не выбран.</small>
         </div>
 
-        <div class="card">
+        <div class="card owner-only">
           <div class="card-head"><h3>Визуальный конструктор</h3><span class="pill">Черновик</span></div>
           <p>Цвета, подписи и видимость блоков меняются без правки кода.</p>
           <div class="design-grid">
@@ -254,6 +279,7 @@
 
         <div class="card">
           <div class="card-head"><h3>Пользователи и доступы</h3><button class="text-btn" id="reloadUsers">Обновить</button></div>
+          <p class="admin-hint">Новый сотрудник сначала один раз открывает приложение со своего Telegram. После этого назначьте ему роль «Бармен», задайте PIN и добавьте в смену. Роль «Партнёрский обзор» показывает всю рабочую информацию без права что-либо менять.</p>
           <div id="usersList" class="operation-list empty-state">Загрузка…</div>
         </div>
 
@@ -421,9 +447,57 @@
       </div>
 
       <div class="help-footer">
-        <b>Версия документа: бета 0.3</b>
+        <b>Версия документа: бета 0.4</b>
         <small>Текст является рабочей редакцией для закрытого теста и будет дополнен перед публичным запуском.</small>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="promosModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet premium-sheet">
+      <button class="close" data-close="promosModal">×</button>
+      <span class="muted">Предложения Пивника</span>
+      <h2>Акции</h2>
+      <div class="premium-list">
+        <article class="premium-offer active-offer">
+          <span class="offer-index">01</span>
+          <div><b>100 бонусов за первый вход</b><p>Начисляются автоматически при первой регистрации в приложении.</p></div>
+          <strong>+100 Б</strong>
+        </article>
+        <article class="premium-offer">
+          <span class="offer-index">02</span>
+          <div><b>Каждый 15-й литр — подарок</b><p>Оплатите 14 литров разливного пива и получите 1 литр бесплатно.</p></div>
+          <strong>14 → 1</strong>
+        </article>
+        <article class="premium-offer disabled-offer">
+          <span class="offer-index">03</span>
+          <div><b>Пригласить друга</b><p>После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.</p></div>
+          <button id="referralButton" type="button" disabled>Ссылка после бета-теста</button>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="shopModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet premium-sheet">
+      <button class="close" data-close="shopModal">×</button>
+      <span class="muted">Лавка Пивника</span>
+      <h2>Магазин за бонусы</h2>
+      <p class="help-intro" id="shopNote">Цены в бонусах могут быть выше обычной цены. Выдача только в баре после проверки сотрудником.</p>
+      <div id="shopCatalog" class="shop-catalog empty-state">Загрузка каталога…</div>
+      <button class="primary full" id="shopShowQr" type="button">Показать QR сотруднику</button>
+      <small class="shop-legal">Алкогольные позиции выдаются только совершеннолетним посетителям при наличии товара.</small>
+    </div>
+  </div>
+
+  <div class="modal" id="leaderboardModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet premium-sheet">
+      <button class="close" data-close="leaderboardModal">×</button>
+      <span class="muted">Лига Пивника</span>
+      <h2 id="leaderboardModalTitle">Таблица лидеров</h2>
+      <p class="help-intro">Рейтинг считается по фактически оплаченным покупкам текущего месяца. Отменённые операции не учитываются.</p>
+      <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
+      <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
     </div>
   </div>
 
@@ -451,15 +525,16 @@
       <ul>
         <li>QR-код постоянный и привязан к вашему аккаунту.</li>
         <li>Списание проходит сразу после проведения сотрудником.</li>
+        <li>Новый клиент получает 100 приветственных бонусов.</li>
         <li>Все изменения баланса и подарочных литров сохраняются в журнале.</li>
       </ul>
       <button class="text-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
       <button class="primary full" id="acceptTerms" type="button">Принимаю и продолжить</button>
-      <small>Рабочая редакция для закрытого бета-теста, версия 0.3.</small>
+      <small>Рабочая редакция для закрытого бета-теста, версия 0.4.</small>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

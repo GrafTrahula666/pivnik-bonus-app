@@ -29,7 +29,11 @@ const state = {
   shiftStaff: [],
   staffSession: localStorage.getItem('pivnik_staff_session') || '',
   activeStaff: null,
-  staffAvailable: []
+  staffAvailable: [],
+  catalog: [],
+  selectedShopItem: 'craft-05',
+  leaderboard: null,
+  staffRecent: []
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -332,6 +336,71 @@ function renderBeer(profile = state.profile) {
   $('#beerLoyaltyCard')?.classList.toggle('gift-ready', gifts > 0);
 }
 
+function renderShopCatalog() {
+  const clientList = $('#shopCatalog');
+  if (clientList) {
+    clientList.className = `shop-catalog${state.catalog.length ? '' : ' empty-state'}`;
+    clientList.innerHTML = state.catalog.length ? state.catalog.map((item, index) => `<article class="shop-product ${item.active ? '' : 'disabled'}">
+      <div class="shop-product-number">${String(index + 1).padStart(2, '0')}</div>
+      <div class="grow"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><span>${item.active ? 'Можно получить у сотрудника' : 'После бета-теста'}</span></div>
+      <strong>${fmt(item.bonusPrice)} Б</strong>
+    </article>`).join('') : 'Каталог пока пуст';
+  }
+  const staffList = $('#staffShopItems');
+  if (staffList) {
+    const activeItems = state.catalog.filter((item) => item.active);
+    if (!activeItems.some((item) => item.code === state.selectedShopItem)) state.selectedShopItem = activeItems[0]?.code || '';
+    staffList.className = `staff-shop-items${activeItems.length ? '' : ' empty-state'}`;
+    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item">
+      <input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} />
+      <span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span>
+    </label>`).join('') : 'Активных товаров пока нет';
+    staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => {
+      state.selectedShopItem = input.value;
+      updateCalculation();
+    }));
+  }
+}
+
+async function loadCatalog() {
+  const data = await api('/api/shop/catalog');
+  state.catalog = data.items || [];
+  if ($('#shopNote') && data.note) $('#shopNote').textContent = data.note;
+  renderShopCatalog();
+  return state.catalog;
+}
+
+function renderLeaderboard() {
+  const data = state.leaderboard;
+  if (!data) return;
+  if ($('#leaderboardMonth')) $('#leaderboardMonth').textContent = data.month;
+  const preview = $('#leaderboardPreview');
+  if (preview) {
+    preview.innerHTML = [1, 2, 3].map((rank) => {
+      const leader = data.leaders?.find((item) => item.rank === rank);
+      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i><b>${escapeHtml(leader?.name || 'Пока свободно')}</b></span>`;
+    }).join('');
+  }
+  if ($('#leaderboardMe')) $('#leaderboardMe').textContent = data.me?.spend > 0 ? `Ваше место: №${data.me.rank} · ${fmt(data.me.spend)} ₽` : 'Ваше место появится после первой покупки';
+  if ($('#leaderboardModalTitle')) $('#leaderboardModalTitle').textContent = `Лидеры · ${data.month}`;
+  if ($('#leaderboardPrizeNote')) $('#leaderboardPrizeNote').textContent = data.prizeNote || 'Награды за 1–3 место будут объявлены позже.';
+  const list = $('#leaderboardList');
+  if (list) {
+    list.className = `leaderboard-list${data.leaders?.length ? '' : ' empty-state'}`;
+    list.innerHTML = data.leaders?.length ? data.leaders.map((leader) => `<div class="leaderboard-row ${leader.isMe ? 'is-me' : ''} ${leader.rank <= 3 ? 'podium' : ''}">
+      <span class="leader-rank">${leader.rank}</span>
+      <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>Покупки за текущий месяц</small></div>
+      <strong>${fmt(leader.spend)} ₽</strong>
+    </div>`).join('') : 'Пока нет покупок для рейтинга';
+  }
+}
+
+async function loadLeaderboard() {
+  state.leaderboard = await api('/api/leaderboard/monthly');
+  renderLeaderboard();
+  return state.leaderboard;
+}
+
 function updateResolvedBeer(profile = state.resolvedClient?.profile) {
   const beer = profile?.beer;
   if (!beer) return;
@@ -497,6 +566,7 @@ async function activateStaff() {
   closeModal('staffLoginModal');
   toast(`Смена: ${activeStaffName()}`);
   haptic('medium');
+  await loadStaffRecent();
 }
 
 function clearStaffSession() {
@@ -538,9 +608,12 @@ function renderProfile() {
   $('#adminNav').classList.toggle('hidden', !roleCanAdmin(profile.role));
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
   if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
-  $('#adminRoleBadge').textContent = profile.role === 'viewer' ? 'VIEW' : 'ADMIN';
-  $('#adminAccessLabel').textContent = profile.role === 'viewer' ? 'Только просмотр' : 'Полный доступ';
+  const partnerView = profile.role === 'viewer';
+  $('#adminRoleBadge').textContent = partnerView ? 'ПАРТНЁР' : 'ВЛАДЕЛЕЦ';
+  $('#adminAccessLabel').textContent = partnerView ? 'Полный обзор · без изменений' : 'Полный доступ';
+  if ($('#adminPanelTitle')) $('#adminPanelTitle').textContent = partnerView ? 'Партнёрский обзор' : 'Панель владельца';
   $$('.admin-write-only').forEach((element) => element.classList.toggle('hidden', !roleCanWrite(profile.role)));
+  $$('.owner-only').forEach((element) => element.classList.toggle('hidden', !roleCanWrite(profile.role)));
   renderCurrentShift();
 }
 
@@ -562,29 +635,43 @@ function renderStatuses() {
 }
 
 function renderTransaction(transaction) {
-  const isRedeem = transaction.mode === 'redeem';
-  const isGift = transaction.mode === 'beer_gift';
-  const mode = isGift ? 'Подарочный литр' : isRedeem ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
-  const icon = isGift ? '🍺' : isRedeem ? '−' : transaction.mode === 'adjustment' ? '±' : '+';
-  const primary = isGift
-    ? `${fmtLiters(transaction.beerGiftSpentLiters)} л`
-    : transaction.mode === 'adjustment'
-      ? `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`
-      : `${fmt(transaction.checkAmount)} ₽`;
-  const beerDetails = transaction.beerLiters > 0
-    ? ` · пиво ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
-    : '';
-  const detail = isGift
-    ? `Бесплатно выдано ${fmtLiters(transaction.beerGiftSpentLiters)} л разливного пива`
-    : isRedeem
+  const cancelled = transaction.status === 'cancelled';
+  const labels = {
+    accrue: ['Начисление', '+'],
+    redeem: ['Списание', '−'],
+    adjustment: ['Корректировка', '±'],
+    beer_gift: ['Подарочный литр', '🍺'],
+    welcome: ['Приветственный бонус', '100'],
+    shop: ['Покупка в магазине', '□']
+  };
+  const [mode, icon] = labels[transaction.mode] || ['Операция', '•'];
+  let primary = `${fmt(transaction.checkAmount)} ₽`;
+  let detail = '';
+  if (transaction.mode === 'beer_gift') {
+    primary = `${fmtLiters(transaction.beerGiftSpentLiters)} л`;
+    detail = `Бесплатно выдано ${fmtLiters(transaction.beerGiftSpentLiters)} л разливного пива`;
+  } else if (transaction.mode === 'welcome') {
+    primary = `+${transaction.bonusEarned} Б`;
+    detail = transaction.reason || 'Бонус за первую регистрацию';
+  } else if (transaction.mode === 'shop') {
+    primary = `−${transaction.bonusSpent} Б`;
+    detail = transaction.reason || 'Товар из магазина';
+  } else if (transaction.mode === 'adjustment') {
+    primary = `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`;
+    detail = transaction.reason || 'Ручная корректировка';
+  } else {
+    const beerDetails = transaction.beerLiters > 0
+      ? ` · пиво ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
+      : '';
+    detail = transaction.mode === 'redeem'
       ? `Списано ${transaction.bonusSpent} Б · начислено ${transaction.bonusEarned} Б${beerDetails}`
-      : transaction.mode === 'adjustment'
-        ? transaction.reason || 'Ручная корректировка'
-        : `Начислено ${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽${beerDetails}`;
+      : `Начислено ${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽${beerDetails}`;
+  }
+  if (cancelled) detail = `ОТМЕНЕНО · ${transaction.cancelReason || 'причина указана в журнале'} · ${detail}`;
   const suspicious = transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : '';
-  return `<div class="op-row ${transaction.isSuspicious ? 'suspicious' : ''}">
+  return `<div class="op-row ${transaction.isSuspicious ? 'suspicious' : ''} ${cancelled ? 'cancelled' : ''}">
     <span class="op-icon">${icon}</span>
-    <div><b>${mode}${suspicious}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')}<br>${escapeHtml(detail)}</small></div>
+    <div><b>${mode}${cancelled ? '<span class="op-cancelled">отменено</span>' : ''}${suspicious}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')}<br>${escapeHtml(detail)}</small></div>
     <strong>${primary}</strong>
   </div>`;
 }
@@ -596,8 +683,11 @@ async function refreshMe() {
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
-  await loadCurrentShift();
-  if (roleCanStaff(state.profile?.role)) await loadStaffSession();
+  await Promise.all([loadCurrentShift(), loadCatalog(), loadLeaderboard()]);
+  if (roleCanStaff(state.profile?.role)) {
+    await loadStaffSession();
+    await loadStaffRecent();
+  }
 }
 
 async function authenticate() {
@@ -640,8 +730,11 @@ async function boot() {
     renderProfile();
     renderStatuses();
     $('#bootText').textContent = 'Проверяем текущую смену…';
-    await loadCurrentShift();
-    if (roleCanStaff(state.profile?.role)) await loadStaffSession();
+    await Promise.all([loadCurrentShift(), loadCatalog(), loadLeaderboard()]);
+    if (roleCanStaff(state.profile?.role)) {
+      await loadStaffSession();
+      await loadStaffRecent();
+    }
     await finishBoot();
     showConsentIfNeeded();
   } catch (error) {
@@ -735,13 +828,60 @@ function clearResolvedClient() {
   updateCalculation();
 }
 
+function staffRecentHtml(transaction, quota) {
+  const cancelled = transaction.status === 'cancelled';
+  const canCancel = !cancelled && ['accrue', 'redeem', 'beer_gift', 'shop'].includes(transaction.mode) && quota?.active && quota.remaining > 0;
+  const type = transaction.mode === 'beer_gift' ? 'Подарок' : transaction.mode === 'shop' ? 'Магазин' : transaction.mode === 'redeem' ? 'Списание' : 'Начисление';
+  const value = transaction.mode === 'beer_gift' ? `${fmtLiters(transaction.beerGiftSpentLiters)} л` : transaction.mode === 'shop' ? `${transaction.bonusSpent} Б` : `${fmt(transaction.checkAmount)} ₽`;
+  return `<div class="op-row staff-recent-op ${cancelled ? 'cancelled' : ''}">
+    <span class="op-icon">${cancelled ? '×' : '✓'}</span>
+    <div><b>${escapeHtml(transaction.clientName || 'Клиент')} · ${type}</b><small>${new Date(transaction.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}${cancelled ? `<br>Отменено: ${escapeHtml(transaction.cancelReason || '')}` : ''}</small></div>
+    <strong>${value}</strong>
+    ${canCancel ? `<button class="text-btn danger-text cancel-operation-button" data-staff-cancel="${transaction.id}" type="button">Отменить</button>` : ''}
+  </div>`;
+}
+
+function renderStaffRecent(data) {
+  state.staffRecent = data.transactions || [];
+  const quota = data.quota || { active: false, limit: 3, used: 0, remaining: 0 };
+  if ($('#staffCancelQuota')) $('#staffCancelQuota').textContent = quota.active
+    ? `Отмены: ${quota.used} из ${quota.limit} · осталось ${quota.remaining}`
+    : 'Отмены доступны только в активной смене';
+  const list = $('#staffRecentOperations');
+  if (!list) return;
+  list.className = `operation-list${state.staffRecent.length ? '' : ' empty-state'}`;
+  list.innerHTML = state.staffRecent.length ? state.staffRecent.map((tx) => staffRecentHtml(tx, quota)).join('') : 'Операций этой смены пока нет';
+  list.querySelectorAll('[data-staff-cancel]').forEach((button) => button.addEventListener('click', async () => {
+    const reason = prompt('Причина отмены операции:');
+    if (!reason?.trim()) return;
+    try {
+      const result = await api(`/api/staff/transactions/${button.dataset.staffCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      if (state.resolvedClient?.profile?.id === result.client?.id) {
+        state.resolvedClient.profile = result.client;
+        $('#foundMeta').textContent = `${fmt(result.client.balance)} бонусов · ${result.client.status.bonusPercent}% начисление`;
+        updateResolvedBeer(result.client);
+      }
+      toast('Операция отменена');
+      await Promise.all([loadStaffRecent(), loadLeaderboard()]);
+    } catch (error) { toast(error.message); }
+  }));
+}
+
+async function loadStaffRecent() {
+  if (!roleCanStaff(state.profile?.role)) return;
+  const data = await api('/api/staff/recent');
+  renderStaffRecent(data);
+}
+
 function updateCalculation() {
   const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
   const client = state.resolvedClient?.profile;
   const isGift = state.mode === 'beerGift';
-  let cash = isGift ? 0 : amount;
+  const isShop = state.mode === 'shop';
+  const shopItem = state.catalog.find((item) => item.code === state.selectedShopItem && item.active);
+  let cash = (isGift || isShop) ? 0 : amount;
   let earn = 0;
-  if (client && amount > 0 && !isGift) {
+  if (client && amount > 0 && !isGift && !isShop) {
     if (state.mode === 'accrue') {
       const discount = amount * client.status.discountPercent / 100;
       cash = amount - discount;
@@ -755,34 +895,40 @@ function updateCalculation() {
       earn = Math.floor(cash * client.status.bonusPercent / 100);
     }
   }
-  $('#cashDue').textContent = isGift ? '0 ₽' : `${fmt(Math.max(0, cash))} ₽`;
-  $('#bonusEarn').textContent = isGift ? 'подарок' : `+${fmt(earn)}`;
+  $('#cashDue').textContent = (isGift || isShop) ? '0 ₽' : `${fmt(Math.max(0, cash))} ₽`;
+  $('#bonusEarn').textContent = isGift ? 'подарок' : isShop ? `−${fmt(shopItem?.bonusPrice || 0)} Б` : `+${fmt(earn)}`;
   const giftAvailable = Number(client?.beer?.giftLitersBalance || 0) >= Number(state.selectedGiftLiters || 0.5);
+  const shopAvailable = Boolean(client && shopItem && Number(client.balance || 0) >= Number(shopItem.bonusPrice || 0));
   $('#createSale').disabled = isGift
     ? !(client && giftAvailable && !state.saleBusy)
-    : !(amount > 0 && client && !state.saleBusy);
+    : isShop ? !(shopAvailable && !state.saleBusy)
+      : !(amount > 0 && client && !state.saleBusy);
   $('#createSale').textContent = state.saleBusy
     ? 'Проводим…'
     : isGift ? `Выдать ${fmtLiters(state.selectedGiftLiters)} л бесплатно`
-      : state.mode === 'redeem' ? 'Списать бонусы' : 'Начислить бонусы';
-  $('#saleAmount').disabled = isGift;
-  $('#beerLiters').disabled = isGift;
-  $('.staff-step')?.classList.toggle('gift-operation-active', isGift);
+      : isShop ? shopItem ? `Списать ${fmt(shopItem.bonusPrice)} Б и выдать` : 'Выберите товар'
+        : state.mode === 'redeem' ? 'Списать бонусы' : 'Начислить бонусы';
+  $('#saleAmount').disabled = isGift || isShop;
+  $('#beerLiters').disabled = isGift || isShop;
+  $('.staff-step')?.classList.toggle('gift-operation-active', isGift || isShop);
 }
 
 function showOperationResult(transaction, client) {
   const element = $('#operationResult');
   const isRedeem = transaction.mode === 'redeem';
   const isGift = transaction.mode === 'beer_gift';
-  const title = isGift ? 'Подарок выдан' : isRedeem ? 'Бонусы списаны' : 'Операция проведена';
+  const isShop = transaction.mode === 'shop';
+  const title = isShop ? 'Товар выдан' : isGift ? 'Подарок выдан' : isRedeem ? 'Бонусы списаны' : 'Операция проведена';
   const beerLine = transaction.beerLiters > 0
     ? `<br>Учтено пива: ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
     : '';
-  const detail = isGift
-    ? `−${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
-    : isRedeem
-      ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б${beerLine}`
-      : `+${transaction.bonusEarned} Б${beerLine}`;
+  const detail = isShop
+    ? `${escapeHtml(transaction.reason || 'Товар')} · −${transaction.bonusSpent} Б`
+    : isGift
+      ? `−${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
+      : isRedeem
+        ? `−${transaction.bonusSpent} Б · +${transaction.bonusEarned} Б${beerLine}`
+        : `+${transaction.bonusEarned} Б${beerLine}`;
   const footer = isGift
     ? `Осталось подарочного объёма: ${fmtLiters(client.beer?.giftLitersBalance)} л`
     : `Новый баланс: ${fmt(client.balance)} Б`;
@@ -801,32 +947,38 @@ async function createSale() {
   const amount = Number(String($('#saleAmount').value || '').replace(',', '.')) || 0;
   const beerLiters = Number(String($('#beerLiters').value || '').replace(',', '.')) || 0;
   const isGift = state.mode === 'beerGift';
+  const isShop = state.mode === 'shop';
   state.saleBusy = true;
   updateCalculation();
   try {
-    const data = await api(isGift ? '/api/staff/beer-gift' : '/api/staff/transactions', {
-      method: 'POST',
-      body: JSON.stringify(isGift ? {
-        qrToken: state.resolvedClient.qrToken,
-        giftLiters: state.selectedGiftLiters,
-        requestKey: requestId()
-      } : {
-        qrToken: state.resolvedClient.qrToken,
-        amount,
-        beerLiters,
-        mode: state.mode,
-        bonusToSpend: Number($('#bonusToSpend').value || 0),
-        requestKey: requestId()
-      })
-    });
+    const path = isGift ? '/api/staff/beer-gift' : isShop ? '/api/staff/shop/purchase' : '/api/staff/transactions';
+    const body = isGift ? {
+      qrToken: state.resolvedClient.qrToken,
+      giftLiters: state.selectedGiftLiters,
+      requestKey: requestId()
+    } : isShop ? {
+      qrToken: state.resolvedClient.qrToken,
+      itemCode: state.selectedShopItem,
+      requestKey: requestId()
+    } : {
+      qrToken: state.resolvedClient.qrToken,
+      amount,
+      beerLiters,
+      mode: state.mode,
+      bonusToSpend: Number($('#bonusToSpend').value || 0),
+      requestKey: requestId()
+    };
+    const data = await api(path, { method: 'POST', body: JSON.stringify(body) });
     showOperationResult(data.transaction, data.client);
-    const message = isGift
-      ? `Выдано ${fmtLiters(data.transaction.beerGiftSpentLiters)} л бесплатно`
-      : state.mode === 'redeem'
-        ? `Списано ${data.transaction.bonusSpent} бонусов`
-        : data.transaction.beerGiftEarnedLiters
-          ? `Начислено ${data.transaction.bonusEarned} Б и ${fmtLiters(data.transaction.beerGiftEarnedLiters)} л подарка`
-          : `Начислено ${data.transaction.bonusEarned} бонусов`;
+    const message = isShop
+      ? `Списано ${data.transaction.bonusSpent} Б · товар выдан`
+      : isGift
+        ? `Выдано ${fmtLiters(data.transaction.beerGiftSpentLiters)} л бесплатно`
+        : state.mode === 'redeem'
+          ? `Списано ${data.transaction.bonusSpent} бонусов`
+          : data.transaction.beerGiftEarnedLiters
+            ? `Начислено ${data.transaction.bonusEarned} Б и ${fmtLiters(data.transaction.beerGiftEarnedLiters)} л подарка`
+            : `Начислено ${data.transaction.bonusEarned} бонусов`;
     toast(message);
     haptic('medium');
     $('#saleAmount').value = '';
@@ -839,6 +991,7 @@ async function createSale() {
       state.profile = data.client;
       renderProfile();
     }
+    await Promise.all([loadStaffRecent(), loadLeaderboard()]);
   } finally {
     state.saleBusy = false;
     updateCalculation();
@@ -885,15 +1038,21 @@ async function publishDesign() {
 function adminTransactionHtml(transaction) {
   const client = transaction.clientName || 'Клиент';
   const staff = transaction.staffName || 'Система';
-  const isGift = transaction.mode === 'beer_gift';
-  const type = isGift ? 'Подарочный литр' : transaction.mode === 'redeem' ? 'Списание' : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
-  const beerInfo = isGift
+  const cancelled = transaction.status === 'cancelled';
+  const type = transaction.mode === 'beer_gift' ? 'Подарочный литр'
+    : transaction.mode === 'shop' ? 'Магазин'
+      : transaction.mode === 'welcome' ? 'Приветственный бонус'
+        : transaction.mode === 'redeem' ? 'Списание'
+          : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+  const beerInfo = transaction.mode === 'beer_gift'
     ? ` · −${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
     : transaction.beerLiters ? ` · ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · +${fmtLiters(transaction.beerGiftEarnedLiters)} л подарка` : ''}` : '';
-  return `<div class="op-row admin-op ${transaction.isSuspicious ? 'suspicious' : ''}">
-    <span class="op-icon">${isGift ? '🍺' : transaction.mode === 'redeem' ? '−' : transaction.mode === 'adjustment' ? '±' : '+'}</span>
-    <div><b>${escapeHtml(client)}${transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : ''}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${escapeHtml(staff)}<br>${type} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б${beerInfo}</small></div>
-    <strong>${isGift ? `${fmtLiters(transaction.beerGiftSpentLiters)} л` : `${fmt(transaction.checkAmount)} ₽`}</strong>
+  const canCancel = roleCanWrite(state.profile?.role) && !cancelled && ['accrue', 'redeem', 'beer_gift', 'shop'].includes(transaction.mode);
+  return `<div class="op-row admin-op ${transaction.isSuspicious ? 'suspicious' : ''} ${cancelled ? 'cancelled' : ''}">
+    <span class="op-icon">${cancelled ? '×' : transaction.mode === 'beer_gift' ? '🍺' : transaction.mode === 'shop' ? '□' : transaction.mode === 'redeem' ? '−' : transaction.mode === 'adjustment' ? '±' : '+'}</span>
+    <div><b>${escapeHtml(client)}${cancelled ? '<span class="op-cancelled">отменено</span>' : ''}${transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : ''}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')} · ${escapeHtml(staff)}<br>${type} · +${transaction.bonusEarned} / −${transaction.bonusSpent} Б${beerInfo}${cancelled ? `<br>Причина: ${escapeHtml(transaction.cancelReason || '')}` : ''}</small></div>
+    <strong>${transaction.mode === 'beer_gift' ? `${fmtLiters(transaction.beerGiftSpentLiters)} л` : transaction.mode === 'shop' ? `${transaction.bonusSpent} Б` : `${fmt(transaction.checkAmount)} ₽`}</strong>
+    ${canCancel ? `<button class="text-btn danger-text admin-cancel-button" data-admin-cancel="${transaction.id}" type="button">Отменить</button>` : ''}
   </div>`;
 }
 
@@ -906,9 +1065,19 @@ async function loadAdmin() {
   $('#metricToday').textContent = `${fmt(summaryData.summary.todayCheck)} ₽`;
   $('#metricTodayOps').textContent = `${summaryData.summary.todayOperations} операций`;
   $('#metricSuspicious').textContent = fmt(summaryData.summary.suspiciousOperations);
+  if ($('#metricCancelled')) $('#metricCancelled').textContent = fmt(summaryData.summary.cancelledToday);
   $('#adminOperations').className = `operation-list${summaryData.operations.length ? '' : ' empty-state'}`;
   $('#adminOperations').innerHTML = summaryData.operations.length ? summaryData.operations.map(adminTransactionHtml).join('') : 'Операций пока нет';
-  fillDesignForm(summaryData.settings.draft);
+  $('#adminOperations').querySelectorAll('[data-admin-cancel]').forEach((button) => button.addEventListener('click', async () => {
+    const reason = prompt('Причина отмены операции владельцем:');
+    if (!reason?.trim()) return;
+    try {
+      await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      toast('Операция отменена');
+      await Promise.all([loadAdmin(), loadLeaderboard()]);
+    } catch (error) { toast(error.message); }
+  }));
+  if (roleCanWrite(state.profile?.role)) fillDesignForm(summaryData.settings.draft);
   renderUsers(usersData.users);
   renderShiftAdmin(shiftData);
 }
@@ -921,13 +1090,13 @@ function renderUsers(users) {
           <select data-role-user="${user.id}">
             <option value="client" ${user.role === 'client' ? 'selected' : ''}>Клиент</option>
             <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Бармен</option>
-            <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Просмотр админки</option>
+            <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Партнёрский обзор</option>
           </select>
           <button class="text-btn" data-adjust-user="${user.id}" type="button">Баланс</button>
-          ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button>` : ''}
+          ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button><button class="text-btn" data-reset-cancel-user="${user.id}" type="button">Сбросить отмены</button>` : ''}
           <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
         </div>`
-      : `<small>${escapeHtml(user.role)}</small>`;
+      : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : escapeHtml(user.role)}</small>`;
     return `<div class="user-row">
       <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${fmt(user.balance)} Б</strong>
@@ -968,6 +1137,14 @@ function renderUsers(users) {
     } catch (error) { toast(error.message); }
   }));
 
+  $$('[data-reset-cancel-user]').forEach((button) => button.addEventListener('click', async () => {
+    if (!confirm('Сбросить лимит отмен этого сотрудника на текущую смену?')) return;
+    try {
+      await api(`/api/admin/users/${button.dataset.resetCancelUser}/cancel-limit/reset`, { method: 'POST', body: '{}' });
+      toast('Сотруднику снова доступны 3 отмены');
+    } catch (error) { toast(error.message); }
+  }));
+
   $$('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
     if (!confirm('Перевыпустить личный QR? Старый код перестанет работать.')) return;
     try {
@@ -981,6 +1158,10 @@ function renderUsers(users) {
 $$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
+$('#openPromosButton').addEventListener('click', () => openModal('promosModal'));
+$('#openShopButton').addEventListener('click', () => { renderShopCatalog(); openModal('shopModal'); });
+$('#openLeaderboardButton').addEventListener('click', () => { renderLeaderboard(); openModal('leaderboardModal'); });
+$('#shopShowQr').addEventListener('click', () => { closeModal('shopModal'); showQr().catch((error) => toast(error.message)); });
 $('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#showHistoryButton').addEventListener('click', () => showHistory().catch((error) => toast(error.message)));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
@@ -1009,7 +1190,9 @@ $$('.mode').forEach((button) => button.addEventListener('click', () => {
   $$('.mode').forEach((item) => item.classList.toggle('active', item === button));
   $('#redeemControls').classList.toggle('hidden', state.mode !== 'redeem');
   $('#beerGiftControls').classList.toggle('hidden', state.mode !== 'beerGift');
+  $('#shopControls').classList.toggle('hidden', state.mode !== 'shop');
   if (state.mode === 'beerGift') updateResolvedBeer();
+  if (state.mode === 'shop') renderShopCatalog();
   hideOperationResult();
   updateCalculation();
 }));
@@ -1017,6 +1200,7 @@ $('#createSale').addEventListener('click', () => createSale().catch((error) => t
 $('#saveDraft').addEventListener('click', () => saveDraft().catch((error) => toast(error.message)));
 $('#publishDesign').addEventListener('click', () => publishDesign().catch((error) => toast(error.message)));
 $('#reloadAdmin').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$('#reloadStaffRecent').addEventListener('click', () => loadStaffRecent().catch((error) => toast(error.message)));
 $('#reloadUsers').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
 $('#saveShift').addEventListener('click', () => saveShift().catch((error) => toast(error.message)));
 $('#endShift').addEventListener('click', () => endShift().catch((error) => toast(error.message)));

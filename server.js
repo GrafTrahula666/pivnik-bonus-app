@@ -51,22 +51,30 @@ const STATUS_LEVELS = [
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
-const TERMS_VERSION = 'beta-0.3';
+const TERMS_VERSION = 'beta-0.4';
 const BEER_PAID_TARGET_ML = 14_000;
 const BEER_GIFT_ML = 1_000;
 const MAX_BEER_ML_PER_TRANSACTION = 100_000;
+const WELCOME_BONUS = 100;
+const REFERRAL_REWARD = 200;
+const STAFF_CANCEL_LIMIT = 3;
+const SHOP_CATALOG = [
+  { code: 'craft-05', title: 'Крафт из витрины · 0,5 л', subtitle: 'Любая доступная позиция из отмеченной категории. Выдача только в баре, 18+.', bonusPrice: 450, active: true },
+  { code: 'combo', title: 'Комбо Пивника', subtitle: 'Готовим состав и цену. Появится после бета-теста.', bonusPrice: 900, active: false }
+];
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 const DEFAULT_DESIGN = {
+  version: 9,
   colors: {
-    background: '#0e0c0a',
-    header: '#15110e',
-    surface: '#1c1612',
-    card: '#231a14',
-    text: '#f7eee5',
-    muted: '#a99580',
-    accent: '#e9a83b',
-    accentSoft: '#ffc96b'
+    background: '#07090c',
+    header: '#0b0e13',
+    surface: '#10141a',
+    card: '#131820',
+    text: '#f4f6f8',
+    muted: '#98a0ab',
+    accent: '#f4f6f8',
+    accentSoft: '#cfd5dc'
   },
   texts: {
     brand: 'Пивник',
@@ -77,6 +85,7 @@ const DEFAULT_DESIGN = {
   sections: {
     promos: true,
     featured: true,
+    leaderboard: true,
     team: true,
     byline: true
   },
@@ -304,8 +313,11 @@ async function initDatabase() {
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_ml INTEGER NOT NULL DEFAULT 0');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_gift_earned_ml INTEGER NOT NULL DEFAULT 0');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_gift_spent_ml INTEGER NOT NULL DEFAULT 0');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_by BIGINT REFERENCES users(id)');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancel_reason TEXT');
     await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_mode_check');
-    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift'))");
+    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop'))");
     await client.query(`
       UPDATE transactions
       SET status = 'cancelled', completed_at = COALESCE(completed_at, NOW()),
@@ -333,6 +345,16 @@ async function initDatabase() {
     `);
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_shifts_single_active ON shifts ((1)) WHERE ended_at IS NULL');
     await client.query('CREATE INDEX IF NOT EXISTS idx_shift_members_user ON shift_members(user_id, shift_id)');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS cancel_quota_resets (
+        id BIGSERIAL PRIMARY KEY,
+        shift_id BIGINT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reset_by BIGINT NOT NULL REFERENCES users(id),
+        reset_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_cancel_quota_resets ON cancel_quota_resets(shift_id, user_id, reset_at DESC)');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_settings (
@@ -349,8 +371,15 @@ async function initDatabase() {
        ON CONFLICT (id) DO NOTHING`,
       [JSON.stringify(DEFAULT_DESIGN)]
     );
+    await client.query(
+      `UPDATE app_settings
+       SET draft = $1::jsonb, published = $1::jsonb, updated_at = NOW()
+       WHERE COALESCE((published->>'version')::int, 0) < 9`,
+      [JSON.stringify(DEFAULT_DESIGN)]
+    );
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status, created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_cancelled_by ON transactions(cancelled_by, cancelled_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_qr_expiry ON qr_sessions(expires_at)');
     await client.query('INSERT INTO beer_loyalty (user_id) SELECT id FROM users ON CONFLICT (user_id) DO NOTHING');
     const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
@@ -436,7 +465,7 @@ async function getProfile(userId, db = pool) {
     role: row.role,
     balance: Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
-    termsAccepted: Boolean(row.terms_accepted_at),
+    termsAccepted: Boolean(row.terms_accepted_at && row.terms_version === TERMS_VERSION),
     termsAcceptedAt: row.terms_accepted_at,
     termsVersion: row.terms_version,
     spend12m: rubles(spend12mCents),
@@ -488,13 +517,15 @@ function requireRole(...roles) {
 
 async function resolveActingStaff(req) {
   const raw = String(req.headers['x-staff-session'] || '').trim();
-  if (!raw) return req.user;
-  const payload = verifySession(raw);
-  if (!payload || payload.kind !== 'staff' || String(payload.terminalUid) !== String(req.user.id)) return null;
-  const profile = await getProfile(payload.staffUid);
+  let profile = req.user;
+  if (raw) {
+    const payload = verifySession(raw);
+    if (!payload || payload.kind !== 'staff' || String(payload.terminalUid) !== String(req.user.id)) return null;
+    profile = await getProfile(payload.staffUid);
+  }
   if (!profile || !['staff', 'admin'].includes(profile.role)) return null;
   const shift = await getCurrentShift();
-  if (shift?.members?.length && !shift.members.some((member) => String(member.id) === String(profile.id))) return null;
+  if (profile.role !== 'admin' && shift?.members?.length && !shift.members.some((member) => String(member.id) === String(profile.id))) return null;
   return profile;
 }
 
@@ -538,8 +569,82 @@ function transactionResponse(row) {
     beerGiftEarnedMl: Number(row.beer_gift_earned_ml || 0),
     beerGiftEarnedLiters: litersFromMl(row.beer_gift_earned_ml),
     beerGiftSpentMl: Number(row.beer_gift_spent_ml || 0),
-    beerGiftSpentLiters: litersFromMl(row.beer_gift_spent_ml)
+    beerGiftSpentLiters: litersFromMl(row.beer_gift_spent_ml),
+    cancelledBy: row.cancelled_by ? String(row.cancelled_by) : null,
+    cancelledAt: row.cancelled_at,
+    cancelReason: row.cancel_reason
   };
+}
+
+function publicLeaderboardName(row) {
+  const first = String(row.first_name || 'Гость').trim();
+  const last = String(row.last_name || '').trim();
+  return last ? `${first} ${last.slice(0, 1)}.` : first;
+}
+
+async function getCancellationQuota(staffId, db = pool) {
+  const shift = await getCurrentShift(db);
+  if (!shift || !shift.members.some((member) => String(member.id) === String(staffId))) {
+    return { active: false, limit: STAFF_CANCEL_LIMIT, used: 0, remaining: 0, shiftId: null };
+  }
+  const resetResult = await db.query(
+    'SELECT MAX(reset_at) AS reset_at FROM cancel_quota_resets WHERE shift_id = $1 AND user_id = $2',
+    [shift.id, staffId]
+  );
+  const shiftStart = new Date(shift.startedAt);
+  const resetAt = resetResult.rows[0]?.reset_at ? new Date(resetResult.rows[0].reset_at) : null;
+  const countFrom = resetAt && resetAt > shiftStart ? resetAt : shiftStart;
+  const countResult = await db.query(
+    `SELECT COUNT(*)::int AS count
+     FROM transactions
+     WHERE cancelled_by = $1 AND cancelled_at >= $2`,
+    [staffId, countFrom]
+  );
+  const used = Number(countResult.rows[0]?.count || 0);
+  return { active: true, limit: STAFF_CANCEL_LIMIT, used, remaining: Math.max(0, STAFF_CANCEL_LIMIT - used), shiftId: shift.id, countFrom };
+}
+
+async function cancelCompletedTransaction(db, transactionId, actorId, reason, options = {}) {
+  const txResult = await db.query('SELECT * FROM transactions WHERE id = $1 FOR UPDATE', [transactionId]);
+  if (!txResult.rowCount) throw Object.assign(new Error('Операция не найдена.'), { statusCode: 404 });
+  const tx = txResult.rows[0];
+  if (tx.status !== 'completed') throw Object.assign(new Error('Эта операция уже отменена или не завершена.'), { statusCode: 400 });
+  if (!['accrue', 'redeem', 'beer_gift', 'shop'].includes(tx.mode)) {
+    throw Object.assign(new Error('Эту операцию нельзя отменить таким способом.'), { statusCode: 400 });
+  }
+  if (options.staffId && String(tx.staff_id) !== String(options.staffId)) {
+    throw Object.assign(new Error('Сотрудник может отменить только свою операцию.'), { statusCode: 403 });
+  }
+  if (options.notBefore && new Date(tx.created_at) < new Date(options.notBefore)) {
+    throw Object.assign(new Error('Можно отменять только операции текущей смены.'), { statusCode: 403 });
+  }
+
+  const walletResult = await db.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
+  const beerResult = await db.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
+  if (!walletResult.rowCount || !beerResult.rowCount) throw new Error('Счёт клиента не найден.');
+
+  const currentBalance = Number(walletResult.rows[0].balance || 0);
+  const newBalance = currentBalance - Number(tx.bonus_earned || 0) + Number(tx.bonus_spent || 0);
+  const currentPaidMl = Number(beerResult.rows[0].paid_ml_total || 0);
+  const currentGiftMl = Number(beerResult.rows[0].gift_ml_balance || 0);
+  const newPaidMl = currentPaidMl - Number(tx.beer_ml || 0);
+  const newGiftMl = currentGiftMl - Number(tx.beer_gift_earned_ml || 0) + Number(tx.beer_gift_spent_ml || 0);
+  if (newBalance < 0) throw Object.assign(new Error('Отмена невозможна: начисленные бонусы уже использованы.'), { statusCode: 409 });
+  if (newPaidMl < 0 || newGiftMl < 0) throw Object.assign(new Error('Отмена невозможна: подарочный объём уже использован. Нужна ручная корректировка владельца.'), { statusCode: 409 });
+
+  await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, tx.client_id]);
+  await db.query(
+    'UPDATE beer_loyalty SET paid_ml_total = $1, gift_ml_balance = $2, updated_at = NOW() WHERE user_id = $3',
+    [newPaidMl, newGiftMl, tx.client_id]
+  );
+  const updated = await db.query(
+    `UPDATE transactions
+     SET status = 'cancelled', cancelled_by = $1, cancelled_at = NOW(), cancel_reason = $2
+     WHERE id = $3
+     RETURNING *`,
+    [actorId, reason, transactionId]
+  );
+  return updated.rows[0];
 }
 
 app.get('/api/health', async (_req, res) => {
@@ -578,23 +683,45 @@ app.post('/api/auth', async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const userResult = await client.query(
+      const inserted = await client.query(
         `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, role)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (telegram_id) DO UPDATE SET
-           username = EXCLUDED.username,
-           first_name = EXCLUDED.first_name,
-           last_name = EXCLUDED.last_name,
-           photo_url = EXCLUDED.photo_url,
-           language_code = EXCLUDED.language_code,
-           role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE users.role END,
-           updated_at = NOW()
+         ON CONFLICT (telegram_id) DO NOTHING
          RETURNING id`,
         [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
       );
-      const userId = userResult.rows[0].id;
-      await client.query('INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
+      const isNew = inserted.rowCount > 0;
+      let userId;
+      if (isNew) {
+        userId = inserted.rows[0].id;
+      } else {
+        const updated = await client.query(
+          `UPDATE users SET
+             username = $2,
+             first_name = $3,
+             last_name = $4,
+             photo_url = $5,
+             language_code = $6,
+             role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
+             updated_at = NOW()
+           WHERE telegram_id = $1
+           RETURNING id`,
+          [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
+        );
+        userId = updated.rows[0].id;
+      }
+      await client.query(
+        'INSERT INTO wallets (user_id, balance) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
+        [userId, isNew ? WELCOME_BONUS : 0]
+      );
       await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
+      if (isNew && WELCOME_BONUS > 0) {
+        await client.query(
+          `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
+           VALUES ($1, 'welcome', 'completed', $2, $2, 'Приветственный бонус за регистрацию', NOW())`,
+          [userId, WELCOME_BONUS]
+        );
+      }
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
@@ -665,6 +792,57 @@ app.get('/api/me/transactions', authRequired, async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
+  try {
+    const ranked = await pool.query(
+      `WITH totals AS (
+         SELECT u.id, u.first_name, u.last_name,
+                COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
+         FROM users u
+         JOIN transactions t ON t.client_id = u.id
+         WHERE t.status = 'completed'
+           AND t.mode IN ('accrue','redeem')
+           AND t.created_at >= date_trunc('month', CURRENT_DATE)
+           AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+         GROUP BY u.id, u.first_name, u.last_name
+       ), positions AS (
+         SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank
+         FROM totals
+       )
+       SELECT * FROM positions ORDER BY rank, id LIMIT 10`
+    );
+    const myResult = await pool.query(
+      `WITH totals AS (
+         SELECT u.id, COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
+         FROM users u
+         LEFT JOIN transactions t ON t.client_id = u.id
+           AND t.status = 'completed'
+           AND t.mode IN ('accrue','redeem')
+           AND t.created_at >= date_trunc('month', CURRENT_DATE)
+           AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+         GROUP BY u.id
+       ), positions AS (
+         SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank FROM totals
+       )
+       SELECT rank, spend_cents FROM positions WHERE id = $1`,
+      [req.user.id]
+    );
+    const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date());
+    res.json({
+      month,
+      prizeNote: 'Награды за 1–3 место будут объявлены после бета-теста.',
+      leaders: ranked.rows.map((row) => ({ rank: Number(row.rank), name: publicLeaderboardName(row), spend: rubles(row.spend_cents), isMe: String(row.id) === String(req.user.id) })),
+      me: myResult.rowCount ? { rank: Number(myResult.rows[0].rank), spend: rubles(myResult.rows[0].spend_cents) } : null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/shop/catalog', authRequired, async (_req, res) => {
+  res.json({ items: SHOP_CATALOG, note: 'Цены указаны в бонусах. Выдача — только в баре после проверки сотрудником.' });
 });
 
 app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
@@ -930,6 +1108,103 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
   }
 });
 
+app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
+  const qrToken = String(req.body?.qrToken || '');
+  const itemCode = String(req.body?.itemCode || '');
+  const requestKey = String(req.body?.requestKey || crypto.randomUUID());
+  const item = SHOP_CATALOG.find((entry) => entry.code === itemCode && entry.active);
+  if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
+  if (!item) return res.status(400).json({ error: 'Товар недоступен.' });
+  const actingStaff = await resolveActingStaff(req);
+  if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
+    if (existing.rowCount) {
+      await client.query('ROLLBACK');
+      return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
+    }
+    const userResult = await client.query('SELECT id, telegram_id, first_name FROM users WHERE qr_token = $1 FOR UPDATE', [qrToken]);
+    if (!userResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
+    const target = userResult.rows[0];
+    const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [target.id]);
+    const balance = Number(walletResult.rows[0]?.balance || 0);
+    if (balance < item.bonusPrice) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Недостаточно бонусов. Нужно ${item.bonusPrice} Б.` });
+    }
+    const balanceAfter = balance - item.bonusPrice;
+    const txResult = await client.query(
+      `INSERT INTO transactions (request_key, client_id, staff_id, mode, status, bonus_spent, balance_after, reason, completed_at)
+       VALUES ($1,$2,$3,'shop','completed',$4,$5,$6,NOW()) RETURNING *`,
+      [requestKey, target.id, actingStaff.id, item.bonusPrice, balanceAfter, item.title]
+    );
+    await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
+    await client.query('COMMIT');
+    await sendTelegramMessage(target.telegram_id, `Покупка в лавке «Пивника»
+
+${item.title}
+Списано: ${item.bonusPrice} бонусов
+Баланс: ${balanceAfter} бонусов`);
+    res.json({ transaction: transactionResponse(txResult.rows[0]), client: await getProfile(target.id), item });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/staff/recent', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
+  try {
+    const actingStaff = await resolveActingStaff(req);
+    if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+    const quota = await getCancellationQuota(actingStaff.id);
+    const from = quota.active ? quota.countFrom : new Date(Date.now() - 16 * 60 * 60 * 1000);
+    const result = await pool.query(
+      `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name
+       FROM transactions t JOIN users c ON c.id = t.client_id
+       WHERE t.staff_id = $1 AND t.created_at >= $2
+       ORDER BY t.created_at DESC LIMIT 12`,
+      [actingStaff.id, from]
+    );
+    res.json({ transactions: result.rows.map(transactionResponse), quota });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
+  const actingStaff = await resolveActingStaff(req);
+  if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+  const quota = await getCancellationQuota(actingStaff.id);
+  if (!quota.active) return res.status(403).json({ error: 'Отмена доступна только в активной смене.' });
+  if (quota.remaining <= 0) return res.status(403).json({ error: 'Лимит отмен исчерпан. Следующую отмену проводит владелец.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const tx = await cancelCompletedTransaction(client, req.params.id, actingStaff.id, reason, { staffId: actingStaff.id, notBefore: quota.countFrom });
+    await client.query('COMMIT');
+    const profile = await getProfile(tx.client_id);
+    await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
+Причина: ${reason}
+Текущий баланс: ${profile.balance} бонусов.`);
+    res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: await getCancellationQuota(actingStaff.id) });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/staff/transactions/:id', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
     const actingStaff = await resolveActingStaff(req);
@@ -1047,7 +1322,8 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
         (SELECT COALESCE(SUM(bonus_earned),0)::bigint FROM transactions WHERE status='completed') AS issued,
         (SELECT COUNT(*)::int FROM transactions WHERE created_at::date = CURRENT_DATE) AS today_ops,
         (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE) AS today_check_cents,
-        (SELECT COUNT(*)::int FROM transactions WHERE is_suspicious = TRUE) AS suspicious_ops
+        (SELECT COUNT(*)::int FROM transactions WHERE is_suspicious = TRUE AND status = 'completed') AS suspicious_ops,
+        (SELECT COUNT(*)::int FROM transactions WHERE status = 'cancelled' AND cancelled_at::date = CURRENT_DATE) AS cancelled_today
     `);
     const opsResult = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name,
@@ -1065,7 +1341,8 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
         issued: Number(summaryResult.rows[0].issued || 0),
         todayOperations: summaryResult.rows[0].today_ops,
         todayCheck: rubles(summaryResult.rows[0].today_check_cents),
-        suspiciousOperations: summaryResult.rows[0].suspicious_ops
+        suspiciousOperations: summaryResult.rows[0].suspicious_ops,
+        cancelledToday: summaryResult.rows[0].cancelled_today
       },
       operations: opsResult.rows.map(transactionResponse),
       settings: settingsResult.rows[0]
@@ -1177,6 +1454,45 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
     next(error);
   } finally {
     client.release();
+  }
+});
+
+app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'), async (req, res, next) => {
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const tx = await cancelCompletedTransaction(client, req.params.id, req.user.id, reason);
+    await client.query('COMMIT');
+    const profile = await getProfile(tx.client_id);
+    await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
+Причина: ${reason}
+Текущий баланс: ${profile.balance} бонусов.`);
+    res.json({ ok: true, transaction: transactionResponse(tx), client: profile });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/admin/users/:id/cancel-limit/reset', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const shift = await getCurrentShift();
+    if (!shift) return res.status(400).json({ error: 'Сейчас нет активной смены.' });
+    if (!shift.members.some((member) => String(member.id) === String(req.params.id))) {
+      return res.status(400).json({ error: 'Сотрудник не входит в текущую смену.' });
+    }
+    await pool.query(
+      'INSERT INTO cancel_quota_resets (shift_id, user_id, reset_by) VALUES ($1,$2,$3)',
+      [shift.id, req.params.id, req.user.id]
+    );
+    res.json({ ok: true, quota: await getCancellationQuota(req.params.id) });
+  } catch (error) {
+    next(error);
   }
 });
 
