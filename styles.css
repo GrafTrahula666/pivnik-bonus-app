@@ -1912,3 +1912,66 @@ body {
   font-size: 11px;
   line-height: 1.48;
 }
+
+
+/* V10: редактируемые акции и магазин */
+.modal-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.modal-title-row h2 { margin-top: 3px; }
+.premium-offer { grid-template-columns: 68px 34px minmax(0, 1fr) auto; }
+.premium-offer-media,
+.shop-product-media,
+.admin-content-thumb,
+.content-image-preview {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.035);
+}
+.premium-offer-media { width: 68px; height: 68px; border-radius: 16px; }
+.shop-product-media { width: 58px; height: 58px; border-radius: 14px; }
+.admin-content-thumb { width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto; }
+.premium-offer-media img,
+.shop-product-media img,
+.admin-content-thumb img,
+.content-image-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.content-image-fallback { display: grid; place-items: center; color: var(--text); }
+.content-image-fallback span { font-size: 20px; font-weight: 700; opacity: .7; }
+.premium-offer-copy small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
+.shop-product { grid-template-columns: 58px 30px minmax(0,1fr) auto; }
+
+.content-admin-card .card-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.content-admin-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
+.content-admin-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.content-admin-title { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.content-admin-title small { color: var(--muted); font-size: 10px; }
+.admin-content-list { display: grid; gap: 8px; }
+.admin-content-row { display: flex; gap: 9px; align-items: center; padding: 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.025); }
+.admin-content-row.inactive { opacity: .55; }
+.admin-content-row > div:nth-child(2) { flex: 1; min-width: 0; }
+.admin-content-row b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.admin-content-row small { color: var(--muted); font-size: 9px; line-height: 1.35; }
+.admin-content-buttons { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.admin-content-buttons button { font-size: 10px; padding: 3px; }
+
+.content-editor-sheet label { display: grid; gap: 6px; margin-top: 12px; font-size: 11px; color: var(--muted); }
+.content-textarea { min-height: 92px; resize: vertical; font-family: inherit; }
+.content-editor-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.content-active-label { display: flex !important; align-items: center; gap: 8px !important; min-height: 46px; padding: 0 4px; color: var(--text) !important; }
+.content-active-label input { width: 18px; height: 18px; accent-color: #fff; }
+.content-image-editor { display: grid; grid-template-columns: 130px 1fr; gap: 12px; margin: 16px 0; align-items: start; }
+.content-image-preview { width: 130px; aspect-ratio: 1; border-radius: 18px; display: grid; place-items: center; color: var(--muted); font-size: 11px; }
+.content-image-preview.has-image { background: #080a0d; }
+.content-image-fields { min-width: 0; }
+.content-image-fields input[type="file"] { width: 100%; color: var(--muted); font-size: 10px; }
+.content-image-fields small { display: block; color: var(--muted); margin-top: 5px; font-size: 9px; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .content-admin-columns { grid-template-columns: 1fr; }
+  .premium-offer { grid-template-columns: 58px 28px minmax(0,1fr); }
+  .premium-offer-media { width: 58px; height: 58px; }
+  .premium-offer > strong { grid-column: 3; justify-self: start; }
+  .shop-product { grid-template-columns: 52px 26px minmax(0,1fr); }
+  .shop-product-media { width: 52px; height: 52px; }
+  .shop-product > strong { grid-column: 3; }
+  .content-image-editor { grid-template-columns: 96px 1fr; }
+  .content-image-preview { width: 96px; }
+}

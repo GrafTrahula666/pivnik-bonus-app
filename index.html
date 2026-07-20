@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0e13" />
   <title>Пивник | Бонусы</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=10" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -277,6 +277,22 @@
           </div>
         </div>
 
+        <div class="card content-admin-card" id="contentAdminCard">
+          <div class="card-head">
+            <div><h3>Акции и магазин</h3><p>Название, описание, цена, фотография, порядок и доступность меняются без правки кода.</p></div>
+            <button class="text-btn" id="reloadContent" type="button">Обновить</button>
+          </div>
+          <div class="content-admin-actions admin-write-only">
+            <button class="secondary" id="addPromotion" type="button">+ Добавить акцию</button>
+            <button class="primary" id="addShopItem" type="button">+ Добавить товар</button>
+          </div>
+          <div class="content-admin-columns">
+            <section><div class="content-admin-title"><b>Акции</b><small>Карточки для клиентов</small></div><div id="adminPromotionsList" class="admin-content-list empty-state">Загрузка…</div></section>
+            <section><div class="content-admin-title"><b>Магазин</b><small>Товары за бонусы</small></div><div id="adminShopItemsList" class="admin-content-list empty-state">Загрузка…</div></section>
+          </div>
+          <small class="admin-hint">Поддерживаются JPG, PNG и WEBP. Файл автоматически уменьшается и сохраняется в базе. Для крафта установлена цена 600 Б.</small>
+        </div>
+
         <div class="card">
           <div class="card-head"><h3>Пользователи и доступы</h3><button class="text-btn" id="reloadUsers">Обновить</button></div>
           <p class="admin-hint">Новый сотрудник сначала один раз открывает приложение со своего Telegram. После этого назначьте ему роль «Бармен», задайте PIN и добавьте в смену. Роль «Партнёрский обзор» показывает всю рабочую информацию без права что-либо менять.</p>
@@ -456,33 +472,15 @@
   <div class="modal" id="promosModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
       <button class="close" data-close="promosModal">×</button>
-      <span class="muted">Предложения Пивника</span>
-      <h2>Акции</h2>
-      <div class="premium-list">
-        <article class="premium-offer active-offer">
-          <span class="offer-index">01</span>
-          <div><b>100 бонусов за первый вход</b><p>Начисляются автоматически при первой регистрации в приложении.</p></div>
-          <strong>+100 Б</strong>
-        </article>
-        <article class="premium-offer">
-          <span class="offer-index">02</span>
-          <div><b>Каждый 15-й литр — подарок</b><p>Оплатите 14 литров разливного пива и получите 1 литр бесплатно.</p></div>
-          <strong>14 → 1</strong>
-        </article>
-        <article class="premium-offer disabled-offer">
-          <span class="offer-index">03</span>
-          <div><b>Пригласить друга</b><p>После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.</p></div>
-          <button id="referralButton" type="button" disabled>Ссылка после бета-теста</button>
-        </article>
-      </div>
+      <div class="modal-title-row"><div><span class="muted">Предложения Пивника</span><h2>Акции</h2></div><button class="text-btn admin-write-only" id="editPromosQuick" type="button">Редактировать</button></div>
+      <div id="promosCatalog" class="premium-list empty-state">Загрузка акций…</div>
     </div>
   </div>
 
   <div class="modal" id="shopModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
       <button class="close" data-close="shopModal">×</button>
-      <span class="muted">Лавка Пивника</span>
-      <h2>Магазин за бонусы</h2>
+      <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин за бонусы</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
       <p class="help-intro" id="shopNote">Цены в бонусах могут быть выше обычной цены. Выдача только в баре после проверки сотрудником.</p>
       <div id="shopCatalog" class="shop-catalog empty-state">Загрузка каталога…</div>
       <button class="primary full" id="shopShowQr" type="button">Показать QR сотруднику</button>
@@ -498,6 +496,51 @@
       <p class="help-intro">Рейтинг считается по фактически оплаченным покупкам текущего месяца. Отменённые операции не учитываются.</p>
       <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
       <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
+    </div>
+  </div>
+
+  <div class="modal" id="contentEditorModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet content-editor-sheet">
+      <button class="close" data-close="contentEditorModal">×</button>
+      <span class="muted">Доступно только владельцу</span>
+      <h2 id="contentEditorTitle">Редактирование</h2>
+      <input type="hidden" id="contentEditorType" />
+      <input type="hidden" id="contentEditorId" />
+      <label>Название
+        <input class="text-input" id="contentTitle" maxlength="120" placeholder="Название карточки" />
+      </label>
+      <label>Описание
+        <textarea class="text-input content-textarea" id="contentDescription" maxlength="500" placeholder="Кратко и понятно для клиента"></textarea>
+      </label>
+      <label id="contentBadgeRow">Короткая подпись
+        <input class="text-input" id="contentBadge" maxlength="40" placeholder="Например: +100 Б" />
+      </label>
+      <label id="contentPriceRow">Цена в бонусах
+        <input class="text-input" id="contentPrice" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="600" />
+      </label>
+      <div class="content-editor-two">
+        <label>Порядок
+          <input class="text-input" id="contentSortOrder" type="number" min="-9999" max="9999" step="1" value="10" />
+        </label>
+        <label class="content-active-label"><input type="checkbox" id="contentActive" checked /> Показывать клиентам</label>
+      </div>
+      <div class="content-image-editor">
+        <div class="content-image-preview" id="contentImagePreview"><span>Без фото</span></div>
+        <div class="content-image-fields">
+          <label>Загрузить фотографию
+            <input id="contentImageFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
+          </label>
+          <small id="contentImageFileName">JPG, PNG или WEBP · до 6 МБ</small>
+          <label>Или HTTPS-ссылка
+            <input class="text-input" id="contentImageUrl" type="url" placeholder="https://…" />
+          </label>
+          <button class="text-btn danger-text" id="removeContentImage" type="button">Убрать фотографию</button>
+        </div>
+      </div>
+      <div class="two-buttons">
+        <button class="secondary" data-close="contentEditorModal" type="button">Отмена</button>
+        <button class="primary" id="saveContentItem" type="button">Сохранить</button>
+      </div>
     </div>
   </div>
 
@@ -535,6 +578,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

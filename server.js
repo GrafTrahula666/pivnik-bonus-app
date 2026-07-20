@@ -37,7 +37,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 
 const STATUS_LEVELS = [
   { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
@@ -58,9 +58,15 @@ const MAX_BEER_ML_PER_TRANSACTION = 100_000;
 const WELCOME_BONUS = 100;
 const REFERRAL_REWARD = 200;
 const STAFF_CANCEL_LIMIT = 3;
-const SHOP_CATALOG = [
-  { code: 'craft-05', title: 'Крафт из витрины · 0,5 л', subtitle: 'Любая доступная позиция из отмеченной категории. Выдача только в баре, 18+.', bonusPrice: 450, active: true },
-  { code: 'combo', title: 'Комбо Пивника', subtitle: 'Готовим состав и цену. Появится после бета-теста.', bonusPrice: 900, active: false }
+const MAX_CONTENT_IMAGE_BYTES = 3_200_000;
+const DEFAULT_PROMOTIONS = [
+  { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
+  { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
+  { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
+];
+const DEFAULT_SHOP_ITEMS = [
+  { code: 'craft-05', title: 'Крафт из витрины · 0,5 л', subtitle: 'Любая доступная позиция из отмеченной категории. Выдача только в баре, 18+.', bonusPrice: 600, active: true, sortOrder: 10 },
+  { code: 'combo', title: 'Комбо Пивника', subtitle: 'Готовим состав и цену. Появится после бета-теста.', bonusPrice: 900, active: false, sortOrder: 20 }
 ];
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -104,6 +110,47 @@ function makeShortCode() {
 function normalizeStaffPin(value) {
   const pin = String(value || '').trim();
   return /^\d{4,6}$/.test(pin) ? pin : '';
+}
+
+
+function normalizeContentImage(value) {
+  const source = String(value || '').trim();
+  if (!source) return null;
+  if (/^https:\/\/[^\s]+$/i.test(source)) {
+    if (source.length > 2_000) throw Object.assign(new Error('Ссылка на изображение слишком длинная.'), { statusCode: 400 });
+    return source;
+  }
+  if (/^data:image\/(jpeg|png|webp);base64,/i.test(source)) {
+    if (Buffer.byteLength(source, 'utf8') > MAX_CONTENT_IMAGE_BYTES) {
+      throw Object.assign(new Error('Изображение слишком большое. После сжатия должно быть не больше 3 МБ.'), { statusCode: 400 });
+    }
+    return source;
+  }
+  throw Object.assign(new Error('Разрешены JPG, PNG, WEBP или HTTPS-ссылка.'), { statusCode: 400 });
+}
+
+function makeContentCode(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+}
+
+function promotionResponse(row) {
+  return {
+    id: String(row.id), code: row.code, title: row.title, description: row.description || '',
+    badge: row.badge || '', imageSrc: row.image_src || '', active: Boolean(row.active),
+    sortOrder: Number(row.sort_order || 0), updatedAt: row.updated_at
+  };
+}
+
+function shopItemResponse(row) {
+  return {
+    id: String(row.id), code: row.code, title: row.title, subtitle: row.subtitle || '',
+    bonusPrice: Number(row.bonus_price || 0), imageSrc: row.image_src || '',
+    active: Boolean(row.active), sortOrder: Number(row.sort_order || 0), updatedAt: row.updated_at
+  };
+}
+
+function contentText(value, maxLength, fallback = '') {
+  return String(value ?? fallback).trim().slice(0, maxLength);
 }
 
 function createStaffPinHash(pin, salt = crypto.randomBytes(16).toString('hex')) {
@@ -377,6 +424,53 @@ async function initDatabase() {
        WHERE COALESCE((published->>'version')::int, 0) < 9`,
       [JSON.stringify(DEFAULT_DESIGN)]
     );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS promotions (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        badge TEXT NOT NULL DEFAULT '',
+        image_src TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by BIGINT REFERENCES users(id)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shop_items (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        subtitle TEXT NOT NULL DEFAULT '',
+        bonus_price INTEGER NOT NULL CHECK (bonus_price >= 0),
+        image_src TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by BIGINT REFERENCES users(id)
+      )
+    `);
+    for (const item of DEFAULT_PROMOTIONS) {
+      await client.query(
+        `INSERT INTO promotions (code, title, description, badge, active, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
+        [item.code, item.title, item.description, item.badge, item.active, item.sortOrder]
+      );
+    }
+    for (const item of DEFAULT_SHOP_ITEMS) {
+      await client.query(
+        `INSERT INTO shop_items (code, title, subtitle, bonus_price, active, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
+        [item.code, item.title, item.subtitle, item.bonusPrice, item.active, item.sortOrder]
+      );
+    }
+    await client.query('CREATE INDEX IF NOT EXISTS idx_promotions_sort ON promotions(sort_order, id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_shop_items_sort ON shop_items(sort_order, id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_client_date ON transactions(client_id, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_cancelled_by ON transactions(cancelled_by, cancelled_at DESC)');
@@ -841,8 +935,22 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
   }
 });
 
-app.get('/api/shop/catalog', authRequired, async (_req, res) => {
-  res.json({ items: SHOP_CATALOG, note: 'Цены указаны в бонусах. Выдача — только в баре после проверки сотрудником.' });
+app.get('/api/promotions', authRequired, async (_req, res, next) => {
+  try {
+    const result = await pool.query('SELECT * FROM promotions ORDER BY sort_order, id');
+    res.json({ promotions: result.rows.map(promotionResponse) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/shop/catalog', authRequired, async (_req, res, next) => {
+  try {
+    const result = await pool.query('SELECT * FROM shop_items ORDER BY sort_order, id');
+    res.json({ items: result.rows.map(shopItemResponse), note: 'Цены указаны в бонусах. Выдача — только в баре после проверки сотрудником.' });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
@@ -1112,9 +1220,10 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
   const qrToken = String(req.body?.qrToken || '');
   const itemCode = String(req.body?.itemCode || '');
   const requestKey = String(req.body?.requestKey || crypto.randomUUID());
-  const item = SHOP_CATALOG.find((entry) => entry.code === itemCode && entry.active);
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
-  if (!item) return res.status(400).json({ error: 'Товар недоступен.' });
+  const itemResult = await pool.query('SELECT * FROM shop_items WHERE code = $1 AND active = TRUE', [itemCode]);
+  if (!itemResult.rowCount) return res.status(400).json({ error: 'Товар недоступен.' });
+  const item = shopItemResponse(itemResult.rows[0]);
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
   const client = await pool.connect();
@@ -1494,6 +1603,115 @@ app.post('/api/admin/users/:id/cancel-limit/reset', authRequired, requireRole('a
   } catch (error) {
     next(error);
   }
+});
+
+app.get('/api/admin/content', authRequired, requireRole('viewer', 'admin'), async (_req, res, next) => {
+  try {
+    const [promotions, shopItems] = await Promise.all([
+      pool.query('SELECT * FROM promotions ORDER BY sort_order, id'),
+      pool.query('SELECT * FROM shop_items ORDER BY sort_order, id')
+    ]);
+    res.json({ promotions: promotions.rows.map(promotionResponse), shopItems: shopItems.rows.map(shopItemResponse) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/promotions', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const title = contentText(req.body?.title, 120);
+    if (!title) return res.status(400).json({ error: 'Укажите название акции.' });
+    const description = contentText(req.body?.description, 500);
+    const badge = contentText(req.body?.badge, 40);
+    const imageSrc = normalizeContentImage(req.body?.imageSrc);
+    const active = req.body?.active !== false;
+    const sortOrder = Math.max(-9999, Math.min(9999, Math.trunc(Number(req.body?.sortOrder || 0))));
+    const result = await pool.query(
+      `INSERT INTO promotions (code,title,description,badge,image_src,active,sort_order,updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [makeContentCode('promo'), title, description, badge, imageSrc, active, sortOrder, req.user.id]
+    );
+    res.json({ promotion: promotionResponse(result.rows[0]) });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
+app.put('/api/admin/promotions/:id', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const title = contentText(req.body?.title, 120);
+    if (!title) return res.status(400).json({ error: 'Укажите название акции.' });
+    const imageSrc = normalizeContentImage(req.body?.imageSrc);
+    const result = await pool.query(
+      `UPDATE promotions SET title=$1, description=$2, badge=$3, image_src=$4, active=$5, sort_order=$6, updated_by=$7, updated_at=NOW()
+       WHERE id=$8 RETURNING *`,
+      [title, contentText(req.body?.description, 500), contentText(req.body?.badge, 40), imageSrc,
+       req.body?.active !== false, Math.max(-9999, Math.min(9999, Math.trunc(Number(req.body?.sortOrder || 0)))), req.user.id, req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Акция не найдена.' });
+    res.json({ promotion: promotionResponse(result.rows[0]) });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
+app.delete('/api/admin/promotions/:id', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await pool.query('DELETE FROM promotions WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Акция не найдена.' });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/admin/shop-items', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const title = contentText(req.body?.title, 120);
+    const bonusPrice = Math.trunc(Number(req.body?.bonusPrice || 0));
+    if (!title) return res.status(400).json({ error: 'Укажите название товара.' });
+    if (bonusPrice < 1 || bonusPrice > 1_000_000) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 бонусов.' });
+    const imageSrc = normalizeContentImage(req.body?.imageSrc);
+    const result = await pool.query(
+      `INSERT INTO shop_items (code,title,subtitle,bonus_price,image_src,active,sort_order,updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [makeContentCode('item'), title, contentText(req.body?.subtitle, 500), bonusPrice, imageSrc,
+       req.body?.active !== false, Math.max(-9999, Math.min(9999, Math.trunc(Number(req.body?.sortOrder || 0)))), req.user.id]
+    );
+    res.json({ item: shopItemResponse(result.rows[0]) });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
+app.put('/api/admin/shop-items/:id', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const title = contentText(req.body?.title, 120);
+    const bonusPrice = Math.trunc(Number(req.body?.bonusPrice || 0));
+    if (!title) return res.status(400).json({ error: 'Укажите название товара.' });
+    if (bonusPrice < 1 || bonusPrice > 1_000_000) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 бонусов.' });
+    const imageSrc = normalizeContentImage(req.body?.imageSrc);
+    const result = await pool.query(
+      `UPDATE shop_items SET title=$1, subtitle=$2, bonus_price=$3, image_src=$4, active=$5, sort_order=$6, updated_by=$7, updated_at=NOW()
+       WHERE id=$8 RETURNING *`,
+      [title, contentText(req.body?.subtitle, 500), bonusPrice, imageSrc, req.body?.active !== false,
+       Math.max(-9999, Math.min(9999, Math.trunc(Number(req.body?.sortOrder || 0)))), req.user.id, req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Товар не найден.' });
+    res.json({ item: shopItemResponse(result.rows[0]) });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
+app.delete('/api/admin/shop-items/:id', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await pool.query('DELETE FROM shop_items WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Товар не найден.' });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });
 
 app.put('/api/admin/design/draft', authRequired, requireRole('admin'), async (req, res, next) => {

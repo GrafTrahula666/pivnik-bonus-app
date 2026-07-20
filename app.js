@@ -31,6 +31,9 @@ const state = {
   activeStaff: null,
   staffAvailable: [],
   catalog: [],
+  promotions: [],
+  adminContent: { promotions: [], shopItems: [] },
+  editingContent: null,
   selectedShopItem: 'craft-05',
   leaderboard: null,
   staffRecent: []
@@ -336,15 +339,51 @@ function renderBeer(profile = state.profile) {
   $('#beerLoyaltyCard')?.classList.toggle('gift-ready', gifts > 0);
 }
 
+function imageMarkup(source, title, className) {
+  if (!source) return `<div class="${className} content-image-fallback"><span>${escapeHtml((title || 'П').slice(0, 1).toUpperCase())}</span></div>`;
+  return `<div class="${className}"><img data-content-image src="${escapeHtml(source)}" alt="${escapeHtml(title || 'Изображение')}" loading="lazy" /></div>`;
+}
+
+function bindContentImageFallbacks(root = document) {
+  root.querySelectorAll('img[data-content-image]').forEach((image) => image.addEventListener('error', () => {
+    const holder = image.parentElement;
+    if (!holder) return;
+    holder.classList.add('content-image-fallback');
+    holder.innerHTML = '<span>П</span>';
+  }, { once: true }));
+}
+
+function renderPromotions() {
+  const list = $('#promosCatalog');
+  if (!list) return;
+  list.className = `premium-list${state.promotions.length ? '' : ' empty-state'}`;
+  list.innerHTML = state.promotions.length ? state.promotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'}">
+    ${imageMarkup(item.imageSrc, item.title, 'premium-offer-media')}
+    <span class="offer-index">${String(index + 1).padStart(2, '0')}</span>
+    <div class="premium-offer-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p><small>${item.active ? 'Доступно сейчас' : 'Недоступно / скоро'}</small></div>
+    <strong>${escapeHtml(item.badge || (item.active ? 'Активно' : 'Скоро'))}</strong>
+  </article>`).join('') : 'Акций пока нет';
+  bindContentImageFallbacks(list);
+}
+
+async function loadPromotions() {
+  const data = await api('/api/promotions');
+  state.promotions = data.promotions || [];
+  renderPromotions();
+  return state.promotions;
+}
+
 function renderShopCatalog() {
   const clientList = $('#shopCatalog');
   if (clientList) {
     clientList.className = `shop-catalog${state.catalog.length ? '' : ' empty-state'}`;
     clientList.innerHTML = state.catalog.length ? state.catalog.map((item, index) => `<article class="shop-product ${item.active ? '' : 'disabled'}">
+      ${imageMarkup(item.imageSrc, item.title, 'shop-product-media')}
       <div class="shop-product-number">${String(index + 1).padStart(2, '0')}</div>
       <div class="grow"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><span>${item.active ? 'Можно получить у сотрудника' : 'После бета-теста'}</span></div>
       <strong>${fmt(item.bonusPrice)} Б</strong>
     </article>`).join('') : 'Каталог пока пуст';
+    bindContentImageFallbacks(clientList);
   }
   const staffList = $('#staffShopItems');
   if (staffList) {
@@ -683,7 +722,7 @@ async function refreshMe() {
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
-  await Promise.all([loadCurrentShift(), loadCatalog(), loadLeaderboard()]);
+  await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard()]);
   if (roleCanStaff(state.profile?.role)) {
     await loadStaffSession();
     await loadStaffRecent();
@@ -730,7 +769,7 @@ async function boot() {
     renderProfile();
     renderStatuses();
     $('#bootText').textContent = 'Проверяем текущую смену…';
-    await Promise.all([loadCurrentShift(), loadCatalog(), loadLeaderboard()]);
+    await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard()]);
     if (roleCanStaff(state.profile?.role)) {
       await loadStaffSession();
       await loadStaffRecent();
@@ -1058,7 +1097,9 @@ function adminTransactionHtml(transaction) {
 
 async function loadAdmin() {
   if (!roleCanAdmin(state.profile?.role)) return;
-  const [summaryData, usersData, shiftData] = await Promise.all([api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift')]);
+  const [summaryData, usersData, shiftData, contentData] = await Promise.all([
+    api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift'), api('/api/admin/content')
+  ]);
   state.adminSettings = summaryData.settings;
   $('#metricClients').textContent = fmt(summaryData.summary.clients);
   $('#metricIssued').textContent = fmt(summaryData.summary.issued);
@@ -1080,6 +1121,153 @@ async function loadAdmin() {
   if (roleCanWrite(state.profile?.role)) fillDesignForm(summaryData.settings.draft);
   renderUsers(usersData.users);
   renderShiftAdmin(shiftData);
+  renderAdminContent(contentData);
+}
+
+function renderAdminContent(data = state.adminContent) {
+  state.adminContent = { promotions: data?.promotions || [], shopItems: data?.shopItems || [] };
+  const canWrite = roleCanWrite(state.profile?.role);
+  const build = (items, type) => items.length ? items.map((item) => `<div class="admin-content-row ${item.active ? '' : 'inactive'}">
+    ${imageMarkup(item.imageSrc, item.title, 'admin-content-thumb')}
+    <div><b>${escapeHtml(item.title)}</b><small>${type === 'shop' ? `${fmt(item.bonusPrice)} Б` : escapeHtml(item.badge || 'Без подписи')} · ${item.active ? 'показывается' : 'скрыто'} · порядок ${item.sortOrder}</small></div>
+    ${canWrite ? `<div class="admin-content-buttons"><button class="text-btn" data-content-edit="${type}" data-content-id="${item.id}" type="button">Изменить</button><button class="text-btn danger-text" data-content-delete="${type}" data-content-id="${item.id}" type="button">Удалить</button></div>` : '<small>Только просмотр</small>'}
+  </div>`).join('') : 'Пока пусто';
+  const promos = $('#adminPromotionsList');
+  const shop = $('#adminShopItemsList');
+  if (promos) { promos.className = `admin-content-list${state.adminContent.promotions.length ? '' : ' empty-state'}`; promos.innerHTML = build(state.adminContent.promotions, 'promotion'); bindContentImageFallbacks(promos); }
+  if (shop) { shop.className = `admin-content-list${state.adminContent.shopItems.length ? '' : ' empty-state'}`; shop.innerHTML = build(state.adminContent.shopItems, 'shop'); bindContentImageFallbacks(shop); }
+  $$('[data-content-edit]').forEach((button) => button.addEventListener('click', () => openContentEditor(button.dataset.contentEdit, button.dataset.contentId)));
+  $$('[data-content-delete]').forEach((button) => button.addEventListener('click', () => deleteContentItem(button.dataset.contentDelete, button.dataset.contentId)));
+}
+
+async function reloadContent() {
+  const data = await api('/api/admin/content');
+  renderAdminContent(data);
+  await Promise.all([loadPromotions(), loadCatalog()]);
+}
+
+function findContentItem(type, id) {
+  const list = type === 'promotion' ? state.adminContent.promotions : state.adminContent.shopItems;
+  return list.find((item) => String(item.id) === String(id)) || null;
+}
+
+function updateContentImagePreview() {
+  const preview = $('#contentImagePreview');
+  const source = state.editingContent?.imageSrc || '';
+  if (!preview) return;
+  preview.innerHTML = source ? `<img data-content-image src="${escapeHtml(source)}" alt="Предпросмотр" />` : '<span>Без фото</span>';
+  preview.classList.toggle('has-image', Boolean(source));
+  bindContentImageFallbacks(preview);
+}
+
+function openContentEditor(type, id = '') {
+  if (!roleCanWrite(state.profile?.role)) return toast('Редактирование доступно только владельцу');
+  const item = id ? findContentItem(type, id) : null;
+  state.editingContent = { type, id: item?.id || '', imageSrc: item?.imageSrc || '', fileName: '' };
+  $('#contentEditorType').value = type;
+  $('#contentEditorId').value = item?.id || '';
+  $('#contentEditorTitle').textContent = `${item ? 'Редактировать' : 'Добавить'} ${type === 'promotion' ? 'акцию' : 'товар'}`;
+  $('#contentTitle').value = item?.title || '';
+  $('#contentDescription').value = type === 'promotion' ? (item?.description || '') : (item?.subtitle || '');
+  $('#contentBadge').value = item?.badge || '';
+  $('#contentPrice').value = item?.bonusPrice || (type === 'shop' ? 600 : '');
+  $('#contentSortOrder').value = item?.sortOrder ?? 10;
+  $('#contentActive').checked = item?.active !== false;
+  $('#contentImageUrl').value = item?.imageSrc?.startsWith('https://') ? item.imageSrc : '';
+  $('#contentImageFile').value = '';
+  $('#contentImageFileName').textContent = 'JPG, PNG или WEBP · до 6 МБ';
+  $('#contentBadgeRow').classList.toggle('hidden', type !== 'promotion');
+  $('#contentPriceRow').classList.toggle('hidden', type !== 'shop');
+  updateContentImagePreview();
+  openModal('contentEditorModal');
+}
+
+async function imageFileToDataUrl(file) {
+  if (!file) return '';
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowed.includes(file.type)) throw new Error('Разрешены только JPG, PNG и WEBP.');
+  if (file.size > 6 * 1024 * 1024) throw new Error('Исходный файл должен быть не больше 6 МБ.');
+  const raw = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Не удалось прочитать изображение.'));
+    reader.readAsDataURL(file);
+  });
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Файл изображения повреждён.'));
+    img.src = raw;
+  });
+  let maxSide = 1280;
+  let quality = 0.84;
+  let output = '';
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    output = canvas.toDataURL('image/webp', quality);
+    if (output.length < 2_700_000) return output;
+    maxSide = Math.max(640, Math.round(maxSide * 0.82));
+    quality = Math.max(0.58, quality - 0.07);
+  }
+  if (output.length >= 3_000_000) throw new Error('Фотография слишком сложная. Выберите изображение меньшего размера.');
+  return output;
+}
+
+async function saveContentItem() {
+  const type = state.editingContent?.type;
+  if (!type) return;
+  const title = $('#contentTitle').value.trim();
+  if (!title) return toast('Укажите название');
+  const url = $('#contentImageUrl').value.trim();
+  if (url && !/^https:\/\//i.test(url)) return toast('Ссылка должна начинаться с https://');
+  const imageSrc = url || state.editingContent.imageSrc || '';
+  const payload = {
+    title,
+    active: $('#contentActive').checked,
+    sortOrder: Number($('#contentSortOrder').value || 0),
+    imageSrc
+  };
+  if (type === 'promotion') {
+    payload.description = $('#contentDescription').value.trim();
+    payload.badge = $('#contentBadge').value.trim();
+  } else {
+    payload.subtitle = $('#contentDescription').value.trim();
+    payload.bonusPrice = Number($('#contentPrice').value || 0);
+    if (payload.bonusPrice < 1) return toast('Укажите цену в бонусах');
+  }
+  const id = state.editingContent.id;
+  const base = type === 'promotion' ? '/api/admin/promotions' : '/api/admin/shop-items';
+  const button = $('#saveContentItem');
+  button.disabled = true;
+  try {
+    await api(id ? `${base}/${id}` : base, { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+    closeModal('contentEditorModal');
+    toast(type === 'promotion' ? 'Акция сохранена' : 'Товар сохранён');
+    await reloadContent();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function deleteContentItem(type, id) {
+  if (!roleCanWrite(state.profile?.role)) return;
+  const item = findContentItem(type, id);
+  if (!confirm(`Удалить «${item?.title || 'эту карточку'}»?`)) return;
+  const base = type === 'promotion' ? '/api/admin/promotions' : '/api/admin/shop-items';
+  await api(`${base}/${id}`, { method: 'DELETE' });
+  toast(type === 'promotion' ? 'Акция удалена' : 'Товар удалён');
+  await reloadContent();
+}
+
+function openContentAdmin() {
+  closeModal('promosModal');
+  closeModal('shopModal');
+  switchScreen('admin');
+  setTimeout(() => $('#contentAdminCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 }
 
 function renderUsers(users) {
@@ -1158,7 +1346,7 @@ function renderUsers(users) {
 $$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
-$('#openPromosButton').addEventListener('click', () => openModal('promosModal'));
+$('#openPromosButton').addEventListener('click', () => { renderPromotions(); openModal('promosModal'); });
 $('#openShopButton').addEventListener('click', () => { renderShopCatalog(); openModal('shopModal'); });
 $('#openLeaderboardButton').addEventListener('click', () => { renderLeaderboard(); openModal('leaderboardModal'); });
 $('#shopShowQr').addEventListener('click', () => { closeModal('shopModal'); showQr().catch((error) => toast(error.message)); });
@@ -1202,6 +1390,37 @@ $('#publishDesign').addEventListener('click', () => publishDesign().catch((error
 $('#reloadAdmin').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
 $('#reloadStaffRecent').addEventListener('click', () => loadStaffRecent().catch((error) => toast(error.message)));
 $('#reloadUsers').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$('#reloadContent').addEventListener('click', () => reloadContent().catch((error) => toast(error.message)));
+$('#addPromotion').addEventListener('click', () => openContentEditor('promotion'));
+$('#addShopItem').addEventListener('click', () => openContentEditor('shop'));
+$('#editPromosQuick').addEventListener('click', openContentAdmin);
+$('#editShopQuick').addEventListener('click', openContentAdmin);
+$('#saveContentItem').addEventListener('click', () => saveContentItem().catch((error) => toast(error.message)));
+$('#removeContentImage').addEventListener('click', () => {
+  if (!state.editingContent) return;
+  state.editingContent.imageSrc = '';
+  $('#contentImageUrl').value = '';
+  $('#contentImageFile').value = '';
+  $('#contentImageFileName').textContent = 'Фотография удалена из карточки';
+  updateContentImagePreview();
+});
+$('#contentImageFile').addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  if (!file || !state.editingContent) return;
+  const label = $('#contentImageFileName');
+  label.textContent = 'Обрабатываем изображение…';
+  try {
+    state.editingContent.imageSrc = await imageFileToDataUrl(file);
+    state.editingContent.fileName = file.name;
+    $('#contentImageUrl').value = '';
+    label.textContent = `${file.name} · сохранится как WEBP`;
+    updateContentImagePreview();
+  } catch (error) {
+    event.target.value = '';
+    label.textContent = 'JPG, PNG или WEBP · до 6 МБ';
+    toast(error.message);
+  }
+});
 $('#saveShift').addEventListener('click', () => saveShift().catch((error) => toast(error.message)));
 $('#endShift').addEventListener('click', () => endShift().catch((error) => toast(error.message)));
 $('#changeStaffButton').addEventListener('click', () => { renderStaffSession(); openModal('staffLoginModal'); });
