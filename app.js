@@ -36,7 +36,9 @@ const state = {
   editingContent: null,
   selectedShopItem: 'craft-05',
   leaderboard: null,
-  staffRecent: []
+  staffRecent: [],
+  profileDraft: null,
+  profileSetupStep: 1
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -53,6 +55,153 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
+
+const AVATAR_OPTIONS = [
+  ['01-panda', 'Панда'], ['02-cat', 'Кот'], ['03-dog', 'Пёс'], ['04-fox', 'Лиса'], ['05-bear', 'Медведь'],
+  ['06-rabbit', 'Кролик'], ['07-owl', 'Сова'], ['08-raccoon', 'Енот'], ['09-wolf', 'Волк'], ['10-deer', 'Олень'],
+  ['11-koala', 'Коала'], ['12-tiger', 'Тигр'], ['13-red-panda', 'Красная панда'], ['14-penguin', 'Пингвин'],
+  ['15-mouse', 'Мышонок'], ['16-dragon', 'Дракон'], ['17-unicorn', 'Единорог'], ['18-griffin', 'Грифон'], ['19-fire-imp', 'Огонёк']
+].map(([key, name]) => ({ key, name }));
+const AGE_OPTIONS = ['', '18-24', '25-34', '35-44', '45-54', '55+'];
+
+function avatarAssetUrl(entity = {}) {
+  const source = entity.avatarSource || 'preset_male';
+  if (source === 'telegram' && entity.photoUrl) return entity.photoUrl;
+  if (source === 'preset_female') return '/assets/avatars/preset-female.webp';
+  if (source === 'animal' && entity.avatarKey) return `/assets/avatars/${encodeURIComponent(entity.avatarKey)}.webp`;
+  return '/assets/avatars/preset-male.webp';
+}
+
+function avatarFallback(entity = {}) {
+  return String(entity.firstName || entity.name || 'П').trim().slice(0, 1).toUpperCase() || 'П';
+}
+
+function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = false) {
+  const visible = !respectPrivacy || entity.showAvatar !== false;
+  const fallback = visible ? avatarFallback(entity) : '•';
+  const src = visible ? avatarAssetUrl(entity) : '';
+  return `<span class="${className} avatar-render"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span>`;
+}
+
+function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
+  if (!element) return;
+  element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
+}
+
+function profileDraftFromCurrent() {
+  const profile = state.profile || {};
+  return {
+    avatarSource: profile.avatarSource || 'preset_male',
+    avatarKey: profile.avatarKey || null,
+    ageGroup: profile.ageGroup || '',
+    privacy: {
+      publicProfile: profile.privacy?.publicProfile !== false,
+      showName: profile.privacy?.showName !== false,
+      showAvatar: profile.privacy?.showAvatar !== false,
+      showMonthlySpend: profile.privacy?.showMonthlySpend !== false,
+      showStats: profile.privacy?.showStats !== false
+    }
+  };
+}
+
+function selectedAvatarPreview() {
+  return {
+    firstName: state.profile?.firstName || 'П',
+    photoUrl: state.profile?.photoUrl || null,
+    avatarSource: state.profileDraft?.avatarSource || 'preset_male',
+    avatarKey: state.profileDraft?.avatarKey || null
+  };
+}
+
+function renderAnimalPicker() {
+  const grid = $('#animalAvatarGrid');
+  if (!grid) return;
+  grid.innerHTML = AVATAR_OPTIONS.map((item) => `<button type="button" class="animal-avatar-choice ${state.profileDraft?.avatarKey === item.key ? 'active' : ''}" data-animal-avatar="${item.key}">
+    <img src="/assets/avatars/${item.key}.webp" alt="${escapeHtml(item.name)}"><small>${escapeHtml(item.name)}</small>
+  </button>`).join('');
+  grid.querySelectorAll('[data-animal-avatar]').forEach((button) => button.addEventListener('click', () => {
+    state.profileDraft.avatarSource = 'animal';
+    state.profileDraft.avatarKey = button.dataset.animalAvatar;
+    if (!state.profile?.onboardingComplete) state.profileDraft.privacy.showAvatar = true;
+    closeModal('animalPickerModal');
+    renderProfileSetup();
+  }));
+}
+
+function renderProfileSetup(step = state.profileSetupStep || 1) {
+  state.profileSetupStep = step;
+  if (!state.profileDraft) state.profileDraft = profileDraftFromCurrent();
+  $('#profileSetupStepAvatar')?.classList.toggle('hidden', step !== 1);
+  $('#profileSetupStepPrivacy')?.classList.toggle('hidden', step !== 2);
+  $('#profileSetupBack')?.classList.toggle('hidden', step !== 2);
+  const close = $('#profileSetupClose');
+  if (close) close.classList.toggle('hidden', !state.profile?.onboardingComplete);
+
+  $$('#profileSetupModal [data-avatar-source]').forEach((button) => {
+    const source = button.dataset.avatarSource;
+    const selected = state.profileDraft.avatarSource === source;
+    button.classList.toggle('active', selected);
+    if (source === 'telegram') {
+      button.disabled = !state.profile?.photoUrl;
+      const small = button.querySelector('small');
+      if (small) small.textContent = state.profile?.photoUrl ? 'Фото из профиля Telegram' : 'В Telegram нет фото';
+    }
+  });
+  $('#openAnimalPicker')?.classList.toggle('active', state.profileDraft.avatarSource === 'animal');
+  const telegramPreview = $('#telegramAvatarPreview');
+  if (telegramPreview) {
+    if (state.profile?.photoUrl) renderAvatarInto(telegramPreview, { ...state.profile, avatarSource: 'telegram' });
+    else telegramPreview.textContent = 'T';
+  }
+  renderAvatarInto($('#profileSetupPreview'), selectedAvatarPreview());
+  const selectedText = $('#profileSetupSelectedText');
+  if (selectedText) {
+    const source = state.profileDraft.avatarSource;
+    selectedText.textContent = source === 'telegram' ? 'Фото Telegram' : source === 'preset_female' ? 'Женский силуэт' : source === 'animal' ? 'Аватар из коллекции' : 'Мужской силуэт';
+  }
+  $$('#profileAgeOptions [data-age]').forEach((button) => button.classList.toggle('active', button.dataset.age === (state.profileDraft.ageGroup || '')));
+  const privacy = state.profileDraft.privacy;
+  if ($('#privacyPublicProfile')) $('#privacyPublicProfile').checked = privacy.publicProfile;
+  if ($('#privacyShowName')) $('#privacyShowName').checked = privacy.showName;
+  if ($('#privacyShowAvatar')) $('#privacyShowAvatar').checked = privacy.showAvatar;
+  if ($('#privacyShowSpend')) $('#privacyShowSpend').checked = privacy.showMonthlySpend;
+  if ($('#privacyShowStats')) $('#privacyShowStats').checked = privacy.showStats;
+}
+
+function openProfileSetup(step = 1) {
+  state.profileDraft = profileDraftFromCurrent();
+  renderProfileSetup(step);
+  renderAnimalPicker();
+  openModal('profileSetupModal');
+}
+
+function syncPrivacyDraft() {
+  if (!state.profileDraft) state.profileDraft = profileDraftFromCurrent();
+  state.profileDraft.privacy = {
+    publicProfile: Boolean($('#privacyPublicProfile')?.checked),
+    showName: Boolean($('#privacyShowName')?.checked),
+    showAvatar: Boolean($('#privacyShowAvatar')?.checked),
+    showMonthlySpend: Boolean($('#privacyShowSpend')?.checked),
+    showStats: Boolean($('#privacyShowStats')?.checked)
+  };
+}
+
+async function saveProfileSettings() {
+  syncPrivacyDraft();
+  const button = $('#saveProfileSettings');
+  if (button) button.disabled = true;
+  try {
+    const data = await api('/api/me/profile', { method: 'PUT', body: JSON.stringify(state.profileDraft) });
+    state.profile = data.profile;
+    state.profileDraft = null;
+    closeModal('profileSetupModal');
+    renderProfile();
+    await loadLeaderboard();
+    toast('Профиль сохранён');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
 
 
 function enhanceDom() {
@@ -202,6 +351,71 @@ function enhanceDom() {
         <p>Продолжая, вы принимаете правила бонусной программы и условия обработки данных для работы приложения.</p>
         <button class="text-btn consent-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
         <button class="primary full" id="acceptTerms" type="button">Принять и продолжить</button>
+      </div>
+    </div>`);
+  }
+
+
+  const profileAvatar = $('#profileAvatar');
+  if (profileAvatar) {
+    profileAvatar.setAttribute('role', 'button');
+    profileAvatar.setAttribute('tabindex', '0');
+    profileAvatar.setAttribute('aria-label', 'Настроить профиль и аватар');
+  }
+  const heroActions = $('.hero-actions');
+  if (heroActions && !$('#openProfileSettings')) {
+    heroActions.insertAdjacentHTML('afterend', '<button class="profile-settings-link" id="openProfileSettings" type="button">Аватар и конфиденциальность</button>');
+  }
+
+  if (!$('#profileSetupModal')) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal consent-modal profile-setup-modal" id="profileSetupModal" aria-hidden="true">
+      <div class="modal-sheet tall-sheet profile-setup-sheet">
+        <button class="close" id="profileSetupClose" type="button">×</button>
+        <button class="profile-back hidden" id="profileSetupBack" type="button">← Назад</button>
+        <section id="profileSetupStepAvatar">
+          <span class="muted">Личный профиль</span>
+          <h2>Выберите аватар</h2>
+          <p class="help-intro">Никаких случайных изображений: выберите вариант сами. Настройки можно изменить позже.</p>
+          <div class="primary-avatar-grid">
+            <button class="primary-avatar-choice" data-avatar-source="preset_male" type="button"><img src="/assets/avatars/preset-male.webp" alt="Мужской аватар"><b>Мужской</b></button>
+            <button class="primary-avatar-choice" data-avatar-source="preset_female" type="button"><img src="/assets/avatars/preset-female.webp" alt="Женский аватар"><b>Женский</b></button>
+          </div>
+          <div class="secondary-avatar-grid">
+            <button class="secondary-avatar-choice" data-avatar-source="telegram" type="button"><span class="telegram-avatar-preview" id="telegramAvatarPreview">T</span><span><b>Фото Telegram</b><small>Фото из профиля Telegram</small></span></button>
+            <button class="secondary-avatar-choice" id="openAnimalPicker" type="button"><img src="/assets/avatars/01-panda.webp" alt="Коллекция аватаров"><span><b>Выбрать аватар</b><small>Животные и мифические существа</small></span></button>
+          </div>
+          <div class="selected-avatar-line"><span id="profileSetupPreview"></span><div><small>Выбрано</small><b id="profileSetupSelectedText">Мужской силуэт</b></div></div>
+          <div class="profile-age-block">
+            <h3>Возрастная группа <small>по желанию</small></h3>
+            <div class="age-option-grid" id="profileAgeOptions">
+              <button type="button" data-age="">Не указывать</button><button type="button" data-age="18-24">18–24</button><button type="button" data-age="25-34">25–34</button><button type="button" data-age="35-44">35–44</button><button type="button" data-age="45-54">45–54</button><button type="button" data-age="55+">55+</button>
+            </div>
+            <p class="privacy-note">Возраст нужен только для внутренней статистики бара и не будет указан в профиле.</p>
+          </div>
+          <button class="primary full" id="profileSetupNext" type="button">Продолжить</button>
+        </section>
+        <section class="hidden" id="profileSetupStepPrivacy">
+          <span class="muted">Настройки профиля</span>
+          <h2>Конфиденциальность</h2>
+          <p class="help-intro">Можно оставить в рейтинге только сумму, скрыв имя и аватар, либо запретить открывать подробный профиль.</p>
+          <div class="privacy-switches">
+            <label><span><b>Публичный профиль</b><small>Другие смогут открыть статистику и достижения</small></span><input id="privacyPublicProfile" type="checkbox" checked></label>
+            <label><span><b>Показывать имя</b><small>В рейтинге и публичном профиле</small></span><input id="privacyShowName" type="checkbox" checked></label>
+            <label><span><b>Показывать аватар</b><small>Фото Telegram или выбранный аватар</small></span><input id="privacyShowAvatar" type="checkbox" checked></label>
+            <label><span><b>Показывать сумму</b><small>Сумма покупок за месяц в таблице лидеров</small></span><input id="privacyShowSpend" type="checkbox" checked></label>
+            <label><span><b>Показывать статистику</b><small>Посещения, бонусы и будущие достижения</small></span><input id="privacyShowStats" type="checkbox" checked></label>
+          </div>
+          <p class="privacy-note">Владелец и сотрудники видят служебные данные, необходимые для начисления и списания бонусов.</p>
+          <button class="primary full" id="saveProfileSettings" type="button">Сохранить профиль</button>
+        </section>
+      </div>
+    </div>
+    <div class="modal" id="animalPickerModal" aria-hidden="true">
+      <div class="modal-sheet tall-sheet animal-picker-sheet">
+        <button class="close" data-close="animalPickerModal">×</button>
+        <span class="muted">Бесплатная коллекция</span>
+        <h2>Выберите аватар</h2>
+        <div class="animal-avatar-grid" id="animalAvatarGrid"></div>
       </div>
     </div>`);
   }
@@ -428,8 +642,9 @@ function renderLeaderboard() {
     list.className = `leaderboard-list${data.leaders?.length ? '' : ' empty-state'}`;
     list.innerHTML = data.leaders?.length ? data.leaders.map((leader) => `<div class="leaderboard-row ${leader.isMe ? 'is-me' : ''} ${leader.rank <= 3 ? 'podium' : ''}">
       <span class="leader-rank">${leader.rank}</span>
+      ${avatarInlineHtml(leader, 'leader-avatar', true)}
       <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>Покупки за текущий месяц</small></div>
-      <strong>${fmt(leader.spend)} ₽</strong>
+      <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
     </div>`).join('') : 'Пока нет покупок для рейтинга';
   }
 }
@@ -459,8 +674,8 @@ function renderCurrentShift() {
       container.innerHTML = '<div class="person"><span class="avatar">П</span><div><b>Команда Пивника</b><small>Смена пока не выбрана владельцем.</small></div></div>';
     } else {
       const members = shift.members.map((member) => `<div class="shift-person">
-        <span class="avatar">${escapeHtml((member.firstName || member.name || 'П').slice(0, 1).toUpperCase())}</span>
-        <div><b>${escapeHtml(member.name || member.firstName || 'Сотрудник')}</b><small>сегодня на смене</small></div>
+        ${avatarInlineHtml(member, 'avatar', true)}
+        <div><b>${escapeHtml(member.showName === false ? 'Сотрудник Пивника' : (member.name || member.firstName || 'Сотрудник'))}</b><small>сегодня на смене</small></div>
       </div>`).join('');
       const note = shift.note ? `<div class="shift-team-note">${escapeHtml(shift.note)}</div>` : '';
       container.innerHTML = `<div class="shift-team-grid">${members}</div>${note}`;
@@ -566,7 +781,7 @@ function renderStaffSession() {
       const disabled = !staff.pinConfigured;
       return `<label class="staff-session-option ${disabled ? 'disabled' : ''}">
         <input type="radio" name="staff-session-user" value="${escapeHtml(staff.id)}" ${active ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
-        <span class="avatar">${escapeHtml((staff.firstName || staff.name || 'П').slice(0, 1).toUpperCase())}</span>
+        ${avatarInlineHtml(staff, 'avatar')}
         <div><b>${escapeHtml(staff.name || staff.firstName || 'Сотрудник')}</b><small>${disabled ? 'PIN ещё не задан владельцем' : 'PIN настроен'}</small></div>
       </label>`;
     }).join('') : 'В текущей смене нет сотрудников с ролью «Бармен».';
@@ -625,7 +840,7 @@ function renderProfile() {
   $('#statusName').textContent = profile.status.name;
   $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
-  $('#profileAvatar').textContent = (profile.firstName || 'П').slice(0, 1).toUpperCase();
+  renderAvatarInto($('#profileAvatar'), profile);
   $('#staffName').textContent = activeStaffName();
   renderBeer(profile);
 
@@ -743,8 +958,12 @@ async function authenticate() {
   renderStatuses();
 }
 
-function showConsentIfNeeded() {
-  if (!state.profile?.termsAccepted) openModal('consentModal');
+function showRequiredSetup() {
+  if (!state.profile?.termsAccepted) {
+    openModal('consentModal');
+    return;
+  }
+  if (!state.profile?.onboardingComplete) openProfileSetup(1);
 }
 
 async function boot() {
@@ -775,7 +994,7 @@ async function boot() {
       await loadStaffRecent();
     }
     await finishBoot();
-    showConsentIfNeeded();
+    showRequiredSetup();
   } catch (error) {
     $('#bootText').textContent = error.message;
     $('#bootScreen').classList.add('error');
@@ -790,6 +1009,7 @@ async function acceptTerms() {
     state.profile = data.profile;
     closeModal('consentModal');
     toast('Правила приняты');
+    if (!state.profile?.onboardingComplete) openProfileSetup(1);
   } finally {
     button.disabled = false;
   }
@@ -833,7 +1053,7 @@ async function resolveQr(payload) {
   $('#foundName').textContent = `${data.client.firstName} · ${data.client.status.name}`;
   $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}% начисление`;
   $('#foundCode').textContent = data.shortCode || data.client.qrShortCode || '';
-  $('#foundAvatar').textContent = data.client.firstName.slice(0, 1).toUpperCase();
+  renderAvatarInto($('#foundAvatar'), data.client);
   updateResolvedBeer(data.client);
   updateCalculation();
   haptic('medium');
@@ -1342,6 +1562,31 @@ function renderUsers(users) {
     } catch (error) { toast(error.message); }
   }));
 }
+
+$('#openProfileSettings')?.addEventListener('click', () => openProfileSetup(1));
+$('#profileAvatar')?.addEventListener('click', () => openProfileSetup(1));
+$('#profileAvatar')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') openProfileSetup(1); });
+$('#profileSetupClose')?.addEventListener('click', () => { if (state.profile?.onboardingComplete) closeModal('profileSetupModal'); });
+$('#profileSetupBack')?.addEventListener('click', () => renderProfileSetup(1));
+$('#profileSetupNext')?.addEventListener('click', () => renderProfileSetup(2));
+$('#saveProfileSettings')?.addEventListener('click', () => saveProfileSettings().catch((error) => toast(error.message)));
+$('#openAnimalPicker')?.addEventListener('click', () => { renderAnimalPicker(); openModal('animalPickerModal'); });
+$$('#profileSetupModal [data-avatar-source]').forEach((button) => button.addEventListener('click', () => {
+  if (button.disabled) return;
+  state.profileDraft = state.profileDraft || profileDraftFromCurrent();
+  state.profileDraft.avatarSource = button.dataset.avatarSource;
+  state.profileDraft.avatarKey = null;
+  if (!state.profile?.onboardingComplete) state.profileDraft.privacy.showAvatar = button.dataset.avatarSource !== 'telegram';
+  renderProfileSetup();
+}));
+$$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener('click', () => {
+  state.profileDraft = state.profileDraft || profileDraftFromCurrent();
+  state.profileDraft.ageGroup = button.dataset.age || '';
+  renderProfileSetup();
+}));
+['privacyPublicProfile','privacyShowName','privacyShowAvatar','privacyShowSpend','privacyShowStats'].forEach((id) => {
+  $(`#${id}`)?.addEventListener('change', syncPrivacyDraft);
+});
 
 $$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));

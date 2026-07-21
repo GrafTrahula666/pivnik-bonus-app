@@ -38,6 +38,7 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
 app.use(express.json({ limit: '5mb' }));
+app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
 const STATUS_LEVELS = [
   { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
@@ -59,6 +60,12 @@ const WELCOME_BONUS = 100;
 const REFERRAL_REWARD = 200;
 const STAFF_CANCEL_LIMIT = 3;
 const MAX_CONTENT_IMAGE_BYTES = 3_200_000;
+const AVATAR_SOURCES = new Set(['preset_male', 'preset_female', 'telegram', 'animal']);
+const ANIMAL_AVATARS = new Set([
+  '01-panda','02-cat','03-dog','04-fox','05-bear','06-rabbit','07-owl','08-raccoon','09-wolf','10-deer',
+  '11-koala','12-tiger','13-red-panda','14-penguin','15-mouse','16-dragon','17-unicorn','18-griffin','19-fire-imp'
+]);
+const AGE_GROUPS = new Set(['18-24', '25-34', '35-44', '45-54', '55+']);
 const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
@@ -110,6 +117,39 @@ function makeShortCode() {
 function normalizeStaffPin(value) {
   const pin = String(value || '').trim();
   return /^\d{4,6}$/.test(pin) ? pin : '';
+}
+
+function normalizeAvatarSource(value) {
+  const source = String(value || '').trim();
+  return AVATAR_SOURCES.has(source) ? source : 'preset_male';
+}
+
+function normalizeAvatarKey(source, value) {
+  if (source !== 'animal') return null;
+  const key = String(value || '').trim();
+  return ANIMAL_AVATARS.has(key) ? key : null;
+}
+
+function normalizeAgeGroup(value) {
+  const age = String(value || '').trim();
+  return AGE_GROUPS.has(age) ? age : null;
+}
+
+function profileAppearanceFromRow(row) {
+  return {
+    avatarSource: row.avatar_source || 'preset_male',
+    avatarKey: row.avatar_key || null,
+    photoUrl: row.photo_url || null,
+    onboardingComplete: Boolean(row.onboarding_completed_at),
+    ageGroup: row.age_group || null,
+    privacy: {
+      publicProfile: row.profile_public !== false,
+      showName: row.show_name !== false,
+      showAvatar: row.show_avatar !== false,
+      showMonthlySpend: row.show_leaderboard_amount !== false,
+      showStats: row.show_stats !== false
+    }
+  };
 }
 
 
@@ -308,6 +348,15 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_salt TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_updated_at TIMESTAMPTZ');
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_source TEXT NOT NULL DEFAULT 'preset_male'");
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS age_group TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_public BOOLEAN NOT NULL DEFAULT TRUE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_name BOOLEAN NOT NULL DEFAULT TRUE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_avatar BOOLEAN NOT NULL DEFAULT TRUE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_leaderboard_amount BOOLEAN NOT NULL DEFAULT TRUE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_stats BOOLEAN NOT NULL DEFAULT TRUE');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_token_unique ON users(qr_token) WHERE qr_token IS NOT NULL');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_short_unique ON users(qr_short_code) WHERE qr_short_code IS NOT NULL');
 
@@ -498,7 +547,7 @@ async function getCurrentShift(db = pool) {
   if (!shiftResult.rowCount) return null;
   const shift = shiftResult.rows[0];
   const membersResult = await db.query(
-    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.role, sm.position
+    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.show_name, u.show_avatar, u.role, sm.position
      FROM shift_members sm
      JOIN users u ON u.id = sm.user_id
      WHERE sm.shift_id = $1
@@ -518,6 +567,10 @@ async function getCurrentShift(db = pool) {
       lastName: row.last_name,
       name: [row.first_name, row.last_name].filter(Boolean).join(' '),
       photoUrl: row.photo_url,
+      avatarSource: row.avatar_source || 'preset_male',
+      avatarKey: row.avatar_key || null,
+      showName: row.show_name !== false,
+      showAvatar: row.show_avatar !== false,
       role: row.role
     }))
   };
@@ -556,6 +609,17 @@ async function getProfile(userId, db = pool) {
     firstName: row.first_name,
     lastName: row.last_name,
     photoUrl: row.photo_url,
+    avatarSource: row.avatar_source || 'preset_male',
+    avatarKey: row.avatar_key || null,
+    onboardingComplete: Boolean(row.onboarding_completed_at),
+    ageGroup: row.age_group || null,
+    privacy: {
+      publicProfile: row.profile_public !== false,
+      showName: row.show_name !== false,
+      showAvatar: row.show_avatar !== false,
+      showMonthlySpend: row.show_leaderboard_amount !== false,
+      showStats: row.show_stats !== false
+    },
     role: row.role,
     balance: Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
@@ -855,6 +919,46 @@ app.post('/api/me/consent', authRequired, async (req, res, next) => {
   }
 });
 
+
+app.put('/api/me/profile', authRequired, async (req, res, next) => {
+  try {
+    const avatarSource = normalizeAvatarSource(req.body?.avatarSource);
+    const avatarKey = normalizeAvatarKey(avatarSource, req.body?.avatarKey);
+    if (avatarSource === 'animal' && !avatarKey) return res.status(400).json({ error: 'Выберите аватар из коллекции.' });
+    if (avatarSource === 'telegram' && !req.user.photoUrl) return res.status(400).json({ error: 'В профиле Telegram нет доступной фотографии.' });
+    const ageGroup = normalizeAgeGroup(req.body?.ageGroup);
+    const privacy = req.body?.privacy && typeof req.body.privacy === 'object' ? req.body.privacy : {};
+    await pool.query(
+      `UPDATE users SET
+         avatar_source = $1,
+         avatar_key = $2,
+         age_group = $3,
+         profile_public = $4,
+         show_name = $5,
+         show_avatar = $6,
+         show_leaderboard_amount = $7,
+         show_stats = $8,
+         onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
+         updated_at = NOW()
+       WHERE id = $9`,
+      [
+        avatarSource,
+        avatarKey,
+        ageGroup,
+        privacy.publicProfile !== false,
+        privacy.showName !== false,
+        privacy.showAvatar !== false,
+        privacy.showMonthlySpend !== false,
+        privacy.showStats !== false,
+        req.user.id
+      ]
+    );
+    res.json({ ok: true, profile: await getProfile(req.user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/me/qr', authRequired, async (req, res, next) => {
   try {
     const qr = await ensurePersonalQr(pool, req.user.id);
@@ -892,7 +996,8 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
   try {
     const ranked = await pool.query(
       `WITH totals AS (
-         SELECT u.id, u.first_name, u.last_name,
+         SELECT u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key,
+                u.show_name, u.show_avatar, u.show_leaderboard_amount,
                 COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
          FROM users u
          JOIN transactions t ON t.client_id = u.id
@@ -900,7 +1005,8 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-         GROUP BY u.id, u.first_name, u.last_name
+         GROUP BY u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key,
+                  u.show_name, u.show_avatar, u.show_leaderboard_amount
        ), positions AS (
          SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank
          FROM totals
@@ -927,7 +1033,19 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
     res.json({
       month,
       prizeNote: 'Награды за 1–3 место будут объявлены после бета-теста.',
-      leaders: ranked.rows.map((row) => ({ rank: Number(row.rank), name: publicLeaderboardName(row), spend: rubles(row.spend_cents), isMe: String(row.id) === String(req.user.id) })),
+      leaders: ranked.rows.map((row) => {
+        const isMe = String(row.id) === String(req.user.id);
+        return {
+          rank: Number(row.rank),
+          name: isMe || row.show_name ? publicLeaderboardName(row) : 'Скрытый гость',
+          spend: isMe || row.show_leaderboard_amount ? rubles(row.spend_cents) : null,
+          isMe,
+          avatarSource: isMe || row.show_avatar ? (row.avatar_source || 'preset_male') : null,
+          avatarKey: isMe || row.show_avatar ? (row.avatar_key || null) : null,
+          photoUrl: isMe || row.show_avatar ? (row.photo_url || null) : null,
+          showAvatar: Boolean(isMe || row.show_avatar)
+        };
+      }),
       me: myResult.rowCount ? { rank: Number(myResult.rows[0].rank), spend: rubles(myResult.rows[0].spend_cents) } : null
     });
   } catch (error) {
@@ -958,7 +1076,7 @@ app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async
     const shift = await getCurrentShift();
     const shiftIds = shift?.members?.length ? shift.members.map((member) => member.id) : [];
     const result = await pool.query(
-      `SELECT id, telegram_id, username, first_name, last_name, role,
+      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, role,
               (staff_pin_hash IS NOT NULL AND staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users
        WHERE role IN ('staff','admin')
@@ -970,6 +1088,9 @@ app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async
         id: String(row.id), telegramId: String(row.telegram_id), username: row.username,
         firstName: row.first_name, lastName: row.last_name,
         name: [row.first_name, row.last_name].filter(Boolean).join(' '), role: row.role,
+        photoUrl: row.photo_url,
+        avatarSource: row.avatar_source || 'preset_male',
+        avatarKey: row.avatar_key || null,
         pinConfigured: Boolean(row.pin_configured)
       }));
     const activeStaff = await resolveActingStaff(req);
@@ -1343,7 +1464,7 @@ app.get('/api/shift/current', authRequired, async (_req, res, next) => {
 app.get('/api/admin/shift', authRequired, requireRole('viewer', 'admin'), async (_req, res, next) => {
   try {
     const staffResult = await pool.query(
-      `SELECT id, telegram_id, username, first_name, last_name, photo_url, role
+      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, role
        FROM users
        WHERE role IN ('staff','admin')
        ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 0 END, first_name, id`
@@ -1358,6 +1479,8 @@ app.get('/api/admin/shift', authRequired, requireRole('viewer', 'admin'), async 
         lastName: row.last_name,
         name: [row.first_name, row.last_name].filter(Boolean).join(' '),
         photoUrl: row.photo_url,
+        avatarSource: row.avatar_source || 'preset_male',
+        avatarKey: row.avatar_key || null,
         role: row.role
       }))
     });
