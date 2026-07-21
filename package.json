@@ -1,9 +1,9 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
-  "description": "Telegram Mini App программы лояльности бара Пивник — V11 с аватарами, onboarding и конфиденциальностью",
+  "description": "Telegram Mini App программы лояльности бара Пивник — V12 с фиксированной навигацией, VIP-балансами, анимированными рамками и достижением Создатель",
   "engines": {
     "node": ">=20"
   },

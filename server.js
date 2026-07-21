@@ -59,6 +59,7 @@ const MAX_BEER_ML_PER_TRANSACTION = 100_000;
 const WELCOME_BONUS = 100;
 const REFERRAL_REWARD = 200;
 const STAFF_CANCEL_LIMIT = 3;
+const UNLIMITED_BONUS_BALANCE = 9_999_999_999_999;
 const MAX_CONTENT_IMAGE_BYTES = 3_200_000;
 const AVATAR_SOURCES = new Set(['preset_male', 'preset_female', 'telegram', 'animal']);
 const ANIMAL_AVATARS = new Set([
@@ -133,6 +134,30 @@ function normalizeAvatarKey(source, value) {
 function normalizeAgeGroup(value) {
   const age = String(value || '').trim();
   return AGE_GROUPS.has(age) ? age : null;
+}
+
+function isOwnerRow(row) {
+  return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
+}
+
+function hasUnlimitedBonus(row) {
+  return Boolean(row?.unlimited_bonus) || isOwnerRow(row) || row?.role === 'viewer';
+}
+
+function profileFrameFromRow(row) {
+  if (isOwnerRow(row)) return 'cosmic';
+  if (row?.role === 'viewer') return 'fire';
+  return ['cosmic', 'fire'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
+}
+
+function achievementsFromRow(row) {
+  if (!isOwnerRow(row)) return [];
+  return [{
+    code: 'creator',
+    title: 'Создатель',
+    rarity: 'Единственное',
+    description: 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.'
+  }];
 }
 
 function profileAppearanceFromRow(row) {
@@ -357,6 +382,8 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_avatar BOOLEAN NOT NULL DEFAULT TRUE');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_leaderboard_amount BOOLEAN NOT NULL DEFAULT TRUE');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_stats BOOLEAN NOT NULL DEFAULT TRUE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlimited_bonus BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_frame TEXT NOT NULL DEFAULT 'none'");
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_token_unique ON users(qr_token) WHERE qr_token IS NOT NULL');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_short_unique ON users(qr_short_code) WHERE qr_short_code IS NOT NULL');
 
@@ -367,6 +394,7 @@ async function initDatabase() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query('ALTER TABLE wallets ALTER COLUMN balance TYPE BIGINT');
     await client.query(`
       CREATE TABLE IF NOT EXISTS beer_loyalty (
         user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -405,6 +433,7 @@ async function initDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query('ALTER TABLE transactions ALTER COLUMN balance_after TYPE BIGINT');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN NOT NULL DEFAULT FALSE');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_ml INTEGER NOT NULL DEFAULT 0');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS beer_gift_earned_ml INTEGER NOT NULL DEFAULT 0');
@@ -525,6 +554,16 @@ async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_cancelled_by ON transactions(cancelled_by, cancelled_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_qr_expiry ON qr_sessions(expires_at)');
     await client.query('INSERT INTO beer_loyalty (user_id) SELECT id FROM users ON CONFLICT (user_id) DO NOTHING');
+    if (ownerTelegramId) {
+      await client.query(
+        "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'cosmic', updated_at = NOW() WHERE telegram_id::text = $1",
+        [ownerTelegramId]
+      );
+    }
+    await client.query(
+      "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'fire', updated_at = NOW() WHERE role = 'viewer' AND ($1 = '' OR telegram_id::text <> $1)",
+      [ownerTelegramId]
+    );
     const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
     for (const row of usersWithoutQr.rows) await ensurePersonalQr(client, row.id);
     await client.query('COMMIT');
@@ -547,7 +586,7 @@ async function getCurrentShift(db = pool) {
   if (!shiftResult.rowCount) return null;
   const shift = shiftResult.rows[0];
   const membersResult = await db.query(
-    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.show_name, u.show_avatar, u.role, sm.position
+    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.show_name, u.show_avatar, u.role, sm.position
      FROM shift_members sm
      JOIN users u ON u.id = sm.user_id
      WHERE sm.shift_id = $1
@@ -569,6 +608,7 @@ async function getCurrentShift(db = pool) {
       photoUrl: row.photo_url,
       avatarSource: row.avatar_source || 'preset_male',
       avatarKey: row.avatar_key || null,
+      profileFrame: profileFrameFromRow(row),
       showName: row.show_name !== false,
       showAvatar: row.show_avatar !== false,
       role: row.role
@@ -602,6 +642,7 @@ async function getProfile(userId, db = pool) {
   const row = userResult.rows[0];
   const spend12mCents = await getRollingSpend(db, userId);
   const status = getStatus(spend12mCents);
+  const unlimitedBonus = hasUnlimitedBonus(row);
   return {
     id: String(row.id),
     telegramId: String(row.telegram_id),
@@ -611,6 +652,9 @@ async function getProfile(userId, db = pool) {
     photoUrl: row.photo_url,
     avatarSource: row.avatar_source || 'preset_male',
     avatarKey: row.avatar_key || null,
+    profileFrame: profileFrameFromRow(row),
+    achievements: achievementsFromRow(row),
+    unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
     privacy: {
@@ -621,7 +665,7 @@ async function getProfile(userId, db = pool) {
       showStats: row.show_stats !== false
     },
     role: row.role,
-    balance: Number(row.balance || 0),
+    balance: unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
     termsAccepted: Boolean(row.terms_accepted_at && row.terms_version === TERMS_VERSION),
     termsAcceptedAt: row.terms_accepted_at,
@@ -778,11 +822,13 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, op
   }
 
   const walletResult = await db.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
+  const userResult = await db.query('SELECT telegram_id, role, unlimited_bonus FROM users WHERE id = $1', [tx.client_id]);
   const beerResult = await db.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
-  if (!walletResult.rowCount || !beerResult.rowCount) throw new Error('Счёт клиента не найден.');
+  if (!walletResult.rowCount || !userResult.rowCount || !beerResult.rowCount) throw new Error('Счёт клиента не найден.');
 
-  const currentBalance = Number(walletResult.rows[0].balance || 0);
-  const newBalance = currentBalance - Number(tx.bonus_earned || 0) + Number(tx.bonus_spent || 0);
+  const unlimitedBonus = hasUnlimitedBonus(userResult.rows[0]);
+  const currentBalance = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(walletResult.rows[0].balance || 0);
+  const newBalance = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : currentBalance - Number(tx.bonus_earned || 0) + Number(tx.bonus_spent || 0);
   const currentPaidMl = Number(beerResult.rows[0].paid_ml_total || 0);
   const currentGiftMl = Number(beerResult.rows[0].gift_ml_balance || 0);
   const newPaidMl = currentPaidMl - Number(tx.beer_ml || 0);
@@ -790,7 +836,9 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, op
   if (newBalance < 0) throw Object.assign(new Error('Отмена невозможна: начисленные бонусы уже использованы.'), { statusCode: 409 });
   if (newPaidMl < 0 || newGiftMl < 0) throw Object.assign(new Error('Отмена невозможна: подарочный объём уже использован. Нужна ручная корректировка владельца.'), { statusCode: 409 });
 
-  await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, tx.client_id]);
+  if (!unlimitedBonus) {
+    await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, tx.client_id]);
+  }
   await db.query(
     'UPDATE beer_loyalty SET paid_ml_total = $1, gift_ml_balance = $2, updated_at = NOW() WHERE user_id = $3',
     [newPaidMl, newGiftMl, tx.client_id]
@@ -872,6 +920,12 @@ app.post('/api/auth', async (req, res, next) => {
         'INSERT INTO wallets (user_id, balance) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
         [userId, isNew ? WELCOME_BONUS : 0]
       );
+      if (role === 'admin') {
+        await client.query(
+          "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'cosmic', updated_at = NOW() WHERE id = $1",
+          [userId]
+        );
+      }
       await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
       if (isNew && WELCOME_BONUS > 0) {
         await client.query(
@@ -996,7 +1050,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
   try {
     const ranked = await pool.query(
       `WITH totals AS (
-         SELECT u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key,
+         SELECT u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.role, u.telegram_id,
                 u.show_name, u.show_avatar, u.show_leaderboard_amount,
                 COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
          FROM users u
@@ -1005,7 +1059,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-         GROUP BY u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key,
+         GROUP BY u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.role, u.telegram_id,
                   u.show_name, u.show_avatar, u.show_leaderboard_amount
        ), positions AS (
          SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank
@@ -1043,6 +1097,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
           avatarSource: isMe || row.show_avatar ? (row.avatar_source || 'preset_male') : null,
           avatarKey: isMe || row.show_avatar ? (row.avatar_key || null) : null,
           photoUrl: isMe || row.show_avatar ? (row.photo_url || null) : null,
+          profileFrame: isMe || row.show_avatar ? profileFrameFromRow(row) : 'none',
           showAvatar: Boolean(isMe || row.show_avatar)
         };
       }),
@@ -1076,7 +1131,7 @@ app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async
     const shift = await getCurrentShift();
     const shiftIds = shift?.members?.length ? shift.members.map((member) => member.id) : [];
     const result = await pool.query(
-      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, role,
+      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, profile_frame, role,
               (staff_pin_hash IS NOT NULL AND staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users
        WHERE role IN ('staff','admin')
@@ -1091,6 +1146,7 @@ app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async
         photoUrl: row.photo_url,
         avatarSource: row.avatar_source || 'preset_male',
         avatarKey: row.avatar_key || null,
+        profileFrame: profileFrameFromRow(row),
         pinConfigured: Boolean(row.pin_configured)
       }));
     const activeStaff = await resolveActingStaff(req);
@@ -1164,7 +1220,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     }
 
     const userResult = await client.query(
-      `SELECT id, telegram_id, first_name, last_name, qr_short_code
+      `SELECT id, telegram_id, first_name, last_name, qr_short_code, role, unlimited_bonus
        FROM users WHERE qr_token = $1 FOR UPDATE`,
       [qrToken]
     );
@@ -1179,7 +1235,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Бонусный счёт клиента не найден.' });
     }
-    const balance = Number(walletResult.rows[0].balance || 0);
+    const unlimitedBonus = hasUnlimitedBonus(targetUser);
+    const balance = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(walletResult.rows[0].balance || 0);
     const beerResult = await client.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [targetUser.id]);
     if (!beerResult.rowCount) {
       await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [targetUser.id]);
@@ -1210,7 +1267,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
 
     const cashPaidCents = Math.max(0, amountCents - discountCents - bonusSpent * 100);
     const bonusEarned = Math.max(0, Math.floor((cashPaidCents * status.bonusPercent) / 10_000));
-    const balanceAfter = balance - bonusSpent + bonusEarned;
+    const balanceAfter = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : balance - bonusSpent + bonusEarned;
     const isSuspicious = amountCents > SUSPICIOUS_THRESHOLD_CENTS;
 
     const txResult = await client.query(
@@ -1223,7 +1280,9 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
        RETURNING *`,
       [requestKey, targetUser.id, actingStaff.id, mode, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, isSuspicious, beerMl, beerGiftEarnedMl]
     );
-    await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, targetUser.id]);
+    if (!unlimitedBonus) {
+      await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, targetUser.id]);
+    }
     await client.query(
       'UPDATE beer_loyalty SET paid_ml_total = $1, gift_ml_balance = $2, updated_at = NOW() WHERE user_id = $3',
       [newPaidMl, newGiftBalanceMl, targetUser.id]
@@ -1355,25 +1414,28 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       await client.query('ROLLBACK');
       return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
     }
-    const userResult = await client.query('SELECT id, telegram_id, first_name FROM users WHERE qr_token = $1 FOR UPDATE', [qrToken]);
+    const userResult = await client.query('SELECT id, telegram_id, first_name, role, unlimited_bonus FROM users WHERE qr_token = $1 FOR UPDATE', [qrToken]);
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
     const target = userResult.rows[0];
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [target.id]);
-    const balance = Number(walletResult.rows[0]?.balance || 0);
-    if (balance < item.bonusPrice) {
+    const unlimitedBonus = hasUnlimitedBonus(target);
+    const balance = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(walletResult.rows[0]?.balance || 0);
+    if (!unlimitedBonus && balance < item.bonusPrice) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: `Недостаточно бонусов. Нужно ${item.bonusPrice} Б.` });
     }
-    const balanceAfter = balance - item.bonusPrice;
+    const balanceAfter = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : balance - item.bonusPrice;
     const txResult = await client.query(
       `INSERT INTO transactions (request_key, client_id, staff_id, mode, status, bonus_spent, balance_after, reason, completed_at)
        VALUES ($1,$2,$3,'shop','completed',$4,$5,$6,NOW()) RETURNING *`,
       [requestKey, target.id, actingStaff.id, item.bonusPrice, balanceAfter, item.title]
     );
-    await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
+    if (!unlimitedBonus) {
+      await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
+    }
     await client.query('COMMIT');
     await sendTelegramMessage(target.telegram_id, `Покупка в лавке «Пивника»
 
@@ -1481,6 +1543,7 @@ app.get('/api/admin/shift', authRequired, requireRole('viewer', 'admin'), async 
         photoUrl: row.photo_url,
         avatarSource: row.avatar_source || 'preset_male',
         avatarKey: row.avatar_key || null,
+        profileFrame: profileFrameFromRow(row),
         role: row.role
       }))
     });
@@ -1587,7 +1650,7 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
 app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, w.balance,
+      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame, w.balance,
               bl.paid_ml_total, bl.gift_ml_balance,
               (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users u
@@ -1602,7 +1665,9 @@ app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async 
       username: row.username,
       name: [row.first_name, row.last_name].filter(Boolean).join(' '),
       role: row.role,
-      balance: Number(row.balance || 0),
+      balance: hasUnlimitedBonus(row) ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
+      unlimitedBonus: hasUnlimitedBonus(row),
+      profileFrame: profileFrameFromRow(row),
       qrShortCode: row.qr_short_code,
       beerPaidLitersTotal: litersFromMl(row.paid_ml_total),
       beerGiftLitersBalance: litersFromMl(row.gift_ml_balance),
@@ -1621,7 +1686,15 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
     const target = await pool.query('SELECT telegram_id FROM users WHERE id = $1', [req.params.id]);
     if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
     if (String(target.rows[0].telegram_id) === ownerTelegramId) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
-    await pool.query('UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2', [role, req.params.id]);
+    await pool.query(
+      `UPDATE users SET
+         role = $1,
+         unlimited_bonus = CASE WHEN $1 = 'viewer' THEN TRUE ELSE FALSE END,
+         profile_frame = CASE WHEN $1 = 'viewer' THEN 'fire' ELSE 'none' END,
+         updated_at = NOW()
+       WHERE id = $2`,
+      [role, req.params.id]
+    );
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -1662,10 +1735,15 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const targetResult = await client.query('SELECT telegram_id, role, unlimited_bonus FROM users WHERE id = $1', [req.params.id]);
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [req.params.id]);
-    if (!walletResult.rowCount) {
+    if (!targetResult.rowCount || !walletResult.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Пользователь не найден.' });
+    }
+    if (hasUnlimitedBonus(targetResult.rows[0])) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'У этого профиля включён постоянный безлимит бонусов.' });
     }
     const oldBalance = Number(walletResult.rows[0].balance || 0);
     const newBalance = oldBalance + amount;

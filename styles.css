@@ -2230,3 +2230,184 @@ body {
   .animal-avatar-grid { grid-template-columns: repeat(2, 1fr); }
   .age-option-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+
+/* V12: фиксированная навигация, особые рамки и достижение владельца */
+.app-shell {
+  padding-bottom: calc(108px + env(safe-area-inset-bottom));
+}
+.bottom-nav {
+  position: fixed !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: 0 !important;
+  transform: translateX(-50%) !important;
+  width: min(100%, 480px) !important;
+  z-index: 120 !important;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+
+.avatar-frame::before,
+.avatar-frame::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.avatar-frame::before {
+  inset: 0;
+  z-index: 5;
+  padding: 2px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: avatarFrameSpin 5.5s linear infinite;
+}
+.avatar-frame::after {
+  inset: 2px;
+  z-index: 4;
+  opacity: .75;
+  animation: avatarFramePulse 2.4s ease-in-out infinite;
+}
+.avatar-frame-fire::before {
+  background: conic-gradient(from 0deg, #3b0900, #ff3d00, #ffd36a, #ff6a00, #681000, #ffcf72, #ff3d00, #3b0900);
+}
+.avatar-frame-fire::after {
+  box-shadow: inset 0 0 8px rgba(255,94,0,.62), 0 0 12px rgba(255,73,0,.42), 0 0 22px rgba(255,156,48,.22);
+  background:
+    radial-gradient(circle at 18% 80%, rgba(255,205,98,.95) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 22%, rgba(255,102,0,.9) 0 1px, transparent 2px),
+    radial-gradient(circle at 54% 8%, rgba(255,235,167,.8) 0 1px, transparent 2px);
+}
+.avatar-frame-cosmic {
+  filter: drop-shadow(0 0 5px rgba(117,72,198,.36));
+}
+.avatar-frame-cosmic::before {
+  inset: -2px;
+  padding: 3px;
+  background:
+    conic-gradient(
+      from 0deg,
+      #050408 0deg,
+      #211238 34deg,
+      #7542c9 72deg,
+      #f7f5ff 94deg,
+      #30184d 128deg,
+      #09070d 166deg,
+      #a790d5 204deg,
+      #ffffff 224deg,
+      #5f2aa4 266deg,
+      #181020 312deg,
+      #050408 360deg
+    );
+  box-shadow:
+    0 0 8px rgba(120,71,199,.66),
+    0 0 18px rgba(74,38,132,.38),
+    inset 0 0 8px rgba(255,255,255,.18);
+  animation: avatarCosmicOrbit 7.5s linear infinite;
+}
+.avatar-frame-cosmic::after {
+  inset: -5px;
+  opacity: .92;
+  background:
+    radial-gradient(circle at 50% 4%, rgba(255,255,255,1) 0 1px, transparent 2px),
+    radial-gradient(circle at 86% 22%, rgba(201,183,255,.95) 0 1.2px, transparent 2.2px),
+    radial-gradient(circle at 96% 58%, rgba(255,255,255,.9) 0 .9px, transparent 2px),
+    radial-gradient(circle at 72% 91%, rgba(151,104,232,.95) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 29% 96%, rgba(255,255,255,.88) 0 1px, transparent 2px),
+    radial-gradient(circle at 3% 63%, rgba(185,157,245,.9) 0 1.3px, transparent 2.4px),
+    radial-gradient(circle at 13% 21%, rgba(255,255,255,.78) 0 .8px, transparent 1.8px),
+    conic-gradient(from 150deg, transparent 0 22%, rgba(115,62,190,.18) 31%, transparent 42% 68%, rgba(255,255,255,.11) 78%, transparent 88%);
+  box-shadow:
+    0 0 11px rgba(185,156,255,.52),
+    0 0 24px rgba(83,41,151,.42),
+    0 0 38px rgba(255,255,255,.12),
+    inset 0 0 12px rgba(223,211,255,.24);
+  animation: avatarCosmicStars 4.2s ease-in-out infinite, avatarCosmicDrift 11s linear infinite;
+}
+.profile-avatar .avatar-frame::before { padding: 3px; }
+.profile-avatar .avatar-frame::after { inset: 3px; }
+
+.achievement-section { position: relative; }
+.achievement-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 58px minmax(0,1fr) 20px;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid rgba(181,151,255,.2);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 12% 50%, rgba(104,55,170,.18), transparent 32%),
+    linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+  color: var(--text);
+  text-align: left;
+  transition: filter .2s ease, border-color .2s ease, transform .2s ease, background .2s ease;
+}
+.achievement-card:hover,
+.achievement-card:focus-visible,
+.achievement-card.expanded {
+  filter: brightness(1.2);
+  border-color: rgba(215,199,255,.58);
+  background:
+    radial-gradient(circle at 12% 50%, rgba(126,68,205,.3), transparent 36%),
+    linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.025));
+}
+.achievement-card:active { transform: scale(.992); }
+.achievement-emblem {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 26px;
+  color: #fff;
+  background: radial-gradient(circle at 35% 28%, #fff, #b8a0e8 16%, #5f2c97 48%, #0a0710 76%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 0 22px rgba(120,71,188,.35);
+}
+.achievement-copy { min-width: 0; display: grid; }
+.achievement-copy small { color: #cbb8ef; font-size: 9px; letter-spacing: .11em; text-transform: uppercase; }
+.achievement-copy strong { margin-top: 2px; font-size: 16px; }
+.achievement-copy span {
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  opacity: 0;
+  transition: max-height .24s ease, margin .24s ease, opacity .2s ease;
+}
+.achievement-card:hover .achievement-copy span,
+.achievement-card:focus-visible .achievement-copy span,
+.achievement-card.expanded .achievement-copy span {
+  max-height: 70px;
+  margin-top: 7px;
+  opacity: 1;
+}
+.achievement-card > i { color: #cbb8ef; font-size: 24px; font-style: normal; transition: transform .2s ease; }
+.achievement-card.expanded > i { transform: rotate(90deg); }
+.unlimited-mark { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 600; }
+
+@keyframes avatarFrameSpin { to { transform: rotate(360deg); } }
+@keyframes avatarFramePulse { 0%,100% { opacity: .55; filter: brightness(.9); } 50% { opacity: 1; filter: brightness(1.28); } }
+@keyframes avatarCosmicOrbit {
+  0% { transform: rotate(0deg) scale(1); filter: brightness(.92) saturate(.95); }
+  50% { transform: rotate(180deg) scale(1.025); filter: brightness(1.2) saturate(1.16); }
+  100% { transform: rotate(360deg) scale(1); filter: brightness(.92) saturate(.95); }
+}
+@keyframes avatarCosmicStars {
+  0%,100% { opacity: .58; filter: brightness(.82) blur(0); }
+  28% { opacity: 1; filter: brightness(1.42) blur(.1px); }
+  62% { opacity: .76; filter: brightness(1.06) blur(0); }
+}
+@keyframes avatarCosmicDrift {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-frame::before,
+  .avatar-frame::after { animation: none; }
+}
