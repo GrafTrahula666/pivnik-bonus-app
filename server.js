@@ -554,6 +554,29 @@ async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_cancelled_by ON transactions(cancelled_by, cancelled_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_qr_expiry ON qr_sessions(expires_at)');
     await client.query('INSERT INTO beer_loyalty (user_id) SELECT id FROM users ON CONFLICT (user_id) DO NOTHING');
+    // V12.2: transactions are the audit source. Restore loyalty totals if an old deployment
+    // accidentally left beer_loyalty at zero, while never decreasing valid stored values.
+    await client.query(`
+      UPDATE beer_loyalty bl
+      SET
+        paid_ml_total = GREATEST(
+          bl.paid_ml_total,
+          COALESCE((
+            SELECT SUM(t.beer_ml)
+            FROM transactions t
+            WHERE t.client_id = bl.user_id AND t.status = 'completed'
+          ), 0)
+        ),
+        gift_ml_balance = GREATEST(
+          bl.gift_ml_balance,
+          LEAST(2147483647, GREATEST(0, COALESCE((
+            SELECT SUM(t.beer_gift_earned_ml) - SUM(t.beer_gift_spent_ml)
+            FROM transactions t
+            WHERE t.client_id = bl.user_id AND t.status = 'completed'
+          ), 0)))::integer
+        ),
+        updated_at = NOW()
+    `);
     if (ownerTelegramId) {
       await client.query(
         "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'cosmic', updated_at = NOW() WHERE telegram_id::text = $1",
@@ -1202,10 +1225,12 @@ app.post('/api/staff/qr/resolve', authRequired, requireRole('staff', 'admin'), a
 app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   const mode = req.body?.mode === 'redeem' ? 'redeem' : 'accrue';
   const amountCents = centsFromInput(req.body?.amount);
+  const beerVolumeWasConfirmed = Object.prototype.hasOwnProperty.call(req.body || {}, 'beerLiters');
   const beerMl = mlFromLiters(req.body?.beerLiters);
   const qrToken = String(req.body?.qrToken || '');
   const requestKey = String(req.body?.requestKey || crypto.randomUUID());
   if (!amountCents) return res.status(400).json({ error: 'Введите сумму чека.' });
+  if (!beerVolumeWasConfirmed) return res.status(400).json({ error: 'Укажите объём разливного или явно выберите 0 л.' });
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });

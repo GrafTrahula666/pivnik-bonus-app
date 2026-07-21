@@ -171,9 +171,10 @@
           <div class="step-heading"><span>1</span><div><h3>Сумма чека</h3><small>Введите итоговую сумму до бонусной операции</small></div></div>
           <div class="money-input"><input id="saleAmount" inputmode="decimal" placeholder="0" autocomplete="off" /><span>₽</span></div>
           <div class="beer-volume-block">
-            <div class="field-caption"><span>Разливное пиво в чеке</span><small>оставьте 0, если разливного нет</small></div>
+            <div class="field-caption"><span>Разливное пиво в чеке</span><small id="beerVolumeHint">Обязательно выберите объём или «Без разливного»</small></div>
             <div class="volume-input"><input id="beerLiters" inputmode="decimal" placeholder="0" autocomplete="off" /><span>л</span></div>
             <div class="volume-presets">
+              <button type="button" data-beer-liters="0">Без разливного</button>
               <button type="button" data-beer-liters="0.5">0,5 л</button>
               <button type="button" data-beer-liters="1">1 л</button>
               <button type="button" data-beer-liters="1.5">1,5 л</button>

@@ -2411,3 +2411,20 @@ body {
   .avatar-frame::before,
   .avatar-frame::after { animation: none; }
 }
+
+
+/* V12.2: обязательное подтверждение литров и надёжные аватары */
+#beerVolumeHint { transition: color .18s ease; }
+#beerVolumeHint.confirmed { color: var(--gold2); }
+.volume-presets button.active {
+  border-color: var(--gold2);
+  color: var(--text);
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
+}
+.profile-avatar .avatar-fallback,
+.avatar-render .avatar-fallback,
+.avatar-render-inner .avatar-fallback {
+  background: radial-gradient(circle at 38% 28%, rgba(255,255,255,.10), transparent 42%), rgba(255,255,255,.035);
+  color: var(--text);
+  font-weight: 700;
+}

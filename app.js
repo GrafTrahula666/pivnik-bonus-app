@@ -38,7 +38,8 @@ const state = {
   leaderboard: null,
   staffRecent: [],
   profileDraft: null,
-  profileSetupStep: 1
+  profileSetupStep: 1,
+  beerVolumeConfirmed: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -67,20 +68,24 @@ const AGE_OPTIONS = ['', '18-24', '25-34', '35-44', '45-54', '55+'];
 function avatarAssetUrl(entity = {}) {
   const source = entity.avatarSource || 'preset_male';
   if (source === 'telegram' && entity.photoUrl) return entity.photoUrl;
-  if (source === 'preset_female') return '/assets/avatars/preset-female.webp';
-  if (source === 'animal' && entity.avatarKey) return `/assets/avatars/${encodeURIComponent(entity.avatarKey)}.webp`;
-  return '/assets/avatars/preset-male.webp';
+  if (source === 'preset_female') return '/assets/avatars/preset-female.webp?v=12.2';
+  if (source === 'animal' && entity.avatarKey) return `/assets/avatars/${encodeURIComponent(entity.avatarKey)}.webp?v=12.2`;
+  return '/assets/avatars/preset-male.webp?v=12.2';
 }
 
 function avatarFallback(entity = {}) {
   return String(entity.firstName || entity.name || 'П').trim().slice(0, 1).toUpperCase() || 'П';
 }
 
+function avatarFrameClass(entity = {}) {
+  return entity.profileFrame === 'cosmic' ? 'avatar-frame avatar-frame-cosmic' : entity.profileFrame === 'fire' ? 'avatar-frame avatar-frame-fire' : '';
+}
+
 function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = false) {
   const visible = !respectPrivacy || entity.showAvatar !== false;
   const fallback = visible ? avatarFallback(entity) : '•';
   const src = visible ? avatarAssetUrl(entity) : '';
-  return `<span class="${className} avatar-render"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span>`;
+  return `<span class="${className} avatar-render ${avatarFrameClass(entity)}"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span>`;
 }
 
 function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
@@ -117,7 +122,7 @@ function renderAnimalPicker() {
   const grid = $('#animalAvatarGrid');
   if (!grid) return;
   grid.innerHTML = AVATAR_OPTIONS.map((item) => `<button type="button" class="animal-avatar-choice ${state.profileDraft?.avatarKey === item.key ? 'active' : ''}" data-animal-avatar="${item.key}">
-    <img src="/assets/avatars/${item.key}.webp" alt="${escapeHtml(item.name)}"><small>${escapeHtml(item.name)}</small>
+    <img src="/assets/avatars/${item.key}.webp?v=12.2" alt="${escapeHtml(item.name)}"><small>${escapeHtml(item.name)}</small>
   </button>`).join('');
   grid.querySelectorAll('[data-animal-avatar]').forEach((button) => button.addEventListener('click', () => {
     state.profileDraft.avatarSource = 'animal';
@@ -832,6 +837,18 @@ function clearStaffSession() {
   toast('Используется текущий Telegram-аккаунт');
 }
 
+function renderAchievements() {
+  const section = $('#creatorAchievementSection');
+  const profile = state.profile;
+  const creator = profile?.achievements?.find((item) => item.code === 'creator');
+  if (!section) return;
+  section.classList.toggle('hidden', !creator);
+  if (!creator) return;
+  $('#creatorAchievementTitle').textContent = creator.title;
+  $('#creatorAchievementRarity').textContent = creator.rarity;
+  $('#creatorAchievementDescription').textContent = creator.description;
+}
+
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
@@ -841,6 +858,7 @@ function renderProfile() {
   $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   renderAvatarInto($('#profileAvatar'), profile);
+  renderAchievements();
   $('#staffName').textContent = activeStaffName();
   renderBeer(profile);
 
@@ -1158,10 +1176,18 @@ function updateCalculation() {
   $('#bonusEarn').textContent = isGift ? 'подарок' : isShop ? `−${fmt(shopItem?.bonusPrice || 0)} Б` : `+${fmt(earn)}`;
   const giftAvailable = Number(client?.beer?.giftLitersBalance || 0) >= Number(state.selectedGiftLiters || 0.5);
   const shopAvailable = Boolean(client && shopItem && Number(client.balance || 0) >= Number(shopItem.bonusPrice || 0));
+  const beerConfirmed = state.beerVolumeConfirmed;
   $('#createSale').disabled = isGift
     ? !(client && giftAvailable && !state.saleBusy)
     : isShop ? !(shopAvailable && !state.saleBusy)
-      : !(amount > 0 && client && !state.saleBusy);
+      : !(amount > 0 && client && beerConfirmed && !state.saleBusy);
+  const beerHint = $('#beerVolumeHint');
+  if (beerHint && !isGift && !isShop) {
+    beerHint.textContent = beerConfirmed
+      ? `Учтём ${fmtLiters(Number(String($('#beerLiters').value || '0').replace(',', '.')) || 0)} л`
+      : 'Обязательно выберите объём или «Без разливного»';
+    beerHint.classList.toggle('confirmed', beerConfirmed);
+  }
   $('#createSale').textContent = state.saleBusy
     ? 'Проводим…'
     : isGift ? `Выдать ${fmtLiters(state.selectedGiftLiters)} л бесплатно`
@@ -1207,6 +1233,11 @@ async function createSale() {
   const beerLiters = Number(String($('#beerLiters').value || '').replace(',', '.')) || 0;
   const isGift = state.mode === 'beerGift';
   const isShop = state.mode === 'shop';
+  if (!isGift && !isShop && !state.beerVolumeConfirmed) {
+    toast('Выберите объём разливного или «Без разливного»');
+    $('#beerLiters')?.focus();
+    return;
+  }
   state.saleBusy = true;
   updateCalculation();
   try {
@@ -1242,6 +1273,8 @@ async function createSale() {
     haptic('medium');
     $('#saleAmount').value = '';
     $('#beerLiters').value = '';
+    state.beerVolumeConfirmed = false;
+    $$('[data-beer-liters]').forEach((item) => item.classList.remove('active'));
     $('#bonusToSpend').value = '';
     state.resolvedClient = { ...state.resolvedClient, profile: data.client };
     $('#foundMeta').textContent = `${fmt(data.client.balance)} бонусов · ${data.client.status.bonusPercent}% начисление`;
@@ -1507,7 +1540,7 @@ function renderUsers(users) {
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : escapeHtml(user.role)}</small>`;
     return `<div class="user-row">
       <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
-      <strong>${fmt(user.balance)} Б</strong>
+      <strong>${fmt(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">∞ безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
   }).join('');
@@ -1588,6 +1621,13 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
   $(`#${id}`)?.addEventListener('change', syncPrivacyDraft);
 });
 
+$('#creatorAchievementCard')?.addEventListener('click', () => {
+  const card = $('#creatorAchievementCard');
+  const expanded = !card.classList.contains('expanded');
+  card.classList.toggle('expanded', expanded);
+  card.setAttribute('aria-expanded', String(expanded));
+});
+
 $$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
@@ -1607,9 +1647,15 @@ $('#scanClient').addEventListener('click', scanQr);
 $('#manualCodeButton').addEventListener('click', manualCode);
 $('#clearClient').addEventListener('click', clearResolvedClient);
 $('#saleAmount').addEventListener('input', updateCalculation);
-$('#beerLiters').addEventListener('input', updateCalculation);
+$('#beerLiters').addEventListener('input', () => {
+  state.beerVolumeConfirmed = true;
+  $$('[data-beer-liters]').forEach((item) => item.classList.remove('active'));
+  updateCalculation();
+});
 $$('[data-beer-liters]').forEach((button) => button.addEventListener('click', () => {
   $('#beerLiters').value = button.dataset.beerLiters;
+  state.beerVolumeConfirmed = true;
+  $$('[data-beer-liters]').forEach((item) => item.classList.toggle('active', item === button));
   updateCalculation();
 }));
 $$('.gift-volume').forEach((button) => button.addEventListener('click', () => {
