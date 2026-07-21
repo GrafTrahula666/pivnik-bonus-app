@@ -40,8 +40,8 @@ const state = {
   profileDraft: null,
   profileSetupStep: 1,
   beerVolumeConfirmed: false,
-  shopCarouselIndex: 0,
-  shopCarouselTimer: null
+  homeShopCarouselIndex: 0,
+  homeShopCarouselTimer: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -80,7 +80,7 @@ function avatarFallback(entity = {}) {
 }
 
 function avatarFrameClass(entity = {}) {
-  return entity.profileFrame === 'money' ? 'avatar-frame avatar-frame-money' : entity.profileFrame === 'fire' ? 'avatar-frame avatar-frame-fire' : '';
+  return entity.profileFrame === 'money' ? 'avatar-frame avatar-frame-money' : entity.profileFrame === 'fire' ? 'avatar-frame avatar-frame-fire' : entity.profileFrame === 'diamond' ? 'avatar-frame avatar-frame-diamond' : '';
 }
 
 function moneyOrbitHtml(entity = {}) {
@@ -506,10 +506,6 @@ function closeModal(id) {
   if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
-  if (id === 'shopModal' && state.shopCarouselTimer) {
-    clearInterval(state.shopCarouselTimer);
-    state.shopCarouselTimer = null;
-  }
 }
 
 function switchScreen(target) {
@@ -604,56 +600,101 @@ async function loadPromotions() {
   return state.promotions;
 }
 
+const SHOP_CATEGORY_META = {
+  craft: { title: 'Крафтовое пиво и сидр', subtitle: 'Напитки из отдельной витрины' },
+  limited: { title: 'Limited Edition', subtitle: 'Редкие и персональные позиции' },
+  profile: { title: 'Оформление профиля', subtitle: 'Рамки, аватары и будущие фоны' },
+  other: { title: 'Другое', subtitle: 'Остальные товары' }
+};
+
+function shopPriceLabel(item = {}) {
+  if (item.priceType === 'rub') return `${fmt(item.cashPrice)} ₽`;
+  if (item.priceType === 'pending') return 'Цена позже';
+  return `${fmt(item.bonusPrice)} Б`;
+}
+
+function shopVisual(item = {}) {
+  const code = String(item.code || '');
+  if (code.includes('cider')) return { key: 'cider', mark: 'DD' };
+  if (code.includes('frost')) return { key: 'frost', mark: '❄' };
+  if (code.includes('named-glass')) return { key: 'glass', mark: '✒' };
+  if (code.includes('money')) return { key: 'money', mark: '$' };
+  if (code.includes('fire')) return { key: 'fire', mark: '♨' };
+  if (code.includes('diamond')) return { key: 'diamond', mark: '◇' };
+  return { key: item.category || 'other', mark: String(item.title || 'П').slice(0, 1).toUpperCase() };
+}
+
+function shopImageMarkup(item = {}, className = 'shop-list-media') {
+  if (item.imageSrc) return imageMarkup(item.imageSrc, item.title, className);
+  const visual = shopVisual(item);
+  return `<div class="${className} content-image-fallback shop-visual shop-visual-${escapeHtml(visual.key)}"><span>${escapeHtml(visual.mark)}</span></div>`;
+}
+
+function shopAvailabilityLabel(item = {}) {
+  if (!item.active) return 'Скоро';
+  if (item.priceType === 'rub') return 'Оплата в баре';
+  if (item.priceType === 'pending') return 'Цена уточняется';
+  return 'Покупка по QR';
+}
+
+function renderHomeShopPreview() {
+  const preview = $('#homeShopPreview');
+  const caption = $('#homeShopCaption');
+  if (!preview) return;
+  const items = state.catalog.filter((item) => item.active);
+  if (!items.length) {
+    preview.innerHTML = '<span class="home-shop-preview-fallback">П</span>';
+    if (caption) caption.textContent = 'Каталог скоро появится';
+    return;
+  }
+  state.homeShopCarouselIndex = ((state.homeShopCarouselIndex % items.length) + items.length) % items.length;
+  const item = items[state.homeShopCarouselIndex];
+  preview.innerHTML = `${shopImageMarkup(item, 'home-shop-preview-media')}<span class="home-shop-preview-shade"></span><span class="home-shop-preview-price">${escapeHtml(shopPriceLabel(item))}</span><i class="home-shop-preview-progress" aria-hidden="true"></i>`;
+  if (caption) caption.textContent = item.title;
+  bindContentImageFallbacks(preview);
+}
+
+function restartHomeShopCarousel() {
+  if (state.homeShopCarouselTimer) clearInterval(state.homeShopCarouselTimer);
+  state.homeShopCarouselTimer = null;
+  renderHomeShopPreview();
+  const items = state.catalog.filter((item) => item.active);
+  if (items.length > 1) {
+    state.homeShopCarouselTimer = setInterval(() => {
+      state.homeShopCarouselIndex = (state.homeShopCarouselIndex + 1) % items.length;
+      renderHomeShopPreview();
+    }, 10_000);
+  }
+}
+
 function renderShopCatalog() {
   const clientList = $('#shopCatalog');
   if (clientList) {
-    if (state.shopCarouselTimer) {
-      clearInterval(state.shopCarouselTimer);
-      state.shopCarouselTimer = null;
-    }
     clientList.className = `shop-catalog${state.catalog.length ? '' : ' empty-state'}`;
     if (!state.catalog.length) {
       clientList.innerHTML = 'Каталог пока пуст';
     } else {
-      state.shopCarouselIndex = ((state.shopCarouselIndex % state.catalog.length) + state.catalog.length) % state.catalog.length;
-      const featured = state.catalog[state.shopCarouselIndex];
-      clientList.innerHTML = `<section class="shop-showcase ${featured.active ? '' : 'disabled'}">
-        <div class="shop-showcase-media">${imageMarkup(featured.imageSrc, featured.title, 'shop-showcase-image')}</div>
-        <div class="shop-showcase-overlay"></div>
-        <div class="shop-showcase-content">
-          <span class="shop-showcase-kicker">${featured.active ? 'ДОСТУПНО СЕЙЧАС' : 'СКОРО В ЛАВКЕ'}</span>
-          <h3>${escapeHtml(featured.title)}</h3>
-          <p>${escapeHtml(featured.subtitle)}</p>
-          <div class="shop-showcase-bottom"><strong>${fmt(featured.bonusPrice)} Б</strong><span>${featured.active ? 'Покажите QR сотруднику' : 'Позиция пока недоступна'}</span></div>
-        </div>
-        ${state.catalog.length > 1 ? `<button class="shop-carousel-arrow prev" type="button" data-shop-step="-1" aria-label="Предыдущий товар">‹</button><button class="shop-carousel-arrow next" type="button" data-shop-step="1" aria-label="Следующий товар">›</button>` : ''}
-        <div class="shop-carousel-progress"><i></i></div>
-      </section>
-      <div class="shop-carousel-dots">${state.catalog.map((item, index) => `<button type="button" data-shop-slide="${index}" class="${index === state.shopCarouselIndex ? 'active' : ''}" aria-label="Показать ${escapeHtml(item.title)}"></button>`).join('')}</div>
-      <div class="shop-mini-list">${state.catalog.map((item, index) => `<button type="button" class="shop-mini-item ${index === state.shopCarouselIndex ? 'active' : ''} ${item.active ? '' : 'disabled'}" data-shop-slide="${index}">
-        ${imageMarkup(item.imageSrc, item.title, 'shop-mini-media')}
-        <span><b>${escapeHtml(item.title)}</b><small>${item.active ? `${fmt(item.bonusPrice)} Б` : 'Скоро'}</small></span>
-      </button>`).join('')}</div>`;
+      const categoryOrder = ['craft', 'limited', 'profile', 'other'];
+      const groups = categoryOrder
+        .map((category) => ({ category, items: state.catalog.filter((item) => (item.category || 'other') === category) }))
+        .filter((group) => group.items.length);
+      clientList.innerHTML = groups.map((group) => {
+        const meta = SHOP_CATEGORY_META[group.category] || SHOP_CATEGORY_META.other;
+        return `<section class="shop-category" data-shop-category="${escapeHtml(group.category)}">
+          <div class="shop-category-head"><div><span>${escapeHtml(meta.subtitle)}</span><h3>${escapeHtml(meta.title)}</h3></div><b>${group.items.length}</b></div>
+          <div class="shop-category-grid">${group.items.map((item) => `<article class="shop-list-card ${item.active ? '' : 'disabled'}">
+            ${shopImageMarkup(item, 'shop-list-media')}
+            <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${escapeHtml(shopAvailabilityLabel(item))}</small></div>
+            <strong>${escapeHtml(shopPriceLabel(item))}</strong>
+          </article>`).join('')}</div>
+        </section>`;
+      }).join('');
       bindContentImageFallbacks(clientList);
-      clientList.querySelectorAll('[data-shop-slide]').forEach((button) => button.addEventListener('click', () => {
-        state.shopCarouselIndex = Number(button.dataset.shopSlide || 0);
-        renderShopCatalog();
-      }));
-      clientList.querySelectorAll('[data-shop-step]').forEach((button) => button.addEventListener('click', () => {
-        state.shopCarouselIndex += Number(button.dataset.shopStep || 0);
-        renderShopCatalog();
-      }));
-      if (state.catalog.length > 1 && $('#shopModal')?.classList.contains('open')) {
-        state.shopCarouselTimer = setInterval(() => {
-          state.shopCarouselIndex = (state.shopCarouselIndex + 1) % state.catalog.length;
-          renderShopCatalog();
-        }, 4800);
-      }
     }
   }
   const staffList = $('#staffShopItems');
   if (staffList) {
-    const activeItems = state.catalog.filter((item) => item.active);
+    const activeItems = state.catalog.filter((item) => item.active && item.priceType === 'bonus' && Number(item.bonusPrice) > 0);
     if (!activeItems.some((item) => item.code === state.selectedShopItem)) state.selectedShopItem = activeItems[0]?.code || '';
     staffList.className = `staff-shop-items${activeItems.length ? '' : ' empty-state'}`;
     staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item">
@@ -672,6 +713,7 @@ async function loadCatalog() {
   state.catalog = data.items || [];
   if ($('#shopNote') && data.note) $('#shopNote').textContent = data.note;
   renderShopCatalog();
+  restartHomeShopCarousel();
   return state.catalog;
 }
 
@@ -1431,7 +1473,7 @@ function renderAdminContent(data = state.adminContent) {
   const canWrite = roleCanWrite(state.profile?.role);
   const build = (items, type) => items.length ? items.map((item) => `<div class="admin-content-row ${item.active ? '' : 'inactive'}">
     ${imageMarkup(item.imageSrc, item.title, 'admin-content-thumb')}
-    <div><b>${escapeHtml(item.title)}</b><small>${type === 'shop' ? `${fmt(item.bonusPrice)} Б` : escapeHtml(item.badge || 'Без подписи')} · ${item.active ? 'показывается' : 'скрыто'} · порядок ${item.sortOrder}</small></div>
+    <div><b>${escapeHtml(item.title)}</b><small>${type === 'shop' ? `${escapeHtml(SHOP_CATEGORY_META[item.category]?.title || SHOP_CATEGORY_META.other.title)} · ${escapeHtml(shopPriceLabel(item))}` : escapeHtml(item.badge || 'Без подписи')} · ${item.active ? 'показывается' : 'скрыто'} · порядок ${item.sortOrder}</small></div>
     ${canWrite ? `<div class="admin-content-buttons"><button class="text-btn" data-content-edit="${type}" data-content-id="${item.id}" type="button">Изменить</button><button class="text-btn danger-text" data-content-delete="${type}" data-content-id="${item.id}" type="button">Удалить</button></div>` : '<small>Только просмотр</small>'}
   </div>`).join('') : 'Пока пусто';
   const promos = $('#adminPromotionsList');
@@ -1462,6 +1504,16 @@ function updateContentImagePreview() {
   bindContentImageFallbacks(preview);
 }
 
+function syncContentPriceEditor() {
+  const type = $('#contentEditorType')?.value;
+  const priceType = $('#contentPriceType')?.value || 'bonus';
+  const isShop = type === 'shop';
+  $('#contentShopOptions')?.classList.toggle('hidden', !isShop);
+  $('#contentPriceRow')?.classList.toggle('hidden', !isShop || priceType === 'pending');
+  if ($('#contentPriceLabel')) $('#contentPriceLabel').textContent = priceType === 'rub' ? 'Цена в рублях' : 'Цена в бонусах';
+  if ($('#contentPrice')) $('#contentPrice').placeholder = priceType === 'rub' ? '1000' : '600';
+}
+
 function openContentEditor(type, id = '') {
   if (!roleCanWrite(state.profile?.role)) return toast('Редактирование доступно только владельцу');
   const item = id ? findContentItem(type, id) : null;
@@ -1472,14 +1524,16 @@ function openContentEditor(type, id = '') {
   $('#contentTitle').value = item?.title || '';
   $('#contentDescription').value = type === 'promotion' ? (item?.description || '') : (item?.subtitle || '');
   $('#contentBadge').value = item?.badge || '';
-  $('#contentPrice').value = item?.bonusPrice || (type === 'shop' ? 600 : '');
+  $('#contentCategory').value = item?.category || 'other';
+  $('#contentPriceType').value = item?.priceType || 'bonus';
+  $('#contentPrice').value = item?.priceType === 'rub' ? (item?.cashPrice || 1000) : (item?.bonusPrice || (type === 'shop' ? 600 : ''));
   $('#contentSortOrder').value = item?.sortOrder ?? 10;
   $('#contentActive').checked = item?.active !== false;
   $('#contentImageUrl').value = item?.imageSrc?.startsWith('https://') ? item.imageSrc : '';
   $('#contentImageFile').value = '';
   $('#contentImageFileName').textContent = 'JPG, PNG или WEBP · до 6 МБ';
   $('#contentBadgeRow').classList.toggle('hidden', type !== 'promotion');
-  $('#contentPriceRow').classList.toggle('hidden', type !== 'shop');
+  syncContentPriceEditor();
   updateContentImagePreview();
   openModal('contentEditorModal');
 }
@@ -1538,8 +1592,12 @@ async function saveContentItem() {
     payload.badge = $('#contentBadge').value.trim();
   } else {
     payload.subtitle = $('#contentDescription').value.trim();
-    payload.bonusPrice = Number($('#contentPrice').value || 0);
-    if (payload.bonusPrice < 1) return toast('Укажите цену в бонусах');
+    payload.category = $('#contentCategory').value;
+    payload.priceType = $('#contentPriceType').value;
+    const enteredPrice = Number($('#contentPrice').value || 0);
+    payload.bonusPrice = payload.priceType === 'bonus' ? enteredPrice : 0;
+    payload.cashPrice = payload.priceType === 'rub' ? enteredPrice : 0;
+    if (payload.priceType !== 'pending' && enteredPrice < 1) return toast(payload.priceType === 'rub' ? 'Укажите цену в рублях' : 'Укажите цену в бонусах');
   }
   const id = state.editingContent.id;
   const base = type === 'promotion' ? '/api/admin/promotions' : '/api/admin/shop-items';
@@ -1681,7 +1739,7 @@ $$('.bottom-nav button').forEach((button) => button.addEventListener('click', ()
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#openPromosButton').addEventListener('click', () => { renderPromotions(); openModal('promosModal'); });
-$('#openShopButton').addEventListener('click', () => { state.shopCarouselIndex = 0; openModal('shopModal'); renderShopCatalog(); });
+$('#openShopButton').addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openLeaderboardButton').addEventListener('click', () => { renderLeaderboard(); openModal('leaderboardModal'); });
 $('#shopShowQr').addEventListener('click', () => { closeModal('shopModal'); showQr().catch((error) => toast(error.message)); });
 $('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));
@@ -1736,6 +1794,7 @@ $('#addShopItem').addEventListener('click', () => openContentEditor('shop'));
 $('#editPromosQuick').addEventListener('click', openContentAdmin);
 $('#editShopQuick').addEventListener('click', openContentAdmin);
 $('#saveContentItem').addEventListener('click', () => saveContentItem().catch((error) => toast(error.message)));
+$('#contentPriceType')?.addEventListener('change', syncContentPriceEditor);
 $('#removeContentImage').addEventListener('click', () => {
   if (!state.editingContent) return;
   state.editingContent.imageSrc = '';

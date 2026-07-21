@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0e13" />
   <title>Пивник | Бонусы</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=12.3" />
+  <link rel="stylesheet" href="styles.css?v=12.4" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -122,9 +122,9 @@
               <i>›</i>
             </button>
             <button class="home-action-card shop-entry-card" id="openShopButton" type="button">
-              <span class="home-action-kicker">ЛАВКА</span>
-              <span class="home-action-mark">□</span>
-              <span class="home-action-copy"><b>Магазин</b><small>Крафт и товары за бонусы</small></span>
+              <span class="home-action-kicker">ВИТРИНА · 10 СЕК</span>
+              <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
+              <span class="home-action-copy"><b>Магазин</b><small id="homeShopCaption">Крафт, лимитированные вещи и оформление профиля</small></span>
               <i>›</i>
             </button>
           </div>
@@ -495,10 +495,10 @@
   <div class="modal" id="shopModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
       <button class="close" data-close="shopModal">×</button>
-      <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин за бонусы</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
-      <p class="help-intro" id="shopNote">Товары меняются автоматически. Выберите нужную позицию и покажите QR сотруднику в баре.</p>
+      <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
+      <p class="help-intro" id="shopNote">Каталог разделён по категориям. Товары за бонусы выдаёт сотрудник по QR, рублёвые позиции оплачиваются в баре.</p>
       <div id="shopCatalog" class="shop-catalog empty-state">Загрузка каталога…</div>
-      <button class="primary full" id="shopShowQr" type="button">Показать QR сотруднику</button>
+      <button class="primary full" id="shopShowQr" type="button">Показать QR для покупки за бонусы</button>
       <small class="shop-legal">Алкогольные позиции выдаются только совершеннолетним посетителям при наличии товара.</small>
     </div>
   </div>
@@ -530,7 +530,24 @@
       <label id="contentBadgeRow">Короткая подпись
         <input class="text-input" id="contentBadge" maxlength="40" placeholder="Например: +100 Б" />
       </label>
-      <label id="contentPriceRow">Цена в бонусах
+      <div class="content-editor-two hidden" id="contentShopOptions">
+        <label>Категория
+          <select class="text-input" id="contentCategory">
+            <option value="craft">Крафтовое пиво и сидр</option>
+            <option value="limited">Limited Edition</option>
+            <option value="profile">Оформление профиля</option>
+            <option value="other">Другое</option>
+          </select>
+        </label>
+        <label>Тип цены
+          <select class="text-input" id="contentPriceType">
+            <option value="bonus">Бонусы</option>
+            <option value="rub">Рубли</option>
+            <option value="pending">Цена позже</option>
+          </select>
+        </label>
+      </div>
+      <label id="contentPriceRow"><span id="contentPriceLabel">Цена в бонусах</span>
         <input class="text-input" id="contentPrice" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="600" />
       </label>
       <div class="content-editor-two">
@@ -593,6 +610,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=12.3"></script>
+  <script src="app.js?v=12.4"></script>
 </body>
 </html>

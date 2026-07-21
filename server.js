@@ -67,14 +67,20 @@ const ANIMAL_AVATARS = new Set([
   '11-koala','12-tiger','13-red-panda','14-penguin','15-mouse','16-dragon','17-unicorn','18-griffin','19-fire-imp'
 ]);
 const AGE_GROUPS = new Set(['18-24', '25-34', '35-44', '45-54', '55+']);
+const SHOP_CATEGORIES = new Set(['craft', 'limited', 'profile', 'other']);
+const SHOP_PRICE_TYPES = new Set(['bonus', 'rub', 'pending']);
 const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
   { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
 ];
 const DEFAULT_SHOP_ITEMS = [
-  { code: 'craft-05', title: 'Крафт из витрины · 0,5 л', subtitle: 'Любая доступная позиция из отмеченной категории. Выдача только в баре, 18+.', bonusPrice: 600, active: true, sortOrder: 10 },
-  { code: 'combo', title: 'Комбо Пивника', subtitle: 'Готовим состав и цену. Появится после бета-теста.', bonusPrice: 900, active: false, sortOrder: 20 }
+  { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, active: true, sortOrder: 10 },
+  { code: 'limited-frost-nova', title: 'Frost Nova', subtitle: 'Лимитированная позиция. Цена появится после подтверждения партии.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, active: false, sortOrder: 20 },
+  { code: 'limited-named-glass', title: 'Именной бокал', subtitle: 'Персональный бокал с выбранной надписью. Детали и цена появятся позже.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, active: false, sortOrder: 30 },
+  { code: 'frame-money-owner', title: 'Рамка с долларами', subtitle: 'Анимированное оформление профиля в стиле владельца приложения.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, active: true, sortOrder: 40 },
+  { code: 'frame-fire-partner', title: 'Огненная рамка', subtitle: 'Анимированное оформление профиля в стиле Виталика.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, active: true, sortOrder: 50 },
+  { code: 'frame-diamond', title: 'Алмазная рамка', subtitle: 'Холодное сияние и гранёная анимация вокруг аватара.', category: 'profile', priceType: 'bonus', bonusPrice: 999, cashPrice: 0, active: true, sortOrder: 60 }
 ];
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -136,6 +142,16 @@ function normalizeAgeGroup(value) {
   return AGE_GROUPS.has(age) ? age : null;
 }
 
+function normalizeShopCategory(value) {
+  const category = String(value || '').trim();
+  return SHOP_CATEGORIES.has(category) ? category : 'other';
+}
+
+function normalizeShopPriceType(value) {
+  const type = String(value || '').trim();
+  return SHOP_PRICE_TYPES.has(type) ? type : 'bonus';
+}
+
 function isOwnerRow(row) {
   return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
 }
@@ -147,7 +163,7 @@ function hasUnlimitedBonus(row) {
 function profileFrameFromRow(row) {
   if (isOwnerRow(row)) return 'money';
   if (row?.role === 'viewer') return 'fire';
-  return ['money', 'fire'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
+  return ['money', 'fire', 'diamond'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
 }
 
 function achievementsFromRow(row) {
@@ -209,7 +225,8 @@ function promotionResponse(row) {
 function shopItemResponse(row) {
   return {
     id: String(row.id), code: row.code, title: row.title, subtitle: row.subtitle || '',
-    bonusPrice: Number(row.bonus_price || 0), imageSrc: row.image_src || '',
+    category: normalizeShopCategory(row.category), priceType: normalizeShopPriceType(row.price_type),
+    bonusPrice: Number(row.bonus_price || 0), cashPrice: Number(row.cash_price || 0), imageSrc: row.image_src || '',
     active: Boolean(row.active), sortOrder: Number(row.sort_order || 0), updatedAt: row.updated_at
   };
 }
@@ -528,7 +545,10 @@ async function initDatabase() {
         code TEXT NOT NULL UNIQUE,
         title TEXT NOT NULL,
         subtitle TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'other',
+        price_type TEXT NOT NULL DEFAULT 'bonus',
         bonus_price INTEGER NOT NULL CHECK (bonus_price >= 0),
+        cash_price INTEGER NOT NULL DEFAULT 0 CHECK (cash_price >= 0),
         image_src TEXT,
         active BOOLEAN NOT NULL DEFAULT TRUE,
         sort_order INTEGER NOT NULL DEFAULT 0,
@@ -537,6 +557,9 @@ async function initDatabase() {
         updated_by BIGINT REFERENCES users(id)
       )
     `);
+    await client.query("ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'other'");
+    await client.query("ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS price_type TEXT NOT NULL DEFAULT 'bonus'");
+    await client.query('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS cash_price INTEGER NOT NULL DEFAULT 0');
     for (const item of DEFAULT_PROMOTIONS) {
       await client.query(
         `INSERT INTO promotions (code, title, description, badge, active, sort_order)
@@ -544,11 +567,19 @@ async function initDatabase() {
         [item.code, item.title, item.description, item.badge, item.active, item.sortOrder]
       );
     }
+    // Старые демонстрационные позиции скрываются только если владелец их не редактировал.
+    await client.query("UPDATE shop_items SET active = FALSE WHERE code IN ('craft-05','combo') AND updated_by IS NULL");
     for (const item of DEFAULT_SHOP_ITEMS) {
       await client.query(
-        `INSERT INTO shop_items (code, title, subtitle, bonus_price, active, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
-        [item.code, item.title, item.subtitle, item.bonusPrice, item.active, item.sortOrder]
+        `INSERT INTO shop_items (code, title, subtitle, category, price_type, bonus_price, cash_price, active, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (code) DO NOTHING`,
+        [item.code, item.title, item.subtitle, item.category, item.priceType, item.bonusPrice, item.cashPrice, item.active, item.sortOrder]
+      );
+      await client.query(
+        `UPDATE shop_items
+         SET title=$2, subtitle=$3, category=$4, price_type=$5, bonus_price=$6, cash_price=$7, active=$8, sort_order=$9, updated_at=NOW()
+         WHERE code=$1 AND updated_by IS NULL`,
+        [item.code, item.title, item.subtitle, item.category, item.priceType, item.bonusPrice, item.cashPrice, item.active, item.sortOrder]
       );
     }
     await client.query('CREATE INDEX IF NOT EXISTS idx_promotions_sort ON promotions(sort_order, id)');
@@ -1148,7 +1179,7 @@ app.get('/api/promotions', authRequired, async (_req, res, next) => {
 app.get('/api/shop/catalog', authRequired, async (_req, res, next) => {
   try {
     const result = await pool.query('SELECT * FROM shop_items ORDER BY sort_order, id');
-    res.json({ items: result.rows.map(shopItemResponse), note: 'Товары меняются автоматически. Выберите позицию и покажите QR сотруднику в баре.' });
+    res.json({ items: result.rows.map(shopItemResponse), note: 'Каталог разделён по категориям. Товары за бонусы выдаёт сотрудник по QR, рублёвые позиции оплачиваются в баре.' });
   } catch (error) {
     next(error);
   }
@@ -1431,7 +1462,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
   const itemCode = String(req.body?.itemCode || '');
   const requestKey = String(req.body?.requestKey || crypto.randomUUID());
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
-  const itemResult = await pool.query('SELECT * FROM shop_items WHERE code = $1 AND active = TRUE', [itemCode]);
+  const itemResult = await pool.query("SELECT * FROM shop_items WHERE code = $1 AND active = TRUE AND price_type = 'bonus' AND bonus_price > 0", [itemCode]);
   if (!itemResult.rowCount) return res.status(400).json({ error: 'Товар недоступен.' });
   const item = shopItemResponse(itemResult.rows[0]);
   const actingStaff = await resolveActingStaff(req);
@@ -1465,6 +1496,9 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
     );
     if (!unlimitedBonus) {
       await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
+    }
+    if (item.code === 'frame-diamond') {
+      await client.query("UPDATE users SET profile_frame = 'diamond', updated_at = NOW() WHERE id = $1", [target.id]);
     }
     await client.query('COMMIT');
     await sendTelegramMessage(target.telegram_id, `Покупка в лавке «Пивника»
@@ -1899,14 +1933,19 @@ app.delete('/api/admin/promotions/:id', authRequired, requireRole('admin'), asyn
 app.post('/api/admin/shop-items', authRequired, requireRole('admin'), async (req, res, next) => {
   try {
     const title = contentText(req.body?.title, 120);
+    const category = normalizeShopCategory(req.body?.category);
+    const priceType = normalizeShopPriceType(req.body?.priceType);
     const bonusPrice = Math.trunc(Number(req.body?.bonusPrice || 0));
+    const cashPrice = Math.trunc(Number(req.body?.cashPrice || 0));
     if (!title) return res.status(400).json({ error: 'Укажите название товара.' });
-    if (bonusPrice < 1 || bonusPrice > 1_000_000) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 бонусов.' });
+    if (priceType === 'bonus' && (bonusPrice < 1 || bonusPrice > 1_000_000)) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 бонусов.' });
+    if (priceType === 'rub' && (cashPrice < 1 || cashPrice > 1_000_000)) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 рублей.' });
     const imageSrc = normalizeContentImage(req.body?.imageSrc);
     const result = await pool.query(
-      `INSERT INTO shop_items (code,title,subtitle,bonus_price,image_src,active,sort_order,updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [makeContentCode('item'), title, contentText(req.body?.subtitle, 500), bonusPrice, imageSrc,
+      `INSERT INTO shop_items (code,title,subtitle,category,price_type,bonus_price,cash_price,image_src,active,sort_order,updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [makeContentCode('item'), title, contentText(req.body?.subtitle, 500), category, priceType,
+       priceType === 'bonus' ? bonusPrice : 0, priceType === 'rub' ? cashPrice : 0, imageSrc,
        req.body?.active !== false, Math.max(-9999, Math.min(9999, Math.trunc(Number(req.body?.sortOrder || 0)))), req.user.id]
     );
     res.json({ item: shopItemResponse(result.rows[0]) });
@@ -1919,14 +1958,19 @@ app.post('/api/admin/shop-items', authRequired, requireRole('admin'), async (req
 app.put('/api/admin/shop-items/:id', authRequired, requireRole('admin'), async (req, res, next) => {
   try {
     const title = contentText(req.body?.title, 120);
+    const category = normalizeShopCategory(req.body?.category);
+    const priceType = normalizeShopPriceType(req.body?.priceType);
     const bonusPrice = Math.trunc(Number(req.body?.bonusPrice || 0));
+    const cashPrice = Math.trunc(Number(req.body?.cashPrice || 0));
     if (!title) return res.status(400).json({ error: 'Укажите название товара.' });
-    if (bonusPrice < 1 || bonusPrice > 1_000_000) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 бонусов.' });
+    if (priceType === 'bonus' && (bonusPrice < 1 || bonusPrice > 1_000_000)) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 бонусов.' });
+    if (priceType === 'rub' && (cashPrice < 1 || cashPrice > 1_000_000)) return res.status(400).json({ error: 'Цена должна быть от 1 до 1 000 000 рублей.' });
     const imageSrc = normalizeContentImage(req.body?.imageSrc);
     const result = await pool.query(
-      `UPDATE shop_items SET title=$1, subtitle=$2, bonus_price=$3, image_src=$4, active=$5, sort_order=$6, updated_by=$7, updated_at=NOW()
-       WHERE id=$8 RETURNING *`,
-      [title, contentText(req.body?.subtitle, 500), bonusPrice, imageSrc, req.body?.active !== false,
+      `UPDATE shop_items SET title=$1, subtitle=$2, category=$3, price_type=$4, bonus_price=$5, cash_price=$6, image_src=$7, active=$8, sort_order=$9, updated_by=$10, updated_at=NOW()
+       WHERE id=$11 RETURNING *`,
+      [title, contentText(req.body?.subtitle, 500), category, priceType,
+       priceType === 'bonus' ? bonusPrice : 0, priceType === 'rub' ? cashPrice : 0, imageSrc, req.body?.active !== false,
        Math.max(-9999, Math.min(9999, Math.trunc(Number(req.body?.sortOrder || 0)))), req.user.id, req.params.id]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'Товар не найден.' });
