@@ -39,7 +39,9 @@ const state = {
   staffRecent: [],
   profileDraft: null,
   profileSetupStep: 1,
-  beerVolumeConfirmed: false
+  beerVolumeConfirmed: false,
+  shopCarouselIndex: 0,
+  shopCarouselTimer: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -78,18 +80,24 @@ function avatarFallback(entity = {}) {
 }
 
 function avatarFrameClass(entity = {}) {
-  return entity.profileFrame === 'cosmic' ? 'avatar-frame avatar-frame-cosmic' : entity.profileFrame === 'fire' ? 'avatar-frame avatar-frame-fire' : '';
+  return entity.profileFrame === 'money' ? 'avatar-frame avatar-frame-money' : entity.profileFrame === 'fire' ? 'avatar-frame avatar-frame-fire' : '';
+}
+
+function moneyOrbitHtml(entity = {}) {
+  if (entity.profileFrame !== 'money') return '';
+  return `<span class="money-orbit" aria-hidden="true">${Array.from({ length: 8 }, (_, index) => `<i style="--money-index:${index}">$</i>`).join('')}</span>`;
 }
 
 function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = false) {
   const visible = !respectPrivacy || entity.showAvatar !== false;
   const fallback = visible ? avatarFallback(entity) : '•';
   const src = visible ? avatarAssetUrl(entity) : '';
-  return `<span class="${className} avatar-render ${avatarFrameClass(entity)}"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span>`;
+  return `<span class="${className} avatar-render ${avatarFrameClass(entity)}"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${moneyOrbitHtml(entity)}</span>`;
 }
 
 function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
+  element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 
@@ -498,6 +506,10 @@ function closeModal(id) {
   if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
+  if (id === 'shopModal' && state.shopCarouselTimer) {
+    clearInterval(state.shopCarouselTimer);
+    state.shopCarouselTimer = null;
+  }
 }
 
 function switchScreen(target) {
@@ -595,14 +607,49 @@ async function loadPromotions() {
 function renderShopCatalog() {
   const clientList = $('#shopCatalog');
   if (clientList) {
+    if (state.shopCarouselTimer) {
+      clearInterval(state.shopCarouselTimer);
+      state.shopCarouselTimer = null;
+    }
     clientList.className = `shop-catalog${state.catalog.length ? '' : ' empty-state'}`;
-    clientList.innerHTML = state.catalog.length ? state.catalog.map((item, index) => `<article class="shop-product ${item.active ? '' : 'disabled'}">
-      ${imageMarkup(item.imageSrc, item.title, 'shop-product-media')}
-      <div class="shop-product-number">${String(index + 1).padStart(2, '0')}</div>
-      <div class="grow"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><span>${item.active ? 'Можно получить у сотрудника' : 'После бета-теста'}</span></div>
-      <strong>${fmt(item.bonusPrice)} Б</strong>
-    </article>`).join('') : 'Каталог пока пуст';
-    bindContentImageFallbacks(clientList);
+    if (!state.catalog.length) {
+      clientList.innerHTML = 'Каталог пока пуст';
+    } else {
+      state.shopCarouselIndex = ((state.shopCarouselIndex % state.catalog.length) + state.catalog.length) % state.catalog.length;
+      const featured = state.catalog[state.shopCarouselIndex];
+      clientList.innerHTML = `<section class="shop-showcase ${featured.active ? '' : 'disabled'}">
+        <div class="shop-showcase-media">${imageMarkup(featured.imageSrc, featured.title, 'shop-showcase-image')}</div>
+        <div class="shop-showcase-overlay"></div>
+        <div class="shop-showcase-content">
+          <span class="shop-showcase-kicker">${featured.active ? 'ДОСТУПНО СЕЙЧАС' : 'СКОРО В ЛАВКЕ'}</span>
+          <h3>${escapeHtml(featured.title)}</h3>
+          <p>${escapeHtml(featured.subtitle)}</p>
+          <div class="shop-showcase-bottom"><strong>${fmt(featured.bonusPrice)} Б</strong><span>${featured.active ? 'Покажите QR сотруднику' : 'Позиция пока недоступна'}</span></div>
+        </div>
+        ${state.catalog.length > 1 ? `<button class="shop-carousel-arrow prev" type="button" data-shop-step="-1" aria-label="Предыдущий товар">‹</button><button class="shop-carousel-arrow next" type="button" data-shop-step="1" aria-label="Следующий товар">›</button>` : ''}
+        <div class="shop-carousel-progress"><i></i></div>
+      </section>
+      <div class="shop-carousel-dots">${state.catalog.map((item, index) => `<button type="button" data-shop-slide="${index}" class="${index === state.shopCarouselIndex ? 'active' : ''}" aria-label="Показать ${escapeHtml(item.title)}"></button>`).join('')}</div>
+      <div class="shop-mini-list">${state.catalog.map((item, index) => `<button type="button" class="shop-mini-item ${index === state.shopCarouselIndex ? 'active' : ''} ${item.active ? '' : 'disabled'}" data-shop-slide="${index}">
+        ${imageMarkup(item.imageSrc, item.title, 'shop-mini-media')}
+        <span><b>${escapeHtml(item.title)}</b><small>${item.active ? `${fmt(item.bonusPrice)} Б` : 'Скоро'}</small></span>
+      </button>`).join('')}</div>`;
+      bindContentImageFallbacks(clientList);
+      clientList.querySelectorAll('[data-shop-slide]').forEach((button) => button.addEventListener('click', () => {
+        state.shopCarouselIndex = Number(button.dataset.shopSlide || 0);
+        renderShopCatalog();
+      }));
+      clientList.querySelectorAll('[data-shop-step]').forEach((button) => button.addEventListener('click', () => {
+        state.shopCarouselIndex += Number(button.dataset.shopStep || 0);
+        renderShopCatalog();
+      }));
+      if (state.catalog.length > 1 && $('#shopModal')?.classList.contains('open')) {
+        state.shopCarouselTimer = setInterval(() => {
+          state.shopCarouselIndex = (state.shopCarouselIndex + 1) % state.catalog.length;
+          renderShopCatalog();
+        }, 4800);
+      }
+    }
   }
   const staffList = $('#staffShopItems');
   if (staffList) {
@@ -853,7 +900,9 @@ function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
   $('#eyebrow').textContent = `${profile.firstName}${profile.username ? ` · @${profile.username}` : ''}`;
-  $('#clientBalance').textContent = fmt(profile.balance);
+  $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : fmt(profile.balance);
+  $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
+  $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
   $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
@@ -937,7 +986,7 @@ function renderTransaction(transaction) {
       : '';
     detail = transaction.mode === 'redeem'
       ? `Списано ${transaction.bonusSpent} Б · начислено ${transaction.bonusEarned} Б${beerDetails}`
-      : `Начислено ${transaction.bonusEarned} Б · скидка ${fmt(transaction.discount)} ₽${beerDetails}`;
+      : `Начислено ${transaction.bonusEarned} Б${Number(transaction.discount || 0) > 0 ? ` · скидка ${fmt(transaction.discount)} ₽` : ''}${beerDetails}`;
   }
   if (cancelled) detail = `ОТМЕНЕНО · ${transaction.cancelReason || 'причина указана в журнале'} · ${detail}`;
   const suspicious = transaction.isSuspicious ? '<span class="op-alert">проверить</span>' : '';
@@ -1632,7 +1681,7 @@ $$('.bottom-nav button').forEach((button) => button.addEventListener('click', ()
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#openPromosButton').addEventListener('click', () => { renderPromotions(); openModal('promosModal'); });
-$('#openShopButton').addEventListener('click', () => { renderShopCatalog(); openModal('shopModal'); });
+$('#openShopButton').addEventListener('click', () => { state.shopCarouselIndex = 0; openModal('shopModal'); renderShopCatalog(); });
 $('#openLeaderboardButton').addEventListener('click', () => { renderLeaderboard(); openModal('leaderboardModal'); });
 $('#shopShowQr').addEventListener('click', () => { closeModal('shopModal'); showQr().catch((error) => toast(error.message)); });
 $('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));

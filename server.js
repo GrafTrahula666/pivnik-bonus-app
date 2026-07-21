@@ -42,11 +42,11 @@ app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h'
 
 const STATUS_LEVELS = [
   { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
-  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 1, nextCents: 3_000_000 },
-  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 2, nextCents: 7_000_000 },
-  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 3, nextCents: 10_000_000 },
-  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 4, nextCents: 15_000_000 },
-  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 5, nextCents: 50_000_000 },
+  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 0, nextCents: 3_000_000 },
+  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 0, nextCents: 7_000_000 },
+  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 0, nextCents: 10_000_000 },
+  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 0, nextCents: 15_000_000 },
+  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 0, nextCents: 50_000_000 },
   { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
 ];
 
@@ -145,9 +145,9 @@ function hasUnlimitedBonus(row) {
 }
 
 function profileFrameFromRow(row) {
-  if (isOwnerRow(row)) return 'cosmic';
+  if (isOwnerRow(row)) return 'money';
   if (row?.role === 'viewer') return 'fire';
-  return ['cosmic', 'fire'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
+  return ['money', 'fire'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
 }
 
 function achievementsFromRow(row) {
@@ -260,6 +260,10 @@ async function ensurePersonalQr(db, userId, force = false) {
 
 function getStatus(spendCents) {
   return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
+}
+
+function getEffectiveStatus(row, spendCents) {
+  return hasUnlimitedBonus(row) ? STATUS_LEVELS[STATUS_LEVELS.length - 1] : getStatus(spendCents);
 }
 
 function centsFromInput(value) {
@@ -579,7 +583,7 @@ async function initDatabase() {
     `);
     if (ownerTelegramId) {
       await client.query(
-        "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'cosmic', updated_at = NOW() WHERE telegram_id::text = $1",
+        "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE telegram_id::text = $1",
         [ownerTelegramId]
       );
     }
@@ -664,8 +668,8 @@ async function getProfile(userId, db = pool) {
   if (!userResult.rowCount) return null;
   const row = userResult.rows[0];
   const spend12mCents = await getRollingSpend(db, userId);
-  const status = getStatus(spend12mCents);
   const unlimitedBonus = hasUnlimitedBonus(row);
+  const status = getEffectiveStatus(row, spend12mCents);
   return {
     id: String(row.id),
     telegramId: String(row.telegram_id),
@@ -694,6 +698,7 @@ async function getProfile(userId, db = pool) {
     termsAcceptedAt: row.terms_accepted_at,
     termsVersion: row.terms_version,
     spend12m: rubles(spend12mCents),
+    vipStatusLocked: unlimitedBonus,
     beer: {
       paidMlTotal: Number(row.paid_ml_total || 0),
       paidLitersTotal: litersFromMl(row.paid_ml_total),
@@ -945,7 +950,7 @@ app.post('/api/auth', async (req, res, next) => {
       );
       if (role === 'admin') {
         await client.query(
-          "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'cosmic', updated_at = NOW() WHERE id = $1",
+          "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE id = $1",
           [userId]
         );
       }
@@ -1143,7 +1148,7 @@ app.get('/api/promotions', authRequired, async (_req, res, next) => {
 app.get('/api/shop/catalog', authRequired, async (_req, res, next) => {
   try {
     const result = await pool.query('SELECT * FROM shop_items ORDER BY sort_order, id');
-    res.json({ items: result.rows.map(shopItemResponse), note: 'Цены указаны в бонусах. Выдача — только в баре после проверки сотрудником.' });
+    res.json({ items: result.rows.map(shopItemResponse), note: 'Товары меняются автоматически. Выберите позицию и покажите QR сотруднику в баре.' });
   } catch (error) {
     next(error);
   }
@@ -1274,7 +1279,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     const beerGiftEarnedMl = Math.max(0, newGiftCount - previousGiftCount) * BEER_GIFT_ML;
     const newGiftBalanceMl = Number(beerWallet.gift_ml_balance || 0) + beerGiftEarnedMl;
     const spend12mCents = await getRollingSpend(client, targetUser.id);
-    const status = getStatus(spend12mCents);
+    const status = getEffectiveStatus(targetUser, spend12mCents);
 
     let discountCents = 0;
     let bonusSpent = 0;
