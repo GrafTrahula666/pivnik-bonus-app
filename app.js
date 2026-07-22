@@ -41,13 +41,26 @@ const state = {
   profileSetupStep: 1,
   beerVolumeConfirmed: false,
   homeShopCarouselIndex: 0,
-  homeShopCarouselTimer: null
+  homeShopCarouselTimer: null,
+  adminUsers: [],
+  adminTransactions: [],
+  adminInquiries: [],
+  shopContact: null,
+  walletConfig: null,
+  inquiryItem: null
 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const fmt = (number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Number(number || 0));
 const fmtLiters = (number) => new Intl.NumberFormat('ru-RU', { minimumFractionDigits: Number(number) % 1 ? 1 : 0, maximumFractionDigits: 2 }).format(Number(number || 0));
+const compactBonus = (number) => {
+  const value = Number(number || 0);
+  if (value >= 1_000_000_000) return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value / 1_000_000_000)} млрд`;
+  if (value >= 1_000_000) return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value / 1_000_000)} млн`;
+  if (value >= 100_000) return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(value / 1_000)} тыс.`;
+  return fmt(value);
+};
 const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
 const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
@@ -80,24 +93,38 @@ function avatarFallback(entity = {}) {
 }
 
 function avatarFrameClass(entity = {}) {
-  return entity.profileFrame === 'money' ? 'avatar-frame avatar-frame-money' : entity.profileFrame === 'fire' ? 'avatar-frame avatar-frame-fire' : entity.profileFrame === 'diamond' ? 'avatar-frame avatar-frame-diamond' : '';
+  if (entity.profileFrame === 'money') return 'avatar-frame avatar-frame-money';
+  if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
+  if (entity.profileFrame === 'diamond') return 'avatar-frame avatar-frame-diamond';
+  if (entity.profileFrame === 'anna') return 'avatar-frame avatar-frame-anna';
+  return '';
 }
 
-function moneyOrbitHtml(entity = {}) {
-  if (entity.profileFrame !== 'money') return '';
-  return `<span class="money-orbit" aria-hidden="true">${Array.from({ length: 8 }, (_, index) => `<i style="--money-index:${index}">$</i>`).join('')}</span>`;
+function avatarOrbitHtml(entity = {}) {
+  if (entity.profileFrame === 'money') {
+    return `<span class="avatar-orbit money-orbit" aria-hidden="true">${Array.from({ length: 8 }, (_, index) => `<i style="--orbit-index:${index}">$</i>`).join('')}</span>`;
+  }
+  if (entity.profileFrame === 'anna') {
+    const symbols = [
+      '<span class="anna-18">18</span>', '<span class="anna-heart">💔</span>', '<span class="anna-whip">➰</span>', '<span class="anna-cash">$</span>',
+      '<span class="anna-18">18</span>', '<span class="anna-heart">💔</span>', '<span class="anna-whip">➰</span>', '<span class="anna-cash">$</span>'
+    ];
+    return `<span class="avatar-orbit anna-orbit" aria-hidden="true">${symbols.map((symbol, index) => `<i style="--orbit-index:${index}">${symbol}</i>`).join('')}</span>`;
+  }
+  return '';
 }
 
 function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = false) {
   const visible = !respectPrivacy || entity.showAvatar !== false;
   const fallback = visible ? avatarFallback(entity) : '•';
   const src = visible ? avatarAssetUrl(entity) : '';
-  return `<span class="${className} avatar-render ${avatarFrameClass(entity)}"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${moneyOrbitHtml(entity)}</span>`;
+  return `<span class="${className} avatar-render ${avatarFrameClass(entity)}"><span class="avatar-fallback">${escapeHtml(fallback)}</span>${src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${avatarOrbitHtml(entity)}</span>`;
 }
 
 function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
+  element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 
@@ -480,17 +507,23 @@ function haptic(type = 'light') {
 }
 
 async function api(path, options = {}) {
+  const isStaffRequest = String(path).startsWith('/api/staff/');
   const response = await fetch(path, {
     ...options,
     headers: {
       'content-type': 'application/json',
       ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
-      ...(state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
+      ...(isStaffRequest && state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
       ...(options.headers || {})
     }
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.error || `Ошибка ${response.status}`);
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
   return data;
 }
 
@@ -513,6 +546,7 @@ function switchScreen(target) {
   $$('.bottom-nav button').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
+  if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
 }
 
 function currentLevelIndex() {
@@ -601,9 +635,9 @@ async function loadPromotions() {
 }
 
 const SHOP_CATEGORY_META = {
-  craft: { title: 'Крафтовое пиво и сидр', subtitle: 'Напитки из отдельной витрины' },
-  limited: { title: 'Limited Edition', subtitle: 'Редкие и персональные позиции' },
-  profile: { title: 'Оформление профиля', subtitle: 'Рамки, аватары и будущие фоны' },
+  craft: { title: 'Крафтовое пиво и сидр', subtitle: 'Напитки, которые можно забрать в баре' },
+  limited: { title: 'Limited Edition · кружки', subtitle: 'Коллекционные кружки и именные бокалы' },
+  profile: { title: 'Оформление профиля', subtitle: 'Рамки, аватары и фоны профиля' },
   other: { title: 'Другое', subtitle: 'Остальные товары' }
 };
 
@@ -624,10 +658,18 @@ function shopVisual(item = {}) {
   return { key: item.category || 'other', mark: String(item.title || 'П').slice(0, 1).toUpperCase() };
 }
 
-function shopImageMarkup(item = {}, className = 'shop-list-media') {
-  if (item.imageSrc) return imageMarkup(item.imageSrc, item.title, className);
+function autoProductArtwork(item = {}) {
   const visual = shopVisual(item);
-  return `<div class="${className} content-image-fallback shop-visual shop-visual-${escapeHtml(visual.key)}"><span>${escapeHtml(visual.mark)}</span></div>`;
+  const title = String(item.title || 'Товар').slice(0, 42);
+  const palette = {
+    craft: ['#1f120b', '#a94c16'], limited: ['#071421', '#2782a9'], profile: ['#120b20', '#7b3fb0'], other: ['#101316', '#59636d']
+  }[item.category || 'other'] || ['#101316', '#59636d'];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${palette[0]}"/><stop offset="1" stop-color="${palette[1]}"/></linearGradient></defs><rect width="1200" height="900" rx="52" fill="url(#g)"/><circle cx="600" cy="360" r="245" fill="white" opacity=".08"/><text x="600" y="430" text-anchor="middle" font-family="Arial" font-size="180" font-weight="900" fill="white">${escapeHtml(visual.mark)}</text><text x="72" y="790" font-family="Arial" font-size="60" font-weight="800" fill="white">${escapeHtml(title)}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function shopImageMarkup(item = {}, className = 'shop-list-media') {
+  return imageMarkup(item.imageSrc || autoProductArtwork(item), item.title, className);
 }
 
 function shopAvailabilityLabel(item = {}) {
@@ -641,7 +683,7 @@ function renderHomeShopPreview() {
   const preview = $('#homeShopPreview');
   const caption = $('#homeShopCaption');
   if (!preview) return;
-  const items = state.catalog.filter((item) => item.active);
+  const items = state.catalog.filter((item) => item.active && ['craft', 'limited'].includes(item.category));
   if (!items.length) {
     preview.innerHTML = '<span class="home-shop-preview-fallback">П</span>';
     if (caption) caption.textContent = 'Каталог скоро появится';
@@ -658,13 +700,19 @@ function restartHomeShopCarousel() {
   if (state.homeShopCarouselTimer) clearInterval(state.homeShopCarouselTimer);
   state.homeShopCarouselTimer = null;
   renderHomeShopPreview();
-  const items = state.catalog.filter((item) => item.active);
+  const items = state.catalog.filter((item) => item.active && ['craft', 'limited'].includes(item.category));
   if (items.length > 1) {
     state.homeShopCarouselTimer = setInterval(() => {
       state.homeShopCarouselIndex = (state.homeShopCarouselIndex + 1) % items.length;
       renderHomeShopPreview();
     }, 10_000);
   }
+}
+
+function shopActionLabel(item = {}) {
+  if (item.category === 'limited') return 'Уточнить по кружке';
+  if (item.priceType === 'bonus') return 'Как купить';
+  return 'Уточнить покупку';
 }
 
 function renderShopCatalog() {
@@ -685,11 +733,13 @@ function renderShopCatalog() {
           <div class="shop-category-grid">${group.items.map((item) => `<article class="shop-list-card ${item.active ? '' : 'disabled'}">
             ${shopImageMarkup(item, 'shop-list-media')}
             <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${escapeHtml(shopAvailabilityLabel(item))}</small></div>
-            <strong>${escapeHtml(shopPriceLabel(item))}</strong>
+            <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions"><button class="secondary" data-shop-inquiry="${escapeHtml(item.code)}" type="button">${escapeHtml(shopActionLabel(item))}</button><button class="text-btn" data-shop-chat="${escapeHtml(item.code)}" type="button">Написать Кириллу</button></div></div>
           </article>`).join('')}</div>
         </section>`;
       }).join('');
       bindContentImageFallbacks(clientList);
+      clientList.querySelectorAll('[data-shop-inquiry]').forEach((button) => button.addEventListener('click', () => openShopInquiry(button.dataset.shopInquiry)));
+      clientList.querySelectorAll('[data-shop-chat]').forEach((button) => button.addEventListener('click', () => contactOwnerAboutItem(button.dataset.shopChat)));
     }
   }
   const staffList = $('#staffShopItems');
@@ -715,6 +765,109 @@ async function loadCatalog() {
   renderShopCatalog();
   restartHomeShopCarousel();
   return state.catalog;
+}
+
+async function loadShopContact() {
+  try { state.shopContact = await api('/api/shop/contact'); } catch (_) { state.shopContact = { ownerName: 'Кирилл', ownerUsername: null }; }
+  return state.shopContact;
+}
+
+function findShopItem(code) {
+  return state.catalog.find((item) => item.code === code) || null;
+}
+
+function openShopInquiry(code) {
+  const item = findShopItem(code);
+  if (!item) return;
+  state.inquiryItem = item;
+  $('#shopInquiryItem').textContent = item.title;
+  $('#shopInquiryMessage').value = item.category === 'limited'
+    ? `Здравствуйте! Хочу уточнить детали по кружке «${item.title}».`
+    : `Здравствуйте! Хочу уточнить покупку «${item.title}».`;
+  openModal('shopInquiryModal');
+}
+
+async function submitShopInquiry() {
+  const item = state.inquiryItem;
+  const message = $('#shopInquiryMessage')?.value?.trim() || '';
+  if (!item) throw new Error('Товар не выбран.');
+  const button = $('#sendShopInquiry');
+  button.disabled = true;
+  try {
+    await api('/api/shop/inquiries', { method: 'POST', body: JSON.stringify({ itemCode: item.code, itemTitle: item.title, message }) });
+    closeModal('shopInquiryModal');
+    toast('Вопрос отправлен Кириллу');
+  } finally { button.disabled = false; }
+}
+
+async function contactOwnerAboutItem(code) {
+  const item = findShopItem(code);
+  if (!item) return;
+  if (!state.shopContact) await loadShopContact();
+  const text = item.category === 'limited'
+    ? `Привет! Меня заинтересовала кружка «${item.title}». Хочу уточнить детали.`
+    : `Привет! Хочу уточнить покупку «${item.title}».`;
+  try { await navigator.clipboard.writeText(text); } catch (_) {}
+  const username = state.shopContact?.ownerUsername;
+  if (username) {
+    const url = `https://t.me/${encodeURIComponent(username)}`;
+    try { tg?.openTelegramLink?.(url); } catch (_) { window.open(url, '_blank', 'noopener'); }
+    toast('Текст вопроса скопирован');
+  } else {
+    openShopInquiry(code);
+    toast('Личный username владельца не настроен — отправьте вопрос через форму');
+  }
+}
+
+async function loadWalletConfig() {
+  try { state.walletConfig = await api('/api/wallet/config'); } catch (_) { state.walletConfig = { appleAvailable: false, googleAvailable: false, fallbackAvailable: true }; }
+  $('#addAppleWallet')?.classList.toggle('hidden', !state.walletConfig.appleAvailable);
+  $('#addGoogleWallet')?.classList.toggle('hidden', !state.walletConfig.googleAvailable);
+  return state.walletConfig;
+}
+
+async function saveQrCardImage() {
+  if (!state.qr?.image) await createQr();
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080; canvas.height = 680;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 1080, 680);
+  gradient.addColorStop(0, '#10161d'); gradient.addColorStop(1, '#54270f');
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#ffffff'; ctx.font = '800 64px Arial'; ctx.fillText('ПИВНИК', 70, 95);
+  ctx.font = '500 30px Arial'; ctx.fillStyle = '#ffd08a'; ctx.fillText('Бонусная карта', 70, 142);
+  ctx.font = '700 42px Arial'; ctx.fillStyle = '#ffffff'; ctx.fillText(`${state.profile.firstName || 'Гость'}`, 70, 245);
+  ctx.font = '500 30px Arial'; ctx.fillStyle = '#d4d9df'; ctx.fillText(`${state.profile.status?.name || ''} · ${state.profile.unlimitedBonus ? '∞' : compactBonus(state.profile.balance)} Б`, 70, 295);
+  const image = new Image();
+  image.onload = async () => {
+    ctx.fillStyle = '#fff'; ctx.fillRect(650, 70, 350, 350); ctx.drawImage(image, 675, 95, 300, 300);
+    ctx.font = '700 32px monospace'; ctx.fillStyle = '#ffffff'; ctx.fillText(state.qr.shortCode || '', 70, 560);
+    ctx.font = '400 24px Arial'; ctx.fillStyle = '#c6ccd2'; ctx.fillText('Покажите карту сотруднику перед оплатой', 70, 610);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
+    if (!blob) throw new Error('Не удалось подготовить QR-карту.');
+    const canCreateFile = typeof File === 'function';
+    const file = canCreateFile ? new File([blob], 'pivnik-card.png', { type: 'image/png' }) : null;
+    if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Карта Пивника' });
+    } else {
+      const link = document.createElement('a');
+      const objectUrl = URL.createObjectURL(blob);
+      link.href = objectUrl;
+      link.download = 'pivnik-card.png';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    }
+  };
+  image.src = state.qr.image;
+}
+
+async function openWalletIssuer(kind) {
+  const endpoint = kind === 'apple' ? '/api/wallet/apple' : '/api/wallet/google';
+  const data = await api(endpoint);
+  if (!data.url) throw new Error('Ссылка Wallet не получена.');
+  window.open(data.url, '_blank', 'noopener');
 }
 
 function renderLeaderboard() {
@@ -886,14 +1039,42 @@ function renderStaffSession() {
 
 async function loadStaffSession() {
   if (!roleCanStaff(state.profile?.role)) return;
-  const data = await api('/api/staff/session');
-  state.staffAvailable = data.available || [];
-  state.activeStaff = data.activeStaff || null;
-  if (!state.activeStaff && state.staffSession) {
+  try {
+    const data = await api('/api/staff/session');
+    state.staffAvailable = data.available || [];
+    state.activeStaff = data.activeStaff || null;
+    if (!state.activeStaff && state.staffSession) {
+      state.staffSession = '';
+      localStorage.removeItem('pivnik_staff_session');
+    }
+    renderStaffSession();
+    return data;
+  } catch (error) {
     state.staffSession = '';
+    state.activeStaff = null;
     localStorage.removeItem('pivnik_staff_session');
+    renderStaffSession();
+    if (error.status !== 401 && error.status !== 403) throw error;
+    return null;
   }
-  renderStaffSession();
+}
+
+async function openStaffWorkspace() {
+  if (!roleCanStaff(state.profile?.role)) return;
+  await loadStaffSession();
+  await loadStaffRecent({ silent: true });
+  const memberIds = new Set((state.currentShift?.members || []).map((member) => String(member.id)));
+  const currentUserOnShift = memberIds.has(String(state.profile?.id));
+  if (!state.activeStaff && !currentUserOnShift) {
+    renderStaffLockedState('Вы не выбраны в текущую смену. Клиентская часть приложения доступна без PIN.');
+  }
+}
+
+function renderStaffLockedState(message = 'Для работы за стойкой выберите сотрудника и введите PIN.') {
+  const list = $('#staffRecentOperations');
+  if (list) { list.className = 'operation-list empty-state'; list.textContent = message; }
+  if ($('#staffCancelQuota')) $('#staffCancelQuota').textContent = 'Клиентский профиль работает независимо от смены';
+  $('#createSale')?.setAttribute('disabled', '');
 }
 
 async function activateStaff() {
@@ -915,6 +1096,7 @@ async function activateStaff() {
   toast(`Смена: ${activeStaffName()}`);
   haptic('medium');
   await loadStaffRecent();
+  updateCalculation();
 }
 
 function clearStaffSession() {
@@ -942,7 +1124,7 @@ function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
   $('#eyebrow').textContent = `${profile.firstName}${profile.username ? ` · @${profile.username}` : ''}`;
-  $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : fmt(profile.balance);
+  $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : compactBonus(profile.balance);
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
@@ -1046,10 +1228,10 @@ async function refreshMe() {
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
-  await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard()]);
+  await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadShopContact(), loadWalletConfig()]);
   if (roleCanStaff(state.profile?.role)) {
     await loadStaffSession();
-    await loadStaffRecent();
+    await loadStaffRecent({ silent: true });
   }
 }
 
@@ -1097,10 +1279,18 @@ async function boot() {
     renderProfile();
     renderStatuses();
     $('#bootText').textContent = 'Проверяем текущую смену…';
-    await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard()]);
+    await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadShopContact(), loadWalletConfig()]);
     if (roleCanStaff(state.profile?.role)) {
-      await loadStaffSession();
-      await loadStaffRecent();
+      try {
+        await loadStaffSession();
+        await loadStaffRecent({ silent: true });
+      } catch (staffError) {
+        console.warn('Staff workspace preload skipped:', staffError);
+        state.staffSession = '';
+        state.activeStaff = null;
+        localStorage.removeItem('pivnik_staff_session');
+        renderStaffSession();
+      }
     }
     await finishBoot();
     showRequiredSetup();
@@ -1133,7 +1323,7 @@ async function createQr() {
 
 async function showQr() {
   openModal('qrModal');
-  await createQr();
+  await Promise.all([createQr(), loadWalletConfig()]);
 }
 
 async function copyQrCode() {
@@ -1235,10 +1425,24 @@ function renderStaffRecent(data) {
   }));
 }
 
-async function loadStaffRecent() {
+async function loadStaffRecent({ silent = false } = {}) {
   if (!roleCanStaff(state.profile?.role)) return;
-  const data = await api('/api/staff/recent');
-  renderStaffRecent(data);
+  try {
+    const data = await api('/api/staff/recent');
+    renderStaffRecent(data);
+    return data;
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      state.staffSession = '';
+      state.activeStaff = null;
+      localStorage.removeItem('pivnik_staff_session');
+      renderStaffSession();
+      renderStaffLockedState(error.message || 'Сотрудник не находится на смене.');
+      if (!silent) openModal('staffLoginModal');
+      return null;
+    }
+    throw error;
+  }
 }
 
 function updateCalculation() {
@@ -1439,33 +1643,127 @@ function adminTransactionHtml(transaction) {
   </div>`;
 }
 
-async function loadAdmin() {
-  if (!roleCanAdmin(state.profile?.role)) return;
-  const [summaryData, usersData, shiftData, contentData] = await Promise.all([
-    api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift'), api('/api/admin/content')
-  ]);
-  state.adminSettings = summaryData.settings;
-  $('#metricClients').textContent = fmt(summaryData.summary.clients);
-  $('#metricIssued').textContent = fmt(summaryData.summary.issued);
-  $('#metricToday').textContent = `${fmt(summaryData.summary.todayCheck)} ₽`;
-  $('#metricTodayOps').textContent = `${summaryData.summary.todayOperations} операций`;
-  $('#metricSuspicious').textContent = fmt(summaryData.summary.suspiciousOperations);
-  if ($('#metricCancelled')) $('#metricCancelled').textContent = fmt(summaryData.summary.cancelledToday);
-  $('#adminOperations').className = `operation-list${summaryData.operations.length ? '' : ' empty-state'}`;
-  $('#adminOperations').innerHTML = summaryData.operations.length ? summaryData.operations.map(adminTransactionHtml).join('') : 'Операций пока нет';
-  $('#adminOperations').querySelectorAll('[data-admin-cancel]').forEach((button) => button.addEventListener('click', async () => {
+function bindAdminTransactionActions(root) {
+  root?.querySelectorAll('[data-admin-cancel]').forEach((button) => button.addEventListener('click', async () => {
     const reason = prompt('Причина отмены операции владельцем:');
     if (!reason?.trim()) return;
     try {
       await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
       toast('Операция отменена');
       await Promise.all([loadAdmin(), loadLeaderboard()]);
+      if ($('#adminTransactionsModal')?.classList.contains('open')) await openAllTransactions();
     } catch (error) { toast(error.message); }
   }));
+}
+
+function renderAdminTransactions(transactions, target = '#adminOperations') {
+  const root = $(target);
+  if (!root) return;
+  root.className = `operation-list${transactions.length ? '' : ' empty-state'}`;
+  root.innerHTML = transactions.length ? transactions.map(adminTransactionHtml).join('') : 'Операций пока нет';
+  bindAdminTransactionActions(root);
+}
+
+function inquiryStatusLabel(status) {
+  return status === 'answered' ? 'Отвечено' : status === 'order' ? 'Заказ оформлен' : 'Новое';
+}
+
+function renderInquiries(items, target = '#adminInquiries', compact = false) {
+  const root = $(target);
+  if (!root) return;
+  root.className = `inquiry-list${items.length ? '' : ' empty-state'}`;
+  root.innerHTML = items.length ? items.map((item) => `<article class="inquiry-row status-${escapeHtml(item.status)}">
+    <div class="inquiry-main"><span>${escapeHtml(inquiryStatusLabel(item.status))}</span><b>${escapeHtml(item.itemTitle)}</b><small>${escapeHtml(item.name || item.telegramId)}${item.username ? ` · @${escapeHtml(item.username)}` : ''} · ${new Date(item.createdAt).toLocaleString('ru-RU')}</small><p>${escapeHtml(item.message)}</p></div>
+    ${compact ? '' : `<div class="inquiry-actions">${item.username ? `<button class="text-btn" data-inquiry-chat="${escapeHtml(item.username)}" type="button">Открыть чат</button>` : ''}${roleCanWrite(state.profile?.role) ? `<select data-inquiry-status="${item.id}"><option value="new" ${item.status === 'new' ? 'selected' : ''}>Новое</option><option value="answered" ${item.status === 'answered' ? 'selected' : ''}>Отвечено</option><option value="order" ${item.status === 'order' ? 'selected' : ''}>Заказ оформлен</option></select>` : ''}</div>`}
+  </article>`).join('') : 'Обращений пока нет';
+  root.querySelectorAll('[data-inquiry-chat]').forEach((button) => button.addEventListener('click', () => {
+    const url = `https://t.me/${encodeURIComponent(button.dataset.inquiryChat)}`;
+    try { tg?.openTelegramLink?.(url); } catch (_) { window.open(url, '_blank', 'noopener'); }
+  }));
+  root.querySelectorAll('[data-inquiry-status]').forEach((select) => select.addEventListener('change', async () => {
+    try {
+      await api(`/api/admin/inquiries/${select.dataset.inquiryStatus}`, { method: 'PATCH', body: JSON.stringify({ status: select.value }) });
+      toast('Статус обращения обновлён');
+      await loadAdmin();
+      if ($('#adminInquiriesModal')?.classList.contains('open')) await openAllInquiries();
+    } catch (error) { toast(error.message); }
+  }));
+}
+
+async function loadAdmin() {
+  if (!roleCanAdmin(state.profile?.role)) return;
+  const [summaryData, usersData, shiftData, contentData, inquiriesData] = await Promise.all([
+    api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift'), api('/api/admin/content'), api('/api/admin/inquiries?limit=5')
+  ]);
+  state.adminSettings = summaryData.settings;
+  state.adminUsers = usersData.users || [];
+  state.adminTransactions = summaryData.operations || [];
+  state.adminInquiries = inquiriesData.inquiries || [];
+  $('#metricClients').textContent = fmt(summaryData.summary.clients);
+  $('#metricIssued').textContent = fmt(summaryData.summary.issued);
+  $('#metricToday').textContent = `${fmt(summaryData.summary.todayCheck)} ₽`;
+  $('#metricTodayOps').textContent = `${summaryData.summary.todayOperations} операций`;
+  $('#metricSuspicious').textContent = fmt(summaryData.summary.suspiciousOperations);
+  if ($('#metricCancelled')) $('#metricCancelled').textContent = fmt(summaryData.summary.cancelledToday);
+  renderAdminTransactions(state.adminTransactions.slice(0, 5));
+  renderUsers(state.adminUsers.slice(0, 5), '#usersList', true);
+  renderInquiries(state.adminInquiries.slice(0, 5), '#adminInquiries', true);
   if (roleCanWrite(state.profile?.role)) fillDesignForm(summaryData.settings.draft);
-  renderUsers(usersData.users);
   renderShiftAdmin(shiftData);
   renderAdminContent(contentData);
+}
+
+async function openAllTransactions() {
+  const data = await api('/api/admin/transactions?limit=200');
+  state.adminTransactions = data.transactions || [];
+  filterAdminTransactions();
+  openModal('adminTransactionsModal');
+}
+
+function filterAdminTransactions() {
+  const query = ($('#transactionSearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
+  const mode = $('#transactionModeFilter')?.value || '';
+  const filtered = state.adminTransactions.filter((item) => {
+    const haystack = `${item.clientName || ''} ${item.staffName || ''} ${item.reason || ''}`.toLocaleLowerCase('ru-RU');
+    return (!query || haystack.includes(query)) && (!mode || item.mode === mode);
+  });
+  renderAdminTransactions(filtered, '#allTransactionsList');
+}
+
+async function openAllUsers() {
+  if (!state.adminUsers.length) {
+    const data = await api('/api/admin/users');
+    state.adminUsers = data.users || [];
+  }
+  filterAdminUsers();
+  openModal('adminUsersModal');
+}
+
+function filterAdminUsers() {
+  const query = ($('#userSearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
+  const role = $('#userRoleFilter')?.value || '';
+  const filtered = state.adminUsers.filter((user) => {
+    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
+    return (!query || haystack.includes(query)) && (!role || user.role === role);
+  });
+  renderUsers(filtered, '#allUsersList', false);
+}
+
+async function openAllInquiries() {
+  const data = await api('/api/admin/inquiries?limit=200');
+  state.adminInquiries = data.inquiries || [];
+  filterAdminInquiries();
+  openModal('adminInquiriesModal');
+}
+
+function filterAdminInquiries() {
+  const query = ($('#inquirySearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
+  const status = $('#inquiryStatusFilter')?.value || '';
+  const filtered = state.adminInquiries.filter((item) => {
+    const haystack = `${item.name || ''} ${item.username || ''} ${item.itemTitle || ''} ${item.message || ''}`.toLocaleLowerCase('ru-RU');
+    return (!query || haystack.includes(query)) && (!status || item.status === status);
+  });
+  renderInquiries(filtered, '#allInquiriesList', false);
 }
 
 function renderAdminContent(data = state.adminContent) {
@@ -1573,6 +1871,24 @@ async function imageFileToDataUrl(file) {
   return output;
 }
 
+async function generateProductArtworkDataUrl(item = {}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200; canvas.height = 900;
+  const ctx = canvas.getContext('2d');
+  const palettes = { craft: ['#1f120b','#a94c16'], limited: ['#071421','#2782a9'], profile: ['#120b20','#7b3fb0'], other: ['#101316','#59636d'] };
+  const colors = palettes[item.category || 'other'] || palettes.other;
+  const gradient = ctx.createLinearGradient(0, 0, 1200, 900);
+  gradient.addColorStop(0, colors[0]); gradient.addColorStop(1, colors[1]);
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1200, 900);
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.beginPath(); ctx.arc(600, 360, 245, 0, Math.PI * 2); ctx.fill();
+  const visual = shopVisual(item);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '900 180px Arial'; ctx.fillText(visual.mark, 600, 430);
+  ctx.textAlign = 'left'; ctx.font = '800 60px Arial';
+  const title = String(item.title || 'Товар').slice(0, 36);
+  ctx.fillText(title, 72, 790);
+  return canvas.toDataURL('image/webp', 0.88);
+}
+
 async function saveContentItem() {
   const type = state.editingContent?.type;
   if (!type) return;
@@ -1580,7 +1896,7 @@ async function saveContentItem() {
   if (!title) return toast('Укажите название');
   const url = $('#contentImageUrl').value.trim();
   if (url && !/^https:\/\//i.test(url)) return toast('Ссылка должна начинаться с https://');
-  const imageSrc = url || state.editingContent.imageSrc || '';
+  let imageSrc = url || state.editingContent.imageSrc || '';
   const payload = {
     title,
     active: $('#contentActive').checked,
@@ -1593,12 +1909,15 @@ async function saveContentItem() {
   } else {
     payload.subtitle = $('#contentDescription').value.trim();
     payload.category = $('#contentCategory').value;
+    if (!imageSrc) imageSrc = await generateProductArtworkDataUrl({ title, category: payload.category, code: `auto-${Date.now()}` });
+    payload.imageSrc = imageSrc;
     payload.priceType = $('#contentPriceType').value;
     const enteredPrice = Number($('#contentPrice').value || 0);
     payload.bonusPrice = payload.priceType === 'bonus' ? enteredPrice : 0;
     payload.cashPrice = payload.priceType === 'rub' ? enteredPrice : 0;
     if (payload.priceType !== 'pending' && enteredPrice < 1) return toast(payload.priceType === 'rub' ? 'Укажите цену в рублях' : 'Укажите цену в бонусах');
   }
+  payload.imageSrc = imageSrc;
   const id = state.editingContent.id;
   const base = type === 'promotion' ? '/api/admin/promotions' : '/api/admin/shop-items';
   const button = $('#saveContentItem');
@@ -1630,10 +1949,12 @@ function openContentAdmin() {
   setTimeout(() => $('#contentAdminCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 }
 
-function renderUsers(users) {
-  $('#usersList').className = `operation-list${users.length ? '' : ' empty-state'}`;
-  $('#usersList').innerHTML = users.map((user) => {
-    const controls = roleCanWrite(state.profile.role) && user.role !== 'admin'
+function renderUsers(users, target = '#usersList', compact = false) {
+  const root = $(target);
+  if (!root) return;
+  root.className = `operation-list${users.length ? '' : ' empty-state'}`;
+  root.innerHTML = users.length ? users.map((user) => {
+    const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
       ? `<div class="user-actions">
           <select data-role-user="${user.id}">
             <option value="client" ${user.role === 'client' ? 'selected' : ''}>Клиент</option>
@@ -1644,35 +1965,31 @@ function renderUsers(users) {
           ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button><button class="text-btn" data-reset-cancel-user="${user.id}" type="button">Сбросить отмены</button>` : ''}
           <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
         </div>`
-      : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : escapeHtml(user.role)}</small>`;
-    return `<div class="user-row">
+      : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
+    return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
       <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
-      <strong>${fmt(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">∞ безлимит</small>' : ''}</strong>
+      <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
-  }).join('');
+  }).join('') : 'Пользователи не найдены';
 
-  $$('[data-role-user]').forEach((select) => select.addEventListener('change', async () => {
+  root.querySelectorAll('[data-role-user]').forEach((select) => select.addEventListener('change', async () => {
     try {
       await api(`/api/admin/users/${select.dataset.roleUser}/role`, { method: 'POST', body: JSON.stringify({ role: select.value }) });
-      toast('Роль обновлена');
-      await loadAdmin();
+      toast('Роль обновлена'); await loadAdmin(); await openAllUsers();
     } catch (error) { toast(error.message); }
   }));
-
-  $$('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
+  root.querySelectorAll('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
     const amount = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
     if (amount === null) return;
     const reason = prompt('Причина корректировки:', 'Корректировка владельца');
     if (!reason?.trim()) return;
     try {
       await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason: reason.trim() }) });
-      toast('Баланс изменён');
-      await loadAdmin();
+      toast('Баланс изменён'); await loadAdmin(); await openAllUsers();
     } catch (error) { toast(error.message); }
   }));
-
-  $$('[data-pin-user]').forEach((button) => button.addEventListener('click', async () => {
+  root.querySelectorAll('[data-pin-user]').forEach((button) => button.addEventListener('click', async () => {
     const pin = prompt('Новый PIN сотрудника: 4–6 цифр');
     if (pin === null) return;
     if (!/^\d{4,6}$/.test(pin.trim())) return toast('PIN должен содержать 4–6 цифр');
@@ -1680,26 +1997,18 @@ function renderUsers(users) {
     if (confirmPin !== pin) return toast('PIN-коды не совпадают');
     try {
       await api(`/api/admin/users/${button.dataset.pinUser}/pin`, { method: 'POST', body: JSON.stringify({ pin }) });
-      toast('PIN сотрудника сохранён');
-      await loadAdmin();
+      toast('PIN сотрудника сохранён'); await loadAdmin(); await openAllUsers();
     } catch (error) { toast(error.message); }
   }));
-
-  $$('[data-reset-cancel-user]').forEach((button) => button.addEventListener('click', async () => {
+  root.querySelectorAll('[data-reset-cancel-user]').forEach((button) => button.addEventListener('click', async () => {
     if (!confirm('Сбросить лимит отмен этого сотрудника на текущую смену?')) return;
-    try {
-      await api(`/api/admin/users/${button.dataset.resetCancelUser}/cancel-limit/reset`, { method: 'POST', body: '{}' });
-      toast('Сотруднику снова доступны 3 отмены');
-    } catch (error) { toast(error.message); }
+    try { await api(`/api/admin/users/${button.dataset.resetCancelUser}/cancel-limit/reset`, { method: 'POST', body: '{}' }); toast('Сотруднику снова доступны 3 отмены'); }
+    catch (error) { toast(error.message); }
   }));
-
-  $$('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
+  root.querySelectorAll('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
     if (!confirm('Перевыпустить личный QR? Старый код перестанет работать.')) return;
-    try {
-      const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' });
-      toast(`Новый код: ${data.shortCode}`);
-      await loadAdmin();
-    } catch (error) { toast(error.message); }
+    try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await loadAdmin(); await openAllUsers(); }
+    catch (error) { toast(error.message); }
   }));
 }
 
@@ -1783,11 +2092,28 @@ $$('.mode').forEach((button) => button.addEventListener('click', () => {
   updateCalculation();
 }));
 $('#createSale').addEventListener('click', () => createSale().catch((error) => toast(error.message)));
+$('#sendShopInquiry')?.addEventListener('click', () => submitShopInquiry().catch((error) => toast(error.message)));
+$('#saveQrCard')?.addEventListener('click', () => saveQrCardImage().catch((error) => toast(error.message)));
+$('#addAppleWallet')?.addEventListener('click', () => openWalletIssuer('apple').catch((error) => toast(error.message)));
+$('#addGoogleWallet')?.addEventListener('click', () => openWalletIssuer('google').catch((error) => toast(error.message)));
+$('#openAllUsers')?.addEventListener('click', () => openAllUsers().catch((error) => toast(error.message)));
+$('#openAllUsersFromCard')?.addEventListener('click', () => openAllUsers().catch((error) => toast(error.message)));
+$('#openAllTransactions')?.addEventListener('click', () => openAllTransactions().catch((error) => toast(error.message)));
+$('#openAllTransactionsFromCard')?.addEventListener('click', () => openAllTransactions().catch((error) => toast(error.message)));
+$('#openAllInquiries')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
+$('#openAllInquiriesFromCard')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
+$('#openContentAdminQuick')?.addEventListener('click', openContentAdmin);
+$('#userSearch')?.addEventListener('input', filterAdminUsers);
+$('#userRoleFilter')?.addEventListener('change', filterAdminUsers);
+$('#transactionSearch')?.addEventListener('input', filterAdminTransactions);
+$('#transactionModeFilter')?.addEventListener('change', filterAdminTransactions);
+$('#inquirySearch')?.addEventListener('input', filterAdminInquiries);
+$('#inquiryStatusFilter')?.addEventListener('change', filterAdminInquiries);
 $('#saveDraft').addEventListener('click', () => saveDraft().catch((error) => toast(error.message)));
 $('#publishDesign').addEventListener('click', () => publishDesign().catch((error) => toast(error.message)));
-$('#reloadAdmin').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$('#reloadAdmin')?.addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
 $('#reloadStaffRecent').addEventListener('click', () => loadStaffRecent().catch((error) => toast(error.message)));
-$('#reloadUsers').addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
+$('#reloadUsers')?.addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
 $('#reloadContent').addEventListener('click', () => reloadContent().catch((error) => toast(error.message)));
 $('#addPromotion').addEventListener('click', () => openContentEditor('promotion'));
 $('#addShopItem').addEventListener('click', () => openContentEditor('shop'));

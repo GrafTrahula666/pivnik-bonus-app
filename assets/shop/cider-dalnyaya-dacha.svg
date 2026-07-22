@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#23160f"/><stop offset="1" stop-color="#8c3f13"/></linearGradient>
+    <radialGradient id="glow" cx="70%" cy="25%" r="60%"><stop stop-color="#ffcf67" stop-opacity=".85"/><stop offset="1" stop-color="#ff8a00" stop-opacity="0"/></radialGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-opacity=".5"/></filter>
+  </defs>
+  <rect width="1200" height="900" rx="52" fill="url(#bg)"/>
+  <rect width="1200" height="900" rx="52" fill="url(#glow)"/>
+  <circle cx="220" cy="190" r="130" fill="#ffb530" opacity=".15"/>
+  <g filter="url(#shadow)" transform="translate(410 70)">
+    <path d="M165 0h130l18 122c7 45 26 83 61 115l27 25v470c0 56-45 101-101 101H160c-56 0-101-45-101-101V262l27-25c35-32 54-70 61-115L165 0z" fill="#e9a52a"/>
+    <path d="M177 0h106l12 86H165l12-86z" fill="#43301b"/>
+    <rect x="88" y="240" width="284" height="360" rx="26" fill="#f8e4ba"/>
+    <path d="M88 420c85-48 198-55 284-15v195H88V420z" fill="#722d1b"/>
+    <text x="230" y="340" text-anchor="middle" font-family="Arial, sans-serif" font-size="52" font-weight="800" fill="#51200f">ДАЛЬНЯЯ</text>
+    <text x="230" y="397" text-anchor="middle" font-family="Arial, sans-serif" font-size="52" font-weight="800" fill="#51200f">ДАЧА</text>
+    <text x="230" y="505" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#fff0cf">СИДР</text>
+  </g>
+  <text x="80" y="775" font-family="Arial, sans-serif" font-size="62" font-weight="800" fill="#fff6df">Сидр «Дальняя дача»</text>
+  <text x="84" y="830" font-family="Arial, sans-serif" font-size="30" fill="#ffdba1">18+ · выдача в баре</text>
+</svg>

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0e13" />
   <title>Пивник | Бонусы</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=12.4" />
+  <link rel="stylesheet" href="styles.css?v=13.0" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -124,7 +124,7 @@
             <button class="home-action-card shop-entry-card" id="openShopButton" type="button">
               <span class="home-action-kicker">ВИТРИНА · 10 СЕК</span>
               <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
-              <span class="home-action-copy"><b>Магазин</b><small id="homeShopCaption">Крафт, лимитированные вещи и оформление профиля</small></span>
+              <span class="home-action-copy"><b>Магазин</b><small id="homeShopCaption">Крафт, сидр и коллекционные кружки</small></span>
               <i>›</i>
             </button>
           </div>
@@ -244,6 +244,13 @@
           <span class="pill danger" id="adminRoleBadge">ADMIN</span>
         </div>
 
+        <div class="admin-quick-grid">
+          <button type="button" id="openAllUsers"><span>Пользователи</span><small>поиск, роли, баланс и PIN</small></button>
+          <button type="button" id="openAllTransactions"><span>Транзакции</span><small>полный журнал и фильтры</small></button>
+          <button type="button" id="openAllInquiries"><span>Вопросы и заказы</span><small>обращения по товарам и кружкам</small></button>
+          <button type="button" id="openContentAdminQuick"><span>Магазин</span><small>карточки, цены и фотографии</small></button>
+        </div>
+
         <div class="metric-grid">
           <div class="metric"><span>Клиентов</span><strong id="metricClients">0</strong><small>зарегистрировано</small></div>
           <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>
@@ -305,17 +312,21 @@
             <section><div class="content-admin-title"><b>Акции</b><small>Карточки для клиентов</small></div><div id="adminPromotionsList" class="admin-content-list empty-state">Загрузка…</div></section>
             <section><div class="content-admin-title"><b>Магазин</b><small>Товары за бонусы</small></div><div id="adminShopItemsList" class="admin-content-list empty-state">Загрузка…</div></section>
           </div>
-          <small class="admin-hint">Поддерживаются JPG, PNG и WEBP. Файл автоматически уменьшается и сохраняется в базе. Для крафта установлена цена 600 Б.</small>
+          <small class="admin-hint">Поддерживаются JPG, PNG и WEBP. Файл автоматически уменьшается и сохраняется в базе. Если фотография не загружена, приложение автоматически создаст фирменную обложку товара.</small>
         </div>
 
-        <div class="card">
-          <div class="card-head"><h3>Пользователи и доступы</h3><button class="text-btn" id="reloadUsers">Обновить</button></div>
-          <p class="admin-hint">Новый сотрудник сначала один раз открывает приложение со своего Telegram. После этого назначьте ему роль «Бармен», задайте PIN и добавьте в смену. Роль «Партнёрский обзор» показывает всю рабочую информацию без права что-либо менять.</p>
+        <div class="card admin-preview-card">
+          <div class="card-head"><div><h3>Последние пользователи</h3><p>На главной панели показываются только 5 записей.</p></div><button class="text-btn" id="openAllUsersFromCard">Все пользователи</button></div>
           <div id="usersList" class="operation-list empty-state">Загрузка…</div>
         </div>
 
-        <div class="card">
-          <div class="card-head"><h3>Последние операции</h3><button class="text-btn" id="reloadAdmin">Обновить</button></div>
+        <div class="card admin-preview-card">
+          <div class="card-head"><div><h3>Вопросы и заказы</h3><p>Последние обращения по покупкам и кружкам.</p></div><button class="text-btn" id="openAllInquiriesFromCard">Все обращения</button></div>
+          <div id="adminInquiries" class="inquiry-list empty-state">Обращений пока нет</div>
+        </div>
+
+        <div class="card admin-preview-card">
+          <div class="card-head"><div><h3>Последние транзакции</h3><p>На дашборде отображаются только 5 операций.</p></div><button class="text-btn" id="openAllTransactionsFromCard">Все транзакции</button></div>
           <div id="adminOperations" class="operation-list empty-state">Операций пока нет</div>
         </div>
       </section>
@@ -336,6 +347,11 @@
       <div class="qr-frame"><img id="qrImage" alt="QR-код клиента" /></div>
       <div class="token" id="qrToken">PVK-0000-0000</div>
       <button class="copy-code" id="copyQrCode" type="button">Скопировать короткий код</button>
+      <div class="wallet-actions">
+        <button class="secondary" id="saveQrCard" type="button">Сохранить QR-карту</button>
+        <button class="wallet-button hidden" id="addAppleWallet" type="button">Добавить в Apple Wallet</button>
+        <button class="wallet-button hidden" id="addGoogleWallet" type="button">Добавить в Google Wallet</button>
+      </div>
       <p class="qr-warning">Код постоянный. Не передавайте QR посторонним: операции по нему будут отражены в вашей истории.</p>
     </div>
   </div>
@@ -576,6 +592,44 @@
     </div>
   </div>
 
+  <div class="modal" id="shopInquiryModal" aria-hidden="true">
+    <div class="modal-sheet inquiry-sheet">
+      <button class="close" data-close="shopInquiryModal">×</button>
+      <span class="muted">Связь с владельцем</span>
+      <h2 id="shopInquiryItem">Товар</h2>
+      <p>Сообщение сохранится в админ-панели и придёт Кириллу через бота.</p>
+      <textarea class="text-input content-textarea" id="shopInquiryMessage" maxlength="1200" placeholder="Напишите вопрос"></textarea>
+      <button class="primary full" id="sendShopInquiry" type="button">Отправить Кириллу</button>
+    </div>
+  </div>
+
+  <div class="modal" id="adminUsersModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet admin-directory-sheet">
+      <button class="close" data-close="adminUsersModal">×</button>
+      <span class="muted">Админ-панель</span><h2>Все пользователи</h2>
+      <div class="admin-filter-row"><input class="text-input" id="userSearch" placeholder="Имя, username или Telegram ID"><select class="text-input" id="userRoleFilter"><option value="">Все роли</option><option value="client">Клиенты</option><option value="staff">Бармены</option><option value="viewer">Партнёр</option><option value="admin">Владелец</option></select></div>
+      <div id="allUsersList" class="operation-list empty-state">Загрузка…</div>
+    </div>
+  </div>
+
+  <div class="modal" id="adminTransactionsModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet admin-directory-sheet">
+      <button class="close" data-close="adminTransactionsModal">×</button>
+      <span class="muted">Админ-панель</span><h2>Все транзакции</h2>
+      <div class="admin-filter-row"><input class="text-input" id="transactionSearch" placeholder="Клиент, сотрудник или причина"><select class="text-input" id="transactionModeFilter"><option value="">Все типы</option><option value="accrue">Начисления</option><option value="redeem">Списания</option><option value="shop">Магазин</option><option value="beer_gift">Подарки</option><option value="adjustment">Корректировки</option></select></div>
+      <div id="allTransactionsList" class="operation-list empty-state">Загрузка…</div>
+    </div>
+  </div>
+
+  <div class="modal" id="adminInquiriesModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet admin-directory-sheet">
+      <button class="close" data-close="adminInquiriesModal">×</button>
+      <span class="muted">Админ-панель</span><h2>Вопросы и заказы</h2>
+      <div class="admin-filter-row"><input class="text-input" id="inquirySearch" placeholder="Клиент, товар или текст"><select class="text-input" id="inquiryStatusFilter"><option value="">Все статусы</option><option value="new">Новые</option><option value="answered">Отвечено</option><option value="order">Заказ оформлен</option></select></div>
+      <div id="allInquiriesList" class="inquiry-list empty-state">Загрузка…</div>
+    </div>
+  </div>
+
   <div class="modal" id="staffLoginModal" aria-hidden="true">
     <div class="modal-sheet staff-login-sheet">
       <button class="close" data-close="staffLoginModal">×</button>
@@ -610,6 +664,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=12.4"></script>
+  <script src="app.js?v=13.0"></script>
 </body>
 </html>

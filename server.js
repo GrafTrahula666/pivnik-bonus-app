@@ -13,6 +13,10 @@ const __dirname = path.dirname(__filename);
 const port = Number(process.env.PORT || 3000);
 const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
+const ownerTelegramUsername = String(process.env.OWNER_TELEGRAM_USERNAME || '').replace(/^@/, '').trim();
+const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
+const appleWalletIssuerUrl = String(process.env.APPLE_WALLET_ISSUER_URL || '').trim();
+const googleWalletIssuerUrl = String(process.env.GOOGLE_WALLET_ISSUER_URL || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
 const sessionSecret = crypto
   .createHash('sha256')
@@ -75,12 +79,12 @@ const DEFAULT_PROMOTIONS = [
   { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
 ];
 const DEFAULT_SHOP_ITEMS = [
-  { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, active: true, sortOrder: 10 },
-  { code: 'limited-frost-nova', title: 'Frost Nova', subtitle: 'Лимитированная позиция. Цена появится после подтверждения партии.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, active: false, sortOrder: 20 },
-  { code: 'limited-named-glass', title: 'Именной бокал', subtitle: 'Персональный бокал с выбранной надписью. Детали и цена появятся позже.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, active: false, sortOrder: 30 },
-  { code: 'frame-money-owner', title: 'Рамка с долларами', subtitle: 'Анимированное оформление профиля в стиле владельца приложения.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, active: true, sortOrder: 40 },
-  { code: 'frame-fire-partner', title: 'Огненная рамка', subtitle: 'Анимированное оформление профиля в стиле Виталика.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, active: true, sortOrder: 50 },
-  { code: 'frame-diamond', title: 'Алмазная рамка', subtitle: 'Холодное сияние и гранёная анимация вокруг аватара.', category: 'profile', priceType: 'bonus', bonusPrice: 999, cashPrice: 0, active: true, sortOrder: 60 }
+  { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, imageSrc: '/assets/shop/cider-dalnyaya-dacha.svg', active: true, sortOrder: 10 },
+  { code: 'limited-frost-nova', title: 'Frost Nova', subtitle: 'Коллекционная кружка Limited Edition. Детали и стоимость уточняются лично.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, imageSrc: '/assets/shop/frost-nova.svg', active: true, sortOrder: 20 },
+  { code: 'limited-named-glass', title: 'Именной бокал', subtitle: 'Персональный бокал с именем, надписью или короткой фразой.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, imageSrc: '/assets/shop/named-glass.svg', active: true, sortOrder: 30 },
+  { code: 'frame-money-owner', title: 'Рамка с долларами', subtitle: 'Анимированное оформление профиля в стиле владельца приложения.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, imageSrc: '/assets/shop/frame-money.svg', active: true, sortOrder: 40 },
+  { code: 'frame-fire-partner', title: 'Огненная рамка', subtitle: 'Анимированное оформление профиля в стиле Виталика.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, imageSrc: '/assets/shop/frame-fire.svg', active: true, sortOrder: 50 },
+  { code: 'frame-diamond', title: 'Алмазная рамка', subtitle: 'Холодное сияние и гранёная анимация вокруг аватара.', category: 'profile', priceType: 'bonus', bonusPrice: 999, cashPrice: 0, imageSrc: '/assets/shop/frame-diamond.svg', active: true, sortOrder: 60 }
 ];
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -156,14 +160,22 @@ function isOwnerRow(row) {
   return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
 }
 
+function isAnnaRow(row) {
+  const telegramId = String(row?.telegram_id || row?.telegramId || '');
+  if (annaTelegramId && telegramId === annaTelegramId) return true;
+  const fullName = `${String(row?.first_name || row?.firstName || '').trim()} ${String(row?.last_name || row?.lastName || '').trim()}`.trim().toLocaleLowerCase('ru-RU');
+  return ['анна берман', 'аня берман', 'берман анна', 'берман аня'].includes(fullName);
+}
+
 function hasUnlimitedBonus(row) {
   return Boolean(row?.unlimited_bonus) || isOwnerRow(row) || row?.role === 'viewer';
 }
 
 function profileFrameFromRow(row) {
   if (isOwnerRow(row)) return 'money';
+  if (isAnnaRow(row)) return 'anna';
   if (row?.role === 'viewer') return 'fire';
-  return ['money', 'fire', 'diamond'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
+  return ['money', 'fire', 'diamond', 'anna'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
 }
 
 function achievementsFromRow(row) {
@@ -197,6 +209,7 @@ function profileAppearanceFromRow(row) {
 function normalizeContentImage(value) {
   const source = String(value || '').trim();
   if (!source) return null;
+  if (/^\/assets\/[a-z0-9_./-]+$/i.test(source)) return source;
   if (/^https:\/\/[^\s]+$/i.test(source)) {
     if (source.length > 2_000) throw Object.assign(new Error('Ссылка на изображение слишком длинная.'), { statusCode: 400 });
     return source;
@@ -367,6 +380,34 @@ function validateTelegramInitData(initData) {
     photoUrl: user.photo_url || null,
     languageCode: user.language_code || null
   };
+}
+
+async function applyBetaUserRules(db, userId) {
+  const result = await db.query(
+    `SELECT u.id, u.telegram_id, u.first_name, u.last_name, w.balance
+     FROM users u JOIN wallets w ON w.user_id = u.id
+     WHERE u.id = $1`,
+    [userId]
+  );
+  if (!result.rowCount || !isAnnaRow(result.rows[0])) return;
+  const row = result.rows[0];
+  await db.query("UPDATE users SET profile_frame = 'anna', updated_at = NOW() WHERE id = $1", [row.id]);
+  const grant = await db.query(
+    `INSERT INTO beta_grants (code, user_id, amount) VALUES ('anna-senior-beta-million', $1, 1000000)
+     ON CONFLICT (code, user_id) DO NOTHING RETURNING user_id`,
+    [row.id]
+  );
+  if (!grant.rowCount) return;
+  const current = Number(row.balance || 0);
+  const balanceAfter = 1_000_000;
+  const amount = balanceAfter - current;
+  if (!amount) return;
+  await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, row.id]);
+  await db.query(
+    `INSERT INTO transactions (client_id, mode, status, bonus_spent, bonus_earned, balance_after, reason, completed_at)
+     VALUES ($1, 'adjustment', 'completed', $2, $3, $4, 'Бета-тест — Старшина Анна Берман', NOW())`,
+    [row.id, amount < 0 ? Math.abs(amount) : 0, amount > 0 ? amount : 0, balanceAfter]
+  );
 }
 
 async function initDatabase() {
@@ -560,6 +601,30 @@ async function initDatabase() {
     await client.query("ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'other'");
     await client.query("ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS price_type TEXT NOT NULL DEFAULT 'bonus'");
     await client.query('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS cash_price INTEGER NOT NULL DEFAULT 0');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS beta_grants (
+        code TEXT NOT NULL,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        amount BIGINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (code, user_id)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shop_inquiries (
+        id BIGSERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        shop_item_id BIGINT REFERENCES shop_items(id) ON DELETE SET NULL,
+        item_code TEXT,
+        item_title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','answered','order')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_shop_inquiries_created ON shop_inquiries(created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_shop_inquiries_status ON shop_inquiries(status, created_at DESC)');
     for (const item of DEFAULT_PROMOTIONS) {
       await client.query(
         `INSERT INTO promotions (code, title, description, badge, active, sort_order)
@@ -571,15 +636,15 @@ async function initDatabase() {
     await client.query("UPDATE shop_items SET active = FALSE WHERE code IN ('craft-05','combo') AND updated_by IS NULL");
     for (const item of DEFAULT_SHOP_ITEMS) {
       await client.query(
-        `INSERT INTO shop_items (code, title, subtitle, category, price_type, bonus_price, cash_price, active, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (code) DO NOTHING`,
-        [item.code, item.title, item.subtitle, item.category, item.priceType, item.bonusPrice, item.cashPrice, item.active, item.sortOrder]
+        `INSERT INTO shop_items (code, title, subtitle, category, price_type, bonus_price, cash_price, image_src, active, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (code) DO NOTHING`,
+        [item.code, item.title, item.subtitle, item.category, item.priceType, item.bonusPrice, item.cashPrice, item.imageSrc || null, item.active, item.sortOrder]
       );
       await client.query(
         `UPDATE shop_items
-         SET title=$2, subtitle=$3, category=$4, price_type=$5, bonus_price=$6, cash_price=$7, active=$8, sort_order=$9, updated_at=NOW()
+         SET title=$2, subtitle=$3, category=$4, price_type=$5, bonus_price=$6, cash_price=$7, image_src=COALESCE(image_src,$8), active=$9, sort_order=$10, updated_at=NOW()
          WHERE code=$1 AND updated_by IS NULL`,
-        [item.code, item.title, item.subtitle, item.category, item.priceType, item.bonusPrice, item.cashPrice, item.active, item.sortOrder]
+        [item.code, item.title, item.subtitle, item.category, item.priceType, item.bonusPrice, item.cashPrice, item.imageSrc || null, item.active, item.sortOrder]
       );
     }
     await client.query('CREATE INDEX IF NOT EXISTS idx_promotions_sort ON promotions(sort_order, id)');
@@ -622,6 +687,13 @@ async function initDatabase() {
       "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'fire', updated_at = NOW() WHERE role = 'viewer' AND ($1 = '' OR telegram_id::text <> $1)",
       [ownerTelegramId]
     );
+    const annaCandidates = await client.query(
+      `SELECT id FROM users
+       WHERE ($1 <> '' AND telegram_id::text = $1)
+          OR (LOWER(TRIM(first_name)) IN ('анна','аня') AND LOWER(TRIM(COALESCE(last_name,''))) = 'берман')`,
+      [annaTelegramId]
+    );
+    for (const row of annaCandidates.rows) await applyBetaUserRules(client, row.id);
     const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
     for (const row of usersWithoutQr.rows) await ensurePersonalQr(client, row.id);
     await client.query('COMMIT');
@@ -993,6 +1065,7 @@ app.post('/api/auth', async (req, res, next) => {
           [userId, WELCOME_BONUS]
         );
       }
+      await applyBetaUserRules(client, userId);
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
@@ -1183,6 +1256,62 @@ app.get('/api/shop/catalog', authRequired, async (_req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.get('/api/shop/contact', authRequired, async (_req, res, next) => {
+  try {
+    let username = ownerTelegramUsername;
+    if (!username && ownerTelegramId) {
+      const result = await pool.query('SELECT username FROM users WHERE telegram_id::text = $1 LIMIT 1', [ownerTelegramId]);
+      username = String(result.rows[0]?.username || '').replace(/^@/, '');
+    }
+    res.json({ ownerName: 'Кирилл', ownerUsername: username || null });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/shop/inquiries', authRequired, async (req, res, next) => {
+  try {
+    const itemCode = String(req.body?.itemCode || '').trim();
+    const message = String(req.body?.message || '').trim();
+    if (message.length < 3 || message.length > 1200) return res.status(400).json({ error: 'Напишите вопрос от 3 до 1200 символов.' });
+    const itemResult = itemCode ? await pool.query('SELECT id, code, title FROM shop_items WHERE code = $1 LIMIT 1', [itemCode]) : { rowCount: 0, rows: [] };
+    const item = itemResult.rows[0] || null;
+    const itemTitle = item?.title || String(req.body?.itemTitle || 'Покупка в магазине').trim().slice(0, 120);
+    const saved = await pool.query(
+      `INSERT INTO shop_inquiries (user_id, shop_item_id, item_code, item_title, message)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id, status, created_at`,
+      [req.user.id, item?.id || null, item?.code || itemCode || null, itemTitle, message]
+    );
+    const clientName = [req.user.firstName, req.user.lastName].filter(Boolean).join(' ') || req.user.telegramId;
+    if (ownerTelegramId) {
+      await sendTelegramMessage(ownerTelegramId, `🛒 Новый вопрос из магазина «Пивника»\n\nКлиент: ${clientName}${req.user.username ? ` (@${req.user.username})` : ''}\nТовар: ${itemTitle}\n\n${message}`);
+    }
+    res.json({ ok: true, inquiry: { id: String(saved.rows[0].id), status: saved.rows[0].status, createdAt: saved.rows[0].created_at } });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/wallet/config', authRequired, async (_req, res) => {
+  res.json({
+    appleAvailable: Boolean(appleWalletIssuerUrl),
+    googleAvailable: Boolean(googleWalletIssuerUrl),
+    fallbackAvailable: true
+  });
+});
+
+app.get('/api/wallet/apple', authRequired, async (req, res) => {
+  if (!appleWalletIssuerUrl) return res.status(503).json({ error: 'Apple Wallet ещё не подключён владельцем.' });
+  const url = new URL(appleWalletIssuerUrl);
+  url.searchParams.set('user', req.user.id);
+  url.searchParams.set('token', req.user.qrShortCode || '');
+  res.json({ url: url.toString() });
+});
+
+app.get('/api/wallet/google', authRequired, async (req, res) => {
+  if (!googleWalletIssuerUrl) return res.status(503).json({ error: 'Google Wallet ещё не подключён владельцем.' });
+  const url = new URL(googleWalletIssuerUrl);
+  url.searchParams.set('user', req.user.id);
+  url.searchParams.set('token', req.user.qrShortCode || '');
+  res.json({ url: url.toString() });
 });
 
 app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
@@ -1691,7 +1820,7 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
        JOIN users c ON c.id = t.client_id
        LEFT JOIN users s ON s.id = t.staff_id
        ORDER BY t.created_at DESC
-       LIMIT 30`
+       LIMIT 5`
     );
     const settingsResult = await pool.query('SELECT draft, published, updated_at FROM app_settings WHERE id = 1');
     res.json({
@@ -1741,6 +1870,57 @@ app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async 
   } catch (error) {
     next(error);
   }
+});
+
+app.get('/api/admin/transactions', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
+  try {
+    const limit = Math.max(5, Math.min(300, Number(req.query.limit || 200)));
+    const q = String(req.query.q || '').trim();
+    const mode = String(req.query.mode || '').trim();
+    const params = [];
+    const where = [];
+    if (q) {
+      params.push(`%${q}%`);
+      where.push(`(CONCAT_WS(' ', c.first_name, c.last_name) ILIKE $${params.length} OR c.telegram_id::text ILIKE $${params.length} OR COALESCE(c.username,'') ILIKE $${params.length})`);
+    }
+    if (mode && ['accrue','redeem','adjustment','beer_gift','welcome','shop'].includes(mode)) { params.push(mode); where.push(`t.mode = $${params.length}`); }
+    params.push(limit);
+    const result = await pool.query(
+      `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name, CONCAT_WS(' ', s.first_name, s.last_name) AS staff_name
+       FROM transactions t JOIN users c ON c.id=t.client_id LEFT JOIN users s ON s.id=t.staff_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY t.created_at DESC LIMIT $${params.length}`,
+      params
+    );
+    res.json({ transactions: result.rows.map(transactionResponse) });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/admin/inquiries', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
+  try {
+    const limit = Math.max(5, Math.min(300, Number(req.query.limit || 200)));
+    const result = await pool.query(
+      `SELECT i.*, u.telegram_id, u.username, u.first_name, u.last_name
+       FROM shop_inquiries i JOIN users u ON u.id=i.user_id
+       ORDER BY i.created_at DESC LIMIT $1`,
+      [limit]
+    );
+    res.json({ inquiries: result.rows.map((row) => ({
+      id: String(row.id), userId: String(row.user_id), itemCode: row.item_code, itemTitle: row.item_title,
+      message: row.message, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at,
+      telegramId: String(row.telegram_id), username: row.username, name: [row.first_name,row.last_name].filter(Boolean).join(' ')
+    })) });
+  } catch (error) { next(error); }
+});
+
+app.patch('/api/admin/inquiries/:id', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const status = String(req.body?.status || '');
+    if (!['new','answered','order'].includes(status)) return res.status(400).json({ error: 'Недопустимый статус обращения.' });
+    const result = await pool.query('UPDATE shop_inquiries SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING id', [status, req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Обращение не найдено.' });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });
 
 app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async (req, res, next) => {
