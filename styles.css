@@ -3253,3 +3253,123 @@ body {
   .anna-orbit,
   .anna-orbit i { animation: none !important; }
 }
+
+
+/* V14: Android-safe startup and achievement preview */
+.boot-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.boot-actions button { min-height: 44px; }
+.boot-screen.error .boot-copy { padding-bottom: 18px; }
+
+.section-link {
+  appearance: none; border: 0; background: transparent; color: var(--muted); padding: 4px 0 4px 10px;
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.section-link span { font-size: 20px; vertical-align: -2px; }
+.profile-achievement-showcase { display: flex; align-items: flex-end; gap: 10px; min-height: 78px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: none; }
+.profile-achievement-showcase::-webkit-scrollbar { display: none; }
+.achievement-empty {
+  width: 100%; min-height: 68px; border: 1px dashed rgba(255,255,255,.12); border-radius: 18px;
+  background: rgba(255,255,255,.025); color: var(--muted); text-align: left; padding: 16px; cursor: pointer;
+}
+.achievement-empty span { float: right; font-size: 22px; }
+.profile-achievement-medal {
+  flex: 0 0 auto; border: 0; background: transparent; color: var(--text); padding: 0; display: grid; justify-items: center; gap: 5px; cursor: pointer;
+}
+.profile-achievement-medal > span {
+  display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06);
+  box-shadow: inset 0 0 16px rgba(255,255,255,.04);
+}
+.profile-achievement-medal small { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: var(--muted); }
+.profile-achievement-medal.rarity-legendary > span { width: 70px; height: 70px; border-color: rgba(255,205,86,.7); box-shadow: 0 0 24px rgba(255,177,44,.28), inset 0 0 18px rgba(255,213,91,.12); }
+.profile-achievement-medal.rarity-epic > span { width: 58px; height: 58px; border-color: rgba(190,100,255,.65); }
+.profile-achievement-medal.rarity-rare > span { width: 48px; height: 48px; border-color: rgba(74,153,255,.6); }
+.profile-achievement-medal.rarity-common > span { width: 38px; height: 38px; }
+
+.all-seeing-eye { width: 76%; height: 76%; overflow: visible; }
+.eye-triangle { fill: rgba(232,184,71,.10); stroke: #f0c967; stroke-width: 5; stroke-linejoin: round; }
+.eye-shape { fill: rgba(8,9,12,.9); stroke: #fff0b4; stroke-width: 4; }
+.eye-pupil { fill: #f4d36f; filter: drop-shadow(0 0 5px rgba(255,208,84,.85)); }
+.beta-achievement-icon { display: grid; place-items: center; width: 100%; height: 100%; font-weight: 900; font-size: 32px; color: #fff0a8; text-shadow: 0 0 12px rgba(255,199,66,.72); }
+.generic-achievement-icon { font-size: 24px; }
+
+.achievement-tabs { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; margin: 16px 0 14px; }
+.achievement-tabs button {
+  border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.035); color: var(--muted);
+  padding: 10px 4px; font-size: 11px; cursor: pointer;
+}
+.achievement-tabs button.active { color: var(--text); border-color: rgba(255,209,91,.48); background: rgba(255,193,62,.09); }
+.achievement-coming-soon { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.035); }
+.achievement-coming-soon b { color: #ffd66b; }
+.achievement-coming-soon span { color: var(--muted); font-size: 12px; }
+.achievement-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
+.achievement-tile {
+  min-width: 0; min-height: 142px; border: 1px solid rgba(255,255,255,.09); border-radius: 16px; background: rgba(255,255,255,.035);
+  color: var(--text); padding: 12px 7px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; text-align: center;
+}
+.achievement-tile-icon { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); }
+.achievement-tile b { width: 100%; font-size: 11px; line-height: 1.15; }
+.achievement-tile small { font-size: 9px; color: var(--muted); }
+.achievement-tile p { margin: 3px 0 0; color: var(--muted); font-size: 9px; line-height: 1.25; }
+.achievement-tile.locked { position: relative; overflow: hidden; filter: grayscale(1); color: rgba(255,255,255,.5); }
+.achievement-tile.locked::after { content: ''; position: absolute; inset: 0; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); background: rgba(5,7,10,.18); pointer-events: none; }
+.achievement-tile.locked .achievement-tile-icon i { width: 30px; height: 30px; border-radius: 45% 55% 52% 48%; background: linear-gradient(135deg,#999,#333); }
+.achievement-tile.earned.rarity-legendary { border-color: rgba(255,204,73,.55); box-shadow: 0 0 20px rgba(255,177,40,.12); }
+
+.achievement-celebration-modal { z-index: 260; background: rgba(1,2,5,.92); }
+.achievement-celebration-modal.open { display: grid; place-items: center; }
+.achievement-celebration {
+  position: relative; width: min(92vw, 430px); min-height: min(720px, 88vh); padding: 42px 28px 30px; border-radius: 30px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden;
+  border: 1px solid rgba(255,211,94,.42); background: radial-gradient(circle at 50% 28%, rgba(255,185,51,.22), transparent 32%), linear-gradient(180deg,#171006,#080a10 68%);
+  box-shadow: 0 0 80px rgba(255,167,32,.2);
+}
+.achievement-celebration::before { content: ''; position: absolute; inset: -50%; background: conic-gradient(from 0deg,transparent,rgba(255,217,112,.12),transparent 18%); animation: achievementRay 7s linear infinite; }
+.achievement-celebration > * { position: relative; z-index: 2; }
+.achievement-celebration-kicker { text-transform: uppercase; letter-spacing: .22em; color: #ffdf83; font-size: 12px; }
+.achievement-celebration-icon { width: 154px; height: 154px; margin: 25px 0 18px; border-radius: 50%; display: grid; place-items: center; border: 2px solid rgba(255,213,97,.78); background: radial-gradient(circle,#432b08,#0a0b0f 68%); box-shadow: 0 0 50px rgba(255,182,44,.38), inset 0 0 26px rgba(255,219,108,.16); animation: achievementFloat 3.2s ease-in-out infinite; }
+.achievement-celebration-icon .beta-achievement-icon { font-size: 76px; }
+.achievement-celebration-rarity { color: #ffd661; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+.achievement-celebration h2 { margin: 8px 0 8px; font-size: clamp(34px,8vw,50px); }
+.achievement-celebration p { max-width: 320px; margin: 0; color: #c7c9cf; line-height: 1.45; }
+.achievement-celebration-reward { margin: 18px 0 22px; padding: 10px 18px; border-radius: 999px; background: rgba(255,201,73,.12); color: #ffe49b; font-weight: 800; }
+.achievement-celebration .primary { max-width: 300px; }
+.achievement-burst { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.achievement-burst i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #ffe792; box-shadow: 0 0 12px #ffd15e; animation: achievementSpark 2.7s ease-in-out infinite; }
+.achievement-burst i:nth-child(1){left:14%;top:22%;animation-delay:.1s}.achievement-burst i:nth-child(2){left:82%;top:18%;animation-delay:.7s}.achievement-burst i:nth-child(3){left:8%;top:58%;animation-delay:1.2s}.achievement-burst i:nth-child(4){left:90%;top:62%;animation-delay:1.7s}.achievement-burst i:nth-child(5){left:26%;top:82%;animation-delay:2.1s}.achievement-burst i:nth-child(6){left:72%;top:86%;animation-delay:2.5s}
+@keyframes achievementRay { to { transform: rotate(360deg); } }
+@keyframes achievementFloat { 50% { transform: translateY(-8px) scale(1.02); } }
+@keyframes achievementSpark { 0%,100% { opacity:.15; transform:scale(.6) } 50% { opacity:1; transform:scale(1.8) } }
+
+/* Android Telegram WebView: avoid expensive effects and preserve the functional shell. */
+.android-webview .boot-scene { width: min(100%, 420px); box-shadow: none; }
+.android-webview .boot-smoke, .lite-mode .boot-smoke { display: none; }
+.android-webview .boot-image { filter: none; }
+.android-webview .app-shell::before, .lite-mode .app-shell::before { background-attachment: scroll !important; }
+.android-webview .modal-sheet, .android-webview .bottom-nav, .android-webview .topbar,
+.lite-mode .modal-sheet, .lite-mode .bottom-nav, .lite-mode .topbar { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.lite-mode *, .android-webview.reduce-effects * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+@media (prefers-reduced-motion: reduce) {
+  .achievement-celebration::before, .achievement-celebration-icon, .achievement-burst i { animation: none !important; }
+}
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .achievement-tile.locked::after { background: rgba(5,7,10,.66); }
+}
+
+/* V14.1 Android WebView safety overrides */
+.android-webview * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.android-webview .boot-image, .android-webview .sign-layer, .android-webview .app-shell::before {
+  mix-blend-mode: normal !important;
+}
+.android-webview .achievement-tile.locked::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(5,7,10,.70) !important;
+}
+.android-webview.reduce-effects *, .lite-mode * {
+  animation-duration: .001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .001ms !important;
+}

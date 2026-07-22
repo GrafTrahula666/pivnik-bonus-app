@@ -1,20 +1,43 @@
-const tg = window.Telegram?.WebApp ?? null;
-if (tg) {
-  tg.ready();
-  tg.expand();
+let tg = window.Telegram?.WebApp ?? null;
+const APP_VERSION = '14.0';
+const isAndroid = /Android/i.test(navigator.userAgent || '');
+const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
+document.documentElement.classList.toggle('android-webview', isAndroid);
+document.documentElement.classList.toggle('lite-mode', isLiteRequested);
+document.documentElement.classList.toggle('reduce-effects', isAndroid || isLiteRequested);
+
+function refreshTelegramBridge() {
+  tg = window.Telegram?.WebApp ?? tg ?? null;
+  if (!tg) return null;
+  try { tg.ready(); } catch (_) {}
+  try { tg.expand(); } catch (_) {}
   try {
     tg.setHeaderColor('#15110e');
     tg.setBackgroundColor('#0e0c0a');
     tg.setBottomBarColor('#120e0b');
   } catch (_) {}
+  return tg;
 }
+refreshTelegramBridge();
 
-const BOOT_MIN_MS = 1800;
-const BOOT_FAILSAFE_MS = 12000;
+const safeStorage = {
+  get(key) { try { return localStorage.getItem(key) || ''; } catch (_) { return ''; } },
+  set(key, value) { try { localStorage.setItem(key, value); } catch (_) {} },
+  remove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+};
+const deepClone = (value) => {
+  try { return globalThis.structuredClone ? globalThis.structuredClone(value) : JSON.parse(JSON.stringify(value)); }
+  catch (_) { return JSON.parse(JSON.stringify(value)); }
+};
+
+const BOOT_MIN_MS = isAndroid ? 450 : 900;
+const BOOT_FAILSAFE_MS = 10000;
+const API_TIMEOUT_MS = 9000;
 const bootStartedAt = performance.now();
+let bootCompleted = false;
 
 const state = {
-  token: localStorage.getItem('pivnik_session') || '',
+  token: safeStorage.get('pivnik_session'),
   profile: null,
   statuses: [],
   design: null,
@@ -27,7 +50,7 @@ const state = {
   operationResultTimer: null,
   currentShift: null,
   shiftStaff: [],
-  staffSession: localStorage.getItem('pivnik_staff_session') || '',
+  staffSession: safeStorage.get('pivnik_staff_session'),
   activeStaff: null,
   staffAvailable: [],
   catalog: [],
@@ -47,7 +70,11 @@ const state = {
   adminInquiries: [],
   shopContact: null,
   walletConfig: null,
-  inquiryItem: null
+  inquiryItem: null,
+  achievements: [],
+  achievementTab: 'common',
+  achievementQueue: [],
+  bootSecondaryStarted: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -66,11 +93,11 @@ const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const escapeHtml = (value) => String(value ?? '')
-  .replaceAll('&', '&amp;')
-  .replaceAll('<', '&lt;')
-  .replaceAll('>', '&gt;')
-  .replaceAll('"', '&quot;')
-  .replaceAll("'", '&#039;');
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
 
 const AVATAR_OPTIONS = [
   ['01-panda', 'Панда'], ['02-cat', 'Кот'], ['03-dog', 'Пёс'], ['04-fox', 'Лиса'], ['05-bear', 'Медведь'],
@@ -238,6 +265,7 @@ async function saveProfileSettings() {
     renderProfile();
     await loadLeaderboard();
     toast('Профиль сохранён');
+    setTimeout(maybeShowAchievementCelebration, 350);
   } finally {
     if (button) button.disabled = false;
   }
@@ -468,10 +496,39 @@ function requestId() {
 }
 
 async function finishBoot() {
+  if (bootCompleted) return;
+  bootCompleted = true;
   const elapsed = performance.now() - bootStartedAt;
   if (elapsed < BOOT_MIN_MS) await delay(BOOT_MIN_MS - elapsed);
-  $('#bootScreen').classList.add('hidden');
-  $('#appShell').classList.remove('hidden');
+  $('#bootScreen')?.classList.add('hidden');
+  $('#appShell')?.classList.remove('hidden');
+}
+
+function showBootActions(message, { canOpenApp = Boolean(state.profile) } = {}) {
+  const text = $('#bootText');
+  if (text && message) text.textContent = message;
+  $('#bootScreen')?.classList.add('error');
+  $('#bootActions')?.classList.remove('hidden');
+  const lite = $('#bootLite');
+  if (lite) lite.textContent = canOpenApp ? 'Открыть приложение' : 'Открыть облегчённо';
+}
+
+function clearBootError() {
+  $('#bootScreen')?.classList.remove('error');
+  $('#bootActions')?.classList.add('hidden');
+}
+
+function enableLiteMode() {
+  document.documentElement.classList.add('lite-mode');
+  const url = new URL(location.href);
+  url.searchParams.set('lite', '1');
+  history.replaceState(null, '', url);
+  if (state.profile) {
+    finishBoot();
+    toast('Облегчённый режим включён');
+  } else {
+    location.reload();
+  }
 }
 
 setTimeout(() => {
@@ -483,7 +540,12 @@ setTimeout(() => {
 setTimeout(() => {
   const bootScreen = $('#bootScreen');
   if (!bootScreen || bootScreen.classList.contains('hidden')) return;
-  $('#bootText').textContent = 'Соединение заняло больше времени обычного…';
+  if (state.profile) {
+    finishBoot();
+    toast('Часть данных продолжает загружаться');
+  } else {
+    showBootActions('Не удалось завершить подключение. Можно повторить без перезапуска Telegram.');
+  }
 }, BOOT_FAILSAFE_MS);
 
 function updateNetworkBadge() {
@@ -491,11 +553,13 @@ function updateNetworkBadge() {
   if (!badge) return;
   const online = navigator.onLine;
   badge.classList.toggle('offline', !online);
-  badge.lastChild.textContent = online ? 'онлайн' : 'нет сети';
+  const label = badge.querySelector('span') || badge.lastChild;
+  if (label) label.textContent = online ? 'онлайн' : 'нет сети';
 }
 
 function toast(text) {
   const element = $('#toast');
+  if (!element) return;
   element.textContent = text;
   element.classList.add('show');
   clearTimeout(element._timer);
@@ -503,28 +567,67 @@ function toast(text) {
 }
 
 function haptic(type = 'light') {
-  try { tg?.HapticFeedback?.impactOccurred(type); } catch (_) {}
+  try { refreshTelegramBridge()?.HapticFeedback?.impactOccurred(type); } catch (_) {}
+}
+
+function timeoutError() {
+  const error = new Error('Сервер отвечает слишком долго. Проверьте интернет и повторите.');
+  error.code = 'TIMEOUT';
+  return error;
+}
+
+async function fetchWithTimeout(path, options, timeoutMs) {
+  if (typeof AbortController === 'undefined') {
+    return Promise.race([
+      fetch(path, options),
+      delay(timeoutMs).then(() => { throw timeoutError(); })
+    ]);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(path, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw timeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function api(path, options = {}) {
   const isStaffRequest = String(path).startsWith('/api/staff/');
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      'content-type': 'application/json',
-      ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
-      ...(isStaffRequest && state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
-      ...(options.headers || {})
+  const method = String(options.method || 'GET').toUpperCase();
+  const attempts = Number(options.retries ?? (method === 'GET' ? 1 : 0)) + 1;
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(path, {
+        ...options,
+        headers: {
+          'content-type': 'application/json',
+          'x-pivnik-version': APP_VERSION,
+          ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
+          ...(isStaffRequest && state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
+          ...(options.headers || {})
+        }
+      }, Number(options.timeoutMs || API_TIMEOUT_MS));
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(data.error || `Ошибка ${response.status}`);
+        error.status = response.status;
+        error.payload = data;
+        throw error;
+      }
+      return data;
+    } catch (error) {
+      lastError = error;
+      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';
+      if (attempt + 1 >= attempts || !retryable) break;
+      await delay(450 * (attempt + 1));
     }
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.error || `Ошибка ${response.status}`);
-    error.status = response.status;
-    error.payload = data;
-    throw error;
   }
-  return data;
+  throw lastError;
 }
 
 function openModal(id) {
@@ -555,7 +658,7 @@ function currentLevelIndex() {
 
 function applyDesign(design) {
   if (!design) return;
-  state.design = structuredClone(design);
+  state.design = deepClone(design);
   const root = document.documentElement;
   const colors = design.colors || {};
   root.style.setProperty('--bg', colors.background || '#0e0c0a');
@@ -1045,14 +1148,14 @@ async function loadStaffSession() {
     state.activeStaff = data.activeStaff || null;
     if (!state.activeStaff && state.staffSession) {
       state.staffSession = '';
-      localStorage.removeItem('pivnik_staff_session');
+      safeStorage.remove('pivnik_staff_session');
     }
     renderStaffSession();
     return data;
   } catch (error) {
     state.staffSession = '';
     state.activeStaff = null;
-    localStorage.removeItem('pivnik_staff_session');
+    safeStorage.remove('pivnik_staff_session');
     renderStaffSession();
     if (error.status !== 401 && error.status !== 403) throw error;
     return null;
@@ -1089,7 +1192,7 @@ async function activateStaff() {
   });
   state.staffSession = data.token;
   state.activeStaff = data.staff;
-  localStorage.setItem('pivnik_staff_session', state.staffSession);
+  safeStorage.set('pivnik_staff_session', state.staffSession);
   $('#staffPinInput').value = '';
   renderStaffSession();
   closeModal('staffLoginModal');
@@ -1102,22 +1205,105 @@ async function activateStaff() {
 function clearStaffSession() {
   state.staffSession = '';
   state.activeStaff = null;
-  localStorage.removeItem('pivnik_staff_session');
+  safeStorage.remove('pivnik_staff_session');
   renderStaffSession();
   closeModal('staffLoginModal');
   toast('Используется текущий Telegram-аккаунт');
 }
 
+function achievementRarityLabel(rarity) {
+  return { common: 'Обычное', rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' }[rarity] || 'Достижение';
+}
+
+function achievementIconHtml(item = {}) {
+  if (item.icon === 'all-seeing-eye' || item.code === 'creator') {
+    return `<svg class="all-seeing-eye" viewBox="0 0 100 90" aria-hidden="true">
+      <path class="eye-triangle" d="M50 5 95 82H5Z" />
+      <path class="eye-shape" d="M22 51c8-11 18-16 28-16s20 5 28 16c-8 11-18 16-28 16S30 62 22 51Z" />
+      <circle class="eye-pupil" cx="50" cy="51" r="8" />
+    </svg>`;
+  }
+  if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">β</span>';
+  return '<span class="generic-achievement-icon">◆</span>';
+}
+
+function renderProfileAchievements() {
+  const holder = $('#profileAchievementShowcase');
+  if (!holder) return;
+  const achievements = state.profile?.achievements || [];
+  const order = { legendary: 1, epic: 2, rare: 3, common: 4 };
+  const sorted = [...achievements].sort((a, b) => (order[a.rarity] || 9) - (order[b.rarity] || 9));
+  if (!sorted.length) {
+    holder.innerHTML = '<button class="achievement-empty" id="achievementEmptyOpen" type="button">Достижения скоро появятся <span>›</span></button>';
+    $('#achievementEmptyOpen')?.addEventListener('click', openAchievements);
+    return;
+  }
+  holder.innerHTML = sorted.map((item) => `<button class="profile-achievement-medal rarity-${escapeHtml(item.rarity)}" data-profile-achievement="${escapeHtml(item.code)}" type="button" title="${escapeHtml(item.title)}">
+    <span>${achievementIconHtml(item)}</span><small>${escapeHtml(item.title)}</small>
+  </button>`).join('');
+  holder.querySelectorAll('[data-profile-achievement]').forEach((button) => button.addEventListener('click', () => {
+    state.achievementTab = 'legendary';
+    openAchievements(button.dataset.profileAchievement);
+  }));
+}
+
+function placeholderAchievements(rarity) {
+  const labels = {
+    common: ['Первый шаг', 'Завсегдатай', 'Пивная дистанция', 'Ночной гость', 'Коллекционер', 'Серия визитов'],
+    rare: ['Скрытая награда', 'Редкий маршрут', 'Особый вечер', 'Секрет Пивника', 'Долгая серия', 'Клуб знатоков'],
+    epic: ['Эпический путь', 'Большая коллекция', 'Год с Пивником', 'Пивной мастер', 'Легенда района', 'Испытание'],
+    legendary: ['Уникальная награда', 'Единственный экземпляр', 'Секретная легенда']
+  };
+  return (labels[rarity] || labels.common).map((title, index) => ({ code: `placeholder-${rarity}-${index}`, title, rarity, locked: true }));
+}
+
+function renderAchievementCatalog() {
+  const catalog = $('#achievementCatalog');
+  if (!catalog) return;
+  const rarity = state.achievementTab || 'common';
+  $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.classList.toggle('active', button.dataset.achievementTab === rarity));
+  const earned = (state.profile?.achievements || []).filter((item) => item.rarity === rarity);
+  const items = [...earned, ...placeholderAchievements(rarity)];
+  catalog.innerHTML = `<div class="achievement-coming-soon"><b>Скоро</b><span>Условия и изображения достижений сейчас готовятся</span></div>
+    <div class="achievement-grid">${items.map((item) => item.locked
+      ? `<button class="achievement-tile locked rarity-${rarity}" type="button"><span class="achievement-tile-icon"><i></i></span><b>${escapeHtml(item.title)}</b><small>В разработке</small></button>`
+      : `<button class="achievement-tile earned rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}" type="button"><span class="achievement-tile-icon">${achievementIconHtml(item)}</span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(achievementRarityLabel(item.rarity))}</small><p>${escapeHtml(item.description)}</p></button>`
+    ).join('')}</div>`;
+}
+
+function openAchievements(code = '') {
+  if (code) {
+    const item = (state.profile?.achievements || []).find((achievement) => achievement.code === code);
+    if (item) state.achievementTab = item.rarity;
+  }
+  renderAchievementCatalog();
+  openModal('achievementsModal');
+}
+
 function renderAchievements() {
-  const section = $('#creatorAchievementSection');
-  const profile = state.profile;
-  const creator = profile?.achievements?.find((item) => item.code === 'creator');
-  if (!section) return;
-  section.classList.toggle('hidden', !creator);
-  if (!creator) return;
-  $('#creatorAchievementTitle').textContent = creator.title;
-  $('#creatorAchievementRarity').textContent = creator.rarity;
-  $('#creatorAchievementDescription').textContent = creator.description;
+  renderProfileAchievements();
+}
+
+async function acknowledgeAchievement(code) {
+  await api(`/api/me/achievements/${encodeURIComponent(code)}/ack`, { method: 'POST', body: '{}', retries: 0 });
+  const item = state.profile?.achievements?.find((achievement) => achievement.code === code);
+  if (item) item.announced = true;
+  state.profile.unannouncedAchievements = (state.profile.unannouncedAchievements || []).filter((achievement) => achievement.code !== code);
+}
+
+function maybeShowAchievementCelebration() {
+  if (!state.profile?.onboardingComplete || !state.profile?.termsAccepted) return;
+  const queue = state.profile?.unannouncedAchievements || [];
+  const item = queue[0];
+  if (!item || $('#achievementCelebrationModal')?.classList.contains('open')) return;
+  $('#achievementCelebrationIcon').innerHTML = achievementIconHtml(item);
+  $('#achievementCelebrationRarity').textContent = `${achievementRarityLabel(item.rarity)} достижение`;
+  $('#achievementCelebrationTitle').textContent = item.title;
+  $('#achievementCelebrationDescription').textContent = item.description;
+  $('#achievementCelebrationReward').textContent = item.rewardBonus > 0 ? `+${fmt(item.rewardBonus)} бонусов` : 'Особая награда';
+  $('#ackAchievementButton').dataset.achievementCode = item.code;
+  openModal('achievementCelebrationModal');
+  haptic('heavy');
 }
 
 function renderProfile() {
@@ -1228,25 +1414,59 @@ async function refreshMe() {
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
-  await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadShopContact(), loadWalletConfig()]);
-  if (roleCanStaff(state.profile?.role)) {
-    await loadStaffSession();
-    await loadStaffRecent({ silent: true });
+  void loadSecondaryData();
+}
+
+async function waitForTelegramInitData(maxWaitMs = 2800) {
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    const bridge = refreshTelegramBridge();
+    if (bridge?.initData) return bridge.initData;
+    await delay(120);
   }
+  return refreshTelegramBridge()?.initData || '';
 }
 
 async function authenticate() {
-  const initData = tg?.initData || '';
+  const initData = await waitForTelegramInitData(isAndroid ? 6000 : 2600);
   const payload = { initData };
   if (!initData && new URLSearchParams(location.search).get('demo') === '1') payload.demoTelegramId = '999000111';
-  const data = await api('/api/auth', { method: 'POST', body: JSON.stringify(payload), headers: { authorization: '' } });
+  const data = await api('/api/auth', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { authorization: '' },
+    retries: 1,
+    timeoutMs: 11000
+  });
   state.token = data.token;
-  localStorage.setItem('pivnik_session', state.token);
+  safeStorage.set('pivnik_session', state.token);
   state.profile = data.profile;
   state.statuses = data.statuses || [];
   applyDesign(data.design);
   renderProfile();
   renderStatuses();
+}
+
+async function loadSecondaryData() {
+  if (state.bootSecondaryStarted) return;
+  state.bootSecondaryStarted = true;
+  const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadShopContact(), loadWalletConfig()];
+  const results = await Promise.allSettled(jobs);
+  const failures = results.filter((item) => item.status === 'rejected');
+  failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
+  if (roleCanStaff(state.profile?.role)) {
+    try {
+      await loadStaffSession();
+      await loadStaffRecent({ silent: true });
+    } catch (staffError) {
+      console.warn('Staff workspace preload skipped:', staffError);
+      state.staffSession = '';
+      state.activeStaff = null;
+      safeStorage.remove('pivnik_staff_session');
+      renderStaffSession();
+    }
+  }
+  if (failures.length && navigator.onLine) toast('Часть разделов обновится при следующем открытии');
 }
 
 function showRequiredSetup() {
@@ -1258,45 +1478,39 @@ function showRequiredSetup() {
 }
 
 async function boot() {
+  clearBootError();
   try {
+    refreshTelegramBridge();
     $('#bootText').textContent = 'Подключаем бонусный счёт…';
     if (state.token) {
       try {
-        const me = await api('/api/me');
+        const me = await api('/api/me', { retries: 1, timeoutMs: 9000 });
         state.profile = me.profile;
         state.statuses = me.statuses || [];
         applyDesign(me.design);
-      } catch {
+      } catch (error) {
+        console.warn('Stored session rejected:', error);
         state.token = '';
-        localStorage.removeItem('pivnik_session');
+        safeStorage.remove('pivnik_session');
       }
     }
     if (!state.token) {
       $('#bootText').textContent = 'Проверяем доступ в Telegram…';
       await authenticate();
     }
-    $('#bootText').textContent = 'Собираем данные профиля…';
+    $('#bootText').textContent = 'Открываем профиль…';
     renderProfile();
     renderStatuses();
-    $('#bootText').textContent = 'Проверяем текущую смену…';
-    await Promise.all([loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadShopContact(), loadWalletConfig()]);
-    if (roleCanStaff(state.profile?.role)) {
-      try {
-        await loadStaffSession();
-        await loadStaffRecent({ silent: true });
-      } catch (staffError) {
-        console.warn('Staff workspace preload skipped:', staffError);
-        state.staffSession = '';
-        state.activeStaff = null;
-        localStorage.removeItem('pivnik_staff_session');
-        renderStaffSession();
-      }
-    }
     await finishBoot();
     showRequiredSetup();
+    setTimeout(maybeShowAchievementCelebration, 650);
+    void loadSecondaryData();
   } catch (error) {
-    $('#bootText').textContent = error.message;
-    $('#bootScreen').classList.add('error');
+    console.error('Boot failed:', error);
+    const message = error?.status === 401
+      ? 'Telegram не передал данные входа. Закройте окно и откройте приложение из бота ещё раз.'
+      : (error?.message || 'Не удалось загрузить приложение.');
+    showBootActions(message);
   }
 }
 
@@ -1309,6 +1523,7 @@ async function acceptTerms() {
     closeModal('consentModal');
     toast('Правила приняты');
     if (!state.profile?.onboardingComplete) openProfileSetup(1);
+    else setTimeout(maybeShowAchievementCelebration, 350);
   } finally {
     button.disabled = false;
   }
@@ -1435,7 +1650,7 @@ async function loadStaffRecent({ silent = false } = {}) {
     if (error.status === 401 || error.status === 403) {
       state.staffSession = '';
       state.activeStaff = null;
-      localStorage.removeItem('pivnik_staff_session');
+      safeStorage.remove('pivnik_staff_session');
       renderStaffSession();
       renderStaffLockedState(error.message || 'Сотрудник не находится на смене.');
       if (!silent) openModal('staffLoginModal');
@@ -2037,12 +2252,29 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
   $(`#${id}`)?.addEventListener('change', syncPrivacyDraft);
 });
 
-$('#creatorAchievementCard')?.addEventListener('click', () => {
-  const card = $('#creatorAchievementCard');
-  const expanded = !card.classList.contains('expanded');
-  card.classList.toggle('expanded', expanded);
-  card.setAttribute('aria-expanded', String(expanded));
+$('#openAchievementsButton')?.addEventListener('click', () => openAchievements());
+$$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {
+  state.achievementTab = button.dataset.achievementTab;
+  renderAchievementCatalog();
+}));
+$('#ackAchievementButton')?.addEventListener('click', async () => {
+  const button = $('#ackAchievementButton');
+  const code = button.dataset.achievementCode;
+  button.disabled = true;
+  try {
+    await acknowledgeAchievement(code);
+    closeModal('achievementCelebrationModal');
+    renderAchievements();
+    setTimeout(maybeShowAchievementCelebration, 350);
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; }
 });
+$('#bootRetry')?.addEventListener('click', () => {
+  state.bootSecondaryStarted = false;
+  bootCompleted = false;
+  boot();
+});
+$('#bootLite')?.addEventListener('click', enableLiteMode);
 
 $$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
@@ -2156,6 +2388,18 @@ $$('[data-design-color], [data-design-text], [data-design-section], [data-design
   if (input.matches('[data-design-radius]')) $('#radiusValue').textContent = input.value;
   if (state.adminSettings) applyDesign(readDesignForm());
 }));
+window.addEventListener('error', (event) => {
+  console.error('Client error:', event.error || event.message);
+  const bootScreen = $('#bootScreen');
+  if (bootScreen && !bootScreen.classList.contains('hidden')) showBootActions('Ошибка запуска. Нажмите «Повторить» или откройте облегчённый режим.');
+});
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshTelegramBridge();
+});
+
 window.addEventListener('online', updateNetworkBadge);
 window.addEventListener('offline', updateNetworkBadge);
 updateNetworkBadge();
