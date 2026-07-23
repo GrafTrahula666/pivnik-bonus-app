@@ -14,7 +14,9 @@ const port = Number(process.env.PORT || 3000);
 const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerTelegramUsername = String(process.env.OWNER_TELEGRAM_USERNAME || '').replace(/^@/, '').trim();
-const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
+const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '1200809503').trim();
+const annaTelegramUsername = String(process.env.ANNA_TELEGRAM_USERNAME || '').replace(/^@/, '').trim().toLocaleLowerCase('ru-RU');
+const dimaTelegramId = String(process.env.DIMA_TELEGRAM_ID || '1086738355').trim();
 const appleWalletIssuerUrl = String(process.env.APPLE_WALLET_ISSUER_URL || '').trim();
 const googleWalletIssuerUrl = String(process.env.GOOGLE_WALLET_ISSUER_URL || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
@@ -163,10 +165,24 @@ function isOwnerRow(row) {
 }
 
 function isAnnaRow(row) {
+  if (String(row?.profile_frame || row?.profileFrame || '') === 'anna') return true;
   const telegramId = String(row?.telegram_id || row?.telegramId || '');
   if (annaTelegramId && telegramId === annaTelegramId) return true;
-  const fullName = `${String(row?.first_name || row?.firstName || '').trim()} ${String(row?.last_name || row?.lastName || '').trim()}`.trim().toLocaleLowerCase('ru-RU');
-  return ['анна берман', 'аня берман', 'берман анна', 'берман аня'].includes(fullName);
+  const username = String(row?.username || '').replace(/^@/, '').trim().toLocaleLowerCase('ru-RU');
+  if (annaTelegramUsername && username === annaTelegramUsername) return true;
+  const firstName = String(row?.first_name || row?.firstName || '').trim().toLocaleLowerCase('ru-RU');
+  const lastName = String(row?.last_name || row?.lastName || '').trim().toLocaleLowerCase('ru-RU');
+  const fullName = `${firstName} ${lastName}`.trim();
+  if (['анна берман', 'аня берман', 'берман анна', 'берман аня'].includes(fullName)) return true;
+  return ['staff', 'admin'].includes(String(row?.role || ''))
+    && ['анна', 'аня'].includes(firstName)
+    && (!lastName || lastName === 'берман');
+}
+
+function isDimaRow(row) {
+  if (String(row?.profile_frame || row?.profileFrame || '') === 'dima') return true;
+  const telegramId = String(row?.telegram_id || row?.telegramId || '');
+  return Boolean(dimaTelegramId && telegramId === dimaTelegramId);
 }
 
 function hasUnlimitedBonus(row) {
@@ -176,8 +192,9 @@ function hasUnlimitedBonus(row) {
 function profileFrameFromRow(row) {
   if (isOwnerRow(row)) return 'money';
   if (isAnnaRow(row)) return 'anna';
+  if (isDimaRow(row)) return 'dima';
   if (row?.role === 'viewer') return 'fire';
-  return ['money', 'fire', 'diamond', 'anna'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
+  return ['money', 'fire', 'diamond', 'anna', 'dima'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
 }
 
 async function achievementsForUser(db, row) {
@@ -441,14 +458,14 @@ function validateTelegramInitData(initData) {
   };
 }
 
-async function applyBetaUserRules(db, userId) {
+async function applyBetaUserRules(db, userId, { forceAnna = false } = {}) {
   const result = await db.query(
-    `SELECT u.id, u.telegram_id, u.first_name, u.last_name, w.balance
+    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.profile_frame, u.role, w.balance
      FROM users u JOIN wallets w ON w.user_id = u.id
      WHERE u.id = $1`,
     [userId]
   );
-  if (!result.rowCount || !isAnnaRow(result.rows[0])) return;
+  if (!result.rowCount || (!forceAnna && !isAnnaRow(result.rows[0]))) return;
   const row = result.rows[0];
   await db.query("UPDATE users SET profile_frame = 'anna', updated_at = NOW() WHERE id = $1", [row.id]);
   const grant = await db.query(
@@ -789,6 +806,18 @@ async function initDatabase() {
       "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'fire', updated_at = NOW() WHERE role = 'viewer' AND ($1 = '' OR telegram_id::text <> $1)",
       [ownerTelegramId]
     );
+    if (annaTelegramId) {
+      await client.query(
+        "UPDATE users SET profile_frame = 'anna', updated_at = NOW() WHERE telegram_id::text = $1",
+        [annaTelegramId]
+      );
+    }
+    if (dimaTelegramId) {
+      await client.query(
+        "UPDATE users SET profile_frame = 'dima', updated_at = NOW() WHERE telegram_id::text = $1",
+        [dimaTelegramId]
+      );
+    }
     if (ownerTelegramId) {
       const ownerResult = await client.query('SELECT id FROM users WHERE telegram_id::text = $1 LIMIT 1', [ownerTelegramId]);
       if (ownerResult.rowCount) {
@@ -800,13 +829,40 @@ async function initDatabase() {
       [BETA_TESTER_LIMIT]
     );
     for (const row of betaCandidates.rows) await maybeGrantBetaTester(client, row.id);
-    const annaCandidates = await client.query(
-      `SELECT id FROM users
-       WHERE ($1 <> '' AND telegram_id::text = $1)
-          OR (LOWER(TRIM(first_name)) IN ('анна','аня') AND LOWER(TRIM(COALESCE(last_name,''))) = 'берман')`,
-      [annaTelegramId]
+    // V14.3: персональная рамка Анны восстанавливается не только по имени.
+    // Старые установки уже содержат уникальную запись beta_grants, поэтому рамка
+    // переживает смену имени в Telegram, роли сотрудника и повторные деплои.
+    await client.query(
+      `UPDATE users
+       SET profile_frame = 'anna', updated_at = NOW()
+       WHERE id IN (
+         SELECT user_id FROM beta_grants WHERE code = 'anna-senior-beta-million'
+       )`
     );
-    for (const row of annaCandidates.rows) await applyBetaUserRules(client, row.id);
+    let annaCandidates = await client.query(
+      `SELECT DISTINCT u.id
+       FROM users u
+       LEFT JOIN beta_grants bg
+         ON bg.user_id = u.id AND bg.code = 'anna-senior-beta-million'
+       WHERE u.profile_frame = 'anna'
+          OR bg.user_id IS NOT NULL
+          OR ($1 <> '' AND u.telegram_id::text = $1)
+          OR ($2 <> '' AND LOWER(TRIM(COALESCE(u.username,''))) = $2)
+          OR (LOWER(TRIM(u.first_name)) IN ('анна','аня') AND LOWER(TRIM(COALESCE(u.last_name,''))) = 'берман')`,
+      [annaTelegramId, annaTelegramUsername]
+    );
+    if (!annaCandidates.rowCount) {
+      const uniqueStaffAnna = await client.query(
+        `SELECT id FROM users
+         WHERE role IN ('staff','admin')
+           AND LOWER(TRIM(first_name)) IN ('анна','аня')
+           AND LOWER(TRIM(COALESCE(last_name,''))) IN ('','берман')
+         ORDER BY created_at, id
+         LIMIT 2`
+      );
+      if (uniqueStaffAnna.rowCount === 1) annaCandidates = uniqueStaffAnna;
+    }
+    for (const row of annaCandidates.rows) await applyBetaUserRules(client, row.id, { forceAnna: true });
     const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
     for (const row of usersWithoutQr.rows) await ensurePersonalQr(client, row.id);
     await client.query('COMMIT');
@@ -2077,17 +2133,22 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
   try {
     const role = String(req.body?.role || 'client');
     if (!['client', 'staff', 'viewer'].includes(role)) return res.status(400).json({ error: 'Недопустимая роль.' });
-    const target = await pool.query('SELECT telegram_id FROM users WHERE id = $1', [req.params.id]);
+    const target = await pool.query(
+      'SELECT telegram_id, username, first_name, last_name, profile_frame, role FROM users WHERE id = $1',
+      [req.params.id]
+    );
     if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
     if (String(target.rows[0].telegram_id) === ownerTelegramId) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
+    const keepAnnaFrame = isAnnaRow(target.rows[0]);
+    const keepDimaFrame = isDimaRow(target.rows[0]);
     await pool.query(
       `UPDATE users SET
          role = $1,
          unlimited_bonus = CASE WHEN $1 = 'viewer' THEN TRUE ELSE FALSE END,
-         profile_frame = CASE WHEN $1 = 'viewer' THEN 'fire' ELSE 'none' END,
+         profile_frame = CASE WHEN $3 THEN 'anna' WHEN $4 THEN 'dima' WHEN $1 = 'viewer' THEN 'fire' ELSE 'none' END,
          updated_at = NOW()
        WHERE id = $2`,
-      [role, req.params.id]
+      [role, req.params.id, keepAnnaFrame, keepDimaFrame]
     );
     res.json({ ok: true });
   } catch (error) {

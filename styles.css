@@ -3104,6 +3104,71 @@ body {
 @keyframes annaOrbitSpin { to { transform: rotate(360deg); } }
 @keyframes annaSymbolUpright { to { transform: rotate(360deg); } }
 
+
+/* V14.4: персональная рамка Димы — бейсболки, NY и микрофоны */
+.avatar-frame-dima,
+.profile-avatar.has-dima-frame,
+.profile-avatar.has-dima-frame .avatar-render-inner {
+  overflow: visible !important;
+}
+.avatar-frame-dima {
+  filter: drop-shadow(0 0 9px rgba(50, 116, 255, .34));
+}
+.avatar-frame-dima::before {
+  inset: -3px;
+  padding: 3px;
+  background: conic-gradient(from 12deg, #02040a, #12265a, #ffffff, #0b183b, #3e72e8, #dce8ff, #02040a);
+  box-shadow: 0 0 14px rgba(71, 126, 255, .38), inset 0 0 8px rgba(255,255,255,.22);
+  animation: dimaFrameSpin 8.2s linear infinite;
+}
+.avatar-frame-dima::after {
+  inset: -7px;
+  border: 1px solid rgba(143, 180, 255, .34);
+  background: radial-gradient(circle, transparent 54%, rgba(53, 104, 221, .15) 71%, transparent 80%);
+  box-shadow: 0 0 19px rgba(48, 108, 255, .22);
+  animation: avatarFramePulse 2.35s ease-in-out infinite;
+}
+.dima-orbit {
+  animation: dimaOrbitSpin 7.2s linear infinite;
+}
+.dima-orbit i {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(2, 8, 23, .94);
+  border: 1px solid rgba(136, 176, 255, .58);
+  box-shadow: 0 0 9px rgba(65, 124, 255, .46);
+  font: 900 10px/1 system-ui, sans-serif;
+  font-style: normal;
+  animation: dimaSymbolUpright 7.2s linear infinite reverse, moneySymbolPulse 1.85s ease-in-out infinite;
+}
+.dima-orbit i:nth-child(1) { left: calc(50% - 9px); top: -9px; }
+.dima-orbit i:nth-child(2) { right: 0; top: 4px; animation-delay: -.18s; }
+.dima-orbit i:nth-child(3) { right: -9px; top: calc(50% - 9px); animation-delay: -.36s; }
+.dima-orbit i:nth-child(4) { right: 0; bottom: 4px; animation-delay: -.54s; }
+.dima-orbit i:nth-child(5) { left: calc(50% - 9px); bottom: -9px; animation-delay: -.72s; }
+.dima-orbit i:nth-child(6) { left: 0; bottom: 4px; animation-delay: -.9s; }
+.dima-orbit i:nth-child(7) { left: -9px; top: calc(50% - 9px); animation-delay: -1.08s; }
+.dima-orbit i:nth-child(8) { left: 0; top: 4px; animation-delay: -1.26s; }
+.profile-avatar .dima-orbit { inset: -16px; }
+.profile-avatar .dima-orbit i { width: 19px; height: 19px; font-size: 11px; }
+.dima-ny {
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  font: 1000 7px/.9 Arial Black, Impact, sans-serif;
+  letter-spacing: -.16em;
+  transform: skew(-7deg);
+  text-shadow: 0 0 4px rgba(110, 163, 255, .95);
+}
+@keyframes dimaFrameSpin { to { transform: rotate(360deg); } }
+@keyframes dimaOrbitSpin { to { transform: rotate(360deg); } }
+@keyframes dimaSymbolUpright { to { transform: rotate(360deg); } }
+
 .shop-list-card {
   grid-template-columns: 92px minmax(0, 1fr);
   align-items: stretch;
@@ -3251,7 +3316,11 @@ body {
   .avatar-frame-anna::before,
   .avatar-frame-anna::after,
   .anna-orbit,
-  .anna-orbit i { animation: none !important; }
+  .anna-orbit i,
+  .avatar-frame-dima::before,
+  .avatar-frame-dima::after,
+  .dima-orbit,
+  .dima-orbit i { animation: none !important; }
 }
 
 

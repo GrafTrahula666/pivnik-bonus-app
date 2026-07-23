@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '14.2';
+const APP_VERSION = '14.4';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 document.documentElement.classList.toggle('android-webview', isAndroid);
@@ -124,6 +124,7 @@ function avatarFrameClass(entity = {}) {
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
   if (entity.profileFrame === 'diamond') return 'avatar-frame avatar-frame-diamond';
   if (entity.profileFrame === 'anna') return 'avatar-frame avatar-frame-anna';
+  if (entity.profileFrame === 'dima') return 'avatar-frame avatar-frame-dima';
   return '';
 }
 
@@ -137,6 +138,10 @@ function avatarOrbitHtml(entity = {}) {
       '<span class="anna-18">18</span>', '<span class="anna-heart">💔</span>', '<span class="anna-whip">➰</span>', '<span class="anna-cash">$</span>'
     ];
     return `<span class="avatar-orbit anna-orbit" aria-hidden="true">${symbols.map((symbol, index) => `<i style="--orbit-index:${index}">${symbol}</i>`).join('')}</span>`;
+  }
+  if (entity.profileFrame === 'dima') {
+    const symbols = ['🧢', '<span class="dima-ny">NY</span>', '🎤', '🧢', '<span class="dima-ny">NY</span>', '🎤', '🧢', '<span class="dima-ny">NY</span>'];
+    return `<span class="avatar-orbit dima-orbit" aria-hidden="true">${symbols.map((symbol, index) => `<i style="--orbit-index:${index}">${symbol}</i>`).join('')}</span>`;
   }
   return '';
 }
@@ -152,6 +157,7 @@ function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
+  element.classList.toggle('has-dima-frame', entity.profileFrame === 'dima');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 
