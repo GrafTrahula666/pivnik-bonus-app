@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '14.0';
+const APP_VERSION = '14.2';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 document.documentElement.classList.toggle('android-webview', isAndroid);
@@ -519,32 +519,38 @@ function clearBootError() {
 }
 
 function enableLiteMode() {
-  document.documentElement.classList.add('lite-mode');
+  document.documentElement.classList.add('lite-mode', 'reduce-effects');
   const url = new URL(location.href);
   url.searchParams.set('lite', '1');
   history.replaceState(null, '', url);
   if (state.profile) {
     finishBoot();
     toast('Облегчённый режим включён');
-  } else {
-    location.reload();
+    return;
   }
+  state.bootSecondaryStarted = false;
+  bootCompleted = false;
+  clearBootError();
+  const text = $('#bootText');
+  if (text) text.textContent = 'Повторно подключаемся к Telegram…';
+  void boot();
 }
 
 setTimeout(() => {
   const bootScreen = $('#bootScreen');
-  if (!bootScreen || bootScreen.classList.contains('hidden')) return;
-  $('#bootText').textContent = 'Почти готово…';
+  if (!bootScreen || bootScreen.classList.contains('hidden') || bootScreen.classList.contains('error')) return;
+  const text = $('#bootText');
+  if (text) text.textContent = 'Почти готово…';
 }, BOOT_FAILSAFE_MS / 2);
 
 setTimeout(() => {
   const bootScreen = $('#bootScreen');
-  if (!bootScreen || bootScreen.classList.contains('hidden')) return;
+  if (!bootScreen || bootScreen.classList.contains('hidden') || bootScreen.classList.contains('error')) return;
   if (state.profile) {
     finishBoot();
     toast('Часть данных продолжает загружаться');
   } else {
-    showBootActions('Не удалось завершить подключение. Можно повторить без перезапуска Telegram.');
+    showBootActions('Не удалось завершить подключение. Нажмите «Повторить» — перезапуск Telegram не требуется.');
   }
 }, BOOT_FAILSAFE_MS);
 
@@ -1417,20 +1423,50 @@ async function refreshMe() {
   void loadSecondaryData();
 }
 
+function telegramInitDataFromLocation() {
+  const sources = [location.hash.slice(1), location.search.slice(1)];
+  for (const source of sources) {
+    if (!source) continue;
+    try {
+      const params = new URLSearchParams(source);
+      const initData = params.get('tgWebAppData') || params.get('initData');
+      if (initData) return initData;
+    } catch (_) {}
+  }
+  return '';
+}
+
+function currentTelegramInitData() {
+  const bridge = refreshTelegramBridge();
+  if (bridge?.initData) return { value: bridge.initData, source: 'sdk' };
+  const fromLocation = telegramInitDataFromLocation();
+  if (fromLocation) return { value: fromLocation, source: 'url' };
+  return { value: '', source: 'none' };
+}
+
 async function waitForTelegramInitData(maxWaitMs = 2800) {
   const started = Date.now();
   while (Date.now() - started < maxWaitMs) {
-    const bridge = refreshTelegramBridge();
-    if (bridge?.initData) return bridge.initData;
+    const snapshot = currentTelegramInitData();
+    if (snapshot.value) return snapshot;
     await delay(120);
   }
-  return refreshTelegramBridge()?.initData || '';
+  return currentTelegramInitData();
 }
 
 async function authenticate() {
-  const initData = await waitForTelegramInitData(isAndroid ? 6000 : 2600);
+  const demoRequested = new URLSearchParams(location.search).get('demo') === '1';
+  const telegramAuth = await waitForTelegramInitData(isAndroid ? 7000 : 3200);
+  const initData = telegramAuth.value;
+  if (!initData && !demoRequested) {
+    const error = new Error('Telegram не передал данные входа (код A14-TG0). Закройте мини-приложение и откройте его кнопкой из бота.');
+    error.status = 401;
+    error.code = 'TELEGRAM_INIT_DATA_MISSING';
+    throw error;
+  }
+  console.info(`Telegram authorization source: ${telegramAuth.source}`);
   const payload = { initData };
-  if (!initData && new URLSearchParams(location.search).get('demo') === '1') payload.demoTelegramId = '999000111';
+  if (!initData && demoRequested) payload.demoTelegramId = '999000111';
   const data = await api('/api/auth', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -1507,9 +1543,9 @@ async function boot() {
     void loadSecondaryData();
   } catch (error) {
     console.error('Boot failed:', error);
-    const message = error?.status === 401
+    const message = error?.message || (error?.status === 401
       ? 'Telegram не передал данные входа. Закройте окно и откройте приложение из бота ещё раз.'
-      : (error?.message || 'Не удалось загрузить приложение.');
+      : 'Не удалось загрузить приложение.');
     showBootActions(message);
   }
 }
@@ -2272,7 +2308,7 @@ $('#ackAchievementButton')?.addEventListener('click', async () => {
 $('#bootRetry')?.addEventListener('click', () => {
   state.bootSecondaryStarted = false;
   bootCompleted = false;
-  boot();
+  void boot();
 });
 $('#bootLite')?.addEventListener('click', enableLiteMode);
 

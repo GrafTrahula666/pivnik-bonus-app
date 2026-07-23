@@ -3373,3 +3373,18 @@ body {
   animation-iteration-count: 1 !important;
   transition-duration: .001ms !important;
 }
+
+
+/* V14.2: true lightweight fallback for Android Telegram WebView. */
+.lite-mode .boot-overlay,
+.lite-mode .boot-image,
+.lite-mode .boot-person,
+.lite-mode .boot-sign-glitch,
+.lite-mode .shooting-star { display: none !important; }
+.lite-mode .boot-scene {
+  background: #0b0e13 !important;
+  box-shadow: none !important;
+}
+.lite-mode .boot-copy {
+  background: linear-gradient(180deg, rgba(11,14,19,.92), rgba(7,9,12,.98)) !important;
+}

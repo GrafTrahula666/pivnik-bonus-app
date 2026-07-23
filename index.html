@@ -6,9 +6,31 @@
   <meta name="theme-color" content="#0b0e13" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
-  <script async src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=14.0" />
-  <script defer src="app.js?v=14.0"></script>
+  <script>
+    (() => {
+      let appRequested = false;
+      const loadApp = () => {
+        if (appRequested) return;
+        appRequested = true;
+        const start = () => {
+          const script = document.createElement('script');
+          script.src = 'app.js?v=14.2';
+          script.async = false;
+          document.head.appendChild(script);
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+        else start();
+      };
+      const telegramSdk = document.createElement('script');
+      telegramSdk.src = 'https://telegram.org/js/telegram-web-app.js?63';
+      telegramSdk.async = true;
+      telegramSdk.onload = loadApp;
+      telegramSdk.onerror = loadApp;
+      document.head.appendChild(telegramSdk);
+      setTimeout(loadApp, 1800);
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css?v=14.2" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
