@@ -1,9 +1,9 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.4.4",
+  "version": "1.4.2",
   "private": true,
   "type": "module",
-  "description": "Telegram Mini App программы лояльности бара Пивник — V14.4: точные Telegram ID и персональные рамки Анны и Димы",
+  "description": "Telegram Mini App программы лояльности бара Пивник — V14.2: исправление Android-входа и цикла облегчённого режима",
   "engines": {
     "node": ">=20"
   },
