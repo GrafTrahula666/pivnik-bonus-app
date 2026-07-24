@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '14.2-recovery';
+const APP_VERSION = '14.3-profile-settings';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 document.documentElement.classList.toggle('android-webview', isAndroid);
@@ -160,6 +160,7 @@ function profileDraftFromCurrent() {
   return {
     avatarSource: profile.avatarSource || 'preset_male',
     avatarKey: profile.avatarKey || null,
+    profileFrame: profile.profileFrame || 'none',
     ageGroup: profile.ageGroup || '',
     privacy: {
       publicProfile: profile.privacy?.publicProfile !== false,
@@ -176,7 +177,8 @@ function selectedAvatarPreview() {
     firstName: state.profile?.firstName || 'П',
     photoUrl: state.profile?.photoUrl || null,
     avatarSource: state.profileDraft?.avatarSource || 'preset_male',
-    avatarKey: state.profileDraft?.avatarKey || null
+    avatarKey: state.profileDraft?.avatarKey || null,
+    profileFrame: state.profileDraft?.profileFrame || state.profile?.profileFrame || 'none'
   };
 }
 
@@ -202,7 +204,7 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
   $('#profileSetupStepPrivacy')?.classList.toggle('hidden', step !== 2);
   $('#profileSetupBack')?.classList.toggle('hidden', step !== 2);
   const close = $('#profileSetupClose');
-  if (close) close.classList.toggle('hidden', !state.profile?.onboardingComplete);
+  if (close) close.classList.remove('hidden');
 
   $$('#profileSetupModal [data-avatar-source]').forEach((button) => {
     const source = button.dataset.avatarSource;
@@ -221,6 +223,17 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
     else telegramPreview.textContent = 'T';
   }
   renderAvatarInto($('#profileSetupPreview'), selectedAvatarPreview());
+  const frameOptions = $('#profileFrameOptions');
+  if (frameOptions) {
+    const availableFrames = Array.isArray(state.profile?.availableFrames) && state.profile.availableFrames.length
+      ? state.profile.availableFrames
+      : [{ code: state.profile?.profileFrame || 'none', title: 'Текущая рамка' }];
+    frameOptions.innerHTML = availableFrames.map((frame) => `<button type="button" class="profile-frame-choice ${state.profileDraft.profileFrame === frame.code ? 'active' : ''}" data-profile-frame="${escapeHtml(frame.code)}"><span class="frame-choice-preview ${frame.code !== 'none' ? `avatar-frame-${escapeHtml(frame.code)}` : ''}">${frame.code === 'none' ? '—' : '◆'}</span><b>${escapeHtml(frame.title)}</b></button>`).join('');
+    frameOptions.querySelectorAll('[data-profile-frame]').forEach((button) => button.addEventListener('click', () => {
+      state.profileDraft.profileFrame = button.dataset.profileFrame || 'none';
+      renderProfileSetup();
+    }));
+  }
   const selectedText = $('#profileSetupSelectedText');
   if (selectedText) {
     const source = state.profileDraft.avatarSource;
@@ -265,7 +278,6 @@ async function saveProfileSettings() {
     renderProfile();
     await loadLeaderboard();
     toast('Профиль сохранён');
-    setTimeout(maybeShowAchievementCelebration, 350);
   } finally {
     if (button) button.disabled = false;
   }
@@ -432,7 +444,7 @@ function enhanceDom() {
   }
   const heroActions = $('.hero-actions');
   if (heroActions && !$('#openProfileSettings')) {
-    heroActions.insertAdjacentHTML('afterend', '<button class="profile-settings-link" id="openProfileSettings" type="button">Аватар и конфиденциальность</button>');
+    heroActions.insertAdjacentHTML('afterend', '<button class="profile-settings-link" id="openProfileSettings" type="button">Настройки профиля</button>');
   }
 
   if (!$('#profileSetupModal')) {
@@ -441,9 +453,9 @@ function enhanceDom() {
         <button class="close" id="profileSetupClose" type="button">×</button>
         <button class="profile-back hidden" id="profileSetupBack" type="button">← Назад</button>
         <section id="profileSetupStepAvatar">
-          <span class="muted">Личный профиль</span>
-          <h2>Выберите аватар</h2>
-          <p class="help-intro">Никаких случайных изображений: выберите вариант сами. Настройки можно изменить позже.</p>
+          <span class="muted">Настройки профиля</span>
+          <h2>Аватар и оформление</h2>
+          <p class="help-intro">Выберите аватар, доступную рамку и возрастную группу. Всё можно изменить позже.</p>
           <div class="primary-avatar-grid">
             <button class="primary-avatar-choice" data-avatar-source="preset_male" type="button"><img src="/assets/avatars/preset-male.webp" alt="Мужской аватар"><b>Мужской</b></button>
             <button class="primary-avatar-choice" data-avatar-source="preset_female" type="button"><img src="/assets/avatars/preset-female.webp" alt="Женский аватар"><b>Женский</b></button>
@@ -453,6 +465,11 @@ function enhanceDom() {
             <button class="secondary-avatar-choice" id="openAnimalPicker" type="button"><img src="/assets/avatars/01-panda.webp" alt="Коллекция аватаров"><span><b>Выбрать аватар</b><small>Животные и мифические существа</small></span></button>
           </div>
           <div class="selected-avatar-line"><span id="profileSetupPreview"></span><div><small>Выбрано</small><b id="profileSetupSelectedText">Мужской силуэт</b></div></div>
+          <div class="profile-frame-block">
+            <h3>Рамка профиля</h3>
+            <div class="profile-frame-options" id="profileFrameOptions"></div>
+            <p class="privacy-note">Здесь показываются только рамки, доступные вашему аккаунту. Новые рамки приобретаются в магазине.</p>
+          </div>
           <div class="profile-age-block">
             <h3>Возрастная группа <small>по желанию</small></h3>
             <div class="age-option-grid" id="profileAgeOptions">
@@ -1469,12 +1486,17 @@ async function loadSecondaryData() {
   if (failures.length && navigator.onLine) toast('Часть разделов обновится при следующем открытии');
 }
 
-function showRequiredSetup() {
-  if (!state.profile?.termsAccepted) {
-    openModal('consentModal');
-    return;
+async function syncFirstRunState() {
+  if (state.profile?.termsAccepted && state.profile?.onboardingComplete) return;
+  try {
+    const data = await api('/api/me/consent', { method: 'POST', body: '{}', timeoutMs: 7000 });
+    if (data?.profile) {
+      state.profile = data.profile;
+      renderProfile();
+    }
+  } catch (error) {
+    console.warn('First-run state sync skipped:', error);
   }
-  if (!state.profile?.onboardingComplete) openProfileSetup(1);
 }
 
 async function boot() {
@@ -1502,8 +1524,10 @@ async function boot() {
     renderProfile();
     renderStatuses();
     await finishBoot();
-    showRequiredSetup();
-    setTimeout(maybeShowAchievementCelebration, 650);
+    closeModal('consentModal');
+    closeModal('profileSetupModal');
+    void syncFirstRunState();
+    void claimBetaTesterReward();
     void loadSecondaryData();
   } catch (error) {
     console.error('Boot failed:', error);
@@ -1516,16 +1540,27 @@ async function boot() {
 
 async function acceptTerms() {
   const button = $('#acceptTerms');
-  button.disabled = true;
+  if (button) button.disabled = true;
   try {
-    const data = await api('/api/me/consent', { method: 'POST', body: '{}' });
-    state.profile = data.profile;
+    const data = await api('/api/me/consent', { method: 'POST', body: '{}', timeoutMs: 7000 });
+    if (data?.profile) state.profile = data.profile;
     closeModal('consentModal');
-    toast('Правила приняты');
-    if (!state.profile?.onboardingComplete) openProfileSetup(1);
-    else setTimeout(maybeShowAchievementCelebration, 350);
+    renderProfile();
+    toast('Настройки сохранены');
   } finally {
-    button.disabled = false;
+    if (button) button.disabled = false;
+  }
+}
+
+async function claimBetaTesterReward() {
+  try {
+    const data = await api('/api/me/beta-tester/claim', { method: 'POST', body: '{}', timeoutMs: 7000 });
+    if (data?.profile) {
+      state.profile = data.profile;
+      renderProfile();
+    }
+  } catch (error) {
+    console.warn('Beta tester reward claim skipped:', error);
   }
 }
 
@@ -2230,7 +2265,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
 $('#openProfileSettings')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') openProfileSetup(1); });
-$('#profileSetupClose')?.addEventListener('click', () => { if (state.profile?.onboardingComplete) closeModal('profileSetupModal'); });
+$('#profileSetupClose')?.addEventListener('click', () => closeModal('profileSetupModal'));
 $('#profileSetupBack')?.addEventListener('click', () => renderProfileSetup(1));
 $('#profileSetupNext')?.addEventListener('click', () => renderProfileSetup(2));
 $('#saveProfileSettings')?.addEventListener('click', () => saveProfileSettings().catch((error) => toast(error.message)));
@@ -2265,7 +2300,6 @@ $('#ackAchievementButton')?.addEventListener('click', async () => {
     await acknowledgeAchievement(code);
     closeModal('achievementCelebrationModal');
     renderAchievements();
-    setTimeout(maybeShowAchievementCelebration, 350);
   } catch (error) { toast(error.message); }
   finally { button.disabled = false; }
 });

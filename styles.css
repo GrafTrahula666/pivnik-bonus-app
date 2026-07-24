@@ -3373,3 +3373,17 @@ body {
   animation-iteration-count: 1 !important;
   transition-duration: .001ms !important;
 }
+
+
+/* V14.3 profile settings */
+.profile-frame-block { margin-top: 18px; }
+.profile-frame-block h3 { margin: 0 0 10px; }
+.profile-frame-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.profile-frame-choice { min-height: 82px; border: 1px solid rgba(255,255,255,.12); border-radius: 18px; background: rgba(255,255,255,.035); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px; }
+.profile-frame-choice.active { border-color: rgba(255,255,255,.65); background: rgba(255,255,255,.09); box-shadow: 0 0 0 2px rgba(255,255,255,.06) inset; }
+.frame-choice-preview { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; border: 2px solid rgba(255,255,255,.35); }
+.frame-choice-preview.avatar-frame-money { border-color: #65ef9b; box-shadow: 0 0 14px rgba(101,239,155,.55); color: #65ef9b; }
+.frame-choice-preview.avatar-frame-fire { border-color: #ff7a3d; box-shadow: 0 0 14px rgba(255,122,61,.55); color: #ff7a3d; }
+.frame-choice-preview.avatar-frame-diamond { border-color: #80dcff; box-shadow: 0 0 14px rgba(128,220,255,.55); color: #80dcff; }
+.frame-choice-preview.avatar-frame-anna { border-color: #ff568a; box-shadow: 0 0 14px rgba(255,86,138,.55); color: #ff568a; }
+@media (max-width: 380px) { .profile-frame-options { grid-template-columns: 1fr; } }

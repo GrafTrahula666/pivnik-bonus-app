@@ -1,9 +1,9 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "private": true,
   "type": "module",
-  "description": "Telegram Mini App программы лояльности бара Пивник — V14.2 recovery: стабильная авторизация и Android-safe загрузка",
+  "description": "Telegram Mini App программы лояльности бара Пивник — V14.3: стабильный вход, настройки профиля и достижения без блокировки",
   "engines": {
     "node": ">=20"
   },

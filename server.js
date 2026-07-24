@@ -179,17 +179,41 @@ function profileFrameFromRow(row) {
 }
 
 function achievementsFromRow(row) {
-  if (!isOwnerRow(row)) return [];
-  return [{
-    code: 'creator',
-    title: 'Создатель',
-    rarity: 'legendary',
-    description: 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.',
-    icon: 'all-seeing-eye',
-    rewardBonus: 0,
-    grantedAt: null,
-    announced: true
-  }];
+  const achievements = [];
+  if (isOwnerRow(row)) {
+    achievements.push({
+      code: 'creator',
+      title: 'Создатель',
+      rarity: 'legendary',
+      description: 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.',
+      icon: 'all-seeing-eye',
+      rewardBonus: 0,
+      grantedAt: null,
+      announced: true
+    });
+  }
+  if (Number(row?.beta_number || 0) > 0 && Number(row.beta_number) <= 30) {
+    achievements.push({
+      code: 'beta-tester',
+      title: 'Тестировщик',
+      rarity: 'legendary',
+      description: 'Легендарное достижение первых 30 участников закрытого бета-теста «Пивника».',
+      icon: 'beta',
+      rewardBonus: 150,
+      grantedAt: row.created_at || null,
+      announced: true
+    });
+  }
+  return achievements;
+}
+
+function availableFramesFromRow(row) {
+  if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
+  if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
+  if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
+  const frames = [{ code: 'none', title: 'Без рамки' }];
+  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
+  return frames;
 }
 
 function profileAppearanceFromRow(row) {
@@ -615,6 +639,11 @@ async function initDatabase() {
       )
     `);
     await client.query(`
+      INSERT INTO beta_grants (code, user_id, amount)
+      SELECT 'profile-frame-diamond', id, 0 FROM users WHERE profile_frame = 'diamond'
+      ON CONFLICT (code, user_id) DO NOTHING
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS shop_inquiries (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -765,11 +794,14 @@ async function getRollingSpend(client, userId) {
 
 async function getProfile(userId, db = pool) {
   const userResult = await db.query(
-    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance
+    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance,
+            (SELECT COUNT(*)::integer FROM users ux
+             WHERE ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id)) AS beta_number,
+            EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame
      FROM users u
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-     WHERE u.id = $1`,
+     WHERE u.id = $1::bigint`,
     [userId]
   );
   if (!userResult.rowCount) return null;
@@ -787,6 +819,7 @@ async function getProfile(userId, db = pool) {
     avatarSource: row.avatar_source || 'preset_male',
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
+    availableFrames: availableFramesFromRow(row),
     achievements: achievementsFromRow(row),
     unannouncedAchievements: [],
     unlimitedBonus,
@@ -827,6 +860,18 @@ async function getProfile(userId, db = pool) {
       nextSpend: status.nextCents ? rubles(status.nextCents) : null
     }
   };
+}
+
+async function ensureUserSetupDefaults(db, userId) {
+  await db.query(
+    `UPDATE users
+     SET terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
+         terms_version = $1::text,
+         onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
+         updated_at = NOW()
+     WHERE id = $2::bigint`,
+    [TERMS_VERSION, userId]
+  );
 }
 
 async function authRequired(req, res, next) {
@@ -1026,11 +1071,11 @@ app.post('/api/auth', async (req, res, next) => {
     try {
       await client.query('BEGIN');
       const inserted = await client.query(
-        `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, role, terms_accepted_at, terms_version, onboarding_completed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::text, NOW())
          ON CONFLICT (telegram_id) DO NOTHING
          RETURNING id`,
-        [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
+        [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role, TERMS_VERSION]
       );
       const isNew = inserted.rowCount > 0;
       let userId;
@@ -1045,10 +1090,13 @@ app.post('/api/auth', async (req, res, next) => {
              photo_url = $5,
              language_code = $6,
              role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
+             terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
+             terms_version = $8::text,
+             onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
              updated_at = NOW()
-           WHERE telegram_id = $1
+           WHERE telegram_id = $1::bigint
            RETURNING id`,
-          [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
+          [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role, TERMS_VERSION]
         );
         userId = updated.rows[0].id;
       }
@@ -1091,8 +1139,12 @@ app.post('/api/auth', async (req, res, next) => {
 
 app.get('/api/me', authRequired, async (req, res, next) => {
   try {
-    const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
-    res.json({ profile: req.user, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
+    await ensureUserSetupDefaults(pool, req.user.id);
+    const [profile, designResult] = await Promise.all([
+      getProfile(req.user.id),
+      pool.query('SELECT published FROM app_settings WHERE id = 1')
+    ]);
+    res.json({ profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
   } catch (error) {
     next(error);
   }
@@ -1113,13 +1165,57 @@ app.post('/api/me/achievements/:code/ack', authRequired, async (_req, res) => {
 
 app.post('/api/me/consent', authRequired, async (req, res, next) => {
   try {
-    await pool.query(
-      'UPDATE users SET terms_accepted_at = NOW(), terms_version = $1, updated_at = NOW() WHERE id = $2',
-      [TERMS_VERSION, req.user.id]
-    );
+    await ensureUserSetupDefaults(pool, req.user.id);
     res.json({ ok: true, profile: await getProfile(req.user.id) });
   } catch (error) {
     next(error);
+  }
+});
+
+app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [req.user.id]);
+    const ordinalResult = await client.query(
+      `SELECT (SELECT COUNT(*)::integer FROM users ux
+               WHERE ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id)) AS beta_number
+       FROM users u WHERE u.id = $1::bigint`,
+      [req.user.id]
+    );
+    const betaNumber = Number(ordinalResult.rows[0]?.beta_number || 0);
+    if (!betaNumber || betaNumber > 30) {
+      await client.query('COMMIT');
+      return res.json({ eligible: false, granted: false, profile: await getProfile(req.user.id) });
+    }
+    const grant = await client.query(
+      `INSERT INTO beta_grants (code, user_id, amount)
+       VALUES ('beta-tester-legendary', $1::bigint, 150::bigint)
+       ON CONFLICT (code, user_id) DO NOTHING
+       RETURNING user_id`,
+      [req.user.id]
+    );
+    let granted = false;
+    if (grant.rowCount) {
+      const wallet = await client.query(
+        'UPDATE wallets SET balance = balance + 150::bigint, updated_at = NOW() WHERE user_id = $1::bigint RETURNING balance',
+        [req.user.id]
+      );
+      const balanceAfter = Number(wallet.rows[0]?.balance || 0);
+      await client.query(
+        `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
+         VALUES ($1::bigint, 'adjustment', 'completed', $2::integer, $3::bigint, 'Легендарное достижение «Тестировщик»', NOW())`,
+        [req.user.id, 150, balanceAfter]
+      );
+      granted = true;
+    }
+    await client.query('COMMIT');
+    res.json({ eligible: true, granted, profile: await getProfile(req.user.id) });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    next(error);
+  } finally {
+    client.release();
   }
 });
 
@@ -1132,6 +1228,16 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
     if (avatarSource === 'telegram' && !req.user.photoUrl) return res.status(400).json({ error: 'В профиле Telegram нет доступной фотографии.' });
     const ageGroup = normalizeAgeGroup(req.body?.ageGroup);
     const privacy = req.body?.privacy && typeof req.body.privacy === 'object' ? req.body.privacy : {};
+    const accessResult = await pool.query(
+      `SELECT u.*, EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame
+       FROM users u WHERE u.id = $1::bigint`,
+      [req.user.id]
+    );
+    const accessRow = accessResult.rows[0];
+    const availableFrames = availableFramesFromRow(accessRow);
+    const requestedFrame = String(req.body?.profileFrame || profileFrameFromRow(accessRow) || 'none');
+    if (!availableFrames.some((frame) => frame.code === requestedFrame)) return res.status(400).json({ error: 'Эта рамка недоступна вашему аккаунту.' });
+    const storedFrame = isOwnerRow(accessRow) || isAnnaRow(accessRow) || accessRow?.role === 'viewer' ? profileFrameFromRow(accessRow) : requestedFrame;
     await pool.query(
       `UPDATE users SET
          avatar_source = $1,
@@ -1142,9 +1248,12 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
          show_avatar = $6,
          show_leaderboard_amount = $7,
          show_stats = $8,
+         profile_frame = $9::text,
          onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
+         terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
+         terms_version = $10::text,
          updated_at = NOW()
-       WHERE id = $9`,
+       WHERE id = $11::bigint`,
       [
         avatarSource,
         avatarKey,
@@ -1154,6 +1263,8 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
         privacy.showAvatar !== false,
         privacy.showMonthlySpend !== false,
         privacy.showStats !== false,
+        storedFrame,
+        TERMS_VERSION,
         req.user.id
       ]
     );
@@ -1645,7 +1756,12 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
     }
     if (item.code === 'frame-diamond') {
-      await client.query("UPDATE users SET profile_frame = 'diamond', updated_at = NOW() WHERE id = $1", [target.id]);
+      await client.query(
+        `INSERT INTO beta_grants (code, user_id, amount) VALUES ('profile-frame-diamond', $1::bigint, 0::bigint)
+         ON CONFLICT (code, user_id) DO NOTHING`,
+        [target.id]
+      );
+      await client.query("UPDATE users SET profile_frame = 'diamond', updated_at = NOW() WHERE id = $1::bigint", [target.id]);
     }
     await client.query('COMMIT');
     await sendTelegramMessage(target.telegram_id, `Покупка в лавке «Пивника»
