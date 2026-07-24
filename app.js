@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '14.3-profile-settings';
+const APP_VERSION = '14.4-qr-fix';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 document.documentElement.classList.toggle('android-webview', isAndroid);
@@ -1609,17 +1609,50 @@ async function resolveQr(payload) {
 }
 
 function scanQr() {
-  if (tg?.showScanQrPopup) {
-    tg.showScanQrPopup({ text: 'Наведите камеру на QR-код клиента' }, (text) => {
-      if (!text) return false;
-      resolveQr(text)
-        .then(() => tg.closeScanQrPopup())
-        .catch((error) => toast(error.message));
-      return true;
-    });
+  const bridge = refreshTelegramBridge();
+  const supported = Boolean(
+    bridge
+    && typeof bridge.showScanQrPopup === 'function'
+    && (!bridge.isVersionAtLeast || bridge.isVersionAtLeast('6.4'))
+  );
+
+  if (!supported) {
+    toast('Сканер Telegram недоступен. Введите короткий код вручную.');
+    setTimeout(manualCode, 80);
     return;
   }
-  manualCode();
+
+  let resolving = false;
+  const closeScanner = () => {
+    try { bridge.closeScanQrPopup?.(); } catch (_) {}
+  };
+
+  try {
+    bridge.showScanQrPopup({ text: 'Наведите камеру на QR-код клиента' }, (text) => {
+      const payload = String(text || '').trim();
+      if (!payload || resolving) return false;
+
+      resolving = true;
+      toast('QR найден. Проверяем клиента…');
+      resolveQr(payload)
+        .then(() => {
+          closeScanner();
+          toast('Клиент найден');
+        })
+        .catch((error) => {
+          resolving = false;
+          toast(error?.message || 'QR не распознан. Попробуйте ещё раз.');
+        });
+
+      // Не закрываем камеру до ответа сервера. Это позволяет повторно
+      // отсканировать код, если он оказался чужим или повреждённым.
+      return false;
+    });
+  } catch (error) {
+    console.warn('Telegram QR scanner failed:', error);
+    toast('Не удалось открыть камеру. Введите короткий код вручную.');
+    setTimeout(manualCode, 80);
+  }
 }
 
 function manualCode() {
