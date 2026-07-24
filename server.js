@@ -158,21 +158,6 @@ function normalizeShopPriceType(value) {
   return SHOP_PRICE_TYPES.has(type) ? type : 'bonus';
 }
 
-async function runOptionalTransactionStep(db, savepointName, task) {
-  if (!/^[a-z][a-z0-9_]*$/i.test(savepointName)) throw new Error('Invalid savepoint name');
-  await db.query(`SAVEPOINT ${savepointName}`);
-  try {
-    const result = await task();
-    await db.query(`RELEASE SAVEPOINT ${savepointName}`);
-    return result;
-  } catch (error) {
-    await db.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
-    await db.query(`RELEASE SAVEPOINT ${savepointName}`);
-    console.error(`Optional transaction step "${savepointName}" skipped:`, error);
-    return null;
-  }
-}
-
 function isOwnerRow(row) {
   return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
 }
@@ -196,26 +181,46 @@ function profileFrameFromRow(row) {
 }
 
 async function achievementsForUser(db, row) {
-  const result = await db.query(
-    `SELECT d.code, d.title, d.rarity, d.description, d.icon, d.reward_bonus,
-            ua.granted_at, ua.announced_at
-     FROM user_achievements ua
-     JOIN achievement_definitions d ON d.code = ua.achievement_code
-     WHERE ua.user_id = $1 AND d.active = TRUE
-     ORDER BY CASE d.rarity WHEN 'legendary' THEN 1 WHEN 'epic' THEN 2 WHEN 'rare' THEN 3 ELSE 4 END,
-              d.sort_order, ua.granted_at`,
-    [row.id]
-  );
-  return result.rows.map((item) => ({
-    code: item.code,
-    title: item.title,
-    rarity: item.rarity,
-    description: item.description,
-    icon: item.icon,
-    rewardBonus: Number(item.reward_bonus || 0),
-    grantedAt: item.granted_at,
-    announced: Boolean(item.announced_at)
-  }));
+  try {
+    const result = await db.query(
+      `SELECT d.code, d.title, d.rarity, d.description, d.icon, d.reward_bonus,
+              ua.granted_at, ua.announced_at
+       FROM user_achievements ua
+       JOIN achievement_definitions d ON d.code = ua.achievement_code
+       WHERE ua.user_id = $1::bigint AND d.active = TRUE
+       ORDER BY CASE d.rarity WHEN 'legendary' THEN 1 WHEN 'epic' THEN 2 WHEN 'rare' THEN 3 ELSE 4 END,
+                d.sort_order, ua.granted_at`,
+      [row.id]
+    );
+    return result.rows.map((item) => ({
+      code: item.code,
+      title: item.title,
+      rarity: item.rarity,
+      description: item.description,
+      icon: item.icon,
+      rewardBonus: Number(item.reward_bonus || 0),
+      grantedAt: item.granted_at,
+      announced: Boolean(item.announced_at)
+    }));
+  } catch (error) {
+    console.error('Achievements load skipped:', error.message);
+    return [];
+  }
+}
+
+async function runOptionalDbStep(db, label, task) {
+  const savepoint = 'optional_feature_step';
+  await db.query(`SAVEPOINT ${savepoint}`);
+  try {
+    const result = await task();
+    await db.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return result;
+  } catch (error) {
+    await db.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await db.query(`RELEASE SAVEPOINT ${savepoint}`);
+    console.error(`${label} skipped:`, error.message);
+    return null;
+  }
 }
 
 async function grantAchievement(db, userId, code, reason, { announced = false } = {}) {
@@ -237,7 +242,7 @@ async function grantAchievement(db, userId, code, reason, { announced = false } 
     const wallet = await db.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [userId]);
     if (wallet.rowCount) {
       const balanceAfter = Number(wallet.rows[0].balance || 0) + reward;
-      await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, userId]);
+      await db.query('UPDATE wallets SET balance = $1::bigint, updated_at = NOW() WHERE user_id = $2::bigint', [balanceAfter, userId]);
       await db.query(
         `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
          VALUES ($1::bigint, 'adjustment', 'completed', $2::integer, $3::bigint, $4::text, NOW())`,
@@ -713,7 +718,7 @@ async function initDatabase() {
     await client.query(
       `INSERT INTO achievement_definitions (code, title, rarity, description, icon, reward_bonus, limited_total, sort_order)
        VALUES
-         ('beta-tester', 'Тестировщик', 'legendary', 'Один из первых 30 участников закрытого бета-теста приложения «Пивник».', 'beta', $1::integer, $2::integer, 10),
+         ('beta-tester', 'Тестировщик', 'legendary', 'Один из первых 30 участников закрытого бета-теста приложения «Пивник».', 'beta', $1, $2, 10),
          ('creator', 'Создатель', 'legendary', 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.', 'all-seeing-eye', 0, 1, 1)
        ON CONFLICT (code) DO UPDATE SET
          title = EXCLUDED.title,
@@ -805,16 +810,20 @@ async function initDatabase() {
       [ownerTelegramId]
     );
     if (ownerTelegramId) {
-      const ownerResult = await client.query('SELECT id FROM users WHERE telegram_id::text = $1 LIMIT 1', [ownerTelegramId]);
+      const ownerResult = await client.query('SELECT id FROM users WHERE telegram_id::text = $1::text LIMIT 1', [ownerTelegramId]);
       if (ownerResult.rowCount) {
-        await grantAchievement(client, ownerResult.rows[0].id, 'creator', 'Основатель приложения', { announced: true });
+        await runOptionalDbStep(client, 'Creator achievement', () =>
+          grantAchievement(client, ownerResult.rows[0].id, 'creator', 'Основатель приложения', { announced: true })
+        );
       }
     }
     const betaCandidates = await client.query(
-      `SELECT id FROM users ORDER BY created_at ASC, id ASC LIMIT $1`,
+      `SELECT id FROM users ORDER BY created_at ASC, id ASC LIMIT $1::integer`,
       [BETA_TESTER_LIMIT]
     );
-    for (const row of betaCandidates.rows) await maybeGrantBetaTester(client, row.id);
+    for (const row of betaCandidates.rows) {
+      await runOptionalDbStep(client, `Beta achievement for user ${row.id}`, () => maybeGrantBetaTester(client, row.id));
+    }
     const annaCandidates = await client.query(
       `SELECT id FROM users
        WHERE ($1 <> '' AND telegram_id::text = $1)
@@ -1195,9 +1204,9 @@ app.post('/api/auth', async (req, res, next) => {
           [userId, WELCOME_BONUS, WELCOME_BONUS]
         );
       }
-      await runOptionalTransactionStep(client, 'auth_beta_rules', () => applyBetaUserRules(client, userId));
-      await runOptionalTransactionStep(client, 'auth_beta_achievement', () => maybeGrantBetaTester(client, userId));
-      await runOptionalTransactionStep(client, 'auth_personal_qr', () => ensurePersonalQr(client, userId));
+      await runOptionalDbStep(client, 'Beta user rules', () => applyBetaUserRules(client, userId));
+      await runOptionalDbStep(client, 'Beta tester achievement', () => maybeGrantBetaTester(client, userId));
+      await runOptionalDbStep(client, 'Personal QR creation', () => ensurePersonalQr(client, userId));
       await client.query('COMMIT');
 
       const profile = await getProfile(userId);
@@ -2380,22 +2389,12 @@ app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, 
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'index.html')));
 app.use((_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'index.html')));
 
-app.use((error, req, res, _next) => {
-  const errorId = `PVK-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-  console.error(`[${errorId}] ${req.method} ${req.originalUrl}`, error);
-
-  if (res.headersSent) return;
-  const status = Number(error?.statusCode || error?.status || 500);
-  if (status >= 400 && status < 500) {
-    res.status(status).json({ error: error.message || 'Запрос не выполнен.', errorCode: errorId });
-    return;
-  }
-
-  const isDatabaseError = typeof error?.code === 'string' && /^[0-9A-Z]{5}$/.test(error.code);
-  const message = isDatabaseError
-    ? 'Не удалось обновить данные профиля. Повторите через несколько секунд.'
-    : 'Временная ошибка сервера. Повторите через несколько секунд.';
-  res.status(500).json({ error: message, errorCode: errorId });
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  const databaseError = error && (error.code || '').match(/^[0-9A-Z]{5}$/);
+  const message = databaseError ? 'Сервер временно не смог загрузить данные. Повторите вход.'
+    : (process.env.NODE_ENV === 'production' ? 'Внутренняя ошибка сервера.' : error.message);
+  res.status(500).json({ error: message });
 });
 
 await initDatabase();
