@@ -61,8 +61,6 @@ const BEER_PAID_TARGET_ML = 14_000;
 const BEER_GIFT_ML = 1_000;
 const MAX_BEER_ML_PER_TRANSACTION = 100_000;
 const WELCOME_BONUS = 100;
-const BETA_TESTER_REWARD = 150;
-const BETA_TESTER_LIMIT = 30;
 const REFERRAL_REWARD = 200;
 const STAFF_CANCEL_LIMIT = 3;
 const UNLIMITED_BONUS_BALANCE = 9_999_999_999_999;
@@ -180,91 +178,18 @@ function profileFrameFromRow(row) {
   return ['money', 'fire', 'diamond', 'anna'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
 }
 
-async function achievementsForUser(db, row) {
-  try {
-    const result = await db.query(
-      `SELECT d.code, d.title, d.rarity, d.description, d.icon, d.reward_bonus,
-              ua.granted_at, ua.announced_at
-       FROM user_achievements ua
-       JOIN achievement_definitions d ON d.code = ua.achievement_code
-       WHERE ua.user_id = $1::bigint AND d.active = TRUE
-       ORDER BY CASE d.rarity WHEN 'legendary' THEN 1 WHEN 'epic' THEN 2 WHEN 'rare' THEN 3 ELSE 4 END,
-                d.sort_order, ua.granted_at`,
-      [row.id]
-    );
-    return result.rows.map((item) => ({
-      code: item.code,
-      title: item.title,
-      rarity: item.rarity,
-      description: item.description,
-      icon: item.icon,
-      rewardBonus: Number(item.reward_bonus || 0),
-      grantedAt: item.granted_at,
-      announced: Boolean(item.announced_at)
-    }));
-  } catch (error) {
-    console.error('Achievements load skipped:', error.message);
-    return [];
-  }
-}
-
-async function runOptionalDbStep(db, label, task) {
-  const savepoint = 'optional_feature_step';
-  await db.query(`SAVEPOINT ${savepoint}`);
-  try {
-    const result = await task();
-    await db.query(`RELEASE SAVEPOINT ${savepoint}`);
-    return result;
-  } catch (error) {
-    await db.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-    await db.query(`RELEASE SAVEPOINT ${savepoint}`);
-    console.error(`${label} skipped:`, error.message);
-    return null;
-  }
-}
-
-async function grantAchievement(db, userId, code, reason, { announced = false } = {}) {
-  const definition = await db.query(
-    'SELECT code, title, reward_bonus FROM achievement_definitions WHERE code = $1 AND active = TRUE',
-    [code]
-  );
-  if (!definition.rowCount) return false;
-  const inserted = await db.query(
-    `INSERT INTO user_achievements (user_id, achievement_code, grant_reason, announced_at)
-     VALUES ($1::bigint, $2::text, $3::text, CASE WHEN $4::boolean THEN NOW() ELSE NULL END)
-     ON CONFLICT (user_id, achievement_code) DO NOTHING
-     RETURNING user_id`,
-    [userId, code, reason || null, announced]
-  );
-  if (!inserted.rowCount) return false;
-  const reward = Number(definition.rows[0].reward_bonus || 0);
-  if (reward > 0) {
-    const wallet = await db.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [userId]);
-    if (wallet.rowCount) {
-      const balanceAfter = Number(wallet.rows[0].balance || 0) + reward;
-      await db.query('UPDATE wallets SET balance = $1::bigint, updated_at = NOW() WHERE user_id = $2::bigint', [balanceAfter, userId]);
-      await db.query(
-        `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
-         VALUES ($1::bigint, 'adjustment', 'completed', $2::integer, $3::bigint, $4::text, NOW())`,
-        [userId, reward, balanceAfter, `Достижение «${definition.rows[0].title}»`]
-      );
-    }
-  }
-  return true;
-}
-
-async function maybeGrantBetaTester(db, userId) {
-  await db.query('SELECT pg_advisory_xact_lock(7414030)');
-  const already = await db.query(
-    "SELECT 1 FROM user_achievements WHERE user_id = $1 AND achievement_code = 'beta-tester'",
-    [userId]
-  );
-  if (already.rowCount) return false;
-  const count = await db.query(
-    "SELECT COUNT(*)::int AS count FROM user_achievements WHERE achievement_code = 'beta-tester'"
-  );
-  if (Number(count.rows[0].count || 0) >= BETA_TESTER_LIMIT) return false;
-  return grantAchievement(db, userId, 'beta-tester', 'Один из первых 30 участников закрытого бета-теста');
+function achievementsFromRow(row) {
+  if (!isOwnerRow(row)) return [];
+  return [{
+    code: 'creator',
+    title: 'Создатель',
+    rarity: 'legendary',
+    description: 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.',
+    icon: 'all-seeing-eye',
+    rewardBonus: 0,
+    grantedAt: null,
+    announced: true
+  }];
 }
 
 function profileAppearanceFromRow(row) {
@@ -690,49 +615,6 @@ async function initDatabase() {
       )
     `);
     await client.query(`
-      CREATE TABLE IF NOT EXISTS achievement_definitions (
-        code TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        rarity TEXT NOT NULL CHECK (rarity IN ('common','rare','epic','legendary')),
-        description TEXT NOT NULL DEFAULT '',
-        icon TEXT NOT NULL DEFAULT 'medal',
-        reward_bonus INTEGER NOT NULL DEFAULT 0 CHECK (reward_bonus >= 0),
-        limited_total INTEGER,
-        active BOOLEAN NOT NULL DEFAULT TRUE,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_achievements (
-        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        achievement_code TEXT NOT NULL REFERENCES achievement_definitions(code) ON DELETE CASCADE,
-        granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        announced_at TIMESTAMPTZ,
-        grant_reason TEXT,
-        PRIMARY KEY (user_id, achievement_code)
-      )
-    `);
-    await client.query('CREATE INDEX IF NOT EXISTS idx_user_achievements_granted ON user_achievements(granted_at DESC)');
-    await client.query(
-      `INSERT INTO achievement_definitions (code, title, rarity, description, icon, reward_bonus, limited_total, sort_order)
-       VALUES
-         ('beta-tester', 'Тестировщик', 'legendary', 'Один из первых 30 участников закрытого бета-теста приложения «Пивник».', 'beta', $1, $2, 10),
-         ('creator', 'Создатель', 'legendary', 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.', 'all-seeing-eye', 0, 1, 1)
-       ON CONFLICT (code) DO UPDATE SET
-         title = EXCLUDED.title,
-         rarity = EXCLUDED.rarity,
-         description = EXCLUDED.description,
-         icon = EXCLUDED.icon,
-         reward_bonus = EXCLUDED.reward_bonus,
-         limited_total = EXCLUDED.limited_total,
-         sort_order = EXCLUDED.sort_order,
-         active = TRUE,
-         updated_at = NOW()`,
-      [BETA_TESTER_REWARD, BETA_TESTER_LIMIT]
-    );
-    await client.query(`
       CREATE TABLE IF NOT EXISTS shop_inquiries (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -809,21 +691,6 @@ async function initDatabase() {
       "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'fire', updated_at = NOW() WHERE role = 'viewer' AND ($1 = '' OR telegram_id::text <> $1)",
       [ownerTelegramId]
     );
-    if (ownerTelegramId) {
-      const ownerResult = await client.query('SELECT id FROM users WHERE telegram_id::text = $1::text LIMIT 1', [ownerTelegramId]);
-      if (ownerResult.rowCount) {
-        await runOptionalDbStep(client, 'Creator achievement', () =>
-          grantAchievement(client, ownerResult.rows[0].id, 'creator', 'Основатель приложения', { announced: true })
-        );
-      }
-    }
-    const betaCandidates = await client.query(
-      `SELECT id FROM users ORDER BY created_at ASC, id ASC LIMIT $1::integer`,
-      [BETA_TESTER_LIMIT]
-    );
-    for (const row of betaCandidates.rows) {
-      await runOptionalDbStep(client, `Beta achievement for user ${row.id}`, () => maybeGrantBetaTester(client, row.id));
-    }
     const annaCandidates = await client.query(
       `SELECT id FROM users
        WHERE ($1 <> '' AND telegram_id::text = $1)
@@ -910,7 +777,6 @@ async function getProfile(userId, db = pool) {
   const spend12mCents = await getRollingSpend(db, userId);
   const unlimitedBonus = hasUnlimitedBonus(row);
   const status = getEffectiveStatus(row, spend12mCents);
-  const achievements = await achievementsForUser(db, row);
   return {
     id: String(row.id),
     telegramId: String(row.telegram_id),
@@ -921,8 +787,8 @@ async function getProfile(userId, db = pool) {
     avatarSource: row.avatar_source || 'preset_male',
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
-    achievements,
-    unannouncedAchievements: achievements.filter((item) => !item.announced),
+    achievements: achievementsFromRow(row),
+    unannouncedAchievements: [],
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
@@ -1204,9 +1070,8 @@ app.post('/api/auth', async (req, res, next) => {
           [userId, WELCOME_BONUS, WELCOME_BONUS]
         );
       }
-      await runOptionalDbStep(client, 'Beta user rules', () => applyBetaUserRules(client, userId));
-      await runOptionalDbStep(client, 'Beta tester achievement', () => maybeGrantBetaTester(client, userId));
-      await runOptionalDbStep(client, 'Personal QR creation', () => ensurePersonalQr(client, userId));
+      await applyBetaUserRules(client, userId);
+      await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
       const profile = await getProfile(userId);
@@ -1233,38 +1098,17 @@ app.get('/api/me', authRequired, async (req, res, next) => {
   }
 });
 
-app.get('/api/achievements', authRequired, async (req, res, next) => {
-  try {
-    const definitions = await pool.query(
-      `SELECT code, title, rarity, description, icon, reward_bonus, limited_total, sort_order
-       FROM achievement_definitions WHERE active = TRUE
-       ORDER BY CASE rarity WHEN 'legendary' THEN 1 WHEN 'epic' THEN 2 WHEN 'rare' THEN 3 ELSE 4 END, sort_order`
-    );
-    res.json({
-      achievements: definitions.rows.map((item) => ({
-        code: item.code,
-        title: item.title,
-        rarity: item.rarity,
-        description: item.description,
-        icon: item.icon,
-        rewardBonus: Number(item.reward_bonus || 0),
-        limitedTotal: item.limited_total == null ? null : Number(item.limited_total)
-      })),
-      profileAchievements: req.user.achievements || [],
-      comingSoon: true
-    });
-  } catch (error) { next(error); }
+
+// Recovery mode: the achievement catalogue remains visible in the client, but
+// database-backed automatic grants are temporarily disabled until they are tested
+// separately. These endpoints keep the V14 interface compatible without touching
+// authentication or user balances.
+app.get('/api/achievements', authRequired, async (req, res) => {
+  res.json({ achievements: [], profileAchievements: req.user.achievements || [], comingSoon: true });
 });
 
-app.post('/api/me/achievements/:code/ack', authRequired, async (req, res, next) => {
-  try {
-    await pool.query(
-      `UPDATE user_achievements SET announced_at = COALESCE(announced_at, NOW())
-       WHERE user_id = $1 AND achievement_code = $2`,
-      [req.user.id, String(req.params.code || '')]
-    );
-    res.json({ ok: true });
-  } catch (error) { next(error); }
+app.post('/api/me/achievements/:code/ack', authRequired, async (_req, res) => {
+  res.json({ ok: true });
 });
 
 app.post('/api/me/consent', authRequired, async (req, res, next) => {
@@ -2384,15 +2228,16 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
   }
 });
 
-app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'styles.css')));
-app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'app.js')));
-app.get('/', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'index.html')));
-app.use((_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'index.html')));
+app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
+app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
+app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));
+app.use((_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  const databaseError = error && (error.code || '').match(/^[0-9A-Z]{5}$/);
-  const message = databaseError ? 'Сервер временно не смог загрузить данные. Повторите вход.'
+  const databaseError = Boolean(error && /^[0-9A-Z]{5}$/.test(String(error.code || '')));
+  const message = databaseError
+    ? 'Сервер временно не смог загрузить данные. Повторите вход.'
     : (process.env.NODE_ENV === 'production' ? 'Внутренняя ошибка сервера.' : error.message);
   res.status(500).json({ error: message });
 });
