@@ -158,6 +158,21 @@ function normalizeShopPriceType(value) {
   return SHOP_PRICE_TYPES.has(type) ? type : 'bonus';
 }
 
+async function runOptionalTransactionStep(db, savepointName, task) {
+  if (!/^[a-z][a-z0-9_]*$/i.test(savepointName)) throw new Error('Invalid savepoint name');
+  await db.query(`SAVEPOINT ${savepointName}`);
+  try {
+    const result = await task();
+    await db.query(`RELEASE SAVEPOINT ${savepointName}`);
+    return result;
+  } catch (error) {
+    await db.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+    await db.query(`RELEASE SAVEPOINT ${savepointName}`);
+    console.error(`Optional transaction step "${savepointName}" skipped:`, error);
+    return null;
+  }
+}
+
 function isOwnerRow(row) {
   return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
 }
@@ -211,7 +226,7 @@ async function grantAchievement(db, userId, code, reason, { announced = false } 
   if (!definition.rowCount) return false;
   const inserted = await db.query(
     `INSERT INTO user_achievements (user_id, achievement_code, grant_reason, announced_at)
-     VALUES ($1, $2, $3, CASE WHEN $4 THEN NOW() ELSE NULL END)
+     VALUES ($1::bigint, $2::text, $3::text, CASE WHEN $4::boolean THEN NOW() ELSE NULL END)
      ON CONFLICT (user_id, achievement_code) DO NOTHING
      RETURNING user_id`,
     [userId, code, reason || null, announced]
@@ -225,7 +240,7 @@ async function grantAchievement(db, userId, code, reason, { announced = false } 
       await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, userId]);
       await db.query(
         `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
-         VALUES ($1, 'adjustment', 'completed', $2, $3, $4, NOW())`,
+         VALUES ($1::bigint, 'adjustment', 'completed', $2::integer, $3::bigint, $4::text, NOW())`,
         [userId, reward, balanceAfter, `Достижение «${definition.rows[0].title}»`]
       );
     }
@@ -698,7 +713,7 @@ async function initDatabase() {
     await client.query(
       `INSERT INTO achievement_definitions (code, title, rarity, description, icon, reward_bonus, limited_total, sort_order)
        VALUES
-         ('beta-tester', 'Тестировщик', 'legendary', 'Один из первых 30 участников закрытого бета-теста приложения «Пивник».', 'beta', $1, $2, 10),
+         ('beta-tester', 'Тестировщик', 'legendary', 'Один из первых 30 участников закрытого бета-теста приложения «Пивник».', 'beta', $1::integer, $2::integer, 10),
          ('creator', 'Создатель', 'legendary', 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.', 'all-seeing-eye', 0, 1, 1)
        ON CONFLICT (code) DO UPDATE SET
          title = EXCLUDED.title,
@@ -1176,13 +1191,13 @@ app.post('/api/auth', async (req, res, next) => {
       if (isNew && WELCOME_BONUS > 0) {
         await client.query(
           `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
-           VALUES ($1, 'welcome', 'completed', $2, $2, 'Приветственный бонус за регистрацию', NOW())`,
-          [userId, WELCOME_BONUS]
+           VALUES ($1::bigint, 'welcome', 'completed', $2::integer, $3::bigint, 'Приветственный бонус за регистрацию', NOW())`,
+          [userId, WELCOME_BONUS, WELCOME_BONUS]
         );
       }
-      await applyBetaUserRules(client, userId);
-      await maybeGrantBetaTester(client, userId);
-      await ensurePersonalQr(client, userId);
+      await runOptionalTransactionStep(client, 'auth_beta_rules', () => applyBetaUserRules(client, userId));
+      await runOptionalTransactionStep(client, 'auth_beta_achievement', () => maybeGrantBetaTester(client, userId));
+      await runOptionalTransactionStep(client, 'auth_personal_qr', () => ensurePersonalQr(client, userId));
       await client.query('COMMIT');
 
       const profile = await getProfile(userId);
@@ -2365,10 +2380,22 @@ app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, 
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'index.html')));
 app.use((_req, res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate').sendFile(path.join(__dirname, 'index.html')));
 
-app.use((error, _req, res, _next) => {
-  console.error(error);
-  const message = process.env.NODE_ENV === 'production' ? 'Внутренняя ошибка сервера.' : error.message;
-  res.status(500).json({ error: message });
+app.use((error, req, res, _next) => {
+  const errorId = `PVK-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  console.error(`[${errorId}] ${req.method} ${req.originalUrl}`, error);
+
+  if (res.headersSent) return;
+  const status = Number(error?.statusCode || error?.status || 500);
+  if (status >= 400 && status < 500) {
+    res.status(status).json({ error: error.message || 'Запрос не выполнен.', errorCode: errorId });
+    return;
+  }
+
+  const isDatabaseError = typeof error?.code === 'string' && /^[0-9A-Z]{5}$/.test(error.code);
+  const message = isDatabaseError
+    ? 'Не удалось обновить данные профиля. Повторите через несколько секунд.'
+    : 'Временная ошибка сервера. Повторите через несколько секунд.';
+  res.status(500).json({ error: message, errorCode: errorId });
 });
 
 await initDatabase();

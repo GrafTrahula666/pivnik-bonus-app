@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08121c"/><stop offset="1" stop-color="#16364e"/></linearGradient><radialGradient id="g"><stop stop-color="#aeefff" stop-opacity=".4"/><stop offset="1" stop-color="#aeefff" stop-opacity="0"/></radialGradient></defs>
+  <rect width="1200" height="900" rx="52" fill="url(#bg)"/>
+  <circle cx="600" cy="410" r="330" fill="url(#g)"/>
+  <circle cx="600" cy="410" r="210" fill="#0d1d28" stroke="#a7edff" stroke-width="14"/>
+  <circle cx="600" cy="410" r="175" fill="#1b3342"/>
+  <path d="M600 170l165 96-32 198-133 178-133-178-32-198 165-96z" fill="#7cdcf4" fill-opacity=".22" stroke="#b8f4ff" stroke-width="10"/>
+  <path d="M435 266h330M467 464h266M600 170v472M435 266l165 198 165-198M467 464l133 178 133-178" fill="none" stroke="#d7fbff" stroke-width="6" opacity=".75"/>
+  <text x="80" y="795" font-family="Arial" font-size="62" font-weight="900" fill="#effcff">Алмазная рамка</text>
+</svg>
