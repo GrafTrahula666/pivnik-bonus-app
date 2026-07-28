@@ -1,16 +1,16 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
-  "description": "Telegram Mini App программы лояльности бара Пивник — V14.3: стабильный вход, настройки профиля и достижения без блокировки",
+  "description": "Telegram и VK Mini App программы лояльности бара Пивник — единый дизайн, база и безопасная авторизация",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check app.js"
+    "start": "node universal-server.js",
+    "dev": "node --watch universal-server.js",
+    "check": "node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
