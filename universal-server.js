@@ -342,8 +342,8 @@ async function authenticateVk(body) {
     if (isNew && WELCOME_BONUS > 0) {
       await client.query(
         `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
-         VALUES ($1, 'welcome', 'completed', $2, $2, 'Приветственный бонус за регистрацию через VK', NOW())`,
-        [userId, WELCOME_BONUS]
+         VALUES ($1, 'welcome', 'completed', $2, $3, 'Приветственный бонус за регистрацию через VK', NOW())`,
+[userId, WELCOME_BONUS, WELCOME_BONUS]
       );
     }
 
