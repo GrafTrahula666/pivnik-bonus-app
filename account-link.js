@@ -11,13 +11,18 @@
   let activeCode = null;
   let countdownTimer = null;
 
+  function storageKey(key) {
+    const prefix = String(window.__PIVNIK_STORAGE_PREFIX__ || 'pivnik_tg_');
+    return `${prefix}${String(key).replace(/^pivnik_/, '')}`;
+  }
+
   function getToken() {
-    try { return localStorage.getItem('pivnik_session') || ''; }
+    try { return localStorage.getItem(storageKey('pivnik_session')) || ''; }
     catch (_) { return ''; }
   }
 
   function saveToken(token) {
-    try { localStorage.setItem('pivnik_session', token); }
+    try { localStorage.setItem(storageKey('pivnik_session'), token); }
     catch (_) {}
   }
 

@@ -1,5 +1,7 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '14.4-qr-fix';
+const APP_VERSION = '15.0-unified';
+const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
+const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 document.documentElement.classList.toggle('android-webview', isAndroid);
@@ -20,10 +22,15 @@ function refreshTelegramBridge() {
 }
 refreshTelegramBridge();
 
+function localStorageKey(key) {
+  const prefix = String(window.__PIVNIK_STORAGE_PREFIX__ || 'pivnik_tg_');
+  return `${prefix}${String(key).replace(/^pivnik_/, '')}`;
+}
+
 const safeStorage = {
-  get(key) { try { return localStorage.getItem(key) || ''; } catch (_) { return ''; } },
-  set(key, value) { try { localStorage.setItem(key, value); } catch (_) {} },
-  remove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+  get(key) { try { return localStorage.getItem(localStorageKey(key)) || ''; } catch (_) { return ''; } },
+  set(key, value) { try { localStorage.setItem(localStorageKey(key), value); } catch (_) {} },
+  remove(key) { try { localStorage.removeItem(localStorageKey(key)); } catch (_) {} }
 };
 const deepClone = (value) => {
   try { return globalThis.structuredClone ? globalThis.structuredClone(value) : JSON.parse(JSON.stringify(value)); }
@@ -213,14 +220,18 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
     if (source === 'telegram') {
       button.disabled = !state.profile?.photoUrl;
       const small = button.querySelector('small');
-      if (small) small.textContent = state.profile?.photoUrl ? 'Фото из профиля Telegram' : 'В Telegram нет фото';
+      if (small) {
+        small.textContent = state.profile?.photoUrl
+          ? `Фото из профиля ${PLATFORM_NAME}`
+          : `В ${PLATFORM_NAME} нет фото`;
+      }
     }
   });
   $('#openAnimalPicker')?.classList.toggle('active', state.profileDraft.avatarSource === 'animal');
   const telegramPreview = $('#telegramAvatarPreview');
   if (telegramPreview) {
     if (state.profile?.photoUrl) renderAvatarInto(telegramPreview, { ...state.profile, avatarSource: 'telegram' });
-    else telegramPreview.textContent = 'T';
+    else telegramPreview.textContent = IS_VK ? 'V' : 'T';
   }
   renderAvatarInto($('#profileSetupPreview'), selectedAvatarPreview());
   const frameOptions = $('#profileFrameOptions');
@@ -237,7 +248,7 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
   const selectedText = $('#profileSetupSelectedText');
   if (selectedText) {
     const source = state.profileDraft.avatarSource;
-    selectedText.textContent = source === 'telegram' ? 'Фото Telegram' : source === 'preset_female' ? 'Женский силуэт' : source === 'animal' ? 'Аватар из коллекции' : 'Мужской силуэт';
+    selectedText.textContent = source === 'telegram' ? `Фото ${PLATFORM_NAME}` : source === 'preset_female' ? 'Женский силуэт' : source === 'animal' ? 'Аватар из коллекции' : 'Мужской силуэт';
   }
   $$('#profileAgeOptions [data-age]').forEach((button) => button.classList.toggle('active', button.dataset.age === (state.profileDraft.ageGroup || '')));
   const privacy = state.profileDraft.privacy;
@@ -461,7 +472,7 @@ function enhanceDom() {
             <button class="primary-avatar-choice" data-avatar-source="preset_female" type="button"><img src="/assets/avatars/preset-female.webp" alt="Женский аватар"><b>Женский</b></button>
           </div>
           <div class="secondary-avatar-grid">
-            <button class="secondary-avatar-choice" data-avatar-source="telegram" type="button"><span class="telegram-avatar-preview" id="telegramAvatarPreview">T</span><span><b>Фото Telegram</b><small>Фото из профиля Telegram</small></span></button>
+            <button class="secondary-avatar-choice" data-avatar-source="telegram" type="button"><span class="telegram-avatar-preview" id="telegramAvatarPreview">${IS_VK ? 'V' : 'T'}</span><span><b>Фото ${PLATFORM_NAME}</b><small>Фото из профиля ${PLATFORM_NAME}</small></span></button>
             <button class="secondary-avatar-choice" id="openAnimalPicker" type="button"><img src="/assets/avatars/01-panda.webp" alt="Коллекция аватаров"><span><b>Выбрать аватар</b><small>Животные и мифические существа</small></span></button>
           </div>
           <div class="selected-avatar-line"><span id="profileSetupPreview"></span><div><small>Выбрано</small><b id="profileSetupSelectedText">Мужской силуэт</b></div></div>
@@ -486,7 +497,7 @@ function enhanceDom() {
           <div class="privacy-switches">
             <label><span><b>Публичный профиль</b><small>Другие смогут открыть статистику и достижения</small></span><input id="privacyPublicProfile" type="checkbox" checked></label>
             <label><span><b>Показывать имя</b><small>В рейтинге и публичном профиле</small></span><input id="privacyShowName" type="checkbox" checked></label>
-            <label><span><b>Показывать аватар</b><small>Фото Telegram или выбранный аватар</small></span><input id="privacyShowAvatar" type="checkbox" checked></label>
+            <label><span><b>Показывать аватар</b><small>Фото ${PLATFORM_NAME} или выбранный аватар</small></span><input id="privacyShowAvatar" type="checkbox" checked></label>
             <label><span><b>Показывать сумму</b><small>Сумма покупок за месяц в таблице лидеров</small></span><input id="privacyShowSpend" type="checkbox" checked></label>
             <label><span><b>Показывать статистику</b><small>Посещения, бонусы и будущие достижения</small></span><input id="privacyShowStats" type="checkbox" checked></label>
           </div>
@@ -561,7 +572,7 @@ setTimeout(() => {
     finishBoot();
     toast('Часть данных продолжает загружаться');
   } else {
-    showBootActions('Не удалось завершить подключение. Можно повторить без перезапуска Telegram.');
+    showBootActions(`Не удалось завершить подключение. Можно повторить без перезапуска ${PLATFORM_NAME}.`);
   }
 }, BOOT_FAILSAFE_MS);
 
@@ -615,7 +626,10 @@ async function fetchWithTimeout(path, options, timeoutMs) {
 async function api(path, options = {}) {
   const isStaffRequest = String(path).startsWith('/api/staff/');
   const method = String(options.method || 'GET').toUpperCase();
-  const attempts = Number(options.retries ?? (method === 'GET' ? 1 : 0)) + 1;
+  const carriesRequestKey = method !== 'GET'
+    && typeof options.body === 'string'
+    && /"requestKey"\s*:/.test(options.body);
+  const attempts = Number(options.retries ?? (method === 'GET' || carriesRequestKey ? 1 : 0)) + 1;
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
@@ -624,6 +638,7 @@ async function api(path, options = {}) {
         headers: {
           'content-type': 'application/json',
           'x-pivnik-version': APP_VERSION,
+          'x-pivnik-platform': IS_VK ? 'vk' : 'telegram',
           ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
           ...(isStaffRequest && state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
           ...(options.headers || {})
@@ -1225,7 +1240,7 @@ function clearStaffSession() {
   safeStorage.remove('pivnik_staff_session');
   renderStaffSession();
   closeModal('staffLoginModal');
-  toast('Используется текущий Telegram-аккаунт');
+  toast(`Используется текущий аккаунт ${PLATFORM_NAME}`);
 }
 
 function achievementRarityLabel(rarity) {
@@ -1486,19 +1501,6 @@ async function loadSecondaryData() {
   if (failures.length && navigator.onLine) toast('Часть разделов обновится при следующем открытии');
 }
 
-async function syncFirstRunState() {
-  if (state.profile?.termsAccepted && state.profile?.onboardingComplete) return;
-  try {
-    const data = await api('/api/me/consent', { method: 'POST', body: '{}', timeoutMs: 7000 });
-    if (data?.profile) {
-      state.profile = data.profile;
-      renderProfile();
-    }
-  } catch (error) {
-    console.warn('First-run state sync skipped:', error);
-  }
-}
-
 async function boot() {
   clearBootError();
   try {
@@ -1517,22 +1519,24 @@ async function boot() {
       }
     }
     if (!state.token) {
-      $('#bootText').textContent = 'Проверяем доступ в Telegram…';
+      $('#bootText').textContent = `Проверяем доступ в ${PLATFORM_NAME}…`;
       await authenticate();
     }
     $('#bootText').textContent = 'Открываем профиль…';
     renderProfile();
     renderStatuses();
     await finishBoot();
-    closeModal('consentModal');
     closeModal('profileSetupModal');
-    void syncFirstRunState();
-    void claimBetaTesterReward();
-    void loadSecondaryData();
+    if (state.profile?.termsAccepted) {
+      closeModal('consentModal');
+      void loadSecondaryData();
+    } else {
+      openModal('consentModal');
+    }
   } catch (error) {
     console.error('Boot failed:', error);
     const message = error?.status === 401
-      ? 'Telegram не передал данные входа. Закройте окно и откройте приложение из бота ещё раз.'
+      ? `${PLATFORM_NAME} не передал данные входа. Закройте окно и откройте приложение ещё раз.`
       : (error?.message || 'Не удалось загрузить приложение.');
     showBootActions(message);
   }
@@ -1542,11 +1546,20 @@ async function acceptTerms() {
   const button = $('#acceptTerms');
   if (button) button.disabled = true;
   try {
-    const data = await api('/api/me/consent', { method: 'POST', body: '{}', timeoutMs: 7000 });
+    const data = await api('/api/me/consent', {
+      method: 'POST',
+      body: '{}',
+      timeoutMs: 7000,
+      headers: { 'x-pivnik-explicit-consent': '1' }
+    });
     if (data?.profile) state.profile = data.profile;
     closeModal('consentModal');
     renderProfile();
     toast('Настройки сохранены');
+    void loadSecondaryData();
+    if (!state.profile?.onboardingComplete) {
+      window.setTimeout(() => openProfileSetup(1), 180);
+    }
   } finally {
     if (button) button.disabled = false;
   }
@@ -1617,7 +1630,7 @@ function scanQr() {
   );
 
   if (!supported) {
-    toast('Сканер Telegram недоступен. Введите короткий код вручную.');
+    toast(`Сканер ${PLATFORM_NAME} недоступен. Введите короткий код вручную.`);
     setTimeout(manualCode, 80);
     return;
   }
@@ -1649,7 +1662,7 @@ function scanQr() {
       return false;
     });
   } catch (error) {
-    console.warn('Telegram QR scanner failed:', error);
+    console.warn(`${PLATFORM_NAME} QR scanner failed:`, error);
     toast('Не удалось открыть камеру. Введите короткий код вручную.');
     setTimeout(manualCode, 80);
   }
@@ -1696,7 +1709,10 @@ function renderStaffRecent(data) {
     const reason = prompt('Причина отмены операции:');
     if (!reason?.trim()) return;
     try {
-      const result = await api(`/api/staff/transactions/${button.dataset.staffCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      const result = await api(`/api/staff/transactions/${button.dataset.staffCancel}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim(), requestKey: requestId() })
+      });
       if (state.resolvedClient?.profile?.id === result.client?.id) {
         state.resolvedClient.profile = result.client;
         $('#foundMeta').textContent = `${fmt(result.client.balance)} бонусов · ${result.client.status.bonusPercent}% начисление`;
@@ -1931,7 +1947,10 @@ function bindAdminTransactionActions(root) {
     const reason = prompt('Причина отмены операции владельцем:');
     if (!reason?.trim()) return;
     try {
-      await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim(), requestKey: requestId() })
+      });
       toast('Операция отменена');
       await Promise.all([loadAdmin(), loadLeaderboard()]);
       if ($('#adminTransactionsModal')?.classList.contains('open')) await openAllTransactions();
@@ -1955,13 +1974,31 @@ function renderInquiries(items, target = '#adminInquiries', compact = false) {
   const root = $(target);
   if (!root) return;
   root.className = `inquiry-list${items.length ? '' : ' empty-state'}`;
-  root.innerHTML = items.length ? items.map((item) => `<article class="inquiry-row status-${escapeHtml(item.status)}">
-    <div class="inquiry-main"><span>${escapeHtml(inquiryStatusLabel(item.status))}</span><b>${escapeHtml(item.itemTitle)}</b><small>${escapeHtml(item.name || item.telegramId)}${item.username ? ` · @${escapeHtml(item.username)}` : ''} · ${new Date(item.createdAt).toLocaleString('ru-RU')}</small><p>${escapeHtml(item.message)}</p></div>
-    ${compact ? '' : `<div class="inquiry-actions">${item.username ? `<button class="text-btn" data-inquiry-chat="${escapeHtml(item.username)}" type="button">Открыть чат</button>` : ''}${roleCanWrite(state.profile?.role) ? `<select data-inquiry-status="${item.id}"><option value="new" ${item.status === 'new' ? 'selected' : ''}>Новое</option><option value="answered" ${item.status === 'answered' ? 'selected' : ''}>Отвечено</option><option value="order" ${item.status === 'order' ? 'selected' : ''}>Заказ оформлен</option></select>` : ''}</div>`}
-  </article>`).join('') : 'Обращений пока нет';
-  root.querySelectorAll('[data-inquiry-chat]').forEach((button) => button.addEventListener('click', () => {
-    const url = `https://t.me/${encodeURIComponent(button.dataset.inquiryChat)}`;
-    try { tg?.openTelegramLink?.(url); } catch (_) { window.open(url, '_blank', 'noopener'); }
+  root.innerHTML = items.length ? items.map((item) => {
+    const contactId = item.telegramId
+      ? `Telegram ${item.telegramId}`
+      : item.vkId
+        ? `VK ${item.vkId}`
+        : 'ID не указан';
+    const contactUrl = item.telegramUsername
+      ? `https://t.me/${encodeURIComponent(item.telegramUsername)}`
+      : item.vkId
+        ? `https://vk.com/id${encodeURIComponent(item.vkId)}`
+        : item.vkUsername
+          ? `https://vk.com/${encodeURIComponent(item.vkUsername)}`
+          : '';
+    return `<article class="inquiry-row status-${escapeHtml(item.status)}">
+      <div class="inquiry-main"><span>${escapeHtml(inquiryStatusLabel(item.status))}</span><b>${escapeHtml(item.itemTitle)}</b><small>${escapeHtml(item.name || contactId)}${item.username ? ` · @${escapeHtml(item.username)}` : ''} · ${new Date(item.createdAt).toLocaleString('ru-RU')}</small><p>${escapeHtml(item.message)}</p></div>
+      ${compact ? '' : `<div class="inquiry-actions">${contactUrl ? `<button class="text-btn" data-inquiry-url="${escapeHtml(contactUrl)}" type="button">Открыть чат</button>` : ''}${roleCanWrite(state.profile?.role) ? `<select data-inquiry-status="${item.id}"><option value="new" ${item.status === 'new' ? 'selected' : ''}>Новое</option><option value="answered" ${item.status === 'answered' ? 'selected' : ''}>Отвечено</option><option value="order" ${item.status === 'order' ? 'selected' : ''}>Заказ оформлен</option></select>` : ''}</div>`}
+    </article>`;
+  }).join('') : 'Обращений пока нет';
+  root.querySelectorAll('[data-inquiry-url]').forEach((button) => button.addEventListener('click', () => {
+    const url = button.dataset.inquiryUrl;
+    if (url.startsWith('https://t.me/')) {
+      try { tg?.openTelegramLink?.(url); } catch (_) { window.open(url, '_blank', 'noopener,noreferrer'); }
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   }));
   root.querySelectorAll('[data-inquiry-status]').forEach((select) => select.addEventListener('change', async () => {
     try {
@@ -2026,7 +2063,7 @@ function filterAdminUsers() {
   const query = ($('#userSearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
   const role = $('#userRoleFilter')?.value || '';
   const filtered = state.adminUsers.filter((user) => {
-    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
+    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.vkId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
     return (!query || haystack.includes(query)) && (!role || user.role === role);
   });
   renderUsers(filtered, '#allUsersList', false);
@@ -2250,7 +2287,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId ? `Telegram ${user.telegramId}` : user.vkId ? `VK ${user.vkId}` : 'ID не указан')}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
@@ -2268,7 +2305,14 @@ function renderUsers(users, target = '#usersList', compact = false) {
     const reason = prompt('Причина корректировки:', 'Корректировка владельца');
     if (!reason?.trim()) return;
     try {
-      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason: reason.trim() }) });
+      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: Number(amount),
+          reason: reason.trim(),
+          requestKey: requestId()
+        })
+      });
       toast('Баланс изменён'); await loadAdmin(); await openAllUsers();
     } catch (error) { toast(error.message); }
   }));
@@ -2289,7 +2333,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
-    if (!confirm('Перевыпустить личный QR? Старый код перестанет работать.')) return;
+    if (!confirm('Перевыпустить личный QR? Старый код останется рабочим как защищённый alias.')) return;
     try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await loadAdmin(); await openAllUsers(); }
     catch (error) { toast(error.message); }
   }));

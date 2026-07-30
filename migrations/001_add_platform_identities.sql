@@ -1,10 +1,16 @@
--- Pivnik: shared Telegram/VK identities and bar membership.
--- Safe to run repeatedly on PostgreSQL after the base Telegram schema exists.
-
-BEGIN;
+-- Unified Telegram/VK identity, account-linking and merge schema.
+-- The runtime migration runner executes this file once inside a transaction.
 
 ALTER TABLE users
   ALTER COLUMN telegram_id DROP NOT NULL;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS merged_into_user_id BIGINT REFERENCES users(id),
+  ADD COLUMN IF NOT EXISTS merged_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1;
+
+CREATE INDEX IF NOT EXISTS idx_users_merged_into
+  ON users(merged_into_user_id);
 
 CREATE TABLE IF NOT EXISTS bars (
   id BIGSERIAL PRIMARY KEY,
@@ -29,6 +35,9 @@ CREATE TABLE IF NOT EXISTS user_identities (
   UNIQUE (user_id, provider)
 );
 
+CREATE INDEX IF NOT EXISTS idx_user_identities_user
+  ON user_identities(user_id, provider);
+
 CREATE TABLE IF NOT EXISTS bar_customers (
   bar_id BIGINT NOT NULL REFERENCES bars(id) ON DELETE CASCADE,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -39,38 +48,87 @@ CREATE TABLE IF NOT EXISTS bar_customers (
   PRIMARY KEY (bar_id, user_id)
 );
 
-INSERT INTO bars (code, name, address)
-VALUES ('pivnik', 'ПИВНИК', 'Санкт-Петербург, пр. Энгельса, 55')
-ON CONFLICT (code) DO UPDATE
-SET name = EXCLUDED.name,
-    address = EXCLUDED.address,
-    updated_at = NOW();
+CREATE TABLE IF NOT EXISTS reward_grants (
+  code TEXT NOT NULL,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount BIGINT NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  source TEXT NOT NULL DEFAULT 'system',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (code, user_id)
+);
 
-INSERT INTO user_identities (
-  user_id,
-  provider,
-  provider_user_id,
-  provider_username,
-  profile_url
-)
-SELECT
-  id,
-  'telegram',
-  telegram_id::text,
-  username,
-  photo_url
-FROM users
-WHERE telegram_id IS NOT NULL
-ON CONFLICT (provider, provider_user_id) DO UPDATE
-SET provider_username = EXCLUDED.provider_username,
-    profile_url = EXCLUDED.profile_url,
-    updated_at = NOW();
+CREATE TABLE IF NOT EXISTS platform_migrations (
+  code TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-INSERT INTO bar_customers (bar_id, user_id)
-SELECT b.id, u.id
-FROM bars AS b
-CROSS JOIN users AS u
-WHERE b.code = 'pivnik'
-ON CONFLICT (bar_id, user_id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS account_link_codes (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_provider TEXT NOT NULL CHECK (source_provider IN ('telegram', 'vk')),
+  code_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  used_by_user_id BIGINT REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (expires_at > created_at)
+);
 
-COMMIT;
+CREATE INDEX IF NOT EXISTS idx_account_link_codes_user
+  ON account_link_codes(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_account_link_codes_expiry
+  ON account_link_codes(expires_at);
+
+CREATE TABLE IF NOT EXISTS account_link_attempts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  success BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_account_link_attempts_user
+  ON account_link_attempts(user_id, attempted_at DESC);
+
+CREATE TABLE IF NOT EXISTS qr_aliases (
+  id BIGSERIAL PRIMARY KEY,
+  qr_token TEXT UNIQUE,
+  qr_short_code TEXT UNIQUE,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_user_id BIGINT REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (qr_token IS NOT NULL OR qr_short_code IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_qr_aliases_user
+  ON qr_aliases(user_id);
+
+CREATE TABLE IF NOT EXISTS account_merge_audit (
+  id BIGSERIAL PRIMARY KEY,
+  canonical_user_id BIGINT NOT NULL REFERENCES users(id),
+  merged_user_id BIGINT NOT NULL REFERENCES users(id),
+  duplicate_bonus_removed BIGINT NOT NULL DEFAULT 0 CHECK (duplicate_bonus_removed >= 0),
+  duplicate_bonus_unrecovered BIGINT NOT NULL DEFAULT 0 CHECK (duplicate_bonus_unrecovered >= 0),
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS reward_code TEXT,
+  ADD COLUMN IF NOT EXISTS cancel_request_key TEXT;
+
+ALTER TABLE transactions
+  ALTER COLUMN bonus_spent TYPE BIGINT,
+  ALTER COLUMN bonus_earned TYPE BIGINT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cancel_request_key
+  ON transactions(cancel_request_key)
+  WHERE cancel_request_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_reward
+  ON transactions(client_id, reward_code, status)
+  WHERE reward_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_leaderboard
+  ON transactions(created_at, client_id)
+  INCLUDE (cash_paid_cents)
+  WHERE status = 'completed' AND mode IN ('accrue', 'redeem');

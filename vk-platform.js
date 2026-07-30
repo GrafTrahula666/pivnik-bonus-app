@@ -17,36 +17,16 @@
    * re-authenticated on every launch so switching VK accounts cannot reuse
    * another person's profile, role or QR code.
    */
-  const storageKeys = new Set(['pivnik_session', 'pivnik_staff_session']);
   const storagePrefix = `pivnik_vk_${launchVkUserId || 'unknown'}_`;
-  const storageProto = window.Storage?.prototype;
-  if (storageProto) {
-    const getItem = storageProto.getItem;
-    const setItem = storageProto.setItem;
-    const removeItem = storageProto.removeItem;
-    const mappedKey = (storage, key) => (
-      storage === window.localStorage && storageKeys.has(String(key))
-        ? `${storagePrefix}${String(key)}`
-        : String(key)
-    );
-
-    storageProto.getItem = function patchedGetItem(key) {
-      return getItem.call(this, mappedKey(this, key));
-    };
-    storageProto.setItem = function patchedSetItem(key, value) {
-      return setItem.call(this, mappedKey(this, key), value);
-    };
-    storageProto.removeItem = function patchedRemoveItem(key) {
-      return removeItem.call(this, mappedKey(this, key));
-    };
-
-    try {
-      removeItem.call(window.localStorage, 'pivnik_session');
-      removeItem.call(window.localStorage, 'pivnik_staff_session');
-      removeItem.call(window.localStorage, `${storagePrefix}pivnik_session`);
-      removeItem.call(window.localStorage, `${storagePrefix}pivnik_staff_session`);
-    } catch (_) {}
-  }
+  window.__PIVNIK_STORAGE_PREFIX__ = storagePrefix;
+  try {
+    localStorage.removeItem('pivnik_session');
+    localStorage.removeItem('pivnik_staff_session');
+    localStorage.removeItem(`${storagePrefix}session`);
+    localStorage.removeItem(`${storagePrefix}staff_session`);
+    localStorage.removeItem(`${storagePrefix}pivnik_session`);
+    localStorage.removeItem(`${storagePrefix}pivnik_staff_session`);
+  } catch (_) {}
 
   const bridgeReady = (async () => {
     if (!bridge?.send) throw new Error('VK Bridge не загрузился.');
@@ -217,20 +197,36 @@
     consentObserver = null;
   }
 
-  function replacePlatformWords(root) {
-    if (!root) return;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const nodes = [];
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-    nodes.forEach((node) => {
-      const value = node.nodeValue || '';
-      if (!/Telegram|телеграм/i.test(value)) return;
-      node.nodeValue = value
-        .replace(/Telegram Mini App/g, 'VK Mini App')
-        .replace(/Telegram ID/g, 'VK ID')
-        .replace(/Telegram/g, 'VK')
-        .replace(/телеграм/gi, 'VK');
-    });
+  function applyVkLabels() {
+    const eyebrow = document.getElementById('eyebrow');
+    if (eyebrow) eyebrow.textContent = 'VK Mini App';
+    const scannerHint = document.getElementById('scannerPlatformHint');
+    if (scannerHint) scannerHint.textContent = 'Откроется штатный сканер VK';
+    const clearStaff = document.getElementById('clearStaffButton');
+    if (clearStaff) clearStaff.textContent = 'Работать под текущим VK-аккаунтом';
+    const privacyCopy = document.getElementById('privacyPlatformCopy');
+    if (privacyCopy) {
+      privacyCopy.textContent = 'Для работы приложение использует VK ID и привязанные идентификаторы, имя, username, роль пользователя, бонусный баланс и историю операций.';
+    }
+    const switchHelp = document.getElementById('platformSwitchHelp');
+    if (switchHelp) {
+      const title = document.createElement('strong');
+      title.textContent = 'Что делать, если сменился VK-аккаунт?';
+      switchHelp.replaceChildren(
+        title,
+        document.createElement('br'),
+        document.createTextNode(
+          'Откройте приложение под нужным аккаунтом VK. Чужая сессия повторно не используется.'
+        )
+      );
+    }
+    const userSearch = document.getElementById('userSearch');
+    if (userSearch) userSearch.placeholder = 'Имя, username, VK или Telegram ID';
+  }
+
+  function syncVisualViewport() {
+    const height = Math.max(320, Math.round(window.visualViewport?.height || window.innerHeight));
+    document.documentElement.style.setProperty('--pivnik-viewport-height', `${height}px`);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -239,8 +235,8 @@
     style.textContent = `
       html.vk-mini-app, html.vk-mini-app body { height: 100%; overflow: hidden !important; }
       html.vk-mini-app .app-shell {
-        height: 100dvh !important;
-        min-height: 100dvh !important;
+        height: var(--pivnik-viewport-height, 100dvh) !important;
+        min-height: var(--pivnik-viewport-height, 100dvh) !important;
         overflow: hidden !important;
         display: flex;
         flex-direction: column;
@@ -270,25 +266,17 @@
     `;
     document.head.appendChild(style);
 
-    replacePlatformWords(document.body);
-    const eyebrow = document.getElementById('eyebrow');
-    if (eyebrow) eyebrow.textContent = 'VK Mini App';
+    syncVisualViewport();
+    window.visualViewport?.addEventListener('resize', syncVisualViewport);
+    window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+    window.addEventListener('resize', syncVisualViewport);
+    applyVkLabels();
 
     document.addEventListener('click', (event) => {
       const button = event.target?.closest?.('#acceptTerms');
       if (button) consentExplicit = true;
     }, true);
 
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === 'characterData') replacePlatformWords(mutation.target.parentNode);
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.TEXT_NODE) replacePlatformWords(node.parentNode);
-          else if (node.nodeType === Node.ELEMENT_NODE) replacePlatformWords(node);
-        });
-      }
-    });
-    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
   });
 
   window.addEventListener('pivnik:vk-scanner-error', () => {

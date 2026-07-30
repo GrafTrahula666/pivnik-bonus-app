@@ -1,4 +1,4 @@
-/* VK loading screen geometry hotfix. No image replacement. */
+/* Geometry-only loading-screen fix. The existing 600 × 1066 artwork is reused. */
 html,
 body {
   width: 100%;
@@ -27,11 +27,13 @@ body {
 
 .boot-scene {
   position: relative !important;
-  width: min(100vw, calc(100dvh * 942 / 2048)) !important;
-  height: min(100dvh, calc(100vw * 2048 / 942)) !important;
+  width: min(100vw, calc(100vh * 600 / 1066)) !important;
+  width: min(100vw, calc(100dvh * 600 / 1066)) !important;
+  height: min(100vh, calc(100vw * 1066 / 600)) !important;
+  height: min(100dvh, calc(100vw * 1066 / 600)) !important;
   max-width: none !important;
   max-height: none !important;
-  aspect-ratio: 942 / 2048 !important;
+  aspect-ratio: 600 / 1066 !important;
   margin: 0 auto !important;
   border-radius: 0 !important;
   overflow: hidden !important;
@@ -46,7 +48,7 @@ body {
   width: 100% !important;
   height: 100% !important;
   max-width: none !important;
-  object-fit: fill !important;
+  object-fit: contain !important;
   object-position: center !important;
   transform: none !important;
 }
@@ -58,10 +60,10 @@ body {
 }
 
 .boot-sign-glitch {
-  left: 64.4% !important;
-  top: 56.55% !important;
-  width: 18.8% !important;
-  height: 5.1% !important;
+  left: 67.48% !important;
+  top: 56.52% !important;
+  width: 16.47% !important;
+  height: 5.38% !important;
   overflow: visible !important;
 }
 
@@ -73,14 +75,53 @@ body {
 }
 
 .boot-copy {
-  padding: 20px 18px calc(20px + env(safe-area-inset-bottom)) !important;
+  padding:
+    calc(20px + env(safe-area-inset-top))
+    18px
+    calc(20px + env(safe-area-inset-bottom)) !important;
 }
 
 @media (orientation: landscape) {
   .boot-scene {
-    width: min(100vw, calc(100dvh * 942 / 2048)) !important;
+    width: min(100vw, calc(100vh * 600 / 1066)) !important;
+    width: min(100vw, calc(100dvh * 600 / 1066)) !important;
+    height: 100vh !important;
     height: 100dvh !important;
   }
-  .boot-copy h1 { font-size: clamp(20px, 4.2vh, 30px) !important; }
-  .boot-copy p { font-size: clamp(11px, 2vh, 14px) !important; }
+
+  .boot-copy h1 {
+    font-size: clamp(20px, 4.2vh, 30px) !important;
+  }
+
+  .boot-copy p {
+    font-size: clamp(11px, 2vh, 14px) !important;
+  }
+}
+
+@media (max-height: 560px) {
+  .boot-copy {
+    padding:
+      calc(10px + env(safe-area-inset-top))
+      14px
+      calc(10px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .boot-copy h1 {
+    margin: 8px 0 5px !important;
+    font-size: clamp(19px, 4.5vh, 26px) !important;
+  }
+
+  .boot-copy p {
+    font-size: 11px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-screen,
+  .boot-screen *,
+  .boot-screen *::before,
+  .boot-screen *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
 }

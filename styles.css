@@ -3387,3 +3387,41 @@ body {
 .frame-choice-preview.avatar-frame-diamond { border-color: #80dcff; box-shadow: 0 0 14px rgba(128,220,255,.55); color: #80dcff; }
 .frame-choice-preview.avatar-frame-anna { border-color: #ff568a; box-shadow: 0 0 14px rgba(255,86,138,.55); color: #ff568a; }
 @media (max-width: 380px) { .profile-frame-options { grid-template-columns: 1fr; } }
+
+/* V15: safe-area, keyboard and reduced-height hardening for both app shells. */
+.modal {
+  padding:
+    max(10px, env(safe-area-inset-top))
+    10px
+    max(10px, env(safe-area-inset-bottom));
+}
+
+.modal-sheet {
+  max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: calc(90px + env(safe-area-inset-bottom));
+}
+
+.modal-sheet input,
+.modal-sheet textarea,
+.modal-sheet select,
+.modal-sheet button {
+  scroll-margin-bottom: calc(100px + env(safe-area-inset-bottom));
+}
+
+.toast {
+  bottom: calc(94px + env(safe-area-inset-bottom));
+}
+
+@media (max-height: 560px) {
+  .modal {
+    align-items: flex-end;
+  }
+
+  .modal-sheet {
+    border-radius: 20px;
+    padding: 18px;
+  }
+}

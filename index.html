@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=14.4-qr-fix" />
-  <script defer src="app.js?v=14.4-qr-fix"></script>
+  <link rel="stylesheet" href="styles.css?v=15.0-unified" />
+  <script defer src="app.js?v=15.0-unified"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -187,7 +187,7 @@
           <div class="step-heading"><span>2</span><div><h3>Клиент</h3><small>Отсканируйте личный QR или введите код вручную</small></div></div>
           <button class="scan-zone" id="scanClient" type="button">
             <span class="scan-icon">⌗</span>
-            <span><b>Сканировать QR</b><small>Откроется штатный сканер Telegram</small></span>
+            <span><b>Сканировать QR</b><small id="scannerPlatformHint">Откроется штатный сканер Telegram</small></span>
             <i>›</i>
           </button>
           <button class="manual-code-button" id="manualCodeButton" type="button">Ввести короткий код</button>
@@ -466,7 +466,7 @@
         <details class="help-section">
           <summary><span>10</span><b>Конфиденциальность и данные</b></summary>
           <div class="help-text">
-            <p>Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
+            <p id="privacyPlatformCopy">Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
             <p>Эти данные нужны для авторизации, ведения бонусного счёта, разграничения доступа и рассмотрения спорных операций.</p>
             <p>Административный доступ ограничивается ролями. Полные юридические реквизиты оператора и сроки хранения данных должны быть опубликованы перед открытым запуском.</p>
           </div>
@@ -488,7 +488,7 @@
             <p><strong>Где посмотреть операции?</strong><br>Нажмите кнопку «История».</p>
             <p><strong>Почему статус не обновился?</strong><br>Обновите данные. При задержке обратитесь к администратору.</p>
             <p><strong>Можно ли обменять бонусы на деньги?</strong><br>Нет. Бонусы используются только в рамках программы лояльности.</p>
-            <p><strong>Что делать, если сменился Telegram-аккаунт?</strong><br>Обратитесь к владельцу: автоматический перенос баланса между аккаунтами не гарантируется.</p>
+            <p id="platformSwitchHelp"><strong>Что делать, если сменился Telegram-аккаунт?</strong><br>Откройте приложение под нужным аккаунтом и при необходимости используйте безопасную привязку Telegram ↔ VK.</p>
           </div>
         </details>
       </div>
