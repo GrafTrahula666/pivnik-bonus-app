@@ -1754,7 +1754,11 @@ async function proxyRequest(req, res, bodyBuffer = null) {
 
 async function renderAppIndex(platform) {
   const source = await fs.readFile(path.join(__dirname, 'index.html'), 'utf8');
-  const withLinking = source.replace(
+  const withLoaderFix = source.replace(
+    /<link rel="stylesheet" href="styles\.css([^"]*)" \/>/i,
+    '<link rel="stylesheet" href="styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=1.0.0" />'
+  );
+  const withLinking = withLoaderFix.replace(
     /<script defer src="app\.js([^"]*)"><\/script>/i,
     '<script defer src="/account-link.js?v=2.0.0"></script>\n  <script defer src="app.js$1"></script>'
   );
@@ -1840,6 +1844,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/account-link.js') {
       return serveFile(res, path.join(__dirname, 'account-link.js'), 'text/javascript; charset=utf-8', 'no-cache');
+    }
+
+    if (req.method === 'GET' && url.pathname === '/loader-fix.css') {
+      return serveFile(res, path.join(__dirname, 'loader-fix.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
