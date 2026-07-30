@@ -6,6 +6,8 @@
   const launchParams = window.location.search.replace(/^\?/, '');
   const launchSearch = new URLSearchParams(launchParams);
   const launchVkUserId = String(launchSearch.get('vk_user_id') || '').trim();
+  const BRIDGE_INIT_TIMEOUT_MS = 1600;
+  const BRIDGE_PROFILE_TIMEOUT_MS = 2200;
   let vkUser = null;
   let bridgeInitialized = false;
   let consentExplicit = false;
@@ -28,12 +30,62 @@
     localStorage.removeItem(`${storagePrefix}pivnik_staff_session`);
   } catch (_) {}
 
+  function withTimeout(promise, timeoutMs, message) {
+    let timer = 0;
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]).finally(() => window.clearTimeout(timer));
+  }
+
+  function waitForBridge(signal) {
+    if (!signal?.addEventListener) return bridgeReady;
+    if (signal.aborted) {
+      return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+    }
+    return new Promise((resolve, reject) => {
+      const onAbort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+      signal.addEventListener('abort', onAbort, { once: true });
+      bridgeReady.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
+        (error) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        }
+      );
+    });
+  }
+
   const bridgeReady = (async () => {
     if (!bridge?.send) throw new Error('VK Bridge не загрузился.');
-    await bridge.send('VKWebAppInit');
-    bridgeInitialized = true;
+    let initRequest;
     try {
-      vkUser = await bridge.send('VKWebAppGetUserInfo');
+      initRequest = bridge.send('VKWebAppInit');
+      bridgeInitialized = true;
+      await withTimeout(
+        initRequest,
+        BRIDGE_INIT_TIMEOUT_MS,
+        'VK не подтвердил запуск приложения вовремя.'
+      );
+    } catch (error) {
+      /*
+       * The signed launch parameters are sufficient for authentication.
+       * Some VK iOS shells send no acknowledgement even though Init was
+       * delivered, so an absent acknowledgement must not freeze the app.
+       */
+      console.warn('VK init acknowledgement unavailable; continuing:', error);
+    }
+    try {
+      vkUser = await withTimeout(
+        bridge.send('VKWebAppGetUserInfo'),
+        BRIDGE_PROFILE_TIMEOUT_MS,
+        'VK не передал данные профиля вовремя.'
+      );
     } catch (error) {
       console.warn('VK user info unavailable:', error);
       vkUser = null;
@@ -140,7 +192,7 @@
     })();
 
     if (pathname === '/api/auth') {
-      await bridgeReady;
+      await waitForBridge(init.signal);
       const headers = new Headers(init.headers || {});
       headers.set('content-type', 'application/json');
       const response = await originalFetch(input, {

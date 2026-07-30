@@ -25,6 +25,9 @@ test('VK запускается через подписанный ID и очищ
   const initPosition = vk.indexOf("VKWebAppInit");
   const userPosition = vk.indexOf("VKWebAppGetUserInfo");
   assert.ok(initPosition >= 0 && userPosition > initPosition);
+  assert.match(vk, /BRIDGE_INIT_TIMEOUT_MS/);
+  assert.match(vk, /BRIDGE_PROFILE_TIMEOUT_MS/);
+  assert.match(vk, /waitForBridge\(init\.signal\)/);
   assert.match(vk, /launchVkUserId/);
   assert.match(vk, /String\(vkUser\.id\) !== launchVkUserId/);
   assert.match(vk, /pivnik_vk_\$\{launchVkUserId \|\| 'unknown'\}_/);

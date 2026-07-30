@@ -23,7 +23,7 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js/);
+  assert.match(vk, /\/vk-platform\.js\?v=2\.2\.0/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
 
