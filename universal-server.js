@@ -6,10 +6,13 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {
+  getUserEarnedAchievementState,
+  syncUserAchievements
+} from './achievements.js';
+import {
   chooseCanonicalUser,
   hashLinkCode,
   normalizeLinkCode as normalizeCoreLinkCode,
-  normalizePersonalQr,
   planMergedLedger,
   signSession as signCoreSession,
   strongestRole,
@@ -18,6 +21,7 @@ import {
   validateVkLaunchParams as validateCoreVkLaunchParams,
   verifySession as verifyCoreSession
 } from './platform-core.js';
+import { resolvePersonalQrRecord } from './qr-resolver.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -47,12 +51,17 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const VK_AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LINK_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const BAR_CODE = 'pivnik';
 const BAR_NAME = 'ПИВНИК';
 const BAR_ADDRESS = 'Санкт-Петербург, пр. Энгельса, 55';
 const BEER_PAID_TARGET_ML = 14_000;
 const UNLIMITED_BONUS_BALANCE = 9_999_999_999_999;
+const MIGRATION_CHECKSUM_UPGRADES = Object.freeze({
+  '001_add_platform_identities.sql': Object.freeze({
+    from: '9ab2721fcfaf7f57756d31e422eb781776c52680b10a0facb233be053d96ceca',
+    to: 'ee37be489bbf1675930a0af7e90d4e02a5f6cf37689c002cf56b3e8d37ba4c54'
+  })
+});
 
 const STATUS_LEVELS = [
   { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
@@ -348,7 +357,24 @@ async function runSqlMigrations(client) {
       );
       if (existing.rowCount) {
         if (existing.rows[0].checksum !== checksum) {
-          throw new Error(`Migration ${file} was changed after it was applied.`);
+          const upgrade = MIGRATION_CHECKSUM_UPGRADES[file];
+          if (upgrade?.from !== existing.rows[0].checksum || upgrade.to !== checksum) {
+            throw new Error(`Migration ${file} was changed after it was applied.`);
+          }
+          try {
+            await client.query('BEGIN');
+            await client.query(sql);
+            await client.query(
+              `UPDATE schema_migrations
+               SET checksum = $2, applied_at = NOW()
+               WHERE code = $1 AND checksum = $3`,
+              [file, checksum, existing.rows[0].checksum]
+            );
+            await client.query('COMMIT');
+          } catch (error) {
+            try { await client.query('ROLLBACK'); } catch {}
+            throw error;
+          }
         }
         continue;
       }
@@ -673,7 +699,10 @@ async function getProfile(userId, platform = 'unknown', db = pool) {
   if (!result.rowCount) return null;
 
   const row = result.rows[0];
-  const spend12mCents = await getRollingSpend(db, canonical);
+  const [spend12mCents, achievementState] = await Promise.all([
+    getRollingSpend(db, canonical),
+    getUserEarnedAchievementState(db, canonical)
+  ]);
   const unlimitedBonus = hasUnlimitedBonus(row);
   const status = getEffectiveStatus(row, spend12mCents);
   const identitySummary = await getIdentitySummary(db, canonical);
@@ -689,8 +718,8 @@ async function getProfile(userId, platform = 'unknown', db = pool) {
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: achievementsFromRow(row),
-    unannouncedAchievements: [],
+    achievements: [...achievementsFromRow(row), ...achievementState.earned],
+    unannouncedAchievements: achievementState.unannounced,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
@@ -794,7 +823,7 @@ async function getUnifiedMonthlyLeaderboard(currentUserId) {
 
   return {
     month,
-    prizeNote: 'Единый рейтинг Telegram и VK по фактически оплаченным покупкам текущего месяца.',
+    prizeNote: 'После закрытия месяца участник на 1-м месте получает эпическое достижение и бесплатную пинту 0,5 л.',
     scope: 'telegram-vk',
     leaders: leaders.map((row) => {
       const isMe = String(row.id) === String(canonical);
@@ -954,6 +983,7 @@ async function getUnifiedAdminUsers() {
 }
 
 async function getAppPayload(userId, platform = 'unknown') {
+  await syncUserAchievements(pool, userId);
   const [profile, designResult] = await Promise.all([
     getProfile(userId, platform),
     pool.query('SELECT published FROM app_settings WHERE id = 1')
@@ -1798,8 +1828,12 @@ export async function mergeUsers(db, firstUserId, secondUserId) {
   await db.query('DELETE FROM beta_grants WHERE user_id = $1::bigint', [targetId]);
 
   await db.query(
-    `INSERT INTO reward_grants (code, user_id, amount, source, created_at)
-     SELECT code, $1::bigint, amount, source, created_at
+    `INSERT INTO reward_grants (
+       code, user_id, amount, source, achievement_code,
+       achievement_period, reward_beer_ml, announced_at, created_at
+     )
+     SELECT code, $1::bigint, amount, source, achievement_code,
+            achievement_period, reward_beer_ml, announced_at, created_at
      FROM reward_grants
      WHERE user_id = $2::bigint
      ON CONFLICT (code, user_id) DO NOTHING`,
@@ -2006,33 +2040,6 @@ async function consumeAccountLinkCode(currentUserId, requestedProvider, rawCode)
     merge: mergeResult,
     ...(await getAppPayload(canonical, requestedProvider))
   };
-}
-
-async function resolvePersonalQr(payload) {
-  const normalized = normalizePersonalQr(payload, PERSONAL_QR_PREFIX);
-  if (!normalized) return null;
-  const token = normalized.type === 'token' ? normalized.value : null;
-
-  const direct = await pool.query(
-    `SELECT id, qr_token, qr_short_code
-     FROM users
-     WHERE merged_into_user_id IS NULL
-       AND ${token ? 'qr_token = $1' : 'UPPER(qr_short_code) = $1'}
-     LIMIT 1`,
-    [normalized.value]
-  );
-  if (direct.rowCount) return direct.rows[0];
-
-  const alias = await pool.query(
-    `SELECT u.id, u.qr_token, u.qr_short_code
-     FROM qr_aliases qa
-     JOIN users u ON u.id = qa.user_id
-     WHERE u.merged_into_user_id IS NULL
-       AND ${token ? 'qa.qr_token = $1' : 'UPPER(qa.qr_short_code) = $1'}
-     LIMIT 1`,
-    [normalized.value]
-  );
-  return alias.rows[0] || null;
 }
 
 async function readRequestBody(req) {
@@ -2415,7 +2422,7 @@ const server = http.createServer(async (req, res) => {
       }
       enforceRateLimit(`qr:${user.id}:${requestAddress(req)}`, 60, 60 * 1000);
       const body = parseJsonBody(await readRequestBody(req));
-      const resolved = await resolvePersonalQr(body.payload);
+      const resolved = await resolvePersonalQrRecord(pool, body.payload);
       if (!resolved) return sendJson(res, 404, { error: 'Персональный код не найден.' });
       return sendJson(res, 200, {
         qrToken: resolved.qr_token,
@@ -2464,6 +2471,9 @@ if (!isTestImport) {
         'Platform initialization failed:',
         error?.code || error?.message || 'unknown'
       );
+      process.exitCode = 1;
+      child?.kill('SIGTERM');
+      server.close(() => process.exit(1));
     }
   });
 }

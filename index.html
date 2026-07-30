@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=15.0-unified" />
-  <script defer src="app.js?v=15.0-unified"></script>
+  <link rel="stylesheet" href="styles.css?v=16.0-premium-achievements" />
+  <script defer src="app.js?v=16.0-premium-achievements"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -505,7 +505,7 @@
       <button class="close" data-close="achievementsModal">×</button>
       <span class="muted">Коллекция Пивника</span>
       <h2>Достижения</h2>
-      <p class="help-intro">Полная система наград находится в разработке. Уже полученные особые достижения остаются навсегда.</p>
+      <p class="help-intro">Условия считаются автоматически по завершённым операциям. Обычные награды дают 10 бонусов, редкие — 20, эпические — 30.</p>
       <div class="achievement-tabs" role="tablist" aria-label="Редкость достижений">
         <button class="active" data-achievement-tab="common" type="button">Обычные</button>
         <button data-achievement-tab="rare" type="button">Редкие</button>
@@ -541,6 +541,12 @@
     <div class="modal-sheet tall-sheet premium-sheet">
       <button class="close" data-close="shopModal">×</button>
       <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
+      <div class="shop-private-stock" aria-label="Привилегии магазина">
+        <span class="shop-private-monogram">P</span>
+        <div><small>PRIVATE STOCK · ПИВНИК</small><strong>Редкие вещи для своих</strong><p>Крафт, лимитированные бокалы и оформление профиля — с выдачей прямо в баре.</p></div>
+        <span class="shop-private-seal">№ 55</span>
+      </div>
+      <div class="shop-trust-row"><span>◆ Безопасная покупка по QR</span><span>◆ Получение у сотрудника</span></div>
       <p class="help-intro" id="shopNote">Каталог разделён по категориям. Товары за бонусы выдаёт сотрудник по QR, рублёвые позиции оплачиваются в баре.</p>
       <div id="shopCatalog" class="shop-catalog empty-state">Загрузка каталога…</div>
       <button class="primary full" id="shopShowQr" type="button">Показать QR для покупки за бонусы</button>

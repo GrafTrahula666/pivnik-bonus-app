@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node universal-server.js",
     "dev": "node --watch universal-server.js",
-    "check": "node --check platform-core.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
+    "check": "node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
     "test": "node --test"
   },
   "dependencies": {

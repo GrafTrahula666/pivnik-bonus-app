@@ -147,6 +147,11 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
       'utf8'
     );
     await db.exec(migration);
+    const achievementsMigration = await readFile(
+      new URL('../migrations/002_countable_achievements.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(achievementsMigration);
 
     const telegramUser = await db.query(`
       INSERT INTO users (
@@ -196,6 +201,16 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
        VALUES ('welcome-100', $1, 100, 'consent'),
               ('welcome-100', $2, 100, 'consent')`,
       [telegramId, vkId]
+    );
+    await db.query(
+      `INSERT INTO reward_grants (
+         code, user_id, amount, source, achievement_code,
+         achievement_period, reward_beer_ml, announced_at
+       ) VALUES (
+         'achievement:monthly-top-spender:2026-01', $1, 0, 'achievement',
+         'monthly-top-spender', '2026-01', 500, NOW()
+       )`,
+      [vkId]
     );
     await db.query(
       `INSERT INTO beta_grants (code, user_id, amount)
@@ -311,6 +326,18 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
     );
     assert.equal(Number(beer.rows[0].paid_ml_total), 14_000);
     assert.equal(Number(beer.rows[0].gift_ml_balance), 1_000);
+
+    const achievementGrant = await db.query(
+      `SELECT achievement_code, achievement_period, reward_beer_ml, announced_at
+       FROM reward_grants
+       WHERE user_id = $1 AND code = 'achievement:monthly-top-spender:2026-01'`,
+      [telegramId]
+    );
+    assert.equal(achievementGrant.rowCount, 1);
+    assert.equal(achievementGrant.rows[0].achievement_code, 'monthly-top-spender');
+    assert.equal(achievementGrant.rows[0].achievement_period, '2026-01');
+    assert.equal(Number(achievementGrant.rows[0].reward_beer_ml), 500);
+    assert.ok(achievementGrant.rows[0].announced_at);
 
     const identities = await db.query(
       'SELECT provider, user_id FROM user_identities ORDER BY provider'

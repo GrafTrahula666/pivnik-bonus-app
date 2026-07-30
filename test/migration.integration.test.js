@@ -29,6 +29,12 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     );
     await db.exec(migration);
     await db.exec(migration);
+    const achievementsMigration = await readFile(
+      new URL('../migrations/002_countable_achievements.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(achievementsMigration);
+    await db.exec(achievementsMigration);
 
     const first = await db.query(`
       INSERT INTO users (telegram_id)

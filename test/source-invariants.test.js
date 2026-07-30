@@ -182,4 +182,25 @@ test('Повторные миграции защищены реестром, che
   assert.match(gateway, /checksum/);
   assert.match(gateway, /pivnik-schema-migrations-v1/);
   assert.match(gateway, /platform_migrations/);
+  assert.match(gateway, /MIGRATION_CHECKSUM_UPGRADES/);
+  assert.match(gateway, /server\.close\(\(\) => process\.exit\(1\)\)/);
+});
+
+test('Достижения считаются по журналу и добавлены в оба профиля', async () => {
+  const [achievements, server, gateway, app, migration] = await Promise.all([
+    source('achievements.js'),
+    source('server.js'),
+    source('universal-server.js'),
+    source('app.js'),
+    source('migrations/002_countable_achievements.sql')
+  ]);
+  assert.match(achievements, /single-check-1000/);
+  assert.match(achievements, /monthly-top-spender/);
+  assert.match(achievements, /Europe\/Moscow/);
+  assert.match(achievements, /mode IN \('accrue','redeem'\)/);
+  assert.match(achievements, /ON CONFLICT \(code, user_id\) DO NOTHING/);
+  assert.match(server, /getUserAchievementState/);
+  assert.match(gateway, /syncUserAchievements/);
+  assert.match(app, /loadAchievements\(\)/);
+  assert.match(migration, /'achievement'/);
 });

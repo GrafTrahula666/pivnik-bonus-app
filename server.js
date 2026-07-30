@@ -7,12 +7,18 @@ import helmet from 'helmet';
 import pg from 'pg';
 import QRCode from 'qrcode';
 import {
-  normalizePersonalQr,
+  acknowledgeAchievement,
+  getUserAchievementState,
+  getUserEarnedAchievementState,
+  syncUserAchievements
+} from './achievements.js';
+import {
   normalizeRequestKey,
   signSession as signCoreSession,
   validateTelegramInitData as validateCoreTelegramInitData,
   verifySession as verifyCoreSession
 } from './platform-core.js';
+import { resolvePersonalQrRecord } from './qr-resolver.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -81,6 +87,7 @@ const SHOP_CATEGORIES = new Set(['craft', 'limited', 'profile', 'other']);
 const SHOP_PRICE_TYPES = new Set(['bonus', 'rub', 'pending']);
 const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
+  { code: 'orange-blanche-1-plus-1-3', title: 'Orange Blanche 1+1=3', description: 'Берите две Orange Blanche — третью пинту получите в подарок. Условия и наличие уточняйте у сотрудника бара.', badge: '1+1=3', active: true, sortOrder: 15 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
   { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
 ];
@@ -608,7 +615,7 @@ async function initDatabase() {
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cancel_request_key ON transactions(cancel_request_key) WHERE cancel_request_key IS NOT NULL'
     );
     await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_mode_check');
-    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop'))");
+    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop','achievement'))");
     const pendingCleanup = await client.query(
       `INSERT INTO platform_migrations (code)
        VALUES ('cancel-legacy-pending-transactions-v1')
@@ -903,7 +910,10 @@ async function getProfile(userId, db = pool) {
   );
   if (!userResult.rowCount) return null;
   const row = userResult.rows[0];
-  const spend12mCents = await getRollingSpend(db, userId);
+  const [spend12mCents, achievementState] = await Promise.all([
+    getRollingSpend(db, userId),
+    getUserEarnedAchievementState(db, userId)
+  ]);
   const unlimitedBonus = hasUnlimitedBonus(row);
   const status = getEffectiveStatus(row, spend12mCents);
   return {
@@ -917,8 +927,8 @@ async function getProfile(userId, db = pool) {
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: achievementsFromRow(row),
-    unannouncedAchievements: [],
+    achievements: [...achievementsFromRow(row), ...achievementState.earned],
+    unannouncedAchievements: achievementState.unannounced,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
@@ -1304,16 +1314,29 @@ app.get('/api/me', authRequired, async (req, res, next) => {
 });
 
 
-// Recovery mode: the achievement catalogue remains visible in the client, but
-// database-backed automatic grants are temporarily disabled until they are tested
-// separately. These endpoints keep the V14 interface compatible without touching
-// authentication or user balances.
-app.get('/api/achievements', authRequired, async (req, res) => {
-  res.json({ achievements: [], profileAchievements: req.user.achievements || [], comingSoon: true });
+app.get('/api/achievements', authRequired, async (req, res, next) => {
+  try {
+    const state = await getUserAchievementState(pool, req.user.id);
+    const legendary = (req.user.achievements || []).filter((item) => item.rarity === 'legendary');
+    res.json({
+      achievements: state.achievements,
+      profileAchievements: [...legendary, ...state.earned],
+      unannouncedAchievements: state.unannounced,
+      comingSoon: false
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.post('/api/me/achievements/:code/ack', authRequired, async (_req, res) => {
-  res.json({ ok: true });
+app.post('/api/me/achievements/:code/ack', authRequired, async (req, res, next) => {
+  try {
+    const acknowledged = await acknowledgeAchievement(pool, req.user.id, req.params.code);
+    if (!acknowledged) return res.status(404).json({ error: 'Награда достижения не найдена.' });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/me/consent', authRequired, async (req, res, next) => {
@@ -1528,7 +1551,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
     const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date());
     res.json({
       month,
-      prizeNote: 'Награды за 1–3 место будут объявлены после бета-теста.',
+      prizeNote: 'После закрытия месяца участник на 1-м месте получает эпическое достижение и бесплатную пинту 0,5 л.',
       leaders: ranked.rows.map((row) => {
         const isMe = String(row.id) === String(req.user.id);
         return {
@@ -1700,30 +1723,8 @@ app.post('/api/staff/activate', authRequired, requireRole('staff', 'admin'), asy
 
 app.post('/api/staff/qr/resolve', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
-    const normalized = normalizePersonalQr(req.body?.payload, PERSONAL_QR_PREFIX);
-    if (!normalized) return res.status(400).json({ error: 'Передан пустой QR-код.' });
-    const token = normalized.type === 'token';
-    let result = await pool.query(
-      `SELECT id, qr_token, qr_short_code
-       FROM users
-       WHERE merged_into_user_id IS NULL
-         AND ${token ? 'qr_token = $1' : 'UPPER(qr_short_code) = $1'}
-       LIMIT 1`,
-      [normalized.value]
-    );
-    if (!result.rowCount) {
-      result = await pool.query(
-        `SELECT u.id, u.qr_token, u.qr_short_code
-         FROM qr_aliases qa
-         JOIN users u ON u.id = qa.user_id
-         WHERE u.merged_into_user_id IS NULL
-           AND ${token ? 'qa.qr_token = $1' : 'UPPER(qa.qr_short_code) = $1'}
-         LIMIT 1`,
-        [normalized.value]
-      );
-    }
-    if (!result.rowCount) return res.status(404).json({ error: 'Персональный код не найден.' });
-    const user = result.rows[0];
+    const user = await resolvePersonalQrRecord(pool, req.body?.payload);
+    if (!user) return res.status(404).json({ error: 'Персональный код не найден.' });
     res.json({ qrToken: user.qr_token, shortCode: user.qr_short_code, client: await getProfile(user.id) });
   } catch (error) {
     next(error);
@@ -1749,12 +1750,17 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     await client.query('BEGIN');
     await lockRequestKey(client, requestKey);
 
+    const resolvedQr = await resolvePersonalQrRecord(client, qrToken);
+    if (!resolvedQr) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
     const userResult = await client.query(
       `SELECT id, telegram_id, first_name, last_name, qr_short_code, role, unlimited_bonus
        FROM users
-       WHERE qr_token = $1 AND merged_into_user_id IS NULL
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
        FOR UPDATE`,
-      [qrToken]
+      [resolvedQr.id]
     );
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
@@ -1771,6 +1777,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
         beerMl
       });
       await client.query('COMMIT');
+      await syncUserAchievements(pool, existing.rows[0].client_id);
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id)
@@ -1835,6 +1842,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       [newPaidMl, newGiftBalanceMl, targetUser.id]
     );
     await client.query('COMMIT');
+    await syncUserAchievements(pool, targetUser.id);
 
     const tx = txResult.rows[0];
     const beerText = beerMl > 0
@@ -1895,12 +1903,17 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
     await client.query('BEGIN');
     await lockRequestKey(client, requestKey);
 
+    const resolvedQr = await resolvePersonalQrRecord(client, qrToken);
+    if (!resolvedQr) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
     const userResult = await client.query(
       `SELECT id, telegram_id, first_name, last_name
        FROM users
-       WHERE qr_token = $1 AND merged_into_user_id IS NULL
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
        FOR UPDATE`,
-      [qrToken]
+      [resolvedQr.id]
     );
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
@@ -1916,6 +1929,7 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
         giftSpentMl: giftMl
       });
       await client.query('COMMIT');
+      await syncUserAchievements(pool, existing.rows[0].client_id);
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id)
@@ -1939,6 +1953,7 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
     );
     await client.query('UPDATE beer_loyalty SET gift_ml_balance = $1, updated_at = NOW() WHERE user_id = $2', [newGiftBalance, targetUser.id]);
     await client.query('COMMIT');
+    await syncUserAchievements(pool, targetUser.id);
 
     await sendTelegramMessage(
       targetUser.telegram_id,
@@ -1980,12 +1995,17 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       return res.status(400).json({ error: 'Товар недоступен.' });
     }
     const item = shopItemResponse(itemResult.rows[0]);
+    const resolvedQr = await resolvePersonalQrRecord(client, qrToken);
+    if (!resolvedQr) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
     const userResult = await client.query(
       `SELECT id, telegram_id, first_name, role, unlimited_bonus
        FROM users
-       WHERE qr_token = $1 AND merged_into_user_id IS NULL
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
        FOR UPDATE`,
-      [qrToken]
+      [resolvedQr.id]
     );
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
@@ -2002,6 +2022,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
         reason: item.title
       });
       await client.query('COMMIT');
+      await syncUserAchievements(pool, existing.rows[0].client_id);
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id),
@@ -2033,6 +2054,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       await client.query("UPDATE users SET profile_frame = 'diamond', updated_at = NOW() WHERE id = $1::bigint", [target.id]);
     }
     await client.query('COMMIT');
+    await syncUserAchievements(pool, target.id);
     await sendTelegramMessage(target.telegram_id, `Покупка в лавке «Пивника»
 
 ${item.title}

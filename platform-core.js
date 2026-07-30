@@ -225,14 +225,62 @@ export function normalizeRequestKey(value) {
   return REQUEST_KEY_PATTERN.test(key) ? key : '';
 }
 
-export function normalizePersonalQr(value, prefix = 'PIVNIK:') {
-  const original = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+export function normalizePersonalQr(value, prefix = 'PIVNIK:', depth = 0) {
+  if (depth > 4) return null;
+  let original = value && typeof value === 'object'
+    ? String(value.payload || value.code || value.qr || value.qrToken || value.shortCode || '')
+    : String(value || '');
+  original = original.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   if (!original) return null;
-  if (original.toUpperCase().startsWith(prefix.toUpperCase())) {
-    const token = original.slice(prefix.length);
-    return token ? { type: 'token', value: token } : null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const decoded = decodeURIComponent(original);
+      if (decoded === original) break;
+      original = decoded.trim();
+    } catch {
+      break;
+    }
   }
-  return { type: 'short', value: original.toUpperCase() };
+  original = original.replace(/^["']|["']$/g, '').trim();
+
+  try {
+    const parsed = JSON.parse(original);
+    if (parsed && typeof parsed === 'object') {
+      return normalizePersonalQr(parsed, prefix, depth + 1);
+    }
+  } catch {}
+
+  try {
+    const url = new URL(original);
+    const embedded = url.searchParams.get('payload')
+      || url.searchParams.get('code')
+      || url.searchParams.get('qr')
+      || url.searchParams.get('token');
+    if (embedded) return normalizePersonalQr(embedded, prefix, depth + 1);
+    const tail = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || '');
+    if (tail) original = tail;
+  } catch {}
+
+  const prefixPosition = original.toUpperCase().indexOf(prefix.toUpperCase());
+  if (prefixPosition >= 0) {
+    const token = original.slice(prefixPosition + prefix.length).trim();
+    return /^[A-Za-z0-9_-]{8,128}$/.test(token)
+      ? { type: 'token', value: token }
+      : null;
+  }
+
+  const compact = original.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (/^PVK[A-Z0-9]{8}$/.test(compact)) {
+    return {
+      type: 'short',
+      value: `PVK-${compact.slice(3, 7)}-${compact.slice(7, 11)}`
+    };
+  }
+  if (/^[A-Za-z0-9_-]{8,128}$/.test(original)) {
+    return { type: 'token', value: original };
+  }
+  return null;
 }
 
 export function ledgerBalance(transactions) {

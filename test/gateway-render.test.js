@@ -25,7 +25,7 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('app.js?v=15.0-unified');
+  const appPosition = vk.indexOf('app.js?v=16.0-premium-achievements');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
