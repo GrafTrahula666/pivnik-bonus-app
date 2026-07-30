@@ -2146,7 +2146,7 @@ export async function renderAppIndex(platform) {
     );
 }
 
-function documentSecurityHeaders(platform) {
+export function documentSecurityHeaders(platform) {
   const telegramScript = platform === 'telegram' ? ' https://telegram.org' : '';
   return {
     'x-content-type-options': 'nosniff',
@@ -2160,7 +2160,7 @@ function documentSecurityHeaders(platform) {
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      'frame-ancestors https://vk.com https://*.vk.com https://web.telegram.org https://*.telegram.org'
+      'frame-ancestors https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru https://web.telegram.org https://*.telegram.org'
     ].join('; ')
   };
 }

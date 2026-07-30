@@ -7,9 +7,10 @@ process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
 test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
-  const { renderAppIndex } = await import('../universal-server.js?render-test');
+  const { documentSecurityHeaders, renderAppIndex } = await import('../universal-server.js?render-test');
   const telegram = await renderAppIndex('telegram');
   const vk = await renderAppIndex('vk');
+  const vkCsp = documentSecurityHeaders('vk')['content-security-policy'];
 
   assert.match(telegram, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(telegram, /\/account-link\.js/);
@@ -29,4 +30,9 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
+
+  assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.com/);
+  assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.com/);
+  assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.ru/);
+  assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.ru/);
 });
