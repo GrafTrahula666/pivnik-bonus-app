@@ -23,14 +23,14 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js\?v=3\.1\.0/);
+  assert.match(vk, /\/vk-platform\.js\?v=3\.2\.0/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('app.js?v=16.2-post-boot-sync');
+  const appPosition = vk.indexOf('app.js?v=16.3-vk-launch-recovery');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
@@ -59,5 +59,33 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
       new URL('https://pivnik.example/index.html?vk_user_id=123&vk_platform=desktop_web&sign=test')
     ),
     'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { referer: 'https://vk.ru/app54694987' }
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { origin: 'https://api.vk.com' }
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { 'user-agent': 'Mozilla/5.0 VK-iPhone/8.120' }
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { referer: 'https://not-vk.example/app54694987' }
+    ),
+    'telegram'
   );
 });

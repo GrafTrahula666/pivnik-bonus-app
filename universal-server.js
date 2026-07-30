@@ -1059,6 +1059,8 @@ async function resolveProviderUser(provider, externalUser) {
   let userId;
   try {
     await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2500ms'");
+    await client.query("SET LOCAL statement_timeout = '6000ms'");
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       [`identity:${provider}:${externalUser.id}`]
@@ -2179,7 +2181,7 @@ export async function renderAppIndex(platform) {
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.1.0"></script>\n  <script defer src="/account-link.js$1"></script>'
+      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.0"></script>\n  <script defer src="/account-link.js$1"></script>'
     );
 }
 
@@ -2202,7 +2204,26 @@ export function documentSecurityHeaders(platform) {
   };
 }
 
-export function platformForDocumentRequest(url) {
+function hasVkEmbedSource(headers = {}) {
+  const userAgent = String(headers['user-agent'] || '');
+  if (/(?:VKAndroidApp|VK-iPhone|VKApp)/i.test(userAgent)) return true;
+  const sources = [headers.origin, headers.referer, headers.referrer]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .filter(Boolean);
+  return sources.some((value) => {
+    try {
+      const hostname = new URL(String(value)).hostname.toLowerCase();
+      return hostname === 'vk.com'
+        || hostname.endsWith('.vk.com')
+        || hostname === 'vk.ru'
+        || hostname.endsWith('.vk.ru');
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function platformForDocumentRequest(url, headers = {}) {
   if (url.pathname === '/vk' || url.pathname === '/vk/') return 'vk';
   if (url.pathname !== '/' && url.pathname !== '/index.html') return null;
 
@@ -2212,7 +2233,7 @@ export function platformForDocumentRequest(url) {
       && Array.from(url.searchParams.keys()).some((key) => key.startsWith('vk_'))
     );
 
-  return hasVkLaunchParams ? 'vk' : 'telegram';
+  return hasVkLaunchParams || hasVkEmbedSource(headers) ? 'vk' : 'telegram';
 }
 
 async function serveFile(res, filePath, contentType, cacheControl = 'no-store') {
@@ -2270,7 +2291,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
 
-    const documentPlatform = platformForDocumentRequest(url);
+    const documentPlatform = platformForDocumentRequest(url, req.headers);
     if (req.method === 'GET' && documentPlatform) {
       const html = Buffer.from(await renderAppIndex(documentPlatform));
       res.writeHead(200, {

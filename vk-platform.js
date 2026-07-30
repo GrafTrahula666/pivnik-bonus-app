@@ -3,13 +3,41 @@
 
   const bridge = window.vkBridge;
   const originalFetch = window.fetch.bind(window);
-  const launchParams = window.location.search.replace(/^\?/, '');
+  const rawSearchLaunchParams = window.location.search.replace(/^\?/, '');
+  const rawHashLaunchParams = (() => {
+    const hash = String(window.location.hash || '').replace(/^#/, '');
+    const queryIndex = hash.indexOf('?');
+    return (queryIndex >= 0 ? hash.slice(queryIndex + 1) : hash).replace(/^\?/, '');
+  })();
+  const REQUIRED_LAUNCH_PARAMS = ['vk_app_id', 'vk_user_id', 'vk_ts', 'sign'];
+
+  function hasSignedLaunchParams(value) {
+    const params = new URLSearchParams(String(value || ''));
+    return REQUIRED_LAUNCH_PARAMS.every((key) => Boolean(params.get(key)));
+  }
+
+  function serializeLaunchParams(value) {
+    if (!value || typeof value !== 'object') return '';
+    const params = new URLSearchParams();
+    Object.entries(value).forEach(([key, entry]) => {
+      if (entry === undefined || entry === null) return;
+      params.set(key, String(entry));
+    });
+    return params.toString();
+  }
+
+  let launchParams = [rawSearchLaunchParams, rawHashLaunchParams]
+    .find((value) => hasSignedLaunchParams(value))
+    || rawSearchLaunchParams
+    || rawHashLaunchParams;
   const launchSearch = new URLSearchParams(launchParams);
   const launchVkUserId = String(launchSearch.get('vk_user_id') || '').trim();
   const BRIDGE_INIT_TIMEOUT_MS = 1600;
   const BRIDGE_PROFILE_TIMEOUT_MS = 2200;
+  const BRIDGE_LAUNCH_PARAMS_TIMEOUT_MS = 2200;
   let vkUser = null;
   let bridgeInitialized = false;
+  let bridgeLaunchParamsPromise = null;
   let consentExplicit = false;
   let consentRequired = false;
   let consentObserver = null;
@@ -61,6 +89,38 @@
       return false;
     }
   })();
+
+  function getBridgeLaunchParams() {
+    if (!bridge?.send) return Promise.resolve('');
+    if (!bridgeLaunchParamsPromise) {
+      bridgeLaunchParamsPromise = (async () => {
+        try {
+          const data = await withTimeout(
+            bridge.send('VKWebAppGetLaunchParams'),
+            BRIDGE_LAUNCH_PARAMS_TIMEOUT_MS,
+            'VK не передал параметры запуска вовремя.'
+          );
+          const query = serializeLaunchParams(data);
+          if (!hasSignedLaunchParams(query)) {
+            console.warn('VK Bridge returned incomplete launch parameters.');
+            return '';
+          }
+          return query;
+        } catch (error) {
+          console.warn('VK launch parameters unavailable from Bridge:', error);
+          return '';
+        }
+      })();
+    }
+    return bridgeLaunchParamsPromise;
+  }
+
+  async function resolveLaunchParams(preferBridge = false) {
+    if (!preferBridge && hasSignedLaunchParams(launchParams)) return launchParams;
+    const bridgeParams = await getBridgeLaunchParams();
+    if (bridgeParams) launchParams = bridgeParams;
+    return launchParams;
+  }
 
   const profileReady = (async () => {
     await bridgeReady;
@@ -180,15 +240,23 @@
     if (pathname === '/api/auth') {
       const headers = new Headers(init.headers || {});
       headers.set('content-type', 'application/json');
-      const response = await originalFetch(input, {
+      const sendAuth = (signedLaunchParams) => originalFetch(input, {
         ...init,
         headers,
         body: JSON.stringify({
           platform: 'vk',
-          launchParams,
+          launchParams: signedLaunchParams,
           user: vkUser
         })
       });
+      const signedLaunchParams = await resolveLaunchParams();
+      let response = await sendAuth(signedLaunchParams);
+      if (response.status === 401) {
+        const refreshedLaunchParams = await resolveLaunchParams(true);
+        if (refreshedLaunchParams && refreshedLaunchParams !== signedLaunchParams) {
+          response = await sendAuth(refreshedLaunchParams);
+        }
+      }
       void inspectApiResponse(response);
       return response;
     }

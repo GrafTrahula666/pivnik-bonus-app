@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.2-post-boot-sync';
+const APP_VERSION = '16.3-vk-launch-recovery';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -1627,7 +1627,9 @@ async function boot() {
   } catch (error) {
     console.error('Boot failed:', error);
     const message = error?.status === 401
-      ? `${PLATFORM_NAME} не передал данные входа. Закройте окно и откройте приложение ещё раз.`
+      ? (IS_VK
+          ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
+          : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
       : (error?.message || 'Не удалось загрузить приложение.');
     showBootActions(message);
   }

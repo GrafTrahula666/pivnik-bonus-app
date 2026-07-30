@@ -27,6 +27,9 @@ test('VK запускается через подписанный ID и сохр
   assert.ok(initPosition >= 0 && userPosition > initPosition);
   assert.match(vk, /BRIDGE_INIT_TIMEOUT_MS/);
   assert.match(vk, /BRIDGE_PROFILE_TIMEOUT_MS/);
+  assert.match(vk, /VKWebAppGetLaunchParams/);
+  assert.match(vk, /window\.location\.hash/);
+  assert.match(vk, /response\.status === 401/);
   assert.doesNotMatch(vk, /waitForBridge/);
   assert.match(vk, /launchVkUserId/);
   assert.match(vk, /String\(vkUser\.id\) !== launchVkUserId/);
@@ -83,6 +86,8 @@ test('Объединение блокирует строки, переносит
     source('server.js')
   ]);
   assert.match(gateway, /ORDER BY id FOR UPDATE/);
+  assert.match(gateway, /SET LOCAL lock_timeout = '2500ms'/);
+  assert.match(gateway, /SET LOCAL statement_timeout = '6000ms'/);
   assert.match(gateway, /UPDATE user_identities[\s\S]*SET user_id/);
   assert.match(gateway, /INSERT INTO qr_aliases/);
   assert.match(gateway, /UPDATE transactions SET client_id/);
