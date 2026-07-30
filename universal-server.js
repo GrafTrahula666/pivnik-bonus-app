@@ -2165,6 +2165,19 @@ export function documentSecurityHeaders(platform) {
   };
 }
 
+export function platformForDocumentRequest(url) {
+  if (url.pathname === '/vk' || url.pathname === '/vk/') return 'vk';
+  if (url.pathname !== '/' && url.pathname !== '/index.html') return null;
+
+  const hasVkLaunchParams = url.searchParams.get('vk_app_id') === EXPECTED_VK_APP_ID
+    || (
+      url.searchParams.has('sign')
+      && Array.from(url.searchParams.keys()).some((key) => key.startsWith('vk_'))
+    );
+
+  return hasVkLaunchParams ? 'vk' : 'telegram';
+}
+
 async function serveFile(res, filePath, contentType, cacheControl = 'no-store') {
   try {
     const body = await fs.readFile(filePath);
@@ -2219,24 +2232,14 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
 
-    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-      const html = Buffer.from(await renderAppIndex('telegram'));
+    const documentPlatform = platformForDocumentRequest(url);
+    if (req.method === 'GET' && documentPlatform) {
+      const html = Buffer.from(await renderAppIndex(documentPlatform));
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'content-length': html.length,
         'cache-control': 'no-store',
-        ...documentSecurityHeaders('telegram')
-      });
-      return res.end(html);
-    }
-
-    if (req.method === 'GET' && (url.pathname === '/vk' || url.pathname === '/vk/')) {
-      const html = Buffer.from(await renderAppIndex('vk'));
-      res.writeHead(200, {
-        'content-type': 'text/html; charset=utf-8',
-        'content-length': html.length,
-        'cache-control': 'no-store',
-        ...documentSecurityHeaders('vk')
+        ...documentSecurityHeaders(documentPlatform)
       });
       return res.end(html);
     }

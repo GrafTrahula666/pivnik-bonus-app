@@ -7,7 +7,11 @@ process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
 test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
-  const { documentSecurityHeaders, renderAppIndex } = await import('../universal-server.js?render-test');
+  const {
+    documentSecurityHeaders,
+    platformForDocumentRequest,
+    renderAppIndex
+  } = await import('../universal-server.js?render-test');
   const telegram = await renderAppIndex('telegram');
   const vk = await renderAppIndex('vk');
   const vkCsp = documentSecurityHeaders('vk')['content-security-policy'];
@@ -35,4 +39,25 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.com/);
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.ru/);
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.ru/);
+
+  assert.equal(
+    platformForDocumentRequest(new URL('https://pivnik.example/')),
+    'telegram'
+  );
+  assert.equal(
+    platformForDocumentRequest(new URL('https://pivnik.example/vk')),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/?vk_app_id=54694987&vk_user_id=123&sign=test')
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/index.html?vk_user_id=123&vk_platform=desktop_web&sign=test')
+    ),
+    'vk'
+  );
 });
