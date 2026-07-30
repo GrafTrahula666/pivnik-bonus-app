@@ -23,14 +23,14 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js\?v=3\.0\.0/);
+  assert.match(vk, /\/vk-platform\.js\?v=3\.1\.0/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('app.js?v=16.1-vk-auth-fast');
+  const appPosition = vk.indexOf('app.js?v=16.2-post-boot-sync');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);

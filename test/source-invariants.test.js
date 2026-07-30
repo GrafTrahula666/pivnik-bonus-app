@@ -20,7 +20,7 @@ test('Запуск использует единый gateway и локальны
   assert.doesNotMatch(gateway, /unpkg|cdn\.jsdelivr/i);
 });
 
-test('VK запускается через подписанный ID и очищает сессию каждого VK-аккаунта', async () => {
+test('VK запускается через подписанный ID и сохраняет изолированную сессию аккаунта', async () => {
   const vk = await source('vk-platform.js');
   const initPosition = vk.indexOf("VKWebAppInit");
   const userPosition = vk.indexOf("VKWebAppGetUserInfo");
@@ -31,6 +31,7 @@ test('VK запускается через подписанный ID и очищ
   assert.match(vk, /launchVkUserId/);
   assert.match(vk, /String\(vkUser\.id\) !== launchVkUserId/);
   assert.match(vk, /pivnik_vk_\$\{launchVkUserId \|\| 'unknown'\}_/);
+  assert.doesNotMatch(vk, /removeItem\(`\$\{storagePrefix\}(?:session|staff_session)`\)/);
   assert.match(vk, /code_data \|\| data\?\.code/);
   assert.doesNotMatch(vk, /Storage\.prototype/);
 });
@@ -206,4 +207,29 @@ test('Достижения считаются по журналу и добав�
   assert.doesNotMatch(gateway, /syncUserAchievements/);
   assert.match(app, /loadAchievements\(\)/);
   assert.match(migration, /'achievement'/);
+});
+
+test('Загрузчик снимается до профиля, начислений и достижений', async () => {
+  const [app, accountLink, gateway] = await Promise.all([
+    source('app.js'),
+    source('account-link.js'),
+    source('universal-server.js')
+  ]);
+  const bootStart = app.indexOf('async function boot()');
+  const bootEnd = app.indexOf('async function acceptTerms()', bootStart);
+  const bootSource = app.slice(bootStart, bootEnd);
+  const finishPosition = bootSource.indexOf('await finishBoot()');
+  const backgroundPosition = bootSource.indexOf('schedulePostBootHydration()');
+
+  assert.match(bootSource, /\/api\/bootstrap/);
+  assert.ok(finishPosition >= 0 && backgroundPosition > finishPosition);
+  assert.doesNotMatch(bootSource, /loadSecondaryData\(/);
+  assert.match(app, /async function hydrateAfterBoot\(\)[\s\S]*?\/api\/me[\s\S]*?loadSecondaryData\(\)/);
+  assert.match(app, /const jobs = \[[^\]]*loadAchievements\(\)/);
+  assert.match(app, /pivnik:boot-complete/);
+  assert.match(accountLink, /addEventListener\('pivnik:boot-complete'/);
+  assert.doesNotMatch(accountLink, /setTimeout\(\(\) => void loadStatus\(\), 1500\)/);
+  assert.match(gateway, /getAppPayload\(userId, provider, \{ startup: true \}\)/);
+  assert.match(gateway, /startup\s*\?\s*\[\s*0,\s*\{ earned: \[\], unannounced: \[\] \}/);
+  assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });

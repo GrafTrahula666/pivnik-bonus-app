@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.1-vk-auth-fast';
+const APP_VERSION = '16.2-post-boot-sync';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -531,6 +531,9 @@ async function finishBoot() {
   if (elapsed < BOOT_MIN_MS) await delay(BOOT_MIN_MS - elapsed);
   $('#bootScreen')?.classList.add('hidden');
   $('#appShell')?.classList.remove('hidden');
+  try {
+    window.dispatchEvent(new CustomEvent('pivnik:boot-complete'));
+  } catch (_) {}
 }
 
 function showBootActions(message, { canOpenApp = Boolean(state.profile) } = {}) {
@@ -609,10 +612,14 @@ async function fetchWithTimeout(path, options, timeoutMs) {
   const controller = typeof AbortController === 'undefined' ? null : new AbortController();
   let timedOut = false;
   let timer = 0;
-  const request = Promise.resolve().then(() => fetch(path, {
-    ...options,
-    ...(controller ? { signal: controller.signal } : {})
-  }));
+  const request = Promise.resolve().then(async () => {
+    const response = await fetch(path, {
+      ...options,
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  });
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
       timedOut = true;
@@ -640,7 +647,7 @@ async function api(path, options = {}) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const response = await fetchWithTimeout(path, {
+      const { response, data } = await fetchWithTimeout(path, {
         ...options,
         headers: {
           'content-type': 'application/json',
@@ -651,7 +658,6 @@ async function api(path, options = {}) {
           ...(options.headers || {})
         }
       }, Number(options.timeoutMs || API_TIMEOUT_MS));
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = new Error(data.error || `Ошибка ${response.status}`);
         error.status = response.status;
@@ -1501,11 +1507,7 @@ function renderTransaction(transaction) {
 
 async function refreshMe() {
   const data = await api('/api/me');
-  state.profile = data.profile;
-  state.statuses = data.statuses || state.statuses;
-  applyDesign(data.design);
-  renderProfile();
-  renderStatuses();
+  applyProfilePayload(data);
   void loadSecondaryData();
 }
 
@@ -1532,11 +1534,27 @@ async function authenticate() {
   });
   state.token = data.token;
   safeStorage.set('pivnik_session', state.token);
+  applyProfilePayload(data);
+}
+
+function renderCoreProfile() {
+  try {
+    renderProfile();
+    renderStatuses();
+  } catch (error) {
+    console.error('Core profile render skipped:', error);
+  }
+}
+
+function applyProfilePayload(data) {
+  if (!data?.profile) throw new Error('Сервер не передал профиль.');
   state.profile = data.profile;
-  state.statuses = data.statuses || [];
-  applyDesign(data.design);
-  renderProfile();
-  renderStatuses();
+  state.statuses = data.statuses || state.statuses || [];
+  if (data.design) {
+    try { applyDesign(data.design); }
+    catch (error) { console.warn('Design update skipped:', error); }
+  }
+  renderCoreProfile();
 }
 
 async function loadSecondaryData() {
@@ -1561,6 +1579,22 @@ async function loadSecondaryData() {
   if (failures.length && navigator.onLine) toast('Часть разделов обновится при следующем открытии');
 }
 
+async function hydrateAfterBoot() {
+  try {
+    const data = await api('/api/me', { retries: 0, timeoutMs: 9000 });
+    applyProfilePayload(data);
+  } catch (error) {
+    console.warn('Full profile hydration skipped:', error);
+  }
+  if (state.profile?.termsAccepted) void loadSecondaryData();
+}
+
+function schedulePostBootHydration() {
+  window.setTimeout(() => {
+    void hydrateAfterBoot();
+  }, 0);
+}
+
 async function boot() {
   clearBootError();
   try {
@@ -1568,10 +1602,8 @@ async function boot() {
     $('#bootText').textContent = 'Подключаем бонусный счёт…';
     if (state.token) {
       try {
-        const me = await api('/api/me', { retries: 1, timeoutMs: 9000 });
-        state.profile = me.profile;
-        state.statuses = me.statuses || [];
-        applyDesign(me.design);
+        const bootstrap = await api('/api/bootstrap', { retries: 0, timeoutMs: 6000 });
+        applyProfilePayload(bootstrap);
       } catch (error) {
         console.warn('Stored session rejected:', error);
         state.token = '';
@@ -1583,16 +1615,15 @@ async function boot() {
       await authenticate();
     }
     $('#bootText').textContent = 'Открываем профиль…';
-    renderProfile();
-    renderStatuses();
+    renderCoreProfile();
     await finishBoot();
     closeModal('profileSetupModal');
     if (state.profile?.termsAccepted) {
       closeModal('consentModal');
-      void loadSecondaryData();
     } else {
       openModal('consentModal');
     }
+    schedulePostBootHydration();
   } catch (error) {
     console.error('Boot failed:', error);
     const message = error?.status === 401

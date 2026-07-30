@@ -37,6 +37,7 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
     addEventListener() {}
   };
   const storage = new Map();
+  storage.set('pivnik_vk_123_session', 'persisted-session');
   const localStorage = {
     getItem: (key) => storage.get(key) || null,
     removeItem: (key) => storage.delete(key),
@@ -70,19 +71,18 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
   assert.equal(payload.platform, 'vk');
   assert.equal(payload.user, null);
   assert.match(payload.launchParams, /vk_user_id=123/);
+  assert.equal(storage.get('pivnik_vk_123_session'), 'persisted-session');
 });
 
-test('Client API timeout settles even when wrapped fetch ignores abort', async () => {
+test('Client API timeout covers both fetch and response body', async () => {
   const source = await readFile(new URL('../app.js', import.meta.url), 'utf8');
   const helpers = source.match(
     /function timeoutError\(\)[\s\S]*?async function fetchWithTimeout\([\s\S]*?\n}\n\n(?=async function api)/
   )?.[0];
   assert.ok(helpers, 'fetchWithTimeout helpers must remain extractable for runtime verification');
 
-  let controller;
   class IgnoredAbortController {
     constructor() {
-      controller = this;
       this.signal = {};
       this.aborted = false;
     }
@@ -92,25 +92,40 @@ test('Client API timeout settles even when wrapped fetch ignores abort', async (
     }
   }
 
-  const context = {
-    AbortController: IgnoredAbortController,
-    Error,
-    Promise,
-    clearTimeout() {},
-    fetch: () => new Promise(() => {}),
-    setTimeout(callback) {
-      queueMicrotask(callback);
-      return 1;
-    }
-  };
-  vm.runInNewContext(
-    `${helpers}\nglobalThis.testFetchWithTimeout = fetchWithTimeout;`,
-    context
-  );
+  const never = () => new Promise(() => {});
+  const cases = [
+    () => never(),
+    async () => ({ json: () => never() })
+  ];
 
-  await assert.rejects(
-    context.testFetchWithTimeout('/api/auth', { method: 'POST' }, 7000),
-    (error) => error?.code === 'TIMEOUT'
-  );
-  assert.equal(controller.aborted, true);
+  for (const fetchImplementation of cases) {
+    let controller;
+    class TrackedAbortController extends IgnoredAbortController {
+      constructor() {
+        super();
+        controller = this;
+      }
+    }
+    const context = {
+      AbortController: TrackedAbortController,
+      Error,
+      Promise,
+      clearTimeout() {},
+      fetch: fetchImplementation,
+      setTimeout(callback) {
+        queueMicrotask(callback);
+        return 1;
+      }
+    };
+    vm.runInNewContext(
+      `${helpers}\nglobalThis.testFetchWithTimeout = fetchWithTimeout;`,
+      context
+    );
+
+    await assert.rejects(
+      context.testFetchWithTimeout('/api/auth', { method: 'POST' }, 7000),
+      (error) => error?.code === 'TIMEOUT'
+    );
+    assert.equal(controller.aborted, true);
+  }
 });

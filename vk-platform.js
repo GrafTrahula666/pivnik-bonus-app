@@ -15,17 +15,15 @@
   let consentObserver = null;
 
   /*
-   * Telegram and VK must never share a browser session. VK is also
-   * re-authenticated on every launch so switching VK accounts cannot reuse
-   * another person's profile, role or QR code.
+   * Telegram and VK never share a browser session. VK sessions are scoped by
+   * the signed VK user id, so changing accounts selects another storage key
+   * without forcing every returning user through the full auth transaction.
    */
   const storagePrefix = `pivnik_vk_${launchVkUserId || 'unknown'}_`;
   window.__PIVNIK_STORAGE_PREFIX__ = storagePrefix;
   try {
     localStorage.removeItem('pivnik_session');
     localStorage.removeItem('pivnik_staff_session');
-    localStorage.removeItem(`${storagePrefix}session`);
-    localStorage.removeItem(`${storagePrefix}staff_session`);
     localStorage.removeItem(`${storagePrefix}pivnik_session`);
     localStorage.removeItem(`${storagePrefix}pivnik_staff_session`);
   } catch (_) {}

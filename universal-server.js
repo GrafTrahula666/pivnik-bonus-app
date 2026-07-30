@@ -675,12 +675,14 @@ async function getIdentitySummary(db, userId) {
   };
 }
 
-async function getProfile(userId, platform = 'unknown', db = pool) {
+async function getProfile(userId, platform = 'unknown', db = pool, options = {}) {
+  const startup = options?.startup === true;
   const canonical = await canonicalUserId(db, userId);
   if (!canonical) return null;
 
-  const result = await db.query(
-    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance,
+  const detailColumns = startup
+    ? ''
+    : `,
             (SELECT COUNT(*)::integer
              FROM users ux
              WHERE ux.merged_into_user_id IS NULL
@@ -688,7 +690,10 @@ async function getProfile(userId, platform = 'unknown', db = pool) {
             EXISTS(
               SELECT 1 FROM beta_grants bg
               WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
-            ) AS owns_diamond_frame
+            ) AS owns_diamond_frame`;
+  const result = await db.query(
+    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance
+            ${detailColumns}
      FROM users u
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
@@ -698,13 +703,23 @@ async function getProfile(userId, platform = 'unknown', db = pool) {
   if (!result.rowCount) return null;
 
   const row = result.rows[0];
-  const [spend12mCents, achievementState] = await Promise.all([
-    getRollingSpend(db, canonical),
-    getUserEarnedAchievementState(db, canonical)
-  ]);
+  const [spend12mCents, achievementState, identitySummary] = startup
+    ? [
+      0,
+      { earned: [], unannounced: [] },
+      {
+        identities: [],
+        linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],
+        accountLinked: false
+      }
+    ]
+    : await Promise.all([
+      getRollingSpend(db, canonical),
+      getUserEarnedAchievementState(db, canonical),
+      getIdentitySummary(db, canonical)
+    ]);
   const unlimitedBonus = hasUnlimitedBonus(row);
   const status = getEffectiveStatus(row, spend12mCents);
-  const identitySummary = await getIdentitySummary(db, canonical);
 
   return {
     id: String(row.id),
@@ -717,7 +732,7 @@ async function getProfile(userId, platform = 'unknown', db = pool) {
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: [...achievementsFromRow(row), ...achievementState.earned],
+    achievements: startup ? [] : [...achievementsFromRow(row), ...achievementState.earned],
     unannouncedAchievements: achievementState.unannounced,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
@@ -981,10 +996,13 @@ async function getUnifiedAdminUsers() {
   };
 }
 
-async function getAppPayload(userId, platform = 'unknown') {
+async function getAppPayload(userId, platform = 'unknown', options = {}) {
+  const startup = options?.startup === true;
   const [profile, designResult] = await Promise.all([
-    getProfile(userId, platform),
-    pool.query('SELECT published FROM app_settings WHERE id = 1')
+    getProfile(userId, platform, pool, { startup }),
+    startup
+      ? Promise.resolve({ rows: [] })
+      : pool.query('SELECT published FROM app_settings WHERE id = 1')
   ]);
   if (!profile) {
     throw Object.assign(new Error('Не удалось открыть профиль.'), { statusCode: 404 });
@@ -996,11 +1014,12 @@ async function getAppPayload(userId, platform = 'unknown') {
       min: rubles(item.minCents),
       next: item.nextCents ? rubles(item.nextCents) : null
     })),
-    design: designResult.rows[0]?.published || null
+    design: designResult.rows[0]?.published || null,
+    startup
   };
 }
 
-async function ensureBaseRecords(db, userId) {
+async function ensureAuthRecords(db, userId) {
   await db.query(
     'INSERT INTO wallets (user_id, balance) VALUES ($1::bigint, 0) ON CONFLICT (user_id) DO NOTHING',
     [userId]
@@ -1009,15 +1028,30 @@ async function ensureBaseRecords(db, userId) {
     'INSERT INTO beer_loyalty (user_id) VALUES ($1::bigint) ON CONFLICT (user_id) DO NOTHING',
     [userId]
   );
-  await ensurePersonalQr(db, userId);
-  const barResult = await db.query('SELECT id FROM bars WHERE code = $1', [BAR_CODE]);
-  await db.query(
-    `INSERT INTO bar_customers (bar_id, user_id)
-     VALUES ($1, $2::bigint)
-     ON CONFLICT (bar_id, user_id)
-     DO UPDATE SET status = 'active', updated_at = NOW()`,
-    [barResult.rows[0].id, userId]
-  );
+}
+
+async function ensureSupplementalRecords(userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await ensurePersonalQr(client, userId);
+    const barResult = await client.query('SELECT id FROM bars WHERE code = $1', [BAR_CODE]);
+    if (barResult.rowCount) {
+      await client.query(
+        `INSERT INTO bar_customers (bar_id, user_id)
+         VALUES ($1, $2::bigint)
+         ON CONFLICT (bar_id, user_id)
+         DO UPDATE SET status = 'active', updated_at = NOW()`,
+        [barResult.rows[0].id, userId]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function resolveProviderUser(provider, externalUser) {
@@ -1139,7 +1173,7 @@ async function resolveProviderUser(provider, externalUser) {
       ]
     );
 
-    await ensureBaseRecords(client, userId);
+    await ensureAuthRecords(client, userId);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1158,7 +1192,12 @@ async function resolveProviderUser(provider, externalUser) {
     Number(sessionResult.rows[0]?.session_version || 1),
     { pid: String(externalUser.id) }
   );
-  return { token, ...(await getAppPayload(userId, provider)) };
+  setImmediate(() => {
+    void ensureSupplementalRecords(userId).catch((error) => {
+      console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
+    });
+  });
+  return { token, ...(await getAppPayload(userId, provider, { startup: true })) };
 }
 
 async function authenticateVk(body) {
@@ -2132,7 +2171,7 @@ export async function renderAppIndex(platform) {
   );
   const withLinking = withLoader.replace(
     /<script defer src="app\.js([^"]*)"><\/script>/i,
-    '<script defer src="/account-link.js?v=2.1.0"></script>\n  <script defer src="app.js$1"></script>'
+    '<script defer src="/account-link.js?v=2.2.0"></script>\n  <script defer src="app.js$1"></script>'
   );
 
   if (platform !== 'vk') return withLinking;
@@ -2140,7 +2179,7 @@ export async function renderAppIndex(platform) {
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.0.0"></script>\n  <script defer src="/account-link.js$1"></script>'
+      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.1.0"></script>\n  <script defer src="/account-link.js$1"></script>'
     );
 }
 
@@ -2206,6 +2245,7 @@ function isConsentExempt(pathname) {
   return pathname === '/api/health'
     || pathname === '/api/platform-health'
     || pathname === '/api/auth'
+    || pathname === '/api/bootstrap'
     || pathname === '/api/me'
     || pathname === '/api/me/consent'
     || pathname.startsWith('/api/account-link/');
@@ -2327,6 +2367,12 @@ const server = http.createServer(async (req, res) => {
           error: error.statusCode ? error.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
         });
       }
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      return sendJson(res, 200, await getAppPayload(user.id, platform, { startup: true }));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/me') {

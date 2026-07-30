@@ -462,6 +462,9 @@
     });
     mutationObserver.observe(document.body, { subtree: true, childList: true });
 
-    window.setTimeout(() => void loadStatus(), 1500);
+    const loadAfterBoot = () => window.setTimeout(() => void loadStatus(), 0);
+    const bootScreen = document.getElementById('bootScreen');
+    if (bootScreen?.classList.contains('hidden')) loadAfterBoot();
+    else window.addEventListener('pivnik:boot-complete', loadAfterBoot, { once: true });
   });
 })();
