@@ -40,38 +40,19 @@
     ]).finally(() => window.clearTimeout(timer));
   }
 
-  function waitForBridge(signal) {
-    if (!signal?.addEventListener) return bridgeReady;
-    if (signal.aborted) {
-      return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
-    }
-    return new Promise((resolve, reject) => {
-      const onAbort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
-      signal.addEventListener('abort', onAbort, { once: true });
-      bridgeReady.then(
-        (value) => {
-          signal.removeEventListener('abort', onAbort);
-          resolve(value);
-        },
-        (error) => {
-          signal.removeEventListener('abort', onAbort);
-          reject(error);
-        }
-      );
-    });
-  }
-
   const bridgeReady = (async () => {
-    if (!bridge?.send) throw new Error('VK Bridge не загрузился.');
-    let initRequest;
+    if (!bridge?.send) {
+      console.warn('VK Bridge unavailable; signed launch authentication will be used.');
+      return false;
+    }
     try {
-      initRequest = bridge.send('VKWebAppInit');
       bridgeInitialized = true;
       await withTimeout(
-        initRequest,
+        bridge.send('VKWebAppInit'),
         BRIDGE_INIT_TIMEOUT_MS,
         'VK не подтвердил запуск приложения вовремя.'
       );
+      return true;
     } catch (error) {
       /*
        * The signed launch parameters are sufficient for authentication.
@@ -79,7 +60,13 @@
        * delivered, so an absent acknowledgement must not freeze the app.
        */
       console.warn('VK init acknowledgement unavailable; continuing:', error);
+      return false;
     }
+  })();
+
+  const profileReady = (async () => {
+    await bridgeReady;
+    if (!bridge?.send) return null;
     try {
       vkUser = await withTimeout(
         bridge.send('VKWebAppGetUserInfo'),
@@ -91,7 +78,8 @@
       vkUser = null;
     }
     if (vkUser?.id && launchVkUserId && String(vkUser.id) !== launchVkUserId) {
-      throw new Error('Аккаунт VK не совпадает с подписанными параметрами запуска.');
+      console.warn('VK profile does not match signed launch parameters; profile data ignored.');
+      vkUser = null;
     }
     return vkUser;
   })();
@@ -192,7 +180,6 @@
     })();
 
     if (pathname === '/api/auth') {
-      await waitForBridge(init.signal);
       const headers = new Headers(init.headers || {});
       headers.set('content-type', 'application/json');
       const response = await originalFetch(input, {
@@ -323,6 +310,7 @@
     window.visualViewport?.addEventListener('scroll', syncVisualViewport);
     window.addEventListener('resize', syncVisualViewport);
     applyVkLabels();
+    void profileReady.catch(() => {});
 
     document.addEventListener('click', (event) => {
       const button = event.target?.closest?.('#acceptTerms');

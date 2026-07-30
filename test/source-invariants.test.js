@@ -27,7 +27,7 @@ test('VK запускается через подписанный ID и очищ
   assert.ok(initPosition >= 0 && userPosition > initPosition);
   assert.match(vk, /BRIDGE_INIT_TIMEOUT_MS/);
   assert.match(vk, /BRIDGE_PROFILE_TIMEOUT_MS/);
-  assert.match(vk, /waitForBridge\(init\.signal\)/);
+  assert.doesNotMatch(vk, /waitForBridge/);
   assert.match(vk, /launchVkUserId/);
   assert.match(vk, /String\(vkUser\.id\) !== launchVkUserId/);
   assert.match(vk, /pivnik_vk_\$\{launchVkUserId \|\| 'unknown'\}_/);
@@ -203,7 +203,7 @@ test('Достижения считаются по журналу и добав�
   assert.match(achievements, /mode IN \('accrue','redeem'\)/);
   assert.match(achievements, /ON CONFLICT \(code, user_id\) DO NOTHING/);
   assert.match(server, /getUserAchievementState/);
-  assert.match(gateway, /syncUserAchievements/);
+  assert.doesNotMatch(gateway, /syncUserAchievements/);
   assert.match(app, /loadAchievements\(\)/);
   assert.match(migration, /'achievement'/);
 });

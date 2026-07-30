@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.0-premium-achievements';
+const APP_VERSION = '16.1-vk-auth-fast';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -606,18 +606,24 @@ function timeoutError() {
 }
 
 async function fetchWithTimeout(path, options, timeoutMs) {
-  if (typeof AbortController === 'undefined') {
-    return Promise.race([
-      fetch(path, options),
-      delay(timeoutMs).then(() => { throw timeoutError(); })
-    ]);
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  let timedOut = false;
+  let timer = 0;
+  const request = Promise.resolve().then(() => fetch(path, {
+    ...options,
+    ...(controller ? { signal: controller.signal } : {})
+  }));
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller?.abort();
+      reject(timeoutError());
+    }, timeoutMs);
+  });
   try {
-    return await fetch(path, { ...options, signal: controller.signal });
+    return await Promise.race([request, timeout]);
   } catch (error) {
-    if (error?.name === 'AbortError') throw timeoutError();
+    if (timedOut || error?.name === 'AbortError') throw timeoutError();
     throw error;
   } finally {
     clearTimeout(timer);
@@ -1521,8 +1527,8 @@ async function authenticate() {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: { authorization: '' },
-    retries: 1,
-    timeoutMs: 11000
+    retries: 0,
+    timeoutMs: 7000
   });
   state.token = data.token;
   safeStorage.set('pivnik_session', state.token);

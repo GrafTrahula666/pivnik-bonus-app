@@ -6,8 +6,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {
-  getUserEarnedAchievementState,
-  syncUserAchievements
+  getUserEarnedAchievementState
 } from './achievements.js';
 import {
   chooseCanonicalUser,
@@ -983,7 +982,6 @@ async function getUnifiedAdminUsers() {
 }
 
 async function getAppPayload(userId, platform = 'unknown') {
-  await syncUserAchievements(pool, userId);
   const [profile, designResult] = await Promise.all([
     getProfile(userId, platform),
     pool.query('SELECT published FROM app_settings WHERE id = 1')
@@ -2142,7 +2140,7 @@ export async function renderAppIndex(platform) {
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=2.2.0"></script>\n  <script defer src="/account-link.js$1"></script>'
+      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.0.0"></script>\n  <script defer src="/account-link.js$1"></script>'
     );
 }
 

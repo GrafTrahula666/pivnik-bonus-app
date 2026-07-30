@@ -27,8 +27,7 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
     },
     addEventListener() {},
     dispatchEvent() {},
-    setTimeout(callback) {
-      queueMicrotask(callback);
+    setTimeout() {
       return 1;
     },
     clearTimeout() {}
@@ -57,7 +56,6 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
     document,
     localStorage,
     location,
-    queueMicrotask,
     window
   });
 
@@ -72,4 +70,47 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
   assert.equal(payload.platform, 'vk');
   assert.equal(payload.user, null);
   assert.match(payload.launchParams, /vk_user_id=123/);
+});
+
+test('Client API timeout settles even when wrapped fetch ignores abort', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const helpers = source.match(
+    /function timeoutError\(\)[\s\S]*?async function fetchWithTimeout\([\s\S]*?\n}\n\n(?=async function api)/
+  )?.[0];
+  assert.ok(helpers, 'fetchWithTimeout helpers must remain extractable for runtime verification');
+
+  let controller;
+  class IgnoredAbortController {
+    constructor() {
+      controller = this;
+      this.signal = {};
+      this.aborted = false;
+    }
+
+    abort() {
+      this.aborted = true;
+    }
+  }
+
+  const context = {
+    AbortController: IgnoredAbortController,
+    Error,
+    Promise,
+    clearTimeout() {},
+    fetch: () => new Promise(() => {}),
+    setTimeout(callback) {
+      queueMicrotask(callback);
+      return 1;
+    }
+  };
+  vm.runInNewContext(
+    `${helpers}\nglobalThis.testFetchWithTimeout = fetchWithTimeout;`,
+    context
+  );
+
+  await assert.rejects(
+    context.testFetchWithTimeout('/api/auth', { method: 'POST' }, 7000),
+    (error) => error?.code === 'TIMEOUT'
+  );
+  assert.equal(controller.aborted, true);
 });
