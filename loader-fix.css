@@ -1,7 +1,4 @@
-/* Pivnik loader geometry fix v1.0
-   Keeps the animated artwork in its original 942x2048 coordinate system,
-   prevents VK/Telegram viewport cropping and keeps the sign fully visible. */
-
+/* VK loading screen geometry hotfix. No image replacement. */
 html,
 body {
   width: 100%;
@@ -10,49 +7,47 @@ body {
 }
 
 .boot-screen {
-  width: 100vw !important;
-  width: 100dvw !important;
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
   height: 100vh !important;
   height: 100dvh !important;
   padding: 0 !important;
   overflow: hidden !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  display: grid !important;
+  place-items: center !important;
   background: #000 !important;
 }
 
 .boot-screen.hidden {
-  display: flex !important;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .boot-scene {
   position: relative !important;
-  flex: 0 0 auto !important;
   width: min(100vw, calc(100dvh * 942 / 2048)) !important;
   height: min(100dvh, calc(100vw * 2048 / 942)) !important;
   max-width: none !important;
   max-height: none !important;
   aspect-ratio: 942 / 2048 !important;
-  margin: auto !important;
+  margin: 0 auto !important;
   border-radius: 0 !important;
   overflow: hidden !important;
   background: #000 !important;
   box-shadow: none !important;
-  isolation: isolate;
 }
 
 .boot-image {
   position: absolute !important;
   inset: 0 !important;
+  display: block !important;
   width: 100% !important;
   height: 100% !important;
   max-width: none !important;
   object-fit: fill !important;
-  object-position: center center !important;
+  object-position: center !important;
   transform: none !important;
 }
 
@@ -62,56 +57,30 @@ body {
   inset: 0 !important;
 }
 
-/* The old box cropped the lettering because the PNG was forced through cover. */
 .boot-sign-glitch {
-  left: 65.2% !important;
-  top: 56.9% !important;
-  width: 18.2% !important;
-  height: 4.65% !important;
+  left: 64.4% !important;
+  top: 56.55% !important;
+  width: 18.8% !important;
+  height: 5.1% !important;
   overflow: visible !important;
-  transform: none !important;
 }
 
 .sign-layer {
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
-  object-position: center center !important;
+  object-position: center !important;
 }
 
 .boot-copy {
-  padding: clamp(14px, 3.5vh, 24px) clamp(14px, 4.2vw, 20px)
-    calc(clamp(16px, 3.8vh, 24px) + env(safe-area-inset-bottom)) !important;
-}
-
-.boot-copy h1 {
-  font-size: clamp(22px, 4.8vw, 38px) !important;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom)) !important;
 }
 
 @media (orientation: landscape) {
-  .boot-copy {
-    padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important;
-  }
-
-  .boot-copy h1 {
-    margin-top: 8px !important;
-    margin-bottom: 5px !important;
-    font-size: clamp(20px, 4.2vh, 31px) !important;
-  }
-
-  .boot-copy p {
-    font-size: clamp(11px, 2.1vh, 14px) !important;
-  }
-}
-
-@supports not (height: 100dvh) {
-  .boot-screen {
-    width: 100vw !important;
-    height: 100vh !important;
-  }
-
   .boot-scene {
-    width: min(100vw, calc(100vh * 942 / 2048)) !important;
-    height: min(100vh, calc(100vw * 2048 / 942)) !important;
+    width: min(100vw, calc(100dvh * 942 / 2048)) !important;
+    height: 100dvh !important;
   }
+  .boot-copy h1 { font-size: clamp(20px, 4.2vh, 30px) !important; }
+  .boot-copy p { font-size: clamp(11px, 2vh, 14px) !important; }
 }
