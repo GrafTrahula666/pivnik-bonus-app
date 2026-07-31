@@ -2470,6 +2470,9 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/account-link/status') {
       const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
       return sendJson(res, 200, {
         ...(await getIdentitySummary(pool, user.id)),
@@ -2479,6 +2482,9 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/account-link/code') {
       const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
       enforceRateLimit(
         `link-code:${user.id}:${requestAddress(req)}`,
         5,
@@ -2490,6 +2496,9 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/account-link/consume') {
       const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
       enforceRateLimit(
         `link-consume:${user.id}:${requestAddress(req)}`,
         10,

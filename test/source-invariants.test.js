@@ -240,7 +240,7 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });
 
-test('Первый вход после загрузчика всегда показывает незавершённый обязательный шаг', async () => {
+test('Запуск не открывает правила или профиль, а функции требуют отдельного согласия', async () => {
   const [app, railway, gateway] = await Promise.all([
     source('app.js'),
     source('railway.json'),
@@ -249,16 +249,23 @@ test('Первый вход после загрузчика всегда пок�
   const bootStart = app.indexOf('async function boot()');
   const bootEnd = app.indexOf('async function acceptTerms()', bootStart);
   const bootSource = app.slice(bootStart, bootEnd);
-  const gateStart = app.indexOf('function requiredFirstRunGate(');
-  const gateEnd = app.indexOf('async function boot()', gateStart);
-  const gateSource = app.slice(gateStart, gateEnd);
+  const acceptStart = app.indexOf('async function acceptTerms()');
+  const acceptEnd = app.indexOf('async function claimBetaTesterReward()', acceptStart);
+  const acceptSource = app.slice(acceptStart, acceptEnd);
 
-  assert.match(gateSource, /!profile\?\.termsAccepted[\s\S]*?return 'consent'/);
-  assert.match(gateSource, /!profile\?\.onboardingComplete[\s\S]*?return 'profile'/);
-  assert.match(gateSource, /gate === 'profile'[\s\S]*?openProfileSetup\(1\)/);
-  assert.match(bootSource, /await finishBoot\(\)[\s\S]*?syncFirstRunGate\(\)[\s\S]*?schedulePostBootHydration\(\)/);
-  assert.doesNotMatch(bootSource, /await finishBoot\(\)[\s\S]*?closeModal\('profileSetupModal'\)/);
-  assert.match(app, /profileSetupClose[\s\S]*?state\.profile\?\.onboardingComplete[\s\S]*?closeModal\('profileSetupModal'\)/);
+  assert.doesNotMatch(app, /requiredFirstRunGate|syncFirstRunGate|scheduleConsentGate|openConsentGate/);
+  assert.match(bootSource, /await finishBoot\(\)[\s\S]*?closeModal\('consentModal'\)[\s\S]*?closeModal\('profileSetupModal'\)[\s\S]*?schedulePostBootHydration\(\)/);
+  assert.doesNotMatch(bootSource, /openModal\('consentModal'\)|openProfileSetup\(/);
+  assert.match(app, /function blockUnacceptedAction\(event\)[\s\S]*?state\.profile\?\.termsAccepted[\s\S]*?stopImmediatePropagation\(\)[\s\S]*?openModal\('consentModal'\)/);
+  assert.match(app, /document\.addEventListener\('click', blockUnacceptedAction, true\)/);
+  assert.match(app, /profileSetupClose'\)\?\.addEventListener\('click', \(\) => closeModal\('profileSetupModal'\)\)/);
+  assert.doesNotMatch(acceptSource, /openProfileSetup\(/);
+  for (const route of ['status', 'code', 'consume']) {
+    const routeStart = gateway.indexOf(`/api/account-link/${route}`);
+    const routeEnd = gateway.indexOf('\n    }', routeStart);
+    const routeSource = gateway.slice(routeStart, routeEnd);
+    assert.match(routeSource, /!user\.termsAccepted[\s\S]*?428/);
+  }
   assert.match(railway, /PIVNIK_DOCUMENT_PLATFORM=vk npm start/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
   assert.match(gateway, /url\.pathname === '\/vk\/app\.js'/);

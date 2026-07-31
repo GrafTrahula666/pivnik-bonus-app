@@ -20,7 +20,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.match(telegram, /\/account-link\.js/);
   assert.match(telegram, /\/loader-fix\.css/);
   assert.match(telegram, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
-  assert.match(telegram, /src="\/app\.js\?v=16\.5-absolute-assets"/);
+  assert.match(telegram, /src="\/app\.js\?v=16\.6-optional-profile"/);
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
@@ -29,7 +29,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
   assert.match(vk, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
-  assert.match(vk, /src="\/app\.js\?v=16\.5-absolute-assets"/);
+  assert.match(vk, /src="\/app\.js\?v=16\.6-optional-profile"/);
 
   const resourceUrls = [...vk.matchAll(/(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1])
@@ -49,7 +49,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('/app.js?v=16.5-absolute-assets');
+  const appPosition = vk.indexOf('/app.js?v=16.6-optional-profile');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
@@ -135,7 +135,7 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
     assert.equal(platform, 'vk');
     assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
     assert.match(html, /\/vk-platform\.js\?v=3\.2\.0/);
-    assert.match(html, /src="\/app\.js\?v=16\.5-absolute-assets"/);
+    assert.match(html, /src="\/app\.js\?v=16\.6-optional-profile"/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;

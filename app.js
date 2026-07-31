@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.5-absolute-assets';
+const APP_VERSION = '16.6-optional-profile';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -212,7 +212,7 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
   $('#profileSetupStepPrivacy')?.classList.toggle('hidden', step !== 2);
   $('#profileSetupBack')?.classList.toggle('hidden', step !== 2);
   const close = $('#profileSetupClose');
-  if (close) close.classList.toggle('hidden', !state.profile?.onboardingComplete);
+  if (close) close.classList.remove('hidden');
 
   $$('#profileSetupModal [data-avatar-source]').forEach((button) => {
     const source = button.dataset.avatarSource;
@@ -261,6 +261,10 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
 }
 
 function openProfileSetup(step = 1) {
+  if (!state.profile?.termsAccepted) {
+    openModal('consentModal');
+    return;
+  }
   state.profileDraft = profileDraftFromCurrent();
   renderProfileSetup(step);
   renderAnimalPicker();
@@ -1384,7 +1388,7 @@ async function acknowledgeAchievement(code) {
 }
 
 function maybeShowAchievementCelebration() {
-  if (!state.profile?.onboardingComplete || !state.profile?.termsAccepted) return;
+  if (!state.profile?.termsAccepted) return;
   const queue = state.profile?.unannouncedAchievements || [];
   const item = queue[0];
   if (!item || $('#achievementCelebrationModal')?.classList.contains('open')) return;
@@ -1595,25 +1599,15 @@ function schedulePostBootHydration() {
   }, 0);
 }
 
-function requiredFirstRunGate(profile = state.profile) {
-  if (!profile?.termsAccepted) return 'consent';
-  if (!profile?.onboardingComplete) return 'profile';
-  return 'none';
-}
-
-function syncFirstRunGate() {
-  const gate = requiredFirstRunGate();
-  if (gate === 'consent') {
-    closeModal('profileSetupModal');
-    openModal('consentModal');
-    return;
-  }
-  closeModal('consentModal');
-  if (gate === 'profile') {
-    openProfileSetup(1);
-    return;
-  }
-  closeModal('profileSetupModal');
+function blockUnacceptedAction(event) {
+  if (state.profile?.termsAccepted) return;
+  const interactive = event.target?.closest?.(
+    '#appShell button, #appShell a, #appShell input, #appShell select, #appShell textarea, #appShell [role="button"]'
+  );
+  if (!interactive) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  openModal('consentModal');
 }
 
 async function boot() {
@@ -1638,7 +1632,8 @@ async function boot() {
     $('#bootText').textContent = 'Открываем профиль…';
     renderCoreProfile();
     await finishBoot();
-    syncFirstRunGate();
+    closeModal('consentModal');
+    closeModal('profileSetupModal');
     schedulePostBootHydration();
   } catch (error) {
     console.error('Boot failed:', error);
@@ -1664,11 +1659,8 @@ async function acceptTerms() {
     if (data?.profile) state.profile = data.profile;
     closeModal('consentModal');
     renderProfile();
-    toast('Настройки сохранены');
+    toast('Правила приняты');
     void loadSecondaryData();
-    if (!state.profile?.onboardingComplete) {
-      window.setTimeout(() => openProfileSetup(1), 180);
-    }
   } finally {
     if (button) button.disabled = false;
   }
@@ -2452,9 +2444,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
 $('#openProfileSettings')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') openProfileSetup(1); });
-$('#profileSetupClose')?.addEventListener('click', () => {
-  if (state.profile?.onboardingComplete) closeModal('profileSetupModal');
-});
+$('#profileSetupClose')?.addEventListener('click', () => closeModal('profileSetupModal'));
 $('#profileSetupBack')?.addEventListener('click', () => renderProfileSetup(1));
 $('#profileSetupNext')?.addEventListener('click', () => renderProfileSetup(2));
 $('#saveProfileSettings')?.addEventListener('click', () => saveProfileSettings().catch((error) => toast(error.message)));
@@ -2475,6 +2465,8 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
 ['privacyPublicProfile','privacyShowName','privacyShowAvatar','privacyShowSpend','privacyShowStats'].forEach((id) => {
   $(`#${id}`)?.addEventListener('change', syncPrivacyDraft);
 });
+
+document.addEventListener('click', blockUnacceptedAction, true);
 
 $('#openAchievementsButton')?.addEventListener('click', () => openAchievements());
 $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {

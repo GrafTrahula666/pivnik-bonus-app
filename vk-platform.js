@@ -40,7 +40,6 @@
   let bridgeLaunchParamsPromise = null;
   let consentExplicit = false;
   let consentRequired = false;
-  let consentObserver = null;
 
   /*
    * Telegram and VK never share a browser session. VK sessions are scoped by
@@ -220,8 +219,7 @@
   function updateConsentState(profile) {
     if (!profile || typeof profile !== 'object') return;
     consentRequired = profile.termsAccepted !== true;
-    if (consentRequired) scheduleConsentGate();
-    else stopConsentGate();
+    if (!consentRequired) stopConsentGate();
   }
 
   async function inspectApiResponse(response) {
@@ -276,33 +274,8 @@
     return response;
   };
 
-  function openConsentGate() {
-    if (!consentRequired) return;
-    const modal = document.getElementById('consentModal');
-    const shell = document.getElementById('appShell');
-    if (!modal || shell?.classList.contains('hidden')) return;
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-  }
-
-  function scheduleConsentGate() {
-    window.setTimeout(openConsentGate, 80);
-    window.setTimeout(openConsentGate, 500);
-    if (consentObserver || !document.body) return;
-    consentObserver = new MutationObserver(() => openConsentGate());
-    consentObserver.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'aria-hidden']
-    });
-  }
-
   function stopConsentGate() {
     consentRequired = false;
-    consentObserver?.disconnect();
-    consentObserver = null;
   }
 
   function applyVkLabels() {
