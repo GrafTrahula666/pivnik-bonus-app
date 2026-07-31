@@ -42,6 +42,7 @@ const configuredDocumentPlatform = String(
 ).trim().toLowerCase() === 'vk' ? 'vk' : 'telegram';
 const isTestImport = process.env.NODE_ENV === 'test'
   && process.env.PIVNIK_TEST_IMPORT === '1';
+const DEFAULT_DOCUMENT_SCRIPT_NONCE = 'pivnik-render-test';
 
 const TERMS_VERSION = 'beta-0.4';
 const EXPECTED_VK_APP_ID = '54694987';
@@ -2168,7 +2169,33 @@ async function proxyRequest(req, res, bodyBuffer = null) {
   else req.pipe(upstream);
 }
 
-export async function renderAppIndex(platform) {
+let vkBridgeBrowserSource = '';
+
+async function getVkBridgeBrowserSource() {
+  if (!vkBridgeBrowserSource) {
+    vkBridgeBrowserSource = await fs.readFile(
+      path.join(__dirname, 'node_modules', '@vkontakte', 'vk-bridge', 'dist', 'browser.min.js'),
+      'utf8'
+    );
+    if (/<\/script/i.test(vkBridgeBrowserSource)) {
+      throw new Error('VK Bridge browser bundle cannot be embedded safely.');
+    }
+  }
+  return vkBridgeBrowserSource;
+}
+
+function normalizeDocumentScriptNonce(value) {
+  const nonce = String(value || DEFAULT_DOCUMENT_SCRIPT_NONCE);
+  if (!/^[A-Za-z0-9+/_=-]{16,128}$/.test(nonce)) {
+    throw new Error('Invalid document script nonce.');
+  }
+  return nonce;
+}
+
+export async function renderAppIndex(
+  platform,
+  scriptNonce = DEFAULT_DOCUMENT_SCRIPT_NONCE
+) {
   const source = await fs.readFile(path.join(__dirname, 'index.html'), 'utf8');
   const withLoader = source.replace(
     /<link rel="stylesheet" href="\/?styles\.css([^"]*)"\s*\/>/i,
@@ -2180,22 +2207,38 @@ export async function renderAppIndex(platform) {
   );
 
   if (platform !== 'vk') return withLinking;
+  const nonce = normalizeDocumentScriptNonce(scriptNonce);
+  const bridgeSource = await getVkBridgeBrowserSource();
+  const earlyBridge = [
+    `<script nonce="${nonce}">`,
+    bridgeSource,
+    'window.__PIVNIK_EARLY_VK_INIT_AT__ = Date.now();',
+    "window.__PIVNIK_EARLY_VK_INIT_PROMISE__ = window.vkBridge.send('VKWebAppInit');",
+    'window.__PIVNIK_EARLY_VK_INIT_PROMISE__.catch(function () {});',
+    '</script>'
+  ].join('\n');
   return withLinking
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.0"></script>\n  <script defer src="/account-link.js$1"></script>'
+      `${earlyBridge}\n  <script defer src="/vk-platform.js?v=3.3.0"></script>\n  <script defer src="/account-link.js$1"></script>`
     );
 }
 
-export function documentSecurityHeaders(platform) {
+export function documentSecurityHeaders(
+  platform,
+  scriptNonce = DEFAULT_DOCUMENT_SCRIPT_NONCE
+) {
   const telegramScript = platform === 'telegram' ? ' https://telegram.org' : '';
+  const nonceSource = platform === 'vk'
+    ? ` 'nonce-${normalizeDocumentScriptNonce(scriptNonce)}'`
+    : '';
   return {
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
     'content-security-policy': [
       "default-src 'self'",
-      `script-src 'self'${telegramScript}`,
+      `script-src 'self'${telegramScript}${nonceSource}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "connect-src 'self'",
@@ -2302,12 +2345,13 @@ const server = http.createServer(async (req, res) => {
 
     const documentPlatform = platformForDocumentRequest(url, req.headers);
     if (req.method === 'GET' && documentPlatform) {
-      const html = Buffer.from(await renderAppIndex(documentPlatform));
+      const scriptNonce = crypto.randomBytes(18).toString('base64');
+      const html = Buffer.from(await renderAppIndex(documentPlatform, scriptNonce));
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'content-length': html.length,
         'cache-control': 'no-store',
-        ...documentSecurityHeaders(documentPlatform)
+        ...documentSecurityHeaders(documentPlatform, scriptNonce)
       });
       return res.end(html);
     }
