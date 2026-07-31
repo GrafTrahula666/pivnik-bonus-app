@@ -2,6 +2,7 @@
   'use strict';
 
   const bridge = window.vkBridge;
+  const earlyBridgeInitPromise = window.__PIVNIK_EARLY_VK_INIT_PROMISE__;
   const originalFetch = window.fetch.bind(window);
   const rawSearchLaunchParams = window.location.search.replace(/^\?/, '');
   const rawHashLaunchParams = (() => {
@@ -76,7 +77,7 @@
     try {
       bridgeInitialized = true;
       await withTimeout(
-        bridge.send('VKWebAppInit'),
+        earlyBridgeInitPromise || bridge.send('VKWebAppInit'),
         BRIDGE_INIT_TIMEOUT_MS,
         'VK не подтвердил запуск приложения вовремя.'
       );
