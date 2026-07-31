@@ -13,8 +13,9 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
     renderAppIndex
   } = await import('../universal-server.js?render-test');
   const telegram = await renderAppIndex('telegram');
-  const vk = await renderAppIndex('vk');
-  const vkCsp = documentSecurityHeaders('vk')['content-security-policy'];
+  const vkNonce = 'gateway-render-nonce';
+  const vk = await renderAppIndex('vk', vkNonce);
+  const vkCsp = documentSecurityHeaders('vk', vkNonce)['content-security-policy'];
 
   assert.match(telegram, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(telegram, /\/account-link\.js/);
@@ -24,8 +25,11 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
-  assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js\?v=3\.2\.0/);
+  assert.match(vk, new RegExp(`<script nonce="${vkNonce}">`));
+  assert.match(vk, /window\.vkBridge=window\.vkConnect=/);
+  assert.match(vk, /__PIVNIK_EARLY_VK_INIT_PROMISE__ = window\.vkBridge\.send\('VKWebAppInit'\)/);
+  assert.doesNotMatch(vk, /src="\/vendor\/vk-bridge\.js/);
+  assert.match(vk, /\/vk-platform\.js\?v=3\.3\.0/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
   assert.match(vk, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
@@ -46,13 +50,14 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
     }
   }
 
-  const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
+  const bridgePosition = vk.indexOf('__PIVNIK_EARLY_VK_INIT_PROMISE__');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
   const appPosition = vk.indexOf('/app.js?v=16.6-optional-profile');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
+  assert.match(vkCsp, new RegExp(`script-src [^;]*'nonce-${vkNonce}'`));
 
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.com/);
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.com/);
@@ -130,11 +135,12 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
       renderAppIndex
     } = await import('../universal-server.js?render-vk-default');
     const platform = platformForDocumentRequest(new URL('https://pivnik.example/'));
-    const html = await renderAppIndex(platform);
+    const html = await renderAppIndex(platform, 'railway-render-nonce');
 
     assert.equal(platform, 'vk');
-    assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-    assert.match(html, /\/vk-platform\.js\?v=3\.2\.0/);
+    assert.match(html, /window\.vkBridge=window\.vkConnect=/);
+    assert.match(html, /__PIVNIK_EARLY_VK_INIT_PROMISE__/);
+    assert.match(html, /\/vk-platform\.js\?v=3\.3\.0/);
     assert.match(html, /src="\/app\.js\?v=16\.6-optional-profile"/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   } finally {
