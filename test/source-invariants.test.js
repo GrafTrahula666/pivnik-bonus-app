@@ -259,6 +259,7 @@ test('Первый вход после загрузчика всегда пок�
   assert.match(bootSource, /await finishBoot\(\)[\s\S]*?syncFirstRunGate\(\)[\s\S]*?schedulePostBootHydration\(\)/);
   assert.doesNotMatch(bootSource, /await finishBoot\(\)[\s\S]*?closeModal\('profileSetupModal'\)/);
   assert.match(app, /profileSetupClose[\s\S]*?state\.profile\?\.onboardingComplete[\s\S]*?closeModal\('profileSetupModal'\)/);
-  assert.match(railway, /PIVNIK_DOCUMENT_PLATFORM=vk npm start/);
+  assert.match(railway, /"startCommand": "npm start"/);
+  assert.doesNotMatch(railway, /PIVNIK_DOCUMENT_PLATFORM=vk/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
 });
