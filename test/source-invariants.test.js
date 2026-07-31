@@ -239,3 +239,26 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(gateway, /startup\s*\?\s*\[\s*0,\s*\{ earned: \[\], unannounced: \[\] \}/);
   assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });
+
+test('Первый вход после загрузчика всегда показывает незавершённый обязательный шаг', async () => {
+  const [app, railway, gateway] = await Promise.all([
+    source('app.js'),
+    source('railway.json'),
+    source('universal-server.js')
+  ]);
+  const bootStart = app.indexOf('async function boot()');
+  const bootEnd = app.indexOf('async function acceptTerms()', bootStart);
+  const bootSource = app.slice(bootStart, bootEnd);
+  const gateStart = app.indexOf('function requiredFirstRunGate(');
+  const gateEnd = app.indexOf('async function boot()', gateStart);
+  const gateSource = app.slice(gateStart, gateEnd);
+
+  assert.match(gateSource, /!profile\?\.termsAccepted[\s\S]*?return 'consent'/);
+  assert.match(gateSource, /!profile\?\.onboardingComplete[\s\S]*?return 'profile'/);
+  assert.match(gateSource, /gate === 'profile'[\s\S]*?openProfileSetup\(1\)/);
+  assert.match(bootSource, /await finishBoot\(\)[\s\S]*?syncFirstRunGate\(\)[\s\S]*?schedulePostBootHydration\(\)/);
+  assert.doesNotMatch(bootSource, /await finishBoot\(\)[\s\S]*?closeModal\('profileSetupModal'\)/);
+  assert.match(app, /profileSetupClose[\s\S]*?state\.profile\?\.onboardingComplete[\s\S]*?closeModal\('profileSetupModal'\)/);
+  assert.match(railway, /PIVNIK_DOCUMENT_PLATFORM=vk npm start/);
+  assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
+});

@@ -37,6 +37,9 @@ const vkAppId = String(process.env.VK_APP_ID || '').trim();
 const vkAppSecret = String(process.env.VK_APP_SECRET || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
 const configuredSessionSecret = String(process.env.SESSION_SECRET || '');
+const configuredDocumentPlatform = String(
+  process.env.PIVNIK_DOCUMENT_PLATFORM || 'telegram'
+).trim().toLowerCase() === 'vk' ? 'vk' : 'telegram';
 const isTestImport = process.env.NODE_ENV === 'test'
   && process.env.PIVNIK_TEST_IMPORT === '1';
 
@@ -2223,7 +2226,11 @@ function hasVkEmbedSource(headers = {}) {
   });
 }
 
-export function platformForDocumentRequest(url, headers = {}) {
+export function platformForDocumentRequest(
+  url,
+  headers = {},
+  defaultPlatform = configuredDocumentPlatform
+) {
   if (url.pathname === '/vk' || url.pathname === '/vk/') return 'vk';
   if (url.pathname !== '/' && url.pathname !== '/index.html') return null;
 
@@ -2233,7 +2240,9 @@ export function platformForDocumentRequest(url, headers = {}) {
       && Array.from(url.searchParams.keys()).some((key) => key.startsWith('vk_'))
     );
 
-  return hasVkLaunchParams || hasVkEmbedSource(headers) ? 'vk' : 'telegram';
+  return hasVkLaunchParams || hasVkEmbedSource(headers)
+    ? 'vk'
+    : (defaultPlatform === 'vk' ? 'vk' : 'telegram');
 }
 
 async function serveFile(res, filePath, contentType, cacheControl = 'no-store') {

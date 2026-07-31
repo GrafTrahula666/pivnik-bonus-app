@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.3-vk-launch-recovery';
+const APP_VERSION = '16.4-first-run-recovery';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -212,7 +212,7 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
   $('#profileSetupStepPrivacy')?.classList.toggle('hidden', step !== 2);
   $('#profileSetupBack')?.classList.toggle('hidden', step !== 2);
   const close = $('#profileSetupClose');
-  if (close) close.classList.remove('hidden');
+  if (close) close.classList.toggle('hidden', !state.profile?.onboardingComplete);
 
   $$('#profileSetupModal [data-avatar-source]').forEach((button) => {
     const source = button.dataset.avatarSource;
@@ -1595,6 +1595,27 @@ function schedulePostBootHydration() {
   }, 0);
 }
 
+function requiredFirstRunGate(profile = state.profile) {
+  if (!profile?.termsAccepted) return 'consent';
+  if (!profile?.onboardingComplete) return 'profile';
+  return 'none';
+}
+
+function syncFirstRunGate() {
+  const gate = requiredFirstRunGate();
+  if (gate === 'consent') {
+    closeModal('profileSetupModal');
+    openModal('consentModal');
+    return;
+  }
+  closeModal('consentModal');
+  if (gate === 'profile') {
+    openProfileSetup(1);
+    return;
+  }
+  closeModal('profileSetupModal');
+}
+
 async function boot() {
   clearBootError();
   try {
@@ -1617,12 +1638,7 @@ async function boot() {
     $('#bootText').textContent = 'Открываем профиль…';
     renderCoreProfile();
     await finishBoot();
-    closeModal('profileSetupModal');
-    if (state.profile?.termsAccepted) {
-      closeModal('consentModal');
-    } else {
-      openModal('consentModal');
-    }
+    syncFirstRunGate();
     schedulePostBootHydration();
   } catch (error) {
     console.error('Boot failed:', error);
@@ -2436,7 +2452,9 @@ function renderUsers(users, target = '#usersList', compact = false) {
 $('#openProfileSettings')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') openProfileSetup(1); });
-$('#profileSetupClose')?.addEventListener('click', () => closeModal('profileSetupModal'));
+$('#profileSetupClose')?.addEventListener('click', () => {
+  if (state.profile?.onboardingComplete) closeModal('profileSetupModal');
+});
 $('#profileSetupBack')?.addEventListener('click', () => renderProfileSetup(1));
 $('#profileSetupNext')?.addEventListener('click', () => renderProfileSetup(2));
 $('#saveProfileSettings')?.addEventListener('click', () => saveProfileSettings().catch((error) => toast(error.message)));

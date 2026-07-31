@@ -30,7 +30,7 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('app.js?v=16.3-vk-launch-recovery');
+  const appPosition = vk.indexOf('app.js?v=16.4-first-run-recovery');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
@@ -88,4 +88,33 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
     ),
     'telegram'
   );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      {},
+      'vk'
+    ),
+    'vk'
+  );
+});
+
+test('VK Railway service serves VK document from the bare root URL', async () => {
+  const previous = process.env.PIVNIK_DOCUMENT_PLATFORM;
+  process.env.PIVNIK_DOCUMENT_PLATFORM = 'vk';
+  try {
+    const {
+      platformForDocumentRequest,
+      renderAppIndex
+    } = await import('../universal-server.js?render-vk-default');
+    const platform = platformForDocumentRequest(new URL('https://pivnik.example/'));
+    const html = await renderAppIndex(platform);
+
+    assert.equal(platform, 'vk');
+    assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
+    assert.match(html, /\/vk-platform\.js\?v=3\.2\.0/);
+    assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
+  } finally {
+    if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;
+    else process.env.PIVNIK_DOCUMENT_PLATFORM = previous;
+  }
 });
