@@ -65,6 +65,8 @@ test('Согласие отправляется только обработчи�
   assert.match(app, /#acceptTerms.*addEventListener\('click'/s);
   assert.match(app, /x-pivnik-explicit-consent/);
   assert.match(accountLink, /explicitConsent = true/);
+  assert.doesNotMatch(accountLink, /MutationObserver/);
+  assert.doesNotMatch(accountLink, /scheduleConsentGate|openConsentGate/);
   assert.match(server, /x-pivnik-explicit-consent/);
   assert.match(gateway, /x-pivnik-explicit-consent/);
   assert.match(gateway, /grantReward\([\s\S]*?'welcome-100'/);

@@ -4,8 +4,6 @@
   const previousFetch = window.fetch.bind(window);
   const platform = window.__PIVNIK_PLATFORM__ === 'vk' ? 'vk' : 'telegram';
   let explicitConsent = false;
-  let consentRequired = false;
-  let consentObserver = null;
   let lastProfile = null;
   let linkStatus = null;
   let activeCode = null;
@@ -39,10 +37,7 @@
       const data = await response.clone().json();
       if (data?.profile) {
         lastProfile = data.profile;
-        consentRequired = data.profile.termsAccepted !== true;
         updateLinkCardFromProfile(data.profile);
-        if (consentRequired) scheduleConsentGate();
-        else stopConsentGate();
       }
     } catch (_) {}
   }
@@ -127,36 +122,6 @@
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     if (!document.querySelector('.modal.open')) document.body.classList.remove('modal-open');
-  }
-
-  function openConsentGate() {
-    if (!consentRequired) return;
-    const shell = document.getElementById('appShell');
-    const modal = document.getElementById('consentModal');
-    if (!modal || shell?.classList.contains('hidden')) return;
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-  }
-
-  function scheduleConsentGate() {
-    window.setTimeout(openConsentGate, 80);
-    window.setTimeout(openConsentGate, 500);
-    window.setTimeout(openConsentGate, 1200);
-    if (consentObserver || !document.body) return;
-    consentObserver = new MutationObserver(openConsentGate);
-    consentObserver.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'aria-hidden']
-    });
-  }
-
-  function stopConsentGate() {
-    consentRequired = false;
-    consentObserver?.disconnect();
-    consentObserver = null;
   }
 
   function platformTitle(value) {
@@ -438,13 +403,11 @@
     const consent = document.getElementById('consentModal');
     if (!consent) return;
     const paragraph = consent.querySelector('.consent-sheet > p');
-    if (paragraph) {
-      paragraph.textContent = 'Для работы бонусной программы используются идентификаторы привязанных аккаунтов VK и Telegram, имя, бонусный баланс и история операций.';
-    }
+    const paragraphCopy = 'Для работы бонусной программы используются идентификаторы привязанных аккаунтов VK и Telegram, имя, бонусный баланс и история операций.';
+    if (paragraph && paragraph.textContent !== paragraphCopy) paragraph.textContent = paragraphCopy;
     const firstListItem = consent.querySelector('li');
-    if (firstListItem) {
-      firstListItem.textContent = 'После привязки в VK и Telegram отображается один и тот же постоянный QR-код.';
-    }
+    const listCopy = 'После привязки в VK и Telegram отображается один и тот же постоянный QR-код.';
+    if (firstListItem && firstListItem.textContent !== listCopy) firstListItem.textContent = listCopy;
   }
 
   document.addEventListener('click', (event) => {
@@ -454,13 +417,9 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     injectInterface();
+    // Consent is action-gated by app.js. Do not watch or rewrite the whole DOM:
+    // observer callbacks that mutate the observed tree can starve the boot loop.
     updateConsentCopy();
-
-    const mutationObserver = new MutationObserver(() => {
-      updateConsentCopy();
-      if (consentRequired) openConsentGate();
-    });
-    mutationObserver.observe(document.body, { subtree: true, childList: true });
 
     const loadAfterBoot = () => window.setTimeout(() => void loadStatus(), 0);
     const bootScreen = document.getElementById('bootScreen');

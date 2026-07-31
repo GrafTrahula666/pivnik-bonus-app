@@ -18,7 +18,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   const vkCsp = documentSecurityHeaders('vk', vkNonce)['content-security-policy'];
 
   assert.match(telegram, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
-  assert.match(telegram, /\/account-link\.js/);
+  assert.match(telegram, /\/account-link\.js\?v=2\.3\.0/);
   assert.match(telegram, /\/loader-fix\.css/);
   assert.match(telegram, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
   assert.match(telegram, /src="\/app\.js\?v=16\.6-optional-profile"/);
@@ -30,7 +30,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.match(vk, /__PIVNIK_EARLY_VK_INIT_PROMISE__ = window\.vkBridge\.send\('VKWebAppInit'\)/);
   assert.doesNotMatch(vk, /src="\/vendor\/vk-bridge\.js/);
   assert.match(vk, /\/vk-platform\.js\?v=3\.3\.0/);
-  assert.match(vk, /\/account-link\.js/);
+  assert.match(vk, /\/account-link\.js\?v=2\.3\.0/);
   assert.match(vk, /\/loader-fix\.css/);
   assert.match(vk, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
   assert.match(vk, /src="\/app\.js\?v=16\.6-optional-profile"/);

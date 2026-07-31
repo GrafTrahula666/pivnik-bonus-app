@@ -2203,7 +2203,7 @@ export async function renderAppIndex(
   );
   const withLinking = withLoader.replace(
     /<script defer src="\/?app\.js([^"]*)"><\/script>/i,
-    '<script defer src="/account-link.js?v=2.2.0"></script>\n  <script defer src="/app.js$1"></script>'
+    '<script defer src="/account-link.js?v=2.3.0"></script>\n  <script defer src="/app.js$1"></script>'
   );
 
   if (platform !== 'vk') return withLinking;
