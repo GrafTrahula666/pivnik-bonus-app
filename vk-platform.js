@@ -54,6 +54,9 @@
     localStorage.removeItem('pivnik_staff_session');
     localStorage.removeItem(`${storagePrefix}pivnik_session`);
     localStorage.removeItem(`${storagePrefix}pivnik_staff_session`);
+    if (!launchVkUserId) {
+      ['session', 'staff_session'].forEach((key) => localStorage.removeItem(`${storagePrefix}${key}`));
+    }
   } catch (_) {}
 
   function withTimeout(promise, timeoutMs, message) {

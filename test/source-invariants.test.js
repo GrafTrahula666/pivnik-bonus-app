@@ -34,6 +34,7 @@ test('VK запускается через подписанный ID и сохр
   assert.match(vk, /launchVkUserId/);
   assert.match(vk, /String\(vkUser\.id\) !== launchVkUserId/);
   assert.match(vk, /pivnik_vk_\$\{launchVkUserId \|\| 'unknown'\}_/);
+  assert.match(vk, /if \(!launchVkUserId\)[\s\S]*?staff_session/);
   assert.doesNotMatch(vk, /removeItem\(`\$\{storagePrefix\}(?:session|staff_session)`\)/);
   assert.match(vk, /code_data \|\| data\?\.code/);
   assert.doesNotMatch(vk, /Storage\.prototype/);

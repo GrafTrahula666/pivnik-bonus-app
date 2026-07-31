@@ -173,10 +173,11 @@ test('VK auth falls back to VKWebAppGetLaunchParams when the URL has no signatur
     documentElement: { classList: { add() {} } },
     addEventListener() {}
   };
+  const storage = new Map([['pivnik_vk_unknown_session', 'another-vk-user']]);
   const localStorage = {
-    getItem: () => null,
-    removeItem() {},
-    setItem() {}
+    getItem: (key) => storage.get(key) || null,
+    removeItem: (key) => storage.delete(key),
+    setItem: (key, value) => storage.set(key, String(value))
   };
 
   vm.runInNewContext(source, {
@@ -206,6 +207,7 @@ test('VK auth falls back to VKWebAppGetLaunchParams when the URL has no signatur
   assert.match(payload.launchParams, /vk_platform=mobile_iphone/);
   assert.match(payload.launchParams, /vk_access_token_settings=/);
   assert.match(payload.launchParams, /sign=bridge-sign/);
+  assert.equal(storage.has('pivnik_vk_unknown_session'), false);
 });
 
 test('Client API timeout covers both fetch and response body', async () => {
