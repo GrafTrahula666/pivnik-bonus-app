@@ -261,4 +261,6 @@ test('Первый вход после загрузчика всегда пок�
   assert.match(app, /profileSetupClose[\s\S]*?state\.profile\?\.onboardingComplete[\s\S]*?closeModal\('profileSetupModal'\)/);
   assert.match(railway, /PIVNIK_DOCUMENT_PLATFORM=vk npm start/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
+  assert.match(gateway, /url\.pathname === '\/vk\/app\.js'/);
+  assert.match(gateway, /url\.pathname === '\/vk\/styles\.css'/);
 });

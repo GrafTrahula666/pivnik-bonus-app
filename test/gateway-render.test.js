@@ -6,7 +6,7 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
-test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
+test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async () => {
   const {
     documentSecurityHeaders,
     platformForDocumentRequest,
@@ -19,6 +19,8 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.match(telegram, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(telegram, /\/account-link\.js/);
   assert.match(telegram, /\/loader-fix\.css/);
+  assert.match(telegram, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
+  assert.match(telegram, /src="\/app\.js\?v=16\.5-absolute-assets"/);
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
@@ -26,11 +28,28 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.match(vk, /\/vk-platform\.js\?v=3\.2\.0/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
+  assert.match(vk, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
+  assert.match(vk, /src="\/app\.js\?v=16\.5-absolute-assets"/);
+
+  const resourceUrls = [...vk.matchAll(/(?:src|href)="([^"]+)"/g)]
+    .map((match) => match[1])
+    .filter((resource) => resource.startsWith('/'));
+  for (const basePath of ['/vk', '/vk/']) {
+    const baseUrl = new URL(basePath, 'https://pivnik.example');
+    for (const resource of resourceUrls) {
+      const resolved = new URL(resource, baseUrl);
+      assert.equal(
+        resolved.pathname.startsWith('/vk/'),
+        false,
+        `${resource} must not resolve below ${basePath}`
+      );
+    }
+  }
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('app.js?v=16.4-first-run-recovery');
+  const appPosition = vk.indexOf('/app.js?v=16.5-absolute-assets');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
@@ -46,6 +65,10 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   );
   assert.equal(
     platformForDocumentRequest(new URL('https://pivnik.example/vk')),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(new URL('https://pivnik.example/vk/')),
     'vk'
   );
   assert.equal(
@@ -112,6 +135,7 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
     assert.equal(platform, 'vk');
     assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
     assert.match(html, /\/vk-platform\.js\?v=3\.2\.0/);
+    assert.match(html, /src="\/app\.js\?v=16\.5-absolute-assets"/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;

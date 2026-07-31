@@ -2171,12 +2171,12 @@ async function proxyRequest(req, res, bodyBuffer = null) {
 export async function renderAppIndex(platform) {
   const source = await fs.readFile(path.join(__dirname, 'index.html'), 'utf8');
   const withLoader = source.replace(
-    /<link rel="stylesheet" href="styles\.css([^"]*)"\s*\/>/i,
-    '<link rel="stylesheet" href="styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=2.1.0" />'
+    /<link rel="stylesheet" href="\/?styles\.css([^"]*)"\s*\/>/i,
+    '<link rel="stylesheet" href="/styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=2.1.0" />'
   );
   const withLinking = withLoader.replace(
-    /<script defer src="app\.js([^"]*)"><\/script>/i,
-    '<script defer src="/account-link.js?v=2.2.0"></script>\n  <script defer src="app.js$1"></script>'
+    /<script defer src="\/?app\.js([^"]*)"><\/script>/i,
+    '<script defer src="/account-link.js?v=2.2.0"></script>\n  <script defer src="/app.js$1"></script>'
   );
 
   if (platform !== 'vk') return withLinking;
@@ -2310,6 +2310,17 @@ const server = http.createServer(async (req, res) => {
         ...documentSecurityHeaders(documentPlatform)
       });
       return res.end(html);
+    }
+
+    // Keep previously cached /vk/ documents operational. Older HTML used
+    // relative asset URLs, so a trailing slash made the browser request these
+    // two files below /vk/ instead of from the application root.
+    if (req.method === 'GET' && url.pathname === '/vk/app.js') {
+      return serveFile(res, path.join(__dirname, 'app.js'), 'text/javascript; charset=utf-8', 'no-cache');
+    }
+
+    if (req.method === 'GET' && url.pathname === '/vk/styles.css') {
+      return serveFile(res, path.join(__dirname, 'styles.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
     if (req.method === 'GET' && url.pathname === '/vk-platform.js') {
