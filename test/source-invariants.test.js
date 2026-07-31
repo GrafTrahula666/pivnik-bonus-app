@@ -17,6 +17,8 @@ test('Запуск использует единый gateway и локальны
   assert.equal(pkg.dependencies['@vkontakte/vk-bridge'], '2.15.11');
   assert.match(gateway, /\/vendor\/vk-bridge\.js/);
   assert.match(gateway, /@vkontakte', 'vk-bridge', 'dist', 'browser\.min\.js/);
+  assert.match(gateway, /__PIVNIK_EARLY_VK_INIT_PROMISE__/);
+  assert.match(gateway, /scriptNonce/);
   assert.doesNotMatch(gateway, /unpkg|cdn\.jsdelivr/i);
 });
 
@@ -27,6 +29,7 @@ test('VK запускается через подписанный ID и сохр
   assert.ok(initPosition >= 0 && userPosition > initPosition);
   assert.match(vk, /BRIDGE_INIT_TIMEOUT_MS/);
   assert.match(vk, /BRIDGE_PROFILE_TIMEOUT_MS/);
+  assert.match(vk, /earlyBridgeInitPromise \|\| bridge\.send\('VKWebAppInit'\)/);
   assert.match(vk, /VKWebAppGetLaunchParams/);
   assert.match(vk, /window\.location\.hash/);
   assert.match(vk, /response\.status === 401/);
