@@ -23,6 +23,10 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.match(telegram, /href="\/styles\.css\?v=16\.0-premium-achievements"/);
   assert.match(telegram, /src="\/app\.js\?v=16\.6-optional-profile"/);
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
+  const telegramLinkingPosition = telegram.indexOf('/account-link.js');
+  const telegramAppPosition = telegram.indexOf('/app.js?v=16.6-optional-profile');
+  assert.ok(telegramLinkingPosition >= 0);
+  assert.ok(telegramLinkingPosition < telegramAppPosition);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, new RegExp(`<script nonce="${vkNonce}">`));
@@ -126,7 +130,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   );
 });
 
-test('VK Railway service serves VK document from the bare root URL', async () => {
+test('Optional VK document override remains available without forcing Railway into VK mode', async () => {
   const previous = process.env.PIVNIK_DOCUMENT_PLATFORM;
   process.env.PIVNIK_DOCUMENT_PLATFORM = 'vk';
   try {

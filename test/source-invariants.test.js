@@ -131,15 +131,23 @@ test('Смена роли и PIN инвалидирует старые сесс�
 });
 
 test('Общий рейтинг учитывает только покупки, активные профили и московский месяц', async () => {
-  const gateway = await source('universal-server.js');
+  const [gateway, index] = await Promise.all([
+    source('universal-server.js'),
+    source('index.html')
+  ]);
+  assert.match(gateway, /WITH RECURSIVE user_map AS/);
+  assert.match(gateway, /um\.canonical_id AS user_id/);
   assert.match(gateway, /t\.status = 'completed'/);
   assert.match(gateway, /t\.mode IN \('accrue','redeem'\)/);
   assert.match(gateway, /u\.merged_into_user_id IS NULL/);
   assert.match(gateway, /Europe\/Moscow/);
+  assert.match(gateway, /scope: 'telegram-vk'/);
   assert.match(gateway, /show_name/);
   assert.match(gateway, /show_avatar/);
   assert.match(gateway, /show_leaderboard_amount/);
   assert.match(gateway, /Number\(current\.spend_cents \|\| 0\) > 0/);
+  assert.match(index, /Единая лига для Telegram и VK/);
+  assert.match(index, /после привязки аккаунтов их покупки суммируются/);
 });
 
 test('Loader использует фактическое соотношение сторон и accessibility-режимы', async () => {
@@ -271,7 +279,8 @@ test('Запуск не открывает правила или профиль,
     const routeSource = gateway.slice(routeStart, routeEnd);
     assert.match(routeSource, /!user\.termsAccepted[\s\S]*?428/);
   }
-  assert.match(railway, /PIVNIK_DOCUMENT_PLATFORM=vk npm start/);
+  assert.match(railway, /"startCommand": "npm start"/);
+  assert.doesNotMatch(railway, /PIVNIK_DOCUMENT_PLATFORM/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
   assert.match(gateway, /url\.pathname === '\/vk\/app\.js'/);
   assert.match(gateway, /url\.pathname === '\/vk\/styles\.css'/);
