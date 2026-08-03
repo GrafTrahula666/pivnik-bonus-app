@@ -14,7 +14,7 @@ test('Telegram launch recovers signed initData from SDK or launch URL without br
   assert.match(app, /get\('tgWebAppData'\)/);
   assert.match(app, /bridge\?\.initData \|\| telegramInitDataFromUrl/);
   assert.match(app, /telegramBridgeInitialized/);
-  assert.match(index, /app\.js\?v=16\.5-telegram-initdata-recovery/);
+  assert.match(index, /app\.js\?v=17\.0-luxury-vip-space/);
 });
 
 test('Telegram auth limits valid identities separately and throttles only invalid IP attempts', async () => {

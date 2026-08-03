@@ -524,7 +524,7 @@ async function canonicalUserId(db, rawUserId) {
   if (!/^\d+$/.test(userId)) return null;
   for (let hop = 0; hop < 12; hop += 1) {
     const result = await db.query(
-      'SELECT id, merged_into_user_id FROM users WHERE id = $1::bigint',
+      'SELECT id, merged_into_user_id FROM users WHERE id = $1::bigint AND deleted_at IS NULL',
       [userId]
     );
     if (!result.rowCount) return null;
@@ -552,7 +552,7 @@ async function canonicalizeSessionToken(rawToken) {
       return { token: rawToken, payload: null, userId: null };
     }
     const result = await pool.query(
-      `SELECT id, session_version, merged_into_user_id
+      `SELECT id, session_version, merged_into_user_id, deleted_at
        FROM users
        WHERE id = $1::bigint`,
       [rawId]
@@ -561,6 +561,7 @@ async function canonicalizeSessionToken(rawToken) {
     if (
       !row
       || row.merged_into_user_id
+      || row.deleted_at
       || Number(row.session_version) !== suppliedVersion
     ) {
       return { token: rawToken, payload: null, userId: null };
@@ -592,7 +593,9 @@ async function requireGatewayUser(req) {
                 AND ui.provider_user_id = $3
             ) AS identity_matches
      FROM users u
-     WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
+     WHERE u.id = $1::bigint
+       AND u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL`,
     [normalized.userId, platform, providerUserId]
   );
   if (!result.rowCount || !providerUserId || !result.rows[0].identity_matches) {
@@ -700,7 +703,9 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
      FROM users u
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-     WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
+     WHERE u.id = $1::bigint
+       AND u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL`,
     [canonical]
   );
   if (!result.rowCount) return null;
@@ -827,6 +832,7 @@ async function getUnifiedMonthlyLeaderboard(currentUserId) {
        FROM users u
        LEFT JOIN monthly_spend ms ON ms.user_id = u.id
        WHERE u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
      )
      SELECT * FROM ranked
      ORDER BY rank, id`,
@@ -896,7 +902,9 @@ async function updateUnifiedProfile(userId, platform, body) {
          WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
        ) AS owns_diamond_frame
        FROM users u
-       WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL
+       WHERE u.id = $1::bigint
+         AND u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
        FOR UPDATE`,
       [canonical]
     );
@@ -957,6 +965,90 @@ async function updateUnifiedProfile(userId, platform, body) {
   }
 }
 
+async function deleteUnifiedAccount(userId, confirmation) {
+  if (String(confirmation || '').trim().toUpperCase() !== 'УДАЛИТЬ') {
+    throw Object.assign(new Error('Введите слово «УДАЛИТЬ» для подтверждения.'), { statusCode: 400 });
+  }
+  const canonical = await canonicalUserId(pool, userId);
+  if (!canonical) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query(
+      `SELECT id
+       FROM users
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL
+       FOR UPDATE`,
+      [canonical]
+    );
+    if (!locked.rowCount) {
+      throw Object.assign(new Error('Аккаунт уже удалён или не найден.'), { statusCode: 404 });
+    }
+
+    await client.query('DELETE FROM account_link_codes WHERE user_id = $1::bigint OR used_by_user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM account_link_attempts WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM user_identities WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM bar_customers WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM reward_grants WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM beta_grants WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM qr_aliases WHERE user_id = $1::bigint OR source_user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM qr_sessions WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM shift_members WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM cancel_quota_resets WHERE user_id = $1::bigint OR reset_by = $1::bigint', [canonical]);
+    await client.query('DELETE FROM shop_inquiries WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM wallets WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM beer_loyalty WHERE user_id = $1::bigint', [canonical]);
+    await client.query('UPDATE shifts SET created_by = NULL WHERE created_by = $1::bigint', [canonical]);
+    await client.query('UPDATE app_settings SET updated_by = NULL WHERE updated_by = $1::bigint', [canonical]);
+    await client.query('UPDATE promotions SET updated_by = NULL WHERE updated_by = $1::bigint', [canonical]);
+    await client.query('UPDATE shop_items SET updated_by = NULL WHERE updated_by = $1::bigint', [canonical]);
+
+    await client.query(
+      `UPDATE users SET
+         telegram_id = NULL,
+         username = NULL,
+         first_name = 'Удалённый пользователь',
+         last_name = NULL,
+         photo_url = NULL,
+         language_code = NULL,
+         role = 'client',
+         qr_token = NULL,
+         qr_short_code = NULL,
+         staff_pin_hash = NULL,
+         staff_pin_salt = NULL,
+         staff_pin_updated_at = NULL,
+         avatar_source = 'preset_male',
+         avatar_key = NULL,
+         profile_frame = 'none',
+         age_group = NULL,
+         profile_public = FALSE,
+         show_name = FALSE,
+         show_avatar = FALSE,
+         show_leaderboard_amount = FALSE,
+         show_stats = FALSE,
+         unlimited_bonus = FALSE,
+         onboarding_completed_at = NULL,
+         terms_accepted_at = NULL,
+         terms_version = NULL,
+         session_version = session_version + 1,
+         deleted_at = NOW(),
+         updated_at = NOW()
+       WHERE id = $1::bigint`,
+      [canonical]
+    );
+    await client.query('COMMIT');
+    return { ok: true, deleted: true };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function getUnifiedAdminUsers() {
   const result = await pool.query(
     `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role,
@@ -975,6 +1067,7 @@ async function getUnifiedAdminUsers() {
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
      WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
      ORDER BY u.created_at DESC
      LIMIT 200`
   );
@@ -2067,7 +2160,9 @@ async function consumeAccountLinkCode(currentUserId, requestedProvider, rawCode)
     `SELECT u.session_version, ui.provider_user_id
      FROM users u
      JOIN user_identities ui ON ui.user_id = u.id AND ui.provider = $2
-     WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
+     WHERE u.id = $1::bigint
+       AND u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL`,
     [canonical, requestedProvider]
   );
   if (!sessionResult.rowCount) {
@@ -2430,6 +2525,15 @@ const server = http.createServer(async (req, res) => {
       const body = parseJsonBody(await readRequestBody(req));
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
       return sendJson(res, 200, await updateUnifiedProfile(user.id, platform, body));
+    }
+
+    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      const body = parseJsonBody(await readRequestBody(req));
+      return sendJson(res, 200, await deleteUnifiedAccount(user.id, body.confirmation));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/leaderboard/monthly') {

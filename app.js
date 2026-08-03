@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.5-telegram-initdata-recovery';
+const APP_VERSION = '17.0-luxury-vip-space';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -97,6 +97,8 @@ const state = {
   achievementsLoaded: false,
   achievementTab: 'common',
   achievementQueue: [],
+  transactions: [],
+  historyTab: 'purchases',
   bootSecondaryStarted: false
 };
 
@@ -705,11 +707,16 @@ function closeModal(id) {
 }
 
 function switchScreen(target) {
+  if (!target) return;
   $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
-  $$('.bottom-nav button').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
+  if (target === 'actions') renderPromotions();
+  if (target === 'league') renderLeaderboard();
+  if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
 
 function currentLevelIndex() {
@@ -733,7 +740,8 @@ function applyDesign(design) {
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
-  $('#showQrButton').lastChild.textContent = design.texts?.qrButton || 'Показать QR';
+  const legacyQrButton = $('#showQrButton');
+  if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
   $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
@@ -779,15 +787,18 @@ function bindContentImageFallbacks(root = document) {
 
 function renderPromotions() {
   const list = $('#promosCatalog');
-  if (!list) return;
-  list.className = `premium-list${state.promotions.length ? '' : ' empty-state'}`;
-  list.innerHTML = state.promotions.length ? state.promotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'} ${item.code === 'orange-blanche-1-plus-1-3' ? 'orange-blanche-offer' : ''}" data-promo-code="${escapeHtml(item.code)}">
-    ${imageMarkup(item.imageSrc, item.title, 'premium-offer-media')}
-    <span class="offer-index">${String(index + 1).padStart(2, '0')}</span>
-    <div class="premium-offer-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p><small>${item.active ? 'Доступно сейчас' : 'Недоступно / скоро'}</small></div>
-    <strong>${escapeHtml(item.badge || (item.active ? 'Активно' : 'Скоро'))}</strong>
-  </article>`).join('') : 'Акций пока нет';
-  bindContentImageFallbacks(list);
+  const activePromotion = state.promotions.find((item) => item.active) || state.promotions[0];
+  if ($('#homePromoTitle')) $('#homePromoTitle').textContent = activePromotion?.title || 'Новые предложения скоро';
+  if (list) {
+    list.className = `premium-list${state.promotions.length ? '' : ' empty-state'}`;
+    list.innerHTML = state.promotions.length ? state.promotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'} ${item.code === 'orange-blanche-1-plus-1-3' ? 'orange-blanche-offer' : ''}" data-promo-code="${escapeHtml(item.code)}">
+      ${imageMarkup(item.imageSrc, item.title, 'premium-offer-media')}
+      <span class="offer-index">${String(index + 1).padStart(2, '0')}</span>
+      <div class="premium-offer-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p><small>${item.active ? 'Доступно сейчас' : 'Недоступно / скоро'}</small></div>
+      <strong>${escapeHtml(item.badge || (item.active ? 'Активно' : 'Скоро'))}</strong>
+    </article>`).join('') : 'Акций пока нет';
+    bindContentImageFallbacks(list);
+  }
 }
 
 async function loadPromotions() {
@@ -1037,6 +1048,15 @@ function renderLeaderboard() {
   const data = state.leaderboard;
   if (!data) return;
   if ($('#leaderboardMonth')) $('#leaderboardMonth').textContent = data.month;
+  const place = data.me?.spend > 0 ? data.me.rank : '—';
+  if ($('#leaguePlaceHome')) $('#leaguePlaceHome').textContent = place;
+  if ($('#leaguePlaceScreen')) $('#leaguePlaceScreen').textContent = place;
+  if ($('#statsLeaguePlace')) $('#statsLeaguePlace').textContent = place;
+  if ($('#leagueSpentHome')) {
+    $('#leagueSpentHome').textContent = data.me?.spend > 0
+      ? `${fmt(data.me.spend)} ₽ за месяц`
+      : 'по сумме покупок';
+  }
   const preview = $('#leaderboardPreview');
   if (preview) {
     preview.innerHTML = [1, 2, 3].map((rank) => {
@@ -1045,7 +1065,7 @@ function renderLeaderboard() {
     }).join('');
   }
   if ($('#leaderboardMe')) $('#leaderboardMe').textContent = data.me?.spend > 0 ? `Ваше место: №${data.me.rank} · ${fmt(data.me.spend)} ₽` : 'Ваше место появится после первой покупки';
-  if ($('#leaderboardModalTitle')) $('#leaderboardModalTitle').textContent = `Лидеры · ${data.month}`;
+  if ($('#leaderboardModalTitle')) $('#leaderboardModalTitle').textContent = `Лига Пивника · ${data.month}`;
   if ($('#leaderboardPrizeNote')) $('#leaderboardPrizeNote').textContent = data.prizeNote || 'Награды за 1–3 место будут объявлены позже.';
   const list = $('#leaderboardList');
   if (list) {
@@ -1375,6 +1395,11 @@ function openAchievements(code = '') {
 
 function renderAchievements() {
   renderProfileAchievements();
+  const earned = state.profile?.achievements?.length || 0;
+  const pending = state.profile?.unannouncedAchievements?.length || 0;
+  if ($('#achievementCountHome')) $('#achievementCountHome').textContent = fmt(earned);
+  if ($('#profileAchievementBadge')) $('#profileAchievementBadge').textContent = pending || earned;
+  if ($('#statsAchievements')) $('#statsAchievements').textContent = fmt(earned);
 }
 
 async function loadAchievements() {
@@ -1396,6 +1421,7 @@ async function acknowledgeAchievement(code) {
   const item = state.profile?.achievements?.find((achievement) => achievement.grantCode === code || achievement.code === code);
   if (item) item.announced = true;
   state.profile.unannouncedAchievements = (state.profile.unannouncedAchievements || []).filter((achievement) => achievement.grantCode !== code);
+  renderAchievements();
 }
 
 function maybeShowAchievementCelebration() {
@@ -1416,14 +1442,31 @@ function maybeShowAchievementCelebration() {
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
-  $('#eyebrow').textContent = `${profile.firstName}${profile.username ? ` · @${profile.username}` : ''}`;
+  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
+  const platformLabel = profile.platform === 'vk' ? 'VK' : 'Telegram';
+  const linked = Array.isArray(profile.linkedPlatforms) ? profile.linkedPlatforms : [];
+  $('#eyebrow').textContent = `${profile.firstName || 'Гость'}${profile.username ? ` · @${profile.username}` : ''}`;
+  if ($('#clientName')) $('#clientName').textContent = fullName;
+  if ($('#profileName')) $('#profileName').textContent = fullName;
+  if ($('#profileHandle')) $('#profileHandle').textContent = profile.username ? `@${profile.username} · ${platformLabel}` : platformLabel;
+  if ($('#profileStatus')) $('#profileStatus').textContent = `${profile.status.name} · ${profile.status.bonusPercent}% начисление`;
+  if ($('#profileServicesValue')) {
+    $('#profileServicesValue').textContent = linked.includes('telegram') && linked.includes('vk')
+      ? 'Telegram и VK связаны'
+      : `Подключён ${platformLabel}`;
+  }
   $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : compactBonus(profile.balance);
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
-  $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
+  $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   renderAvatarInto($('#profileAvatar'), profile);
+  renderAvatarInto($('#profileAvatarMirror'), profile);
+  const totalLiters = Number(profile.beer?.paidLitersTotal || 0);
+  if ($('#totalLitersHome')) $('#totalLitersHome').textContent = fmtLiters(totalLiters);
+  if ($('#statsTotalLiters')) $('#statsTotalLiters').textContent = fmtLiters(totalLiters);
+  if ($('#statsSpend12m')) $('#statsSpend12m').textContent = `${fmt(profile.spend12m)} ₽`;
   renderAchievements();
   $('#staffName').textContent = activeStaffName();
   renderBeer(profile);
@@ -1439,11 +1482,14 @@ function renderProfile() {
   } else {
     $('#statusProgress').style.width = '100%';
     $('#statusProgressText').textContent = 'Максимальный статус';
-    $('#nextRewardText').textContent = 'максимум';
+    $('#nextRewardText').textContent = 'Максимальный статус';
   }
 
-  $('#staffNav').classList.toggle('hidden', !roleCanStaff(profile.role));
-  $('#adminNav').classList.toggle('hidden', !roleCanAdmin(profile.role));
+  const hasStaffAccess = roleCanStaff(profile.role);
+  const hasAdminAccess = roleCanAdmin(profile.role);
+  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
+  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
+  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
   if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
   const partnerView = profile.role === 'viewer';
@@ -1712,11 +1758,79 @@ async function copyQrCode() {
   }
 }
 
+function historyMatchesTab(transaction, tab = state.historyTab) {
+  if (tab === 'rewards') return ['beer_gift', 'shop', 'achievement'].includes(transaction.mode);
+  if (tab === 'bonuses') return ['accrue', 'redeem', 'welcome', 'adjustment'].includes(transaction.mode);
+  return ['accrue', 'redeem', 'shop'].includes(transaction.mode);
+}
+
+function renderHistoryTab() {
+  const list = $('#historyList');
+  if (!list) return;
+  $$('.history-tabs [data-history-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.historyTab === state.historyTab);
+  });
+  const transactions = state.transactions.filter((transaction) => historyMatchesTab(transaction));
+  list.className = `operation-list${transactions.length ? '' : ' empty-state'}`;
+  list.innerHTML = transactions.length ? transactions.map(renderTransaction).join('') : 'В этом разделе пока нет операций';
+}
+
 async function showHistory() {
   const data = await api('/api/me/transactions');
-  $('#historyList').className = `operation-list${data.transactions.length ? '' : ' empty-state'}`;
-  $('#historyList').innerHTML = data.transactions.length ? data.transactions.map(renderTransaction).join('') : 'Операций пока нет';
-  openModal('historyModal');
+  state.transactions = data.transactions || [];
+  renderHistoryTab();
+}
+
+function notificationPreferences() {
+  const raw = safeStorage.get('pivnik_notification_preferences');
+  if (!raw) return { achievements: true, bonuses: true, promotions: true };
+  try {
+    return { achievements: true, bonuses: true, promotions: true, ...JSON.parse(raw) };
+  } catch (_) {
+    return { achievements: true, bonuses: true, promotions: true };
+  }
+}
+
+function renderNotificationPreferences() {
+  const preferences = notificationPreferences();
+  if ($('#notifyAchievements')) $('#notifyAchievements').checked = preferences.achievements !== false;
+  if ($('#notifyBonuses')) $('#notifyBonuses').checked = preferences.bonuses !== false;
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = preferences.promotions !== false;
+}
+
+function saveNotificationPreferences() {
+  safeStorage.set('pivnik_notification_preferences', JSON.stringify({
+    achievements: Boolean($('#notifyAchievements')?.checked),
+    bonuses: Boolean($('#notifyBonuses')?.checked),
+    promotions: Boolean($('#notifyPromotions')?.checked)
+  }));
+  closeModal('notificationsModal');
+  toast('Настройки уведомлений сохранены');
+}
+
+function openConnectedServices() {
+  const accountLinkButton = $('#openAccountLink');
+  if (accountLinkButton) accountLinkButton.click();
+  else toast('Раздел привязки ещё загружается');
+}
+
+async function deleteOwnAccount() {
+  const confirmation = String($('#deleteAccountConfirm')?.value || '').trim().toUpperCase();
+  if (confirmation !== 'УДАЛИТЬ') throw new Error('Введите слово «УДАЛИТЬ».');
+  await api('/api/me/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation: 'УДАЛИТЬ' }),
+    retries: 0,
+    timeoutMs: 9000
+  });
+  safeStorage.remove('pivnik_session');
+  safeStorage.remove('pivnik_staff_session');
+  safeStorage.remove('pivnik_notification_preferences');
+  state.token = '';
+  state.profile = null;
+  closeModal('deleteAccountModal');
+  toast('Аккаунт удалён');
+  window.setTimeout(() => window.location.reload(), 900);
 }
 
 async function resolveQr(payload) {
@@ -2504,17 +2618,41 @@ $('#bootRetry')?.addEventListener('click', () => {
 });
 $('#bootLite')?.addEventListener('click', enableLiteMode);
 
-$$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
+$$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
-$('#openPromosButton').addEventListener('click', () => { renderPromotions(); openModal('promosModal'); });
+$('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
+$('#openPromosButton').addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton').addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
-$('#openLeaderboardButton').addEventListener('click', () => { renderLeaderboard(); openModal('leaderboardModal'); });
-$('#shopShowQr').addEventListener('click', () => { closeModal('shopModal'); showQr().catch((error) => toast(error.message)); });
-$('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));
-$('#showHistoryButton').addEventListener('click', () => showHistory().catch((error) => toast(error.message)));
+$('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
+$('#openProfileAvatar')?.addEventListener('click', () => openProfileSetup(1));
+$('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
+$('#openProfileAchievements')?.addEventListener('click', () => openAchievements());
+$('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
+$('#openConnectedServices')?.addEventListener('click', openConnectedServices);
+$('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
+$('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
+$('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
+$$('.history-tabs [data-history-tab]').forEach((button) => button.addEventListener('click', () => {
+  state.historyTab = button.dataset.historyTab || 'purchases';
+  renderHistoryTab();
+}));
+$('#saveNotifications')?.addEventListener('click', saveNotificationPreferences);
+$('#deleteAccountConfirm')?.addEventListener('input', (event) => {
+  $('#deleteAccountButton').disabled = String(event.target.value || '').trim().toUpperCase() !== 'УДАЛИТЬ';
+});
+$('#deleteAccountButton')?.addEventListener('click', async () => {
+  const button = $('#deleteAccountButton');
+  button.disabled = true;
+  try { await deleteOwnAccount(); }
+  catch (error) { toast(error.message); button.disabled = false; }
+});
+$('#profileStaffNav')?.addEventListener('click', () => switchScreen('staff'));
+$('#profileAdminNav')?.addEventListener('click', () => switchScreen('admin'));
+$('#backToProfileFromStaff')?.addEventListener('click', () => switchScreen('profile'));
+$('#backToProfileFromAdmin')?.addEventListener('click', () => switchScreen('profile'));
 $('#openTermsFromConsent').addEventListener('click', () => openModal('helpModal'));
 $('#acceptTerms').addEventListener('click', () => acceptTerms().catch((error) => toast(error.message)));
 $('#copyQrCode').addEventListener('click', () => copyQrCode());

@@ -263,3 +263,31 @@ test('Первый вход не открывает цепочку модало�
   assert.doesNotMatch(railway, /PIVNIK_DOCUMENT_PLATFORM=vk/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
 });
+
+test('Luxury VIP Space сохраняет клиентскую навигацию, реальные данные и видимый космос', async () => {
+  const [index, app, styles, server, gateway, deletionMigration] = await Promise.all([
+    source('index.html'),
+    source('app.js'),
+    source('styles.css'),
+    source('server.js'),
+    source('universal-server.js'),
+    source('migrations/003_account_deletion.sql')
+  ]);
+  const navStart = index.indexOf('<nav class="bottom-nav"');
+  const navEnd = index.indexOf('</nav>', navStart);
+  const nav = index.slice(navStart, navEnd);
+  assert.match(nav, /Главная/);
+  assert.match(nav, /Акции/);
+  assert.match(nav, /id="navQrButton"/);
+  assert.match(nav, /Лига/);
+  assert.match(nav, /Профиль/);
+  assert.doesNotMatch(nav, /Бармен|Админ/);
+  assert.match(styles, /luxury-vip-space\.webp/);
+  assert.match(styles, /filter: brightness\(1\.72\)/);
+  assert.match(app, /profile\.status\.bonusPercent/);
+  assert.match(app, /profileStaffNav/);
+  assert.match(app, /profileAdminNav/);
+  assert.match(server, /app\.delete\('\/api\/me\/account'/);
+  assert.match(gateway, /url\.pathname === '\/api\/me\/account'/);
+  assert.match(deletionMigration, /deleted_at TIMESTAMPTZ/);
+});
