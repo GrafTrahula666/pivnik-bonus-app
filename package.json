@@ -1,6 +1,6 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.6.1",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "description": "Telegram и VK Mini App программы лояльности бара Пивник — единый дизайн, база и безопасная авторизация",
