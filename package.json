@@ -1,6 +1,6 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "type": "module",
   "description": "Telegram и VK Mini App программы лояльности бара Пивник — единый дизайн, база и безопасная авторизация",
@@ -8,9 +8,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node universal-server.js",
-    "dev": "node --watch universal-server.js",
-    "check": "node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
+    "start": "node bootstrap.js",
+    "dev": "node --watch bootstrap.js",
+    "check": "node --check bootstrap.js && node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
     "test": "node --test"
   },
   "dependencies": {
