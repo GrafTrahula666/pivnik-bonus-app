@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
+import { signSession } from '../platform-core.js';
 
 process.env.PIVNIK_TEST_IMPORT = '1';
 process.env.NODE_ENV = 'test';
@@ -39,4 +41,35 @@ test('PostgreSQL: API rate limit is durable and resets after its window', async 
   } finally {
     await db.close();
   }
+});
+
+test('Global API limit separates authenticated users behind one shared IP', async () => {
+  const { globalApiRateLimitSubject } = await import('../universal-server.js?rate-limit-subject');
+  const secret = crypto
+    .createHash('sha256')
+    .update(process.env.SESSION_SECRET)
+    .digest();
+  const expires = Date.now() + 60_000;
+  const firstToken = signSession({ uid: '101', sv: 1, exp: expires }, secret);
+  const secondToken = signSession({ uid: '202', sv: 1, exp: expires }, secret);
+  const request = (token, address = '203.0.113.10') => ({
+    headers: {
+      authorization: token ? `Bearer ${token}` : '',
+      'x-forwarded-for': address
+    },
+    socket: { remoteAddress: address }
+  });
+
+  assert.notEqual(
+    globalApiRateLimitSubject(request(firstToken)),
+    globalApiRateLimitSubject(request(secondToken))
+  );
+  assert.equal(
+    globalApiRateLimitSubject(request(firstToken, '203.0.113.10')),
+    globalApiRateLimitSubject(request(firstToken, '203.0.113.11'))
+  );
+  assert.notEqual(
+    globalApiRateLimitSubject(request('', '203.0.113.10')),
+    globalApiRateLimitSubject(request('', '203.0.113.11'))
+  );
 });

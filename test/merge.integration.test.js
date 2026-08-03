@@ -157,16 +157,21 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
       'utf8'
     );
     await db.exec(publicLaunchMigration);
+    const creatorMigration = await readFile(
+      new URL('../migrations/004_creator_identity.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(creatorMigration);
 
     const telegramUser = await db.query(`
       INSERT INTO users (
         telegram_id, username, first_name, last_name, role,
         qr_token, qr_short_code, terms_accepted_at, terms_version,
-        onboarding_completed_at, created_at
+        onboarding_completed_at, adult_confirmed_at, is_creator, created_at
       ) VALUES (
         1001, 'telegram_user', 'Телеграм', 'Клиент', 'client',
         'TelegramTokenCase', 'PVK-TG11-AAAA', NOW(), 'beta-0.4',
-        NOW(), '2026-01-01T10:00:00Z'
+        NOW(), NOW(), TRUE, '2026-01-01T10:00:00Z'
       )
       RETURNING id
     `);
@@ -279,7 +284,7 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
     assert.equal(merge.finalBalance, 180);
 
     const canonical = await db.query(
-      `SELECT role, staff_pin_hash, staff_pin_salt, telegram_id,
+      `SELECT role, staff_pin_hash, staff_pin_salt, telegram_id, is_creator, adult_confirmed_at,
               profile_public, show_name, session_version
        FROM users WHERE id = $1`,
       [telegramId]
@@ -288,12 +293,14 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
     assert.equal(canonical.rows[0].staff_pin_hash, 'pin-hash');
     assert.equal(canonical.rows[0].staff_pin_salt, 'pin-salt');
     assert.equal(String(canonical.rows[0].telegram_id), '1001');
+    assert.equal(canonical.rows[0].is_creator, true);
+    assert.ok(canonical.rows[0].adult_confirmed_at);
     assert.equal(canonical.rows[0].profile_public, true);
     assert.equal(canonical.rows[0].show_name, false);
     assert.equal(Number(canonical.rows[0].session_version), 2);
 
     const archived = await db.query(
-      `SELECT merged_into_user_id, qr_token, qr_short_code, role,
+      `SELECT merged_into_user_id, qr_token, qr_short_code, role, is_creator,
               staff_pin_hash, session_version
        FROM users WHERE id = $1`,
       [vkId]
@@ -302,6 +309,7 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
     assert.equal(archived.rows[0].qr_token, null);
     assert.equal(archived.rows[0].qr_short_code, null);
     assert.equal(archived.rows[0].role, 'client');
+    assert.equal(archived.rows[0].is_creator, false);
     assert.equal(archived.rows[0].staff_pin_hash, null);
     assert.equal(Number(archived.rows[0].session_version), 2);
 

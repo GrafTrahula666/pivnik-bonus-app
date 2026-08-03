@@ -41,6 +41,12 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     );
     await db.exec(publicLaunchMigration);
     await db.exec(publicLaunchMigration);
+    const creatorMigration = await readFile(
+      new URL('../migrations/004_creator_identity.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(creatorMigration);
+    await db.exec(creatorMigration);
 
     const first = await db.query(`
       INSERT INTO users (telegram_id)
@@ -133,6 +139,11 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     );
     assert.equal((await db.query('SELECT 1 FROM api_rate_limits')).rows.length, 1);
     assert.equal((await db.query('SELECT 1 FROM account_deletion_audit')).rows.length, 1);
+
+    await db.query('UPDATE users SET is_creator = TRUE WHERE id = $1', [firstId]);
+    await assert.rejects(
+      db.query('UPDATE users SET is_creator = TRUE WHERE id = $1', [secondId])
+    );
   } finally {
     await db.close();
   }

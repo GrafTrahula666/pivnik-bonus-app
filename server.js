@@ -95,8 +95,8 @@ const DEFAULT_SHOP_ITEMS = [
   { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, imageSrc: '/assets/shop/cider-dalnyaya-dacha.svg', active: true, sortOrder: 10 },
   { code: 'limited-frost-nova', title: 'Frost Nova', subtitle: 'Коллекционная кружка Limited Edition. Детали и стоимость уточняются лично.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, imageSrc: '/assets/shop/frost-nova.svg', active: true, sortOrder: 20 },
   { code: 'limited-named-glass', title: 'Именной бокал', subtitle: 'Персональный бокал с именем, надписью или короткой фразой.', category: 'limited', priceType: 'pending', bonusPrice: 0, cashPrice: 0, imageSrc: '/assets/shop/named-glass.svg', active: true, sortOrder: 30 },
-  { code: 'frame-money-owner', title: 'Рамка с долларами', subtitle: 'Анимированное оформление профиля в стиле владельца приложения.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, imageSrc: '/assets/shop/frame-money.svg', active: true, sortOrder: 40 },
-  { code: 'frame-fire-partner', title: 'Огненная рамка', subtitle: 'Анимированное оформление профиля в стиле Виталика.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, imageSrc: '/assets/shop/frame-fire.svg', active: true, sortOrder: 50 },
+  { code: 'frame-money-owner', title: 'Рамка с долларами', subtitle: 'Анимированное оформление профиля в стиле владельца приложения.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, imageSrc: '/assets/shop/frame-money.svg', active: false, sortOrder: 40 },
+  { code: 'frame-fire-partner', title: 'Огненная рамка', subtitle: 'Анимированное оформление профиля в стиле Виталика.', category: 'profile', priceType: 'rub', bonusPrice: 0, cashPrice: 1000, imageSrc: '/assets/shop/frame-fire.svg', active: false, sortOrder: 50 },
   { code: 'frame-diamond', title: 'Алмазная рамка', subtitle: 'Холодное сияние и гранёная анимация вокруг аватара.', category: 'profile', priceType: 'bonus', bonusPrice: 999, cashPrice: 0, imageSrc: '/assets/shop/frame-diamond.svg', active: true, sortOrder: 60 }
 ];
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -170,7 +170,8 @@ function normalizeShopPriceType(value) {
 }
 
 function isOwnerRow(row) {
-  return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
+  return Boolean(row?.is_creator)
+    || Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === ownerTelegramId);
 }
 
 function isAnnaRow(row) {
@@ -533,6 +534,10 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_stats BOOLEAN NOT NULL DEFAULT TRUE');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlimited_bonus BOOLEAN NOT NULL DEFAULT FALSE');
     await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_frame TEXT NOT NULL DEFAULT 'none'");
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_creator BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_creator ON users ((1)) WHERE is_creator = TRUE'
+    );
     await client.query(`
       CREATE TABLE IF NOT EXISTS platform_migrations (
         code TEXT PRIMARY KEY,
@@ -823,7 +828,16 @@ async function initDatabase() {
     }
     if (ownerTelegramId) {
       await client.query(
-        "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE telegram_id::text = $1",
+        `UPDATE users
+         SET is_creator = TRUE, role = 'admin', unlimited_bonus = TRUE,
+             profile_frame = 'money', updated_at = NOW()
+         WHERE telegram_id::text = $1
+           AND merged_into_user_id IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM users creator
+             WHERE creator.is_creator = TRUE
+               AND creator.id <> users.id
+           )`,
         [ownerTelegramId]
       );
     }
@@ -860,7 +874,7 @@ async function getCurrentShift(db = pool) {
   if (!shiftResult.rowCount) return null;
   const shift = shiftResult.rows[0];
   const membersResult = await db.query(
-    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.show_name, u.show_avatar, u.role, sm.position
+    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.is_creator, u.show_name, u.show_avatar, u.role, sm.position
      FROM shift_members sm
      JOIN users u ON u.id = sm.user_id
      WHERE sm.shift_id = $1 AND u.merged_into_user_id IS NULL
@@ -1169,7 +1183,7 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, re
 
   const walletResult = await db.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
   const userResult = await db.query(
-    `SELECT telegram_id, role, unlimited_bonus
+    `SELECT telegram_id, role, unlimited_bonus, is_creator
      FROM users
      WHERE id = $1::bigint AND merged_into_user_id IS NULL`,
     [tx.client_id]
@@ -1243,11 +1257,11 @@ app.post('/api/auth', async (req, res, next) => {
     try {
       await client.query('BEGIN');
       const inserted = await client.query(
-        `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, role, terms_accepted_at, terms_version, onboarding_completed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, NULL)
+        `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, role, terms_accepted_at, terms_version, onboarding_completed_at, is_creator)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, NULL, $8)
          ON CONFLICT (telegram_id) DO NOTHING
          RETURNING id, session_version`,
-        [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
+        [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role, role === 'admin']
       );
       const isNew = inserted.rowCount > 0;
       let userId;
@@ -1262,6 +1276,7 @@ app.post('/api/auth', async (req, res, next) => {
              photo_url = $5,
              language_code = $6,
              role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
+             is_creator = CASE WHEN $7 = 'admin' THEN TRUE ELSE is_creator END,
              updated_at = NOW()
            WHERE telegram_id = $1::bigint AND merged_into_user_id IS NULL
            RETURNING id, session_version`,
@@ -1280,7 +1295,7 @@ app.post('/api/auth', async (req, res, next) => {
       );
       if (role === 'admin') {
         await client.query(
-          "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE id = $1",
+          "UPDATE users SET is_creator = TRUE, unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE id = $1",
           [userId]
         );
       }
@@ -1532,7 +1547,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
   try {
     const ranked = await pool.query(
       `WITH totals AS (
-         SELECT u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.role, u.telegram_id,
+         SELECT u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.role, u.telegram_id, u.is_creator,
                 u.show_name, u.show_avatar, u.show_leaderboard_amount,
                 COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
          FROM users u
@@ -1541,7 +1556,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-         GROUP BY u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.role, u.telegram_id,
+         GROUP BY u.id, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.role, u.telegram_id, u.is_creator,
                   u.show_name, u.show_avatar, u.show_leaderboard_amount
        ), positions AS (
          SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank
@@ -1592,7 +1607,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
 
 app.get('/api/promotions', authRequired, async (_req, res, next) => {
   try {
-    const result = await pool.query('SELECT * FROM promotions ORDER BY sort_order, id');
+    const result = await pool.query('SELECT * FROM promotions WHERE active = TRUE ORDER BY sort_order, id');
     res.json({ promotions: result.rows.map(promotionResponse) });
   } catch (error) {
     next(error);
@@ -1601,8 +1616,14 @@ app.get('/api/promotions', authRequired, async (_req, res, next) => {
 
 app.get('/api/shop/catalog', authRequired, async (_req, res, next) => {
   try {
-    const result = await pool.query('SELECT * FROM shop_items ORDER BY sort_order, id');
-    res.json({ items: result.rows.map(shopItemResponse), note: 'Каталог разделён по категориям. Товары за бонусы выдаёт сотрудник по QR, рублёвые позиции оплачиваются в баре.' });
+    const result = await pool.query(
+      `SELECT *
+       FROM shop_items
+       WHERE active = TRUE
+         AND NOT (category = 'profile' AND price_type = 'rub')
+       ORDER BY sort_order, id`
+    );
+    res.json({ items: result.rows.map(shopItemResponse), note: 'Каталог разделён по категориям. Товары за бонусы выдаёт сотрудник по QR; физические позиции можно уточнить в баре.' });
   } catch (error) {
     next(error);
   }
@@ -1713,7 +1734,7 @@ app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async
     const shift = await getCurrentShift();
     const shiftIds = shift?.members?.length ? shift.members.map((member) => member.id) : [];
     const result = await pool.query(
-      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, profile_frame, role,
+      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, profile_frame, is_creator, role,
               (staff_pin_hash IS NOT NULL AND staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users
        WHERE role IN ('staff','admin') AND merged_into_user_id IS NULL
@@ -1817,7 +1838,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
     const userResult = await client.query(
-      `SELECT id, telegram_id, first_name, last_name, qr_short_code, role, unlimited_bonus
+      `SELECT id, telegram_id, first_name, last_name, qr_short_code, role, unlimited_bonus, is_creator
        FROM users
        WHERE id = $1::bigint AND merged_into_user_id IS NULL
        FOR UPDATE`,
@@ -2062,7 +2083,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
     const userResult = await client.query(
-      `SELECT id, telegram_id, first_name, role, unlimited_bonus
+      `SELECT id, telegram_id, first_name, role, unlimited_bonus, is_creator
        FROM users
        WHERE id = $1::bigint AND merged_into_user_id IS NULL
        FOR UPDATE`,
@@ -2243,7 +2264,7 @@ app.get('/api/shift/current', authRequired, async (_req, res, next) => {
 app.get('/api/admin/shift', authRequired, requireRole('viewer', 'admin'), async (_req, res, next) => {
   try {
     const staffResult = await pool.query(
-      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, role
+      `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, profile_frame, is_creator, role
        FROM users
        WHERE role IN ('staff','admin') AND merged_into_user_id IS NULL
        ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 0 END, first_name, id`
@@ -2370,7 +2391,7 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
 app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame, w.balance,
+      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame, u.is_creator, w.balance,
               bl.paid_ml_total, bl.gift_ml_balance,
               (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users u
@@ -2547,7 +2568,7 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
     await client.query('BEGIN');
     await lockRequestKey(client, requestKey);
     const targetResult = await client.query(
-      `SELECT id, telegram_id, role, unlimited_bonus
+      `SELECT id, telegram_id, role, unlimited_bonus, is_creator
        FROM users
        WHERE id = $1::bigint AND merged_into_user_id IS NULL
        FOR UPDATE`,

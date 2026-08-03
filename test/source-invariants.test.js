@@ -74,12 +74,16 @@ test('Согласие отправляется только обработчи�
   assert.match(server, /x-pivnik-explicit-consent/);
   assert.match(gateway, /x-pivnik-explicit-consent/);
   assert.match(gateway, /grantReward\([\s\S]*?'welcome-100'/);
-  assert.match(server, /VALUES \(\$1, \$2, \$3, \$4, \$5, \$6, \$7, NULL, NULL, NULL\)/);
+  assert.match(server, /onboarding_completed_at, is_creator/);
+  assert.match(server, /role === 'admin'/);
   assert.doesNotMatch(server, /ensureUserSetupDefaults/);
 });
 
-test('Миграция создаёт идентичности, награды, aliases, аудит и версии сессий', async () => {
-  const migration = await source('migrations/001_add_platform_identities.sql');
+test('Миграции создают идентичности, награды, aliases, аудит и единственного создателя', async () => {
+  const [migration, creatorMigration] = await Promise.all([
+    source('migrations/001_add_platform_identities.sql'),
+    source('migrations/004_creator_identity.sql')
+  ]);
   assert.match(migration, /UNIQUE \(provider, provider_user_id\)/);
   assert.match(migration, /UNIQUE \(user_id, provider\)/);
   assert.match(migration, /PRIMARY KEY \(code, user_id\)/);
@@ -88,6 +92,8 @@ test('Миграция создаёт идентичности, награды, 
   assert.match(migration, /session_version BIGINT NOT NULL DEFAULT 1/);
   assert.match(migration, /idx_transactions_leaderboard/);
   assert.match(migration, /idx_transactions_cancel_request_key/);
+  assert.match(creatorMigration, /is_creator BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(creatorMigration, /idx_users_single_creator/);
 });
 
 test('Публичный запуск требует 18+, даёт документы и безвозвратное удаление', async () => {
@@ -135,6 +141,9 @@ test('Лимиты запросов переживают перезапуск, �
   assert.match(gateway, /ON CONFLICT \(subject_hash, route_group\) DO UPDATE/);
   assert.match(gateway, /rateLimitSubjectHash\('ip'/);
   assert.match(gateway, /rateLimitSubjectHash\('user'/);
+  assert.match(gateway, /rateLimitSubjectHash\('auth-identity'/);
+  assert.match(gateway, /globalApiRateLimitSubject/);
+  assert.match(gateway, /'\/api\/auth'\]\.includes/);
   assert.match(gateway, /MAX_BODY_BYTES = 4 \* 1024 \* 1024/);
   assert.match(server, /express\.json\(\{ limit: '4mb' \}\)/);
   assert.match(app, /output\.length < 2_700_000/);
@@ -159,6 +168,14 @@ test('В публичной разметке нет признаков неза�
   const index = await source('index.html');
   assert.doesNotMatch(index, /закрытая бета|бета-тест|рабочая редакция|будет дополнено|после бета/i);
   assert.match(index, /Редакция правил: 1\.0/);
+});
+
+test('Публичные акции и магазин скрывают незавершённые и цифровые рублёвые позиции', async () => {
+  const server = await source('server.js');
+  assert.match(server, /FROM promotions WHERE active = TRUE/);
+  assert.match(server, /FROM shop_items[\s\S]*?WHERE active = TRUE[\s\S]*?category = 'profile'[\s\S]*?price_type = 'rub'/);
+  assert.match(server, /frame-money-owner[\s\S]*?active: false/);
+  assert.match(server, /frame-fire-partner[\s\S]*?active: false/);
 });
 
 test('Объединение блокирует строки, переносит связи, архивирует дубль и сверяет журнал', async () => {
@@ -301,6 +318,9 @@ test('Достижения считаются по журналу и добав�
   assert.doesNotMatch(gateway, /syncUserAchievements/);
   assert.match(app, /loadAchievements\(\)/);
   assert.match(migration, /'achievement'/);
+  assert.match(server, /row\?\.is_creator/);
+  assert.match(gateway, /row\?\.is_creator/);
+  assert.match(gateway, /achievements: \[\.\.\.achievementsFromRow\(row\), \.\.\.\(startup \? \[\] : achievementState\.earned\)\]/);
 });
 
 test('Загрузчик снимается до профиля, начислений и достижений', async () => {
@@ -356,7 +376,8 @@ test('Запуск не открывает правила или профиль,
   }
   assert.match(railway, /"startCommand": "npm start"/);
   assert.doesNotMatch(railway, /PIVNIK_DOCUMENT_PLATFORM/);
-  assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
+  assert.doesNotMatch(gateway, /PIVNIK_DOCUMENT_PLATFORM|defaultPlatform/);
+  assert.match(gateway, /hasVkLaunchParams \|\| hasVkEmbedSource\(headers\) \? 'vk' : 'telegram'/);
   assert.match(gateway, /url\.pathname === '\/vk\/app\.js'/);
   assert.match(gateway, /url\.pathname === '\/vk\/styles\.css'/);
 });

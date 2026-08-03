@@ -302,6 +302,28 @@ test('Канонический профиль: защищённая роль в�
   assert.equal(chooseCanonicalUser(admin, client, activity).canonical.id, '10');
 });
 
+test('Канонический профиль: постоянный маркер создателя не архивируется', () => {
+  const creator = {
+    id: '12',
+    role: 'client',
+    unlimited_bonus: false,
+    is_creator: true,
+    created_at: '2026-01-02T00:00:00Z'
+  };
+  const activeClient = {
+    id: '13',
+    role: 'client',
+    unlimited_bonus: false,
+    is_creator: false,
+    created_at: '2026-01-01T00:00:00Z'
+  };
+  const activity = new Map([
+    ['12', { real_operations: 0, real_spend: 0 }],
+    ['13', { real_operations: 100, real_spend: 1_000_000 }]
+  ]);
+  assert.equal(chooseCanonicalUser(creator, activeClient, activity).canonical.id, '12');
+});
+
 test('Канонический профиль: при равных правах сохраняется реальная активность', () => {
   const first = {
     id: '20',

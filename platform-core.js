@@ -320,7 +320,7 @@ export function chooseCanonicalUser(first, second, activityByUser = new Map()) {
   const score = (row) => {
     const activity = activityByUser.get(String(row.id)) || {};
     return {
-      protectedAccount: Boolean(row.role === 'admin' || row.unlimited_bonus),
+      protectedAccount: Boolean(row.is_creator || row.role === 'admin' || row.unlimited_bonus),
       realOperations: Number(activity.real_operations || 0),
       realSpend: Number(activity.real_spend || 0),
       createdAt: new Date(row.created_at).getTime(),

@@ -20,11 +20,11 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.match(telegram, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(telegram, /\/account-link\.js\?v=2\.4\.0/);
   assert.match(telegram, /\/loader-fix\.css/);
-  assert.match(telegram, /href="\/styles\.css\?v=17\.0-public-launch"/);
-  assert.match(telegram, /src="\/app\.js\?v=17\.0-public-launch"/);
+  assert.match(telegram, /href="\/styles\.css\?v=17\.1-telegram-recovery"/);
+  assert.match(telegram, /src="\/app\.js\?v=17\.1-telegram-recovery"/);
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
   const telegramLinkingPosition = telegram.indexOf('/account-link.js');
-  const telegramAppPosition = telegram.indexOf('/app.js?v=17.0-public-launch');
+  const telegramAppPosition = telegram.indexOf('/app.js?v=17.1-telegram-recovery');
   assert.ok(telegramLinkingPosition >= 0);
   assert.ok(telegramLinkingPosition < telegramAppPosition);
 
@@ -36,8 +36,8 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   assert.match(vk, /\/vk-platform\.js\?v=3\.4\.0/);
   assert.match(vk, /\/account-link\.js\?v=2\.4\.0/);
   assert.match(vk, /\/loader-fix\.css/);
-  assert.match(vk, /href="\/styles\.css\?v=17\.0-public-launch"/);
-  assert.match(vk, /src="\/app\.js\?v=17\.0-public-launch"/);
+  assert.match(vk, /href="\/styles\.css\?v=17\.1-telegram-recovery"/);
+  assert.match(vk, /src="\/app\.js\?v=17\.1-telegram-recovery"/);
 
   const resourceUrls = [...vk.matchAll(/(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1])
@@ -57,7 +57,7 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
   const bridgePosition = vk.indexOf('__PIVNIK_EARLY_VK_INIT_PROMISE__');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('/app.js?v=17.0-public-launch');
+  const appPosition = vk.indexOf('/app.js?v=17.1-telegram-recovery');
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
@@ -126,11 +126,11 @@ test('Gateway render: /, /vk and /vk/ load root-absolute platform assets', async
       {},
       'vk'
     ),
-    'vk'
+    'telegram'
   );
 });
 
-test('Optional VK document override remains available without forcing Railway into VK mode', async () => {
+test('Legacy Railway document override cannot force the Telegram root into VK mode', async () => {
   const previous = process.env.PIVNIK_DOCUMENT_PLATFORM;
   process.env.PIVNIK_DOCUMENT_PLATFORM = 'vk';
   try {
@@ -141,12 +141,12 @@ test('Optional VK document override remains available without forcing Railway in
     const platform = platformForDocumentRequest(new URL('https://pivnik.example/'));
     const html = await renderAppIndex(platform, 'railway-render-nonce');
 
-    assert.equal(platform, 'vk');
-    assert.match(html, /window\.vkBridge=window\.vkConnect=/);
-    assert.match(html, /__PIVNIK_EARLY_VK_INIT_PROMISE__/);
-    assert.match(html, /\/vk-platform\.js\?v=3\.4\.0/);
-    assert.match(html, /src="\/app\.js\?v=17\.0-public-launch"/);
-    assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
+    assert.equal(platform, 'telegram');
+    assert.doesNotMatch(html, /window\.vkBridge=window\.vkConnect=/);
+    assert.doesNotMatch(html, /__PIVNIK_EARLY_VK_INIT_PROMISE__/);
+    assert.doesNotMatch(html, /\/vk-platform\.js/);
+    assert.match(html, /src="\/app\.js\?v=17\.1-telegram-recovery"/);
+    assert.match(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;
     else process.env.PIVNIK_DOCUMENT_PLATFORM = previous;

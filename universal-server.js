@@ -37,9 +37,6 @@ const vkAppId = String(process.env.VK_APP_ID || '').trim();
 const vkAppSecret = String(process.env.VK_APP_SECRET || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
 const configuredSessionSecret = String(process.env.SESSION_SECRET || '');
-const configuredDocumentPlatform = String(
-  process.env.PIVNIK_DOCUMENT_PLATFORM || 'telegram'
-).trim().toLowerCase() === 'vk' ? 'vk' : 'telegram';
 const isTestImport = process.env.NODE_ENV === 'test'
   && process.env.PIVNIK_TEST_IMPORT === '1';
 const DEFAULT_DOCUMENT_SCRIPT_NONCE = 'pivnik-render-test';
@@ -241,8 +238,15 @@ function litersFromMl(ml) {
 }
 
 function isOwnerRow(row) {
-  return Boolean(ownerTelegramId && String(row?.telegram_id || '') === ownerTelegramId)
-    || Boolean(row?.role === 'admin');
+  return Boolean(row?.is_creator)
+    || Boolean(ownerTelegramId && String(row?.telegram_id || '') === ownerTelegramId);
+}
+
+function isConfiguredOwnerIdentity(provider, providerUserId) {
+  const id = String(providerUserId || '');
+  return provider === 'telegram'
+    ? Boolean(ownerTelegramId && id === ownerTelegramId)
+    : Boolean(ownerVkId && id === ownerVkId);
 }
 
 function isAnnaRow(row) {
@@ -435,6 +439,89 @@ async function claimDataMigration(client, code) {
   return Boolean(result.rowCount);
 }
 
+export async function synchronizeCreatorAccount(db, options = {}) {
+  const telegramId = String(options.telegramId ?? ownerTelegramId).trim();
+  const vkId = String(options.vkId ?? ownerVkId).trim();
+
+  // A merged row must never retain the unique creator marker.
+  await db.query(
+    `UPDATE users
+     SET is_creator = FALSE, updated_at = NOW()
+     WHERE is_creator = TRUE AND merged_into_user_id IS NOT NULL`
+  );
+
+  const existing = await db.query(
+    `SELECT id
+     FROM users
+     WHERE is_creator = TRUE AND merged_into_user_id IS NULL
+     ORDER BY id
+     LIMIT 1`
+  );
+  let creatorId = existing.rows[0]?.id ? String(existing.rows[0].id) : null;
+
+  if (!creatorId && (telegramId || vkId)) {
+    const candidates = await db.query(
+      `SELECT u.id,
+              CASE
+                WHEN $1::text <> '' AND (
+                  u.telegram_id::text = $1::text OR EXISTS (
+                    SELECT 1 FROM user_identities ui
+                    WHERE ui.user_id = u.id
+                      AND ui.provider = 'telegram'
+                      AND ui.provider_user_id = $1::text
+                  )
+                ) THEN 0
+                WHEN $2::text <> '' AND EXISTS (
+                  SELECT 1 FROM user_identities ui
+                  WHERE ui.user_id = u.id
+                    AND ui.provider = 'vk'
+                    AND ui.provider_user_id = $2::text
+                ) THEN 1
+                ELSE 2
+              END AS priority
+       FROM users u
+       WHERE u.merged_into_user_id IS NULL
+         AND (
+           ($1::text <> '' AND (
+             u.telegram_id::text = $1::text OR EXISTS (
+               SELECT 1 FROM user_identities ui
+               WHERE ui.user_id = u.id
+                 AND ui.provider = 'telegram'
+                 AND ui.provider_user_id = $1::text
+             )
+           ))
+           OR ($2::text <> '' AND EXISTS (
+             SELECT 1 FROM user_identities ui
+             WHERE ui.user_id = u.id
+               AND ui.provider = 'vk'
+               AND ui.provider_user_id = $2::text
+           ))
+         )
+       ORDER BY priority, u.created_at, u.id
+       LIMIT 2`,
+      [telegramId, vkId]
+    );
+    creatorId = candidates.rows[0]?.id ? String(candidates.rows[0].id) : null;
+    if (candidates.rows.length > 1) {
+      console.warn('OWNER_TELEGRAM_ID and OWNER_VK_ID point to different unlinked profiles; Telegram profile kept as creator.');
+    }
+  }
+
+  if (!creatorId) return null;
+  const updated = await db.query(
+    `UPDATE users
+     SET is_creator = TRUE,
+         role = 'admin',
+         unlimited_bonus = TRUE,
+         profile_frame = 'money',
+         updated_at = NOW()
+     WHERE id = $1::bigint AND merged_into_user_id IS NULL
+     RETURNING id`,
+    [creatorId]
+  );
+  return updated.rows[0]?.id ? String(updated.rows[0].id) : null;
+}
+
 async function initPlatformDatabase() {
   const client = await pool.connect();
   try {
@@ -464,6 +551,8 @@ async function initPlatformDatabase() {
             updated_at = NOW()
       `);
     }
+
+    await synchronizeCreatorAccount(client);
 
     if (await claimDataMigration(client, 'backfill-reward-grants-v2')) {
       await client.query(`
@@ -759,7 +848,10 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: startup ? [] : [...achievementsFromRow(row), ...achievementState.earned],
+    // Special achievements are already present on the user row and are safe to
+    // return during the lightweight bootstrap. Counted achievements still load
+    // in the background so they never delay the first usable screen.
+    achievements: [...achievementsFromRow(row), ...(startup ? [] : achievementState.earned)],
     unannouncedAchievements: achievementState.unannounced,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
@@ -849,7 +941,7 @@ async function getUnifiedMonthlyLeaderboard(currentUserId) {
      ), ranked AS (
        SELECT u.id, u.first_name, u.last_name, u.photo_url,
               u.avatar_source, u.avatar_key, u.profile_frame, u.role,
-              u.telegram_id, u.unlimited_bonus,
+              u.telegram_id, u.unlimited_bonus, u.is_creator,
               u.profile_public, u.show_name, u.show_avatar, u.show_leaderboard_amount,
               COALESCE(ms.spend_cents, 0)::bigint AS spend_cents,
               RANK() OVER (ORDER BY COALESCE(ms.spend_cents, 0) DESC, u.id ASC) AS rank
@@ -989,7 +1081,7 @@ async function updateUnifiedProfile(userId, platform, body) {
 async function getUnifiedAdminUsers() {
   const result = await pool.query(
     `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role,
-            u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame,
+            u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame, u.is_creator,
             w.balance, bl.paid_ml_total, bl.gift_ml_balance,
             (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured,
             (SELECT ui.provider_user_id
@@ -1119,13 +1211,17 @@ async function resolveProviderUser(provider, externalUser) {
       if (legacy.rowCount) userId = await canonicalUserId(client, legacy.rows[0].id);
     }
 
-    const isOwner = provider === 'telegram'
-      ? Boolean(ownerTelegramId && externalUser.id === ownerTelegramId)
-      : Boolean(ownerVkId && externalUser.id === ownerVkId);
+    const isOwner = isConfiguredOwnerIdentity(provider, externalUser.id);
 
-    if (!userId && isOwner && provider === 'vk' && ownerTelegramId) {
+    if (!userId && isOwner) {
       const owner = await client.query(
-        'SELECT id FROM users WHERE telegram_id::text = $1 FOR UPDATE',
+        `SELECT id
+         FROM users
+         WHERE merged_into_user_id IS NULL
+           AND (is_creator = TRUE OR ($1::text <> '' AND telegram_id::text = $1::text))
+         ORDER BY is_creator DESC, id
+         LIMIT 1
+         FOR UPDATE`,
         [ownerTelegramId]
       );
       if (owner.rowCount) userId = await canonicalUserId(client, owner.rows[0].id);
@@ -1135,10 +1231,11 @@ async function resolveProviderUser(provider, externalUser) {
       const inserted = await client.query(
         `INSERT INTO users (
            telegram_id, username, first_name, last_name, photo_url, language_code, role,
-           terms_accepted_at, terms_version, onboarding_completed_at, unlimited_bonus, profile_frame
+           terms_accepted_at, terms_version, onboarding_completed_at, unlimited_bonus, profile_frame,
+           is_creator
          ) VALUES (
            $1, $2, $3, $4, $5, $6, $7,
-           NULL, NULL, NULL, $8, $9
+           NULL, NULL, NULL, $8, $9, $10
          )
          RETURNING id`,
         [
@@ -1150,7 +1247,8 @@ async function resolveProviderUser(provider, externalUser) {
           externalUser.languageCode || 'ru',
           isOwner ? 'admin' : 'client',
           isOwner,
-          isOwner ? 'money' : 'none'
+          isOwner ? 'money' : 'none',
+          isOwner
         ]
       );
       userId = String(inserted.rows[0].id);
@@ -1171,6 +1269,7 @@ async function resolveProviderUser(provider, externalUser) {
                role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
                unlimited_bonus = CASE WHEN $7 = 'admin' THEN TRUE ELSE unlimited_bonus END,
                profile_frame = CASE WHEN $7 = 'admin' THEN 'money' ELSE profile_frame END,
+               is_creator = CASE WHEN $7 = 'admin' THEN TRUE ELSE is_creator END,
                telegram_id = CASE WHEN $8 = 'telegram' THEN COALESCE(telegram_id, $9::bigint) ELSE telegram_id END,
                updated_at = NOW()
            WHERE id = $1::bigint`,
@@ -1247,14 +1346,21 @@ async function authenticateVk(body) {
     throw Object.assign(new Error('Данные профиля VK не совпадают с подписью запуска.'), { statusCode: 401 });
   }
 
-  return resolveProviderUser('vk', {
+  const externalUser = {
     id: vkAuth.userId,
     username: safeText(rawUser.screen_name, 100, `id${vkAuth.userId}`),
     firstName: safeText(rawUser.first_name, 80, 'Пользователь'),
     lastName: safeText(rawUser.last_name, 80, ''),
     photoUrl: safeHttpsUrl(rawUser.photo_200 || rawUser.photo_100 || rawUser.photo_max_orig),
     languageCode: vkAuth.languageCode
-  });
+  };
+  await enforceRateLimit(
+    rateLimitSubjectHash('auth-identity', `vk:${externalUser.id}`),
+    'auth:vk',
+    60,
+    10 * 60 * 1000
+  );
+  return resolveProviderUser('vk', externalUser);
 }
 
 async function authenticateTelegram(body) {
@@ -1274,6 +1380,12 @@ async function authenticateTelegram(body) {
   } else {
     throw Object.assign(new Error('Откройте приложение через Telegram.'), { statusCode: 401 });
   }
+  await enforceRateLimit(
+    rateLimitSubjectHash('auth-identity', `telegram:${user.id}`),
+    'auth:telegram',
+    60,
+    10 * 60 * 1000
+  );
   return resolveProviderUser('telegram', user);
 }
 
@@ -1765,6 +1877,7 @@ export async function mergeUsers(db, firstUserId, secondUserId) {
     ? profileFrameFromRow(source)
     : profileFrameFromRow(target);
   const telegramId = source.telegram_id || target.telegram_id || null;
+  const isCreator = Boolean(source.is_creator || target.is_creator);
   const sourceAvatarCustomized = String(source.avatar_source || 'preset_male') !== 'preset_male'
     || Boolean(source.avatar_key);
   const targetAvatarCustomized = String(target.avatar_source || 'preset_male') !== 'preset_male'
@@ -1776,6 +1889,7 @@ export async function mergeUsers(db, firstUserId, secondUserId) {
   await db.query(
     `UPDATE users
      SET telegram_id = NULL,
+         is_creator = FALSE,
          qr_token = NULL,
          qr_short_code = NULL,
          updated_at = NOW()
@@ -1789,6 +1903,7 @@ export async function mergeUsers(db, firstUserId, secondUserId) {
          role = $3,
          unlimited_bonus = $4,
          profile_frame = $5,
+         is_creator = $27::boolean,
          staff_pin_hash = CASE
            WHEN role IN ('staff', 'admin')
              AND staff_pin_hash IS NOT NULL AND staff_pin_salt IS NOT NULL
@@ -1805,6 +1920,7 @@ export async function mergeUsers(db, firstUserId, secondUserId) {
            THEN staff_pin_updated_at ELSE $8
          END,
          terms_accepted_at = COALESCE(terms_accepted_at, $9),
+         adult_confirmed_at = COALESCE(adult_confirmed_at, $28),
          terms_version = CASE
            WHEN terms_version = $10::text OR $11::text = $10::text THEN $10::text
            ELSE COALESCE(terms_version, $11::text)
@@ -1856,7 +1972,9 @@ export async function mergeUsers(db, firstUserId, secondUserId) {
       target.show_name !== false,
       target.show_avatar !== false,
       target.show_leaderboard_amount !== false,
-      target.show_stats !== false
+      target.show_stats !== false,
+      isCreator,
+      target.adult_confirmed_at
     ]
   );
 
@@ -2423,11 +2541,7 @@ function hasVkEmbedSource(headers = {}) {
   });
 }
 
-export function platformForDocumentRequest(
-  url,
-  headers = {},
-  defaultPlatform = configuredDocumentPlatform
-) {
+export function platformForDocumentRequest(url, headers = {}) {
   if (url.pathname === '/vk' || url.pathname === '/vk/') return 'vk';
   if (url.pathname !== '/' && url.pathname !== '/index.html') return null;
 
@@ -2437,9 +2551,17 @@ export function platformForDocumentRequest(
       && Array.from(url.searchParams.keys()).some((key) => key.startsWith('vk_'))
     );
 
-  return hasVkLaunchParams || hasVkEmbedSource(headers)
-    ? 'vk'
-    : (defaultPlatform === 'vk' ? 'vk' : 'telegram');
+  return hasVkLaunchParams || hasVkEmbedSource(headers) ? 'vk' : 'telegram';
+}
+
+export function globalApiRateLimitSubject(req) {
+  const rawAuthorization = String(req?.headers?.authorization || '');
+  const token = rawAuthorization.startsWith('Bearer ') ? rawAuthorization.slice(7) : '';
+  const payload = token ? verifySession(token) : null;
+  if (payload && /^\d+$/.test(String(payload.uid || ''))) {
+    return rateLimitSubjectHash('user', payload.uid);
+  }
+  return rateLimitSubjectHash('ip', requestAddress(req));
 }
 
 async function serveFile(res, filePath, contentType, cacheControl = 'no-store') {
@@ -2500,10 +2622,10 @@ const server = http.createServer(async (req, res) => {
     if (
       platformReady
       && url.pathname.startsWith('/api/')
-      && !['/api/health', '/api/platform-health'].includes(url.pathname)
+      && !['/api/health', '/api/platform-health', '/api/auth'].includes(url.pathname)
     ) {
       await enforceRateLimit(
-        rateLimitSubjectHash('ip', requestAddress(req)),
+        globalApiRateLimitSubject(req),
         'api-global',
         300,
         60 * 1000
@@ -2603,21 +2725,28 @@ const server = http.createServer(async (req, res) => {
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = body.platform === 'vk' ? 'vk' : 'telegram';
-      await enforceRateLimit(
-        rateLimitSubjectHash('ip', requestAddress(req)),
-        `auth:${platform}`,
-        30,
-        10 * 60 * 1000
-      );
       try {
         const data = platform === 'vk'
           ? await authenticateVk(body)
           : await authenticateTelegram(body);
         return sendJson(res, 200, data);
       } catch (error) {
+        let responseError = error;
+        if (Number(error?.statusCode || 500) === 401) {
+          try {
+            await enforceRateLimit(
+              rateLimitSubjectHash('ip', requestAddress(req)),
+              `auth-invalid:${platform}`,
+              60,
+              10 * 60 * 1000
+            );
+          } catch (limitError) {
+            responseError = limitError;
+          }
+        }
         console.error(`${platform} auth failed:`, error.message);
-        return sendJson(res, Number(error.statusCode || 500), {
-          error: error.statusCode ? error.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
+        return sendJson(res, Number(responseError.statusCode || 500), {
+          error: responseError.statusCode ? responseError.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
         });
       }
     }
