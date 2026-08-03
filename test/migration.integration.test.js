@@ -35,11 +35,17 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     );
     await db.exec(achievementsMigration);
     await db.exec(achievementsMigration);
+    const accountDeletionMigration = await readFile(
+      new URL('../migrations/003_account_deletion.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(accountDeletionMigration);
+    await db.exec(accountDeletionMigration);
 
     const first = await db.query(`
       INSERT INTO users (telegram_id)
       VALUES (1001)
-      RETURNING id, session_version
+      RETURNING id, session_version, deleted_at
     `);
     const second = await db.query(`
       INSERT INTO users (telegram_id)
@@ -49,6 +55,7 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     const firstId = first.rows[0].id;
     const secondId = second.rows[0].id;
     assert.equal(Number(first.rows[0].session_version), 1);
+    assert.equal(first.rows[0].deleted_at, null);
 
     await db.query(
       `INSERT INTO user_identities (user_id, provider, provider_user_id)

@@ -516,6 +516,7 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS merged_into_user_id BIGINT REFERENCES users(id)');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS merged_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
@@ -905,7 +906,9 @@ async function getProfile(userId, db = pool) {
      FROM users u
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-     WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
+     WHERE u.id = $1::bigint
+       AND u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL`,
     [userId]
   );
   if (!userResult.rowCount) return null;
@@ -969,6 +972,70 @@ async function getProfile(userId, db = pool) {
   };
 }
 
+async function deleteAccountData(userId, confirmation) {
+  if (String(confirmation || '').trim().toUpperCase() !== 'УДАЛИТЬ') {
+    throw Object.assign(new Error('Введите слово «УДАЛИТЬ» для подтверждения.'), { statusCode: 400 });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query(
+      `SELECT id
+       FROM users
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL
+       FOR UPDATE`,
+      [userId]
+    );
+    if (!locked.rowCount) {
+      throw Object.assign(new Error('Аккаунт уже удалён или не найден.'), { statusCode: 404 });
+    }
+
+    await client.query('DELETE FROM account_link_codes WHERE user_id = $1::bigint OR used_by_user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM account_link_attempts WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM user_identities WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM bar_customers WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM reward_grants WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM beta_grants WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM qr_aliases WHERE user_id = $1::bigint OR source_user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM qr_sessions WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM shift_members WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM cancel_quota_resets WHERE user_id = $1::bigint OR reset_by = $1::bigint', [userId]);
+    await client.query('DELETE FROM shop_inquiries WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM wallets WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM beer_loyalty WHERE user_id = $1::bigint', [userId]);
+    await client.query('UPDATE shifts SET created_by = NULL WHERE created_by = $1::bigint', [userId]);
+    await client.query('UPDATE app_settings SET updated_by = NULL WHERE updated_by = $1::bigint', [userId]);
+    await client.query('UPDATE promotions SET updated_by = NULL WHERE updated_by = $1::bigint', [userId]);
+    await client.query('UPDATE shop_items SET updated_by = NULL WHERE updated_by = $1::bigint', [userId]);
+    await client.query(
+      `UPDATE users SET
+         telegram_id = NULL, username = NULL,
+         first_name = 'Удалённый пользователь', last_name = NULL,
+         photo_url = NULL, language_code = NULL, role = 'client',
+         qr_token = NULL, qr_short_code = NULL,
+         staff_pin_hash = NULL, staff_pin_salt = NULL, staff_pin_updated_at = NULL,
+         avatar_source = 'preset_male', avatar_key = NULL, profile_frame = 'none',
+         age_group = NULL, profile_public = FALSE, show_name = FALSE,
+         show_avatar = FALSE, show_leaderboard_amount = FALSE, show_stats = FALSE,
+         unlimited_bonus = FALSE, onboarding_completed_at = NULL,
+         terms_accepted_at = NULL, terms_version = NULL,
+         session_version = session_version + 1,
+         deleted_at = NOW(), updated_at = NOW()
+       WHERE id = $1::bigint`,
+      [userId]
+    );
+    await client.query('COMMIT');
+    return { ok: true, deleted: true };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function authRequired(req, res, next) {
   const raw = req.headers.authorization || '';
   const token = raw.startsWith('Bearer ') ? raw.slice(7) : '';
@@ -980,7 +1047,9 @@ async function authRequired(req, res, next) {
     const subject = await pool.query(
       `SELECT session_version
        FROM users
-       WHERE id = $1::bigint AND merged_into_user_id IS NULL`,
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL`,
       [payload.uid]
     );
     if (
@@ -1024,7 +1093,9 @@ async function resolveActingStaff(req) {
     const subjects = await pool.query(
       `SELECT id, session_version
        FROM users
-       WHERE id = ANY($1::bigint[]) AND merged_into_user_id IS NULL`,
+       WHERE id = ANY($1::bigint[])
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL`,
       [[payload.terminalUid, payload.staffUid]]
     );
     const versions = new Map(subjects.rows.map((row) => [String(row.id), Number(row.session_version)]));
@@ -1313,6 +1384,15 @@ app.get('/api/me', authRequired, async (req, res, next) => {
   }
 });
 
+app.delete('/api/me/account', authRequired, async (req, res, next) => {
+  try {
+    const result = await deleteAccountData(req.user.id, req.body?.confirmation);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 
 app.get('/api/achievements', authRequired, async (req, res, next) => {
   try {
@@ -1521,6 +1601,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
          FROM users u
          JOIN transactions t ON t.client_id = u.id
          WHERE t.status = 'completed'
+           AND u.deleted_at IS NULL
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
@@ -1541,6 +1622,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+         WHERE u.deleted_at IS NULL
          GROUP BY u.id
        ), positions AS (
          SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank FROM totals
@@ -2316,6 +2398,7 @@ app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async 
        JOIN wallets w ON w.user_id = u.id
        LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
        WHERE u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
        ORDER BY u.created_at DESC
        LIMIT 200`
     );

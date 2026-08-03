@@ -152,6 +152,11 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
       'utf8'
     );
     await db.exec(achievementsMigration);
+    const accountDeletionMigration = await readFile(
+      new URL('../migrations/003_account_deletion.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(accountDeletionMigration);
 
     const telegramUser = await db.query(`
       INSERT INTO users (
