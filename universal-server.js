@@ -1218,14 +1218,16 @@ async function authenticateVk(body) {
     throw Object.assign(new Error('Данные профиля VK не совпадают с подписью запуска.'), { statusCode: 401 });
   }
 
-  return resolveProviderUser('vk', {
+  const externalUser = {
     id: vkAuth.userId,
     username: safeText(rawUser.screen_name, 100, `id${vkAuth.userId}`),
     firstName: safeText(rawUser.first_name, 80, 'Пользователь'),
     lastName: safeText(rawUser.last_name, 80, ''),
     photoUrl: safeHttpsUrl(rawUser.photo_200 || rawUser.photo_100 || rawUser.photo_max_orig),
     languageCode: vkAuth.languageCode
-  });
+  };
+  enforceRateLimit(`auth-identity:vk:${externalUser.id}`, 60, 10 * 60 * 1000);
+  return resolveProviderUser('vk', externalUser);
 }
 
 async function authenticateTelegram(body) {
@@ -1245,6 +1247,7 @@ async function authenticateTelegram(body) {
   } else {
     throw Object.assign(new Error('Откройте приложение через Telegram.'), { statusCode: 401 });
   }
+  enforceRateLimit(`auth-identity:telegram:${user.id}`, 60, 10 * 60 * 1000);
   return resolveProviderUser('telegram', user);
 }
 
@@ -2176,7 +2179,7 @@ export async function renderAppIndex(platform) {
   );
   const withLinking = withLoader.replace(
     /<script defer src="app\.js([^"]*)"><\/script>/i,
-    '<script defer src="/account-link.js?v=2.2.0"></script>\n  <script defer src="app.js$1"></script>'
+    '<script defer src="/account-link.js?v=2.3.0"></script>\n  <script defer src="app.js$1"></script>'
   );
 
   if (platform !== 'vk') return withLinking;
@@ -2381,20 +2384,27 @@ const server = http.createServer(async (req, res) => {
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = body.platform === 'vk' ? 'vk' : 'telegram';
-      enforceRateLimit(
-        `auth:${requestAddress(req)}:${platform}`,
-        30,
-        10 * 60 * 1000
-      );
       try {
         const data = platform === 'vk'
           ? await authenticateVk(body)
           : await authenticateTelegram(body);
         return sendJson(res, 200, data);
       } catch (error) {
+        let responseError = error;
+        if (Number(error?.statusCode || 500) === 401) {
+          try {
+            enforceRateLimit(
+              `auth-invalid:${requestAddress(req)}:${platform}`,
+              60,
+              10 * 60 * 1000
+            );
+          } catch (limitError) {
+            responseError = limitError;
+          }
+        }
         console.error(`${platform} auth failed:`, error.message);
-        return sendJson(res, Number(error.statusCode || 500), {
-          error: error.statusCode ? error.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
+        return sendJson(res, Number(responseError.statusCode || 500), {
+          error: responseError.statusCode ? responseError.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
         });
       }
     }

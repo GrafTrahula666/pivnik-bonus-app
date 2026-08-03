@@ -240,7 +240,7 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });
 
-test('Первый вход после загрузчика всегда показывает незавершённый обязательный шаг', async () => {
+test('Первый вход не открывает цепочку модалок, но блокирует действия до принятия правил', async () => {
   const [app, railway, gateway] = await Promise.all([
     source('app.js'),
     source('railway.json'),
@@ -249,16 +249,16 @@ test('Первый вход после загрузчика всегда пок�
   const bootStart = app.indexOf('async function boot()');
   const bootEnd = app.indexOf('async function acceptTerms()', bootStart);
   const bootSource = app.slice(bootStart, bootEnd);
-  const gateStart = app.indexOf('function requiredFirstRunGate(');
-  const gateEnd = app.indexOf('async function boot()', gateStart);
-  const gateSource = app.slice(gateStart, gateEnd);
-
-  assert.match(gateSource, /!profile\?\.termsAccepted[\s\S]*?return 'consent'/);
-  assert.match(gateSource, /!profile\?\.onboardingComplete[\s\S]*?return 'profile'/);
-  assert.match(gateSource, /gate === 'profile'[\s\S]*?openProfileSetup\(1\)/);
-  assert.match(bootSource, /await finishBoot\(\)[\s\S]*?syncFirstRunGate\(\)[\s\S]*?schedulePostBootHydration\(\)/);
-  assert.doesNotMatch(bootSource, /await finishBoot\(\)[\s\S]*?closeModal\('profileSetupModal'\)/);
-  assert.match(app, /profileSetupClose[\s\S]*?state\.profile\?\.onboardingComplete[\s\S]*?closeModal\('profileSetupModal'\)/);
+  const acceptTermsStart = bootEnd;
+  const acceptTermsEnd = app.indexOf('async function claimBetaTesterReward()', acceptTermsStart);
+  const acceptTermsSource = app.slice(acceptTermsStart, acceptTermsEnd);
+  assert.match(app, /function blockUnacceptedAction\(event\)[\s\S]*?openModal\('consentModal'\)/);
+  assert.match(app, /document\.addEventListener\('click', blockUnacceptedAction, true\)/);
+  assert.match(bootSource, /await finishBoot\(\)[\s\S]*?closeModal\('consentModal'\)[\s\S]*?closeModal\('profileSetupModal'\)[\s\S]*?schedulePostBootHydration\(\)/);
+  assert.doesNotMatch(app, /requiredFirstRunGate|syncFirstRunGate/);
+  assert.match(app, /if \(close\) close\.classList\.remove\('hidden'\)/);
+  assert.doesNotMatch(bootSource, /openProfileSetup\(1\)/);
+  assert.doesNotMatch(acceptTermsSource, /openProfileSetup\(1\)/);
   assert.match(railway, /"startCommand": "npm start"/);
   assert.doesNotMatch(railway, /PIVNIK_DOCUMENT_PLATFORM=vk/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
