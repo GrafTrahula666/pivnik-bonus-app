@@ -39,6 +39,11 @@ await patchFile('app.js', [
     to: "      state.profile = data.client;\n      renderProfile();\n    }"
   },
   {
+    label: 'получение достижений без обязательной настройки профиля',
+    from: "  if (!state.profile?.onboardingComplete || !state.profile?.termsAccepted) return;",
+    to: "  if (!state.profile?.termsAccepted) return;"
+  },
+  {
     label: 'явное получение достижений',
     from: "document.addEventListener('click', blockUnacceptedAction, true);\n\n$('#openAchievementsButton')?.addEventListener('click', () => openAchievements());",
     to: "document.addEventListener('click', blockUnacceptedAction, true);\n\nfunction openAchievementHub() {\n  if ((state.profile?.unannouncedAchievements || []).length) {\n    maybeShowAchievementCelebration();\n    return;\n  }\n  openAchievements();\n}\n\n$('#openAchievementsButton')?.addEventListener('click', openAchievementHub);"
