@@ -55,7 +55,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '4mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
 const STATUS_LEVELS = [
@@ -70,7 +70,7 @@ const STATUS_LEVELS = [
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
-const TERMS_VERSION = 'beta-0.4';
+const TERMS_VERSION = 'public-1.0';
 const BEER_PAID_TARGET_ML = 14_000;
 const BEER_GIFT_ML = 1_000;
 const MAX_BEER_ML_PER_TRANSACTION = 100_000;
@@ -89,7 +89,7 @@ const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
   { code: 'orange-blanche-1-plus-1-3', title: 'Orange Blanche 1+1=3', description: 'Берите две Orange Blanche — третью пинту получите в подарок. Условия и наличие уточняйте у сотрудника бара.', badge: '1+1=3', active: true, sortOrder: 15 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
-  { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
+  { code: 'referral-beta', title: 'Пригласить друга', description: 'Функция готовится к запуску. Условия будут опубликованы перед активацией.', badge: 'Скоро', active: false, sortOrder: 30 }
 ];
 const DEFAULT_SHOP_ITEMS = [
   { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, imageSrc: '/assets/shop/cider-dalnyaya-dacha.svg', active: true, sortOrder: 10 },
@@ -208,9 +208,9 @@ function achievementsFromRow(row) {
   if (Number(row?.beta_number || 0) > 0 && Number(row.beta_number) <= 30) {
     achievements.push({
       code: 'beta-tester',
-      title: 'Тестировщик',
+      title: 'Первопроходец',
       rarity: 'legendary',
-      description: 'Легендарное достижение первых 30 участников закрытого бета-теста «Пивника».',
+      description: 'Легендарное достижение первых 30 участников приложения «Пивник».',
       icon: 'beta',
       rewardBonus: 150,
       grantedAt: row.created_at || null,
@@ -518,6 +518,7 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS adult_confirmed_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_salt TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_updated_at TIMESTAMPTZ');
@@ -756,6 +757,12 @@ async function initDatabase() {
         [item.code, item.title, item.description, item.badge, item.active, item.sortOrder]
       );
     }
+    await client.query(
+      `UPDATE promotions
+       SET description = 'Функция готовится к запуску. Условия будут опубликованы перед активацией.',
+           badge = 'Скоро', updated_at = NOW()
+       WHERE code = 'referral-beta' AND updated_by IS NULL`
+    );
     // Старые демонстрационные позиции скрываются только если владелец их не редактировал.
     await client.query("UPDATE shop_items SET active = FALSE WHERE code IN ('craft-05','combo') AND updated_by IS NULL");
     for (const item of DEFAULT_SHOP_ITEMS) {
@@ -942,7 +949,12 @@ async function getProfile(userId, db = pool) {
     role: row.role,
     balance: unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
-    termsAccepted: Boolean(row.terms_accepted_at && row.terms_version === TERMS_VERSION),
+    termsAccepted: Boolean(
+      row.terms_accepted_at
+      && row.adult_confirmed_at
+      && row.terms_version === TERMS_VERSION
+    ),
+    adultConfirmed: Boolean(row.adult_confirmed_at),
     termsAcceptedAt: row.terms_accepted_at,
     termsVersion: row.terms_version,
     spend12m: rubles(spend12mCents),
@@ -1344,9 +1356,13 @@ app.post('/api/me/consent', authRequired, async (req, res, next) => {
     if (String(req.headers['x-pivnik-explicit-consent'] || '') !== '1') {
       return res.status(409).json({ error: 'Согласие можно подтвердить только кнопкой пользователя.' });
     }
+    if (req.body?.adultConfirmed !== true) {
+      return res.status(400).json({ error: 'Подтвердите, что вам исполнилось 18 лет.' });
+    }
     await pool.query(
       `UPDATE users
-       SET terms_accepted_at = NOW(), terms_version = $1::text, updated_at = NOW()
+       SET terms_accepted_at = NOW(), adult_confirmed_at = NOW(),
+           terms_version = $1::text, updated_at = NOW()
        WHERE id = $2::bigint AND merged_into_user_id IS NULL`,
       [TERMS_VERSION, req.user.id]
     );
@@ -1362,7 +1378,7 @@ app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [req.user.id]);
     const ordinalResult = await client.query(
-      `SELECT u.terms_accepted_at, u.terms_version,
+      `SELECT u.terms_accepted_at, u.terms_version, u.adult_confirmed_at,
               (SELECT COUNT(*)::integer FROM users ux
                WHERE ux.merged_into_user_id IS NULL
                  AND (ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id))) AS beta_number
@@ -1373,6 +1389,7 @@ app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
     if (
       !ordinalResult.rowCount
       || !ordinalResult.rows[0].terms_accepted_at
+      || !ordinalResult.rows[0].adult_confirmed_at
       || ordinalResult.rows[0].terms_version !== TERMS_VERSION
     ) {
       throw Object.assign(new Error('Сначала примите правила программы.'), { statusCode: 428 });
@@ -1621,6 +1638,50 @@ app.post('/api/shop/inquiries', authRequired, async (req, res, next) => {
     }
     res.json({ ok: true, inquiry: { id: String(saved.rows[0].id), status: saved.rows[0].status, createdAt: saved.rows[0].created_at } });
   } catch (error) { next(error); }
+});
+
+app.post('/api/support', authRequired, async (req, res, next) => {
+  try {
+    const categories = {
+      technical: 'Техническая ошибка',
+      account: 'Аккаунт и данные',
+      bonus: 'Бонусы и операция',
+      other: 'Другой вопрос'
+    };
+    const category = Object.hasOwn(categories, req.body?.category)
+      ? String(req.body.category)
+      : 'other';
+    const message = String(req.body?.message || '').trim();
+    if (message.length < 10 || message.length > 2000) {
+      return res.status(400).json({ error: 'Опишите вопрос: от 10 до 2000 символов.' });
+    }
+    const itemTitle = `Поддержка · ${categories[category]}`;
+    const saved = await pool.query(
+      `INSERT INTO shop_inquiries (user_id, shop_item_id, item_code, item_title, message)
+       VALUES ($1, NULL, $2, $3, $4)
+       RETURNING id, status, created_at`,
+      [req.user.id, `support-${category}`, itemTitle, message]
+    );
+    const clientName = [req.user.firstName, req.user.lastName].filter(Boolean).join(' ')
+      || `ID ${req.user.id}`;
+    if (ownerTelegramId) {
+      await sendTelegramMessage(
+        ownerTelegramId,
+        `🆘 Обращение в поддержку «Пивника»\n\nКлиент: ${clientName}${req.user.username ? ` (@${req.user.username})` : ''}\nТема: ${categories[category]}\n\n${message}`
+      );
+    }
+    res.json({
+      ok: true,
+      request: {
+        id: String(saved.rows[0].id),
+        status: saved.rows[0].status,
+        createdAt: saved.rows[0].created_at,
+        responseTimeDays: 7
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/wallet/config', authRequired, async (_req, res) => {

@@ -40,6 +40,10 @@ test('VK запускается через подписанный ID и сохр
   assert.match(vk, /if \(!launchVkUserId\)[\s\S]*?staff_session/);
   assert.doesNotMatch(vk, /removeItem\(`\$\{storagePrefix\}(?:session|staff_session)`\)/);
   assert.match(vk, /code_data \|\| data\?\.code/);
+  assert.match(vk, /VKWebAppViewHide/);
+  assert.match(vk, /VKWebAppViewRestore/);
+  assert.match(vk, /bridge\?\.subscribe\?\.\(handleBridgeEvent\)/);
+  assert.match(vk, /pivnik:platform-restored/);
   assert.doesNotMatch(vk, /Storage\.prototype/);
 });
 
@@ -84,6 +88,77 @@ test('Миграция создаёт идентичности, награды, 
   assert.match(migration, /session_version BIGINT NOT NULL DEFAULT 1/);
   assert.match(migration, /idx_transactions_leaderboard/);
   assert.match(migration, /idx_transactions_cancel_request_key/);
+});
+
+test('Публичный запуск требует 18+, даёт документы и безвозвратное удаление', async () => {
+  const [migration, gateway, server, app, index, privacy, terms] = await Promise.all([
+    source('migrations/003_public_launch_requirements.sql'),
+    source('universal-server.js'),
+    source('server.js'),
+    source('app.js'),
+    source('index.html'),
+    source('legal/privacy.html'),
+    source('legal/terms.html')
+  ]);
+  assert.match(migration, /adult_confirmed_at/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS account_deletion_audit/);
+  assert.doesNotMatch(migration, /account_deletion_audit[\s\S]*?user_id/);
+  assert.match(gateway, /TERMS_VERSION = 'public-1\.0'/);
+  assert.match(server, /TERMS_VERSION = 'public-1\.0'/);
+  assert.match(gateway, /adult_confirmed_at/);
+  assert.match(app, /adultConfirmed: true/);
+  assert.match(index, /id="adultConfirmed"/);
+  assert.match(index, /href="\/legal\/terms"/);
+  assert.match(index, /href="\/legal\/privacy"/);
+  assert.match(index, /id="openDeleteAccountButton"/);
+  assert.match(index, /id="deleteAccountFromConsent"/);
+  assert.match(app, /confirmation: 'УДАЛИТЬ'/);
+  assert.match(gateway, /req\.method === 'DELETE'.*?\/api\/me\/account/s);
+  assert.match(gateway, /export async function deleteUnifiedAccount/);
+  assert.match(gateway, /DELETE FROM transactions WHERE client_id/);
+  assert.match(gateway, /UPDATE transactions SET staff_id = NULL/);
+  assert.match(gateway, /DELETE FROM users WHERE id = ANY/);
+  assert.match(privacy, /безвозвратно удалить единый аккаунт/i);
+  assert.match(terms, /Удаление аккаунта/);
+});
+
+test('Лимиты запросов переживают перезапуск, а загрузка укладывается в единый предел', async () => {
+  const [migration, gateway, server, app, index] = await Promise.all([
+    source('migrations/003_public_launch_requirements.sql'),
+    source('universal-server.js'),
+    source('server.js'),
+    source('app.js'),
+    source('index.html')
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS api_rate_limits/);
+  assert.match(gateway, /INSERT INTO api_rate_limits/);
+  assert.match(gateway, /ON CONFLICT \(subject_hash, route_group\) DO UPDATE/);
+  assert.match(gateway, /rateLimitSubjectHash\('ip'/);
+  assert.match(gateway, /rateLimitSubjectHash\('user'/);
+  assert.match(gateway, /MAX_BODY_BYTES = 4 \* 1024 \* 1024/);
+  assert.match(server, /express\.json\(\{ limit: '4mb' \}\)/);
+  assert.match(app, /output\.length < 2_700_000/);
+  assert.match(index, /исходник до 6 МБ/);
+});
+
+test('Поддержка доступна в приложении и ограничена по частоте', async () => {
+  const [gateway, server, app, index] = await Promise.all([
+    source('universal-server.js'),
+    source('server.js'),
+    source('app.js'),
+    source('index.html')
+  ]);
+  assert.match(index, /id="supportModal"/);
+  assert.match(index, /не позднее 7 календарных дней/);
+  assert.match(app, /api\('\/api\/support'/);
+  assert.match(server, /app\.post\('\/api\/support'/);
+  assert.match(gateway, /'support-request',[\s\S]*?5,[\s\S]*?24 \* 60 \* 60 \* 1000/);
+});
+
+test('В публичной разметке нет признаков незавершённой бета-версии', async () => {
+  const index = await source('index.html');
+  assert.doesNotMatch(index, /закрытая бета|бета-тест|рабочая редакция|будет дополнено|после бета/i);
+  assert.match(index, /Редакция правил: 1\.0/);
 });
 
 test('Объединение блокирует строки, переносит связи, архивирует дубль и сверяет журнал', async () => {

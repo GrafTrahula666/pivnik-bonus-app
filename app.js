@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '16.6-optional-profile';
+const APP_VERSION = '17.0-public-launch';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -42,6 +42,7 @@ const BOOT_FAILSAFE_MS = 10000;
 const API_TIMEOUT_MS = 9000;
 const bootStartedAt = performance.now();
 let bootCompleted = false;
+let platformRestoreRefreshTimer = 0;
 
 const state = {
   token: safeStorage.get('pivnik_session'),
@@ -312,7 +313,6 @@ function enhanceDom() {
         line.className = 'brand-line';
         title.before(line);
         line.append(title);
-        line.insertAdjacentHTML('beforeend', '<span class="beta-badge">закрытая бета</span>');
       }
     }
   }
@@ -432,7 +432,7 @@ function enhanceDom() {
       .replace('подтвердите запрос в приложении, если подтверждение включено в текущей версии', 'сообщите сумму списания сотруднику — бонусы списываются сразу')
       .replace('Если в текущей версии включено подтверждение, клиент получает запрос и завершает списание в приложении. При отказе или истечении времени операция не проводится.', 'После сканирования QR сотрудник указывает сумму бонусов и проводит списание сразу. Результат сохраняется в истории операций.')
       .replace('Если QR не читается, обновите экран и попробуйте снова.', 'QR является постоянным. Если он не читается, сотрудник может ввести короткий код вручную.')
-      .replace('Версия документа: бета 0.1', 'Версия документа: бета 0.2');
+      .replace('Версия документа: бета 0.1', 'Редакция правил: 1.0');
   }
 
   const pending = $('#pendingModal');
@@ -442,11 +442,12 @@ function enhanceDom() {
     document.body.insertAdjacentHTML('beforeend', `<div class="modal consent-modal" id="consentModal" aria-hidden="true">
       <div class="modal-sheet consent-sheet">
         <span class="consent-mark">П</span>
-        <span class="muted">Закрытая бета</span>
-        <h2>Добро пожаловать в «Пивник»</h2>
-        <p>Продолжая, вы принимаете правила бонусной программы и условия обработки данных для работы приложения.</p>
-        <button class="text-btn consent-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
-        <button class="primary full" id="acceptTerms" type="button">Принять и продолжить</button>
+        <span class="muted">Доступ к функциям</span>
+        <h2>Правила программы</h2>
+        <p>Подтвердите совершеннолетие и примите правила программы и условия обработки данных.</p>
+        <label class="adult-confirm"><input id="adultConfirmed" type="checkbox"> <span>Мне исполнилось 18 лет</span></label>
+        <button class="text-btn consent-link" id="openTermsFromConsent" type="button">Открыть справку и документы</button>
+        <button class="primary full" id="acceptTerms" type="button" disabled>Принять и продолжить</button>
       </div>
     </div>`);
   }
@@ -1648,11 +1649,15 @@ async function boot() {
 
 async function acceptTerms() {
   const button = $('#acceptTerms');
+  if (!$('#adultConfirmed')?.checked) {
+    toast('Подтвердите, что вам исполнилось 18 лет');
+    return;
+  }
   if (button) button.disabled = true;
   try {
     const data = await api('/api/me/consent', {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ adultConfirmed: true }),
       timeoutMs: 7000,
       headers: { 'x-pivnik-explicit-consent': '1' }
     });
@@ -1663,6 +1668,98 @@ async function acceptTerms() {
     void loadSecondaryData();
   } finally {
     if (button) button.disabled = false;
+  }
+}
+
+function syncConsentAcceptance() {
+  const button = $('#acceptTerms');
+  if (button) button.disabled = !$('#adultConfirmed')?.checked;
+}
+
+function openDeleteAccount() {
+  const linked = Array.isArray(state.profile?.linkedPlatforms)
+    && state.profile.linkedPlatforms.includes('telegram')
+    && state.profile.linkedPlatforms.includes('vk');
+  const scope = $('#deleteAccountScope');
+  if (scope) {
+    scope.textContent = linked
+      ? 'Telegram и VK связаны: единый аккаунт удалится сразу в обоих приложениях.'
+      : `Будет удалён аккаунт ${PLATFORM_NAME}. Если он связан со второй платформой, удалится весь единый профиль.`;
+  }
+  if ($('#deleteLinkedConfirm')) $('#deleteLinkedConfirm').checked = false;
+  if ($('#deleteAccountPhrase')) $('#deleteAccountPhrase').value = '';
+  syncDeleteAccountConfirmation();
+  openModal('deleteAccountModal');
+}
+
+function syncDeleteAccountConfirmation() {
+  const confirmed = Boolean($('#deleteLinkedConfirm')?.checked);
+  const phrase = String($('#deleteAccountPhrase')?.value || '').trim().toUpperCase();
+  const button = $('#confirmDeleteAccount');
+  if (button) button.disabled = !(confirmed && phrase === 'УДАЛИТЬ');
+}
+
+async function submitSupportRequest() {
+  const message = String($('#supportMessage')?.value || '').trim();
+  if (message.length < 10) {
+    toast('Опишите вопрос хотя бы в 10 символах');
+    return;
+  }
+  const button = $('#sendSupportRequest');
+  if (button) button.disabled = true;
+  try {
+    const data = await api('/api/support', {
+      method: 'POST',
+      body: JSON.stringify({
+        category: $('#supportCategory')?.value || 'other',
+        message
+      })
+    });
+    if ($('#supportMessage')) $('#supportMessage').value = '';
+    closeModal('supportModal');
+    toast(`Обращение №${data.request?.id || ''} отправлено`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function deleteAccountPermanently() {
+  syncDeleteAccountConfirmation();
+  const button = $('#confirmDeleteAccount');
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  button.textContent = 'Удаляем данные…';
+  try {
+    await api('/api/me/account', {
+      method: 'DELETE',
+      body: JSON.stringify({
+        confirmation: 'УДАЛИТЬ',
+        deleteLinkedAccount: true
+      }),
+      headers: { 'x-pivnik-delete-account': 'irrevocable' },
+      timeoutMs: 12_000,
+      retries: 0
+    });
+    state.token = '';
+    state.staffSession = '';
+    state.profile = null;
+    safeStorage.remove('pivnik_session');
+    safeStorage.remove('pivnik_staff_session');
+    $('#appShell')?.classList.add('hidden');
+    closeModal('consentModal');
+    const sheet = $('#deleteAccountModal .delete-account-sheet');
+    if (sheet) {
+      sheet.innerHTML = `
+        <span class="consent-mark">✓</span>
+        <span class="muted">Готово</span>
+        <h2>Аккаунт удалён</h2>
+        <p>Данные и бонусы удалены безвозвратно. Закройте приложение. При следующем входе будет создан новый пустой профиль.</p>
+      `;
+    }
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = 'Удалить аккаунт навсегда';
+    throw error;
   }
 }
 
@@ -2251,7 +2348,7 @@ function openContentEditor(type, id = '') {
   $('#contentActive').checked = item?.active !== false;
   $('#contentImageUrl').value = item?.imageSrc?.startsWith('https://') ? item.imageSrc : '';
   $('#contentImageFile').value = '';
-  $('#contentImageFileName').textContent = 'JPG, PNG или WEBP · до 6 МБ';
+  $('#contentImageFileName').textContent = 'JPG, PNG или WEBP · исходник до 6 МБ';
   $('#contentBadgeRow').classList.toggle('hidden', type !== 'promotion');
   syncContentPriceEditor();
   updateContentImagePreview();
@@ -2504,6 +2601,15 @@ $('#showHistoryButton').addEventListener('click', () => showHistory().catch((err
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
 $('#openTermsFromConsent').addEventListener('click', () => openModal('helpModal'));
+$('#openSupportButton')?.addEventListener('click', () => openModal('supportModal'));
+$('#sendSupportRequest')?.addEventListener('click', () => submitSupportRequest().catch((error) => toast(error.message)));
+$('#openDeleteAccountButton')?.addEventListener('click', openDeleteAccount);
+$('#deleteAccountFromConsent')?.addEventListener('click', openDeleteAccount);
+$('#deleteLinkedConfirm')?.addEventListener('change', syncDeleteAccountConfirmation);
+$('#deleteAccountPhrase')?.addEventListener('input', syncDeleteAccountConfirmation);
+$('#confirmDeleteAccount')?.addEventListener('click', () => deleteAccountPermanently().catch((error) => toast(error.message)));
+$('#adultConfirmed')?.addEventListener('change', syncConsentAcceptance);
+syncConsentAcceptance();
 $('#acceptTerms').addEventListener('click', () => acceptTerms().catch((error) => toast(error.message)));
 $('#copyQrCode').addEventListener('click', () => copyQrCode());
 $('#refreshButton').addEventListener('click', () => refreshMe().then(() => toast('Данные обновлены')).catch((error) => toast(error.message)));
@@ -2590,7 +2696,7 @@ $('#contentImageFile').addEventListener('change', async (event) => {
     updateContentImagePreview();
   } catch (error) {
     event.target.value = '';
-    label.textContent = 'JPG, PNG или WEBP · до 6 МБ';
+    label.textContent = 'JPG, PNG или WEBP · исходник до 6 МБ';
     toast(error.message);
   }
 });
@@ -2611,6 +2717,14 @@ window.addEventListener('error', (event) => {
 });
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
+});
+window.addEventListener('pivnik:platform-restored', () => {
+  refreshTelegramBridge();
+  window.clearTimeout(platformRestoreRefreshTimer);
+  platformRestoreRefreshTimer = window.setTimeout(() => {
+    if (!bootCompleted || !state.profile || !navigator.onLine) return;
+    void refreshMe().catch((error) => console.warn('Restore refresh skipped:', error));
+  }, 180);
 });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) refreshTelegramBridge();

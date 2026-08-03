@@ -44,13 +44,13 @@ const isTestImport = process.env.NODE_ENV === 'test'
   && process.env.PIVNIK_TEST_IMPORT === '1';
 const DEFAULT_DOCUMENT_SCRIPT_NONCE = 'pivnik-render-test';
 
-const TERMS_VERSION = 'beta-0.4';
+const TERMS_VERSION = 'public-1.0';
 const EXPECTED_VK_APP_ID = '54694987';
 const WELCOME_BONUS = 100;
 const BETA_TESTER_BONUS = 150;
 const LINK_CODE_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const VK_AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const QR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LINK_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -110,29 +110,51 @@ const sessionSecret = crypto
 let platformReady = false;
 let childReady = false;
 let shuttingDown = false;
-const rateLimitBuckets = new Map();
+let rateLimitCleanupTick = 0;
 
 function requestAddress(req) {
   const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   return forwarded || String(req.socket?.remoteAddress || 'unknown');
 }
 
-function enforceRateLimit(key, limit, windowMs) {
-  const now = Date.now();
-  const recent = (rateLimitBuckets.get(key) || []).filter((timestamp) => now - timestamp < windowMs);
-  if (recent.length >= limit) {
+function rateLimitSubjectHash(kind, value) {
+  return crypto
+    .createHmac('sha256', sessionSecret)
+    .update(`${String(kind || 'unknown')}:${String(value || 'unknown')}`)
+    .digest('hex');
+}
+
+export async function enforceRateLimit(subjectHash, routeGroup, limit, windowMs, db = pool) {
+  const result = await db.query(
+    `INSERT INTO api_rate_limits (
+       subject_hash, route_group, window_started_at, request_count, expires_at
+     ) VALUES (
+       $1, $2, NOW(), 1, NOW() + ($3::bigint * INTERVAL '1 millisecond')
+     )
+     ON CONFLICT (subject_hash, route_group) DO UPDATE
+     SET request_count = CASE
+           WHEN api_rate_limits.window_started_at <= NOW() - ($3::bigint * INTERVAL '1 millisecond')
+             THEN 1
+           ELSE api_rate_limits.request_count + 1
+         END,
+         window_started_at = CASE
+           WHEN api_rate_limits.window_started_at <= NOW() - ($3::bigint * INTERVAL '1 millisecond')
+             THEN NOW()
+           ELSE api_rate_limits.window_started_at
+         END,
+         expires_at = NOW() + ($3::bigint * INTERVAL '1 millisecond')
+     RETURNING request_count`,
+    [subjectHash, routeGroup, windowMs]
+  );
+  if (Number(result.rows[0]?.request_count || 0) > limit) {
     throw Object.assign(new Error('Слишком много запросов. Повторите позже.'), {
       statusCode: 429
     });
   }
-  recent.push(now);
-  rateLimitBuckets.set(key, recent);
-  if (rateLimitBuckets.size > 5000) {
-    for (const [bucketKey, timestamps] of rateLimitBuckets) {
-      if (!timestamps.some((timestamp) => now - timestamp < windowMs)) {
-        rateLimitBuckets.delete(bucketKey);
-      }
-    }
+
+  rateLimitCleanupTick += 1;
+  if (rateLimitCleanupTick % 250 === 0) {
+    void pool.query('DELETE FROM api_rate_limits WHERE expires_at < NOW()').catch(() => {});
   }
 }
 
@@ -269,9 +291,9 @@ function achievementsFromRow(row) {
   if (Number(row?.beta_number || 0) > 0 && Number(row.beta_number) <= 30) {
     achievements.push({
       code: 'beta-tester',
-      title: 'Тестировщик',
+      title: 'Первопроходец',
       rarity: 'legendary',
-      description: 'Легендарное достижение первых 30 участников закрытого бета-теста «Пивника».',
+      description: 'Легендарное достижение первых 30 участников приложения «Пивник».',
       icon: 'beta',
       rewardBonus: BETA_TESTER_BONUS,
       grantedAt: row.created_at || null,
@@ -584,7 +606,7 @@ async function requireGatewayUser(req) {
   const platform = normalized.payload.platform === 'vk' ? 'vk' : 'telegram';
   const providerUserId = String(normalized.payload.pid || '');
   const result = await pool.query(
-    `SELECT u.id, u.terms_accepted_at, u.terms_version,
+    `SELECT u.id, u.terms_accepted_at, u.terms_version, u.adult_confirmed_at,
             EXISTS(
               SELECT 1
               FROM user_identities ui
@@ -606,6 +628,7 @@ async function requireGatewayUser(req) {
     platform,
     termsAccepted: Boolean(
       result.rows[0].terms_accepted_at
+      && result.rows[0].adult_confirmed_at
       && result.rows[0].terms_version === TERMS_VERSION
     )
   };
@@ -751,7 +774,12 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
     role: row.role,
     balance: unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
-    termsAccepted: Boolean(row.terms_accepted_at && row.terms_version === TERMS_VERSION),
+    termsAccepted: Boolean(
+      row.terms_accepted_at
+      && row.adult_confirmed_at
+      && row.terms_version === TERMS_VERSION
+    ),
+    adultConfirmed: Boolean(row.adult_confirmed_at),
     termsAcceptedAt: row.terms_accepted_at,
     termsVersion: row.terms_version,
     spend12m: rubles(spend12mCents),
@@ -1280,7 +1308,13 @@ async function grantReward(db, userId, code, amount, source, reason, mode = 'adj
   return { granted: true, amount, balanceAfter };
 }
 
-async function acceptConsent(userId, platform) {
+async function acceptConsent(userId, platform, adultConfirmed) {
+  if (adultConfirmed !== true) {
+    throw Object.assign(
+      new Error('Подтвердите, что вам исполнилось 18 лет.'),
+      { statusCode: 400 }
+    );
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1288,7 +1322,8 @@ async function acceptConsent(userId, platform) {
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
     await client.query(
       `UPDATE users
-       SET terms_accepted_at = NOW(), terms_version = $1, updated_at = NOW()
+       SET terms_accepted_at = NOW(), adult_confirmed_at = NOW(),
+           terms_version = $1, updated_at = NOW()
        WHERE id = $2::bigint`,
       [TERMS_VERSION, canonical]
     );
@@ -1354,7 +1389,7 @@ async function claimBetaTester(userId, platform) {
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
 
     const userResult = await client.query(
-      `SELECT terms_accepted_at, terms_version,
+      `SELECT terms_accepted_at, terms_version, adult_confirmed_at,
               (SELECT COUNT(*)::integer
                FROM users ux
                WHERE ux.merged_into_user_id IS NULL
@@ -1365,7 +1400,7 @@ async function claimBetaTester(userId, platform) {
     );
     if (!userResult.rowCount) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
     const row = userResult.rows[0];
-    if (!row.terms_accepted_at || row.terms_version !== TERMS_VERSION) {
+    if (!row.terms_accepted_at || !row.adult_confirmed_at || row.terms_version !== TERMS_VERSION) {
       throw Object.assign(new Error('Сначала примите правила программы.'), { statusCode: 428 });
     }
 
@@ -2085,6 +2120,125 @@ async function consumeAccountLinkCode(currentUserId, requestedProvider, rawCode)
   };
 }
 
+export async function deleteUnifiedAccount(db, rawUserId, requestedPlatform = 'unknown') {
+  const canonical = await canonicalUserId(db, rawUserId);
+  if (!canonical) {
+    throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
+  }
+
+  await db.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
+  const accountUsers = await db.query(
+    `WITH RECURSIVE account_users AS (
+       SELECT id
+       FROM users
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
+       UNION ALL
+       SELECT u.id
+       FROM users u
+       JOIN account_users parent ON u.merged_into_user_id = parent.id
+     )
+     SELECT id FROM account_users ORDER BY id`,
+    [canonical]
+  );
+  const userIds = accountUsers.rows.map((row) => String(row.id));
+  if (!userIds.length) {
+    throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
+  }
+
+  await db.query(
+    'SELECT id FROM users WHERE id = ANY($1::bigint[]) ORDER BY id FOR UPDATE',
+    [userIds]
+  );
+  const identityResult = await db.query(
+    'SELECT COUNT(*)::int AS count FROM user_identities WHERE user_id = ANY($1::bigint[])',
+    [userIds]
+  );
+  const linkedIdentityCount = Number(identityResult.rows[0]?.count || 0);
+  const deletionId = crypto.randomUUID();
+  const platform = ['telegram', 'vk'].includes(requestedPlatform)
+    ? requestedPlatform
+    : 'unknown';
+
+  // Client history belongs to the deleted account and is removed. If this
+  // person acted as an employee in somebody else's operation, the operation
+  // remains but the employee reference is de-identified.
+  const deletedTransactions = await db.query(
+    'DELETE FROM transactions WHERE client_id = ANY($1::bigint[]) RETURNING id',
+    [userIds]
+  );
+  await db.query(
+    'UPDATE transactions SET staff_id = NULL WHERE staff_id = ANY($1::bigint[])',
+    [userIds]
+  );
+  await db.query(
+    'UPDATE transactions SET cancelled_by = NULL WHERE cancelled_by = ANY($1::bigint[])',
+    [userIds]
+  );
+
+  await db.query('UPDATE shifts SET created_by = NULL WHERE created_by = ANY($1::bigint[])', [userIds]);
+  await db.query(
+    `DELETE FROM cancel_quota_resets
+     WHERE user_id = ANY($1::bigint[]) OR reset_by = ANY($1::bigint[])`,
+    [userIds]
+  );
+  await db.query('UPDATE app_settings SET updated_by = NULL WHERE updated_by = ANY($1::bigint[])', [userIds]);
+  await db.query('UPDATE promotions SET updated_by = NULL WHERE updated_by = ANY($1::bigint[])', [userIds]);
+  await db.query('UPDATE shop_items SET updated_by = NULL WHERE updated_by = ANY($1::bigint[])', [userIds]);
+
+  await db.query(
+    `DELETE FROM account_merge_audit
+     WHERE canonical_user_id = ANY($1::bigint[]) OR merged_user_id = ANY($1::bigint[])`,
+    [userIds]
+  );
+  await db.query(
+    `DELETE FROM qr_aliases
+     WHERE user_id = ANY($1::bigint[]) OR source_user_id = ANY($1::bigint[])`,
+    [userIds]
+  );
+  await db.query(
+    `DELETE FROM account_link_codes
+     WHERE user_id = ANY($1::bigint[]) OR used_by_user_id = ANY($1::bigint[])`,
+    [userIds]
+  );
+  await db.query(
+    'DELETE FROM account_link_attempts WHERE user_id = ANY($1::bigint[])',
+    [userIds]
+  );
+  await db.query(
+    'DELETE FROM api_rate_limits WHERE subject_hash = ANY($1::text[])',
+    [userIds.map((id) => rateLimitSubjectHash('user', id))]
+  );
+
+  const deletedUsers = await db.query(
+    'DELETE FROM users WHERE id = ANY($1::bigint[]) RETURNING id',
+    [userIds]
+  );
+  await db.query(
+    `INSERT INTO account_deletion_audit (
+       deletion_id, requested_from, linked_identity_count,
+       deleted_user_rows, deleted_transaction_rows
+     ) VALUES ($1::uuid, $2, $3, $4, $5)`,
+    [
+      deletionId,
+      platform,
+      linkedIdentityCount,
+      Number(deletedUsers.rowCount || deletedUsers.rows?.length || 0),
+      Number(deletedTransactions.rowCount || deletedTransactions.rows?.length || 0)
+    ]
+  );
+
+  return {
+    ok: true,
+    deleted: true,
+    deletionId,
+    linkedIdentityCount,
+    deletedUserRows: Number(deletedUsers.rowCount || deletedUsers.rows?.length || 0),
+    deletedTransactionRows: Number(
+      deletedTransactions.rowCount || deletedTransactions.rows?.length || 0
+    )
+  };
+}
+
 async function readRequestBody(req) {
   const chunks = [];
   let size = 0;
@@ -2203,7 +2357,7 @@ export async function renderAppIndex(
   );
   const withLinking = withLoader.replace(
     /<script defer src="\/?app\.js([^"]*)"><\/script>/i,
-    '<script defer src="/account-link.js?v=2.3.0"></script>\n  <script defer src="/app.js$1"></script>'
+    '<script defer src="/account-link.js?v=2.4.0"></script>\n  <script defer src="/app.js$1"></script>'
   );
 
   if (platform !== 'vk') return withLinking;
@@ -2221,7 +2375,7 @@ export async function renderAppIndex(
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      `${earlyBridge}\n  <script defer src="/vk-platform.js?v=3.3.0"></script>\n  <script defer src="/account-link.js$1"></script>`
+      `${earlyBridge}\n  <script defer src="/vk-platform.js?v=3.4.0"></script>\n  <script defer src="/account-link.js$1"></script>`
     );
 }
 
@@ -2321,6 +2475,7 @@ function isConsentExempt(pathname) {
     || pathname === '/api/bootstrap'
     || pathname === '/api/me'
     || pathname === '/api/me/consent'
+    || pathname === '/api/me/account'
     || pathname.startsWith('/api/account-link/');
 }
 
@@ -2342,6 +2497,18 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+    if (
+      platformReady
+      && url.pathname.startsWith('/api/')
+      && !['/api/health', '/api/platform-health'].includes(url.pathname)
+    ) {
+      await enforceRateLimit(
+        rateLimitSubjectHash('ip', requestAddress(req)),
+        'api-global',
+        300,
+        60 * 1000
+      );
+    }
 
     const documentPlatform = platformForDocumentRequest(url, req.headers);
     if (req.method === 'GET' && documentPlatform) {
@@ -2436,8 +2603,9 @@ const server = http.createServer(async (req, res) => {
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = body.platform === 'vk' ? 'vk' : 'telegram';
-      enforceRateLimit(
-        `auth:${requestAddress(req)}:${platform}`,
+      await enforceRateLimit(
+        rateLimitSubjectHash('ip', requestAddress(req)),
+        `auth:${platform}`,
         30,
         10 * 60 * 1000
       );
@@ -2464,6 +2632,41 @@ const server = http.createServer(async (req, res) => {
       const user = await requireGatewayUser(req);
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
       return sendJson(res, 200, await getAppPayload(user.id, platform));
+    }
+
+    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      await enforceRateLimit(
+        rateLimitSubjectHash('user', user.id),
+        'delete-account',
+        3,
+        24 * 60 * 60 * 1000
+      );
+      if (String(req.headers['x-pivnik-delete-account'] || '') !== 'irrevocable') {
+        return sendJson(res, 409, { error: 'Удаление можно подтвердить только кнопкой пользователя.' });
+      }
+      const body = parseJsonBody(await readRequestBody(req));
+      if (body.confirmation !== 'УДАЛИТЬ' || body.deleteLinkedAccount !== true) {
+        return sendJson(res, 400, {
+          error: 'Введите «УДАЛИТЬ» и подтвердите удаление связанного аккаунта.'
+        });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2500ms'");
+        await client.query("SET LOCAL statement_timeout = '8000ms'");
+        const result = await deleteUnifiedAccount(client, user.id, platform);
+        await client.query('COMMIT');
+        return sendJson(res, 200, result);
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        throw error;
+      } finally {
+        client.release();
+      }
     }
 
 
@@ -2502,8 +2705,13 @@ const server = http.createServer(async (req, res) => {
       if (String(req.headers['x-pivnik-explicit-consent'] || '') !== '1') {
         return sendJson(res, 409, { error: 'Согласие можно подтвердить только кнопкой пользователя.' });
       }
+      const body = parseJsonBody(await readRequestBody(req));
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await acceptConsent(user.id, platform));
+      return sendJson(
+        res,
+        200,
+        await acceptConsent(user.id, platform, body.adultConfirmed === true)
+      );
     }
 
     if (req.method === 'POST' && url.pathname === '/api/me/beta-tester/claim') {
@@ -2529,8 +2737,9 @@ const server = http.createServer(async (req, res) => {
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      enforceRateLimit(
-        `link-code:${user.id}:${requestAddress(req)}`,
+      await enforceRateLimit(
+        rateLimitSubjectHash('user', user.id),
+        'link-code',
         5,
         15 * 60 * 1000
       );
@@ -2543,8 +2752,9 @@ const server = http.createServer(async (req, res) => {
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      enforceRateLimit(
-        `link-consume:${user.id}:${requestAddress(req)}`,
+      await enforceRateLimit(
+        rateLimitSubjectHash('user', user.id),
+        'link-consume',
         10,
         15 * 60 * 1000
       );
@@ -2561,7 +2771,12 @@ const server = http.createServer(async (req, res) => {
       if (!['staff', 'admin'].includes((await getProfile(user.id)).role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
-      enforceRateLimit(`qr:${user.id}:${requestAddress(req)}`, 60, 60 * 1000);
+      await enforceRateLimit(
+        rateLimitSubjectHash('user', user.id),
+        'qr-resolve',
+        60,
+        60 * 1000
+      );
       const body = parseJsonBody(await readRequestBody(req));
       const resolved = await resolvePersonalQrRecord(pool, body.payload);
       if (!resolved) return sendJson(res, 404, { error: 'Персональный код не найден.' });
@@ -2577,9 +2792,28 @@ const server = http.createServer(async (req, res) => {
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      enforceRateLimit(`pin:${user.id}:${requestAddress(req)}`, 8, 15 * 60 * 1000);
+      await enforceRateLimit(
+        rateLimitSubjectHash('user', user.id),
+        'staff-pin',
+        8,
+        15 * 60 * 1000
+      );
       const bodyBuffer = await readRequestBody(req);
       return await proxyRequest(req, res, bodyBuffer);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/support') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      await enforceRateLimit(
+        rateLimitSubjectHash('user', user.id),
+        'support-request',
+        5,
+        24 * 60 * 60 * 1000
+      );
+      return await proxyRequest(req, res);
     }
 
     if (url.pathname.startsWith('/api/') && !isConsentExempt(url.pathname)) {

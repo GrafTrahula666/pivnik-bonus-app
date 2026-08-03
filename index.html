@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="/styles.css?v=16.0-premium-achievements" />
-  <script defer src="/app.js?v=16.6-optional-profile"></script>
+  <link rel="stylesheet" href="/styles.css?v=17.0-public-launch" />
+  <script defer src="/app.js?v=17.0-public-launch"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -42,7 +42,7 @@
     <header class="topbar">
       <div class="brand-lockup">
         <div class="eyebrow" id="eyebrow">Telegram Mini App</div>
-        <div class="brand-line"><h1 id="brandTitle">Пивник</h1><span class="beta-badge">закрытая бета</span></div>
+        <div class="brand-line"><h1 id="brandTitle">Пивник</h1></div>
       </div>
       <div class="topbar-actions">
         <span class="network-badge" id="networkBadge"><i></i>онлайн</span>
@@ -151,8 +151,8 @@
           <button class="help-entry" id="openHelpButton" type="button">
             <span class="help-entry-icon">?</span>
             <span class="help-entry-copy">
-              <b>Справка и правила</b>
-              <small>Как пользоваться, бонусы, статусы, QR, данные и бета-тест</small>
+              <b>Справка и документы</b>
+              <small>Правила, политика, поддержка и управление аккаунтом</small>
             </span>
             <span class="help-entry-arrow">›</span>
           </button>
@@ -378,8 +378,13 @@
     <div class="modal-sheet tall-sheet help-sheet">
       <button class="close" data-close="helpModal">×</button>
       <span class="muted">Клиентский раздел</span>
-      <h2>Справка и правила</h2>
-      <p class="help-intro">Здесь собраны правила бонусной программы, инструкция по использованию приложения и ответы на частые вопросы. Для быстрого просмотра откройте нужный пункт.</p>
+      <h2>Справка и документы</h2>
+      <p class="help-intro">Здесь собраны правила бонусной программы, документы, инструкция и способы обратиться в поддержку.</p>
+
+      <div class="legal-link-grid">
+        <a class="legal-link-card" href="/legal/terms" target="_blank" rel="noopener noreferrer"><b>Правила программы</b><small>Актуальная редакция · 18+</small></a>
+        <a class="legal-link-card" href="/legal/privacy" target="_blank" rel="noopener noreferrer"><b>Политика данных</b><small>Обработка и удаление</small></a>
+      </div>
 
       <div class="help-contents">
         <details class="help-section" open>
@@ -468,16 +473,16 @@
           <div class="help-text">
             <p id="privacyPlatformCopy">Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
             <p>Эти данные нужны для авторизации, ведения бонусного счёта, разграничения доступа и рассмотрения спорных операций.</p>
-            <p>Административный доступ ограничивается ролями. Полные юридические реквизиты оператора и сроки хранения данных должны быть опубликованы перед открытым запуском.</p>
+            <p>Административный доступ ограничивается ролями. Аккаунт и связанные персональные данные можно удалить безвозвратно непосредственно в приложении.</p>
           </div>
         </details>
 
         <details class="help-section">
-          <summary><span>11</span><b>Правила бета-тестирования</b></summary>
+          <summary><span>11</span><b>Возраст и безопасность</b></summary>
           <div class="help-text">
-            <p>Приложение находится в режиме закрытого теста. Интерфейс, расчёты и отдельные функции могут изменяться.</p>
-            <p>Возможны временные ошибки, задержки обновления данных и недоступность отдельных разделов. О найденных проблемах нужно сообщать владельцу или сотруднику.</p>
-            <p>Планируется сохранить бонусы и статусы, накопленные в бета-тесте, если до завершения теста не будет объявлено иное.</p>
+            <p>Программа предназначена только для пользователей старше 18 лет. Совершеннолетие подтверждается отдельно перед принятием правил.</p>
+            <p>Приложение не продаёт алкоголь дистанционно. Получение товаров происходит только очно в баре после проверки возраста, когда она необходима.</p>
+            <p>О технической ошибке, спорной операции или вопросе по данным можно сообщить через форму поддержки ниже.</p>
           </div>
         </details>
 
@@ -494,9 +499,50 @@
       </div>
 
       <div class="help-footer">
-        <b>Версия документа: бета 0.4</b>
-        <small>Текст является рабочей редакцией для закрытого теста и будет дополнен перед публичным запуском.</small>
+        <b>Редакция правил: 1.0 · 3 августа 2026 года</b>
+        <small>Обращения рассматриваются не позднее 7 календарных дней.</small>
+        <div class="help-footer-actions">
+          <button class="secondary full" id="openSupportButton" type="button">Написать в поддержку</button>
+          <button class="text-btn danger-text full" id="openDeleteAccountButton" type="button">Удалить аккаунт и данные</button>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal support-modal" id="supportModal" aria-hidden="true">
+    <div class="modal-sheet support-sheet">
+      <button class="close" data-close="supportModal">×</button>
+      <span class="muted">Поддержка Пивника</span>
+      <h2>Сообщить о проблеме</h2>
+      <p class="help-intro">Ответ или решение предоставим не позднее 7 календарных дней. Для спорной операции укажите примерное время и сумму.</p>
+      <label>Тема
+        <select class="text-input" id="supportCategory">
+          <option value="technical">Техническая ошибка</option>
+          <option value="account">Аккаунт и данные</option>
+          <option value="bonus">Бонусы и операция</option>
+          <option value="other">Другой вопрос</option>
+        </select>
+      </label>
+      <label>Описание
+        <textarea class="text-input content-textarea" id="supportMessage" maxlength="2000" placeholder="Опишите, что произошло"></textarea>
+      </label>
+      <button class="primary full" id="sendSupportRequest" type="button">Отправить обращение</button>
+    </div>
+  </div>
+
+  <div class="modal account-delete-modal" id="deleteAccountModal" aria-hidden="true">
+    <div class="modal-sheet delete-account-sheet">
+      <button class="close" data-close="deleteAccountModal">×</button>
+      <span class="muted">Аккаунт и данные</span>
+      <h2>Удалить безвозвратно</h2>
+      <p>Будут удалены баланс, QR-код, история клиента, литры, достижения, обращения и идентификаторы всех привязанных платформ.</p>
+      <div class="delete-account-warning" id="deleteAccountScope">Если Telegram и VK связаны, удалится единый аккаунт сразу в обоих приложениях.</div>
+      <label class="delete-linked-confirm"><input id="deleteLinkedConfirm" type="checkbox"> <span>Понимаю, что восстановить данные и бонусы будет невозможно</span></label>
+      <label>Для подтверждения напишите <b>УДАЛИТЬ</b>
+        <input class="text-input" id="deleteAccountPhrase" autocomplete="off" maxlength="8" placeholder="УДАЛИТЬ" />
+      </label>
+      <button class="danger-button full" id="confirmDeleteAccount" type="button" disabled>Удалить аккаунт навсегда</button>
+      <button class="secondary full" data-close="deleteAccountModal" type="button">Отмена</button>
     </div>
   </div>
 
@@ -522,8 +568,8 @@
       <span class="achievement-celebration-kicker">Поздравляем!</span>
       <div class="achievement-celebration-icon" id="achievementCelebrationIcon">β</div>
       <span class="achievement-celebration-rarity" id="achievementCelebrationRarity">Легендарное достижение</span>
-      <h2 id="achievementCelebrationTitle">Тестировщик</h2>
-      <p id="achievementCelebrationDescription">Вы вошли в число первых участников закрытого бета-теста.</p>
+      <h2 id="achievementCelebrationTitle">Первопроходец</h2>
+      <p id="achievementCelebrationDescription">Вы вошли в число первых участников приложения.</p>
       <div class="achievement-celebration-reward" id="achievementCelebrationReward">+150 бонусов</div>
       <button class="primary full" id="ackAchievementButton" type="button">Забрать награду</button>
     </div>
@@ -561,7 +607,7 @@
       <h2 id="leaderboardModalTitle">Таблица лидеров</h2>
       <p class="help-intro">Единая лига для Telegram и VK. Рейтинг считается по фактически оплаченным покупкам текущего месяца; после привязки аккаунтов их покупки суммируются. Отменённые операции не учитываются.</p>
       <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
-      <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
+      <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Условия наград публикуются в карточке действующей акции.</div>
     </div>
   </div>
 
@@ -613,7 +659,7 @@
           <label>Загрузить фотографию
             <input id="contentImageFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
           </label>
-          <small id="contentImageFileName">JPG, PNG или WEBP · до 6 МБ</small>
+          <small id="contentImageFileName">JPG, PNG или WEBP · исходник до 6 МБ</small>
           <label>Или HTTPS-ссылка
             <input class="text-input" id="contentImageUrl" type="url" placeholder="https://…" />
           </label>
@@ -685,16 +731,22 @@
       <div class="consent-mark">П</div>
       <span class="muted">Доступ к функциям</span>
       <h2>Правила программы</h2>
-      <p>Чтобы пользоваться бонусным счётом, сначала примите правила программы и условия обработки данных.</p>
+      <p>Чтобы пользоваться бонусным счётом, подтвердите совершеннолетие и примите правила программы и условия обработки данных.</p>
       <ul>
         <li>QR-код постоянный и привязан к вашему аккаунту.</li>
         <li>Списание проходит сразу после проведения сотрудником.</li>
         <li>Новый клиент получает 100 приветственных бонусов.</li>
         <li>Все изменения баланса и подарочных литров сохраняются в журнале.</li>
       </ul>
-      <button class="text-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
-      <button class="primary full" id="acceptTerms" type="button">Принимаю и продолжить</button>
-      <small>Рабочая редакция для закрытого бета-теста, версия 0.4.</small>
+      <div class="consent-document-links">
+        <a href="/legal/terms" target="_blank" rel="noopener noreferrer">Правила программы</a>
+        <a href="/legal/privacy" target="_blank" rel="noopener noreferrer">Политика данных</a>
+      </div>
+      <label class="adult-confirm"><input id="adultConfirmed" type="checkbox"> <span>Мне исполнилось 18 лет</span></label>
+      <button class="text-link" id="openTermsFromConsent" type="button">Открыть справку и документы</button>
+      <button class="primary full" id="acceptTerms" type="button" disabled>Принимаю и продолжить</button>
+      <button class="text-btn danger-text full" id="deleteAccountFromConsent" type="button">Удалить созданный аккаунт</button>
+      <small>Редакция 1.0 от 3 августа 2026 года.</small>
     </div>
   </div>
 

@@ -311,6 +311,26 @@
     document.documentElement.style.setProperty('--pivnik-viewport-height', `${height}px`);
   }
 
+  function handleBridgeEvent(event) {
+    const type = event?.detail?.type;
+    if (type === 'VKWebAppViewHide') {
+      document.documentElement.classList.add('pivnik-view-hidden');
+      window.dispatchEvent(new CustomEvent('pivnik:platform-hidden'));
+      return;
+    }
+    if (type === 'VKWebAppViewRestore') {
+      document.documentElement.classList.remove('pivnik-view-hidden');
+      syncVisualViewport();
+      window.dispatchEvent(new CustomEvent('pivnik:platform-restored'));
+      return;
+    }
+    if (type === 'VKWebAppUpdateConfig') {
+      const scheme = String(event?.detail?.data?.scheme || '').toLowerCase();
+      document.documentElement.classList.toggle('vk-light-scheme', scheme.includes('light'));
+      syncVisualViewport();
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style');
     style.id = 'vk-layout-hardening';
@@ -352,6 +372,7 @@
     window.visualViewport?.addEventListener('resize', syncVisualViewport);
     window.visualViewport?.addEventListener('scroll', syncVisualViewport);
     window.addEventListener('resize', syncVisualViewport);
+    try { bridge?.subscribe?.(handleBridgeEvent); } catch (_) {}
     applyVkLabels();
     void profileReady.catch(() => {});
 

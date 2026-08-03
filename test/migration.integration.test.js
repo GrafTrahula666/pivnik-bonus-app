@@ -35,6 +35,12 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     );
     await db.exec(achievementsMigration);
     await db.exec(achievementsMigration);
+    const publicLaunchMigration = await readFile(
+      new URL('../migrations/003_public_launch_requirements.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(publicLaunchMigration);
+    await db.exec(publicLaunchMigration);
 
     const first = await db.query(`
       INSERT INTO users (telegram_id)
@@ -108,6 +114,25 @@ test('PostgreSQL: unified-account migration is repeatable and enforces uniquenes
     );
     assert.equal(String(archived.rows[0].merged_into_user_id), String(firstId));
     assert.equal(Number(archived.rows[0].session_version), 2);
+
+    const adultColumn = await db.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name = 'adult_confirmed_at'`
+    );
+    assert.equal(adultColumn.rows.length, 1);
+    await db.query(
+      `INSERT INTO api_rate_limits (
+         subject_hash, route_group, request_count, expires_at
+       ) VALUES ('subject', 'test', 1, NOW() + INTERVAL '1 minute')`
+    );
+    await db.query(
+      `INSERT INTO account_deletion_audit (
+         deletion_id, requested_from, linked_identity_count,
+         deleted_user_rows, deleted_transaction_rows
+       ) VALUES ('00000000-0000-4000-8000-000000000001', 'vk', 2, 2, 3)`
+    );
+    assert.equal((await db.query('SELECT 1 FROM api_rate_limits')).rows.length, 1);
+    assert.equal((await db.query('SELECT 1 FROM account_deletion_audit')).rows.length, 1);
   } finally {
     await db.close();
   }

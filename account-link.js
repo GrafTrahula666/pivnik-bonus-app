@@ -508,7 +508,7 @@
     const consent = document.getElementById('consentModal');
     if (!consent) return;
     const paragraph = consent.querySelector('.consent-sheet > p');
-    const paragraphCopy = 'Для работы бонусной программы используются идентификаторы привязанных аккаунтов VK и Telegram, имя, бонусный баланс и история операций.';
+    const paragraphCopy = 'Программа предназначена для пользователей 18+. Для работы используются идентификаторы привязанных аккаунтов VK и Telegram, имя, бонусный баланс и история операций.';
     if (paragraph && paragraph.textContent !== paragraphCopy) paragraph.textContent = paragraphCopy;
     const firstListItem = consent.querySelector('li');
     const listCopy = 'После привязки в VK и Telegram отображается один и тот же постоянный QR-код.';

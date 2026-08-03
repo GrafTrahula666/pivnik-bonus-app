@@ -152,6 +152,11 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
       'utf8'
     );
     await db.exec(achievementsMigration);
+    const publicLaunchMigration = await readFile(
+      new URL('../migrations/003_public_launch_requirements.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(publicLaunchMigration);
 
     const telegramUser = await db.query(`
       INSERT INTO users (
@@ -263,7 +268,7 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
       [bar.rows[0].id, telegramId, vkId]
     );
 
-    const { mergeUsers } = await import('../universal-server.js?merge-integration');
+    const { mergeUsers, deleteUnifiedAccount } = await import('../universal-server.js?merge-integration');
     await db.exec('BEGIN');
     const merge = await mergeUsers(db, telegramId, vkId);
     await db.exec('COMMIT');
@@ -368,6 +373,46 @@ test('PostgreSQL: mergeUsers preserves purchases, liters, role, PIN and QR alias
       Number((await db.query('SELECT duplicate_bonus_removed FROM account_merge_audit')).rows[0].duplicate_bonus_removed),
       100
     );
+
+    const otherUser = await db.query(
+      `INSERT INTO users (telegram_id, first_name)
+       VALUES (3003, 'Другой клиент') RETURNING id`
+    );
+    const otherUserId = otherUser.rows[0].id;
+    await db.query(
+      `INSERT INTO transactions (
+         request_key, client_id, staff_id, mode, status,
+         check_amount_cents, cash_paid_cents, completed_at
+       ) VALUES ('other-client-purchase', $1, $2, 'accrue', 'completed', 5000, 5000, NOW())`,
+      [otherUserId, telegramId]
+    );
+
+    await db.exec('BEGIN');
+    const deletion = await deleteUnifiedAccount(db, telegramId, 'vk');
+    await db.exec('COMMIT');
+    assert.equal(deletion.deleted, true);
+    assert.equal(deletion.linkedIdentityCount, 2);
+    assert.equal(deletion.deletedUserRows, 2);
+    assert.ok(deletion.deletedTransactionRows >= 5);
+    assert.equal((await db.query('SELECT 1 FROM users WHERE id = ANY($1::bigint[])', [[telegramId, vkId]])).rowCount, 0);
+    assert.equal((await db.query('SELECT 1 FROM user_identities')).rowCount, 0);
+    assert.equal((await db.query('SELECT 1 FROM shop_inquiries')).rowCount, 0);
+    assert.equal((await db.query('SELECT 1 FROM account_merge_audit')).rowCount, 0);
+    const preserved = await db.query(
+      `SELECT staff_id FROM transactions WHERE request_key = 'other-client-purchase'`
+    );
+    assert.equal(preserved.rowCount, 1);
+    assert.equal(preserved.rows[0].staff_id, null);
+    assert.equal((await db.query('SELECT updated_by FROM app_settings WHERE id = 1')).rows[0].updated_by, null);
+    const audit = await db.query(
+      `SELECT requested_from, linked_identity_count, deleted_user_rows,
+              deleted_transaction_rows
+       FROM account_deletion_audit`
+    );
+    assert.equal(audit.rowCount, 1);
+    assert.equal(audit.rows[0].requested_from, 'vk');
+    assert.equal(Number(audit.rows[0].linked_identity_count), 2);
+    assert.equal(Number(audit.rows[0].deleted_user_rows), 2);
   } catch (error) {
     try { await db.exec('ROLLBACK'); } catch {}
     throw error;
