@@ -36,8 +36,14 @@ jobs:
       - name: Materialize release sources
         run: npm run materialize
 
+      - name: Verify materialization is idempotent
+        run: npm run materialize
+
       - name: Check JavaScript syntax
         run: npm run check
+
+      - name: Check backup and restore scripts
+        run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
 
       - name: Run automated tests
         run: npm test
