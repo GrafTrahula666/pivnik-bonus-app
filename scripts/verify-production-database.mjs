@@ -1,5 +1,6 @@
-import pg from 'pg';
 import crypto from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import pg from 'pg';
 
 const { Pool } = pg;
 
@@ -110,7 +111,10 @@ export async function verifyProductionDatabase(databaseUrl) {
   }
 }
 
-if (import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+const isDirectRun = process.argv[1]
+  && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (isDirectRun) {
   verifyProductionDatabase(process.env.DATABASE_URL)
     .then((result) => {
       console.log(JSON.stringify(result, null, 2));
