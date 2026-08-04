@@ -43,11 +43,12 @@ test('production gate blocks missing legal data and tombstone secret', () => {
 });
 
 test('materialized gateway exposes safe production readiness metadata', async () => {
-  const [gateway, migration, privacy, terms] = await Promise.all([
+  const [gateway, migration, privacy, terms, envExample] = await Promise.all([
     readFile(new URL('../universal-server.js', import.meta.url), 'utf8'),
     readFile(new URL('../migrations/005_runtime_identity.sql', import.meta.url), 'utf8'),
     readFile(new URL('../legal/privacy.html', import.meta.url), 'utf8'),
-    readFile(new URL('../legal/terms.html', import.meta.url), 'utf8')
+    readFile(new URL('../legal/terms.html', import.meta.url), 'utf8'),
+    readFile(new URL('../.env.example', import.meta.url), 'utf8')
   ]);
 
   assert.match(gateway, /configuredIdentityTombstoneSecret/);
@@ -58,8 +59,18 @@ test('materialized gateway exposes safe production readiness metadata', async ()
   assert.match(gateway, /refreshDatabaseFingerprint/);
   assert.doesNotMatch(gateway, /createHmac\('sha256', sessionSecret\)[\s\S]{0,120}deleted-identity/);
 
+  assert.match(gateway, /Индивидуальный предприниматель Иживильгин Виталий Викторович/);
+  assert.match(gateway, /ИНН 380415014659/);
+  assert.match(gateway, /origtopg666@gmail\.com/);
+  assert.match(gateway, /г\. Санкт-Петербург, проспект Энгельса, д\. 55/);
+  assert.match(gateway, /автоматически перезаписываются не позднее 90 дней/);
+  assert.match(gateway, /бухгалтерского и налогового учёта, хранятся 5 лет/);
+  assert.match(gateway, /криптографический отпечаток[\s\S]{0,100}хранятся 3 года/);
+
   assert.match(migration, /runtime_identity/);
   assert.match(migration, /database_instance_id/);
   assert.match(privacy, /\{\{LEGAL_OPERATOR_NAME\}\}/);
   assert.match(terms, /\{\{LEGAL_CONTACT_EMAIL\}\}/);
+  assert.match(envExample, /LEGAL_OPERATOR_NAME="Индивидуальный предприниматель Иживильгин Виталий Викторович"/);
+  assert.match(envExample, /LEGAL_OPERATOR_ID="ИНН 380415014659"/);
 });
