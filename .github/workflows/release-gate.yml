@@ -50,22 +50,16 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          echo '=== SAFE VARIABLE AUDIT ==='
           npm run railway:audit || true
-          echo '=== VOLUMES ==='
           railway volume list --json || true
-          echo '=== PUBLIC VOLUME INSTANCE SCHEMA ==='
-          node scripts/railway-volume-instance-introspect.mjs || true
-          echo '=== DATABASE AUDIT ==='
           node scripts/railway-database-audit.mjs || true
 
-      - name: Create and lock pre-unification Railway backups
-        continue-on-error: true
+      - name: Create verified internal database backups
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          node --check scripts/railway-create-release-backups.mjs
-          node scripts/railway-create-release-backups.mjs
+          node --check scripts/railway-create-internal-db-backups.mjs
+          node scripts/railway-create-internal-db-backups.mjs
 
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
