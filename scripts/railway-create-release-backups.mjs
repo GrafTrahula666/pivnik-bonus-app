@@ -1,5 +1,6 @@
 const endpoint = 'https://backboard.railway.com/graphql/v2';
 const token = String(process.env.RAILWAY_API_TOKEN || '').trim();
+const projectId = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
 const environmentId = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
 
 if (!token) {
@@ -60,20 +61,38 @@ if (!workflowFields.length) {
   throw new Error('Railway WorkflowId type has no scalar fields available for mutation selection.');
 }
 
-async function getInstance(volumeId) {
+async function getProductionVolumeInstances() {
   const data = await graphql(`
-    query VolumeInstances($volumeId: String!) {
-      adminVolumeInstancesForVolume(volumeId: $volumeId) {
-        id
-        environmentId
-        serviceId
-        volumeId
-        state
+    query ProductionVolumeInstances($projectId: String!, $environmentId: String!) {
+      environment(id: $environmentId, projectId: $projectId) {
+        volumeInstances(first: 100) {
+          edges {
+            node {
+              id
+              environmentId
+              serviceId
+              volumeId
+              state
+            }
+          }
+        }
       }
     }
-  `, { volumeId });
-  const instances = data.adminVolumeInstancesForVolume || [];
-  const active = instances.find((item) => item.environmentId === environmentId && item.state !== 'DELETED');
+  `, { projectId, environmentId });
+
+  return (data.environment?.volumeInstances?.edges || [])
+    .map((edge) => edge?.node)
+    .filter(Boolean);
+}
+
+const productionVolumeInstances = await getProductionVolumeInstances();
+
+function getInstance(volumeId) {
+  const active = productionVolumeInstances.find((item) => (
+    item.volumeId === volumeId
+    && item.environmentId === environmentId
+    && item.state !== 'DELETED'
+  ));
   if (!active) throw new Error(`No active production volume instance found for volume ${volumeId}.`);
   return active;
 }
@@ -123,7 +142,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
 
 for (const target of targets) {
-  const instance = await getInstance(target.volumeId);
+  const instance = getInstance(target.volumeId);
   let backups = await listBackups(instance.id);
   let backup = backups.find((item) => item.name === target.backupName);
   let created = false;
