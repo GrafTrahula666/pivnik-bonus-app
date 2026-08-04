@@ -21,7 +21,9 @@ test('Удаление доступно без принятия правил и 
 
   const routeStart = gateway.indexOf("req.method === 'DELETE' && url.pathname === '/api/me/account'");
   assert.ok(routeStart >= 0);
-  const route = gateway.slice(routeStart, routeStart + 700);
+  const nextRoute = gateway.indexOf('\n    if (req.method', routeStart + 1);
+  assert.ok(nextRoute > routeStart);
+  const route = gateway.slice(routeStart, nextRoute);
   assert.match(route, /deleteUnifiedAccount\(user\.id, body\.confirmation\)/);
   assert.doesNotMatch(route, /termsAccepted/);
 });
