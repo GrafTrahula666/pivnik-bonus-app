@@ -54,6 +54,19 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
+      - name: Synchronize strong production secrets
+        if: >-
+          (github.event_name == 'push' &&
+           (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.head_ref == 'audit/final-release-gate-20260804')
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          node --check scripts/railway-ensure-production-secrets.mjs
+          node scripts/railway-ensure-production-secrets.mjs
+
       - name: Unify VK legacy database into canonical production
         if: >-
           (github.event_name == 'push' &&
