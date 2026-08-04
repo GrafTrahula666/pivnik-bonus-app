@@ -54,14 +54,13 @@ jobs:
           npm run railway:audit || true
           echo '=== VOLUMES ==='
           railway volume list --json || true
-          echo '=== BACKUP API SCHEMA ==='
-          npm run railway:backup-schema || true
-          echo '=== BACKUP TYPE DETAILS ==='
-          node scripts/railway-backup-details.mjs || true
+          echo '=== PUBLIC VOLUME INSTANCE SCHEMA ==='
+          node scripts/railway-volume-instance-introspect.mjs || true
           echo '=== DATABASE AUDIT ==='
           node scripts/railway-database-audit.mjs || true
 
       - name: Create and lock pre-unification Railway backups
+        continue-on-error: true
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
