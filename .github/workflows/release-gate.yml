@@ -33,6 +33,12 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
+      - name: Discover Railway projects across workspaces
+        continue-on-error: true
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: npx --yes @railway/cli@latest list --json
+
       - name: Materialize release sources
         run: npm run materialize
 
