@@ -6,10 +6,10 @@ GitHub repository access and Railway account access are separate. The Railway Gi
 
 1. In Railway click the profile photo in the top-right corner.
 2. Open **Account Settings → Tokens**.
-3. Create a token and choose **No workspace** so it is an account token.
+3. Create a token and select the workspace that contains the production projects `pivnik-bonus-app` and `pivnik-vk-test`. Do not choose **No workspace**: a token without workspace access returns an empty project list.
 4. In GitHub open this repository → **Settings → Secrets and variables → Actions**.
-5. Create repository secret named exactly `RAILWAY_API_TOKEN`.
-6. Paste the token value there. Do not put it in source code, issues, pull requests, screenshots or chat messages.
+5. Open the existing repository secret `RAILWAY_API_TOKEN` and replace its value with the new token.
+6. Do not put the token in source code, issues, pull requests, screenshots or chat messages.
 
 ## What happens next
 
