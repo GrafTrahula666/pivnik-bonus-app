@@ -7,7 +7,7 @@ import { join } from 'node:path';
 const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
 const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
 const WORKSPACE_ID = 'fbffb30c-9091-432f-9e09-9c59e1440304';
-const IMAGE = 'postgres:17-alpine';
+const IMAGE = 'postgres:18-alpine';
 const BACKUP_DATABASE_NAME = 'pivnik_backup_20260804_pre_unification';
 const DATABASES = {
   telegramCanonical: 'beb858e1-c412-42b8-b570-bda36ca82b59',
@@ -83,7 +83,6 @@ railway([
   '--json'
 ]);
 
-// Pull once before the first database operation so tool availability is deterministic.
 runDocker({}, 'pg_dump --version >/dev/null && pg_restore --version >/dev/null');
 
 const results = {};
@@ -116,7 +115,6 @@ for (const [label, serviceId] of Object.entries(DATABASES)) {
     if (!Number.isFinite(sourceSizeBytes) || sourceSizeBytes <= 0) {
       throw new Error(`${label}: could not determine source database size.`);
     }
-    // Both Railway volumes are 500 MB. Keep a conservative guard before duplication.
     if (sourceSizeBytes > 200 * 1024 * 1024) {
       throw new Error(`${label}: source database is too large for the guarded internal backup.`);
     }
