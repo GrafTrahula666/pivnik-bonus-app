@@ -49,6 +49,13 @@ jobs:
           node --check scripts/railway-database-inventory.mjs
           node scripts/railway-database-inventory.mjs
 
+      - name: Prove production databases are cryptographically equivalent
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          node --check scripts/railway-database-equivalence.mjs
+          node scripts/railway-database-equivalence.mjs
+
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
 
