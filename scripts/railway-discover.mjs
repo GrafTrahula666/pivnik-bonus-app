@@ -57,17 +57,7 @@ const data = await railwayGraphql(`
 `);
 
 const projects = data?.projects?.edges?.map((edge) => edge.node) || [];
-const candidates = projects.filter((project) => {
-  const names = new Set((project.services?.edges || []).map((edge) => edge.node?.name));
-  return names.has('pivnik-bonus-app') || names.has('pivnik-vk-test');
-});
-
-if (!candidates.length) {
-  console.error('Pivnik Railway project was not found for this account token.');
-  process.exit(2);
-}
-
-const safeOutput = candidates.map((project) => ({
+const safeProjects = projects.map((project) => ({
   projectId: project.id,
   projectName: project.name,
   environments: (project.environments?.edges || []).map((edge) => ({
@@ -80,4 +70,21 @@ const safeOutput = candidates.map((project) => ({
   }))
 }));
 
-console.log(JSON.stringify({ ok: true, projects: safeOutput }, null, 2));
+const candidates = safeProjects.filter((project) => {
+  const haystack = [
+    project.projectName,
+    ...project.services.map((service) => service.name)
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('pivnik') || haystack.includes('пивник');
+});
+
+console.log(JSON.stringify({
+  ok: candidates.length > 0,
+  matchedProjects: candidates,
+  allAccessibleProjects: safeProjects
+}, null, 2));
+
+if (!candidates.length) {
+  console.error('No accessible Railway project or service name contains "pivnik". The token is valid but is likely scoped to the wrong workspace.');
+  process.exit(2);
+}
