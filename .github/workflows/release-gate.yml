@@ -56,10 +56,10 @@ jobs:
           railway volume list --json || true
           echo '=== BACKUP API SCHEMA ==='
           npm run railway:backup-schema || true
-          echo '=== TELEGRAM DATABASE AUDIT ==='
-          railway run --project 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5 --environment aa461df9-1dbb-4000-8906-f13dd8008a6f --service 4c4d5f11-e3af-4ffb-8ae9-21a8854b6c90 node scripts/verify-production-database.mjs || true
-          echo '=== VK DATABASE AUDIT ==='
-          railway run --project 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5 --environment aa461df9-1dbb-4000-8906-f13dd8008a6f --service 61352beb-78fe-4293-939c-c1f93294b204 node scripts/verify-production-database.mjs || true
+          echo '=== BACKUP TYPE DETAILS ==='
+          node scripts/railway-backup-details.mjs || true
+          echo '=== DATABASE AUDIT ==='
+          node scripts/railway-database-audit.mjs || true
 
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
