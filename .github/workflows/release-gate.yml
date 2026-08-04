@@ -33,6 +33,36 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
+      - name: Detect Railway automation credentials
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          TELEGRAM_SERVICE_ID: ${{ vars.TELEGRAM_SERVICE_ID }}
+          VK_SERVICE_ID: ${{ vars.VK_SERVICE_ID }}
+          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL }}
+          VK_APP_URL: ${{ vars.VK_APP_URL }}
+        run: |
+          node - <<'NODE'
+          const keys = [
+            'RAILWAY_TOKEN',
+            'RAILWAY_API_TOKEN',
+            'RAILWAY_PROJECT_TOKEN',
+            'RAILWAY_PROJECT_ID',
+            'RAILWAY_ENVIRONMENT_ID',
+            'TELEGRAM_SERVICE_ID',
+            'VK_SERVICE_ID',
+            'TELEGRAM_APP_URL',
+            'VK_APP_URL'
+          ];
+          for (const key of keys) {
+            const value = String(process.env[key] || '');
+            console.log(`${key}: ${value ? `configured (${value.length} chars)` : 'not configured'}`);
+          }
+          NODE
+
       - name: Probe current Railway production
         continue-on-error: true
         run: node scripts/probe-current-production.mjs
