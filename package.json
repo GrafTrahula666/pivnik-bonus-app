@@ -8,10 +8,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node universal-server.js",
-    "dev": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node --watch universal-server.js",
-    "materialize": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs",
-    "check": "node --check scripts/materialize-runtime-patches.mjs && node --check scripts/apply-production-hardening.mjs && node --check scripts/verify-unified-production.mjs && node --check scripts/verify-production-database.mjs && node --check bootstrap-vlad.js && node --check bootstrap.js && node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
+    "start": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node scripts/apply-production-final-fixes.mjs && node universal-server.js",
+    "dev": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node scripts/apply-production-final-fixes.mjs && node --watch universal-server.js",
+    "materialize": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node scripts/apply-production-final-fixes.mjs",
+    "check": "node --check scripts/materialize-runtime-patches.mjs && node --check scripts/apply-production-hardening.mjs && node --check scripts/apply-production-final-fixes.mjs && node --check scripts/verify-unified-production.mjs && node --check scripts/verify-production-database.mjs && node --check bootstrap-vlad.js && node --check bootstrap.js && node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
     "test": "node --test",
     "verify:production": "node scripts/verify-unified-production.mjs",
     "verify:database": "node scripts/verify-production-database.mjs"
