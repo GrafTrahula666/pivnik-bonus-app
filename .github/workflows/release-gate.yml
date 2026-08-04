@@ -42,12 +42,12 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run check
 
-      - name: Inspect Railway direct variable API
+      - name: Inventory production databases safely
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          node --check scripts/railway-variable-introspect.mjs
-          node scripts/railway-variable-introspect.mjs
+          node --check scripts/railway-database-inventory.mjs
+          node scripts/railway-database-inventory.mjs
 
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
