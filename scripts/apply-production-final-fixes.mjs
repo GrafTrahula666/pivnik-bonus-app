@@ -49,20 +49,24 @@ function normalizeDeletedIdentityGuards(source) {
   return normalized;
 }
 
-let gateway = await fs.readFile(gatewayPath, 'utf8');
-gateway = normalizeDeletedIdentityGuards(gateway);
+function normalizeLegalRenderer(source) {
+  const escapeMarker = 'function escapeHtml(value) {';
+  const rendererMarker = 'async function serveLegalDocument(res, filePath) {';
+  const nextFunctionMarker = 'function platformFromRequest(req, fallback = \'unknown\') {';
 
-gateway = replaceRequired(
-  gateway,
-  "const TERMS_VERSION = 'beta-0.4';",
-  "const TERMS_VERSION = '2026-08-04';",
-  'production terms version'
-);
+  const escapeIndex = source.indexOf(escapeMarker);
+  const rendererIndex = source.indexOf(rendererMarker);
+  const starts = [escapeIndex, rendererIndex].filter((index) => index >= 0);
+  if (!starts.length) {
+    throw new Error('Не найден legal renderer после materialization.');
+  }
+  const regionStart = Math.min(...starts);
+  const regionEnd = source.indexOf(nextFunctionMarker, regionStart);
+  if (regionEnd < 0) {
+    throw new Error('Не найдена граница platformFromRequest после legal renderer.');
+  }
 
-gateway = replaceRequired(
-  gateway,
-  `async function serveLegalDocument(res, filePath) {`,
-  `function escapeHtml(value) {
+  const canonical = `function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -71,25 +75,64 @@ gateway = replaceRequired(
     .replaceAll("'", '&#039;');
 }
 
-async function serveLegalDocument(res, filePath) {`,
-  'legal HTML escaping helper'
-);
+async function serveLegalDocument(res, filePath) {
+  try {
+    const template = await fs.readFile(filePath, 'utf8');
+    const replacements = {
+      '{{LEGAL_OPERATOR_NAME}}': legalOperatorName || 'Оператор не настроен',
+      '{{LEGAL_OPERATOR_ID}}': legalOperatorId || 'не настроено',
+      '{{LEGAL_CONTACT_EMAIL}}': legalContactEmail || 'не настроено',
+      '{{LEGAL_OPERATOR_ADDRESS}}': legalOperatorAddress || BAR_ADDRESS,
+      '{{LEGAL_DATA_RETENTION_POLICY}}': legalDataRetentionPolicy || 'не настроено'
+    };
+    const html = Object.entries(replacements).reduce(
+      (result, [token, value]) => result.replaceAll(
+        token,
+        escapeHtml(safeText(value, 1000, 'не настроено'))
+      ),
+      template
+    );
+    const body = Buffer.from(html);
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-length': body.length,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff'
+    });
+    res.end(body);
+  } catch {
+    sendJson(res, 404, { error: 'Документ не найден.' });
+  }
+}
+
+`;
+
+  const normalized = `${source.slice(0, regionStart)}${canonical}${source.slice(regionEnd)}`;
+  const rendererCount = normalized.split(rendererMarker).length - 1;
+  const escapeCount = normalized.split(escapeMarker).length - 1;
+  if (rendererCount !== 1 || escapeCount !== 1) {
+    throw new Error(`Legal renderer normalization failed: renderer=${rendererCount}, escape=${escapeCount}`);
+  }
+  return normalized;
+}
+
+let gateway = await fs.readFile(gatewayPath, 'utf8');
+gateway = normalizeDeletedIdentityGuards(gateway);
+gateway = normalizeLegalRenderer(gateway);
 
 gateway = replaceRequired(
   gateway,
-  `(result, [token, value]) => result.replaceAll(token, safeText(value, 1000, 'не настроено')),`,
-  `(result, [token, value]) => result.replaceAll(
-        token,
-        escapeHtml(safeText(value, 1000, 'не настроено'))
-      ),`,
-  'escaped legal replacements'
+  "const TERMS_VERSION = 'beta-0.4';",
+  "const TERMS_VERSION = '2026-08-04';",
+  'production terms version'
 );
 
 for (const marker of [
   "const TERMS_VERSION = '2026-08-04';",
   'function escapeHtml(value)',
   "escapeHtml(safeText(value, 1000, 'не настроено'))",
-  ".createHmac('sha256', identityTombstoneSecret)"
+  ".createHmac('sha256', identityTombstoneSecret)",
+  'async function serveLegalDocument(res, filePath)'
 ]) {
   if (!gateway.includes(marker)) {
     throw new Error(`Final production fix verification failed: ${marker}`);
