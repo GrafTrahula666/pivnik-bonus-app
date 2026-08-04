@@ -1,35 +1,60 @@
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 
 const { Client } = pg;
+const RAILWAY_ENDPOINT = 'https://backboard.railway.com/graphql/v2';
+const RAILWAY_TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
 const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
-const WORKSPACE_ID = 'fbffb30c-9091-432f-9e09-9c59e1440304';
 const DATABASES = {
   telegramCanonical: 'beb858e1-c412-42b8-b570-bda36ca82b59',
   vkLegacy: 'de5da1be-76c1-4976-a88c-efcce93600e6'
 };
 
-function railway(args) {
-  return execFileSync('railway', args, {
-    encoding: 'utf8',
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    maxBuffer: 10 * 1024 * 1024
-  });
+if (!RAILWAY_TOKEN) {
+  throw new Error('RAILWAY_API_TOKEN is required.');
 }
 
-function parseVariables(raw) {
-  const parsed = JSON.parse(raw);
-  if (Array.isArray(parsed)) {
-    return Object.fromEntries(parsed.map((item) => [item.name ?? item.key, item.value ?? '']));
+async function railwayGraphql(query, variables = {}) {
+  const response = await fetch(RAILWAY_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${RAILWAY_TOKEN}`,
+      'content-type': 'application/json',
+      'user-agent': 'pivnik-db-inventory/2.0'
+    },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(30_000)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.errors?.length) {
+    const message = payload.errors?.map((item) => item.message).join('; ')
+      || `Railway API returned HTTP ${response.status}`;
+    throw new Error(message);
   }
-  if (parsed && typeof parsed === 'object') {
-    if (parsed.variables && typeof parsed.variables === 'object') return parsed.variables;
-    return parsed;
+  return payload.data;
+}
+
+async function serviceVariables(serviceId) {
+  const data = await railwayGraphql(`
+    query ServiceVariables($projectId: String!, $environmentId: String!, $serviceId: String!) {
+      variables(
+        projectId: $projectId
+        environmentId: $environmentId
+        serviceId: $serviceId
+        unrendered: false
+      )
+    }
+  `, {
+    projectId: PROJECT_ID,
+    environmentId: ENVIRONMENT_ID,
+    serviceId
+  });
+  const variables = data?.variables;
+  if (!variables || typeof variables !== 'object' || Array.isArray(variables)) {
+    throw new Error(`Railway returned an invalid variable collection for service ${serviceId}.`);
   }
-  return {};
+  return variables;
 }
 
 function quoteIdent(value) {
@@ -242,22 +267,9 @@ async function inspectDatabase(label, connectionString) {
   }
 }
 
-railway([
-  'link',
-  '--project', PROJECT_ID,
-  '--environment', ENVIRONMENT_ID,
-  '--workspace', WORKSPACE_ID,
-  '--json'
-]);
-
 const inspected = {};
 for (const [label, serviceId] of Object.entries(DATABASES)) {
-  const vars = parseVariables(railway([
-    'variable', 'list',
-    '--service', serviceId,
-    '--environment', ENVIRONMENT_ID,
-    '--json'
-  ]));
+  const vars = await serviceVariables(serviceId);
   const publicUrl = String(vars.DATABASE_PUBLIC_URL || '').trim();
   if (!publicUrl) throw new Error(`${label}: DATABASE_PUBLIC_URL is not configured.`);
   inspected[label] = await inspectDatabase(label, publicUrl);
