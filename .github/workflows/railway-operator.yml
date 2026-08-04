@@ -27,5 +27,5 @@ jobs:
 
       - name: Discover Pivnik Railway services
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: node scripts/railway-discover.mjs
