@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { execFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
 const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
@@ -176,7 +176,7 @@ for (const [label, serviceId] of Object.entries(DATABASES)) {
           SOURCE_DATABASE_NAME: sourceDatabaseName,
           RELEASE_COMMIT: String(process.env.GITHUB_SHA || 'unknown')
         },
-        `psql "$BACKUP_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+        `psql "$BACKUP_DATABASE_URL" -v ON_ERROR_STOP=1 -v SOURCE_DATABASE_NAME="$SOURCE_DATABASE_NAME" -v RELEASE_COMMIT="$RELEASE_COMMIT" <<'SQL'
 CREATE TABLE IF NOT EXISTS public.pivnik_backup_metadata (
   singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   source_database text NOT NULL,
@@ -188,8 +188,7 @@ VALUES (true, :'SOURCE_DATABASE_NAME', :'RELEASE_COMMIT')
 ON CONFLICT (singleton) DO UPDATE
 SET source_database = EXCLUDED.source_database,
     release_commit = EXCLUDED.release_commit;
-SQL`,
-        []
+SQL`
       );
     }
 
