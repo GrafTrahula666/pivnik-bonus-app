@@ -57,12 +57,12 @@ jobs:
           node --check scripts/railway-database-equivalence.mjs
           node scripts/railway-database-equivalence.mjs
 
-      - name: Diagnose production database differences safely
+      - name: Compare differing rows by semantic content
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          node --check scripts/railway-database-delta.mjs
-          node scripts/railway-database-delta.mjs
+          node --check scripts/railway-database-semantic-delta.mjs
+          node scripts/railway-database-semantic-delta.mjs
 
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
