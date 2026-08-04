@@ -1,12 +1,12 @@
--- Preserve only platform identity keys after account deletion.
--- This prevents repeated welcome/beta rewards without restoring deleted profiles.
+-- Preserve only keyed identity hashes after account deletion.
+-- This prevents repeated welcome/beta rewards without retaining raw platform IDs.
 
 CREATE TABLE IF NOT EXISTS deleted_identity_tombstones (
   provider TEXT NOT NULL CHECK (provider IN ('telegram', 'vk')),
-  provider_user_id TEXT NOT NULL,
+  identity_hash TEXT NOT NULL CHECK (length(identity_hash) = 64),
   deleted_user_id BIGINT,
   deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (provider, provider_user_id)
+  PRIMARY KEY (provider, identity_hash)
 );
 
 CREATE INDEX IF NOT EXISTS idx_deleted_identity_tombstones_deleted_at
