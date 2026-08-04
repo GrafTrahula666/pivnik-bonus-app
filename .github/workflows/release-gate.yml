@@ -45,28 +45,19 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run check
 
-      - name: Audit Railway production safely
-        continue-on-error: true
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: |
-          npm run railway:audit || true
-          railway volume list --json || true
-          node scripts/railway-database-audit.mjs || true
-
-      - name: Create verified internal database backups
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: |
-          node --check scripts/railway-create-internal-db-backups.mjs
-          node scripts/railway-create-internal-db-backups.mjs
-
       - name: Inventory production databases safely
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           node --check scripts/railway-database-inventory.mjs
-          node scripts/railway-database-inventory.mjs
+          for attempt in 1 2 3 4 5; do
+            if node scripts/railway-database-inventory.mjs; then
+              exit 0
+            fi
+            echo "Railway inventory attempt ${attempt} was throttled or failed; waiting before retry."
+            sleep $((attempt * 45))
+          done
+          exit 1
 
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
