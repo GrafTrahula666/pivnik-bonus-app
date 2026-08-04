@@ -30,7 +30,12 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
   const linkingPosition = vk.indexOf('/account-link.js');
-  const appPosition = vk.indexOf('app.js?v=17.0-luxury-vip-space');
+  const appScript = vk.match(/app\.js\?v=[^"']+/)?.[0] || '';
+  const appPosition = appScript ? vk.indexOf(appScript) : -1;
+  assert.ok(bridgePosition >= 0);
+  assert.ok(platformPosition >= 0);
+  assert.ok(linkingPosition >= 0);
+  assert.ok(appPosition >= 0);
   assert.ok(bridgePosition < platformPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);

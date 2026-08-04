@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 export const DEFAULT_AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
+export const DEFAULT_AUTH_CLOCK_SKEW_SECONDS = 5 * 60;
 export const LINK_CODE_PATTERN = /^PIV-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
 export const REQUEST_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{7,127}$/;
 export const ROLE_RANK = Object.freeze({ client: 0, viewer: 1, staff: 2, admin: 3 });
@@ -25,13 +26,42 @@ function requireSingleParam(params, key, message) {
   return values[0];
 }
 
+function validateSignedTimestamp(
+  rawTimestamp,
+  {
+    nowSeconds,
+    maxAgeSeconds,
+    clockSkewSeconds,
+    message
+  }
+) {
+  const timestamp = Number(rawTimestamp);
+  const now = Number(nowSeconds);
+  const maxAge = Math.max(0, Number(maxAgeSeconds) || 0);
+  const clockSkew = Math.max(0, Number(clockSkewSeconds) || 0);
+  const ageSeconds = now - timestamp;
+
+  if (
+    !Number.isSafeInteger(timestamp)
+    || timestamp <= 0
+    || !Number.isFinite(now)
+    || ageSeconds > maxAge
+    || ageSeconds < -clockSkew
+  ) {
+    throw new HttpError(message, 401);
+  }
+
+  return timestamp;
+}
+
 export function validateVkLaunchParams(
   rawLaunchParams,
   {
     appId,
     appSecret,
     nowSeconds = Math.floor(Date.now() / 1000),
-    maxAgeSeconds = DEFAULT_AUTH_MAX_AGE_SECONDS
+    maxAgeSeconds = DEFAULT_AUTH_MAX_AGE_SECONDS,
+    clockSkewSeconds = DEFAULT_AUTH_CLOCK_SKEW_SECONDS
   }
 ) {
   if (!appId || !appSecret) {
@@ -79,14 +109,12 @@ export function validateVkLaunchParams(
     throw new HttpError('VK передал некорректный идентификатор пользователя.', 401);
   }
 
-  const timestamp = Number(rawTimestamp);
-  if (
-    !Number.isSafeInteger(timestamp)
-    || timestamp <= 0
-    || Math.abs(Number(nowSeconds) - timestamp) > Number(maxAgeSeconds)
-  ) {
-    throw new HttpError('Ссылка запуска VK устарела. Откройте приложение повторно.', 401);
-  }
+  validateSignedTimestamp(rawTimestamp, {
+    nowSeconds,
+    maxAgeSeconds,
+    clockSkewSeconds,
+    message: 'Ссылка запуска VK устарела. Откройте приложение повторно.'
+  });
 
   return {
     userId,
@@ -100,7 +128,8 @@ export function validateTelegramInitData(
   {
     botToken,
     nowSeconds = Math.floor(Date.now() / 1000),
-    maxAgeSeconds = DEFAULT_AUTH_MAX_AGE_SECONDS
+    maxAgeSeconds = DEFAULT_AUTH_MAX_AGE_SECONDS,
+    clockSkewSeconds = DEFAULT_AUTH_CLOCK_SKEW_SECONDS
   }
 ) {
   if (!botToken) throw new HttpError('TELEGRAM_BOT_TOKEN не настроен.', 503);
@@ -129,14 +158,12 @@ export function validateTelegramInitData(
     throw new HttpError('Подпись Telegram недействительна.', 401);
   }
 
-  const authDate = Number(params.get('auth_date') || 0);
-  if (
-    !Number.isSafeInteger(authDate)
-    || authDate <= 0
-    || Math.abs(Number(nowSeconds) - authDate) > Number(maxAgeSeconds)
-  ) {
-    throw new HttpError('Ссылка запуска Telegram устарела. Откройте приложение повторно.', 401);
-  }
+  validateSignedTimestamp(params.get('auth_date') || 0, {
+    nowSeconds,
+    maxAgeSeconds,
+    clockSkewSeconds,
+    message: 'Ссылка запуска Telegram устарела. Откройте приложение повторно.'
+  });
 
   let user;
   try {

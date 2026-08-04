@@ -1,0 +1,27 @@
+name: Pivnik production readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app' }}
+  VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app' }}
+
+jobs:
+  verify-production:
+    name: Verify deployed VK and Telegram
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Probe deployed services
+        run: node scripts/probe-current-production.mjs
+
+      - name: Verify common database and release
+        run: node scripts/verify-unified-production.mjs
