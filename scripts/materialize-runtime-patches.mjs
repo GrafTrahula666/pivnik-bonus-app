@@ -41,15 +41,21 @@ function replaceRequired(source, from, to, label) {
   return source.replace(from, to);
 }
 
+function replacePatternRequired(source, pattern, replacement, marker, label) {
+  if (source.includes(marker)) return source;
+  if (!pattern.test(source)) {
+    throw new Error(`Не найден фрагмент release-hardening: ${label}`);
+  }
+  return source.replace(pattern, replacement);
+}
+
 async function applyReleaseHardening() {
   let index = await read('index.html');
-  index = replaceRequired(
+  index = replacePatternRequired(
     index,
-    `          <button class="primary full" id="acceptTerms" type="button">Принимаю и продолжить</button>
-          <small>Рабочая редакция для закрытого бета-теста, версия 0.4.</small>`,
-    `          <button class="primary full" id="acceptTerms" type="button">Принимаю и продолжить</button>
-          <button class="text-link danger-text" id="deleteAccountFromConsent" type="button">Удалить аккаунт без принятия правил</button>
-          <small>Рабочая редакция для закрытого бета-теста, версия 0.4.</small>`,
+    /(<button\b[^>]*\bid="acceptTerms"[^>]*>[\s\S]*?<\/button>)/,
+    `$1\n      <button class="text-link danger-text" id="deleteAccountFromConsent" type="button">Удалить аккаунт без принятия правил</button>`,
+    'id="deleteAccountFromConsent"',
     'кнопка удаления до принятия правил'
   );
   await write('index.html', index);
