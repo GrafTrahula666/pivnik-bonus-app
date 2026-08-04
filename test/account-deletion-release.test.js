@@ -38,7 +38,14 @@ test('Удалённая platform identity хранится только как 
   assert.match(migration, /identity_hash TEXT NOT NULL/);
   assert.doesNotMatch(migration, /provider_user_id/);
   assert.match(gateway, /function deletedIdentityHash/);
-  assert.match(gateway, /createHmac\('sha256', sessionSecret\)/);
+  assert.match(gateway, /configuredIdentityTombstoneSecret/);
+  assert.match(gateway, /createHmac\('sha256', identityTombstoneSecret\)/);
+
+  const hashStart = gateway.indexOf('function deletedIdentityHash');
+  const hashEnd = gateway.indexOf('async function hasDeletedIdentity', hashStart);
+  assert.ok(hashStart >= 0 && hashEnd > hashStart);
+  assert.doesNotMatch(gateway.slice(hashStart, hashEnd), /sessionSecret/);
+
   assert.match(gateway, /const rewardEligible = !\(await hasDeletedIdentity/);
   assert.match(gateway, /if \(rewardEligible && betaNumber > 0 && betaNumber <= 30\)/);
   assert.match(gateway, /INSERT INTO deleted_identity_tombstones/);
