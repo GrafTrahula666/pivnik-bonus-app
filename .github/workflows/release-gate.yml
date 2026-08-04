@@ -33,6 +33,10 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
+      - name: Probe current Railway production
+        continue-on-error: true
+        run: node scripts/probe-current-production.mjs
+
       - name: Materialize release sources
         run: npm run materialize
 
