@@ -4,11 +4,12 @@ GitHub repository access and Railway account access are separate. The Railway Gi
 
 ## One-time setup
 
-1. In Railway open **Account Settings → Tokens**.
-2. Create an **Account token**.
-3. In GitHub open this repository → **Settings → Secrets and variables → Actions**.
-4. Create repository secret named exactly `RAILWAY_TOKEN`.
-5. Paste the token value there. Do not put it in source code, issues, pull requests, screenshots or chat messages.
+1. In Railway click the profile photo in the top-right corner.
+2. Open **Account Settings → Tokens**.
+3. Create a token and choose **No workspace** so it is an account token.
+4. In GitHub open this repository → **Settings → Secrets and variables → Actions**.
+5. Create repository secret named exactly `RAILWAY_API_TOKEN`.
+6. Paste the token value there. Do not put it in source code, issues, pull requests, screenshots or chat messages.
 
 ## What happens next
 
