@@ -1,8 +1,8 @@
 const endpoint = 'https://backboard.railway.com/graphql/v2';
-const token = String(process.env.RAILWAY_TOKEN || '').trim();
+const token = String(process.env.RAILWAY_API_TOKEN || '').trim();
 
 if (!token) {
-  console.error('RAILWAY_TOKEN is required.');
+  console.error('RAILWAY_API_TOKEN is required.');
   process.exit(1);
 }
 
