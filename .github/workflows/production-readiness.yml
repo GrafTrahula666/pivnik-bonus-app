@@ -1,0 +1,31 @@
+name: Pivnik production readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    name: Verify deployed VK and Telegram
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate configured application URLs
+        env:
+          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL }}
+          VK_APP_URL: ${{ vars.VK_APP_URL }}
+        run: |
+          test -n "$TELEGRAM_APP_URL" || { echo "Repository variable TELEGRAM_APP_URL is required" >&2; exit 1; }
+          test -n "$VK_APP_URL" || { echo "Repository variable VK_APP_URL is required" >&2; exit 1; }
+
+      - name: Verify common database and release
+        env:
+          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL }}
+          VK_APP_URL: ${{ vars.VK_APP_URL }}
+        run: node scripts/verify-unified-production.mjs
