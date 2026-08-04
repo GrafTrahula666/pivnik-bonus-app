@@ -82,10 +82,14 @@ jobs:
           node scripts/railway-unify-production-databases.mjs
 
       - name: Deploy exact commit and verify both production services
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.head_ref == 'ops/post-merge-production-verify-20260804')
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RELEASE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_COMMIT_SHA: 8a3e182d94dd9c2fb728898b4bc084609f3c0dd6
           TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app' }}
           VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app' }}
         run: node scripts/railway-deploy-and-verify-production.mjs
