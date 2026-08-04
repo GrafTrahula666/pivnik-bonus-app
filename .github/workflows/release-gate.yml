@@ -61,6 +61,13 @@ jobs:
           echo '=== DATABASE AUDIT ==='
           node scripts/railway-database-audit.mjs || true
 
+      - name: Create and lock pre-unification Railway backups
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          node --check scripts/railway-create-release-backups.mjs
+          node scripts/railway-create-release-backups.mjs
+
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
 
