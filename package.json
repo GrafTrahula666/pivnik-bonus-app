@@ -1,6 +1,6 @@
 {
   "name": "pivnik-bonus-app",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "description": "Telegram и VK Mini App программы лояльности бара Пивник — единый дизайн, база и безопасная авторизация",
@@ -8,11 +8,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node scripts/materialize-runtime-patches.mjs && node universal-server.js",
-    "dev": "node scripts/materialize-runtime-patches.mjs && node --watch universal-server.js",
-    "materialize": "node scripts/materialize-runtime-patches.mjs",
-    "check": "node --check scripts/materialize-runtime-patches.mjs && node --check bootstrap-vlad.js && node --check bootstrap.js && node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
-    "test": "node --test"
+    "start": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node universal-server.js",
+    "dev": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs && node --watch universal-server.js",
+    "materialize": "node scripts/materialize-runtime-patches.mjs && node scripts/apply-production-hardening.mjs",
+    "check": "node --check scripts/materialize-runtime-patches.mjs && node --check scripts/apply-production-hardening.mjs && node --check scripts/verify-unified-production.mjs && node --check scripts/verify-production-database.mjs && node --check bootstrap-vlad.js && node --check bootstrap.js && node --check platform-core.js && node --check qr-resolver.js && node --check achievements.js && node --check server.js && node --check universal-server.js && node --check app.js && node --check vk-platform.js && node --check account-link.js",
+    "test": "node --test",
+    "verify:production": "node scripts/verify-unified-production.mjs",
+    "verify:database": "node scripts/verify-production-database.mjs"
   },
   "dependencies": {
     "@vkontakte/vk-bridge": "2.15.11",
