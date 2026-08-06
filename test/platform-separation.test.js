@@ -26,6 +26,7 @@ test('new VK and Telegram identities are not auto-merged', () => {
     gateway,
     /VK and Telegram identities are intentionally independent, including the owner/
   );
+  assert.match(gateway, /accountLinked: false/);
 });
 
 test('public account-link API and UI are disabled', () => {
