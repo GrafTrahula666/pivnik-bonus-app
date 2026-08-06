@@ -9,42 +9,30 @@ const vkPlatformPath = path.join(root, 'vk-platform.js');
 const marker = 'Anna frame entitlement and consent persistence hotfix 2026-08-06';
 const cacheVersion = '3.2.2-anna-consent-persistence';
 
-function replaceFunction(source, name, replacement) {
-  const pattern = new RegExp(`function ${name}\\(row\\) \\{[\\s\\S]*?\\n\\}`, 'm');
-  if (!pattern.test(source)) {
-    throw new Error(`Function ${name} was not found.`);
-  }
-  return source.replace(pattern, replacement);
-}
-
 function patchFrameEntitlement(source) {
   if (source.includes(marker)) return source;
 
-  source = replaceFunction(source, 'profileFrameFromRow', `function profileFrameFromRow(row) {
-  if (isOwnerRow(row)) return 'money';
-  const storedFrame = String(row?.profile_frame || row?.profileFrame || '');
-  // ${marker}. The persisted personal frame is itself an entitlement. It must
-  // survive role changes, VK/Telegram account linking and missing optional env vars.
-  if (isAnnaRow(row) || storedFrame === 'anna') return 'anna';
-  if (row?.role === 'viewer') return 'fire';
-  return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';
-}`);
-
-  source = replaceFunction(source, 'availableFramesFromRow', `function availableFramesFromRow(row) {
-  if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
-  const storedFrame = String(row?.profile_frame || row?.profileFrame || '');
-  if (isAnnaRow(row) || storedFrame === 'anna') {
-    return [{ code: 'anna', title: 'Персональная рамка Анны' }];
+  const identityOnly = "  if (isAnnaRow(row)) return 'anna';";
+  const persistedEntitlement = "  if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';";
+  const identityOccurrences = source.split(identityOnly).length - 1;
+  if (identityOccurrences < 2) {
+    throw new Error(`Anna frame checks changed unexpectedly: ${identityOccurrences}.`);
   }
-  if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
-  const frames = [{ code: 'none', title: 'Без рамки' }];
-  if (row?.owns_diamond_frame || storedFrame === 'diamond') {
-    frames.push({ code: 'diamond', title: 'Алмазная рамка' });
-  }
-  return frames;
-}`);
 
-  return source;
+  source = source.replaceAll(identityOnly, persistedEntitlement);
+  source = source.replace(
+    "  if (storedFrame === 'anna') return 'none';",
+    "  if (storedFrame === 'anna') return 'anna';"
+  );
+
+  const functionMarker = 'function profileFrameFromRow(row) {';
+  if (!source.includes(functionMarker)) {
+    throw new Error('profileFrameFromRow was not found.');
+  }
+  return source.replace(
+    functionMarker,
+    `// ${marker}. A persisted personal frame remains valid after role changes\n// and Telegram/VK account linking, even when optional identity env vars are absent.\n${functionMarker}`
+  );
 }
 
 async function patchServers() {
@@ -88,8 +76,12 @@ async function patchVkConsentPersistence() {
     }
     source = source.replace(originalInspector, fixedInspector);
 
+    const authInspection = '      void inspectApiResponse(response);\n      return response;';
+    if (!source.includes(authInspection)) {
+      throw new Error('VK auth response inspection block was not found.');
+    }
     source = source.replace(
-      '      void inspectApiResponse(response);\n      return response;',
+      authInspection,
       '      await inspectApiResponse(response, { allowOpen: false });\n      return response;'
     );
 
@@ -118,7 +110,7 @@ async function patchVkConsentPersistence() {
 }
 
 async function bumpVkCache() {
-  let source = await fs.readFile(gatewayPath, 'utf8');
+  const source = await fs.readFile(gatewayPath, 'utf8');
   const next = source.replace(/vk-platform\.js\?v=[^"\\]+/g, `vk-platform.js?v=${cacheVersion}`);
   if (next === source && !source.includes(`vk-platform.js?v=${cacheVersion}`)) {
     throw new Error('VK platform cache reference was not found.');
