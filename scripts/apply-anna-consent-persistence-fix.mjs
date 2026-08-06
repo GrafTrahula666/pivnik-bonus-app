@@ -15,8 +15,8 @@ function patchFrameEntitlement(source) {
   const identityOnly = "  if (isAnnaRow(row)) return 'anna';";
   const persistedEntitlement = "  if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';";
   const identityOccurrences = source.split(identityOnly).length - 1;
-  if (identityOccurrences < 2) {
-    throw new Error(`Anna frame checks changed unexpectedly: ${identityOccurrences}.`);
+  if (identityOccurrences < 1) {
+    throw new Error('Anna frame identity check was not found.');
   }
 
   source = source.replaceAll(identityOnly, persistedEntitlement);
