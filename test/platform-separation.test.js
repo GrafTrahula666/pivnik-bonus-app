@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 
+// Release invariant: platforms are independent, while the leaderboard remains shared.
 const [pkgText, gateway, accountLink, app] = await Promise.all([
   fs.readFile(new URL('../package.json', import.meta.url), 'utf8'),
   fs.readFile(new URL('../universal-server.js', import.meta.url), 'utf8'),
