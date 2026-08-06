@@ -24,11 +24,29 @@ test('Удаление доступно без принятия правил и 
   const nextRoute = gateway.indexOf('\n    if (req.method', routeStart + 1);
   assert.ok(nextRoute > routeStart);
   const route = gateway.slice(routeStart, nextRoute);
-  assert.match(route, /deleteUnifiedAccount\(user\.id, body\.confirmation\)/);
+  assert.match(route, /platformFromRequest\(req, user\.payload\.platform \|\| 'unknown'\)/);
+  assert.match(route, /deletePlatformAccount\(user\.id, platform, user\.payload\.pid, body\.confirmation\)/);
   assert.doesNotMatch(route, /termsAccepted/);
+  assert.doesNotMatch(route, /deleteUnifiedAccount/);
 });
 
-test('Удалённая platform identity хранится только как keyed hash и блокирует повторные награды', async () => {
+test('Удаление старой связки затрагивает только текущую платформу', async () => {
+  const gateway = await source('universal-server.js');
+  const functionStart = gateway.indexOf('async function deletePlatformAccount(');
+  const functionEnd = gateway.indexOf('async function getUnifiedAdminUsers()', functionStart);
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+  const deletion = gateway.slice(functionStart, functionEnd);
+
+  assert.match(deletion, /providerUserId/);
+  assert.match(deletion, /remainingIdentities\.length/);
+  assert.match(deletion, /preservedOtherPlatform: true/);
+  assert.match(deletion, /DELETE FROM user_identities[\s\S]*provider = \$2[\s\S]*provider_user_id = \$3/);
+  assert.match(deletion, /INSERT INTO deleted_identity_tombstones/);
+  assert.match(deletion, /session_version = session_version \+ 1/);
+  assert.doesNotMatch(deletion, /DELETE FROM wallets[\s\S]{0,300}preservedOtherPlatform: true/);
+});
+
+test('Последняя identity удаляет весь профиль и сохраняет только keyed hash', async () => {
   const [gateway, migration] = await Promise.all([
     source('universal-server.js'),
     source('migrations/004_deleted_identity_tombstones.sql')
@@ -54,4 +72,6 @@ test('Удалённая platform identity хранится только как 
     gateway.indexOf('INSERT INTO deleted_identity_tombstones')
       < gateway.indexOf('DELETE FROM user_identities')
   );
+  assert.match(gateway, /preservedOtherPlatform: false/);
+  assert.match(gateway, /DELETE FROM wallets/);
 });
