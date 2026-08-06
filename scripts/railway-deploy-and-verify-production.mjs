@@ -171,13 +171,16 @@ function readinessFailures(telegram, vk) {
     if (!value?.legalConfigured) failures.push(`${name}: legal configuration is incomplete`);
     if (!value?.identityTombstoneSecretConfigured) failures.push(`${name}: tombstone secret is missing`);
     if (value?.releaseCommit !== COMMIT_SHA) failures.push(`${name}: release commit is ${value?.releaseCommit || 'missing'}`);
+    if (value?.accountMode !== 'separate') failures.push(`${name}: account mode is not separate`);
+    if (value?.unifiedAccounts !== false) failures.push(`${name}: unified accounts are still enabled`);
+    if (value?.linkCodes !== false) failures.push(`${name}: account link codes are still enabled`);
   }
   if (telegram?.databaseFingerprint !== vk?.databaseFingerprint) failures.push('VK and Telegram use different databases');
   if (telegram?.termsVersion !== vk?.termsVersion) failures.push('VK and Telegram expose different terms versions');
   return failures;
 }
 
-async function waitForUnifiedReadiness() {
+async function waitForSeparatedReadiness() {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
   let lastFailures = ['readiness has not been checked'];
   while (Date.now() < deadline) {
@@ -195,7 +198,7 @@ async function waitForUnifiedReadiness() {
     }
     await sleep(POLL_INTERVAL_MS);
   }
-  throw new Error(`Unified readiness timed out: ${lastFailures.join('; ')}`);
+  throw new Error(`Separated-account readiness timed out: ${lastFailures.join('; ')}`);
 }
 
 const schema = await deployMutationSchema();
@@ -206,10 +209,11 @@ for (const [name, service] of Object.entries(SERVICES)) {
 for (const [name, service] of Object.entries(SERVICES)) {
   await waitForDeployment(name, service.id, deploymentIds[name]);
 }
-const readiness = await waitForUnifiedReadiness();
+const readiness = await waitForSeparatedReadiness();
 
 console.log(JSON.stringify({
   ok: true,
+  accountMode: 'separate',
   releaseCommit: COMMIT_SHA,
   deployments: deploymentIds,
   databaseFingerprint: readiness.telegram.databaseFingerprint,
@@ -217,11 +221,13 @@ console.log(JSON.stringify({
   telegram: {
     ok: readiness.telegram.ok,
     environment: readiness.telegram.environment,
-    releaseCommit: readiness.telegram.releaseCommit
+    releaseCommit: readiness.telegram.releaseCommit,
+    accountMode: readiness.telegram.accountMode
   },
   vk: {
     ok: readiness.vk.ok,
     environment: readiness.vk.environment,
-    releaseCommit: readiness.vk.releaseCommit
+    releaseCommit: readiness.vk.releaseCommit,
+    accountMode: readiness.vk.accountMode
   }
 }, null, 2));

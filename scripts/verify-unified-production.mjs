@@ -15,9 +15,9 @@ export function compareReadiness(telegram, vk) {
   for (const [name, value] of [['Telegram', telegram], ['VK', vk]]) {
     if (!value?.ok) failures.push(`${name}: readiness endpoint is not ready`);
     if (!value?.databaseFingerprint) failures.push(`${name}: database fingerprint is missing`);
-    if (!value?.unifiedAccounts && value?.unifiedAccounts !== undefined) {
-      failures.push(`${name}: unified accounts are disabled`);
-    }
+    if (value?.accountMode !== 'separate') failures.push(`${name}: account mode is not separate`);
+    if (value?.unifiedAccounts !== false) failures.push(`${name}: unified accounts are still enabled`);
+    if (value?.linkCodes !== false) failures.push(`${name}: account link codes are still enabled`);
     if (value?.environment !== 'production') failures.push(`${name}: NODE_ENV is not production`);
     if (!value?.legalConfigured) failures.push(`${name}: legal configuration is incomplete`);
     if (!value?.identityTombstoneSecretConfigured) {
@@ -50,30 +50,29 @@ export function compareReadiness(telegram, vk) {
   return {
     ok: failures.length === 0,
     failures,
+    accountMode: 'separate',
     databaseFingerprint: telegram?.databaseFingerprint || vk?.databaseFingerprint || null,
     releaseCommit: telegram?.releaseCommit || vk?.releaseCommit || 'unknown',
     termsVersion: telegram?.termsVersion || vk?.termsVersion || null
   };
 }
 
-async function fetchReadiness(baseUrl, name) {
+async function fetchReadiness(baseUrl) {
   const response = await fetch(`${baseUrl}/api/release-readiness`, {
     headers: { accept: 'application/json' },
     signal: AbortSignal.timeout(10_000)
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok && !body?.ok) {
-    body.httpStatus = response.status;
-  }
+  if (!response.ok && !body?.ok) body.httpStatus = response.status;
   return body;
 }
 
-export async function verifyUnifiedProduction({ telegramUrl, vkUrl }) {
+export async function verifyPlatformSeparatedProduction({ telegramUrl, vkUrl }) {
   const telegramBase = normalizeBaseUrl(telegramUrl, 'TELEGRAM_APP_URL');
   const vkBase = normalizeBaseUrl(vkUrl, 'VK_APP_URL');
   const [telegram, vk] = await Promise.all([
-    fetchReadiness(telegramBase, 'Telegram'),
-    fetchReadiness(vkBase, 'VK')
+    fetchReadiness(telegramBase),
+    fetchReadiness(vkBase)
   ]);
   return {
     ...compareReadiness(telegram, vk),
@@ -82,8 +81,12 @@ export async function verifyUnifiedProduction({ telegramUrl, vkUrl }) {
   };
 }
 
+// Compatibility export for existing operational imports. The verification now
+// requires separate accounts while still requiring one production database.
+export const verifyUnifiedProduction = verifyPlatformSeparatedProduction;
+
 async function main() {
-  const result = await verifyUnifiedProduction({
+  const result = await verifyPlatformSeparatedProduction({
     telegramUrl: process.env.TELEGRAM_APP_URL,
     vkUrl: process.env.VK_APP_URL
   });
