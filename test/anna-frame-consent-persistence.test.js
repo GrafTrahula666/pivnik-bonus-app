@@ -5,19 +5,24 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('Anna personal frame remains an entitlement after role or identity changes', async () => {
-  const [gateway, server] = await Promise.all([
+  const [gateway, server, materializer, vladBootstrap] = await Promise.all([
     read('universal-server.js'),
-    read('server.js')
+    read('server.js'),
+    read('scripts/materialize-runtime-patches.mjs'),
+    read('bootstrap-vlad.js')
   ]);
+
   for (const source of [gateway, server]) {
     assert.match(source, /Anna frame entitlement and consent persistence hotfix 2026-08-06/);
     assert.match(source, /isAnnaRow\(row\) \|\| String\(row\?\.profile_frame \|\| row\?\.profileFrame \|\| ''\) === 'anna'/);
     assert.match(source, /if \(storedFrame === 'anna'\) return 'anna';/);
     assert.doesNotMatch(source, /if \(storedFrame === 'anna'\) return 'none';/);
     assert.match(source, /code: 'anna', title: 'Персональная рамка Анны'/);
-    assert.match(source, /storedFrame === 'olesya'/);
-    assert.match(source, /storedFrame === 'vladislav'/);
   }
+
+  // The Anna patch must not remove the independent personal-frame materializers.
+  assert.match(materializer, /storedFrame === 'olesya'/);
+  assert.match(vladBootstrap, /storedFrame === 'vladislav'/);
 });
 
 test('VK waits for canonical profile before reopening consent', async () => {
