@@ -11,9 +11,12 @@ test('Anna personal frame remains an entitlement after role or identity changes'
   ]);
   for (const source of [gateway, server]) {
     assert.match(source, /Anna frame entitlement and consent persistence hotfix 2026-08-06/);
-    assert.match(source, /isAnnaRow\(row\) \|\| storedFrame === 'anna'/);
+    assert.match(source, /isAnnaRow\(row\) \|\| String\(row\?\.profile_frame \|\| row\?\.profileFrame \|\| ''\) === 'anna'/);
+    assert.match(source, /if \(storedFrame === 'anna'\) return 'anna';/);
     assert.doesNotMatch(source, /if \(storedFrame === 'anna'\) return 'none';/);
     assert.match(source, /code: 'anna', title: 'Персональная рамка Анны'/);
+    assert.match(source, /storedFrame === 'olesya'/);
+    assert.match(source, /storedFrame === 'vladislav'/);
   }
 });
 
