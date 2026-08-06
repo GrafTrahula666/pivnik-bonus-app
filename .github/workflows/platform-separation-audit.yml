@@ -1,0 +1,63 @@
+name: Platform separation audit report
+
+on:
+  push:
+    branches:
+      - audit/platform-separation-release-20260807
+
+concurrency:
+  group: platform-separation-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Materialize release sources
+        run: npm run materialize
+
+      - name: Verify materialization is idempotent
+        run: npm run materialize
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+      - name: Report result to release PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$RESULT" = "success" ]; then
+            gh pr comment 18 --body "✅ Platform separation audit passed for commit \`$SHA\`: materialization twice, syntax, tests, production dependency audit and package verification are green."
+          else
+            gh pr comment 18 --body "❌ Platform separation audit failed for commit \`$SHA\`. Open the workflow run for the failed step; do not merge this PR."
+          fi
