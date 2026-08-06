@@ -16,8 +16,10 @@ const pkg = JSON.parse(pkgText);
 test('release materialization applies platform separation and safety', () => {
   assert.match(pkg.scripts.materialize, /apply-platform-separation\.mjs/);
   assert.match(pkg.scripts.materialize, /apply-platform-separation-safety\.mjs/);
+  assert.match(pkg.scripts.materialize, /apply-platform-profile-refresh\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-separation\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-separation-safety\.mjs/);
+  assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-profile-refresh\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/verify-platform-separation-production\.mjs/);
   assert.equal(pkg.scripts['verify:platform-separation'], 'node scripts/verify-platform-separation-production.mjs');
   assert.equal(pkg.scripts['verify:cross-platform'], undefined);
@@ -52,6 +54,11 @@ test('deletion is platform-specific and preserves the other legacy identity', ()
   assert.match(gateway, /preservedOtherPlatform: true/);
   assert.match(gateway, /deletePlatformAccount\(user\.id, platform, user\.payload\.pid, body\.confirmation\)/);
   assert.doesNotMatch(gateway, /await deleteUnifiedAccount\(user\.id, body\.confirmation\)/);
+});
+
+test('a surviving standalone platform refreshes its own profile fields', () => {
+  assert.match(gateway, /Separate platform profile refresh 2026-08-07/);
+  assert.match(gateway, /const shouldUpdateMainProfile = identityCountValue <= 1;/);
 });
 
 test('the shared Telegram and VK leaderboard remains available', () => {
