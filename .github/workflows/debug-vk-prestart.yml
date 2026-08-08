@@ -1,0 +1,57 @@
+name: Diagnose VK prestart
+
+on:
+  push:
+    branches:
+      - vk-mini-app-test
+    paths:
+      - .github/workflows/debug-vk-prestart.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: vk-mini-app-test
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Railway prestart chain and capture result
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@127.0.0.1:5432/dummy
+          SESSION_SECRET: 0123456789012345678901234567890123456789
+          NODE_ENV: test
+          PIVNIK_TEST_IMPORT: '1'
+        run: |
+          set +e
+          npm ci > /tmp/vk-prestart.log 2>&1
+          npm_ci_status=$?
+          if [ $npm_ci_status -eq 0 ]; then
+            START_CMD=$(node -e "const p=require('./package.json'); let s=p.scripts.start; s=s.replace(/ && node universal-server\\.js$/, ''); process.stdout.write(s)")
+            echo "START PRECHAIN: $START_CMD" >> /tmp/vk-prestart.log
+            bash -lc "$START_CMD" >> /tmp/vk-prestart.log 2>&1
+            chain_status=$?
+          else
+            chain_status=$npm_ci_status
+          fi
+          mkdir -p ops
+          {
+            echo "VK PRESTART DIAGNOSTIC"
+            echo "exit=$chain_status"
+            echo "date=$(date -u +%FT%TZ)"
+            echo "--- OUTPUT ---"
+            tail -n 500 /tmp/vk-prestart.log
+          } > ops/VK-PRESTART-DIAGNOSTIC.txt
+          git checkout -- index.html app.js server.js universal-server.js vk-platform.js styles.css 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ops/VK-PRESTART-DIAGNOSTIC.txt
+          git commit -m "chore(vk): record prestart diagnostic" || true
+          git push origin HEAD:vk-mini-app-test
+          exit 0
