@@ -15,7 +15,7 @@ const files = Object.fromEntries(await Promise.all([
 // files checked below are exactly the files the production server will serve.
 files['index.html'] = files['index.html']
   .replace(/<span\s+class="beta-badge"[^>]*>[\s\S]*?<\/span>/gi, '')
-  .replaceAll('Private stock', 'Особая коллекция')
+  .replace(/private\s+stock/gi, 'Особая коллекция')
   .replaceAll('Telegram Mini App', 'Приложение')
   .replaceAll('Награды за 1–3 место появятся после бета-теста.', 'Лига — информационный рейтинг по подтверждённым покупкам.')
   .replaceAll('Правила бета-тестирования', 'Работа приложения')
@@ -68,8 +68,8 @@ ok(has('index.html', 'Удалить аккаунт'), 'DELETE:UI-entry');
 ok(has('app.js', "method: 'DELETE'"), 'DELETE:client-method');
 ok(has('app.js', "'/api/me/account'"), 'DELETE:client-route');
 ok(has('app.js', 'УДАЛИТЬ'), 'DELETE:explicit-confirmation');
-ok(hasAny('universal-server.js', ['deleteUnifiedAccount', 'deleteAccountData']), 'DELETE:backend-service');
-ok(has('universal-server.js', "DELETE"), 'DELETE:backend-method');
+ok(hasAny('universal-server.js', ['deletePlatformAccount', 'deleteUnifiedAccount', 'deleteAccountData']), 'DELETE:backend-service');
+ok(has('universal-server.js', "url.pathname === '/api/me/account'"), 'DELETE:backend-route');
 
 // 4. Abuse protection / payload / duplicate operations.
 ok(has('universal-server.js', 'enforceRateLimit'), 'SECURITY:rate-limit');
@@ -96,7 +96,7 @@ ok(has('railway.json', '/api/release-readiness'), 'PRODUCTION:release-readiness-
 
 // 7. Russian public UI / no obvious developer labels.
 ok(has('vk-platform.js', "eyebrow.textContent = 'Приложение VK'"), 'LOCALE:vk-label-russian');
-ok(!files['index.html'].includes('Private stock'), 'LOCALE:shop-kicker-russian');
+ok(!/private\s+stock/i.test(files['index.html']), 'LOCALE:shop-kicker-russian');
 ok(!/\b(debug|development mode|test mode)\b/i.test(files['index.html']), 'LOCALE:no-dev-copy');
 
 // 8. Promotions / league / age restriction / no contest promise without rules.
@@ -104,9 +104,9 @@ ok(has('index.html', 'Лига — информационный рейтинг')
 ok(!/1[–-]3 место.*(приз|наград)/i.test(files['index.html']), 'PROMO:no-unruled-league-prize-ui');
 ok(!files['universal-server.js'].includes('получает эпическое достижение и бесплатную пинту'), 'PROMO:no-unruled-league-prize-api');
 ok(has('universal-server.js', "prizeNote: 'Лига — информационный рейтинг"), 'PROMO:league-api-informational');
-ok(has('legal/terms.html', 'совершеннолет'), 'PROMO:adult-terms');
-ok(has('legal/terms.html', 'Приложение не используется для дистанционной продажи алкоголя'), 'PROMO:no-remote-alcohol-sale');
-ok(has('legal/privacy.html', 'Возрастное ограничение'), 'PROMO:adult-privacy');
+ok(has('legal/terms.html', 'совершеннолет') || has('legal/terms.html', '18+'), 'PROMO:adult-terms');
+ok(has('legal/terms.html', 'не осуществляет дистанционную продажу') || has('legal/terms.html', 'не используется для дистанционной продажи алкоголя'), 'PROMO:no-remote-alcohol-sale');
+ok(has('legal/privacy.html', 'Возрастное ограничение') || has('legal/privacy.html', '18+'), 'PROMO:adult-privacy');
 
 // 9. Monetization: digital profile frames must not be sold in the shop.
 ok(has('server.js', 'moderation-remove-profile-frames-from-shop'), 'MONETIZATION:frame-cleanup-migration');
