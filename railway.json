@@ -2,10 +2,10 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm run check"
+    "buildCommand": "npm run check && npm run materialize && npm run materialize && node scripts/remove-public-profile-shop-items.mjs && node scripts/apply-vk-moderation-final-safe.mjs && node scripts/apply-vk-moderation-final-safe.mjs && node --check app.js && node --check vk-platform.js && node --check server.js && node --check universal-server.js && npm test"
   },
   "deploy": {
-    "startCommand": "PIVNIK_DOCUMENT_PLATFORM=vk npm start",
+    "startCommand": "PIVNIK_DOCUMENT_PLATFORM=vk node universal-server.js",
     "healthcheckPath": "/api/release-readiness",
     "healthcheckTimeout": 180,
     "restartPolicyType": "ON_FAILURE",
