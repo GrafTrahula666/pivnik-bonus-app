@@ -20,24 +20,6 @@ function replaceRequired(source, from, to, marker, label) {
   return source.replace(from, to);
 }
 
-function normalizeHealthAccountMode(source) {
-  const startMarker = "    if (req.method === 'GET' && url.pathname === '/api/health') {";
-  const endMarker = "    if (req.method === 'GET' && url.pathname === '/api/platform-health') {";
-  const start = source.indexOf(startMarker);
-  const end = start >= 0 ? source.indexOf(endMarker, start) : -1;
-  if (start < 0 || end < 0) throw new Error('Не найден health-регион platform-separation.');
-  let region = source.slice(start, end);
-  if (region.includes('accountMode: PLATFORM_ACCOUNT_MODE')) return source;
-  if (!region.includes('unifiedAccounts: true')) {
-    throw new Error('Не найден фрагмент platform-separation: health режим аккаунтов');
-  }
-  region = region.replace(
-    'unifiedAccounts: true',
-    'unifiedAccounts: false,\n        accountMode: PLATFORM_ACCOUNT_MODE'
-  );
-  return `${source.slice(0, start)}${region}${source.slice(end)}`;
-}
-
 let gateway = await read('universal-server.js');
 
 gateway = replaceRequired(
@@ -72,7 +54,13 @@ gateway = replaceRequired(
   'автоматическое объединение владельца'
 );
 
-gateway = normalizeHealthAccountMode(gateway);
+gateway = replaceRequired(
+  gateway,
+  `      return sendJson(res, 200, { ...health, ok: true, unifiedAccounts: true });`,
+  `      return sendJson(res, 200, { ...health, ok: true, unifiedAccounts: false, accountMode: PLATFORM_ACCOUNT_MODE });`,
+  `accountMode: PLATFORM_ACCOUNT_MODE });`,
+  'health режим аккаунтов'
+);
 
 gateway = replaceRequired(
   gateway,
@@ -147,7 +135,6 @@ const failures = [];
 if (!verification[0].includes(`const PLATFORM_ACCOUNT_MODE = 'separate';`)) failures.push('server mode marker');
 if (verification[0].includes(`if (!userId && isOwner && provider === 'vk' && ownerTelegramId)`)) failures.push('owner auto-link');
 if (!verification[0].includes(`linkCodes: false`)) failures.push('link API health');
-if (!verification[0].includes('accountMode: PLATFORM_ACCOUNT_MODE')) failures.push('health account mode');
 if (!verification[1].includes('Account linking is intentionally unavailable')) failures.push('link UI');
 if (!verification[2].includes('Возможное совпадение:')) failures.push('admin possible matches');
 if (failures.length) throw new Error(`Разделение платформ не завершено: ${failures.join(', ')}`);
