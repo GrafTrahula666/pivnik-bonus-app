@@ -5,8 +5,33 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const gatewayPath = path.join(root, 'universal-server.js');
 
+function semanticHardeningAlreadyApplied(source, label) {
+  if (label === 'database-aware health endpoint') {
+    return source.includes("url.pathname === '/api/health'")
+      && source.includes('databaseFingerprint')
+      && source.includes('publicReleaseMetadata()');
+  }
+  if (label === 'release readiness endpoint') {
+    return source.includes("url.pathname === '/api/release-readiness'")
+      && source.includes('legalConfigured')
+      && source.includes('identityTombstoneSecretConfigured')
+      && source.includes('publicReleaseMetadata()');
+  }
+  if (label === 'release readiness consent exemption') {
+    return source.includes("pathname === '/api/release-readiness'");
+  }
+  if (label === 'legal template routes') {
+    return source.includes("serveLegalDocument(res, path.join(__dirname, 'legal', 'privacy.html'))")
+      && source.includes("serveLegalDocument(res, path.join(__dirname, 'legal', 'terms.html'))");
+  }
+  if (label === 'database fingerprint initialization') {
+    return source.includes('await initPlatformDatabase();\n      await refreshDatabaseFingerprint();');
+  }
+  return false;
+}
+
 function replaceRequired(source, from, to, label) {
-  if (source.includes(to)) return source;
+  if (source.includes(to) || semanticHardeningAlreadyApplied(source, label)) return source;
   if (!source.includes(from)) {
     throw new Error(`Не найден production-hardening фрагмент: ${label}`);
   }
