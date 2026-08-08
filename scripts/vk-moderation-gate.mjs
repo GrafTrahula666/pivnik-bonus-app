@@ -23,10 +23,19 @@ files['index.html'] = files['index.html']
   .replaceAll('Версия документа: бета 0.4', 'Редакция правил: 08.08.2026')
   .replaceAll('Рабочая редакция для закрытого бета-теста, версия 0.4.', 'Действующая редакция правил программы лояльности от 08.08.2026.');
 
-files['vk-platform.js'] = files['vk-platform.js'].replaceAll("eyebrow.textContent = 'VK Mini App';", "eyebrow.textContent = 'Приложение VK';");
+files['vk-platform.js'] = files['vk-platform.js']
+  .replaceAll("eyebrow.textContent = 'VK Mini App';", "eyebrow.textContent = 'Приложение VK';");
+
+// Until a separate League season rules document with exact dates and prize
+// conditions exists, the backend must not advertise a contest prize.
+files['universal-server.js'] = files['universal-server.js'].replaceAll(
+  "prizeNote: 'После закрытия месяца участник на 1-м месте получает эпическое достижение и бесплатную пинту 0,5 л.',",
+  "prizeNote: 'Лига — информационный рейтинг по подтверждённой сумме покупок за текущий месяц.',"
+);
 
 await write('index.html', files['index.html']);
 await write('vk-platform.js', files['vk-platform.js']);
+await write('universal-server.js', files['universal-server.js']);
 
 const failures = [];
 const ok = (condition, label) => { if (!condition) failures.push(label); };
@@ -92,7 +101,9 @@ ok(!/\b(debug|development mode|test mode)\b/i.test(files['index.html']), 'LOCALE
 
 // 8. Promotions / league / age restriction / no contest promise without rules.
 ok(has('index.html', 'Лига — информационный рейтинг'), 'PROMO:league-informational');
-ok(!/1[–-]3 место.*(приз|наград)/i.test(files['index.html']), 'PROMO:no-unruled-league-prize');
+ok(!/1[–-]3 место.*(приз|наград)/i.test(files['index.html']), 'PROMO:no-unruled-league-prize-ui');
+ok(!files['universal-server.js'].includes('получает эпическое достижение и бесплатную пинту'), 'PROMO:no-unruled-league-prize-api');
+ok(has('universal-server.js', "prizeNote: 'Лига — информационный рейтинг"), 'PROMO:league-api-informational');
 ok(has('legal/terms.html', 'совершеннолет'), 'PROMO:adult-terms');
 ok(has('legal/terms.html', 'Приложение не используется для дистанционной продажи алкоголя'), 'PROMO:no-remote-alcohol-sale');
 ok(has('legal/privacy.html', 'Возрастное ограничение'), 'PROMO:adult-privacy');
@@ -121,6 +132,7 @@ ok(has('legal/privacy.html', 'не продаются рекламодателя
 ok(has('package.json', 'apply-public-release-copy.mjs'), 'CHAIN:public-release-copy');
 ok(has('package.json', 'apply-vk-moderation-hardening.mjs'), 'CHAIN:moderation-hardening');
 ok(has('package.json', 'apply-no-beta-public-guard.mjs'), 'CHAIN:no-beta-guard');
+ok(has('package.json', 'vk-moderation-gate.mjs'), 'CHAIN:moderation-gate');
 
 if (failures.length) {
   console.error('VK MODERATION GATE: FAIL');
