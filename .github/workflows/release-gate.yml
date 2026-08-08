@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - vk-mini-app-test
       - 'audit/**'
 
 concurrency:
@@ -44,6 +45,10 @@ jobs:
 
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
+
+      - name: Run VK moderation audit
+        if: github.ref == 'refs/heads/vk-mini-app-test'
+        run: npm run audit:vk-moderation
 
       - name: Run automated tests
         run: npm test
