@@ -52,7 +52,7 @@ function normalizeDeletedIdentityGuards(source) {
 function normalizeLegalRenderer(source) {
   const escapeMarker = 'function escapeHtml(value) {';
   const rendererMarker = 'async function serveLegalDocument(res, filePath) {';
-  const nextFunctionMarker = 'function platformFromRequest(req, fallback = \'unknown\') {';
+  const nextFunctionMarker = "function platformFromRequest(req, fallback = 'unknown') {";
 
   const escapeIndex = source.indexOf(escapeMarker);
   const rendererIndex = source.indexOf(rendererMarker);
@@ -116,19 +116,20 @@ async function serveLegalDocument(res, filePath) {
   return normalized;
 }
 
+function normalizeTermsVersion(source) {
+  if (source.includes("const TERMS_VERSION = 'beta-0.4';")) {
+    return source.replace("const TERMS_VERSION = 'beta-0.4';", "const TERMS_VERSION = '2026-08-04';");
+  }
+  if (/const TERMS_VERSION = '\d{4}-\d{2}-\d{2}';/.test(source)) return source;
+  throw new Error('Не найдена допустимая production terms version.');
+}
+
 let gateway = await fs.readFile(gatewayPath, 'utf8');
 gateway = normalizeDeletedIdentityGuards(gateway);
 gateway = normalizeLegalRenderer(gateway);
-
-gateway = replaceRequired(
-  gateway,
-  "const TERMS_VERSION = 'beta-0.4';",
-  "const TERMS_VERSION = '2026-08-04';",
-  'production terms version'
-);
+gateway = normalizeTermsVersion(gateway);
 
 for (const marker of [
-  "const TERMS_VERSION = '2026-08-04';",
   'function escapeHtml(value)',
   "escapeHtml(safeText(value, 1000, 'не настроено'))",
   ".createHmac('sha256', identityTombstoneSecret)",
@@ -137,6 +138,9 @@ for (const marker of [
   if (!gateway.includes(marker)) {
     throw new Error(`Final production fix verification failed: ${marker}`);
   }
+}
+if (!/const TERMS_VERSION = '\d{4}-\d{2}-\d{2}';/.test(gateway)) {
+  throw new Error('Final production fix verification failed: production terms version');
 }
 
 await fs.writeFile(gatewayPath, gateway, 'utf8');

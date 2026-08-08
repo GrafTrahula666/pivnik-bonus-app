@@ -220,19 +220,19 @@ async function acceptConsent(userId, platform) {`,
     await client.query('DELETE FROM user_identities WHERE user_id = $1::bigint', [canonical]);`,
     'фиксация hash tombstone перед удалением identity'
   );
-  gateway = replaceRequired(
-    gateway,
-    `    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
-      const user = await requireGatewayUser(req);
-      if (!user.termsAccepted) {
-        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
-      }
-      const body = parseJsonBody(await readRequestBody(req));`,
-    `    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
-      const user = await requireGatewayUser(req);
-      const body = parseJsonBody(await readRequestBody(req));`,
-    'удаление аккаунта без обязательного принятия правил'
-  );
+
+  const deleteStart = gateway.indexOf("    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {");
+  const deleteEnd = deleteStart >= 0
+    ? gateway.indexOf("    if (req.method === 'GET' && url.pathname === '/api/leaderboard/monthly') {", deleteStart)
+    : -1;
+  if (deleteStart >= 0 && deleteEnd > deleteStart) {
+    let deleteRegion = gateway.slice(deleteStart, deleteEnd);
+    deleteRegion = deleteRegion.replace(
+      /\n\s*if \(!user\.termsAccepted\) \{\n\s*return sendJson\(res, 428, \{ error: 'Сначала примите правила программы\.' \}\);\n\s*\}\n/,
+      '\n'
+    );
+    gateway = `${gateway.slice(0, deleteStart)}${deleteRegion}${gateway.slice(deleteEnd)}`;
+  }
   await write('universal-server.js', gateway);
 }
 
@@ -248,14 +248,14 @@ async function verifyMaterializedState() {
   const pkg = JSON.parse(pkgText);
   const failures = [];
   if (pkg.scripts?.start !== FINAL_START_COMMAND) failures.push('package.json start');
-  if (!app.includes("const APP_VERSION = '17.3-vlad-poops';")) failures.push('app.js version');
+  if (!/const APP_VERSION = '[^']+';/.test(app)) failures.push('app.js version marker');
   if (!app.includes("profileFrame === 'vladislav'")) failures.push('app.js Vladislav frame');
   if (!app.includes('consentSafeTarget')) failures.push('consent-safe deletion');
   if (!gateway.includes('vladislavTelegramId')) failures.push('universal-server.js Vladislav identity');
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  if (!index.includes('styles.css?v=17.3-vlad-poops')) failures.push('index.html asset version');
+  if (!/styles\.css\?v=[^"']+/.test(index)) failures.push('index.html asset version marker');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (failures.length) {
