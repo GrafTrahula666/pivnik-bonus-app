@@ -5,7 +5,7 @@
     "buildCommand": "npm run check"
   },
   "deploy": {
-    "startCommand": "PIVNIK_DOCUMENT_PLATFORM=vk node universal-server.js",
+    "startCommand": "PIVNIK_DOCUMENT_PLATFORM=vk npm start",
     "healthcheckPath": "/api/release-readiness",
     "healthcheckTimeout": 180,
     "restartPolicyType": "ON_FAILURE",
