@@ -89,7 +89,7 @@ await write('universal-server.js', gateway);
 
 let server = await read('server.js');
 server = server.replace(/const TERMS_VERSION = '[^']+';/, `const TERMS_VERSION = '${termsVersion}';`);
-server = server.replace("app.use(express.json({ limit: '1mb' }));", "app.use(express.json({ limit: '4mb' }));
+server = server.replace("app.use(express.json({ limit: '1mb' }));", "app.use(express.json({ limit: '4mb' }));");
 server = all(server, "title: 'Тестировщик',", "title: 'Пионер Пивника',");
 server = all(server, 'Легендарное достижение первых 30 участников закрытого бета-теста «Пивника».', 'Легендарное достижение первых 30 участников «Пивника».');
 server = all(server, 'Легендарное достижение «Тестировщик»', 'Легендарное достижение «Пионер Пивника»');
