@@ -25,6 +25,15 @@ function replaceRequired(source, from, to, label) {
   return source.replace(from, to);
 }
 
+function replaceRegion(source, startText, endText, transform, label) {
+  const start = source.indexOf(startText);
+  if (start < 0) throw new Error(`Не найдено начало final-moderation региона: ${label}`);
+  const end = source.indexOf(endText, start + startText.length);
+  if (end < 0) throw new Error(`Не найден конец final-moderation региона: ${label}`);
+  const region = source.slice(start, end);
+  return `${source.slice(0, start)}${transform(region)}${source.slice(end)}`;
+}
+
 async function patchIndex() {
   let index = await read('index.html');
 
@@ -94,9 +103,32 @@ async function patchGateway() {
     );
   }
 
-  gateway = gateway.replace(
-    `    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {\n      const user = await requireGatewayUser(req);\n      if (!user.termsAccepted) {\n        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });\n      }\n      const body = parseJsonBody(await readRequestBody(req));\n      return sendJson(res, 200, await deleteUnifiedAccount(user.id, body.confirmation));\n    }`,
-    `    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {\n      const user = await requireGatewayUser(req);\n      enforceRateLimit(\`delete-account:\${user.id}:\${requestAddress(req)}\`, 5, 10 * 60 * 1000);\n      const body = parseJsonBody(await readRequestBody(req));\n      return sendJson(res, 200, await deleteUnifiedAccount(user.id, body.confirmation));\n    }`
+  // The platform-separation materializer rewrites this route before this pass.
+  // Normalize the whole route rather than matching one historical implementation.
+  gateway = replaceRegion(
+    gateway,
+    "    if (req.method === 'DELETE' && url.pathname === '/api/me/account') {",
+    "    if (req.method === 'GET' && url.pathname === '/api/leaderboard/monthly') {",
+    (region) => {
+      let normalized = region.replace(
+        /\n\s*if \(!user\.termsAccepted\) \{\n\s*return sendJson\(res, 428, \{ error: 'Сначала примите правила программы\.' \}\);\n\s*\}\n/,
+        '\n'
+      );
+      if (!normalized.includes('delete-account:')) {
+        normalized = normalized.replace(
+          '      const user = await requireGatewayUser(req);',
+          "      const user = await requireGatewayUser(req);\n      enforceRateLimit(`delete-account:${user.id}:${requestAddress(req)}`, 5, 10 * 60 * 1000);"
+        );
+      }
+      if (normalized.includes('termsAccepted')) {
+        throw new Error('Terms gate остался в маршруте удаления аккаунта.');
+      }
+      if (!normalized.includes('deletePlatformAccount') && !normalized.includes('deleteUnifiedAccount')) {
+        throw new Error('Backend удаления аккаунта не найден после нормализации.');
+      }
+      return normalized;
+    },
+    'маршрут удаления аккаунта'
   );
 
   if (!gateway.includes(`// ${marker}: general API abuse protection`)) {
