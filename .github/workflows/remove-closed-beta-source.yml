@@ -1,0 +1,73 @@
+name: Remove closed beta label from VK source
+
+on:
+  push:
+    branches:
+      - vk-mini-app-test
+    paths:
+      - .github/workflows/remove-closed-beta-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remove-label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: vk-mini-app-test
+          fetch-depth: 0
+
+      - name: Delete closed beta label from source
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          index_path = Path('index.html')
+          app_path = Path('app.js')
+
+          index = index_path.read_text(encoding='utf-8')
+          index = index.replace('<span class="beta-badge">закрытая бета</span>', '')
+          index = index.replace('<span class="beta-badge">ЗАКРЫТАЯ БЕТА</span>', '')
+          index = re.sub(r'styles\.css\?v=[^"\']+', 'styles.css?v=17.7-no-beta-source', index)
+          index = re.sub(r'app\.js\?v=[^"\']+', 'app.js?v=17.7-no-beta-source', index)
+          index_path.write_text(index, encoding='utf-8')
+
+          app = app_path.read_text(encoding='utf-8')
+          app = re.sub(
+              r"\s*line\.insertAdjacentHTML\('beforeend',\s*'<span class=\"beta-badge\">закрытая бета</span>'\);",
+              '',
+              app,
+          )
+          app = re.sub(
+              r"\s*line\.insertAdjacentHTML\('beforeend',\s*'<span class=\"beta-badge\">ЗАКРЫТАЯ БЕТА</span>'\);",
+              '',
+              app,
+          )
+          app_path.write_text(app, encoding='utf-8')
+
+          final_index = index_path.read_text(encoding='utf-8')
+          final_app = app_path.read_text(encoding='utf-8')
+          forbidden = ['закрытая бета', 'ЗАКРЫТАЯ БЕТА']
+          if any(x in final_index for x in forbidden):
+              raise SystemExit('closed beta label is still present in index.html')
+          if 'beta-badge">закрытая бета' in final_app or 'beta-badge">ЗАКРЫТАЯ БЕТА' in final_app:
+              raise SystemExit('closed beta label creator is still present in app.js')
+          print('Closed beta label physically removed from index.html and app.js')
+          PY
+
+      - name: Commit source deletion
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html app.js; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html app.js
+          git commit -m "fix(vk): delete closed beta label from source"
+          git push origin HEAD:vk-mini-app-test
