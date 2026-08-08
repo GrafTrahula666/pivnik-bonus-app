@@ -1,0 +1,1 @@
+Fixed-base moderation CI marker for PR #24. Do not merge this diagnostic file into production; remove before final merge.
