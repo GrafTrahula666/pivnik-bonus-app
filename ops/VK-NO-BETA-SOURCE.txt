@@ -1,5 +1,6 @@
 VK moderation source state: CLOSED BETA LABEL REMOVED
 Date: 2026-08-08
 index.html: beta badge element physically deleted
-app.js: legacy beta badge insertion physically deleted
-Static cache: 17.7-no-beta-source
+app.js: restored to last working source version
+Static cache: 17.8-no-beta-direct
+Fix scope: direct HTML deletion only
