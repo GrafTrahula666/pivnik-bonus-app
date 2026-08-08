@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const marker = 'VK moderation hardening 2026-08-07';
 const startupMarker = 'VK deterministic startup hardening 2026-08-07';
-const cacheVersion = '3.3.0-vk-startup-stable';
+const vkBridgeCacheVersion = '3.3.0-vk-startup-stable';
 const removedShopFrameCodes = ['frame-money-owner', 'frame-fire-partner', 'frame-diamond'];
 
 async function read(relativePath) {
@@ -147,8 +147,9 @@ async function patchGateway() {
   let gateway = await read('universal-server.js');
   gateway = gateway.replace(/const MAX_BODY_BYTES = [^;]+;/, 'const MAX_BODY_BYTES = 4 * 1024 * 1024;');
   gateway = gateway.replace(/const TERMS_VERSION = '[^']+';/, "const TERMS_VERSION = '2026-08-07';");
-  gateway = gateway.replace(/vk-platform\.js\?v=[^"\\]+/g, `vk-platform.js?v=${cacheVersion}`);
-  gateway = gateway.replace(/app\.js\?v=[^"\\]+/g, `app.js?v=${cacheVersion}`);
+  gateway = gateway.replace(/vk-platform\.js\?v=[^"\\]+/g, `vk-platform.js?v=${vkBridgeCacheVersion}`);
+  // app.js is versioned in index.html by the public-release pass. Do not overwrite
+  // that independently here: doing so made the two release guards fight each other.
   await write('universal-server.js', gateway);
 }
 
@@ -198,8 +199,8 @@ if (vk.includes("document.getElementById('refreshButton')?.click()")) failures.p
 if (!loader.includes('.boot-screen.hidden {\n  display: none !important;')) failures.push('loader hard hide');
 if (!gateway.includes('const MAX_BODY_BYTES = 4 * 1024 * 1024;')) failures.push('gateway body limit');
 if (!gateway.includes("const TERMS_VERSION = '2026-08-07';")) failures.push('gateway terms version');
-if (!gateway.includes(`vk-platform.js?v=${cacheVersion}`)) failures.push('VK cache version');
-if (!gateway.includes(`app.js?v=${cacheVersion}`)) failures.push('app cache version');
+if (!gateway.includes(`vk-platform.js?v=${vkBridgeCacheVersion}`)) failures.push('VK cache version');
+if (!/app\.js\?v=[^"']+/.test(index)) failures.push('app cache busting');
 if (!server.includes("express.json({ limit: '4mb' })")) failures.push('server body limit');
 if (!server.includes('moderation-remove-profile-frames-from-shop')) failures.push('shop frame cleanup');
 for (const code of removedShopFrameCodes) {
