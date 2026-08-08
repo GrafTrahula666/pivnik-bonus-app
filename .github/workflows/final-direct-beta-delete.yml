@@ -1,0 +1,41 @@
+name: Final direct beta deletion
+
+on:
+  push:
+    branches:
+      - vk-mini-app-test
+    paths:
+      - .github/workflows/final-direct-beta-delete.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: vk-mini-app-test
+          fetch-depth: 0
+      - name: Keep original cache versions and delete only badge
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('<span class="beta-badge">закрытая бета</span>', '')
+          s = s.replace('<span class="beta-badge">ЗАКРЫТАЯ БЕТА</span>', '')
+          s = re.sub(r'styles\.css\?v=[^"\']+', 'styles.css?v=17.0-luxury-vip-space', s)
+          s = re.sub(r'app\.js\?v=[^"\']+', 'app.js?v=17.0-luxury-vip-space', s)
+          p.write_text(s, encoding='utf-8')
+          if 'закрытая бета' in s.lower() or 'class="beta-badge"' in s:
+              raise SystemExit('beta badge still present')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "fix(vk): delete closed beta badge only" || true
+          git push origin HEAD:vk-mini-app-test
