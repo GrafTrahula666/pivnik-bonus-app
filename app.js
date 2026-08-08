@@ -325,7 +325,6 @@ function enhanceDom() {
         line.className = 'brand-line';
         title.before(line);
         line.append(title);
-        line.insertAdjacentHTML('beforeend', '<span class="beta-badge">закрытая бета</span>');
       }
     }
   }
