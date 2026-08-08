@@ -6,6 +6,12 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
+function assertVkPlatformScript(html) {
+  assert.match(html, /\/vk-platform\.js\?v=[^"']+/);
+  assert.doesNotMatch(html, /\/vk-platform\.js\?v=3\.2\.1-consent-gate/,
+    'VK production must not be pinned to the stale pre-release cache key');
+}
+
 test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
   const {
     documentSecurityHeaders,
@@ -23,9 +29,10 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js\?v=3\.2\.1-consent-gate/);
+  assertVkPlatformScript(vk);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
+  assert.doesNotMatch(vk, /закрытая бета|ЗАКРЫТАЯ БЕТА/i);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
@@ -116,8 +123,9 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
 
     assert.equal(platform, 'vk');
     assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-    assert.match(html, /\/vk-platform\.js\?v=3\.2\.1-consent-gate/);
+    assertVkPlatformScript(html);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
+    assert.doesNotMatch(html, /закрытая бета|ЗАКРЫТАЯ БЕТА/i);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;
     else process.env.PIVNIK_DOCUMENT_PLATFORM = previous;
