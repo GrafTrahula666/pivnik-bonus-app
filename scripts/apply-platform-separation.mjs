@@ -56,17 +56,17 @@ gateway = replaceRequired(
 
 gateway = replaceRequired(
   gateway,
-  `      return sendJson(res, 200, { ...health, ok: true, unifiedAccounts: true });`,
-  `      return sendJson(res, 200, { ...health, ok: true, unifiedAccounts: false, accountMode: PLATFORM_ACCOUNT_MODE });`,
-  `accountMode: PLATFORM_ACCOUNT_MODE });`,
+  `      return sendJson(res, 200, {\n        ...health,\n        ok: true,\n        unifiedAccounts: true,\n        ...publicReleaseMetadata()\n      });`,
+  `      return sendJson(res, 200, {\n        ...health,\n        ok: true,\n        unifiedAccounts: false,\n        accountMode: PLATFORM_ACCOUNT_MODE,\n        ...publicReleaseMetadata()\n      });`,
+  `unifiedAccounts: false,\n        accountMode: PLATFORM_ACCOUNT_MODE,\n        ...publicReleaseMetadata()`,
   'health режим аккаунтов'
 );
 
 gateway = replaceRequired(
   gateway,
-  `        unifiedAccounts: true,\n        linkCodes: true,`,
-  `        unifiedAccounts: false,\n        linkCodes: false,\n        accountMode: PLATFORM_ACCOUNT_MODE,`,
-  `linkCodes: false,\n        accountMode: PLATFORM_ACCOUNT_MODE,`,
+  `        unifiedAccounts: true,\n        linkCodes: true,\n        bar: BAR_CODE,`,
+  `        unifiedAccounts: false,\n        linkCodes: false,\n        accountMode: PLATFORM_ACCOUNT_MODE,\n        bar: BAR_CODE,`,
+  `linkCodes: false,\n        accountMode: PLATFORM_ACCOUNT_MODE,\n        bar: BAR_CODE,`,
   'platform-health режим аккаунтов'
 );
 
