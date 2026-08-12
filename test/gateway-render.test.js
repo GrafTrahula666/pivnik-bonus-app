@@ -23,7 +23,7 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js\?v=3\.2\.1-consent-gate/);
+  assert.match(vk, /\/vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
 
@@ -116,7 +116,7 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
 
     assert.equal(platform, 'vk');
     assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-    assert.match(html, /\/vk-platform\.js\?v=3\.2\.1-consent-gate/);
+    assert.match(html, /\/vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;
