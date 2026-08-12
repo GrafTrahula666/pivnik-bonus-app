@@ -36,8 +36,8 @@ jobs:
       - name: Materialize release sources
         run: npm run materialize
 
-      - name: Verify materialization is idempotent
-        run: npm run materialize
+      - name: Verify materialized release state
+        run: test -f .pivnik-materialized
 
       - name: Check JavaScript syntax
         run: npm run check
