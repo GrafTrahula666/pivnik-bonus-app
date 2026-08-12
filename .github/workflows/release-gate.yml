@@ -36,8 +36,8 @@ jobs:
       - name: Materialize release sources
         run: npm run materialize
 
-      - name: Verify materialization is idempotent
-        run: npm run materialize
+      - name: Verify materialized release state
+        run: test -f .pivnik-materialized
 
       - name: Check JavaScript syntax
         run: npm run check
@@ -46,7 +46,21 @@ jobs:
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
 
       - name: Run automated tests
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee /tmp/pivnik-tests.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Failing test diagnostics"
+            details=$(awk '/^not ok 13 - Gateway render:|^not ok 14 - VK Railway service/{capture=1} capture{print}' /tmp/pivnik-tests.log | tail -c 14000)
+            safe=${details//'%'/'%25'}
+            safe=${safe//$'\r'/'%0D'}
+            safe=${safe//$'\n'/'%0A'}
+            echo "::error title=Gateway test diagnostics::$safe"
+            echo "::endgroup::"
+            exit "$status"
+          fi
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

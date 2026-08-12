@@ -98,8 +98,8 @@ test('Объединение блокирует строки, переносит
   assert.match(gateway, /verifiedLedgerBalance !== finalBalance/);
   assert.match(gateway, /account_merge_audit/);
   assert.doesNotMatch(gateway, /анна берман|аня берман|берман анна/i);
-  assert.match(gateway, /if \(storedFrame === 'anna'\) return 'none'/);
-  assert.match(server, /if \(storedFrame === 'anna'\) return 'none'/);
+  assert.match(gateway, /if \(storedFrame === 'anna'\) return 'anna'/);
+  assert.match(server, /if \(storedFrame === 'anna'\) return 'anna'/);
 });
 
 test('Все изменяющие бонусы маршруты используют requestKey и advisory lock', async () => {
@@ -233,7 +233,8 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(app, /async function hydrateAfterBoot\(\)[\s\S]*?\/api\/me[\s\S]*?loadSecondaryData\(\)/);
   assert.match(app, /const jobs = \[[^\]]*loadAchievements\(\)/);
   assert.match(app, /pivnik:boot-complete/);
-  assert.match(accountLink, /addEventListener\('pivnik:boot-complete'/);
+  assert.match(accountLink, /Account linking is intentionally unavailable/);
+  assert.doesNotMatch(accountLink, /addEventListener\('pivnik:boot-complete'/);
   assert.doesNotMatch(accountLink, /setTimeout\(\(\) => void loadStatus\(\), 1500\)/);
   assert.match(gateway, /getAppPayload\(userId, provider, \{ startup: true \}\)/);
   assert.match(gateway, /startup\s*\?\s*\[\s*0,\s*\{ earned: \[\], unannounced: \[\] \}/);
@@ -259,9 +260,9 @@ test('Первый вход не открывает цепочку модало�
   assert.match(app, /if \(close\) close\.classList\.remove\('hidden'\)/);
   assert.doesNotMatch(bootSource, /openProfileSetup\(1\)/);
   assert.doesNotMatch(acceptTermsSource, /openProfileSetup\(1\)/);
-  assert.match(railway, /"startCommand": "npm start"/);
-  assert.doesNotMatch(railway, /PIVNIK_DOCUMENT_PLATFORM=vk/);
+  assert.match(railway, /"startCommand": "PIVNIK_DOCUMENT_PLATFORM=vk npm start"/);
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
+  assert.match(gateway, /\['GET', 'HEAD'\]\.includes\(req\.method\)[\s\S]{0,80}documentPlatform/);
 });
 
 test('Luxury VIP Space сохраняет клиентскую навигацию, реальные данные и видимый космос', async () => {
@@ -290,4 +291,17 @@ test('Luxury VIP Space сохраняет клиентскую навигаци�
   assert.match(server, /app\.delete\('\/api\/me\/account'/);
   assert.match(gateway, /url\.pathname === '\/api\/me\/account'/);
   assert.match(deletionMigration, /deleted_at TIMESTAMPTZ/);
+});
+
+test('VK public UI excludes alcohol promotion and remote catalogue surfaces', async () => {
+  const [styles, gateway] = await Promise.all([
+    source('styles.css'),
+    source('universal-server.js')
+  ]);
+  assert.match(gateway, /<html lang="ru" class="vk-mini-app">/);
+  assert.match(styles, /\.vk-mini-app #beerLoyaltyCard[\s\S]*?display: none !important/);
+  assert.match(styles, /\.vk-mini-app #openShopButton/);
+  assert.match(styles, /\.vk-mini-app #openPromosButton/);
+  assert.match(styles, /\.vk-mini-app \[data-screen="actions"\]/);
+  assert.match(styles, /\.vk-mini-app #shopModal/);
 });

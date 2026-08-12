@@ -125,6 +125,39 @@
     return launchParams;
   }
 
+  // VK moderation hardening 2026-08-07. Explicitly handle VK lifecycle events. View restore only
+  // emits an application event: it must never click UI controls during boot.
+  let bridgeLifecycleInstalled = false;
+  let lastViewRestoreAt = 0;
+
+  function installBridgeLifecycle() {
+    if (bridgeLifecycleInstalled || !bridge?.subscribe) return;
+    bridgeLifecycleInstalled = true;
+    bridge.subscribe((event) => {
+      const type = String(event?.detail?.type || '');
+      if (type === 'VKWebAppViewHide') {
+        document.documentElement.classList.add('vk-view-hidden');
+        return;
+      }
+      if (type === 'VKWebAppViewRestore') {
+        document.documentElement.classList.remove('vk-view-hidden');
+        syncVisualViewport();
+        const now = Date.now();
+        if (now - lastViewRestoreAt > 1000) {
+          lastViewRestoreAt = now;
+          window.dispatchEvent(new CustomEvent('pivnik:vk-view-restore'));
+        }
+        return;
+      }
+      if (type === 'VKWebAppUpdateConfig') {
+        syncVisualViewport();
+        window.dispatchEvent(new CustomEvent('pivnik:vk-config-updated', { detail: event?.detail?.data || {} }));
+      }
+    });
+  }
+
+  void bridgeReady.then(() => installBridgeLifecycle()).catch(() => {});
+
   const profileReady = (async () => {
     await bridgeReady;
     if (!bridge?.send) return null;
@@ -224,12 +257,21 @@
     else stopConsentGate();
   }
 
-  async function inspectApiResponse(response) {
+  async function inspectApiResponse(response, { allowOpen = true } = {}) {
     try {
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) return;
       const data = await response.clone().json();
-      if (data?.profile) updateConsentState(data.profile);
+      if (!data?.profile) return;
+
+      // Anna frame entitlement and consent persistence hotfix 2026-08-06. A returning VK user can receive a transient auth payload
+      // before the canonical /api/me profile is hydrated. A transient false
+      // must never reopen the terms window after the server already persisted consent.
+      if (data.profile.termsAccepted === true) {
+        updateConsentState(data.profile);
+      } else if (allowOpen) {
+        updateConsentState(data.profile);
+      }
     } catch (_) {}
   }
 
@@ -260,7 +302,7 @@
           response = await sendAuth(refreshedLaunchParams);
         }
       }
-      void inspectApiResponse(response);
+      await inspectApiResponse(response, { allowOpen: false });
       return response;
     }
 
@@ -270,8 +312,11 @@
 
     const response = await originalFetch(input, init);
     if (pathname === '/api/me' || pathname === '/api/me/consent') {
-      void inspectApiResponse(response);
-      if (pathname === '/api/me/consent') consentExplicit = false;
+      try {
+        await inspectApiResponse(response, { allowOpen: true });
+      } finally {
+        if (pathname === '/api/me/consent') consentExplicit = false;
+      }
     }
     return response;
   };
@@ -281,9 +326,25 @@
     const modal = document.getElementById('consentModal');
     const shell = document.getElementById('appShell');
     if (!modal || shell?.classList.contains('hidden')) return;
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
+
+    // VK consent gate idempotency hotfix. MutationObserver watches these exact attributes, so writing
+    // the same values repeatedly can create an endless microtask loop in VK iOS.
+    const alreadyOpen = modal.classList.contains('open')
+      && modal.getAttribute('aria-hidden') === 'false'
+      && document.body.classList.contains('modal-open');
+    if (!alreadyOpen) {
+      modal.classList.add('open');
+      if (modal.getAttribute('aria-hidden') !== 'false') {
+        modal.setAttribute('aria-hidden', 'false');
+      }
+      document.body.classList.add('modal-open');
+    }
+
+    // The app-level consent guard continues to protect every action. The
+    // observer is only needed to open the first gate and must not observe its
+    // own mutations indefinitely.
+    consentObserver?.disconnect();
+    consentObserver = null;
   }
 
   function scheduleConsentGate() {
@@ -307,7 +368,7 @@
 
   function applyVkLabels() {
     const eyebrow = document.getElementById('eyebrow');
-    if (eyebrow) eyebrow.textContent = 'VK Mini App';
+    if (eyebrow) eyebrow.textContent = 'Приложение VK';
     const scannerHint = document.getElementById('scannerPlatformHint');
     if (scannerHint) scannerHint.textContent = 'Откроется штатный сканер VK';
     const clearStaff = document.getElementById('clearStaffButton');

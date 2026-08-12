@@ -7,13 +7,13 @@ const file = path.join(root, 'server.js');
 let source = await fs.readFile(file, 'utf8');
 
 source = source.replace(
-  /^\s*\{ code: 'frame-money-owner',[^\n]*\},\n?/m,
+  /^\s*\{ code: 'frame-money-owner',[^\n]*\},?\n?/m,
   ''
 ).replace(
-  /^\s*\{ code: 'frame-fire-partner',[^\n]*\},\n?/m,
+  /^\s*\{ code: 'frame-fire-partner',[^\n]*\},?\n?/m,
   ''
 ).replace(
-  /^\s*\{ code: 'frame-diamond',[^\n]*\},\n?/m,
+  /^\s*\{ code: 'frame-diamond',[^\n]*\},?\n?/m,
   ''
 );
 

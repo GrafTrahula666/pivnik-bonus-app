@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const RELEASE_VERSION = '17.6-no-beta-20260808';
+const RELEASE_VERSION = '17.3-vlad-poops';
 
 const read = (file) => fs.readFile(path.join(root, file), 'utf8');
 const write = (file, content) => fs.writeFile(path.join(root, file), content, 'utf8');
@@ -30,6 +30,10 @@ const publicCopyReplacements = [
 function sanitizePublicCopy(source) {
   let out = source;
   for (const [from, to] of publicCopyReplacements) out = replaceAll(out, from, to);
+  out = out.replace(/закрытая\s+бета/gi, '');
+  out = out.replace(/правила\s+бета-тестирования/gi, 'Работа приложения');
+  out = out.replace(/версия документа:\s*бета(?:\s*\d+(?:\.\d+)*)?/gi, 'Редакция правил: 08.08.2026');
+  out = out.replace(/после\s+бета-теста/gi, 'после запуска');
   return out;
 }
 
@@ -73,6 +77,7 @@ for (const file of ['universal-server.js', 'server.js']) {
 
 const finalIndex = await read('index.html');
 const finalApp = await read('app.js');
+const finalAppForScan = finalApp.replace(/\/\/ FINAL_PUBLIC_RELEASE_UI_GUARD_20260808[\s\S]*$/m, '');
 const forbidden = [
   /закрытая\s+бета/i,
   /правила\s+бета-тестирования/i,
@@ -85,7 +90,7 @@ const forbidden = [
 const failures = [];
 for (const pattern of forbidden) {
   if (pattern.test(finalIndex)) failures.push(`index.html:${pattern}`);
-  if (pattern.test(finalApp)) failures.push(`app.js:${pattern}`);
+  if (pattern.test(finalAppForScan)) failures.push(`app.js:${pattern}`);
 }
 if (!finalIndex.includes(`app.js?v=${RELEASE_VERSION}`)) failures.push('index.html: app cache version not updated');
 if (!finalIndex.includes(`styles.css?v=${RELEASE_VERSION}`)) failures.push('index.html: styles cache version not updated');

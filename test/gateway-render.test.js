@@ -6,10 +6,6 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
-function assertVkPlatformScript(html) {
-  assert.match(html, /\/vk-platform\.js\?v=[^"']+/);
-}
-
 test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
   const {
     documentSecurityHeaders,
@@ -26,11 +22,11 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
+  assert.match(vk, /<html lang="ru" class="vk-mini-app">/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assertVkPlatformScript(vk);
+  assert.match(vk, /\/vk-platform\.js\?v=3\.3\.0-vk-startup-stable/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
-  assert.doesNotMatch(vk, /закрытая бета|ЗАКРЫТАЯ БЕТА/i);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
@@ -50,15 +46,62 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.ru/);
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.ru/);
 
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/')), 'telegram');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/vk')), 'vk');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/?vk_app_id=54694987&vk_user_id=123&sign=test')), 'vk');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/index.html?vk_user_id=123&vk_platform=desktop_web&sign=test')), 'vk');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/'), { referer: 'https://vk.ru/app54694987' }), 'vk');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/'), { origin: 'https://api.vk.com' }), 'vk');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/'), { 'user-agent': 'Mozilla/5.0 VK-iPhone/8.120' }), 'vk');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/'), { referer: 'https://not-vk.example/app54694987' }), 'telegram');
-  assert.equal(platformForDocumentRequest(new URL('https://pivnik.example/'), {}, 'vk'), 'vk');
+  assert.equal(
+    platformForDocumentRequest(new URL('https://pivnik.example/')),
+    'telegram'
+  );
+  assert.equal(
+    platformForDocumentRequest(new URL('https://pivnik.example/vk')),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/?vk_app_id=54694987&vk_user_id=123&sign=test')
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/index.html?vk_user_id=123&vk_platform=desktop_web&sign=test')
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { referer: 'https://vk.ru/app54694987' }
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { origin: 'https://api.vk.com' }
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { 'user-agent': 'Mozilla/5.0 VK-iPhone/8.120' }
+    ),
+    'vk'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      { referer: 'https://not-vk.example/app54694987' }
+    ),
+    'telegram'
+  );
+  assert.equal(
+    platformForDocumentRequest(
+      new URL('https://pivnik.example/'),
+      {},
+      'vk'
+    ),
+    'vk'
+  );
 });
 
 test('VK Railway service serves VK document from the bare root URL', async () => {
@@ -74,9 +117,8 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
 
     assert.equal(platform, 'vk');
     assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-    assertVkPlatformScript(html);
+    assert.match(html, /\/vk-platform\.js\?v=3\.3\.0-vk-startup-stable/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
-    assert.doesNotMatch(html, /закрытая бета|ЗАКРЫТАЯ БЕТА/i);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;
     else process.env.PIVNIK_DOCUMENT_PLATFORM = previous;

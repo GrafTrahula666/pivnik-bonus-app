@@ -4,11 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0e13" />
+  <meta name="pivnik-client-build" content="3.5.0-no-beta-auto-refresh" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=17.0-luxury-vip-space" />
-  <script defer src="app.js?v=17.0-luxury-vip-space"></script>
+  <link rel="stylesheet" href="styles.css?v=20260813-luxury-vip-space" />
+  <script defer src="app.js?v=17.3-vlad-poops"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -41,7 +42,7 @@
   <div class="app-shell hidden" id="appShell">
     <header class="topbar">
       <div class="brand-lockup">
-        <div class="eyebrow" id="eyebrow">Telegram Mini App</div>
+        <div class="eyebrow" id="eyebrow">Приложение</div>
         <div class="brand-line"><h1 id="brandTitle">Пивник</h1></div>
       </div>
       <div class="topbar-actions">
@@ -81,8 +82,8 @@
           <div class="beer-card-top">
             <div>
               <span class="beer-kicker">Пивная дистанция</span>
-              <h2>15-й литр — в подарок</h2>
-              <p>Оплатите 14 литров разливного — следующий литр бесплатный.</p>
+              <h2>Каждый 15-й литр — бесплатно</h2>
+              <p>Оплатите 14 литров разливного пива — следующий 1 литр бесплатно.</p>
             </div>
             <div class="beer-gift-counter"><strong id="beerGiftBalance">0</strong><small>л подарка</small></div>
           </div>
@@ -95,7 +96,7 @@
           <article class="home-stat-card vip-glass-card">
             <span class="home-card-kicker">За всё время</span>
             <strong><span id="totalLitersHome">0</span> л</strong>
-            <small>выпито в Пивнике</small>
+            <small>учтено разливного</small>
           </article>
           <button class="home-stat-card vip-glass-card" id="openLeaderboardButton" type="button">
             <span class="home-card-kicker">Лига Пивника</span>
@@ -112,7 +113,7 @@
             <div class="profile-achievement-showcase" id="profileAchievementShowcase"><div class="achievement-empty">Пока нет</div></div>
           </div>
           <button class="home-shop-card vip-glass-card" id="openShopButton" type="button">
-            <div class="compact-card-head"><div><span class="home-card-kicker">Private stock</span><h2>Магазин</h2></div><span class="shop-arrow">›</span></div>
+            <div class="compact-card-head"><div><span class="home-card-kicker">Особая коллекция</span><h2>Магазин</h2></div><span class="shop-arrow">›</span></div>
             <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
             <strong id="homeShopCaption">Крафт, награды и коллекционные вещи</strong>
             <span class="shop-cta">В магазин</span>
@@ -144,7 +145,7 @@
           <span><i>1</i><b>Пока свободно</b></span><span><i>2</i><b>Пока свободно</b></span><span><i>3</i><b>Пока свободно</b></span>
         </div>
         <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
-        <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
+        <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Лига — информационный рейтинг по подтверждённой сумме покупок за текущий месяц.</div>
       </section>
 
       <section class="screen client-screen" data-screen="profile">
@@ -405,6 +406,11 @@
       <span class="muted">Клиентский раздел</span>
       <h2>Справка и правила</h2>
       <p class="help-intro">Здесь собраны правила бонусной программы, инструкция по использованию приложения и ответы на частые вопросы. Для быстрого просмотра откройте нужный пункт.</p>
+      <div class="consent-legal-links" id="moderationHelpLegalLinks" data-final-legal-links="1">
+        <a class="text-link" href="/legal/terms" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+        <a class="text-link" href="/legal/privacy" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
+        <a class="text-link" href="mailto:origtopg666@gmail.com">Поддержка: origtopg666@gmail.com</a>
+      </div>
 
       <div class="help-contents">
         <details class="help-section" open>
@@ -493,16 +499,16 @@
           <div class="help-text">
             <p id="privacyPlatformCopy">Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
             <p>Эти данные нужны для авторизации, ведения бонусного счёта, разграничения доступа и рассмотрения спорных операций.</p>
-            <p>Административный доступ ограничивается ролями. Полные юридические реквизиты оператора и сроки хранения данных должны быть опубликованы перед открытым запуском.</p>
+            <p>Административный доступ ограничивается ролями. Юридические сведения и условия обработки данных опубликованы в правилах и политике конфиденциальности.</p>
           </div>
         </details>
 
         <details class="help-section">
-          <summary><span>11</span><b>Правила бета-тестирования</b></summary>
+          <summary><span>11</span><b>Работа приложения</b></summary>
           <div class="help-text">
-            <p>Приложение находится в режиме закрытого теста. Интерфейс, расчёты и отдельные функции могут изменяться.</p>
-            <p>Возможны временные ошибки, задержки обновления данных и недоступность отдельных разделов. О найденных проблемах нужно сообщать владельцу или сотруднику.</p>
-            <p>Планируется сохранить бонусы и статусы, накопленные в бета-тесте, если до завершения теста не будет объявлено иное.</p>
+            <p>Приложение работает как программа лояльности бара «ПИВНИК». Актуальные условия бонусной программы опубликованы в правилах.</p>
+            <p>При технической ошибке или задержке обновления данных обратитесь к сотруднику бара.</p>
+            <p>Бонусы, статусы и история операций сохраняются в профиле согласно действующим правилам программы.</p>
           </div>
         </details>
 
@@ -519,8 +525,8 @@
       </div>
 
       <div class="help-footer">
-        <b>Версия документа: бета 0.4</b>
-        <small>Текст является рабочей редакцией для закрытого теста и будет дополнен перед публичным запуском.</small>
+        <b>Редакция правил: 07.08.2026</b>
+        <small>Действующая редакция правил программы лояльности «ПИВНИК».</small>
       </div>
     </div>
   </div>
@@ -545,10 +551,10 @@
     <div class="achievement-celebration">
       <div class="achievement-burst" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <span class="achievement-celebration-kicker">Поздравляем!</span>
-      <div class="achievement-celebration-icon" id="achievementCelebrationIcon">β</div>
+      <div class="achievement-celebration-icon" id="achievementCelebrationIcon">✦</div>
       <span class="achievement-celebration-rarity" id="achievementCelebrationRarity">Легендарное достижение</span>
-      <h2 id="achievementCelebrationTitle">Тестировщик</h2>
-      <p id="achievementCelebrationDescription">Вы вошли в число первых участников закрытого бета-теста.</p>
+      <h2 id="achievementCelebrationTitle">Пионер Пивника</h2>
+      <p id="achievementCelebrationDescription">Вы вошли в число первых 30 участников «Пивника».</p>
       <div class="achievement-celebration-reward" id="achievementCelebrationReward">+150 бонусов</div>
       <button class="primary full" id="ackAchievementButton" type="button">Забрать награду</button>
     </div>
@@ -560,12 +566,12 @@
       <span class="muted">Личная статистика</span>
       <h2>Ваш путь в Пивнике</h2>
       <div class="profile-stats-grid">
-        <article><span>Выпито за всё время</span><strong><i id="statsTotalLiters">0</i> л</strong></article>
+        <article><span>Учтено разливного за всё время</span><strong><i id="statsTotalLiters">0</i> л</strong></article>
         <article><span>Покупки за 12 месяцев</span><strong id="statsSpend12m">0 ₽</strong></article>
         <article><span>Достижения</span><strong id="statsAchievements">0</strong></article>
         <article><span>Место в Лиге</span><strong>№<i id="statsLeaguePlace">—</i></strong></article>
       </div>
-      <p class="help-intro">Литры считаются за всё время, а Лига — только по фактически оплаченным покупкам текущего месяца.</p>
+      <p class="help-intro">Учитывается зафиксированный сотрудником объём разливного пива за всё время. Лига считается только по фактически оплаченным покупкам текущего месяца.</p>
     </div>
   </div>
 
@@ -603,7 +609,7 @@
       <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
       <div class="shop-private-stock" aria-label="Привилегии магазина">
         <span class="shop-private-monogram">P</span>
-        <div><small>PRIVATE STOCK · ПИВНИК</small><strong>Редкие вещи для своих</strong><p>Крафт, лимитированные бокалы и оформление профиля — с выдачей прямо в баре.</p></div>
+        <div><small>Особая коллекция · ПИВНИК</small><strong>Редкие вещи для своих</strong><p>Крафт, лимитированные бокалы и оформление профиля — с выдачей прямо в баре.</p></div>
         <span class="shop-private-seal">№ 55</span>
       </div>
       <div class="shop-trust-row"><span>◆ Безопасная покупка по QR</span><span>◆ Получение у сотрудника</span></div>
@@ -661,7 +667,7 @@
           <label>Загрузить фотографию
             <input id="contentImageFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
           </label>
-          <small id="contentImageFileName">JPG, PNG или WEBP · до 6 МБ</small>
+          <small id="contentImageFileName">JPG, PNG или WEBP · до 3 МБ</small>
           <label>Или HTTPS-ссылка
             <input class="text-input" id="contentImageUrl" type="url" placeholder="https://…" />
           </label>
@@ -741,8 +747,14 @@
         <li>Все изменения баланса и подарочных литров сохраняются в журнале.</li>
       </ul>
       <button class="text-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
-      <button class="primary full" id="acceptTerms" type="button">Принимаю и продолжить</button>
-      <small>Рабочая редакция для закрытого бета-теста, версия 0.4.</small>
+      <div class="consent-legal-links" data-moderation-hardening="VK moderation hardening 2026-08-07">
+        <a class="text-link" href="/legal/terms" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+        <a class="text-link" href="/legal/privacy" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
+        <a class="text-link" href="mailto:origtopg666@gmail.com">Написать в поддержку</a>
+      </div>
+      <button class="primary full" id="acceptTerms" type="button">Подтверждаю 18+ и принимаю</button>
+      <button class="text-link danger-text" id="deleteAccountFromConsent" type="button">Удалить аккаунт без принятия правил</button>
+      <small>Действующая редакция правил программы лояльности от 07.08.2026.</small>
     </div>
   </div>
 

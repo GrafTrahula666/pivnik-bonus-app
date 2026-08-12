@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '17.0-luxury-vip-space';
+const APP_VERSION = '17.3-vlad-poops';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -116,6 +116,10 @@ const compactBonus = (number) => {
 const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
 const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
+const publicReleaseLabel = (value) => String(value ?? '')
+  .replaceAll('Легендарное достижение «Пионер Пивника»', 'Легендарное достижение «Пионер Пивника»')
+  .replaceAll('первых участников', 'первых участников')
+  .replaceAll('программы лояльности', 'программы лояльности');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -149,6 +153,8 @@ function avatarFrameClass(entity = {}) {
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
   if (entity.profileFrame === 'diamond') return 'avatar-frame avatar-frame-diamond';
   if (entity.profileFrame === 'anna') return 'avatar-frame avatar-frame-anna';
+  if (entity.profileFrame === 'olesya') return 'avatar-frame avatar-frame-olesya';
+  if (entity.profileFrame === 'vladislav') return 'avatar-frame avatar-frame-vladislav';
   return '';
 }
 
@@ -162,6 +168,14 @@ function avatarOrbitHtml(entity = {}) {
       '<span class="anna-18">18</span>', '<span class="anna-heart">💔</span>', '<span class="anna-whip">➰</span>', '<span class="anna-cash">$</span>'
     ];
     return `<span class="avatar-orbit anna-orbit" aria-hidden="true">${symbols.map((symbol, index) => `<i style="--orbit-index:${index}">${symbol}</i>`).join('')}</span>`;
+  }
+  if (entity.profileFrame === 'olesya') {
+    const hearts = ['♥','♡','❤','♥','♡','❤','♥','♡','❤','♥','♡','❤'];
+    return `<span class="avatar-orbit olesya-orbit" aria-hidden="true">${hearts.map((heart, index) => `<i style="--orbit-index:${index}"><span>${heart}</span></i>`).join('')}</span>`;
+  }
+  if (entity.profileFrame === 'vladislav') {
+    const poops = Array.from({ length: 12 }, () => '💩');
+    return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
   }
   return '';
 }
@@ -177,6 +191,8 @@ function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
+  element.classList.toggle('has-olesya-frame', entity.profileFrame === 'olesya');
+  element.classList.toggle('has-vladislav-frame', entity.profileFrame === 'vladislav');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 
@@ -325,7 +341,7 @@ function enhanceDom() {
         line.className = 'brand-line';
         title.before(line);
         line.append(title);
-        line.insertAdjacentHTML('beforeend', '<span class="beta-badge">закрытая бета</span>');
+        // Public release: no beta/test badge in the interface.
       }
     }
   }
@@ -445,7 +461,7 @@ function enhanceDom() {
       .replace('подтвердите запрос в приложении, если подтверждение включено в текущей версии', 'сообщите сумму списания сотруднику — бонусы списываются сразу')
       .replace('Если в текущей версии включено подтверждение, клиент получает запрос и завершает списание в приложении. При отказе или истечении времени операция не проводится.', 'После сканирования QR сотрудник указывает сумму бонусов и проводит списание сразу. Результат сохраняется в истории операций.')
       .replace('Если QR не читается, обновите экран и попробуйте снова.', 'QR является постоянным. Если он не читается, сотрудник может ввести короткий код вручную.')
-      .replace('Версия документа: бета 0.1', 'Версия документа: бета 0.2');
+      .replace('Редакция правил 0.1', 'Редакция правил 0.2');
   }
 
   const pending = $('#pendingModal');
@@ -455,7 +471,7 @@ function enhanceDom() {
     document.body.insertAdjacentHTML('beforeend', `<div class="modal consent-modal" id="consentModal" aria-hidden="true">
       <div class="modal-sheet consent-sheet">
         <span class="consent-mark">П</span>
-        <span class="muted">Закрытая бета</span>
+        <span class="muted"></span>
         <h2>Добро пожаловать в «Пивник»</h2>
         <p>Продолжая, вы принимаете правила бонусной программы и условия обработки данных для работы приложения.</p>
         <button class="text-btn consent-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
@@ -1303,7 +1319,7 @@ function achievementIconHtml(item = {}) {
       <circle class="eye-pupil" cx="50" cy="51" r="8" />
     </svg>`;
   }
-  if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">β</span>';
+  if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">✦</span>';
   const symbols = {
     receipt: '▤',
     banknote: '₽',
@@ -1412,7 +1428,6 @@ async function loadAchievements() {
   }
   renderAchievements();
   renderAchievementCatalog();
-  window.setTimeout(maybeShowAchievementCelebration, 120);
   return state.achievements;
 }
 
@@ -1425,7 +1440,7 @@ async function acknowledgeAchievement(code) {
 }
 
 function maybeShowAchievementCelebration() {
-  if (!state.profile?.onboardingComplete || !state.profile?.termsAccepted) return;
+  if (!state.profile?.termsAccepted) return;
   const queue = state.profile?.unannouncedAchievements || [];
   const item = queue[0];
   if (!item || $('#achievementCelebrationModal')?.classList.contains('open')) return;
@@ -1537,18 +1552,18 @@ function renderTransaction(transaction) {
     detail = `Бесплатно выдано ${fmtLiters(transaction.beerGiftSpentLiters)} л разливного пива`;
   } else if (transaction.mode === 'welcome') {
     primary = `+${transaction.bonusEarned} Б`;
-    detail = transaction.reason || 'Бонус за первую регистрацию';
+    detail = publicReleaseLabel(transaction.reason) || 'Бонус за первую регистрацию';
   } else if (transaction.mode === 'shop') {
     primary = `−${transaction.bonusSpent} Б`;
-    detail = transaction.reason || 'Товар из магазина';
+    detail = publicReleaseLabel(transaction.reason) || 'Товар из магазина';
   } else if (transaction.mode === 'achievement') {
     primary = Number(transaction.beerGiftEarnedLiters || 0) > 0
       ? `+${fmtLiters(transaction.beerGiftEarnedLiters)} л`
       : `+${transaction.bonusEarned} Б`;
-    detail = transaction.reason || 'Награда за достижение';
+    detail = publicReleaseLabel(transaction.reason) || 'Награда за достижение';
   } else if (transaction.mode === 'adjustment') {
     primary = `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`;
-    detail = transaction.reason || 'Ручная корректировка';
+    detail = publicReleaseLabel(transaction.reason) || 'Ручная корректировка';
   } else {
     const beerDetails = transaction.beerLiters > 0
       ? ` · пиво ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
@@ -1659,6 +1674,10 @@ function schedulePostBootHydration() {
 
 function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
+  const consentSafeTarget = event.target?.closest?.(
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent'
+  );
+  if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
     '#appShell button, #appShell a, #appShell input, #appShell select, #appShell textarea, #appShell [role="button"]'
   );
@@ -1690,7 +1709,11 @@ async function boot() {
     $('#bootText').textContent = 'Открываем профиль…';
     renderCoreProfile();
     await finishBoot();
-    closeModal('consentModal');
+    // VK deterministic startup hardening 2026-08-07. Once a profile exists the boot overlay is never allowed
+    // to cover the app again. Consent is shown deterministically after the app shell
+    // becomes visible instead of racing MutationObserver and boot cleanup.
+    if (state.profile?.termsAccepted) closeModal('consentModal');
+    else window.setTimeout(() => openModal('consentModal'), 0);
     closeModal('profileSetupModal');
     schedulePostBootHydration();
   } catch (error) {
@@ -1700,7 +1723,15 @@ async function boot() {
           ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
           : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
       : (error?.message || 'Не удалось загрузить приложение.');
-    showBootActions(message);
+    if (IS_VK && state.profile) {
+      renderCoreProfile();
+      await finishBoot();
+      if (!state.profile?.termsAccepted) window.setTimeout(() => openModal('consentModal'), 0);
+      toast('Профиль открыт. Часть данных обновится автоматически.');
+      schedulePostBootHydration();
+    } else {
+      showBootActions(message);
+    }
   }
 }
 
@@ -2029,7 +2060,7 @@ function showOperationResult(transaction, client) {
     ? `<br>Учтено пива: ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
     : '';
   const detail = isShop
-    ? `${escapeHtml(transaction.reason || 'Товар')} · −${transaction.bonusSpent} Б`
+    ? `${escapeHtml(publicReleaseLabel(transaction.reason) || 'Товар')} · −${transaction.bonusSpent} Б`
     : isGift
       ? `−${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
       : isRedeem
@@ -2103,7 +2134,6 @@ async function createSale() {
     if (state.profile?.id === data.client.id) {
       state.profile = data.client;
       renderProfile();
-      window.setTimeout(maybeShowAchievementCelebration, 120);
     }
     await Promise.all([loadStaffRecent(), loadLeaderboard()]);
   } finally {
@@ -2501,7 +2531,40 @@ function renderUsers(users, target = '#usersList', compact = false) {
   const root = $(target);
   if (!root) return;
   root.className = `operation-list${users.length ? '' : ' empty-state'}`;
+  const normalizeAdminIdentity = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/[^a-zа-яё0-9]/gi, '');
+  const identityForMatch = (user) => ({
+    username: normalizeAdminIdentity(user.username),
+    name: normalizeAdminIdentity(user.name)
+  });
+  const sameApproximateIdentity = (left, right) => {
+    const a = identityForMatch(left);
+    const b = identityForMatch(right);
+    const usernameMatch = a.username.length >= 4 && a.username === b.username;
+    const nameMatch = a.name.length >= 6 && (
+      a.name === b.name
+      || a.name.includes(b.name)
+      || b.name.includes(a.name)
+    );
+    return usernameMatch || nameMatch;
+  };
   root.innerHTML = users.length ? users.map((user) => {
+    const platformDetails = [
+      user.telegramId ? `Telegram ${user.telegramId}` : '',
+      user.vkId ? `VK ${user.vkId}` : ''
+    ].filter(Boolean).join(' · ') || 'ID не указан';
+    const legacyLinked = Boolean(user.telegramId && user.vkId);
+    const possibleMatch = legacyLinked ? null : users.find((candidate) => {
+      if (String(candidate.id) === String(user.id)) return false;
+      if (candidate.telegramId && candidate.vkId) return false;
+      const differentPlatforms = Boolean(user.telegramId) !== Boolean(candidate.telegramId);
+      return differentPlatforms && sameApproximateIdentity(user, candidate);
+    });
+    const possibleMatchNote = possibleMatch
+      ? `<br><span class="user-pin-state">Возможное совпадение: ${escapeHtml(possibleMatch.name || possibleMatch.username || possibleMatch.id)} · только подсказка, без объединения</span>`
+      : '';
     const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
       ? `<div class="user-actions">
           <select data-role-user="${user.id}">
@@ -2515,7 +2578,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId ? `Telegram ${user.telegramId}` : user.vkId ? `VK ${user.vkId}` : 'ID не указан')}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
@@ -2594,7 +2657,15 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
 
 document.addEventListener('click', blockUnacceptedAction, true);
 
-$('#openAchievementsButton')?.addEventListener('click', () => openAchievements());
+function openAchievementHub() {
+  if ((state.profile?.unannouncedAchievements || []).length) {
+    maybeShowAchievementCelebration();
+    return;
+  }
+  openAchievements();
+}
+
+$('#openAchievementsButton')?.addEventListener('click', openAchievementHub);
 $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {
   state.achievementTab = button.dataset.achievementTab;
   renderAchievementCatalog();
@@ -2629,12 +2700,13 @@ $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
 $('#openProfileAvatar')?.addEventListener('click', () => openProfileSetup(1));
 $('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
-$('#openProfileAchievements')?.addEventListener('click', () => openAchievements());
+$('#openProfileAchievements')?.addEventListener('click', openAchievementHub);
 $('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
 $('#openConnectedServices')?.addEventListener('click', openConnectedServices);
 $('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
 $('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
 $('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
+$('#deleteAccountFromConsent')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; closeModal('consentModal'); openModal('deleteAccountModal'); });
 $$('.history-tabs [data-history-tab]').forEach((button) => button.addEventListener('click', () => {
   state.historyTab = button.dataset.historyTab || 'purchases';
   renderHistoryTab();
@@ -2765,8 +2837,131 @@ window.addEventListener('unhandledrejection', (event) => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) refreshTelegramBridge();
 });
+window.addEventListener('pivnik:vk-view-restore', () => {
+  if (!IS_VK || !state.token || !state.profile) return;
+  void refreshMe().catch((error) => console.warn('VK restore refresh skipped:', error));
+});
 
 window.addEventListener('online', updateNetworkBadge);
 window.addEventListener('offline', updateNetworkBadge);
 updateNetworkBadge();
 boot();
+
+
+// PIVNIK_PUBLIC_RELEASE_SYNC_START
+// Public no-beta guard 2026-08-08. The source HTML is sanitized at startup and the live VK client
+// reloads when Railway starts serving a different commit.
+(() => {
+  const CURRENT_BUILD = '3.5.0-no-beta-auto-refresh';
+
+  function removeLegacyPublicLabels() {
+    document.querySelectorAll('.beta-badge').forEach((element) => element.remove());
+    const replacements = new Map([
+      ['', ''],
+      ['', ''],
+      ['Работа приложения', 'Работа приложения'],
+      ['Тестировщик', 'Пионер Пивника']
+    ]);
+    document.querySelectorAll('body *').forEach((element) => {
+      if (element.children.length) return;
+      const value = String(element.textContent || '').trim();
+      if (!replacements.has(value)) return;
+      const replacement = replacements.get(value);
+      if (replacement) element.textContent = replacement;
+      else element.remove();
+    });
+  }
+
+  async function fetchServerBuild() {
+    const url = new URL(location.href);
+    url.searchParams.set('__pivnik_build_check', String(Date.now()));
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+      headers: { 'cache-control': 'no-cache', pragma: 'no-cache' }
+    });
+    if (!response.ok) return '';
+    const html = await response.text();
+    const match = html.match(/<meta name="pivnik-client-build" content="([^"]+)"\s*\/>/i);
+    return String(match?.[1] || '');
+  }
+
+  let checking = false;
+  async function reloadIfNewBuild() {
+    if (checking || document.hidden) return;
+    checking = true;
+    try {
+      const serverBuild = await fetchServerBuild();
+      if (serverBuild && serverBuild !== CURRENT_BUILD) {
+        location.reload();
+      }
+    } catch (error) {
+      console.warn('Release build check skipped:', error);
+    } finally {
+      checking = false;
+    }
+  }
+
+  function installHardRefreshButton() {
+    const button = document.getElementById('refreshButton');
+    if (!button || button.dataset.hardRefreshInstalled === '1') return;
+    button.dataset.hardRefreshInstalled = '1';
+    button.title = 'Обновить приложение';
+    button.setAttribute('aria-label', 'Обновить приложение');
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const url = new URL(location.href);
+      url.searchParams.set('__pivnik_reload', String(Date.now()));
+      location.replace(url.toString());
+    }, true);
+  }
+
+  function initializeReleaseSync() {
+    removeLegacyPublicLabels();
+    installHardRefreshButton();
+    window.setTimeout(() => void reloadIfNewBuild(), 4000);
+    window.setInterval(() => void reloadIfNewBuild(), 60_000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeReleaseSync, { once: true });
+  } else {
+    initializeReleaseSync();
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      removeLegacyPublicLabels();
+      installHardRefreshButton();
+      void reloadIfNewBuild();
+    }
+  });
+})();
+// PIVNIK_PUBLIC_RELEASE_SYNC_END
+
+
+// FINAL_PUBLIC_RELEASE_UI_GUARD_20260808
+function scrubLegacyStageUi(root = document) {
+  root.querySelectorAll?.('.beta-badge').forEach((node) => node.remove());
+  const replacements = new Map([
+    ['закрытая бета', ''],
+    ['ЗАКРЫТАЯ БЕТА', ''],
+    ['Правила бета-тестирования', 'Работа приложения'],
+    ['Версия документа: бета 0.4', 'Редакция правил: 08.08.2026'],
+    ['Награды за 1–3 место появятся после бета-теста.', 'Лига — информационный рейтинг по подтверждённой сумме покупок за текущий месяц.'],
+    ['Тестировщик', 'Пионер Пивника'],
+    ['Вы вошли в число первых участников закрытого бета-теста.', 'Вы вошли в число первых 30 участников «Пивника».']
+  ]);
+  const walker = document.createTreeWalker(root.body || root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    let text = node.nodeValue || '';
+    for (const [from, to] of replacements) text = text.split(from).join(to);
+    if (text !== node.nodeValue) node.nodeValue = text;
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  scrubLegacyStageUi(document);
+  new MutationObserver(() => scrubLegacyStageUi(document)).observe(document.body, { childList: true, subtree: true, characterData: true });
+});

@@ -7,7 +7,7 @@ const read = (name) => fs.readFile(path.join(root, name), 'utf8');
 const write = (name, value) => fs.writeFile(path.join(root, name), value, 'utf8');
 
 const files = Object.fromEntries(await Promise.all([
-  'index.html', 'app.js', 'vk-platform.js', 'universal-server.js', 'server.js',
+  'index.html', 'app.js', 'styles.css', 'vk-platform.js', 'universal-server.js', 'server.js',
   'legal/terms.html', 'legal/privacy.html', 'railway.json', 'package.json'
 ].map(async (name) => [name, await read(name)])));
 
@@ -15,7 +15,7 @@ const files = Object.fromEntries(await Promise.all([
 // files checked below are exactly the files the production server will serve.
 files['index.html'] = files['index.html']
   .replace(/<span\s+class="beta-badge"[^>]*>[\s\S]*?<\/span>/gi, '')
-  .replaceAll('Private stock', 'Особая коллекция')
+  .replace(/private stock/gi, 'Особая коллекция')
   .replaceAll('Telegram Mini App', 'Приложение')
   .replaceAll('Награды за 1–3 место появятся после бета-теста.', 'Лига — информационный рейтинг по подтверждённым покупкам.')
   .replaceAll('Правила бета-тестирования', 'Работа приложения')
@@ -68,7 +68,7 @@ ok(has('index.html', 'Удалить аккаунт'), 'DELETE:UI-entry');
 ok(has('app.js', "method: 'DELETE'"), 'DELETE:client-method');
 ok(has('app.js', "'/api/me/account'"), 'DELETE:client-route');
 ok(has('app.js', 'УДАЛИТЬ'), 'DELETE:explicit-confirmation');
-ok(hasAny('universal-server.js', ['deleteUnifiedAccount', 'deleteAccountData']), 'DELETE:backend-service');
+ok(hasAny('universal-server.js', ['deletePlatformAccount', 'deleteUnifiedAccount', 'deleteAccountData']), 'DELETE:backend-service');
 ok(has('universal-server.js', "DELETE"), 'DELETE:backend-method');
 
 // 4. Abuse protection / payload / duplicate operations.
@@ -105,8 +105,16 @@ ok(!/1[–-]3 место.*(приз|наград)/i.test(files['index.html']), '
 ok(!files['universal-server.js'].includes('получает эпическое достижение и бесплатную пинту'), 'PROMO:no-unruled-league-prize-api');
 ok(has('universal-server.js', "prizeNote: 'Лига — информационный рейтинг"), 'PROMO:league-api-informational');
 ok(has('legal/terms.html', 'совершеннолет'), 'PROMO:adult-terms');
-ok(has('legal/terms.html', 'Приложение не используется для дистанционной продажи алкоголя'), 'PROMO:no-remote-alcohol-sale');
+ok(hasAny('legal/terms.html', [
+  'Приложение не используется для дистанционной продажи алкоголя',
+  'Приложение не осуществляет дистанционную продажу и доставку алкогольной продукции'
+]), 'PROMO:no-remote-alcohol-sale');
 ok(has('legal/privacy.html', 'Возрастное ограничение'), 'PROMO:adult-privacy');
+ok(has('universal-server.js', '<html lang="ru" class="vk-mini-app">'), 'PROMO:vk-public-mode');
+ok(has('styles.css', '.vk-mini-app #beerLoyaltyCard'), 'PROMO:no-alcohol-promo-surface');
+ok(has('styles.css', '.vk-mini-app #openShopButton'), 'PROMO:no-shop-entry');
+ok(has('styles.css', '.vk-mini-app #openPromosButton'), 'PROMO:no-promotions-entry');
+ok(has('styles.css', '.vk-mini-app [data-screen="actions"]'), 'PROMO:no-promotions-screen');
 
 // 9. Monetization: digital profile frames must not be sold in the shop.
 ok(has('server.js', 'moderation-remove-profile-frames-from-shop'), 'MONETIZATION:frame-cleanup-migration');

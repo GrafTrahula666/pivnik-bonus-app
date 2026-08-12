@@ -144,4 +144,17 @@ await import('./universal-server.js');`,
 );
 
 if (changed) await fs.writeFile(bootstrapPath, content, 'utf8');
+const preparedBootstrapSource = await fs.readFile(bootstrapPath, 'utf8');
+const serverImport = "await import('./universal-server.js');";
+if (preparedBootstrapSource.includes(serverImport)) {
+  await fs.writeFile(
+    bootstrapPath,
+    preparedBootstrapSource.replace(
+      serverImport,
+      "if (process.env.PIVNIK_PATCH_ONLY !== '1') await import('./universal-server.js');"
+    ),
+    'utf8'
+  );
+}
+process.env.PIVNIK_PATCH_ONLY = '1';
 await import('./bootstrap.js');

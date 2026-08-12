@@ -52,6 +52,7 @@ async function patchIndex() {
   );
 
   index = index.replaceAll('JPG, PNG или WEBP · до 6 МБ', 'JPG, PNG или WEBP · до 3 МБ');
+  index = index.replace(/app\.js\?v=[^"']+/g, `app.js?v=${cacheVersion}`);
 
   if (!index.includes('id="moderationHelpLegalLinks"')) {
     const helpIntro = '<p class="help-intro">Здесь собраны правила бонусной программы, инструкция по использованию приложения и ответы на частые вопросы. Для быстрого просмотра откройте нужный пункт.</p>';
@@ -199,7 +200,7 @@ if (!loader.includes('.boot-screen.hidden {\n  display: none !important;')) fail
 if (!gateway.includes('const MAX_BODY_BYTES = 4 * 1024 * 1024;')) failures.push('gateway body limit');
 if (!gateway.includes("const TERMS_VERSION = '2026-08-07';")) failures.push('gateway terms version');
 if (!gateway.includes(`vk-platform.js?v=${cacheVersion}`)) failures.push('VK cache version');
-if (!gateway.includes(`app.js?v=${cacheVersion}`)) failures.push('app cache version');
+if (!index.includes(`app.js?v=${cacheVersion}`)) failures.push('app cache version');
 if (!server.includes("express.json({ limit: '4mb' })")) failures.push('server body limit');
 if (!server.includes('moderation-remove-profile-frames-from-shop')) failures.push('shop frame cleanup');
 for (const code of removedShopFrameCodes) {
