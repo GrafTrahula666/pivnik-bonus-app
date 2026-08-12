@@ -30,6 +30,10 @@ const publicCopyReplacements = [
 function sanitizePublicCopy(source) {
   let out = source;
   for (const [from, to] of publicCopyReplacements) out = replaceAll(out, from, to);
+  out = out.replace(/закрытая\s+бета/gi, '');
+  out = out.replace(/правила\s+бета-тестирования/gi, 'Работа приложения');
+  out = out.replace(/версия документа:\s*бета(?:\s*\d+(?:\.\d+)*)?/gi, 'Редакция правил: 08.08.2026');
+  out = out.replace(/после\s+бета-теста/gi, 'после запуска');
   return out;
 }
 
