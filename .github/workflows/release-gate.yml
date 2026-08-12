@@ -53,12 +53,11 @@ jobs:
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             echo "::group::Failing test diagnostics"
-            grep -E '^not ok|^[[:space:]]*(failureType|error|code|expected|actual|operator):' /tmp/pivnik-tests.log | tail -n 120 | while IFS= read -r line; do
-              safe=${line//'%'/'%25'}
-              safe=${safe//$'\r'/'%0D'}
-              safe=${safe//$'\n'/'%0A'}
-              echo "::error title=Automated test failure::$safe"
-            done
+            details=$(awk '/^not ok 13 - Gateway render:|^not ok 14 - VK Railway service/{capture=1} capture{print}' /tmp/pivnik-tests.log | tail -c 14000)
+            safe=${details//'%'/'%25'}
+            safe=${safe//$'\r'/'%0D'}
+            safe=${safe//$'\n'/'%0A'}
+            echo "::error title=Gateway test diagnostics::$safe"
             echo "::endgroup::"
             exit "$status"
           fi
