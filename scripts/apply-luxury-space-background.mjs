@@ -10,14 +10,16 @@ const indexPath = path.join(root, 'index.html');
 
 const START = '/* luxury-vip-space-runtime:start */';
 const END = '/* luxury-vip-space-runtime:end */';
-const VERSION = '20260813-luxury-vip-space';
+const VERSION = '20260813-luxury-vip-space-v2';
 
 const override = `
 ${START}
 .app-shell {
   position: relative;
   isolation: isolate;
-  background: rgba(4, 5, 8, .72) !important;
+  background:
+    linear-gradient(180deg, rgba(3, 3, 7, .08), rgba(5, 3, 7, .22) 62%, rgba(4, 2, 5, .38)),
+    url("/assets/backgrounds/luxury-vip-space.webp?v=${VERSION}") center top / cover fixed no-repeat !important;
 }
 .app-shell::before {
   content: "" !important;
@@ -30,11 +32,11 @@ ${START}
   pointer-events: none !important;
   z-index: 0 !important;
   background:
-    linear-gradient(180deg, rgba(3, 4, 8, .18), rgba(4, 5, 9, .52) 48%, rgba(3, 4, 7, .84) 100%),
-    radial-gradient(circle at 50% 8%, rgba(103, 39, 53, .18), transparent 36%),
-    url("/assets/backgrounds/luxury-vip-space.webp?v=${VERSION}") center center / cover no-repeat !important;
-  opacity: .96 !important;
-  filter: saturate(.92) contrast(1.06) brightness(.78) !important;
+    linear-gradient(180deg, rgba(3, 3, 7, .03), rgba(5, 3, 7, .12) 58%, rgba(4, 2, 5, .28) 100%),
+    radial-gradient(circle at 50% 8%, rgba(128, 43, 62, .12), transparent 38%),
+    url("/assets/backgrounds/luxury-vip-space.webp?v=${VERSION}") center top / cover no-repeat !important;
+  opacity: 1 !important;
+  filter: saturate(1.18) contrast(1.08) brightness(1.48) !important;
 }
 .app-shell::after {
   content: "" !important;
@@ -51,14 +53,18 @@ ${START}
     radial-gradient(circle at 72% 28%, rgba(255,255,255,.10) 0 1px, transparent 1.4px),
     radial-gradient(circle at 44% 62%, rgba(200,164,110,.08) 0 1px, transparent 1.5px);
   background-size: 122px 122px, 168px 168px, 214px 214px;
-  opacity: .32 !important;
+  opacity: .16 !important;
 }
 .topbar { position: relative; z-index: 2; }
 .screen { position: relative; z-index: 1; background: transparent !important; }
 .android-webview .app-shell::before,
 .lite-mode .app-shell::before {
   background-attachment: scroll !important;
-  filter: brightness(.72) saturate(.82) !important;
+  filter: brightness(1.34) saturate(1.08) contrast(1.06) !important;
+}
+.android-webview .app-shell,
+.lite-mode .app-shell {
+  background-attachment: scroll !important;
 }
 ${END}
 `;

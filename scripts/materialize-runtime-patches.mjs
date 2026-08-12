@@ -255,7 +255,7 @@ async function verifyMaterializedState() {
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  if (!index.includes('styles.css?v=20260813-luxury-vip-space')) failures.push('index.html asset version');
+  if (!index.includes('styles.css?v=20260813-luxury-vip-space-v2')) failures.push('index.html asset version');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (failures.length) {

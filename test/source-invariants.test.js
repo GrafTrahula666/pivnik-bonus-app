@@ -285,6 +285,14 @@ test('Luxury VIP Space сохраняет клиентскую навигаци�
   assert.doesNotMatch(nav, /Бармен|Админ/);
   assert.match(styles, /luxury-vip-space\.webp/);
   assert.match(styles, /filter: brightness\(1\.72\)/);
+  const luxuryRuntime = styles.slice(
+    styles.indexOf('/* luxury-vip-space-runtime:start */'),
+    styles.indexOf('/* luxury-vip-space-runtime:end */')
+  );
+  assert.match(luxuryRuntime, /brightness\(1\.48\)/);
+  assert.match(luxuryRuntime, /brightness\(1\.34\)/);
+  assert.match(luxuryRuntime, /luxury-vip-space-v2/);
+  assert.doesNotMatch(luxuryRuntime, /brightness\(\.(?:72|78)\)/);
   assert.match(app, /profile\.status\.bonusPercent/);
   assert.match(app, /profileStaffNav/);
   assert.match(app, /profileAdminNav/);
