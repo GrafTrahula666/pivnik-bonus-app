@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=15-design-system" />
-  <script defer src="app.js?v=15-design-system"></script>
+  <link rel="stylesheet" href="styles.css?v=17.0-luxury-vip-space" />
+  <script defer src="app.js?v=17.0-luxury-vip-space"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -51,119 +51,151 @@
     </header>
 
     <main>
-      <section class="screen active" data-screen="client">
-        <div class="hero-card">
+      <section class="screen active client-screen client-home" data-screen="client">
+        <div class="hero-card vip-hero-card">
           <div class="hero-glow" aria-hidden="true"></div>
           <div class="hero-head">
-            <div>
-              <span class="muted" id="balanceLabel">Ваш баланс</span>
-              <div class="balance"><span id="clientBalance">0</span> <small>бонусов</small></div>
+            <div class="client-identity">
+              <div class="profile-avatar" id="profileAvatar">П</div>
+              <div>
+                <span class="muted" id="balanceLabel">Ваш баланс</span>
+                <strong class="client-name" id="clientName">Гость</strong>
+              </div>
             </div>
-            <div class="profile-avatar" id="profileAvatar">П</div>
+            <div class="balance"><span id="clientBalance">0</span><small>бонусов</small></div>
           </div>
 
+          <div class="status-divider"></div>
           <button class="status-row status-button" id="openStatuses" type="button">
             <div>
               <span class="status-caption">Ваш статус</span>
               <strong class="status-name" id="statusName">Путник</strong>
             </div>
-            <span class="status-progress-side">
-              <strong id="statusProgressText">0 / 10 000 ₽</strong>
-              <i class="status-chevron">›</i>
-            </span>
+            <span class="cashback-orbit"><strong id="bonusPercent">5%</strong><small>начисление</small></span>
           </button>
           <div class="progress"><i id="statusProgress" style="width:0%"></i></div>
-
-          <div class="hero-insights">
-            <div><span>Начисление</span><strong id="bonusPercent">5%</strong></div>
-            <div><span>Следующий уровень</span><strong id="nextRewardText">10 000 ₽</strong></div>
-          </div>
-
-          <div class="hero-actions">
-            <button class="primary" id="showQrButton"><span class="button-icon">⌗</span>Показать QR</button>
-            <button class="secondary" id="showHistoryButton"><span class="button-icon">≡</span>История</button>
-          </div>
+          <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
 
-        <div class="client-tip">
-          <span class="client-tip-icon">i</span>
-          <div><b>Один личный QR-код</b><small>Показывайте его сотруднику до оплаты. Код постоянный и привязан к вашему бонусному счёту.</small></div>
-        </div>
-
-
-        <div class="section-block achievement-section" id="profileAchievementsSection">
-          <div class="section-title"><h2>Достижения</h2><button class="section-link" id="openAchievementsButton" type="button">Все <span>›</span></button></div>
-          <div class="profile-achievement-showcase" id="profileAchievementShowcase">
-            <div class="achievement-empty">Коллекция достижений скоро появится</div>
-          </div>
-        </div>
-
-        <article class="beer-loyalty-card" id="beerLoyaltyCard">
+        <article class="beer-loyalty-card vip-glass-card" id="beerLoyaltyCard">
           <div class="beer-card-top">
             <div>
               <span class="beer-kicker">Пивная дистанция</span>
               <h2>15-й литр — в подарок</h2>
-              <p>Любое разливное пиво. Оплатите 14 литров — следующий литр бесплатный.</p>
+              <p>Оплатите 14 литров разливного — следующий литр бесплатный.</p>
             </div>
             <div class="beer-gift-counter"><strong id="beerGiftBalance">0</strong><small>л подарка</small></div>
           </div>
           <div class="beer-progress-head"><span id="beerProgressText">0 из 14 л</span><b id="beerRemainingText">ещё 14 л</b></div>
           <div class="beer-progress"><i id="beerProgressBar" style="width:0%"></i></div>
-          <div class="beer-card-foot"><span>Учитывается объём, указанный сотрудником при оплате.</span><strong id="beerGiftReady">Подарков пока нет</strong></div>
+          <div class="beer-card-foot"><span>Объём фиксирует сотрудник при оплате.</span><strong id="beerGiftReady">Подарков пока нет</strong></div>
         </article>
 
-        <div class="section-block home-hub" data-config-section="promos">
-          <div class="section-title"><h2>Для вас</h2><span>без лишних поисков</span></div>
-          <div class="home-action-grid">
-            <button class="home-action-card promo-entry-card" id="openPromosButton" type="button">
-              <span class="home-action-kicker">ДЕЙСТВУЕТ</span>
-              <span class="home-action-mark">100</span>
-              <span class="home-action-copy"><b>Акции</b><small>Приветственные бонусы, литры и будущие награды</small></span>
-              <i>›</i>
-            </button>
-            <button class="home-action-card shop-entry-card" id="openShopButton" type="button">
-              <span class="home-action-kicker">ВИТРИНА · 10 СЕК</span>
-              <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
-              <span class="home-action-copy"><b>Магазин</b><small id="homeShopCaption">Крафт, сидр и коллекционные кружки</small></span>
-              <i>›</i>
-            </button>
+        <div class="home-stat-grid">
+          <article class="home-stat-card vip-glass-card">
+            <span class="home-card-kicker">За всё время</span>
+            <strong><span id="totalLitersHome">0</span> л</strong>
+            <small>выпито в Пивнике</small>
+          </article>
+          <button class="home-stat-card vip-glass-card" id="openLeaderboardButton" type="button">
+            <span class="home-card-kicker">Лига Пивника</span>
+            <strong>№<span id="leaguePlaceHome">—</span></strong>
+            <small id="leagueSpentHome">по сумме покупок</small>
+            <i>›</i>
+          </button>
+        </div>
+
+        <div class="home-feature-grid">
+          <div class="achievement-section home-achievement-card vip-glass-card" id="profileAchievementsSection">
+            <div class="compact-card-head"><div><span class="home-card-kicker">Коллекция</span><h2>Достижения</h2></div><button class="section-link" id="openAchievementsButton" type="button">Все</button></div>
+            <div class="achievement-count"><strong id="achievementCountHome">0</strong><span>получено</span></div>
+            <div class="profile-achievement-showcase" id="profileAchievementShowcase"><div class="achievement-empty">Пока нет</div></div>
           </div>
-        </div>
-
-        <div class="section-block" data-config-section="leaderboard">
-          <button class="leaderboard-entry" id="openLeaderboardButton" type="button">
-            <div class="leaderboard-entry-head"><span>ЛИГА ПИВНИКА</span><small id="leaderboardMonth">текущий месяц</small></div>
-            <div class="leaderboard-podium-mini" id="leaderboardPreview">
-              <span><i>1</i><b>Пока свободно</b></span>
-              <span><i>2</i><b>Пока свободно</b></span>
-              <span><i>3</i><b>Пока свободно</b></span>
-            </div>
-            <div class="leaderboard-entry-foot"><span id="leaderboardMe">Ваше место появится после первой покупки</span><i>›</i></div>
+          <button class="home-shop-card vip-glass-card" id="openShopButton" type="button">
+            <div class="compact-card-head"><div><span class="home-card-kicker">Private stock</span><h2>Магазин</h2></div><span class="shop-arrow">›</span></div>
+            <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
+            <strong id="homeShopCaption">Крафт, награды и коллекционные вещи</strong>
+            <span class="shop-cta">В магазин</span>
           </button>
         </div>
 
-        <div class="section-block" data-config-section="team">
-          <div class="section-title"><h2>Сегодня на смене</h2></div>
-          <div class="team-strip" id="currentShiftTeam"><div class="person"><span class="avatar">П</span><div><b>Команда Пивника</b><small>Смена пока не выбрана.</small></div></div></div>
-        </div>
-
-        <div class="section-block help-entry-block">
-          <button class="help-entry" id="openHelpButton" type="button">
-            <span class="help-entry-icon">?</span>
-            <span class="help-entry-copy">
-              <b>Справка и правила</b>
-              <small>Как пользоваться, бонусы, статусы, QR, данные и бета-тест</small>
-            </span>
-            <span class="help-entry-arrow">›</span>
-          </button>
-        </div>
+        <button class="home-promo-banner vip-glass-card" id="openPromosButton" type="button" data-config-section="promos">
+          <span class="promo-orbit">✦</span>
+          <span><small>Активная акция</small><strong id="homePromoTitle">Orange Blanche 1+1=3</strong><em>Все предложения в разделе «Акции»</em></span>
+          <i>›</i>
+        </button>
 
         <div class="byline" id="byline">by Kirill Gamilton △</div>
       </section>
 
+      <section class="screen client-screen" data-screen="actions">
+        <div class="client-page-title"><span class="muted">Предложения Пивника</span><h2>Акции</h2><p>Все активные предложения, привилегии и будущие награды.</p></div>
+        <div class="modal-title-row owner-content-action"><span></span><button class="text-btn admin-write-only" id="editPromosQuick" type="button">Редактировать</button></div>
+        <div id="promosCatalog" class="premium-list empty-state">Загрузка акций…</div>
+      </section>
+
+      <section class="screen client-screen" data-screen="league">
+        <div class="client-page-title"><span class="muted">Рейтинг по покупкам</span><h2 id="leaderboardModalTitle">Лига Пивника</h2><p>Место зависит только от фактически потраченной суммы за текущий месяц. Литры здесь не учитываются.</p></div>
+        <div class="league-summary vip-glass-card">
+          <span>Ваше место</span><strong>№<span id="leaguePlaceScreen">—</span></strong><small id="leaderboardMonth">текущий месяц</small>
+          <b id="leaderboardMe">Место появится после первой покупки</b>
+        </div>
+        <div id="leaderboardPreview" class="leaderboard-podium-mini league-preview">
+          <span><i>1</i><b>Пока свободно</b></span><span><i>2</i><b>Пока свободно</b></span><span><i>3</i><b>Пока свободно</b></span>
+        </div>
+        <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
+        <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
+      </section>
+
+      <section class="screen client-screen" data-screen="profile">
+        <div class="profile-identity-card vip-glass-card">
+          <div class="profile-avatar profile-avatar--mirror" id="profileAvatarMirror">П</div>
+          <div><span class="muted">Личный профиль</span><h2 id="profileName">Гость</h2><small id="profileHandle">ПИВНИК</small><strong id="profileStatus">Путник · 5%</strong></div>
+          <button class="profile-edit-icon" id="openProfileSettings" type="button" aria-label="Настройки профиля">✎</button>
+        </div>
+
+        <section class="profile-history-card vip-glass-card">
+          <div class="compact-card-head"><div><span class="home-card-kicker">Бонусный счёт</span><h2>История</h2></div><span>⌁</span></div>
+          <div class="history-tabs" role="tablist">
+            <button class="active" data-history-tab="purchases" type="button">Покупки</button>
+            <button data-history-tab="bonuses" type="button">Бонусы</button>
+            <button data-history-tab="rewards" type="button">Награды</button>
+          </div>
+          <div id="historyList" class="operation-list empty-state">Операций пока нет</div>
+        </section>
+
+        <div class="profile-shortcuts">
+          <button type="button" id="openProfileAvatar"><span>◎</span><strong>Аватар</strong></button>
+          <button type="button" id="openProfileFrames"><span>◇</span><strong>Рамки</strong></button>
+          <button type="button" id="openProfileAchievements"><span>✦</span><strong>Достижения</strong><small id="profileAchievementBadge">0</small></button>
+          <button type="button" id="openProfileStatistics"><span>↗</span><strong>Статистика</strong></button>
+        </div>
+
+        <div class="profile-menu vip-glass-card">
+          <button type="button" id="openConnectedServices"><span>↔</span><div><b>Telegram и VK</b><small id="profileServicesValue">Подключён текущий сервис</small></div><i>›</i></button>
+          <button type="button" id="openNotifications"><span>◉</span><div><b>Уведомления</b><small>Награды, бонусы и важные новости</small></div><i>›</i></button>
+          <button type="button" id="openProfilePrivacy"><span>◌</span><div><b>Конфиденциальность</b><small>Имя, аватар и видимость в Лиге</small></div><i>›</i></button>
+          <button type="button" id="openHelpButton"><span>?</span><div><b>Правила и помощь</b><small>Бонусы, статусы, QR и данные</small></div><i>›</i></button>
+          <button type="button" id="openDeleteAccount" class="danger-menu-item"><span>×</span><div><b>Удалить аккаунт</b><small>Безвозвратное удаление профиля</small></div><i>›</i></button>
+        </div>
+
+        <div class="section-block help-entry-block profile-shift-block" data-config-section="team">
+          <div class="section-title"><h2>Сегодня на смене</h2></div>
+          <div class="team-strip" id="currentShiftTeam"><div class="person"><span class="avatar">П</span><div><b>Команда Пивника</b><small>Смена пока не выбрана.</small></div></div></div>
+        </div>
+
+        <section class="service-access vip-glass-card hidden" id="profileServiceAccess">
+          <span class="home-card-kicker">Служебный доступ</span>
+          <h2>Рабочие режимы</h2>
+          <p>Кнопки видны только пользователям с подтверждёнными правами.</p>
+          <button class="secondary hidden" id="profileStaffNav" type="button">Перейти в режим бармена</button>
+          <button class="primary hidden" id="profileAdminNav" type="button">Открыть админ-панель</button>
+        </section>
+      </section>
+
       <section class="screen" data-screen="staff">
         <div class="staff-banner">
-          <div><span class="muted">Рабочее место</span><h2 id="staffName">Бармен</h2><button class="text-btn staff-switch-button" id="changeStaffButton" type="button">Сотрудник / PIN</button></div>
+          <div><button class="service-back" id="backToProfileFromStaff" type="button">← Профиль</button><span class="muted">Рабочее место</span><h2 id="staffName">Бармен</h2><button class="text-btn staff-switch-button" id="changeStaffButton" type="button">Сотрудник / PIN</button></div>
           <span class="shift-badge" id="staffShiftBadge"><i></i><span>проверяем смену</span></span>
         </div>
 
@@ -187,7 +219,7 @@
           <div class="step-heading"><span>2</span><div><h3>Клиент</h3><small>Отсканируйте личный QR или введите код вручную</small></div></div>
           <button class="scan-zone" id="scanClient" type="button">
             <span class="scan-icon">⌗</span>
-            <span><b>Сканировать QR</b><small>Откроется штатный сканер Telegram</small></span>
+            <span><b>Сканировать QR</b><small id="scannerPlatformHint">Откроется штатный сканер Telegram</small></span>
             <i>›</i>
           </button>
           <button class="manual-code-button" id="manualCodeButton" type="button">Ввести короткий код</button>
@@ -240,7 +272,7 @@
 
       <section class="screen" data-screen="admin">
         <div class="admin-head">
-          <div><span class="muted" id="adminAccessLabel">Управление</span><h2 id="adminPanelTitle">Панель владельца</h2></div>
+          <div><button class="service-back" id="backToProfileFromAdmin" type="button">← Профиль</button><span class="muted" id="adminAccessLabel">Управление</span><h2 id="adminPanelTitle">Панель владельца</h2></div>
           <span class="pill danger" id="adminRoleBadge">ADMIN</span>
         </div>
 
@@ -332,10 +364,12 @@
       </section>
     </main>
 
-    <nav class="bottom-nav">
-      <button class="active" data-target="client"><span>⌂</span>Клиент</button>
-      <button data-target="staff" id="staffNav"><span>▣</span>Бармен</button>
-      <button data-target="admin" id="adminNav"><span>⚙</span>Админ</button>
+    <nav class="bottom-nav" aria-label="Клиентская навигация">
+      <button class="active" data-target="client" type="button"><span>⌂</span><small>Главная</small></button>
+      <button data-target="actions" type="button"><span>✦</span><small>Акции</small></button>
+      <button class="qr-nav-button" id="navQrButton" type="button" aria-label="Открыть личный QR"><span>⌗</span><small>QR</small></button>
+      <button data-target="league" type="button"><span>♛</span><small>Лига</small></button>
+      <button data-target="profile" type="button"><span>◎</span><small>Профиль</small></button>
     </nav>
   </div>
 
@@ -353,15 +387,6 @@
         <button class="wallet-button hidden" id="addGoogleWallet" type="button">Добавить в Google Wallet</button>
       </div>
       <p class="qr-warning">Код постоянный. Не передавайте QR посторонним: операции по нему будут отражены в вашей истории.</p>
-    </div>
-  </div>
-
-  <div class="modal" id="historyModal" aria-hidden="true">
-    <div class="modal-sheet tall-sheet">
-      <button class="close" data-close="historyModal">×</button>
-      <span class="muted">Бонусный счёт</span>
-      <h2>История операций</h2>
-      <div id="historyList" class="operation-list empty-state">Операций пока нет</div>
     </div>
   </div>
 
@@ -385,9 +410,9 @@
         <details class="help-section" open>
           <summary><span>1</span><b>Быстрый старт</b></summary>
           <div class="help-text">
-            <p><strong>Чтобы получить бонусы:</strong> откройте приложение, нажмите «Показать QR» и покажите код сотруднику до завершения операции.</p>
+            <p><strong>Чтобы получить бонусы:</strong> откройте личный код центральной кнопкой QR в нижней навигации и покажите его сотруднику до завершения операции.</p>
             <p><strong>Чтобы списать бонусы:</strong> заранее сообщите сотруднику, покажите личный QR и назовите нужную сумму. Списание выполняется сразу и сохраняется в истории.</p>
-            <p>Баланс и статус отображаются на главном экране. Все начисления, списания и корректировки можно проверить в разделе «История».</p>
+            <p>Баланс и статус отображаются на главном экране. Все начисления, списания и корректировки можно проверить в разделе «Профиль» → «История».</p>
           </div>
         </details>
 
@@ -466,7 +491,7 @@
         <details class="help-section">
           <summary><span>10</span><b>Конфиденциальность и данные</b></summary>
           <div class="help-text">
-            <p>Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
+            <p id="privacyPlatformCopy">Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
             <p>Эти данные нужны для авторизации, ведения бонусного счёта, разграничения доступа и рассмотрения спорных операций.</p>
             <p>Административный доступ ограничивается ролями. Полные юридические реквизиты оператора и сроки хранения данных должны быть опубликованы перед открытым запуском.</p>
           </div>
@@ -485,10 +510,10 @@
           <summary><span>12</span><b>Частые вопросы</b></summary>
           <div class="help-text faq-list">
             <p><strong>Где посмотреть баланс?</strong><br>На главном экране клиента.</p>
-            <p><strong>Где посмотреть операции?</strong><br>Нажмите кнопку «История».</p>
+            <p><strong>Где посмотреть операции?</strong><br>Откройте «Профиль» и выберите нужную вкладку истории.</p>
             <p><strong>Почему статус не обновился?</strong><br>Обновите данные. При задержке обратитесь к администратору.</p>
             <p><strong>Можно ли обменять бонусы на деньги?</strong><br>Нет. Бонусы используются только в рамках программы лояльности.</p>
-            <p><strong>Что делать, если сменился Telegram-аккаунт?</strong><br>Обратитесь к владельцу: автоматический перенос баланса между аккаунтами не гарантируется.</p>
+            <p id="platformSwitchHelp"><strong>Что делать, если сменился Telegram-аккаунт?</strong><br>Откройте приложение под нужным аккаунтом и при необходимости используйте безопасную привязку Telegram ↔ VK.</p>
           </div>
         </details>
       </div>
@@ -505,7 +530,7 @@
       <button class="close" data-close="achievementsModal">×</button>
       <span class="muted">Коллекция Пивника</span>
       <h2>Достижения</h2>
-      <p class="help-intro">Полная система наград находится в разработке. Уже полученные особые достижения остаются навсегда.</p>
+      <p class="help-intro">Условия считаются автоматически по завершённым операциям. Обычные награды дают 10 бонусов, редкие — 20, эпические — 30.</p>
       <div class="achievement-tabs" role="tablist" aria-label="Редкость достижений">
         <button class="active" data-achievement-tab="common" type="button">Обычные</button>
         <button data-achievement-tab="rare" type="button">Редкие</button>
@@ -529,11 +554,46 @@
     </div>
   </div>
 
-  <div class="modal" id="promosModal" aria-hidden="true">
+  <div class="modal" id="profileStatsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
-      <button class="close" data-close="promosModal">×</button>
-      <div class="modal-title-row"><div><span class="muted">Предложения Пивника</span><h2>Акции</h2></div><button class="text-btn admin-write-only" id="editPromosQuick" type="button">Редактировать</button></div>
-      <div id="promosCatalog" class="premium-list empty-state">Загрузка акций…</div>
+      <button class="close" data-close="profileStatsModal">×</button>
+      <span class="muted">Личная статистика</span>
+      <h2>Ваш путь в Пивнике</h2>
+      <div class="profile-stats-grid">
+        <article><span>Выпито за всё время</span><strong><i id="statsTotalLiters">0</i> л</strong></article>
+        <article><span>Покупки за 12 месяцев</span><strong id="statsSpend12m">0 ₽</strong></article>
+        <article><span>Достижения</span><strong id="statsAchievements">0</strong></article>
+        <article><span>Место в Лиге</span><strong>№<i id="statsLeaguePlace">—</i></strong></article>
+      </div>
+      <p class="help-intro">Литры считаются за всё время, а Лига — только по фактически оплаченным покупкам текущего месяца.</p>
+    </div>
+  </div>
+
+  <div class="modal" id="notificationsModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet premium-sheet">
+      <button class="close" data-close="notificationsModal">×</button>
+      <span class="muted">Настройки профиля</span>
+      <h2>Уведомления</h2>
+      <p class="help-intro">Выберите, какие события показывать на этом устройстве.</p>
+      <div class="privacy-switches notification-switches">
+        <label><span><b>Новые достижения</b><small>Сообщать, когда награда готова к получению</small></span><input id="notifyAchievements" type="checkbox" checked></label>
+        <label><span><b>Начисления и списания</b><small>Показывать результат бонусной операции</small></span><input id="notifyBonuses" type="checkbox" checked></label>
+        <label><span><b>Акции Пивника</b><small>Редкие важные предложения без спама</small></span><input id="notifyPromotions" type="checkbox" checked></label>
+      </div>
+      <button class="primary full" id="saveNotifications" type="button">Сохранить</button>
+    </div>
+  </div>
+
+  <div class="modal" id="deleteAccountModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet delete-account-sheet">
+      <button class="close" data-close="deleteAccountModal">×</button>
+      <span class="muted">Опасное действие</span>
+      <h2>Удалить аккаунт безвозвратно?</h2>
+      <p class="help-intro">Профиль, бонусный доступ, привязки Telegram/VK и личный QR будут отключены. Операцию нельзя отменить.</p>
+      <label class="delete-confirm-label">Для подтверждения напишите <b>УДАЛИТЬ</b>
+        <input class="text-input" id="deleteAccountConfirm" autocomplete="off" placeholder="УДАЛИТЬ" />
+      </label>
+      <button class="danger-action" id="deleteAccountButton" type="button" disabled>Удалить аккаунт</button>
     </div>
   </div>
 
@@ -541,21 +601,15 @@
     <div class="modal-sheet tall-sheet premium-sheet">
       <button class="close" data-close="shopModal">×</button>
       <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
+      <div class="shop-private-stock" aria-label="Привилегии магазина">
+        <span class="shop-private-monogram">P</span>
+        <div><small>PRIVATE STOCK · ПИВНИК</small><strong>Редкие вещи для своих</strong><p>Крафт, лимитированные бокалы и оформление профиля — с выдачей прямо в баре.</p></div>
+        <span class="shop-private-seal">№ 55</span>
+      </div>
+      <div class="shop-trust-row"><span>◆ Безопасная покупка по QR</span><span>◆ Получение у сотрудника</span></div>
       <p class="help-intro" id="shopNote">Каталог разделён по категориям. Товары за бонусы выдаёт сотрудник по QR, рублёвые позиции оплачиваются в баре.</p>
       <div id="shopCatalog" class="shop-catalog empty-state">Загрузка каталога…</div>
-      <button class="primary full" id="shopShowQr" type="button">Показать QR для покупки за бонусы</button>
       <small class="shop-legal">Алкогольные позиции выдаются только совершеннолетним посетителям при наличии товара.</small>
-    </div>
-  </div>
-
-  <div class="modal" id="leaderboardModal" aria-hidden="true">
-    <div class="modal-sheet tall-sheet premium-sheet">
-      <button class="close" data-close="leaderboardModal">×</button>
-      <span class="muted">Лига Пивника</span>
-      <h2 id="leaderboardModalTitle">Таблица лидеров</h2>
-      <p class="help-intro">Рейтинг считается по фактически оплаченным покупкам текущего месяца. Отменённые операции не учитываются.</p>
-      <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
-      <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
     </div>
   </div>
 

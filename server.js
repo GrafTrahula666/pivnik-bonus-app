@@ -6,6 +6,19 @@ import express from 'express';
 import helmet from 'helmet';
 import pg from 'pg';
 import QRCode from 'qrcode';
+import {
+  acknowledgeAchievement,
+  getUserAchievementState,
+  getUserEarnedAchievementState,
+  syncUserAchievements
+} from './achievements.js';
+import {
+  normalizeRequestKey,
+  signSession as signCoreSession,
+  validateTelegramInitData as validateCoreTelegramInitData,
+  verifySession as verifyCoreSession
+} from './platform-core.js';
+import { resolvePersonalQrRecord } from './qr-resolver.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +31,7 @@ const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
 const appleWalletIssuerUrl = String(process.env.APPLE_WALLET_ISSUER_URL || '').trim();
 const googleWalletIssuerUrl = String(process.env.GOOGLE_WALLET_ISSUER_URL || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
+const isChildServer = process.env.PIVNIK_CHILD_SERVER === '1';
 const sessionSecret = crypto
   .createHash('sha256')
   .update(process.env.SESSION_SECRET || `pivnik:${botToken || 'local-development'}`)
@@ -41,7 +55,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
 const STATUS_LEVELS = [
@@ -60,8 +74,6 @@ const TERMS_VERSION = 'beta-0.4';
 const BEER_PAID_TARGET_ML = 14_000;
 const BEER_GIFT_ML = 1_000;
 const MAX_BEER_ML_PER_TRANSACTION = 100_000;
-const WELCOME_BONUS = 100;
-const REFERRAL_REWARD = 200;
 const STAFF_CANCEL_LIMIT = 3;
 const UNLIMITED_BONUS_BALANCE = 9_999_999_999_999;
 const MAX_CONTENT_IMAGE_BYTES = 3_200_000;
@@ -75,6 +87,7 @@ const SHOP_CATEGORIES = new Set(['craft', 'limited', 'profile', 'other']);
 const SHOP_PRICE_TYPES = new Set(['bonus', 'rub', 'pending']);
 const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
+  { code: 'orange-blanche-1-plus-1-3', title: 'Orange Blanche 1+1=3', description: 'Берите две Orange Blanche — третью пинту получите в подарок. Условия и наличие уточняйте у сотрудника бара.', badge: '1+1=3', active: true, sortOrder: 15 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
   { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
 ];
@@ -162,9 +175,7 @@ function isOwnerRow(row) {
 
 function isAnnaRow(row) {
   const telegramId = String(row?.telegram_id || row?.telegramId || '');
-  if (annaTelegramId && telegramId === annaTelegramId) return true;
-  const fullName = `${String(row?.first_name || row?.firstName || '').trim()} ${String(row?.last_name || row?.lastName || '').trim()}`.trim().toLocaleLowerCase('ru-RU');
-  return ['анна берман', 'аня берман', 'берман анна', 'берман аня'].includes(fullName);
+  return Boolean(annaTelegramId && telegramId === annaTelegramId);
 }
 
 function hasUnlimitedBonus(row) {
@@ -175,7 +186,9 @@ function profileFrameFromRow(row) {
   if (isOwnerRow(row)) return 'money';
   if (isAnnaRow(row)) return 'anna';
   if (row?.role === 'viewer') return 'fire';
-  return ['money', 'fire', 'diamond', 'anna'].includes(String(row?.profile_frame || '')) ? String(row.profile_frame) : 'none';
+  const storedFrame = String(row?.profile_frame || '');
+  if (storedFrame === 'anna') return 'none';
+  return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';
 }
 
 function achievementsFromRow(row) {
@@ -288,27 +301,65 @@ function verifyStaffPin(pin, salt, expectedHash) {
 }
 
 async function ensurePersonalQr(db, userId, force = false) {
-  if (!force) {
-    const current = await db.query('SELECT qr_token, qr_short_code FROM users WHERE id = $1', [userId]);
-    if (current.rowCount && current.rows[0].qr_token && current.rows[0].qr_short_code) {
-      return current.rows[0];
+  const current = await db.query(
+    `SELECT qr_token, qr_short_code
+     FROM users
+     WHERE id = $1::bigint AND merged_into_user_id IS NULL`,
+    [userId]
+  );
+  if (!current.rowCount) {
+    throw Object.assign(new Error('Активный пользователь для QR-кода не найден.'), {
+      statusCode: 404
+    });
+  }
+  if (!force && current.rows[0].qr_token && current.rows[0].qr_short_code) {
+    return current.rows[0];
+  }
+  if (force && (current.rows[0].qr_token || current.rows[0].qr_short_code)) {
+    await db.query(
+      `INSERT INTO qr_aliases (qr_token, qr_short_code, user_id, source_user_id)
+       VALUES ($1, $2, $3::bigint, $3::bigint)
+       ON CONFLICT DO NOTHING`,
+      [current.rows[0].qr_token, current.rows[0].qr_short_code, userId]
+    );
+    const aliasCheck = await db.query(
+      `SELECT
+         ($1::text IS NULL OR EXISTS(
+           SELECT 1 FROM qr_aliases
+           WHERE qr_token = $1 AND user_id = $3::bigint
+         )) AS token_owned,
+         ($2::text IS NULL OR EXISTS(
+           SELECT 1 FROM qr_aliases
+           WHERE qr_short_code = $2 AND user_id = $3::bigint
+         )) AS short_owned`,
+      [current.rows[0].qr_token, current.rows[0].qr_short_code, userId]
+    );
+    if (!aliasCheck.rows[0]?.token_owned || !aliasCheck.rows[0]?.short_owned) {
+      throw Object.assign(
+        new Error('Старый QR-код уже принадлежит другому профилю. Перевыпуск остановлен.'),
+        { statusCode: 409 }
+      );
     }
   }
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const token = crypto.randomBytes(24).toString('base64url');
     const shortCode = makeShortCode();
+    await db.query('SAVEPOINT personal_qr_generation');
     try {
       const result = await db.query(
         `UPDATE users
          SET qr_token = $1, qr_short_code = $2, updated_at = NOW()
-         WHERE id = $3
+         WHERE id = $3::bigint AND merged_into_user_id IS NULL
          RETURNING qr_token, qr_short_code`,
         [token, shortCode, userId]
       );
       if (!result.rowCount) throw new Error('Пользователь для QR-кода не найден.');
+      await db.query('RELEASE SAVEPOINT personal_qr_generation');
       return result.rows[0];
     } catch (error) {
+      await db.query('ROLLBACK TO SAVEPOINT personal_qr_generation');
+      await db.query('RELEASE SAVEPOINT personal_qr_generation');
       if (error.code === '23505') continue;
       throw error;
     }
@@ -347,67 +398,58 @@ function litersFromMl(ml) {
   return Number(ml || 0) / 1000;
 }
 
+async function lockRequestKey(db, requestKey) {
+  await db.query(
+    'SELECT pg_advisory_xact_lock(hashtext($1))',
+    [`financial-request:${requestKey}`]
+  );
+}
+
+function assertMatchingTransaction(row, expected = {}) {
+  const { clientId, staffId, mode } = expected;
+  const payloadMismatch = (
+    expected.checkAmountCents !== undefined
+      && Number(row.check_amount_cents || 0) !== Number(expected.checkAmountCents)
+  ) || (
+    expected.beerMl !== undefined
+      && Number(row.beer_ml || 0) !== Number(expected.beerMl)
+  ) || (
+    expected.giftSpentMl !== undefined
+      && Number(row.beer_gift_spent_ml || 0) !== Number(expected.giftSpentMl)
+  ) || (
+    expected.bonusPrice !== undefined
+      && Number(row.bonus_spent || 0) !== Number(expected.bonusPrice)
+  ) || (
+    expected.reason !== undefined
+      && String(row.reason || '') !== String(expected.reason)
+  ) || (
+    expected.adjustmentAmount !== undefined
+      && Number(row.bonus_earned || 0) - Number(row.bonus_spent || 0)
+        !== Number(expected.adjustmentAmount)
+  );
+  if (
+    String(row.client_id) !== String(clientId)
+    || String(row.staff_id || '') !== String(staffId || '')
+    || String(row.mode) !== String(mode)
+    || payloadMismatch
+  ) {
+    throw Object.assign(
+      new Error('requestKey уже использован для другой операции.'),
+      { statusCode: 409 }
+    );
+  }
+}
+
 function signSession(payload) {
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = crypto.createHmac('sha256', sessionSecret).update(body).digest('base64url');
-  return `${body}.${signature}`;
+  return signCoreSession(payload, sessionSecret);
 }
 
 function verifySession(token) {
-  if (!token || !token.includes('.')) return null;
-  const [body, signature] = token.split('.');
-  const expected = crypto.createHmac('sha256', sessionSecret).update(body).digest('base64url');
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (!payload.exp || Date.now() > payload.exp) return null;
-    return payload;
-  } catch {
-    return null;
-  }
+  return verifyCoreSession(token, sessionSecret);
 }
 
 function validateTelegramInitData(initData) {
-  if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN is not configured');
-  if (!initData) throw new Error('Telegram initData is missing');
-
-  const params = new URLSearchParams(initData);
-  const receivedHash = params.get('hash');
-  if (!receivedHash) throw new Error('Telegram hash is missing');
-
-  params.delete('hash');
-  const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${value}`)
-    .join('\n');
-
-  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-  const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-  const a = Buffer.from(receivedHash, 'hex');
-  const b = Buffer.from(calculatedHash, 'hex');
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    throw new Error('Telegram signature is invalid');
-  }
-
-  const authDate = Number(params.get('auth_date') || 0);
-  const maxAgeSeconds = 24 * 60 * 60;
-  if (!authDate || Math.abs(Date.now() / 1000 - authDate) > maxAgeSeconds) {
-    throw new Error('Telegram authorization is outdated');
-  }
-
-  const rawUser = params.get('user');
-  if (!rawUser) throw new Error('Telegram user is missing');
-  const user = JSON.parse(rawUser);
-  return {
-    id: String(user.id),
-    username: user.username || null,
-    firstName: user.first_name || 'Гость',
-    lastName: user.last_name || null,
-    photoUrl: user.photo_url || null,
-    languageCode: user.language_code || null
-  };
+  return validateCoreTelegramInitData(initData, { botToken });
 }
 
 async function applyBetaUserRules(db, userId) {
@@ -432,9 +474,21 @@ async function applyBetaUserRules(db, userId) {
   if (!amount) return;
   await db.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, row.id]);
   await db.query(
-    `INSERT INTO transactions (client_id, mode, status, bonus_spent, bonus_earned, balance_after, reason, completed_at)
-     VALUES ($1, 'adjustment', 'completed', $2, $3, $4, 'Бета-тест — Старшина Анна Берман', NOW())`,
-    [row.id, amount < 0 ? Math.abs(amount) : 0, amount > 0 ? amount : 0, balanceAfter]
+    `INSERT INTO transactions (
+       request_key, client_id, mode, status, bonus_spent, bonus_earned,
+       balance_after, reason, reward_code, completed_at
+     ) VALUES (
+       $1, $2, 'adjustment', 'completed', $3, $4,
+       $5, 'Бета-тест — Старшина Анна Берман',
+       'anna-senior-beta-million', NOW()
+     )`,
+    [
+      `reward:${row.id}:anna-senior-beta-million`,
+      row.id,
+      amount < 0 ? Math.abs(amount) : 0,
+      amount > 0 ? amount : 0,
+      balanceAfter
+    ]
   );
 }
 
@@ -445,7 +499,7 @@ async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id BIGSERIAL PRIMARY KEY,
-        telegram_id BIGINT NOT NULL UNIQUE,
+        telegram_id BIGINT UNIQUE,
         username TEXT,
         first_name TEXT NOT NULL,
         last_name TEXT,
@@ -458,6 +512,11 @@ async function initDatabase() {
     `);
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_token TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_short_code TEXT');
+    await client.query('ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS merged_into_user_id BIGINT REFERENCES users(id)');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS merged_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
@@ -474,8 +533,26 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS show_stats BOOLEAN NOT NULL DEFAULT TRUE');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlimited_bonus BOOLEAN NOT NULL DEFAULT FALSE');
     await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_frame TEXT NOT NULL DEFAULT 'none'");
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS platform_migrations (
+        code TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_token_unique ON users(qr_token) WHERE qr_token IS NOT NULL');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_short_unique ON users(qr_short_code) WHERE qr_short_code IS NOT NULL');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS qr_aliases (
+        id BIGSERIAL PRIMARY KEY,
+        qr_token TEXT UNIQUE,
+        qr_short_code TEXT UNIQUE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        source_user_id BIGINT REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK (qr_token IS NOT NULL OR qr_short_code IS NOT NULL)
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_qr_aliases_user ON qr_aliases(user_id)');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS wallets (
@@ -531,14 +608,29 @@ async function initDatabase() {
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_by BIGINT REFERENCES users(id)');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ');
     await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancel_reason TEXT');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reward_code TEXT');
+    await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancel_request_key TEXT');
+    await client.query('ALTER TABLE transactions ALTER COLUMN bonus_spent TYPE BIGINT');
+    await client.query('ALTER TABLE transactions ALTER COLUMN bonus_earned TYPE BIGINT');
+    await client.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cancel_request_key ON transactions(cancel_request_key) WHERE cancel_request_key IS NOT NULL'
+    );
     await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_mode_check');
-    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop'))");
-    await client.query(`
-      UPDATE transactions
-      SET status = 'cancelled', completed_at = COALESCE(completed_at, NOW()),
-          reason = COALESCE(reason, 'Отменено при переходе на мгновенное списание')
-      WHERE status = 'pending'
-    `);
+    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop','achievement'))");
+    const pendingCleanup = await client.query(
+      `INSERT INTO platform_migrations (code)
+       VALUES ('cancel-legacy-pending-transactions-v1')
+       ON CONFLICT (code) DO NOTHING
+       RETURNING code`
+    );
+    if (pendingCleanup.rowCount) {
+      await client.query(`
+        UPDATE transactions
+        SET status = 'cancelled', completed_at = COALESCE(completed_at, NOW()),
+            reason = COALESCE(reason, 'Отменено при переходе на мгновенное списание')
+        WHERE status = 'pending'
+      `);
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS shifts (
@@ -686,30 +778,43 @@ async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_transactions_cancelled_by ON transactions(cancelled_by, cancelled_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_qr_expiry ON qr_sessions(expires_at)');
-    await client.query('INSERT INTO beer_loyalty (user_id) SELECT id FROM users ON CONFLICT (user_id) DO NOTHING');
-    // V12.2: transactions are the audit source. Restore loyalty totals if an old deployment
-    // accidentally left beer_loyalty at zero, while never decreasing valid stored values.
-    await client.query(`
-      UPDATE beer_loyalty bl
-      SET
-        paid_ml_total = GREATEST(
-          bl.paid_ml_total,
-          COALESCE((
-            SELECT SUM(t.beer_ml)
-            FROM transactions t
-            WHERE t.client_id = bl.user_id AND t.status = 'completed'
-          ), 0)
-        ),
-        gift_ml_balance = GREATEST(
-          bl.gift_ml_balance,
-          LEAST(2147483647, GREATEST(0, COALESCE((
-            SELECT SUM(t.beer_gift_earned_ml) - SUM(t.beer_gift_spent_ml)
-            FROM transactions t
-            WHERE t.client_id = bl.user_id AND t.status = 'completed'
-          ), 0)))::integer
-        ),
-        updated_at = NOW()
-    `);
+    const loyaltyBackfill = await client.query(
+      `INSERT INTO platform_migrations (code)
+       VALUES ('backfill-beer-loyalty-from-ledger-v1')
+       ON CONFLICT (code) DO NOTHING
+       RETURNING code`
+    );
+    if (loyaltyBackfill.rowCount) {
+      await client.query(`
+        INSERT INTO beer_loyalty (user_id)
+        SELECT id FROM users
+        WHERE merged_into_user_id IS NULL
+        ON CONFLICT (user_id) DO NOTHING
+      `);
+      // Transactions are the audit source. This one-time repair never decreases
+      // a previously valid loyalty value.
+      await client.query(`
+        UPDATE beer_loyalty bl
+        SET
+          paid_ml_total = GREATEST(
+            bl.paid_ml_total,
+            COALESCE((
+              SELECT SUM(t.beer_ml)
+              FROM transactions t
+              WHERE t.client_id = bl.user_id AND t.status = 'completed'
+            ), 0)
+          ),
+          gift_ml_balance = GREATEST(
+            bl.gift_ml_balance,
+            LEAST(2147483647, GREATEST(0, COALESCE((
+              SELECT SUM(t.beer_gift_earned_ml) - SUM(t.beer_gift_spent_ml)
+              FROM transactions t
+              WHERE t.client_id = bl.user_id AND t.status = 'completed'
+            ), 0)))::integer
+          ),
+          updated_at = NOW()
+      `);
+    }
     if (ownerTelegramId) {
       await client.query(
         "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE telegram_id::text = $1",
@@ -720,15 +825,15 @@ async function initDatabase() {
       "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'fire', updated_at = NOW() WHERE role = 'viewer' AND ($1 = '' OR telegram_id::text <> $1)",
       [ownerTelegramId]
     );
-    const annaCandidates = await client.query(
-      `SELECT id FROM users
-       WHERE ($1 <> '' AND telegram_id::text = $1)
-          OR (LOWER(TRIM(first_name)) IN ('анна','аня') AND LOWER(TRIM(COALESCE(last_name,''))) = 'берман')`,
-      [annaTelegramId]
-    );
-    for (const row of annaCandidates.rows) await applyBetaUserRules(client, row.id);
-    const usersWithoutQr = await client.query('SELECT id FROM users WHERE qr_token IS NULL OR qr_short_code IS NULL');
-    for (const row of usersWithoutQr.rows) await ensurePersonalQr(client, row.id);
+    if (annaTelegramId) {
+      const anna = await client.query(
+        `SELECT id FROM users
+         WHERE telegram_id::text = $1 AND merged_into_user_id IS NULL
+         LIMIT 1`,
+        [annaTelegramId]
+      );
+      if (anna.rowCount) await applyBetaUserRules(client, anna.rows[0].id);
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -752,7 +857,7 @@ async function getCurrentShift(db = pool) {
     `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.photo_url, u.avatar_source, u.avatar_key, u.profile_frame, u.show_name, u.show_avatar, u.role, sm.position
      FROM shift_members sm
      JOIN users u ON u.id = sm.user_id
-     WHERE sm.shift_id = $1
+     WHERE sm.shift_id = $1 AND u.merged_into_user_id IS NULL
      ORDER BY sm.position, u.first_name, u.id`,
     [shift.id]
   );
@@ -763,7 +868,7 @@ async function getCurrentShift(db = pool) {
     note: shift.note || '',
     members: membersResult.rows.map((row) => ({
       id: String(row.id),
-      telegramId: String(row.telegram_id),
+      telegramId: row.telegram_id === null ? null : String(row.telegram_id),
       username: row.username,
       firstName: row.first_name,
       lastName: row.last_name,
@@ -801,17 +906,22 @@ async function getProfile(userId, db = pool) {
      FROM users u
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-     WHERE u.id = $1::bigint`,
+     WHERE u.id = $1::bigint
+       AND u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL`,
     [userId]
   );
   if (!userResult.rowCount) return null;
   const row = userResult.rows[0];
-  const spend12mCents = await getRollingSpend(db, userId);
+  const [spend12mCents, achievementState] = await Promise.all([
+    getRollingSpend(db, userId),
+    getUserEarnedAchievementState(db, userId)
+  ]);
   const unlimitedBonus = hasUnlimitedBonus(row);
   const status = getEffectiveStatus(row, spend12mCents);
   return {
     id: String(row.id),
-    telegramId: String(row.telegram_id),
+    telegramId: row.telegram_id === null ? null : String(row.telegram_id),
     username: row.username,
     firstName: row.first_name,
     lastName: row.last_name,
@@ -820,8 +930,8 @@ async function getProfile(userId, db = pool) {
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: achievementsFromRow(row),
-    unannouncedAchievements: [],
+    achievements: [...achievementsFromRow(row), ...achievementState.earned],
+    unannouncedAchievements: achievementState.unannounced,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
@@ -862,27 +972,97 @@ async function getProfile(userId, db = pool) {
   };
 }
 
-async function ensureUserSetupDefaults(db, userId) {
-  await db.query(
-    `UPDATE users
-     SET terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
-         terms_version = $1::text,
-         onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
-         updated_at = NOW()
-     WHERE id = $2::bigint`,
-    [TERMS_VERSION, userId]
-  );
+async function deleteAccountData(userId, confirmation) {
+  if (String(confirmation || '').trim().toUpperCase() !== 'УДАЛИТЬ') {
+    throw Object.assign(new Error('Введите слово «УДАЛИТЬ» для подтверждения.'), { statusCode: 400 });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query(
+      `SELECT id
+       FROM users
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL
+       FOR UPDATE`,
+      [userId]
+    );
+    if (!locked.rowCount) {
+      throw Object.assign(new Error('Аккаунт уже удалён или не найден.'), { statusCode: 404 });
+    }
+
+    await client.query('DELETE FROM account_link_codes WHERE user_id = $1::bigint OR used_by_user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM account_link_attempts WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM user_identities WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM bar_customers WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM reward_grants WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM beta_grants WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM qr_aliases WHERE user_id = $1::bigint OR source_user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM qr_sessions WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM shift_members WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM cancel_quota_resets WHERE user_id = $1::bigint OR reset_by = $1::bigint', [userId]);
+    await client.query('DELETE FROM shop_inquiries WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM wallets WHERE user_id = $1::bigint', [userId]);
+    await client.query('DELETE FROM beer_loyalty WHERE user_id = $1::bigint', [userId]);
+    await client.query('UPDATE shifts SET created_by = NULL WHERE created_by = $1::bigint', [userId]);
+    await client.query('UPDATE app_settings SET updated_by = NULL WHERE updated_by = $1::bigint', [userId]);
+    await client.query('UPDATE promotions SET updated_by = NULL WHERE updated_by = $1::bigint', [userId]);
+    await client.query('UPDATE shop_items SET updated_by = NULL WHERE updated_by = $1::bigint', [userId]);
+    await client.query(
+      `UPDATE users SET
+         telegram_id = NULL, username = NULL,
+         first_name = 'Удалённый пользователь', last_name = NULL,
+         photo_url = NULL, language_code = NULL, role = 'client',
+         qr_token = NULL, qr_short_code = NULL,
+         staff_pin_hash = NULL, staff_pin_salt = NULL, staff_pin_updated_at = NULL,
+         avatar_source = 'preset_male', avatar_key = NULL, profile_frame = 'none',
+         age_group = NULL, profile_public = FALSE, show_name = FALSE,
+         show_avatar = FALSE, show_leaderboard_amount = FALSE, show_stats = FALSE,
+         unlimited_bonus = FALSE, onboarding_completed_at = NULL,
+         terms_accepted_at = NULL, terms_version = NULL,
+         session_version = session_version + 1,
+         deleted_at = NOW(), updated_at = NOW()
+       WHERE id = $1::bigint`,
+      [userId]
+    );
+    await client.query('COMMIT');
+    return { ok: true, deleted: true };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function authRequired(req, res, next) {
   const raw = req.headers.authorization || '';
   const token = raw.startsWith('Bearer ') ? raw.slice(7) : '';
   const payload = verifySession(token);
-  if (!payload) return res.status(401).json({ error: 'Требуется вход через Telegram.' });
+  if (!payload || !/^\d+$/.test(String(payload.uid || ''))) {
+    return res.status(401).json({ error: 'Требуется повторный вход в приложение.' });
+  }
   try {
+    const subject = await pool.query(
+      `SELECT session_version
+       FROM users
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL`,
+      [payload.uid]
+    );
+    if (
+      !subject.rowCount
+      || !Number.isSafeInteger(Number(payload.sv))
+      || Number(subject.rows[0].session_version) !== Number(payload.sv)
+    ) {
+      return res.status(401).json({ error: 'Сессия устарела. Войдите повторно.' });
+    }
     const profile = await getProfile(payload.uid);
     if (!profile) return res.status(401).json({ error: 'Пользователь не найден.' });
     req.user = profile;
+    req.session = payload;
     next();
   } catch (error) {
     next(error);
@@ -903,12 +1083,37 @@ async function resolveActingStaff(req) {
   let profile = req.user;
   if (raw) {
     const payload = verifySession(raw);
-    if (!payload || payload.kind !== 'staff' || String(payload.terminalUid) !== String(req.user.id)) return null;
+    if (
+      !payload
+      || payload.kind !== 'staff'
+      || String(payload.terminalUid) !== String(req.user.id)
+      || !Number.isSafeInteger(Number(payload.terminalSv))
+      || !Number.isSafeInteger(Number(payload.staffSv))
+    ) return null;
+    const subjects = await pool.query(
+      `SELECT id, session_version
+       FROM users
+       WHERE id = ANY($1::bigint[])
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL`,
+      [[payload.terminalUid, payload.staffUid]]
+    );
+    const versions = new Map(subjects.rows.map((row) => [String(row.id), Number(row.session_version)]));
+    if (
+      versions.get(String(payload.terminalUid)) !== Number(payload.terminalSv)
+      || versions.get(String(payload.staffUid)) !== Number(payload.staffSv)
+    ) return null;
     profile = await getProfile(payload.staffUid);
   }
   if (!profile || !['staff', 'admin'].includes(profile.role)) return null;
   const shift = await getCurrentShift();
-  if (profile.role !== 'admin' && shift?.members?.length && !shift.members.some((member) => String(member.id) === String(profile.id))) return null;
+  if (
+    profile.role !== 'admin'
+    && (
+      !shift
+      || !shift.members.some((member) => String(member.id) === String(profile.id))
+    )
+  ) return null;
   return profile;
 }
 
@@ -921,8 +1126,7 @@ async function sendTelegramMessage(telegramId, text) {
       body: JSON.stringify({ chat_id: telegramId, text })
     });
     if (!response.ok) {
-      const body = await response.text();
-      console.error('Telegram sendMessage failed:', body);
+      console.error('Telegram sendMessage failed with status:', response.status);
     }
   } catch (error) {
     console.error('Telegram sendMessage error:', error.message);
@@ -987,7 +1191,27 @@ async function getCancellationQuota(staffId, db = pool) {
   return { active: true, limit: STAFF_CANCEL_LIMIT, used, remaining: Math.max(0, STAFF_CANCEL_LIMIT - used), shiftId: shift.id, countFrom };
 }
 
-async function cancelCompletedTransaction(db, transactionId, actorId, reason, options = {}) {
+async function cancelCompletedTransaction(db, transactionId, actorId, reason, requestKey, options = {}) {
+  await lockRequestKey(db, requestKey);
+  const repeated = await db.query(
+    'SELECT * FROM transactions WHERE cancel_request_key = $1 FOR UPDATE',
+    [requestKey]
+  );
+  if (repeated.rowCount) {
+    if (
+      String(repeated.rows[0].id) !== String(transactionId)
+      || String(repeated.rows[0].cancelled_by || '') !== String(actorId)
+      || String(repeated.rows[0].cancel_reason || '') !== String(reason)
+    ) {
+      throw Object.assign(
+        new Error('requestKey отмены уже использован для другой операции.'),
+        { statusCode: 409 }
+      );
+    }
+    repeated.rows[0].__idempotentReplay = true;
+    return repeated.rows[0];
+  }
+
   const txResult = await db.query('SELECT * FROM transactions WHERE id = $1 FOR UPDATE', [transactionId]);
   if (!txResult.rowCount) throw Object.assign(new Error('Операция не найдена.'), { statusCode: 404 });
   const tx = txResult.rows[0];
@@ -1003,7 +1227,12 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, op
   }
 
   const walletResult = await db.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
-  const userResult = await db.query('SELECT telegram_id, role, unlimited_bonus FROM users WHERE id = $1', [tx.client_id]);
+  const userResult = await db.query(
+    `SELECT telegram_id, role, unlimited_bonus
+     FROM users
+     WHERE id = $1::bigint AND merged_into_user_id IS NULL`,
+    [tx.client_id]
+  );
   const beerResult = await db.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [tx.client_id]);
   if (!walletResult.rowCount || !userResult.rowCount || !beerResult.rowCount) throw new Error('Счёт клиента не найден.');
 
@@ -1026,10 +1255,11 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, op
   );
   const updated = await db.query(
     `UPDATE transactions
-     SET status = 'cancelled', cancelled_by = $1, cancelled_at = NOW(), cancel_reason = $2
-     WHERE id = $3
+     SET status = 'cancelled', cancelled_by = $1, cancelled_at = NOW(),
+         cancel_reason = $2, cancel_request_key = $3
+     WHERE id = $4
      RETURNING *`,
-    [actorId, reason, transactionId]
+    [actorId, reason, requestKey, transactionId]
   );
   return updated.rows[0];
 }
@@ -1043,7 +1273,8 @@ app.get('/api/health', async (_req, res) => {
     `);
     res.json({ ok: true, database: 'ok', ...result.rows[0], timestamp: new Date().toISOString() });
   } catch (error) {
-    res.status(503).json({ ok: false, database: 'error', error: error.message });
+    console.error('Health query failed:', error?.code || 'database_error');
+    res.status(503).json({ ok: false, database: 'error' });
   }
 });
 
@@ -1072,10 +1303,10 @@ app.post('/api/auth', async (req, res, next) => {
       await client.query('BEGIN');
       const inserted = await client.query(
         `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, role, terms_accepted_at, terms_version, onboarding_completed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::text, NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, NULL)
          ON CONFLICT (telegram_id) DO NOTHING
-         RETURNING id`,
-        [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role, TERMS_VERSION]
+         RETURNING id, session_version`,
+        [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
       );
       const isNew = inserted.rowCount > 0;
       let userId;
@@ -1090,19 +1321,21 @@ app.post('/api/auth', async (req, res, next) => {
              photo_url = $5,
              language_code = $6,
              role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
-             terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
-             terms_version = $8::text,
-             onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
              updated_at = NOW()
-           WHERE telegram_id = $1::bigint
-           RETURNING id`,
-          [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role, TERMS_VERSION]
+           WHERE telegram_id = $1::bigint AND merged_into_user_id IS NULL
+           RETURNING id, session_version`,
+          [telegramUser.id, telegramUser.username, telegramUser.firstName, telegramUser.lastName, telegramUser.photoUrl, telegramUser.languageCode, role]
         );
+        if (!updated.rowCount) {
+          throw Object.assign(new Error('Профиль был объединён. Войдите через основной аккаунт.'), {
+            statusCode: 409
+          });
+        }
         userId = updated.rows[0].id;
       }
       await client.query(
         'INSERT INTO wallets (user_id, balance) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
-        [userId, isNew ? WELCOME_BONUS : 0]
+        [userId, 0]
       );
       if (role === 'admin') {
         await client.query(
@@ -1111,20 +1344,22 @@ app.post('/api/auth', async (req, res, next) => {
         );
       }
       await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
-      if (isNew && WELCOME_BONUS > 0) {
-        await client.query(
-          `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
-           VALUES ($1::bigint, 'welcome', 'completed', $2::integer, $3::bigint, 'Приветственный бонус за регистрацию', NOW())`,
-          [userId, WELCOME_BONUS, WELCOME_BONUS]
-        );
-      }
-      await applyBetaUserRules(client, userId);
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
       const profile = await getProfile(userId);
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
-      const token = signSession({ uid: String(userId), exp: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+      const sessionResult = await pool.query(
+        'SELECT session_version FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
+        [userId]
+      );
+      const token = signSession({
+        uid: String(userId),
+        platform: 'telegram',
+        pid: String(telegramUser.id),
+        sv: Number(sessionResult.rows[0]?.session_version || 1),
+        exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+      });
       res.json({ token, profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -1139,7 +1374,6 @@ app.post('/api/auth', async (req, res, next) => {
 
 app.get('/api/me', authRequired, async (req, res, next) => {
   try {
-    await ensureUserSetupDefaults(pool, req.user.id);
     const [profile, designResult] = await Promise.all([
       getProfile(req.user.id),
       pool.query('SELECT published FROM app_settings WHERE id = 1')
@@ -1150,22 +1384,52 @@ app.get('/api/me', authRequired, async (req, res, next) => {
   }
 });
 
-
-// Recovery mode: the achievement catalogue remains visible in the client, but
-// database-backed automatic grants are temporarily disabled until they are tested
-// separately. These endpoints keep the V14 interface compatible without touching
-// authentication or user balances.
-app.get('/api/achievements', authRequired, async (req, res) => {
-  res.json({ achievements: [], profileAchievements: req.user.achievements || [], comingSoon: true });
+app.delete('/api/me/account', authRequired, async (req, res, next) => {
+  try {
+    const result = await deleteAccountData(req.user.id, req.body?.confirmation);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.post('/api/me/achievements/:code/ack', authRequired, async (_req, res) => {
-  res.json({ ok: true });
+
+app.get('/api/achievements', authRequired, async (req, res, next) => {
+  try {
+    const state = await getUserAchievementState(pool, req.user.id);
+    const legendary = (req.user.achievements || []).filter((item) => item.rarity === 'legendary');
+    res.json({
+      achievements: state.achievements,
+      profileAchievements: [...legendary, ...state.earned],
+      unannouncedAchievements: state.unannounced,
+      comingSoon: false
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/me/achievements/:code/ack', authRequired, async (req, res, next) => {
+  try {
+    const acknowledged = await acknowledgeAchievement(pool, req.user.id, req.params.code);
+    if (!acknowledged) return res.status(404).json({ error: 'Награда достижения не найдена.' });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/me/consent', authRequired, async (req, res, next) => {
   try {
-    await ensureUserSetupDefaults(pool, req.user.id);
+    if (String(req.headers['x-pivnik-explicit-consent'] || '') !== '1') {
+      return res.status(409).json({ error: 'Согласие можно подтвердить только кнопкой пользователя.' });
+    }
+    await pool.query(
+      `UPDATE users
+       SET terms_accepted_at = NOW(), terms_version = $1::text, updated_at = NOW()
+       WHERE id = $2::bigint AND merged_into_user_id IS NULL`,
+      [TERMS_VERSION, req.user.id]
+    );
     res.json({ ok: true, profile: await getProfile(req.user.id) });
   } catch (error) {
     next(error);
@@ -1178,11 +1442,21 @@ app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [req.user.id]);
     const ordinalResult = await client.query(
-      `SELECT (SELECT COUNT(*)::integer FROM users ux
-               WHERE ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id)) AS beta_number
-       FROM users u WHERE u.id = $1::bigint`,
+      `SELECT u.terms_accepted_at, u.terms_version,
+              (SELECT COUNT(*)::integer FROM users ux
+               WHERE ux.merged_into_user_id IS NULL
+                 AND (ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id))) AS beta_number
+       FROM users u
+       WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
       [req.user.id]
     );
+    if (
+      !ordinalResult.rowCount
+      || !ordinalResult.rows[0].terms_accepted_at
+      || ordinalResult.rows[0].terms_version !== TERMS_VERSION
+    ) {
+      throw Object.assign(new Error('Сначала примите правила программы.'), { statusCode: 428 });
+    }
     const betaNumber = Number(ordinalResult.rows[0]?.beta_number || 0);
     if (!betaNumber || betaNumber > 30) {
       await client.query('COMMIT');
@@ -1203,9 +1477,15 @@ app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
       );
       const balanceAfter = Number(wallet.rows[0]?.balance || 0);
       await client.query(
-        `INSERT INTO transactions (client_id, mode, status, bonus_earned, balance_after, reason, completed_at)
-         VALUES ($1::bigint, 'adjustment', 'completed', $2::integer, $3::bigint, 'Легендарное достижение «Тестировщик»', NOW())`,
-        [req.user.id, 150, balanceAfter]
+        `INSERT INTO transactions (
+           request_key, client_id, mode, status, bonus_earned,
+           balance_after, reason, reward_code, completed_at
+         ) VALUES (
+           $1, $2::bigint, 'adjustment', 'completed', $3::bigint,
+           $4::bigint, 'Легендарное достижение «Тестировщик»',
+           'beta-tester-legendary', NOW()
+         )`,
+        [`reward:${req.user.id}:beta-tester-legendary`, req.user.id, 150, balanceAfter]
       );
       granted = true;
     }
@@ -1230,7 +1510,7 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
     const privacy = req.body?.privacy && typeof req.body.privacy === 'object' ? req.body.privacy : {};
     const accessResult = await pool.query(
       `SELECT u.*, EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame
-       FROM users u WHERE u.id = $1::bigint`,
+       FROM users u WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
       [req.user.id]
     );
     const accessRow = accessResult.rows[0];
@@ -1250,10 +1530,8 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
          show_stats = $8,
          profile_frame = $9::text,
          onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
-         terms_accepted_at = COALESCE(terms_accepted_at, NOW()),
-         terms_version = $10::text,
          updated_at = NOW()
-       WHERE id = $11::bigint`,
+       WHERE id = $10::bigint AND merged_into_user_id IS NULL`,
       [
         avatarSource,
         avatarKey,
@@ -1264,7 +1542,6 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
         privacy.showMonthlySpend !== false,
         privacy.showStats !== false,
         storedFrame,
-        TERMS_VERSION,
         req.user.id
       ]
     );
@@ -1275,8 +1552,12 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
 });
 
 app.post('/api/me/qr', authRequired, async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const qr = await ensurePersonalQr(pool, req.user.id);
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [req.user.id]);
+    const qr = await ensurePersonalQr(client, req.user.id);
+    await client.query('COMMIT');
     const payload = `${PERSONAL_QR_PREFIX}${qr.qr_token}`;
     const image = await QRCode.toDataURL(payload, {
       width: 360,
@@ -1286,7 +1567,10 @@ app.post('/api/me/qr', authRequired, async (req, res, next) => {
     });
     res.json({ payload, shortCode: qr.qr_short_code, permanent: true, image });
   } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
     next(error);
+  } finally {
+    client.release();
   }
 });
 
@@ -1317,6 +1601,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
          FROM users u
          JOIN transactions t ON t.client_id = u.id
          WHERE t.status = 'completed'
+           AND u.deleted_at IS NULL
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
@@ -1337,6 +1622,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
            AND t.mode IN ('accrue','redeem')
            AND t.created_at >= date_trunc('month', CURRENT_DATE)
            AND t.created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+         WHERE u.deleted_at IS NULL
          GROUP BY u.id
        ), positions AS (
          SELECT *, RANK() OVER (ORDER BY spend_cents DESC, id ASC) AS rank FROM totals
@@ -1347,7 +1633,7 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
     const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date());
     res.json({
       month,
-      prizeNote: 'Награды за 1–3 место будут объявлены после бета-теста.',
+      prizeNote: 'После закрытия месяца участник на 1-м месте получает эпическое достижение и бесплатную пинту 0,5 л.',
       leaders: ranked.rows.map((row) => {
         const isMe = String(row.id) === String(req.user.id);
         return {
@@ -1451,13 +1737,15 @@ app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async
       `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, profile_frame, role,
               (staff_pin_hash IS NOT NULL AND staff_pin_salt IS NOT NULL) AS pin_configured
        FROM users
-       WHERE role IN ('staff','admin')
+       WHERE role IN ('staff','admin') AND merged_into_user_id IS NULL
        ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 0 END, first_name, id`
     );
     const available = result.rows
-      .filter((row) => !shiftIds.length || shiftIds.includes(String(row.id)))
+      .filter((row) => row.role === 'admin' || shiftIds.includes(String(row.id)))
       .map((row) => ({
-        id: String(row.id), telegramId: String(row.telegram_id), username: row.username,
+        id: String(row.id),
+        telegramId: row.telegram_id === null ? null : String(row.telegram_id),
+        username: row.username,
         firstName: row.first_name, lastName: row.last_name,
         name: [row.first_name, row.last_name].filter(Boolean).join(' '), role: row.role,
         photoUrl: row.photo_url,
@@ -1479,18 +1767,36 @@ app.post('/api/staff/activate', authRequired, requireRole('staff', 'admin'), asy
     const pin = normalizeStaffPin(req.body?.pin);
     if (!userId || !pin) return res.status(400).json({ error: 'Введите PIN сотрудника из 4–6 цифр.' });
     const result = await pool.query(
-      `SELECT id, first_name, last_name, role, staff_pin_hash, staff_pin_salt
-       FROM users WHERE id = $1 AND role IN ('staff','admin')`,
-      [userId]
+      `SELECT id, first_name, last_name, role, staff_pin_hash, staff_pin_salt,
+              session_version,
+              (SELECT session_version FROM users WHERE id = $2::bigint) AS terminal_session_version
+       FROM users
+       WHERE id = $1::bigint
+         AND role IN ('staff','admin')
+         AND merged_into_user_id IS NULL`,
+      [userId, req.user.id]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'Сотрудник не найден.' });
     const row = result.rows[0];
     if (!verifyStaffPin(pin, row.staff_pin_salt, row.staff_pin_hash)) return res.status(403).json({ error: 'Неверный PIN сотрудника.' });
     const shift = await getCurrentShift();
-    if (shift?.members?.length && !shift.members.some((member) => String(member.id) === String(row.id))) {
+    if (
+      row.role !== 'admin'
+      && (
+        !shift
+        || !shift.members.some((member) => String(member.id) === String(row.id))
+      )
+    ) {
       return res.status(403).json({ error: 'Этот сотрудник не выбран в текущей смене.' });
     }
-    const token = signSession({ kind: 'staff', terminalUid: String(req.user.id), staffUid: String(row.id), exp: Date.now() + 16 * 60 * 60 * 1000 });
+    const token = signSession({
+      kind: 'staff',
+      terminalUid: String(req.user.id),
+      terminalSv: Number(row.terminal_session_version),
+      staffUid: String(row.id),
+      staffSv: Number(row.session_version),
+      exp: Date.now() + 16 * 60 * 60 * 1000
+    });
     res.json({ token, staff: { id: String(row.id), firstName: row.first_name, lastName: row.last_name, role: row.role } });
   } catch (error) {
     next(error);
@@ -1499,17 +1805,8 @@ app.post('/api/staff/activate', authRequired, requireRole('staff', 'admin'), asy
 
 app.post('/api/staff/qr/resolve', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
-    const raw = String(req.body?.payload || '').trim().toUpperCase();
-    const token = raw.startsWith(PERSONAL_QR_PREFIX) ? String(req.body.payload).trim().slice(PERSONAL_QR_PREFIX.length) : null;
-    const result = await pool.query(
-      `SELECT id, qr_token, qr_short_code
-       FROM users
-       WHERE ${token ? 'qr_token = $1' : 'UPPER(qr_short_code) = $1'}
-       LIMIT 1`,
-      [token || raw]
-    );
-    if (!result.rowCount) return res.status(404).json({ error: 'Персональный код не найден.' });
-    const user = result.rows[0];
+    const user = await resolvePersonalQrRecord(pool, req.body?.payload);
+    if (!user) return res.status(404).json({ error: 'Персональный код не найден.' });
     res.json({ qrToken: user.qr_token, shortCode: user.qr_short_code, client: await getProfile(user.id) });
   } catch (error) {
     next(error);
@@ -1522,32 +1819,52 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
   const beerVolumeWasConfirmed = Object.prototype.hasOwnProperty.call(req.body || {}, 'beerLiters');
   const beerMl = mlFromLiters(req.body?.beerLiters);
   const qrToken = String(req.body?.qrToken || '');
-  const requestKey = String(req.body?.requestKey || crypto.randomUUID());
+  const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (!amountCents) return res.status(400).json({ error: 'Введите сумму чека.' });
   if (!beerVolumeWasConfirmed) return res.status(400).json({ error: 'Укажите объём разливного или явно выберите 0 л.' });
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
+  if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey операции.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
-    if (existing.rowCount) {
-      await client.query('ROLLBACK');
-      return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
-    }
+    await lockRequestKey(client, requestKey);
 
+    const resolvedQr = await resolvePersonalQrRecord(client, qrToken);
+    if (!resolvedQr) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
     const userResult = await client.query(
       `SELECT id, telegram_id, first_name, last_name, qr_short_code, role, unlimited_bonus
-       FROM users WHERE qr_token = $1 FOR UPDATE`,
-      [qrToken]
+       FROM users
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
+       FOR UPDATE`,
+      [resolvedQr.id]
     );
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
     const targetUser = userResult.rows[0];
+    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
+    if (existing.rowCount) {
+      assertMatchingTransaction(existing.rows[0], {
+        clientId: targetUser.id,
+        staffId: actingStaff.id,
+        mode,
+        checkAmountCents: amountCents,
+        beerMl
+      });
+      await client.query('COMMIT');
+      await syncUserAchievements(pool, existing.rows[0].client_id);
+      return res.json({
+        transaction: transactionResponse(existing.rows[0]),
+        client: await getProfile(existing.rows[0].client_id)
+      });
+    }
 
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [targetUser.id]);
     if (!walletResult.rowCount) {
@@ -1607,6 +1924,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       [newPaidMl, newGiftBalanceMl, targetUser.id]
     );
     await client.query('COMMIT');
+    await syncUserAchievements(pool, targetUser.id);
 
     const tx = txResult.rows[0];
     const beerText = beerMl > 0
@@ -1654,9 +1972,10 @@ ${operationText}
 
 app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   const qrToken = String(req.body?.qrToken || '');
-  const requestKey = String(req.body?.requestKey || crypto.randomUUID());
+  const requestKey = normalizeRequestKey(req.body?.requestKey);
   const giftMl = mlFromLiters(req.body?.giftLiters);
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
+  if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey операции.' });
   if (![500, 1000].includes(giftMl)) return res.status(400).json({ error: 'Можно выдать 0,5 или 1 литр подарка.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
@@ -1664,22 +1983,40 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
-    if (existing.rowCount) {
-      await client.query('ROLLBACK');
-      return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
-    }
+    await lockRequestKey(client, requestKey);
 
+    const resolvedQr = await resolvePersonalQrRecord(client, qrToken);
+    if (!resolvedQr) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
     const userResult = await client.query(
       `SELECT id, telegram_id, first_name, last_name
-       FROM users WHERE qr_token = $1 FOR UPDATE`,
-      [qrToken]
+       FROM users
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
+       FOR UPDATE`,
+      [resolvedQr.id]
     );
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
     const targetUser = userResult.rows[0];
+    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
+    if (existing.rowCount) {
+      assertMatchingTransaction(existing.rows[0], {
+        clientId: targetUser.id,
+        staffId: actingStaff.id,
+        mode: 'beer_gift',
+        giftSpentMl: giftMl
+      });
+      await client.query('COMMIT');
+      await syncUserAchievements(pool, existing.rows[0].client_id);
+      return res.json({
+        transaction: transactionResponse(existing.rows[0]),
+        client: await getProfile(existing.rows[0].client_id)
+      });
+    }
     const beerResult = await client.query('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE', [targetUser.id]);
     if (!beerResult.rowCount || Number(beerResult.rows[0].gift_ml_balance || 0) < giftMl) {
       await client.query('ROLLBACK');
@@ -1698,6 +2035,7 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
     );
     await client.query('UPDATE beer_loyalty SET gift_ml_balance = $1, updated_at = NOW() WHERE user_id = $2', [newGiftBalance, targetUser.id]);
     await client.query('COMMIT');
+    await syncUserAchievements(pool, targetUser.id);
 
     await sendTelegramMessage(
       targetUser.telegram_id,
@@ -1718,27 +2056,61 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
 app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   const qrToken = String(req.body?.qrToken || '');
   const itemCode = String(req.body?.itemCode || '');
-  const requestKey = String(req.body?.requestKey || crypto.randomUUID());
+  const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (!qrToken) return res.status(400).json({ error: 'Сначала отсканируйте QR.' });
-  const itemResult = await pool.query("SELECT * FROM shop_items WHERE code = $1 AND active = TRUE AND price_type = 'bonus' AND bonus_price > 0", [itemCode]);
-  if (!itemResult.rowCount) return res.status(400).json({ error: 'Товар недоступен.' });
-  const item = shopItemResponse(itemResult.rows[0]);
+  if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey операции.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
-    if (existing.rowCount) {
+    await lockRequestKey(client, requestKey);
+    const itemResult = await client.query(
+      `SELECT * FROM shop_items
+       WHERE code = $1 AND active = TRUE
+         AND price_type = 'bonus' AND bonus_price > 0
+       FOR SHARE`,
+      [itemCode]
+    );
+    if (!itemResult.rowCount) {
       await client.query('ROLLBACK');
-      return res.json({ transaction: transactionResponse(existing.rows[0]), client: await getProfile(existing.rows[0].client_id) });
+      return res.status(400).json({ error: 'Товар недоступен.' });
     }
-    const userResult = await client.query('SELECT id, telegram_id, first_name, role, unlimited_bonus FROM users WHERE qr_token = $1 FOR UPDATE', [qrToken]);
+    const item = shopItemResponse(itemResult.rows[0]);
+    const resolvedQr = await resolvePersonalQrRecord(client, qrToken);
+    if (!resolvedQr) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Персональный QR-код не найден.' });
+    }
+    const userResult = await client.query(
+      `SELECT id, telegram_id, first_name, role, unlimited_bonus
+       FROM users
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
+       FOR UPDATE`,
+      [resolvedQr.id]
+    );
     if (!userResult.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Персональный QR-код не найден.' });
     }
     const target = userResult.rows[0];
+    const existing = await client.query('SELECT * FROM transactions WHERE request_key = $1', [requestKey]);
+    if (existing.rowCount) {
+      assertMatchingTransaction(existing.rows[0], {
+        clientId: target.id,
+        staffId: actingStaff.id,
+        mode: 'shop',
+        bonusPrice: item.bonusPrice,
+        reason: item.title
+      });
+      await client.query('COMMIT');
+      await syncUserAchievements(pool, existing.rows[0].client_id);
+      return res.json({
+        transaction: transactionResponse(existing.rows[0]),
+        client: await getProfile(existing.rows[0].client_id),
+        item
+      });
+    }
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [target.id]);
     const unlimitedBonus = hasUnlimitedBonus(target);
     const balance = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(walletResult.rows[0]?.balance || 0);
@@ -1764,6 +2136,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       await client.query("UPDATE users SET profile_frame = 'diamond', updated_at = NOW() WHERE id = $1::bigint", [target.id]);
     }
     await client.query('COMMIT');
+    await syncUserAchievements(pool, target.id);
     await sendTelegramMessage(target.telegram_id, `Покупка в лавке «Пивника»
 
 ${item.title}
@@ -1799,19 +2172,57 @@ app.get('/api/staff/recent', authRequired, requireRole('staff', 'admin'), async 
 
 app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   const reason = String(req.body?.reason || '').trim();
+  const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
+  if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
-  const quota = await getCancellationQuota(actingStaff.id);
-  if (!quota.active) return res.status(403).json({ error: 'Отмена доступна только в активной смене.' });
-  if (quota.remaining <= 0) return res.status(403).json({ error: 'Лимит отмен исчерпан. Следующую отмену проводит владелец.' });
+  const replay = await pool.query(
+    'SELECT * FROM transactions WHERE cancel_request_key = $1',
+    [requestKey]
+  );
+  if (replay.rowCount) {
+    if (
+      String(replay.rows[0].id) !== String(req.params.id)
+      || String(replay.rows[0].cancelled_by || '') !== String(actingStaff.id)
+      || String(replay.rows[0].cancel_reason || '') !== reason
+    ) {
+      return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
+    }
+    return res.json({
+      ok: true,
+      transaction: transactionResponse(replay.rows[0]),
+      client: await getProfile(replay.rows[0].client_id),
+      quota: await getCancellationQuota(actingStaff.id)
+    });
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const tx = await cancelCompletedTransaction(client, req.params.id, actingStaff.id, reason, { staffId: actingStaff.id, notBefore: quota.countFrom });
+    await client.query(
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      [`staff-cancel-quota:${actingStaff.id}`]
+    );
+    const quota = await getCancellationQuota(actingStaff.id, client);
+    if (!quota.active) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Отмена доступна только в активной смене.' });
+    }
+    if (quota.remaining <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Лимит отмен исчерпан. Следующую отмену проводит владелец.' });
+    }
+    const tx = await cancelCompletedTransaction(
+      client,
+      req.params.id,
+      actingStaff.id,
+      reason,
+      requestKey,
+      { staffId: actingStaff.id, notBefore: quota.countFrom }
+    );
     await client.query('COMMIT');
     const profile = await getProfile(tx.client_id);
-    await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
+    if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
 Причина: ${reason}
 Текущий баланс: ${profile.balance} бонусов.`);
     res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: await getCancellationQuota(actingStaff.id) });
@@ -1855,14 +2266,14 @@ app.get('/api/admin/shift', authRequired, requireRole('viewer', 'admin'), async 
     const staffResult = await pool.query(
       `SELECT id, telegram_id, username, first_name, last_name, photo_url, avatar_source, avatar_key, role
        FROM users
-       WHERE role IN ('staff','admin')
+       WHERE role IN ('staff','admin') AND merged_into_user_id IS NULL
        ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 0 END, first_name, id`
     );
     res.json({
       shift: await getCurrentShift(),
       staff: staffResult.rows.map((row) => ({
         id: String(row.id),
-        telegramId: String(row.telegram_id),
+        telegramId: row.telegram_id === null ? null : String(row.telegram_id),
         username: row.username,
         firstName: row.first_name,
         lastName: row.last_name,
@@ -1898,7 +2309,10 @@ app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res,
     }
 
     const validResult = await client.query(
-      `SELECT id FROM users WHERE id = ANY($1::bigint[]) AND role IN ('staff','admin')`,
+      `SELECT id FROM users
+       WHERE id = ANY($1::bigint[])
+         AND role IN ('staff','admin')
+         AND merged_into_user_id IS NULL`,
       [staffIds]
     );
     const validIds = validResult.rows.map((row) => String(row.id));
@@ -1940,7 +2354,7 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
   try {
     const summaryResult = await pool.query(`
       SELECT
-        (SELECT COUNT(*)::int FROM users) AS clients,
+        (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL) AS clients,
         (SELECT COALESCE(SUM(bonus_earned),0)::bigint FROM transactions WHERE status='completed') AS issued,
         (SELECT COUNT(*)::int FROM transactions WHERE created_at::date = CURRENT_DATE) AS today_ops,
         (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE) AS today_check_cents,
@@ -1983,12 +2397,14 @@ app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async 
        FROM users u
        JOIN wallets w ON w.user_id = u.id
        LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
+       WHERE u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
        ORDER BY u.created_at DESC
        LIMIT 200`
     );
     res.json({ users: result.rows.map((row) => ({
       id: String(row.id),
-      telegramId: String(row.telegram_id),
+      telegramId: row.telegram_id === null ? null : String(row.telegram_id),
       username: row.username,
       name: [row.first_name, row.last_name].filter(Boolean).join(' '),
       role: row.role,
@@ -2034,7 +2450,19 @@ app.get('/api/admin/inquiries', authRequired, requireRole('viewer', 'admin'), as
   try {
     const limit = Math.max(5, Math.min(300, Number(req.query.limit || 200)));
     const result = await pool.query(
-      `SELECT i.*, u.telegram_id, u.username, u.first_name, u.last_name
+      `SELECT i.*, u.telegram_id, u.username, u.first_name, u.last_name,
+              (SELECT ui.provider_username
+               FROM user_identities ui
+               WHERE ui.user_id = u.id AND ui.provider = 'telegram'
+               LIMIT 1) AS telegram_username,
+              (SELECT ui.provider_user_id
+               FROM user_identities ui
+               WHERE ui.user_id = u.id AND ui.provider = 'vk'
+               LIMIT 1) AS vk_id,
+              (SELECT ui.provider_username
+               FROM user_identities ui
+               WHERE ui.user_id = u.id AND ui.provider = 'vk'
+               LIMIT 1) AS vk_username
        FROM shop_inquiries i JOIN users u ON u.id=i.user_id
        ORDER BY i.created_at DESC LIMIT $1`,
       [limit]
@@ -2042,7 +2470,12 @@ app.get('/api/admin/inquiries', authRequired, requireRole('viewer', 'admin'), as
     res.json({ inquiries: result.rows.map((row) => ({
       id: String(row.id), userId: String(row.user_id), itemCode: row.item_code, itemTitle: row.item_title,
       message: row.message, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at,
-      telegramId: String(row.telegram_id), username: row.username, name: [row.first_name,row.last_name].filter(Boolean).join(' ')
+      telegramId: row.telegram_id === null ? null : String(row.telegram_id),
+      vkId: row.vk_id === null ? null : String(row.vk_id),
+      telegramUsername: row.telegram_username || null,
+      vkUsername: row.vk_username || null,
+      username: row.username,
+      name: [row.first_name,row.last_name].filter(Boolean).join(' ')
     })) });
   } catch (error) { next(error); }
 });
@@ -2061,7 +2494,10 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
   try {
     const role = String(req.body?.role || 'client');
     if (!['client', 'staff', 'viewer'].includes(role)) return res.status(400).json({ error: 'Недопустимая роль.' });
-    const target = await pool.query('SELECT telegram_id FROM users WHERE id = $1', [req.params.id]);
+    const target = await pool.query(
+      'SELECT telegram_id FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
+      [req.params.id]
+    );
     if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
     if (String(target.rows[0].telegram_id) === ownerTelegramId) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
     await pool.query(
@@ -2069,8 +2505,9 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
          role = $1,
          unlimited_bonus = CASE WHEN $1 = 'viewer' THEN TRUE ELSE FALSE END,
          profile_frame = CASE WHEN $1 = 'viewer' THEN 'fire' ELSE 'none' END,
+         session_version = session_version + 1,
          updated_at = NOW()
-       WHERE id = $2`,
+       WHERE id = $2::bigint AND merged_into_user_id IS NULL`,
       [role, req.params.id]
     );
     res.json({ ok: true });
@@ -2083,12 +2520,20 @@ app.post('/api/admin/users/:id/pin', authRequired, requireRole('admin'), async (
   try {
     const pin = normalizeStaffPin(req.body?.pin);
     if (!pin) return res.status(400).json({ error: 'PIN должен содержать 4–6 цифр.' });
-    const target = await pool.query('SELECT id, role FROM users WHERE id = $1', [req.params.id]);
+    const target = await pool.query(
+      'SELECT id, role FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
+      [req.params.id]
+    );
     if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
     if (!['staff','admin'].includes(target.rows[0].role)) return res.status(400).json({ error: 'PIN можно назначить только сотруднику.' });
     const { salt, hash } = createStaffPinHash(pin);
     await pool.query(
-      'UPDATE users SET staff_pin_hash = $1, staff_pin_salt = $2, staff_pin_updated_at = NOW(), updated_at = NOW() WHERE id = $3',
+      `UPDATE users
+       SET staff_pin_hash = $1, staff_pin_salt = $2,
+           staff_pin_updated_at = NOW(),
+           session_version = session_version + 1,
+           updated_at = NOW()
+       WHERE id = $3::bigint AND merged_into_user_id IS NULL`,
       [hash, salt, req.params.id]
     );
     res.json({ ok: true });
@@ -2098,26 +2543,61 @@ app.post('/api/admin/users/:id/pin', authRequired, requireRole('admin'), async (
 });
 
 app.post('/api/admin/users/:id/reissue-qr', authRequired, requireRole('admin'), async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const qr = await ensurePersonalQr(pool, req.params.id, true);
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [req.params.id]);
+    const qr = await ensurePersonalQr(client, req.params.id, true);
+    await client.query('COMMIT');
     res.json({ ok: true, shortCode: qr.qr_short_code });
   } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
     next(error);
+  } finally {
+    client.release();
   }
 });
 
 app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), async (req, res, next) => {
   const amount = Math.trunc(Number(req.body?.amount || 0));
   const reason = String(req.body?.reason || '').trim();
+  const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (!amount || !reason) return res.status(400).json({ error: 'Укажите сумму и причину.' });
+  if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey корректировки.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const targetResult = await client.query('SELECT telegram_id, role, unlimited_bonus FROM users WHERE id = $1', [req.params.id]);
+    await lockRequestKey(client, requestKey);
+    const targetResult = await client.query(
+      `SELECT id, telegram_id, role, unlimited_bonus
+       FROM users
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL
+       FOR UPDATE`,
+      [req.params.id]
+    );
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [req.params.id]);
     if (!targetResult.rowCount || !walletResult.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Пользователь не найден.' });
+    }
+    const existing = await client.query(
+      'SELECT * FROM transactions WHERE request_key = $1',
+      [requestKey]
+    );
+    if (existing.rowCount) {
+      assertMatchingTransaction(existing.rows[0], {
+        clientId: targetResult.rows[0].id,
+        staffId: req.user.id,
+        mode: 'adjustment',
+        adjustmentAmount: amount,
+        reason
+      });
+      await client.query('COMMIT');
+      return res.json({
+        ok: true,
+        balance: Number(existing.rows[0].balance_after || 0),
+        replayed: true
+      });
     }
     if (hasUnlimitedBonus(targetResult.rows[0])) {
       await client.query('ROLLBACK');
@@ -2131,9 +2611,19 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
     }
     await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, req.params.id]);
     await client.query(
-      `INSERT INTO transactions (client_id, staff_id, mode, status, bonus_spent, bonus_earned, balance_after, reason, completed_at)
-       VALUES ($1,$2,'adjustment','completed',$3,$4,$5,$6,NOW())`,
-      [req.params.id, req.user.id, amount < 0 ? Math.abs(amount) : 0, amount > 0 ? amount : 0, newBalance, reason]
+      `INSERT INTO transactions (
+         request_key, client_id, staff_id, mode, status,
+         bonus_spent, bonus_earned, balance_after, reason, completed_at
+       ) VALUES ($1,$2,$3,'adjustment','completed',$4,$5,$6,$7,NOW())`,
+      [
+        requestKey,
+        req.params.id,
+        req.user.id,
+        amount < 0 ? Math.abs(amount) : 0,
+        amount > 0 ? amount : 0,
+        newBalance,
+        reason
+      ]
     );
     await client.query('COMMIT');
     res.json({ ok: true, balance: newBalance });
@@ -2147,14 +2637,22 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
 
 app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'), async (req, res, next) => {
   const reason = String(req.body?.reason || '').trim();
+  const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
+  if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const tx = await cancelCompletedTransaction(client, req.params.id, req.user.id, reason);
+    const tx = await cancelCompletedTransaction(
+      client,
+      req.params.id,
+      req.user.id,
+      reason,
+      requestKey
+    );
     await client.query('COMMIT');
     const profile = await getProfile(tx.client_id);
-    await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
+    if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
 Причина: ${reason}
 Текущий баланс: ${profile.balance} бонусов.`);
     res.json({ ok: true, transaction: transactionResponse(tx), client: profile });
@@ -2350,7 +2848,7 @@ app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.j
 app.use((_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.use((error, _req, res, _next) => {
-  console.error(error);
+  console.error('Request failed:', error?.code || error?.statusCode || 'internal_error');
   const databaseError = Boolean(error && /^[0-9A-Z]{5}$/.test(String(error.code || '')));
   const message = databaseError
     ? 'Сервер временно не смог загрузить данные. Повторите вход.'
@@ -2359,7 +2857,7 @@ app.use((error, _req, res, _next) => {
 });
 
 await initDatabase();
-const server = app.listen(port, '0.0.0.0', () => {
+const server = app.listen(port, isChildServer ? '127.0.0.1' : '0.0.0.0', () => {
   console.log(`Pivnik app is running on port ${port}`);
 });
 

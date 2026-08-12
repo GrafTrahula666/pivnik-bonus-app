@@ -1,14 +1,31 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '14.4-qr-fix';
+const APP_VERSION = '17.0-luxury-vip-space';
+const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
+const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
+const telegramInitDataFromUrl = readTelegramLaunchData();
+let telegramBridgeInitialized = false;
 document.documentElement.classList.toggle('android-webview', isAndroid);
 document.documentElement.classList.toggle('lite-mode', isLiteRequested);
 document.documentElement.classList.toggle('reduce-effects', isAndroid || isLiteRequested);
 
+function readTelegramLaunchData() {
+  for (const rawParams of [location.hash.slice(1), location.search.slice(1)]) {
+    if (!rawParams) continue;
+    try {
+      const initData = new URLSearchParams(rawParams).get('tgWebAppData');
+      if (initData) return initData;
+    } catch (_) {}
+  }
+  return '';
+}
+
 function refreshTelegramBridge() {
   tg = window.Telegram?.WebApp ?? tg ?? null;
   if (!tg) return null;
+  if (telegramBridgeInitialized) return tg;
+  telegramBridgeInitialized = true;
   try { tg.ready(); } catch (_) {}
   try { tg.expand(); } catch (_) {}
   try {
@@ -20,10 +37,15 @@ function refreshTelegramBridge() {
 }
 refreshTelegramBridge();
 
+function localStorageKey(key) {
+  const prefix = String(window.__PIVNIK_STORAGE_PREFIX__ || 'pivnik_tg_');
+  return `${prefix}${String(key).replace(/^pivnik_/, '')}`;
+}
+
 const safeStorage = {
-  get(key) { try { return localStorage.getItem(key) || ''; } catch (_) { return ''; } },
-  set(key, value) { try { localStorage.setItem(key, value); } catch (_) {} },
-  remove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+  get(key) { try { return localStorage.getItem(localStorageKey(key)) || ''; } catch (_) { return ''; } },
+  set(key, value) { try { localStorage.setItem(localStorageKey(key), value); } catch (_) {} },
+  remove(key) { try { localStorage.removeItem(localStorageKey(key)); } catch (_) {} }
 };
 const deepClone = (value) => {
   try { return globalThis.structuredClone ? globalThis.structuredClone(value) : JSON.parse(JSON.stringify(value)); }
@@ -72,8 +94,11 @@ const state = {
   walletConfig: null,
   inquiryItem: null,
   achievements: [],
+  achievementsLoaded: false,
   achievementTab: 'common',
   achievementQueue: [],
+  transactions: [],
+  historyTab: 'purchases',
   bootSecondaryStarted: false
 };
 
@@ -213,14 +238,18 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
     if (source === 'telegram') {
       button.disabled = !state.profile?.photoUrl;
       const small = button.querySelector('small');
-      if (small) small.textContent = state.profile?.photoUrl ? 'Фото из профиля Telegram' : 'В Telegram нет фото';
+      if (small) {
+        small.textContent = state.profile?.photoUrl
+          ? `Фото из профиля ${PLATFORM_NAME}`
+          : `В ${PLATFORM_NAME} нет фото`;
+      }
     }
   });
   $('#openAnimalPicker')?.classList.toggle('active', state.profileDraft.avatarSource === 'animal');
   const telegramPreview = $('#telegramAvatarPreview');
   if (telegramPreview) {
     if (state.profile?.photoUrl) renderAvatarInto(telegramPreview, { ...state.profile, avatarSource: 'telegram' });
-    else telegramPreview.textContent = 'T';
+    else telegramPreview.textContent = IS_VK ? 'V' : 'T';
   }
   renderAvatarInto($('#profileSetupPreview'), selectedAvatarPreview());
   const frameOptions = $('#profileFrameOptions');
@@ -237,7 +266,7 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
   const selectedText = $('#profileSetupSelectedText');
   if (selectedText) {
     const source = state.profileDraft.avatarSource;
-    selectedText.textContent = source === 'telegram' ? 'Фото Telegram' : source === 'preset_female' ? 'Женский силуэт' : source === 'animal' ? 'Аватар из коллекции' : 'Мужской силуэт';
+    selectedText.textContent = source === 'telegram' ? `Фото ${PLATFORM_NAME}` : source === 'preset_female' ? 'Женский силуэт' : source === 'animal' ? 'Аватар из коллекции' : 'Мужской силуэт';
   }
   $$('#profileAgeOptions [data-age]').forEach((button) => button.classList.toggle('active', button.dataset.age === (state.profileDraft.ageGroup || '')));
   const privacy = state.profileDraft.privacy;
@@ -461,7 +490,7 @@ function enhanceDom() {
             <button class="primary-avatar-choice" data-avatar-source="preset_female" type="button"><img src="/assets/avatars/preset-female.webp" alt="Женский аватар"><b>Женский</b></button>
           </div>
           <div class="secondary-avatar-grid">
-            <button class="secondary-avatar-choice" data-avatar-source="telegram" type="button"><span class="telegram-avatar-preview" id="telegramAvatarPreview">T</span><span><b>Фото Telegram</b><small>Фото из профиля Telegram</small></span></button>
+            <button class="secondary-avatar-choice" data-avatar-source="telegram" type="button"><span class="telegram-avatar-preview" id="telegramAvatarPreview">${IS_VK ? 'V' : 'T'}</span><span><b>Фото ${PLATFORM_NAME}</b><small>Фото из профиля ${PLATFORM_NAME}</small></span></button>
             <button class="secondary-avatar-choice" id="openAnimalPicker" type="button"><img src="/assets/avatars/01-panda.webp" alt="Коллекция аватаров"><span><b>Выбрать аватар</b><small>Животные и мифические существа</small></span></button>
           </div>
           <div class="selected-avatar-line"><span id="profileSetupPreview"></span><div><small>Выбрано</small><b id="profileSetupSelectedText">Мужской силуэт</b></div></div>
@@ -486,7 +515,7 @@ function enhanceDom() {
           <div class="privacy-switches">
             <label><span><b>Публичный профиль</b><small>Другие смогут открыть статистику и достижения</small></span><input id="privacyPublicProfile" type="checkbox" checked></label>
             <label><span><b>Показывать имя</b><small>В рейтинге и публичном профиле</small></span><input id="privacyShowName" type="checkbox" checked></label>
-            <label><span><b>Показывать аватар</b><small>Фото Telegram или выбранный аватар</small></span><input id="privacyShowAvatar" type="checkbox" checked></label>
+            <label><span><b>Показывать аватар</b><small>Фото ${PLATFORM_NAME} или выбранный аватар</small></span><input id="privacyShowAvatar" type="checkbox" checked></label>
             <label><span><b>Показывать сумму</b><small>Сумма покупок за месяц в таблице лидеров</small></span><input id="privacyShowSpend" type="checkbox" checked></label>
             <label><span><b>Показывать статистику</b><small>Посещения, бонусы и будущие достижения</small></span><input id="privacyShowStats" type="checkbox" checked></label>
           </div>
@@ -519,6 +548,9 @@ async function finishBoot() {
   if (elapsed < BOOT_MIN_MS) await delay(BOOT_MIN_MS - elapsed);
   $('#bootScreen')?.classList.add('hidden');
   $('#appShell')?.classList.remove('hidden');
+  try {
+    window.dispatchEvent(new CustomEvent('pivnik:boot-complete'));
+  } catch (_) {}
 }
 
 function showBootActions(message, { canOpenApp = Boolean(state.profile) } = {}) {
@@ -561,7 +593,7 @@ setTimeout(() => {
     finishBoot();
     toast('Часть данных продолжает загружаться');
   } else {
-    showBootActions('Не удалось завершить подключение. Можно повторить без перезапуска Telegram.');
+    showBootActions(`Не удалось завершить подключение. Можно повторить без перезапуска ${PLATFORM_NAME}.`);
   }
 }, BOOT_FAILSAFE_MS);
 
@@ -594,18 +626,28 @@ function timeoutError() {
 }
 
 async function fetchWithTimeout(path, options, timeoutMs) {
-  if (typeof AbortController === 'undefined') {
-    return Promise.race([
-      fetch(path, options),
-      delay(timeoutMs).then(() => { throw timeoutError(); })
-    ]);
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  let timedOut = false;
+  let timer = 0;
+  const request = Promise.resolve().then(async () => {
+    const response = await fetch(path, {
+      ...options,
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  });
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller?.abort();
+      reject(timeoutError());
+    }, timeoutMs);
+  });
   try {
-    return await fetch(path, { ...options, signal: controller.signal });
+    return await Promise.race([request, timeout]);
   } catch (error) {
-    if (error?.name === 'AbortError') throw timeoutError();
+    if (timedOut || error?.name === 'AbortError') throw timeoutError();
     throw error;
   } finally {
     clearTimeout(timer);
@@ -615,21 +657,24 @@ async function fetchWithTimeout(path, options, timeoutMs) {
 async function api(path, options = {}) {
   const isStaffRequest = String(path).startsWith('/api/staff/');
   const method = String(options.method || 'GET').toUpperCase();
-  const attempts = Number(options.retries ?? (method === 'GET' ? 1 : 0)) + 1;
+  const carriesRequestKey = method !== 'GET'
+    && typeof options.body === 'string'
+    && /"requestKey"\s*:/.test(options.body);
+  const attempts = Number(options.retries ?? (method === 'GET' || carriesRequestKey ? 1 : 0)) + 1;
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const response = await fetchWithTimeout(path, {
+      const { response, data } = await fetchWithTimeout(path, {
         ...options,
         headers: {
           'content-type': 'application/json',
           'x-pivnik-version': APP_VERSION,
+          'x-pivnik-platform': IS_VK ? 'vk' : 'telegram',
           ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
           ...(isStaffRequest && state.staffSession ? { 'x-staff-session': state.staffSession } : {}),
           ...(options.headers || {})
         }
       }, Number(options.timeoutMs || API_TIMEOUT_MS));
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = new Error(data.error || `Ошибка ${response.status}`);
         error.status = response.status;
@@ -662,11 +707,16 @@ function closeModal(id) {
 }
 
 function switchScreen(target) {
+  if (!target) return;
   $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
-  $$('.bottom-nav button').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
+  if (target === 'actions') renderPromotions();
+  if (target === 'league') renderLeaderboard();
+  if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
 
 function currentLevelIndex() {
@@ -676,16 +726,22 @@ function currentLevelIndex() {
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
-  // Keep the published content/visibility settings, but let styles.css remain
-  // the single source of truth for the cross-platform visual system.
-  const platformUiColors = {
-    background: '#050609',
-    header: '#06070a'
-  };
+  const root = document.documentElement;
+  const colors = design.colors || {};
+  root.style.setProperty('--bg', colors.background || '#0e0c0a');
+  root.style.setProperty('--header', colors.header || '#15110e');
+  root.style.setProperty('--surface', colors.surface || '#1c1612');
+  root.style.setProperty('--card', colors.card || '#231a14');
+  root.style.setProperty('--text', colors.text || '#f7eee5');
+  root.style.setProperty('--muted', colors.muted || '#a99580');
+  root.style.setProperty('--gold', colors.accent || '#e9a83b');
+  root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
+  root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
-  $('#showQrButton').lastChild.textContent = design.texts?.qrButton || 'Показать QR';
+  const legacyQrButton = $('#showQrButton');
+  if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
   $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
@@ -694,8 +750,8 @@ function applyDesign(design) {
   });
 
   try {
-    tg?.setHeaderColor(platformUiColors.header);
-    tg?.setBackgroundColor(platformUiColors.background);
+    tg?.setHeaderColor(colors.header || '#15110e');
+    tg?.setBackgroundColor(colors.background || '#0e0c0a');
   } catch (_) {}
 }
 
@@ -731,15 +787,18 @@ function bindContentImageFallbacks(root = document) {
 
 function renderPromotions() {
   const list = $('#promosCatalog');
-  if (!list) return;
-  list.className = `premium-list${state.promotions.length ? '' : ' empty-state'}`;
-  list.innerHTML = state.promotions.length ? state.promotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'}">
-    ${imageMarkup(item.imageSrc, item.title, 'premium-offer-media')}
-    <span class="offer-index">${String(index + 1).padStart(2, '0')}</span>
-    <div class="premium-offer-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p><small>${item.active ? 'Доступно сейчас' : 'Недоступно / скоро'}</small></div>
-    <strong>${escapeHtml(item.badge || (item.active ? 'Активно' : 'Скоро'))}</strong>
-  </article>`).join('') : 'Акций пока нет';
-  bindContentImageFallbacks(list);
+  const activePromotion = state.promotions.find((item) => item.active) || state.promotions[0];
+  if ($('#homePromoTitle')) $('#homePromoTitle').textContent = activePromotion?.title || 'Новые предложения скоро';
+  if (list) {
+    list.className = `premium-list${state.promotions.length ? '' : ' empty-state'}`;
+    list.innerHTML = state.promotions.length ? state.promotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'} ${item.code === 'orange-blanche-1-plus-1-3' ? 'orange-blanche-offer' : ''}" data-promo-code="${escapeHtml(item.code)}">
+      ${imageMarkup(item.imageSrc, item.title, 'premium-offer-media')}
+      <span class="offer-index">${String(index + 1).padStart(2, '0')}</span>
+      <div class="premium-offer-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p><small>${item.active ? 'Доступно сейчас' : 'Недоступно / скоро'}</small></div>
+      <strong>${escapeHtml(item.badge || (item.active ? 'Активно' : 'Скоро'))}</strong>
+    </article>`).join('') : 'Акций пока нет';
+    bindContentImageFallbacks(list);
+  }
 }
 
 async function loadPromotions() {
@@ -989,6 +1048,15 @@ function renderLeaderboard() {
   const data = state.leaderboard;
   if (!data) return;
   if ($('#leaderboardMonth')) $('#leaderboardMonth').textContent = data.month;
+  const place = data.me?.spend > 0 ? data.me.rank : '—';
+  if ($('#leaguePlaceHome')) $('#leaguePlaceHome').textContent = place;
+  if ($('#leaguePlaceScreen')) $('#leaguePlaceScreen').textContent = place;
+  if ($('#statsLeaguePlace')) $('#statsLeaguePlace').textContent = place;
+  if ($('#leagueSpentHome')) {
+    $('#leagueSpentHome').textContent = data.me?.spend > 0
+      ? `${fmt(data.me.spend)} ₽ за месяц`
+      : 'по сумме покупок';
+  }
   const preview = $('#leaderboardPreview');
   if (preview) {
     preview.innerHTML = [1, 2, 3].map((rank) => {
@@ -997,7 +1065,7 @@ function renderLeaderboard() {
     }).join('');
   }
   if ($('#leaderboardMe')) $('#leaderboardMe').textContent = data.me?.spend > 0 ? `Ваше место: №${data.me.rank} · ${fmt(data.me.spend)} ₽` : 'Ваше место появится после первой покупки';
-  if ($('#leaderboardModalTitle')) $('#leaderboardModalTitle').textContent = `Лидеры · ${data.month}`;
+  if ($('#leaderboardModalTitle')) $('#leaderboardModalTitle').textContent = `Лига Пивника · ${data.month}`;
   if ($('#leaderboardPrizeNote')) $('#leaderboardPrizeNote').textContent = data.prizeNote || 'Награды за 1–3 место будут объявлены позже.';
   const list = $('#leaderboardList');
   if (list) {
@@ -1220,7 +1288,7 @@ function clearStaffSession() {
   safeStorage.remove('pivnik_staff_session');
   renderStaffSession();
   closeModal('staffLoginModal');
-  toast('Используется текущий Telegram-аккаунт');
+  toast(`Используется текущий аккаунт ${PLATFORM_NAME}`);
 }
 
 function achievementRarityLabel(rarity) {
@@ -1236,7 +1304,21 @@ function achievementIconHtml(item = {}) {
     </svg>`;
   }
   if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">β</span>';
-  return '<span class="generic-achievement-icon">◆</span>';
+  const symbols = {
+    receipt: '▤',
+    banknote: '₽',
+    triple: 'III',
+    pint: '♨',
+    spark: '✦',
+    shop: '◫',
+    'receipt-stack': '▥',
+    crown: '♛',
+    calendar: '◷',
+    bonus: 'Б',
+    'monthly-crown': '♛',
+    seal: '✺'
+  };
+  return `<span class="generic-achievement-icon">${symbols[item.icon] || '◆'}</span>`;
 }
 
 function renderProfileAchievements() {
@@ -1246,7 +1328,7 @@ function renderProfileAchievements() {
   const order = { legendary: 1, epic: 2, rare: 3, common: 4 };
   const sorted = [...achievements].sort((a, b) => (order[a.rarity] || 9) - (order[b.rarity] || 9));
   if (!sorted.length) {
-    holder.innerHTML = '<button class="achievement-empty" id="achievementEmptyOpen" type="button">Достижения скоро появятся <span>›</span></button>';
+    holder.innerHTML = '<button class="achievement-empty" id="achievementEmptyOpen" type="button">Открыть путь достижений <span>›</span></button>';
     $('#achievementEmptyOpen')?.addEventListener('click', openAchievements);
     return;
   }
@@ -1254,19 +1336,16 @@ function renderProfileAchievements() {
     <span>${achievementIconHtml(item)}</span><small>${escapeHtml(item.title)}</small>
   </button>`).join('');
   holder.querySelectorAll('[data-profile-achievement]').forEach((button) => button.addEventListener('click', () => {
-    state.achievementTab = 'legendary';
+    const selected = (state.profile?.achievements || []).find((item) => item.code === button.dataset.profileAchievement);
+    state.achievementTab = selected?.rarity || 'common';
     openAchievements(button.dataset.profileAchievement);
   }));
 }
 
-function placeholderAchievements(rarity) {
-  const labels = {
-    common: ['Первый шаг', 'Завсегдатай', 'Пивная дистанция', 'Ночной гость', 'Коллекционер', 'Серия визитов'],
-    rare: ['Скрытая награда', 'Редкий маршрут', 'Особый вечер', 'Секрет Пивника', 'Долгая серия', 'Клуб знатоков'],
-    epic: ['Эпический путь', 'Большая коллекция', 'Год с Пивником', 'Пивной мастер', 'Легенда района', 'Испытание'],
-    legendary: ['Уникальная награда', 'Единственный экземпляр', 'Секретная легенда']
-  };
-  return (labels[rarity] || labels.common).map((title, index) => ({ code: `placeholder-${rarity}-${index}`, title, rarity, locked: true }));
+function achievementRewardLabel(item = {}) {
+  if (Number(item.rewardBeerMl || 0) > 0) return '1 бесплатная пинта · 0,5 л';
+  if (Number(item.rewardBonus || 0) > 0) return `+${fmt(item.rewardBonus)} бонусов`;
+  return 'Особая награда';
 }
 
 function renderAchievementCatalog() {
@@ -1274,13 +1353,35 @@ function renderAchievementCatalog() {
   if (!catalog) return;
   const rarity = state.achievementTab || 'common';
   $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.classList.toggle('active', button.dataset.achievementTab === rarity));
-  const earned = (state.profile?.achievements || []).filter((item) => item.rarity === rarity);
-  const items = [...earned, ...placeholderAchievements(rarity)];
-  catalog.innerHTML = `<div class="achievement-coming-soon"><b>Скоро</b><span>Условия и изображения достижений сейчас готовятся</span></div>
-    <div class="achievement-grid">${items.map((item) => item.locked
-      ? `<button class="achievement-tile locked rarity-${rarity}" type="button"><span class="achievement-tile-icon"><i></i></span><b>${escapeHtml(item.title)}</b><small>В разработке</small></button>`
-      : `<button class="achievement-tile earned rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}" type="button"><span class="achievement-tile-icon">${achievementIconHtml(item)}</span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(achievementRarityLabel(item.rarity))}</small><p>${escapeHtml(item.description)}</p></button>`
-    ).join('')}</div>`;
+  const items = rarity === 'legendary'
+    ? (state.profile?.achievements || []).filter((item) => item.rarity === 'legendary').map((item) => ({ ...item, earned: true, locked: false }))
+    : state.achievements.filter((item) => item.rarity === rarity);
+  if (!items.length) {
+    const message = rarity === 'legendary'
+      ? 'Легендарные достижения выдаются только за уникальные события.'
+      : state.achievementsLoaded
+        ? 'Для этой редкости пока нет доступных достижений.'
+        : 'Загружаем условия и ваш прогресс…';
+    catalog.innerHTML = `<div class="achievement-catalog-empty">${escapeHtml(message)}</div>`;
+    return;
+  }
+  const earnedCount = items.filter((item) => item.earned).length;
+  catalog.innerHTML = `<div class="achievement-summary">
+      <span>${escapeHtml(achievementRarityLabel(rarity))}</span>
+      <b>${earnedCount} из ${items.length}</b>
+    </div>
+    <div class="achievement-grid">${items.map((item) => {
+      const progress = item.progress || { percent: item.earned ? 100 : 0, label: item.earned ? 'Получено' : 'Уникальное условие' };
+      return `<article class="achievement-tile ${item.earned ? 'earned' : 'locked'} rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}">
+        <span class="achievement-tile-icon">${achievementIconHtml(item)}</span>
+        <span class="achievement-state">${item.earned ? 'Получено' : `${fmt(progress.percent)}%`}</span>
+        <b>${escapeHtml(item.title)}</b>
+        <p>${escapeHtml(item.description || '')}</p>
+        <div class="achievement-progress"><i style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></i></div>
+        <small>${escapeHtml(progress.label || '')}</small>
+        <strong>${escapeHtml(achievementRewardLabel(item))}</strong>
+      </article>`;
+    }).join('')}</div>`;
 }
 
 function openAchievements(code = '') {
@@ -1294,13 +1395,33 @@ function openAchievements(code = '') {
 
 function renderAchievements() {
   renderProfileAchievements();
+  const earned = state.profile?.achievements?.length || 0;
+  const pending = state.profile?.unannouncedAchievements?.length || 0;
+  if ($('#achievementCountHome')) $('#achievementCountHome').textContent = fmt(earned);
+  if ($('#profileAchievementBadge')) $('#profileAchievementBadge').textContent = pending || earned;
+  if ($('#statsAchievements')) $('#statsAchievements').textContent = fmt(earned);
+}
+
+async function loadAchievements() {
+  const data = await api('/api/achievements');
+  state.achievements = data.achievements || [];
+  state.achievementsLoaded = true;
+  if (state.profile) {
+    state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
+    state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
+  }
+  renderAchievements();
+  renderAchievementCatalog();
+  window.setTimeout(maybeShowAchievementCelebration, 120);
+  return state.achievements;
 }
 
 async function acknowledgeAchievement(code) {
   await api(`/api/me/achievements/${encodeURIComponent(code)}/ack`, { method: 'POST', body: '{}', retries: 0 });
-  const item = state.profile?.achievements?.find((achievement) => achievement.code === code);
+  const item = state.profile?.achievements?.find((achievement) => achievement.grantCode === code || achievement.code === code);
   if (item) item.announced = true;
-  state.profile.unannouncedAchievements = (state.profile.unannouncedAchievements || []).filter((achievement) => achievement.code !== code);
+  state.profile.unannouncedAchievements = (state.profile.unannouncedAchievements || []).filter((achievement) => achievement.grantCode !== code);
+  renderAchievements();
 }
 
 function maybeShowAchievementCelebration() {
@@ -1312,8 +1433,8 @@ function maybeShowAchievementCelebration() {
   $('#achievementCelebrationRarity').textContent = `${achievementRarityLabel(item.rarity)} достижение`;
   $('#achievementCelebrationTitle').textContent = item.title;
   $('#achievementCelebrationDescription').textContent = item.description;
-  $('#achievementCelebrationReward').textContent = item.rewardBonus > 0 ? `+${fmt(item.rewardBonus)} бонусов` : 'Особая награда';
-  $('#ackAchievementButton').dataset.achievementCode = item.code;
+  $('#achievementCelebrationReward').textContent = achievementRewardLabel(item);
+  $('#ackAchievementButton').dataset.achievementCode = item.grantCode || item.code;
   openModal('achievementCelebrationModal');
   haptic('heavy');
 }
@@ -1321,14 +1442,31 @@ function maybeShowAchievementCelebration() {
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
-  $('#eyebrow').textContent = `${profile.firstName}${profile.username ? ` · @${profile.username}` : ''}`;
+  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
+  const platformLabel = profile.platform === 'vk' ? 'VK' : 'Telegram';
+  const linked = Array.isArray(profile.linkedPlatforms) ? profile.linkedPlatforms : [];
+  $('#eyebrow').textContent = `${profile.firstName || 'Гость'}${profile.username ? ` · @${profile.username}` : ''}`;
+  if ($('#clientName')) $('#clientName').textContent = fullName;
+  if ($('#profileName')) $('#profileName').textContent = fullName;
+  if ($('#profileHandle')) $('#profileHandle').textContent = profile.username ? `@${profile.username} · ${platformLabel}` : platformLabel;
+  if ($('#profileStatus')) $('#profileStatus').textContent = `${profile.status.name} · ${profile.status.bonusPercent}% начисление`;
+  if ($('#profileServicesValue')) {
+    $('#profileServicesValue').textContent = linked.includes('telegram') && linked.includes('vk')
+      ? 'Telegram и VK связаны'
+      : `Подключён ${platformLabel}`;
+  }
   $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : compactBonus(profile.balance);
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
-  $('#bonusPercent').textContent = `${profile.status.bonusPercent}% бонусами`;
+  $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   renderAvatarInto($('#profileAvatar'), profile);
+  renderAvatarInto($('#profileAvatarMirror'), profile);
+  const totalLiters = Number(profile.beer?.paidLitersTotal || 0);
+  if ($('#totalLitersHome')) $('#totalLitersHome').textContent = fmtLiters(totalLiters);
+  if ($('#statsTotalLiters')) $('#statsTotalLiters').textContent = fmtLiters(totalLiters);
+  if ($('#statsSpend12m')) $('#statsSpend12m').textContent = `${fmt(profile.spend12m)} ₽`;
   renderAchievements();
   $('#staffName').textContent = activeStaffName();
   renderBeer(profile);
@@ -1344,11 +1482,14 @@ function renderProfile() {
   } else {
     $('#statusProgress').style.width = '100%';
     $('#statusProgressText').textContent = 'Максимальный статус';
-    $('#nextRewardText').textContent = 'максимум';
+    $('#nextRewardText').textContent = 'Максимальный статус';
   }
 
-  $('#staffNav').classList.toggle('hidden', !roleCanStaff(profile.role));
-  $('#adminNav').classList.toggle('hidden', !roleCanAdmin(profile.role));
+  const hasStaffAccess = roleCanStaff(profile.role);
+  const hasAdminAccess = roleCanAdmin(profile.role);
+  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
+  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
+  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
   if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
   const partnerView = profile.role === 'viewer';
@@ -1385,7 +1526,8 @@ function renderTransaction(transaction) {
     adjustment: ['Корректировка', '±'],
     beer_gift: ['Подарочный литр', '🍺'],
     welcome: ['Приветственный бонус', '100'],
-    shop: ['Покупка в магазине', '□']
+    shop: ['Покупка в магазине', '□'],
+    achievement: ['Достижение', '◆']
   };
   const [mode, icon] = labels[transaction.mode] || ['Операция', '•'];
   let primary = `${fmt(transaction.checkAmount)} ₽`;
@@ -1399,6 +1541,11 @@ function renderTransaction(transaction) {
   } else if (transaction.mode === 'shop') {
     primary = `−${transaction.bonusSpent} Б`;
     detail = transaction.reason || 'Товар из магазина';
+  } else if (transaction.mode === 'achievement') {
+    primary = Number(transaction.beerGiftEarnedLiters || 0) > 0
+      ? `+${fmtLiters(transaction.beerGiftEarnedLiters)} л`
+      : `+${transaction.bonusEarned} Б`;
+    detail = transaction.reason || 'Награда за достижение';
   } else if (transaction.mode === 'adjustment') {
     primary = `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`;
     detail = transaction.reason || 'Ручная корректировка';
@@ -1421,11 +1568,7 @@ function renderTransaction(transaction) {
 
 async function refreshMe() {
   const data = await api('/api/me');
-  state.profile = data.profile;
-  state.statuses = data.statuses || state.statuses;
-  applyDesign(data.design);
-  renderProfile();
-  renderStatuses();
+  applyProfilePayload(data);
   void loadSecondaryData();
 }
 
@@ -1433,10 +1576,11 @@ async function waitForTelegramInitData(maxWaitMs = 2800) {
   const started = Date.now();
   while (Date.now() - started < maxWaitMs) {
     const bridge = refreshTelegramBridge();
-    if (bridge?.initData) return bridge.initData;
+    const initData = String(bridge?.initData || telegramInitDataFromUrl || '');
+    if (initData) return initData;
     await delay(120);
   }
-  return refreshTelegramBridge()?.initData || '';
+  return String(refreshTelegramBridge()?.initData || telegramInitDataFromUrl || '');
 }
 
 async function authenticate() {
@@ -1447,22 +1591,38 @@ async function authenticate() {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: { authorization: '' },
-    retries: 1,
-    timeoutMs: 11000
+    retries: 0,
+    timeoutMs: 7000
   });
   state.token = data.token;
   safeStorage.set('pivnik_session', state.token);
+  applyProfilePayload(data);
+}
+
+function renderCoreProfile() {
+  try {
+    renderProfile();
+    renderStatuses();
+  } catch (error) {
+    console.error('Core profile render skipped:', error);
+  }
+}
+
+function applyProfilePayload(data) {
+  if (!data?.profile) throw new Error('Сервер не передал профиль.');
   state.profile = data.profile;
-  state.statuses = data.statuses || [];
-  applyDesign(data.design);
-  renderProfile();
-  renderStatuses();
+  state.statuses = data.statuses || state.statuses || [];
+  if (data.design) {
+    try { applyDesign(data.design); }
+    catch (error) { console.warn('Design update skipped:', error); }
+  }
+  renderCoreProfile();
 }
 
 async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
-  const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadShopContact(), loadWalletConfig()];
+  const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
   const results = await Promise.allSettled(jobs);
   const failures = results.filter((item) => item.status === 'rejected');
   failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
@@ -1481,17 +1641,31 @@ async function loadSecondaryData() {
   if (failures.length && navigator.onLine) toast('Часть разделов обновится при следующем открытии');
 }
 
-async function syncFirstRunState() {
-  if (state.profile?.termsAccepted && state.profile?.onboardingComplete) return;
+async function hydrateAfterBoot() {
   try {
-    const data = await api('/api/me/consent', { method: 'POST', body: '{}', timeoutMs: 7000 });
-    if (data?.profile) {
-      state.profile = data.profile;
-      renderProfile();
-    }
+    const data = await api('/api/me', { retries: 0, timeoutMs: 9000 });
+    applyProfilePayload(data);
   } catch (error) {
-    console.warn('First-run state sync skipped:', error);
+    console.warn('Full profile hydration skipped:', error);
   }
+  if (state.profile?.termsAccepted) void loadSecondaryData();
+}
+
+function schedulePostBootHydration() {
+  window.setTimeout(() => {
+    void hydrateAfterBoot();
+  }, 0);
+}
+
+function blockUnacceptedAction(event) {
+  if (state.profile?.termsAccepted) return;
+  const interactive = event.target?.closest?.(
+    '#appShell button, #appShell a, #appShell input, #appShell select, #appShell textarea, #appShell [role="button"]'
+  );
+  if (!interactive) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  openModal('consentModal');
 }
 
 async function boot() {
@@ -1501,10 +1675,8 @@ async function boot() {
     $('#bootText').textContent = 'Подключаем бонусный счёт…';
     if (state.token) {
       try {
-        const me = await api('/api/me', { retries: 1, timeoutMs: 9000 });
-        state.profile = me.profile;
-        state.statuses = me.statuses || [];
-        applyDesign(me.design);
+        const bootstrap = await api('/api/bootstrap', { retries: 0, timeoutMs: 6000 });
+        applyProfilePayload(bootstrap);
       } catch (error) {
         console.warn('Stored session rejected:', error);
         state.token = '';
@@ -1512,22 +1684,21 @@ async function boot() {
       }
     }
     if (!state.token) {
-      $('#bootText').textContent = 'Проверяем доступ в Telegram…';
+      $('#bootText').textContent = `Проверяем доступ в ${PLATFORM_NAME}…`;
       await authenticate();
     }
     $('#bootText').textContent = 'Открываем профиль…';
-    renderProfile();
-    renderStatuses();
+    renderCoreProfile();
     await finishBoot();
     closeModal('consentModal');
     closeModal('profileSetupModal');
-    void syncFirstRunState();
-    void claimBetaTesterReward();
-    void loadSecondaryData();
+    schedulePostBootHydration();
   } catch (error) {
     console.error('Boot failed:', error);
     const message = error?.status === 401
-      ? 'Telegram не передал данные входа. Закройте окно и откройте приложение из бота ещё раз.'
+      ? (IS_VK
+          ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
+          : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
       : (error?.message || 'Не удалось загрузить приложение.');
     showBootActions(message);
   }
@@ -1537,11 +1708,17 @@ async function acceptTerms() {
   const button = $('#acceptTerms');
   if (button) button.disabled = true;
   try {
-    const data = await api('/api/me/consent', { method: 'POST', body: '{}', timeoutMs: 7000 });
+    const data = await api('/api/me/consent', {
+      method: 'POST',
+      body: '{}',
+      timeoutMs: 7000,
+      headers: { 'x-pivnik-explicit-consent': '1' }
+    });
     if (data?.profile) state.profile = data.profile;
     closeModal('consentModal');
     renderProfile();
-    toast('Настройки сохранены');
+    toast('Правила приняты');
+    void loadSecondaryData();
   } finally {
     if (button) button.disabled = false;
   }
@@ -1581,11 +1758,79 @@ async function copyQrCode() {
   }
 }
 
+function historyMatchesTab(transaction, tab = state.historyTab) {
+  if (tab === 'rewards') return ['beer_gift', 'shop', 'achievement'].includes(transaction.mode);
+  if (tab === 'bonuses') return ['accrue', 'redeem', 'welcome', 'adjustment'].includes(transaction.mode);
+  return ['accrue', 'redeem', 'shop'].includes(transaction.mode);
+}
+
+function renderHistoryTab() {
+  const list = $('#historyList');
+  if (!list) return;
+  $$('.history-tabs [data-history-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.historyTab === state.historyTab);
+  });
+  const transactions = state.transactions.filter((transaction) => historyMatchesTab(transaction));
+  list.className = `operation-list${transactions.length ? '' : ' empty-state'}`;
+  list.innerHTML = transactions.length ? transactions.map(renderTransaction).join('') : 'В этом разделе пока нет операций';
+}
+
 async function showHistory() {
   const data = await api('/api/me/transactions');
-  $('#historyList').className = `operation-list${data.transactions.length ? '' : ' empty-state'}`;
-  $('#historyList').innerHTML = data.transactions.length ? data.transactions.map(renderTransaction).join('') : 'Операций пока нет';
-  openModal('historyModal');
+  state.transactions = data.transactions || [];
+  renderHistoryTab();
+}
+
+function notificationPreferences() {
+  const raw = safeStorage.get('pivnik_notification_preferences');
+  if (!raw) return { achievements: true, bonuses: true, promotions: true };
+  try {
+    return { achievements: true, bonuses: true, promotions: true, ...JSON.parse(raw) };
+  } catch (_) {
+    return { achievements: true, bonuses: true, promotions: true };
+  }
+}
+
+function renderNotificationPreferences() {
+  const preferences = notificationPreferences();
+  if ($('#notifyAchievements')) $('#notifyAchievements').checked = preferences.achievements !== false;
+  if ($('#notifyBonuses')) $('#notifyBonuses').checked = preferences.bonuses !== false;
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = preferences.promotions !== false;
+}
+
+function saveNotificationPreferences() {
+  safeStorage.set('pivnik_notification_preferences', JSON.stringify({
+    achievements: Boolean($('#notifyAchievements')?.checked),
+    bonuses: Boolean($('#notifyBonuses')?.checked),
+    promotions: Boolean($('#notifyPromotions')?.checked)
+  }));
+  closeModal('notificationsModal');
+  toast('Настройки уведомлений сохранены');
+}
+
+function openConnectedServices() {
+  const accountLinkButton = $('#openAccountLink');
+  if (accountLinkButton) accountLinkButton.click();
+  else toast('Раздел привязки ещё загружается');
+}
+
+async function deleteOwnAccount() {
+  const confirmation = String($('#deleteAccountConfirm')?.value || '').trim().toUpperCase();
+  if (confirmation !== 'УДАЛИТЬ') throw new Error('Введите слово «УДАЛИТЬ».');
+  await api('/api/me/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation: 'УДАЛИТЬ' }),
+    retries: 0,
+    timeoutMs: 9000
+  });
+  safeStorage.remove('pivnik_session');
+  safeStorage.remove('pivnik_staff_session');
+  safeStorage.remove('pivnik_notification_preferences');
+  state.token = '';
+  state.profile = null;
+  closeModal('deleteAccountModal');
+  toast('Аккаунт удалён');
+  window.setTimeout(() => window.location.reload(), 900);
 }
 
 async function resolveQr(payload) {
@@ -1612,7 +1857,7 @@ function scanQr() {
   );
 
   if (!supported) {
-    toast('Сканер Telegram недоступен. Введите короткий код вручную.');
+    toast(`Сканер ${PLATFORM_NAME} недоступен. Введите короткий код вручную.`);
     setTimeout(manualCode, 80);
     return;
   }
@@ -1644,7 +1889,7 @@ function scanQr() {
       return false;
     });
   } catch (error) {
-    console.warn('Telegram QR scanner failed:', error);
+    console.warn(`${PLATFORM_NAME} QR scanner failed:`, error);
     toast('Не удалось открыть камеру. Введите короткий код вручную.');
     setTimeout(manualCode, 80);
   }
@@ -1691,7 +1936,10 @@ function renderStaffRecent(data) {
     const reason = prompt('Причина отмены операции:');
     if (!reason?.trim()) return;
     try {
-      const result = await api(`/api/staff/transactions/${button.dataset.staffCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      const result = await api(`/api/staff/transactions/${button.dataset.staffCancel}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim(), requestKey: requestId() })
+      });
       if (state.resolvedClient?.profile?.id === result.client?.id) {
         state.resolvedClient.profile = result.client;
         $('#foundMeta').textContent = `${fmt(result.client.balance)} бонусов · ${result.client.status.bonusPercent}% начисление`;
@@ -1855,6 +2103,7 @@ async function createSale() {
     if (state.profile?.id === data.client.id) {
       state.profile = data.client;
       renderProfile();
+      window.setTimeout(maybeShowAchievementCelebration, 120);
     }
     await Promise.all([loadStaffRecent(), loadLeaderboard()]);
   } finally {
@@ -1926,7 +2175,10 @@ function bindAdminTransactionActions(root) {
     const reason = prompt('Причина отмены операции владельцем:');
     if (!reason?.trim()) return;
     try {
-      await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim(), requestKey: requestId() })
+      });
       toast('Операция отменена');
       await Promise.all([loadAdmin(), loadLeaderboard()]);
       if ($('#adminTransactionsModal')?.classList.contains('open')) await openAllTransactions();
@@ -1950,13 +2202,31 @@ function renderInquiries(items, target = '#adminInquiries', compact = false) {
   const root = $(target);
   if (!root) return;
   root.className = `inquiry-list${items.length ? '' : ' empty-state'}`;
-  root.innerHTML = items.length ? items.map((item) => `<article class="inquiry-row status-${escapeHtml(item.status)}">
-    <div class="inquiry-main"><span>${escapeHtml(inquiryStatusLabel(item.status))}</span><b>${escapeHtml(item.itemTitle)}</b><small>${escapeHtml(item.name || item.telegramId)}${item.username ? ` · @${escapeHtml(item.username)}` : ''} · ${new Date(item.createdAt).toLocaleString('ru-RU')}</small><p>${escapeHtml(item.message)}</p></div>
-    ${compact ? '' : `<div class="inquiry-actions">${item.username ? `<button class="text-btn" data-inquiry-chat="${escapeHtml(item.username)}" type="button">Открыть чат</button>` : ''}${roleCanWrite(state.profile?.role) ? `<select data-inquiry-status="${item.id}"><option value="new" ${item.status === 'new' ? 'selected' : ''}>Новое</option><option value="answered" ${item.status === 'answered' ? 'selected' : ''}>Отвечено</option><option value="order" ${item.status === 'order' ? 'selected' : ''}>Заказ оформлен</option></select>` : ''}</div>`}
-  </article>`).join('') : 'Обращений пока нет';
-  root.querySelectorAll('[data-inquiry-chat]').forEach((button) => button.addEventListener('click', () => {
-    const url = `https://t.me/${encodeURIComponent(button.dataset.inquiryChat)}`;
-    try { tg?.openTelegramLink?.(url); } catch (_) { window.open(url, '_blank', 'noopener'); }
+  root.innerHTML = items.length ? items.map((item) => {
+    const contactId = item.telegramId
+      ? `Telegram ${item.telegramId}`
+      : item.vkId
+        ? `VK ${item.vkId}`
+        : 'ID не указан';
+    const contactUrl = item.telegramUsername
+      ? `https://t.me/${encodeURIComponent(item.telegramUsername)}`
+      : item.vkId
+        ? `https://vk.com/id${encodeURIComponent(item.vkId)}`
+        : item.vkUsername
+          ? `https://vk.com/${encodeURIComponent(item.vkUsername)}`
+          : '';
+    return `<article class="inquiry-row status-${escapeHtml(item.status)}">
+      <div class="inquiry-main"><span>${escapeHtml(inquiryStatusLabel(item.status))}</span><b>${escapeHtml(item.itemTitle)}</b><small>${escapeHtml(item.name || contactId)}${item.username ? ` · @${escapeHtml(item.username)}` : ''} · ${new Date(item.createdAt).toLocaleString('ru-RU')}</small><p>${escapeHtml(item.message)}</p></div>
+      ${compact ? '' : `<div class="inquiry-actions">${contactUrl ? `<button class="text-btn" data-inquiry-url="${escapeHtml(contactUrl)}" type="button">Открыть чат</button>` : ''}${roleCanWrite(state.profile?.role) ? `<select data-inquiry-status="${item.id}"><option value="new" ${item.status === 'new' ? 'selected' : ''}>Новое</option><option value="answered" ${item.status === 'answered' ? 'selected' : ''}>Отвечено</option><option value="order" ${item.status === 'order' ? 'selected' : ''}>Заказ оформлен</option></select>` : ''}</div>`}
+    </article>`;
+  }).join('') : 'Обращений пока нет';
+  root.querySelectorAll('[data-inquiry-url]').forEach((button) => button.addEventListener('click', () => {
+    const url = button.dataset.inquiryUrl;
+    if (url.startsWith('https://t.me/')) {
+      try { tg?.openTelegramLink?.(url); } catch (_) { window.open(url, '_blank', 'noopener,noreferrer'); }
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   }));
   root.querySelectorAll('[data-inquiry-status]').forEach((select) => select.addEventListener('change', async () => {
     try {
@@ -2021,7 +2291,7 @@ function filterAdminUsers() {
   const query = ($('#userSearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
   const role = $('#userRoleFilter')?.value || '';
   const filtered = state.adminUsers.filter((user) => {
-    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
+    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.vkId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
     return (!query || haystack.includes(query)) && (!role || user.role === role);
   });
   renderUsers(filtered, '#allUsersList', false);
@@ -2245,7 +2515,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId)}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId ? `Telegram ${user.telegramId}` : user.vkId ? `VK ${user.vkId}` : 'ID не указан')}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
@@ -2263,7 +2533,14 @@ function renderUsers(users, target = '#usersList', compact = false) {
     const reason = prompt('Причина корректировки:', 'Корректировка владельца');
     if (!reason?.trim()) return;
     try {
-      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amount), reason: reason.trim() }) });
+      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: Number(amount),
+          reason: reason.trim(),
+          requestKey: requestId()
+        })
+      });
       toast('Баланс изменён'); await loadAdmin(); await openAllUsers();
     } catch (error) { toast(error.message); }
   }));
@@ -2284,7 +2561,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
-    if (!confirm('Перевыпустить личный QR? Старый код перестанет работать.')) return;
+    if (!confirm('Перевыпустить личный QR? Старый код останется рабочим как защищённый alias.')) return;
     try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await loadAdmin(); await openAllUsers(); }
     catch (error) { toast(error.message); }
   }));
@@ -2315,6 +2592,8 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
   $(`#${id}`)?.addEventListener('change', syncPrivacyDraft);
 });
 
+document.addEventListener('click', blockUnacceptedAction, true);
+
 $('#openAchievementsButton')?.addEventListener('click', () => openAchievements());
 $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {
   state.achievementTab = button.dataset.achievementTab;
@@ -2328,6 +2607,7 @@ $('#ackAchievementButton')?.addEventListener('click', async () => {
     await acknowledgeAchievement(code);
     closeModal('achievementCelebrationModal');
     renderAchievements();
+    window.setTimeout(maybeShowAchievementCelebration, 180);
   } catch (error) { toast(error.message); }
   finally { button.disabled = false; }
 });
@@ -2338,17 +2618,41 @@ $('#bootRetry')?.addEventListener('click', () => {
 });
 $('#bootLite')?.addEventListener('click', enableLiteMode);
 
-$$('.bottom-nav button').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
+$$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
-$('#openPromosButton').addEventListener('click', () => { renderPromotions(); openModal('promosModal'); });
+$('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
+$('#openPromosButton').addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton').addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
-$('#openLeaderboardButton').addEventListener('click', () => { renderLeaderboard(); openModal('leaderboardModal'); });
-$('#shopShowQr').addEventListener('click', () => { closeModal('shopModal'); showQr().catch((error) => toast(error.message)); });
-$('#showQrButton').addEventListener('click', () => showQr().catch((error) => toast(error.message)));
-$('#showHistoryButton').addEventListener('click', () => showHistory().catch((error) => toast(error.message)));
+$('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
+$('#openProfileAvatar')?.addEventListener('click', () => openProfileSetup(1));
+$('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
+$('#openProfileAchievements')?.addEventListener('click', () => openAchievements());
+$('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
+$('#openConnectedServices')?.addEventListener('click', openConnectedServices);
+$('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
+$('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
+$('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
+$$('.history-tabs [data-history-tab]').forEach((button) => button.addEventListener('click', () => {
+  state.historyTab = button.dataset.historyTab || 'purchases';
+  renderHistoryTab();
+}));
+$('#saveNotifications')?.addEventListener('click', saveNotificationPreferences);
+$('#deleteAccountConfirm')?.addEventListener('input', (event) => {
+  $('#deleteAccountButton').disabled = String(event.target.value || '').trim().toUpperCase() !== 'УДАЛИТЬ';
+});
+$('#deleteAccountButton')?.addEventListener('click', async () => {
+  const button = $('#deleteAccountButton');
+  button.disabled = true;
+  try { await deleteOwnAccount(); }
+  catch (error) { toast(error.message); button.disabled = false; }
+});
+$('#profileStaffNav')?.addEventListener('click', () => switchScreen('staff'));
+$('#profileAdminNav')?.addEventListener('click', () => switchScreen('admin'));
+$('#backToProfileFromStaff')?.addEventListener('click', () => switchScreen('profile'));
+$('#backToProfileFromAdmin')?.addEventListener('click', () => switchScreen('profile'));
 $('#openTermsFromConsent').addEventListener('click', () => openModal('helpModal'));
 $('#acceptTerms').addEventListener('click', () => acceptTerms().catch((error) => toast(error.message)));
 $('#copyQrCode').addEventListener('click', () => copyQrCode());
