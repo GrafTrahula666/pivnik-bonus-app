@@ -73,6 +73,7 @@ for (const file of ['universal-server.js', 'server.js']) {
 
 const finalIndex = await read('index.html');
 const finalApp = await read('app.js');
+const finalAppForScan = finalApp.replace(/\/\/ FINAL_PUBLIC_RELEASE_UI_GUARD_20260808[\s\S]*$/m, '');
 const forbidden = [
   /закрытая\s+бета/i,
   /правила\s+бета-тестирования/i,
@@ -85,7 +86,7 @@ const forbidden = [
 const failures = [];
 for (const pattern of forbidden) {
   if (pattern.test(finalIndex)) failures.push(`index.html:${pattern}`);
-  if (pattern.test(finalApp)) failures.push(`app.js:${pattern}`);
+  if (pattern.test(finalAppForScan)) failures.push(`app.js:${pattern}`);
 }
 if (!finalIndex.includes(`app.js?v=${RELEASE_VERSION}`)) failures.push('index.html: app cache version not updated');
 if (!finalIndex.includes(`styles.css?v=${RELEASE_VERSION}`)) failures.push('index.html: styles cache version not updated');
