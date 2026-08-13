@@ -5569,6 +5569,35 @@ body {
 .lite-mode .app-shell {
   background-attachment: scroll !important;
 }
+
+/* V17.4: keep every open dialog above VK's fixed navigation and make its controls the hit target. */
+.modal {
+  z-index: 2000 !important;
+  pointer-events: none;
+}
+
+.modal.open {
+  pointer-events: auto;
+}
+
+.modal.open > .modal-sheet,
+.modal.open > .achievement-celebration {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.achievement-celebration-modal {
+  z-index: 3100 !important;
+}
+
+body.modal-open .app-shell {
+  pointer-events: none;
+}
+
+body.modal-open .modal.open {
+  pointer-events: auto;
+}
 /* luxury-vip-space-runtime:end */
 
 /* VK moderation: keep non-alcohol loyalty offers, hide alcohol and catalogue surfaces. */

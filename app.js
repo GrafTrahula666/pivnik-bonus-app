@@ -714,6 +714,7 @@ function openModal(id) {
   if (!modal) return;
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
 }
 
 function closeModal(id) {
@@ -721,6 +722,7 @@ function closeModal(id) {
   if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
+  if (!document.querySelector('.modal.open')) document.body.classList.remove('modal-open');
 }
 
 function switchScreen(target) {
