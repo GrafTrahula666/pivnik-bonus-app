@@ -5571,20 +5571,31 @@ body {
 }
 /* luxury-vip-space-runtime:end */
 
-/* VK moderation: the public Mini App is an account service, not an alcohol promotion surface. */
+/* VK moderation: keep non-alcohol loyalty offers, hide alcohol and catalogue surfaces. */
 .vk-mini-app #beerLoyaltyCard,
 .vk-mini-app #openShopButton,
-.vk-mini-app #openPromosButton,
-.vk-mini-app [data-screen="actions"],
 .vk-mini-app #shopModal {
   display: none !important;
 }
 
-.vk-mini-app .bottom-nav [data-target="actions"] {
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
 .vk-mini-app .home-feature-grid {
   grid-template-columns: 1fr;
+}
+
+.achievement-load-error {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  text-align: center;
+}
+
+.achievement-load-error span { color: var(--muted); }
+.achievement-load-error button { width: min(220px, 100%); margin-top: 4px; }
+
+.premium-offer.share-promotion { cursor: pointer; }
+.premium-offer.share-promotion:hover,
+.premium-offer.share-promotion:focus-visible {
+  border-color: rgba(222, 176, 99, .56);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .28), 0 0 24px rgba(185, 127, 54, .12);
+  outline: none;
 }

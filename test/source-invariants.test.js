@@ -301,15 +301,32 @@ test('Luxury VIP Space сохраняет клиентскую навигаци�
   assert.match(deletionMigration, /deleted_at TIMESTAMPTZ/);
 });
 
-test('VK public UI excludes alcohol promotion and remote catalogue surfaces', async () => {
-  const [styles, gateway] = await Promise.all([
+test('VK public UI keeps only safe loyalty offers and excludes alcohol/catalogue surfaces', async () => {
+  const [styles, gateway, server, app] = await Promise.all([
     source('styles.css'),
-    source('universal-server.js')
+    source('universal-server.js'),
+    source('server.js'),
+    source('app.js')
   ]);
   assert.match(gateway, /<html lang="ru" class="vk-mini-app">/);
   assert.match(styles, /\.vk-mini-app #beerLoyaltyCard[\s\S]*?display: none !important/);
   assert.match(styles, /\.vk-mini-app #openShopButton/);
-  assert.match(styles, /\.vk-mini-app #openPromosButton/);
-  assert.match(styles, /\.vk-mini-app \[data-screen="actions"\]/);
   assert.match(styles, /\.vk-mini-app #shopModal/);
+  assert.doesNotMatch(styles, /\.vk-mini-app #openPromosButton/);
+  assert.doesNotMatch(styles, /\.vk-mini-app \[data-screen="actions"\]/);
+  assert.doesNotMatch(styles, /\.vk-mini-app \.bottom-nav \[data-target="actions"\]/);
+  assert.match(server, /VK_PROMOTION_CODES = new Set\(\['welcome-100', 'referral-beta'\]\)/);
+  assert.match(server, /req\.session\?\.platform === 'vk'/);
+  assert.match(app, /\['welcome-100', 'referral-beta'\]\.includes\(item\.code\)/);
+  assert.match(app, /VKWebAppShare/);
+  assert.match(app, /https:\/\/vk\.ru\/app54694987/);
+});
+
+test('Достижения повторно загружаются при ручном открытии и дают кнопку повтора', async () => {
+  const app = await source('app.js');
+  assert.match(app, /async function openAchievementHub\(\)/);
+  assert.match(app, /if \(!state\.achievementsLoaded\)/);
+  assert.match(app, /await loadAchievements\(\)/);
+  assert.match(app, /id=\"retryAchievements\"/);
+  assert.match(app, /window\.openAchievements = openAchievements/);
 });

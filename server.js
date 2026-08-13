@@ -87,11 +87,12 @@ const ANIMAL_AVATARS = new Set([
 const AGE_GROUPS = new Set(['18-24', '25-34', '35-44', '45-54', '55+']);
 const SHOP_CATEGORIES = new Set(['craft', 'limited', 'profile', 'other']);
 const SHOP_PRICE_TYPES = new Set(['bonus', 'rub', 'pending']);
+const VK_PROMOTION_CODES = new Set(['welcome-100', 'referral-beta']);
 const DEFAULT_PROMOTIONS = [
-  { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
+  { code: 'welcome-100', title: '100 бонусов за регистрацию', description: 'Начисляются автоматически один раз после подтверждения 18+ и принятия правил при первой регистрации.', badge: '+100 Б', active: true, sortOrder: 10 },
   { code: 'orange-blanche-1-plus-1-3', title: 'Orange Blanche 1+1=3', description: '18+. При покупке двух участвующих пинт Orange Blanche третья предоставляется в подарок. Получение только лично в баре после проверки возраста. Условия и наличие уточняйте у сотрудника.', badge: '1+1=3', active: true, sortOrder: 15 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: '18+. После оплаты 14 литров участвующего разливного пива предоставляется 1 подарочный литр. Получение только лично в баре после проверки возраста.', badge: '14 → 1', active: true, sortOrder: 20 },
-  { code: 'referral-beta', title: 'Пригласить друга', description: 'Реферальная программа пока недоступна.', badge: 'Скоро', active: false, sortOrder: 30 }
+  { code: 'referral-beta', title: 'Приведи друга', description: 'Поделитесь приложением «ПИВНИК» с другом. Дополнительная бонусная награда за приглашение пока не начисляется.', badge: 'Поделиться', active: true, sortOrder: 30 }
 ];
 const DEFAULT_SHOP_ITEMS = [
   { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, imageSrc: '/assets/shop/cider-dalnyaya-dacha.svg', active: true, sortOrder: 10 },
@@ -864,6 +865,12 @@ async function initDatabase() {
       await client.query(
         `INSERT INTO promotions (code, title, description, badge, active, sort_order)
          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
+        [item.code, item.title, item.description, item.badge, item.active, item.sortOrder]
+      );
+      await client.query(
+        `UPDATE promotions
+         SET title=$2, description=$3, badge=$4, active=$5, sort_order=$6, updated_at=NOW()
+         WHERE code=$1 AND updated_by IS NULL`,
         [item.code, item.title, item.description, item.badge, item.active, item.sortOrder]
       );
     }
@@ -1773,10 +1780,13 @@ app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
   }
 });
 
-app.get('/api/promotions', authRequired, async (_req, res, next) => {
+app.get('/api/promotions', authRequired, async (req, res, next) => {
   try {
     const result = await pool.query('SELECT * FROM promotions ORDER BY sort_order, id');
-    res.json({ promotions: result.rows.map(promotionResponse) });
+    const rows = req.session?.platform === 'vk'
+      ? result.rows.filter((row) => VK_PROMOTION_CODES.has(String(row.code || '')))
+      : result.rows;
+    res.json({ promotions: rows.map(promotionResponse) });
   } catch (error) {
     next(error);
   }

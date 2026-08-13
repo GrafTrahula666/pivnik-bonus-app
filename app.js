@@ -95,6 +95,7 @@ const state = {
   inquiryItem: null,
   achievements: [],
   achievementsLoaded: false,
+  achievementsPromise: null,
   achievementTab: 'common',
   achievementQueue: [],
   transactions: [],
@@ -801,25 +802,56 @@ function bindContentImageFallbacks(root = document) {
   }, { once: true }));
 }
 
+async function shareReferralPromotion() {
+  const link = 'https://vk.ru/app54694987';
+  if (IS_VK && window.vkBridge?.send) {
+    await window.vkBridge.send('VKWebAppShare', { link });
+    return;
+  }
+  if (navigator.share) {
+    await navigator.share({ title: 'ПИВНИК', text: 'Присоединяйся к программе лояльности «ПИВНИК».', url: link });
+    return;
+  }
+  await navigator.clipboard.writeText(link);
+  toast('Ссылка на приложение скопирована');
+}
+
 function renderPromotions() {
   const list = $('#promosCatalog');
-  const activePromotion = state.promotions.find((item) => item.active) || state.promotions[0];
+  const visiblePromotions = IS_VK
+    ? state.promotions.filter((item) => ['welcome-100', 'referral-beta'].includes(item.code))
+    : state.promotions;
+  const activePromotion = visiblePromotions.find((item) => item.active) || visiblePromotions[0];
   if ($('#homePromoTitle')) $('#homePromoTitle').textContent = activePromotion?.title || 'Новые предложения скоро';
   if (list) {
-    list.className = `premium-list${state.promotions.length ? '' : ' empty-state'}`;
-    list.innerHTML = state.promotions.length ? state.promotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'} ${item.code === 'orange-blanche-1-plus-1-3' ? 'orange-blanche-offer' : ''}" data-promo-code="${escapeHtml(item.code)}">
+    list.className = `premium-list${visiblePromotions.length ? '' : ' empty-state'}`;
+    list.innerHTML = visiblePromotions.length ? visiblePromotions.map((item, index) => `<article class="premium-offer ${item.active ? 'active-offer' : 'disabled-offer'} ${item.code === 'orange-blanche-1-plus-1-3' ? 'orange-blanche-offer' : ''} ${item.code === 'referral-beta' ? 'share-promotion' : ''}" data-promo-code="${escapeHtml(item.code)}" ${item.code === 'referral-beta' ? 'data-promo-share role="button" tabindex="0" aria-label="Поделиться приложением с другом"' : ''}>
       ${imageMarkup(item.imageSrc, item.title, 'premium-offer-media')}
       <span class="offer-index">${String(index + 1).padStart(2, '0')}</span>
       <div class="premium-offer-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p><small>${item.active ? 'Доступно сейчас' : 'Недоступно / скоро'}</small></div>
       <strong>${escapeHtml(item.badge || (item.active ? 'Активно' : 'Скоро'))}</strong>
     </article>`).join('') : 'Акций пока нет';
     bindContentImageFallbacks(list);
+    list.querySelectorAll('[data-promo-share]').forEach((card) => {
+      const share = () => shareReferralPromotion().catch((error) => {
+        if (String(error?.error_type || error?.message || '').toLowerCase().includes('cancel')) return;
+        toast('Не удалось открыть отправку. Попробуйте ещё раз.');
+      });
+      card.addEventListener('click', share);
+      card.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        void share();
+      });
+    });
   }
 }
 
 async function loadPromotions() {
   const data = await api('/api/promotions');
-  state.promotions = data.promotions || [];
+  state.promotions = IS_VK
+    ? (data.promotions || []).filter((item) => ['welcome-100', 'referral-beta'].includes(item.code))
+    : (data.promotions || []);
   renderPromotions();
   return state.promotions;
 }
@@ -1419,16 +1451,24 @@ function renderAchievements() {
 }
 
 async function loadAchievements() {
-  const data = await api('/api/achievements');
-  state.achievements = data.achievements || [];
-  state.achievementsLoaded = true;
-  if (state.profile) {
-    state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
-    state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
+  if (state.achievementsPromise) return state.achievementsPromise;
+  state.achievementsPromise = (async () => {
+    const data = await api('/api/achievements');
+    state.achievements = data.achievements || [];
+    state.achievementsLoaded = true;
+    if (state.profile) {
+      state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
+      state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
+    }
+    renderAchievements();
+    renderAchievementCatalog();
+    return state.achievements;
+  })();
+  try {
+    return await state.achievementsPromise;
+  } finally {
+    state.achievementsPromise = null;
   }
-  renderAchievements();
-  renderAchievementCatalog();
-  return state.achievements;
 }
 
 async function acknowledgeAchievement(code) {
@@ -2657,15 +2697,33 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
 
 document.addEventListener('click', blockUnacceptedAction, true);
 
-function openAchievementHub() {
-  if ((state.profile?.unannouncedAchievements || []).length) {
-    maybeShowAchievementCelebration();
-    return;
-  }
+async function openAchievementHub() {
   openAchievements();
+  if (!state.achievementsLoaded) {
+    const catalog = $('#achievementCatalog');
+    if (catalog) catalog.innerHTML = '<div class="achievement-catalog-empty">Загружаем достижения и ваш прогресс…</div>';
+    try {
+      await loadAchievements();
+    } catch (error) {
+      console.warn('Achievements reload failed:', error);
+      if (catalog) {
+        catalog.innerHTML = '<div class="achievement-catalog-empty achievement-load-error"><b>Не удалось загрузить достижения</b><span>Проверьте соединение и попробуйте ещё раз.</span><button class="secondary" id="retryAchievements" type="button">Повторить</button></div>';
+      }
+      return;
+    }
+  }
+  if ((state.profile?.unannouncedAchievements || []).length) maybeShowAchievementCelebration();
 }
 
+window.openAchievements = openAchievements;
+window.openAchievementHub = openAchievementHub;
+
 $('#openAchievementsButton')?.addEventListener('click', openAchievementHub);
+$('#achievementCatalog')?.addEventListener('click', (event) => {
+  if (!event.target?.closest?.('#retryAchievements')) return;
+  state.achievementsLoaded = false;
+  void openAchievementHub();
+});
 $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {
   state.achievementTab = button.dataset.achievementTab;
   renderAchievementCatalog();

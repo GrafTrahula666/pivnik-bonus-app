@@ -113,8 +113,12 @@ ok(has('legal/privacy.html', 'Возрастное ограничение'), 'PR
 ok(has('universal-server.js', '<html lang="ru" class="vk-mini-app">'), 'PROMO:vk-public-mode');
 ok(has('styles.css', '.vk-mini-app #beerLoyaltyCard'), 'PROMO:no-alcohol-promo-surface');
 ok(has('styles.css', '.vk-mini-app #openShopButton'), 'PROMO:no-shop-entry');
-ok(has('styles.css', '.vk-mini-app #openPromosButton'), 'PROMO:no-promotions-entry');
-ok(has('styles.css', '.vk-mini-app [data-screen="actions"]'), 'PROMO:no-promotions-screen');
+ok(!has('styles.css', '.vk-mini-app #openPromosButton'), 'PROMO:safe-promotions-entry-visible');
+ok(!has('styles.css', '.vk-mini-app [data-screen="actions"]'), 'PROMO:safe-promotions-screen-visible');
+ok(has('server.js', "VK_PROMOTION_CODES = new Set(['welcome-100', 'referral-beta'])"), 'PROMO:vk-safe-allowlist');
+ok(has('server.js', "req.session?.platform === 'vk'"), 'PROMO:vk-server-filter');
+ok(has('app.js', "['welcome-100', 'referral-beta'].includes(item.code)"), 'PROMO:vk-client-filter');
+ok(has('app.js', "VKWebAppShare"), 'PROMO:referral-share-action');
 
 // 9. Monetization: digital profile frames must not be sold in the shop.
 ok(has('server.js', 'moderation-remove-profile-frames-from-shop'), 'MONETIZATION:frame-cleanup-migration');
