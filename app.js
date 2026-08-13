@@ -2955,20 +2955,20 @@ boot();
 // Public no-beta guard 2026-08-08. The source HTML is sanitized at startup and the live VK client
 // reloads when Railway starts serving a different commit.
 (() => {
-  const CURRENT_BUILD = '3.5.0-no-beta-auto-refresh';
+  const CURRENT_BUILD = '3.5.1-achievement-tabs';
 
   function removeLegacyPublicLabels() {
     document.querySelectorAll('.beta-badge').forEach((element) => element.remove());
     const replacements = new Map([
-      ['', ''],
-      ['', ''],
       ['Работа приложения', 'Работа приложения'],
       ['Тестировщик', 'Пионер Пивника']
     ]);
     document.querySelectorAll('body *').forEach((element) => {
       if (element.children.length) return;
       const value = String(element.textContent || '').trim();
-      if (!replacements.has(value)) return;
+      // Empty runtime containers (achievement catalog, avatars and counters)
+      // must survive until their asynchronous data arrives.
+      if (!value || !replacements.has(value)) return;
       const replacement = replacements.get(value);
       if (replacement) element.textContent = replacement;
       else element.remove();

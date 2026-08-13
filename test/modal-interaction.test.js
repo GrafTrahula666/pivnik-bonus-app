@@ -34,3 +34,14 @@ test('achievement close and rarity tabs remain wired as buttons', async () => {
   assert.match(css, /\.achievement-catalog\s*{[\s\S]*?overflow-y:\s*auto;/);
   assert.match(app, /\$\$\('\[data-close\]'\)[\s\S]*?addEventListener\('click'[\s\S]*?closeModal\(button\.dataset\.close\)/);
 });
+
+test('public copy cleanup preserves empty runtime containers', async () => {
+  const [app, releaseScript] = await Promise.all([
+    source('app.js'),
+    source('scripts/apply-no-beta-public-guard.mjs')
+  ]);
+
+  assert.doesNotMatch(app, /\['',\s*''\]/);
+  assert.match(app, /if \(!value \|\| !replacements\.has\(value\)\) return;/);
+  assert.match(releaseScript, /if \(!value \|\| !replacements\.has\(value\)\) return;/);
+});
