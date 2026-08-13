@@ -1939,8 +1939,11 @@ body {
 .shop-product { grid-template-columns: 58px 30px minmax(0,1fr) auto; }
 
 .content-admin-card .card-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
-.content-admin-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
-.content-admin-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.content-admin-actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 14px 0; }
+.content-admin-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.content-admin-card,
+.content-admin-card section,
+.content-admin-card .admin-content-list { min-width: 0; }
 .content-admin-title { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
 .content-admin-title small { color: var(--muted); font-size: 10px; }
 .admin-content-list { display: grid; gap: 8px; }

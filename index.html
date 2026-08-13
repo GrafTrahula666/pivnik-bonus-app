@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0e13" />
-  <meta name="pivnik-client-build" content="3.5.1-achievement-tabs" />
+  <meta name="pivnik-client-build" content="3.5.2-promotions-only-admin" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20260813-luxury-vip-space-v2&ui=achievement-tabs-4" />
-  <script defer src="app.js?v=17.3-vlad-poops&ui=achievement-tabs-4"></script>
+  <link rel="stylesheet" href="styles.css?v=20260813-luxury-vip-space-v2&ui=promotions-only-admin-1" />
+  <script defer src="app.js?v=17.3-vlad-poops&ui=promotions-only-admin-1"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -281,7 +281,7 @@
           <button type="button" id="openAllUsers"><span>Пользователи</span><small>поиск, роли, баланс и PIN</small></button>
           <button type="button" id="openAllTransactions"><span>Транзакции</span><small>полный журнал и фильтры</small></button>
           <button type="button" id="openAllInquiries"><span>Вопросы и заказы</span><small>обращения по товарам и кружкам</small></button>
-          <button type="button" id="openContentAdminQuick"><span>Магазин</span><small>карточки, цены и фотографии</small></button>
+          <button type="button" id="openContentAdminQuick"><span>Акции</span><small>карточки, порядок и доступность</small></button>
         </div>
 
         <div class="metric-grid">
@@ -334,18 +334,16 @@
 
         <div class="card content-admin-card" id="contentAdminCard">
           <div class="card-head">
-            <div><h3>Акции и магазин</h3><p>Название, описание, цена, фотография, порядок и доступность меняются без правки кода.</p></div>
+            <div><h3>Акции</h3><p>Название, описание, фотография, порядок и доступность меняются без правки кода.</p></div>
             <button class="text-btn" id="reloadContent" type="button">Обновить</button>
           </div>
           <div class="content-admin-actions admin-write-only">
             <button class="secondary" id="addPromotion" type="button">+ Добавить акцию</button>
-            <button class="primary" id="addShopItem" type="button">+ Добавить товар</button>
           </div>
           <div class="content-admin-columns">
             <section><div class="content-admin-title"><b>Акции</b><small>Карточки для клиентов</small></div><div id="adminPromotionsList" class="admin-content-list empty-state">Загрузка…</div></section>
-            <section><div class="content-admin-title"><b>Магазин</b><small>Товары за бонусы</small></div><div id="adminShopItemsList" class="admin-content-list empty-state">Загрузка…</div></section>
           </div>
-          <small class="admin-hint">Поддерживаются JPG, PNG и WEBP. Файл автоматически уменьшается и сохраняется в базе. Если фотография не загружена, приложение автоматически создаст фирменную обложку товара.</small>
+          <small class="admin-hint">Поддерживаются JPG, PNG и WEBP. Файл автоматически уменьшается и сохраняется в базе. Если фотография не загружена, приложение автоматически создаст фирменную обложку акции.</small>
         </div>
 
         <div class="card admin-preview-card">

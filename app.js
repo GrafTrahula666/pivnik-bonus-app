@@ -2889,7 +2889,7 @@ $('#reloadStaffRecent').addEventListener('click', () => loadStaffRecent().catch(
 $('#reloadUsers')?.addEventListener('click', () => loadAdmin().catch((error) => toast(error.message)));
 $('#reloadContent').addEventListener('click', () => reloadContent().catch((error) => toast(error.message)));
 $('#addPromotion').addEventListener('click', () => openContentEditor('promotion'));
-$('#addShopItem').addEventListener('click', () => openContentEditor('shop'));
+$('#addShopItem')?.addEventListener('click', () => openContentEditor('shop'));
 $('#editPromosQuick').addEventListener('click', openContentAdmin);
 $('#editShopQuick').addEventListener('click', openContentAdmin);
 $('#saveContentItem').addEventListener('click', () => saveContentItem().catch((error) => toast(error.message)));
@@ -2955,7 +2955,7 @@ boot();
 // Public no-beta guard 2026-08-08. The source HTML is sanitized at startup and the live VK client
 // reloads when Railway starts serving a different commit.
 (() => {
-  const CURRENT_BUILD = '3.5.1-achievement-tabs';
+  const CURRENT_BUILD = '3.5.2-promotions-only-admin';
 
   function removeLegacyPublicLabels() {
     document.querySelectorAll('.beta-badge').forEach((element) => element.remove());
