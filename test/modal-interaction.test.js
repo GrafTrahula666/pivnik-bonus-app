@@ -19,12 +19,18 @@ test('open dialogs own pointer input above VK navigation', async () => {
 });
 
 test('achievement close and rarity tabs remain wired as buttons', async () => {
-  const [app, html] = await Promise.all([source('app.js'), source('index.html')]);
+  const [app, html, css] = await Promise.all([source('app.js'), source('index.html'), source('styles.css')]);
 
   assert.match(html, /data-close="achievementsModal"/);
   for (const rarity of ['common', 'rare', 'epic', 'legendary']) {
     assert.match(html, new RegExp(`data-achievement-tab="${rarity}"`));
   }
-  assert.match(app, /\$\$\('#achievementsModal \[data-achievement-tab\]'\)[\s\S]*?addEventListener\('click'/);
+  assert.match(app, /function selectAchievementTab\(rarity/);
+  assert.match(app, /addEventListener\('pointerup', activateAchievementTab, true\)/);
+  assert.match(app, /addEventListener\('click', activateAchievementTab, true\)/);
+  assert.match(app, /button\.setAttribute\('aria-selected', selected \? 'true' : 'false'\)/);
+  assert.match(css, /\.achievement-tabs\s*{[\s\S]*?pointer-events:\s*auto\s*!important;/);
+  assert.match(css, /\.achievement-tabs button\s*{[\s\S]*?touch-action:\s*manipulation;/);
+  assert.match(css, /\.achievement-catalog\s*{[\s\S]*?overflow-y:\s*auto;/);
   assert.match(app, /\$\$\('\[data-close\]'\)[\s\S]*?addEventListener\('click'[\s\S]*?closeModal\(button\.dataset\.close\)/);
 });

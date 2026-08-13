@@ -8,8 +8,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20260813-luxury-vip-space-v2&ui=achievement-clicks-2" />
-  <script defer src="app.js?v=17.3-vlad-poops&ui=achievement-clicks-2"></script>
+  <link rel="stylesheet" href="styles.css?v=20260813-luxury-vip-space-v2&ui=achievement-tabs-3" />
+  <script defer src="app.js?v=17.3-vlad-poops&ui=achievement-tabs-3"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -538,12 +538,12 @@
       <h2>Достижения</h2>
       <p class="help-intro">Условия считаются автоматически по завершённым операциям. Обычные награды дают 10 бонусов, редкие — 20, эпические — 30.</p>
       <div class="achievement-tabs" role="tablist" aria-label="Редкость достижений">
-        <button class="active" data-achievement-tab="common" type="button">Обычные</button>
-        <button data-achievement-tab="rare" type="button">Редкие</button>
-        <button data-achievement-tab="epic" type="button">Эпические</button>
-        <button data-achievement-tab="legendary" type="button">Легендарные</button>
+        <button class="active" data-achievement-tab="common" type="button" role="tab" aria-selected="true" aria-controls="achievementCatalog">Обычные</button>
+        <button data-achievement-tab="rare" type="button" role="tab" aria-selected="false" aria-controls="achievementCatalog" tabindex="-1">Редкие</button>
+        <button data-achievement-tab="epic" type="button" role="tab" aria-selected="false" aria-controls="achievementCatalog" tabindex="-1">Эпические</button>
+        <button data-achievement-tab="legendary" type="button" role="tab" aria-selected="false" aria-controls="achievementCatalog" tabindex="-1">Легендарные</button>
       </div>
-      <div class="achievement-catalog" id="achievementCatalog"></div>
+      <div class="achievement-catalog" id="achievementCatalog" role="tabpanel" aria-live="polite"></div>
     </div>
   </div>
 

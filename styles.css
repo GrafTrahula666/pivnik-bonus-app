@@ -3460,12 +3460,44 @@ body {
 .beta-achievement-icon { display: grid; place-items: center; width: 100%; height: 100%; font-weight: 900; font-size: 32px; color: #fff0a8; text-shadow: 0 0 12px rgba(255,199,66,.72); }
 .generic-achievement-icon { font-size: 24px; }
 
-.achievement-tabs { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; margin: 16px 0 14px; }
+.achievements-sheet {
+  display: flex;
+  height: min(86dvh, 760px);
+  max-height: 86dvh;
+  flex-direction: column;
+  overflow: hidden;
+}
+.achievement-tabs {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 6px;
+  margin: 16px 0 14px;
+  isolation: isolate;
+  pointer-events: auto !important;
+}
 .achievement-tabs button {
+  position: relative;
+  z-index: 1;
+  min-height: 48px;
   border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.035); color: var(--muted);
   padding: 10px 4px; font-size: 11px; cursor: pointer;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .achievement-tabs button.active { color: var(--text); border-color: rgba(255,209,91,.48); background: rgba(255,193,62,.09); }
+.achievement-tabs button:focus-visible { outline: 2px solid rgba(255,209,91,.72); outline-offset: 2px; }
+.achievement-catalog {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 .achievement-coming-soon { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.035); }
 .achievement-coming-soon b { color: #ffd66b; }
 .achievement-coming-soon span { color: var(--muted); font-size: 12px; }

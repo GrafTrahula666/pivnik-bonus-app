@@ -1402,7 +1402,12 @@ function renderAchievementCatalog() {
   const catalog = $('#achievementCatalog');
   if (!catalog) return;
   const rarity = state.achievementTab || 'common';
-  $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.classList.toggle('active', button.dataset.achievementTab === rarity));
+  $$('#achievementsModal [data-achievement-tab]').forEach((button) => {
+    const selected = button.dataset.achievementTab === rarity;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    button.tabIndex = selected ? 0 : -1;
+  });
   const items = rarity === 'legendary'
     ? (state.profile?.achievements || []).filter((item) => item.rarity === 'legendary').map((item) => ({ ...item, earned: true, locked: false }))
     : state.achievements.filter((item) => item.rarity === rarity);
@@ -2720,16 +2725,54 @@ async function openAchievementHub() {
 window.openAchievements = openAchievements;
 window.openAchievementHub = openAchievementHub;
 
+const achievementRarities = new Set(['common', 'rare', 'epic', 'legendary']);
+let lastAchievementPointerSelectionAt = 0;
+
+function selectAchievementTab(rarity, { focus = false } = {}) {
+  if (!achievementRarities.has(rarity)) return;
+  state.achievementTab = rarity;
+  renderAchievementCatalog();
+  const selected = $(`#achievementsModal [data-achievement-tab="${rarity}"]`);
+  if (focus) selected?.focus({ preventScroll: true });
+}
+
+function activateAchievementTab(event) {
+  const button = event.target?.closest?.('#achievementsModal [data-achievement-tab]');
+  if (!button) return;
+
+  // VK WebView can cancel the synthetic click after a pointer gesture. Select on
+  // pointerup and keep click as a keyboard/older-browser fallback.
+  if (event.type === 'click' && performance.now() - lastAchievementPointerSelectionAt < 500) return;
+  if (event.type === 'pointerup') {
+    lastAchievementPointerSelectionAt = performance.now();
+    event.preventDefault();
+  }
+  selectAchievementTab(button.dataset.achievementTab);
+}
+
+function navigateAchievementTabs(event) {
+  const current = event.target?.closest?.('#achievementsModal [data-achievement-tab]');
+  if (!current || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const tabs = $$('#achievementsModal [data-achievement-tab]');
+  const currentIndex = tabs.indexOf(current);
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? tabs.length - 1
+      : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  event.preventDefault();
+  selectAchievementTab(tabs[nextIndex].dataset.achievementTab, { focus: true });
+}
+
 $('#openAchievementsButton')?.addEventListener('click', openAchievementHub);
 $('#achievementCatalog')?.addEventListener('click', (event) => {
   if (!event.target?.closest?.('#retryAchievements')) return;
   state.achievementsLoaded = false;
   void openAchievementHub();
 });
-$$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {
-  state.achievementTab = button.dataset.achievementTab;
-  renderAchievementCatalog();
-}));
+$('#achievementsModal')?.addEventListener('pointerup', activateAchievementTab, true);
+$('#achievementsModal')?.addEventListener('click', activateAchievementTab, true);
+$('#achievementsModal')?.addEventListener('keydown', navigateAchievementTabs);
 $('#ackAchievementButton')?.addEventListener('click', async () => {
   const button = $('#ackAchievementButton');
   const code = button.dataset.achievementCode;
