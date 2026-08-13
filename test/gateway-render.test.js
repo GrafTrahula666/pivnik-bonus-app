@@ -23,21 +23,24 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /<html lang="ru" class="vk-mini-app">/);
-  assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-  assert.match(vk, /\/vk-platform\.js\?v=3\.3\.0-vk-startup-stable/);
+  assert.match(vk, /<script src="\/vendor\/vk-bridge\.js\?v=2\.15\.11-early-init"><\/script>/);
+  assert.match(vk, /<script src="\/vk-platform\.js\?v=3\.3\.1-early-init"><\/script>/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
+  const stylesheetPosition = vk.indexOf('styles.css');
   const linkingPosition = vk.indexOf('/account-link.js');
   const appScript = vk.match(/app\.js\?v=[^"']+/)?.[0] || '';
   const appPosition = appScript ? vk.indexOf(appScript) : -1;
   assert.ok(bridgePosition >= 0);
   assert.ok(platformPosition >= 0);
+  assert.ok(stylesheetPosition >= 0);
   assert.ok(linkingPosition >= 0);
   assert.ok(appPosition >= 0);
   assert.ok(bridgePosition < platformPosition);
+  assert.ok(platformPosition < stylesheetPosition);
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
 
@@ -116,8 +119,8 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
     const html = await renderAppIndex(platform);
 
     assert.equal(platform, 'vk');
-    assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
-    assert.match(html, /\/vk-platform\.js\?v=3\.3\.0-vk-startup-stable/);
+    assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11-early-init/);
+    assert.match(html, /\/vk-platform\.js\?v=3\.3\.1-early-init/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;

@@ -2504,10 +2504,12 @@ export async function renderAppIndex(platform) {
   if (platform !== 'vk') return withLinking;
   return withLinking
     .replace('<html lang="ru">', '<html lang="ru" class="vk-mini-app">')
-    .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
-      /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.3.0-vk-startup-stable"></script>\n  <script defer src="/account-link.js$1"></script>'
+      /<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i,
+      // VK keeps its own loading screen visible until VKWebAppInit arrives. These
+      // two scripts must execute before stylesheets and before deferred app code:
+      // a slow stylesheet or cold upstream must never postpone the handshake.
+      '<script src="/vendor/vk-bridge.js?v=2.15.11-early-init"></script>\n  <script src="/vk-platform.js?v=3.3.1-early-init"></script>\n  '
     );
 }
 

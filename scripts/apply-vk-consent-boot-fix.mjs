@@ -10,7 +10,7 @@ const loaderCssPath = path.join(root, 'loader-fix.css');
 const marker = 'VK consent gate idempotency hotfix';
 // Never roll the VK client cache key back when this older hotfix is rerun
 // during the release test suite.
-const cacheVersion = '3.3.0-vk-startup-stable';
+const cacheVersion = '3.3.1-early-init';
 
 const originalGate = `  function openConsentGate() {
     if (!consentRequired) return;
