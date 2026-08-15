@@ -261,33 +261,31 @@ async function ensureCanonicalSchema(client) {
   `);
 }
 
-async function freezeLegacyDatabase(connectionString) {
-  return withClient(connectionString, async (client) => {
-    const databaseResult = await client.query('SELECT current_database() AS name');
-    const databaseName = databaseResult.rows[0].name;
-    await client.query(`ALTER DATABASE ${quoteIdent(databaseName)} SET default_transaction_read_only TO on`);
+async function setLegacyDatabaseReadOnly(connectionString, enabled) {
+  const databaseName = new URL(connectionString).pathname.replace(/^\//, '');
+  if (!databaseName) throw new Error('Legacy database name is missing.');
+  const maintenanceConnectionString = databaseUrlFor(connectionString, BACKUP_DATABASE_NAME);
+  return withClient(maintenanceConnectionString, async (client) => {
+    const command = enabled
+      ? `ALTER DATABASE ${quoteIdent(databaseName)} SET default_transaction_read_only TO on`
+      : `ALTER DATABASE ${quoteIdent(databaseName)} RESET default_transaction_read_only`;
+    await client.query(command);
     await client.query(`
       SELECT pg_terminate_backend(pid)
         FROM pg_stat_activity
-       WHERE datname = current_database()
+       WHERE datname = $1
          AND pid <> pg_backend_pid()
-    `);
+    `, [databaseName]);
     return databaseName;
   });
 }
 
+async function freezeLegacyDatabase(connectionString) {
+  return setLegacyDatabaseReadOnly(connectionString, true);
+}
+
 async function unfreezeLegacyDatabase(connectionString) {
-  return withClient(connectionString, async (client) => {
-    const databaseResult = await client.query('SELECT current_database() AS name');
-    const databaseName = databaseResult.rows[0].name;
-    await client.query(`ALTER DATABASE ${quoteIdent(databaseName)} RESET default_transaction_read_only`);
-    await client.query(`
-      SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-       WHERE datname = current_database()
-         AND pid <> pg_backend_pid()
-    `);
-  });
+  await setLegacyDatabaseReadOnly(connectionString, false);
 }
 
 async function verifyLegacyReadOnly(connectionString) {
@@ -392,6 +390,7 @@ async function migrateSnapshot(targetConnectionString, snapshot) {
       const shopItems = await mapReferenceByCode(client, 'shop_items', snapshot.shop_items || [], userMap);
       const promotions = await mapReferenceByCode(client, 'promotions', snapshot.promotions || [], userMap);
       const shiftMap = new Map();
+      let legacyActiveShiftsArchived = 0;
 
       for (const row of identities) {
         await insertRow(client, 'user_identities', row, {
@@ -427,12 +426,28 @@ async function migrateSnapshot(targetConnectionString, snapshot) {
           transform: { user_id: mappedId(userMap, row.user_id, 'reward_grants.user_id') }
         });
       }
+      const existingActiveShift = await client.query(
+        'SELECT id FROM public.shifts WHERE ended_at IS NULL LIMIT 1'
+      );
+      let hasActiveShift = existingActiveShift.rowCount > 0;
       for (const row of snapshot.shifts || []) {
-        const id = await insertRow(client, 'shifts', row, {
+        const shiftRow = { ...row };
+        if (shiftRow.ended_at === null && hasActiveShift) {
+          const archivedAt = new Date();
+          shiftRow.ended_at = archivedAt;
+          shiftRow.updated_at = archivedAt;
+          shiftRow.note = [
+            String(shiftRow.note || '').trim(),
+            'Архивировано при объединении VK → Telegram 2026-08-04'
+          ].filter(Boolean).join(' · ');
+          legacyActiveShiftsArchived += 1;
+        }
+        const id = await insertRow(client, 'shifts', shiftRow, {
           exclude: ['id'],
-          transform: { created_by: mappedId(userMap, row.created_by, 'shifts.created_by') },
+          transform: { created_by: mappedId(userMap, shiftRow.created_by, 'shifts.created_by') },
           returning: 'id'
         });
+        if (shiftRow.ended_at === null) hasActiveShift = true;
         shiftMap.set(String(row.id), id);
       }
       for (const row of snapshot.shift_members || []) {
@@ -525,6 +540,7 @@ async function migrateSnapshot(targetConnectionString, snapshot) {
         rewards: (snapshot.reward_grants || []).length,
         betaGrants: (snapshot.beta_grants || []).length,
         shifts: (snapshot.shifts || []).length,
+        legacyActiveShiftsArchived,
         barCustomers: (snapshot.bar_customers || []).length,
         barsInserted: bars.inserted,
         barsReused: bars.reused,

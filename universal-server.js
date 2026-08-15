@@ -21,6 +21,12 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import {
+  WHEEL_PRIZES,
+  drawWheelPrize,
+  freeSpinState,
+  paidSpinCost
+} from './wheel.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -33,17 +39,38 @@ const telegramBotToken = String(process.env.TELEGRAM_BOT_TOKEN || '');
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
+const olesyaTelegramId = String(process.env.OLESYA_TELEGRAM_ID || '').trim();
+const vladislavTelegramId = String(process.env.VLADISLAV_TELEGRAM_ID || '').trim();
 const vkAppId = String(process.env.VK_APP_ID || '').trim();
 const vkAppSecret = String(process.env.VK_APP_SECRET || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
 const configuredSessionSecret = String(process.env.SESSION_SECRET || '');
+const configuredIdentityTombstoneSecret = String(process.env.IDENTITY_TOMBSTONE_SECRET || '');
+const DEFAULT_LEGAL_OPERATOR_NAME = 'Индивидуальный предприниматель Иживильгин Виталий Викторович';
+const DEFAULT_LEGAL_OPERATOR_ID = 'ИНН 380415014659';
+const DEFAULT_LEGAL_CONTACT_EMAIL = 'origtopg666@gmail.com';
+const DEFAULT_LEGAL_OPERATOR_ADDRESS = 'г. Санкт-Петербург, проспект Энгельса, д. 55';
+const DEFAULT_LEGAL_DATA_RETENTION_POLICY = "Данные профиля и идентификаторы VK/Telegram хранятся до удаления аккаунта. Резервные копии, содержащие удалённые данные, автоматически перезаписываются не позднее 90 дней. Сведения о покупках, начислениях, списаниях и иные документы, необходимые для бухгалтерского и налогового учёта, хранятся 5 лет. Согласия, история принятия правил, обращения в поддержку, журналы безопасности и криптографический отпечаток удалённой платформенной идентичности хранятся 3 года после удаления аккаунта или завершения обращения. По истечении применимого срока данные удаляются либо обезличиваются, если законодательство не требует более длительного хранения.";
+const legalOperatorName = String(process.env.LEGAL_OPERATOR_NAME || DEFAULT_LEGAL_OPERATOR_NAME).trim();
+const legalOperatorId = String(process.env.LEGAL_OPERATOR_ID || DEFAULT_LEGAL_OPERATOR_ID).trim();
+const legalContactEmail = String(process.env.LEGAL_CONTACT_EMAIL || DEFAULT_LEGAL_CONTACT_EMAIL).trim();
+const legalOperatorAddress = String(process.env.LEGAL_OPERATOR_ADDRESS || DEFAULT_LEGAL_OPERATOR_ADDRESS).trim();
+const legalDataRetentionPolicy = String(
+  process.env.LEGAL_DATA_RETENTION_POLICY || DEFAULT_LEGAL_DATA_RETENTION_POLICY
+).trim();
+const releaseCommit = String(
+  process.env.RAILWAY_GIT_COMMIT_SHA
+    || process.env.GIT_COMMIT_SHA
+    || process.env.SOURCE_VERSION
+    || 'unknown'
+).trim();
 const configuredDocumentPlatform = String(
   process.env.PIVNIK_DOCUMENT_PLATFORM || 'telegram'
 ).trim().toLowerCase() === 'vk' ? 'vk' : 'telegram';
 const isTestImport = process.env.NODE_ENV === 'test'
   && process.env.PIVNIK_TEST_IMPORT === '1';
 
-const TERMS_VERSION = 'beta-0.4';
+const TERMS_VERSION = '2026-08-04';
 const EXPECTED_VK_APP_ID = '54694987';
 const WELCOME_BONUS = 100;
 const BETA_TESTER_BONUS = 150;
@@ -87,6 +114,23 @@ if (process.env.NODE_ENV === 'production' && configuredSessionSecret.length < 32
   console.error('SESSION_SECRET must contain at least 32 characters in production.');
   process.exit(1);
 }
+if (process.env.NODE_ENV === 'production' && configuredIdentityTombstoneSecret.length < 32) {
+  console.error('IDENTITY_TOMBSTONE_SECRET must contain at least 32 characters in production.');
+  process.exit(1);
+}
+if (process.env.NODE_ENV === 'production') {
+  const missingLegalFields = [
+    ['LEGAL_OPERATOR_NAME', legalOperatorName],
+    ['LEGAL_OPERATOR_ID', legalOperatorId],
+    ['LEGAL_CONTACT_EMAIL', legalContactEmail],
+    ['LEGAL_OPERATOR_ADDRESS', legalOperatorAddress],
+    ['LEGAL_DATA_RETENTION_POLICY', legalDataRetentionPolicy]
+  ].filter(([, value]) => !value).map(([name]) => name);
+  if (missingLegalFields.length) {
+    console.error(`Missing required production legal settings: ${missingLegalFields.join(', ')}`);
+    process.exit(1);
+  }
+}
 if (process.env.NODE_ENV === 'production' && allowDemo) {
   console.error('ALLOW_DEMO cannot be enabled in production.');
   process.exit(1);
@@ -106,10 +150,44 @@ const sessionSecret = crypto
   .update(configuredSessionSecret || `pivnik:${telegramBotToken || 'local-development'}`)
   .digest();
 
+const identityTombstoneSecret = crypto
+  .createHash('sha256')
+  .update(
+    configuredIdentityTombstoneSecret
+      || `pivnik-tombstone-development:${configuredSessionSecret || telegramBotToken || 'local'}`
+  )
+  .digest();
+
 let platformReady = false;
 let childReady = false;
 let shuttingDown = false;
+let databaseFingerprint = null;
 const rateLimitBuckets = new Map();
+
+function publicReleaseMetadata() {
+  return {
+    databaseFingerprint,
+    releaseCommit,
+    termsVersion: TERMS_VERSION,
+    environment: process.env.NODE_ENV || 'development'
+  };
+}
+
+async function refreshDatabaseFingerprint() {
+  const result = await pool.query(
+    'SELECT database_instance_id FROM runtime_identity WHERE singleton = TRUE LIMIT 1'
+  );
+  const databaseInstanceId = String(result.rows[0]?.database_instance_id || '');
+  if (!databaseInstanceId) {
+    throw new Error('Runtime database identity is missing.');
+  }
+  databaseFingerprint = crypto
+    .createHash('sha256')
+    .update(databaseInstanceId)
+    .digest('hex')
+    .slice(0, 20);
+  return databaseFingerprint;
+}
 
 function requestAddress(req) {
   const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -231,18 +309,24 @@ function hasUnlimitedBonus(row) {
   return Boolean(row?.unlimited_bonus) || isOwnerRow(row) || row?.role === 'viewer';
 }
 
+// Anna frame entitlement and consent persistence hotfix 2026-08-06. A persisted personal frame remains valid after role changes
+// and Telegram/VK account linking, even when optional identity env vars are absent.
 function profileFrameFromRow(row) {
   if (isOwnerRow(row)) return 'money';
-  if (isAnnaRow(row)) return 'anna';
+  if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
-  if (storedFrame === 'anna') return 'none';
+  if (storedFrame === 'olesya') return 'olesya';
+  if (storedFrame === 'vladislav') return 'vladislav';
+  if (storedFrame === 'anna') return 'anna';
   return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';
 }
 
 function availableFramesFromRow(row) {
   if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
+  if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
+  if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
   const frames = [{ code: 'none', title: 'Без рамки' }];
   if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') {
@@ -510,7 +594,7 @@ async function initPlatformDatabase() {
 
     await client.query('COMMIT');
     platformReady = true;
-    console.log('Unified Telegram/VK account schema is ready.');
+    console.log('Separate Telegram/VK account mode is ready.');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     throw error;
@@ -660,6 +744,8 @@ async function getRollingSpend(db, userId) {
   return Number(result.rows[0]?.spend || 0);
 }
 
+const PLATFORM_ACCOUNT_MODE = 'separate';
+
 async function getIdentitySummary(db, userId) {
   const result = await db.query(
     `SELECT provider, provider_user_id, provider_username
@@ -673,11 +759,13 @@ async function getIdentitySummary(db, userId) {
     id: row.provider_user_id,
     username: row.provider_username || null
   }));
+  const legacyLinked = identities.some((item) => item.provider === 'telegram')
+    && identities.some((item) => item.provider === 'vk');
   return {
     identities,
     linkedPlatforms: identities.map((item) => item.provider),
-    accountLinked: identities.some((item) => item.provider === 'telegram')
-      && identities.some((item) => item.provider === 'vk')
+    accountLinked: false,
+    legacyLinked
   };
 }
 
@@ -718,7 +806,8 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
       {
         identities: [],
         linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],
-        accountLinked: false
+        accountLinked: false,
+        legacyLinked: false
       }
     ]
     : await Promise.all([
@@ -965,10 +1054,19 @@ async function updateUnifiedProfile(userId, platform, body) {
   }
 }
 
-async function deleteUnifiedAccount(userId, confirmation) {
+// Platform separation release safety 2026-08-07. Deletion affects only the platform used for the request.
+// A legacy profile that still contains both identities keeps its balance, history,
+// QR code and achievements for the other platform. The deleted identity is tombstoned.
+async function deletePlatformAccount(userId, platform, providerUserId, confirmation) {
   if (String(confirmation || '').trim().toUpperCase() !== 'УДАЛИТЬ') {
     throw Object.assign(new Error('Введите слово «УДАЛИТЬ» для подтверждения.'), { statusCode: 400 });
   }
+
+  const provider = platform === 'vk' ? 'vk' : platform === 'telegram' ? 'telegram' : null;
+  if (!provider) {
+    throw Object.assign(new Error('Не удалось определить платформу удаляемого аккаунта.'), { statusCode: 400 });
+  }
+
   const canonical = await canonicalUserId(pool, userId);
   if (!canonical) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
 
@@ -988,6 +1086,112 @@ async function deleteUnifiedAccount(userId, confirmation) {
       throw Object.assign(new Error('Аккаунт уже удалён или не найден.'), { statusCode: 404 });
     }
 
+    const identities = await client.query(
+      `SELECT provider, provider_user_id, provider_username, profile_url
+       FROM user_identities
+       WHERE user_id = $1::bigint
+       ORDER BY provider
+       FOR UPDATE`,
+      [canonical]
+    );
+    const requestedProviderUserId = String(providerUserId || '');
+    const deletingIdentity = identities.rows.find((identity) => (
+      identity.provider === provider
+      && (!requestedProviderUserId || String(identity.provider_user_id) === requestedProviderUserId)
+    )) || identities.rows.find((identity) => identity.provider === provider);
+
+    if (!deletingIdentity) {
+      throw Object.assign(new Error('Аккаунт этой платформы уже удалён или не найден.'), { statusCode: 404 });
+    }
+
+    const storeTombstone = async (identity) => {
+      await client.query(
+        `INSERT INTO deleted_identity_tombstones (
+           provider, identity_hash, deleted_user_id, deleted_at
+         ) VALUES ($1, $2, $3::bigint, NOW())
+         ON CONFLICT (provider, identity_hash) DO UPDATE
+         SET deleted_user_id = EXCLUDED.deleted_user_id,
+             deleted_at = EXCLUDED.deleted_at`,
+        [
+          identity.provider,
+          deletedIdentityHash(identity.provider, identity.provider_user_id),
+          canonical
+        ]
+      );
+    };
+
+    const remainingIdentities = identities.rows.filter((identity) => !(
+      identity.provider === deletingIdentity.provider
+      && String(identity.provider_user_id) === String(deletingIdentity.provider_user_id)
+    ));
+
+    if (remainingIdentities.length) {
+      await storeTombstone(deletingIdentity);
+      await client.query(
+        'DELETE FROM account_link_codes WHERE user_id = $1::bigint OR used_by_user_id = $1::bigint',
+        [canonical]
+      );
+      await client.query('DELETE FROM account_link_attempts WHERE user_id = $1::bigint', [canonical]);
+      await client.query(
+        `DELETE FROM user_identities
+         WHERE user_id = $1::bigint
+           AND provider = $2
+           AND provider_user_id = $3`,
+        [canonical, deletingIdentity.provider, deletingIdentity.provider_user_id]
+      );
+
+      const remaining = remainingIdentities[0];
+      await client.query(
+        `UPDATE users SET
+           telegram_id = CASE WHEN $2 = 'telegram' THEN $3::bigint ELSE NULL END,
+           username = $4,
+           first_name = CASE WHEN $2 = 'telegram' THEN 'Пользователь Telegram' ELSE 'Пользователь VK' END,
+           last_name = NULL,
+           photo_url = $5,
+           language_code = NULL,
+           session_version = session_version + 1,
+           updated_at = NOW()
+         WHERE id = $1::bigint`,
+        [
+          canonical,
+          remaining.provider,
+          remaining.provider_user_id,
+          remaining.provider_username || null,
+          remaining.profile_url || null
+        ]
+      );
+
+      await client.query('COMMIT');
+      return {
+        ok: true,
+        deleted: true,
+        platform: provider,
+        preservedOtherPlatform: true
+      };
+    }
+
+    for (const identity of identities.rows) await storeTombstone(identity);
+
+    const deletingIdentities = await client.query(
+      'SELECT provider, provider_user_id FROM user_identities WHERE user_id = $1::bigint FOR UPDATE',
+      [canonical]
+    );
+    for (const identity of deletingIdentities.rows) {
+      await client.query(
+        `INSERT INTO deleted_identity_tombstones (
+           provider, identity_hash, deleted_user_id, deleted_at
+         ) VALUES ($1, $2, $3::bigint, NOW())
+         ON CONFLICT (provider, identity_hash) DO UPDATE
+         SET deleted_user_id = EXCLUDED.deleted_user_id,
+             deleted_at = EXCLUDED.deleted_at`,
+        [
+          identity.provider,
+          deletedIdentityHash(identity.provider, identity.provider_user_id),
+          canonical
+        ]
+      );
+    }
+
     await client.query('DELETE FROM account_link_codes WHERE user_id = $1::bigint OR used_by_user_id = $1::bigint', [canonical]);
     await client.query('DELETE FROM account_link_attempts WHERE user_id = $1::bigint', [canonical]);
     await client.query('DELETE FROM user_identities WHERE user_id = $1::bigint', [canonical]);
@@ -999,6 +1203,7 @@ async function deleteUnifiedAccount(userId, confirmation) {
     await client.query('DELETE FROM shift_members WHERE user_id = $1::bigint', [canonical]);
     await client.query('DELETE FROM cancel_quota_resets WHERE user_id = $1::bigint OR reset_by = $1::bigint', [canonical]);
     await client.query('DELETE FROM shop_inquiries WHERE user_id = $1::bigint', [canonical]);
+    await client.query('DELETE FROM wheel_spins WHERE user_id = $1::bigint', [canonical]);
     await client.query('DELETE FROM wallets WHERE user_id = $1::bigint', [canonical]);
     await client.query('DELETE FROM beer_loyalty WHERE user_id = $1::bigint', [canonical]);
     await client.query('UPDATE shifts SET created_by = NULL WHERE created_by = $1::bigint', [canonical]);
@@ -1040,7 +1245,7 @@ async function deleteUnifiedAccount(userId, confirmation) {
       [canonical]
     );
     await client.query('COMMIT');
-    return { ok: true, deleted: true };
+    return { ok: true, deleted: true, platform: provider, preservedOtherPlatform: false };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     throw error;
@@ -1187,13 +1392,7 @@ async function resolveProviderUser(provider, externalUser) {
       ? Boolean(ownerTelegramId && externalUser.id === ownerTelegramId)
       : Boolean(ownerVkId && externalUser.id === ownerVkId);
 
-    if (!userId && isOwner && provider === 'vk' && ownerTelegramId) {
-      const owner = await client.query(
-        'SELECT id FROM users WHERE telegram_id::text = $1 FOR UPDATE',
-        [ownerTelegramId]
-      );
-      if (owner.rowCount) userId = await canonicalUserId(client, owner.rows[0].id);
-    }
+    // VK and Telegram identities are intentionally independent, including the owner.
 
     if (!userId) {
       const inserted = await client.query(
@@ -1223,7 +1422,10 @@ async function resolveProviderUser(provider, externalUser) {
         'SELECT COUNT(*)::int AS count FROM user_identities WHERE user_id = $1::bigint',
         [userId]
       );
-      const shouldUpdateMainProfile = provider === 'telegram' || Number(identityCount.rows[0]?.count || 0) === 0;
+      // Separate platform profile refresh 2026-08-07. A standalone VK or Telegram identity owns its profile fields.
+      // This also restores the surviving platform after one side of a legacy link is deleted.
+      const identityCountValue = Number(identityCount.rows[0]?.count || 0);
+      const shouldUpdateMainProfile = identityCountValue <= 1;
       if (shouldUpdateMainProfile) {
         await client.query(
           `UPDATE users
@@ -1375,27 +1577,290 @@ async function grantReward(db, userId, code, amount, source, reason, mode = 'adj
   return { granted: true, amount, balanceAfter };
 }
 
+function wheelPrizeByCode(code) {
+  return WHEEL_PRIZES.find((item) => item.code === code) || null;
+}
+
+function wheelPrizeResponse(row) {
+  const prize = wheelPrizeByCode(row.prize_code);
+  return {
+    id: String(row.id),
+    kind: row.kind,
+    listedBonusCost: Number(row.listed_bonus_cost || 0),
+    chargedBonusCost: Number(row.charged_bonus_cost || 0),
+    prize: prize ? {
+      code: prize.code,
+      title: prize.title,
+      bonus: prize.bonus,
+      beerMl: prize.beerMl,
+      annualSupply: prize.annualSupply
+    } : null,
+    createdAt: row.created_at
+  };
+}
+
+async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
+  const [accountResult, lastFreeResult, nowResult] = await Promise.all([
+    db.query(
+      `SELECT u.telegram_id, u.role, u.unlimited_bonus, w.balance
+       FROM users u
+       JOIN wallets w ON w.user_id = u.id
+       WHERE u.id = $1::bigint
+         AND u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL`,
+      [userId]
+    ),
+    db.query(
+      `SELECT id, created_at
+       FROM wheel_spins
+       WHERE user_id = $1::bigint AND kind = 'free'
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [userId]
+    ),
+    nowValue ? Promise.resolve({ rows: [{ now: nowValue }] }) : db.query('SELECT NOW() AS now')
+  ]);
+  if (!accountResult.rowCount) {
+    throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
+  }
+
+  const account = accountResult.rows[0];
+  const lastFree = lastFreeResult.rows[0] || null;
+  const free = freeSpinState(lastFree?.created_at, nowResult.rows[0].now);
+  let paidSpinsSinceLastFree = 0;
+  if (lastFree) {
+    const paidResult = await db.query(
+      `SELECT COUNT(*)::integer AS count
+       FROM wheel_spins
+       WHERE user_id = $1::bigint
+         AND kind IN ('paid_50', 'paid_100')
+         AND id > $2::bigint`,
+      [userId, lastFree.id]
+    );
+    paidSpinsSinceLastFree = Number(paidResult.rows[0]?.count || 0);
+  }
+  const nextPaidCost = paidSpinCost(paidSpinsSinceLastFree);
+  const unlimitedBonus = hasUnlimitedBonus(account);
+  const balance = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(account.balance || 0);
+
+  return {
+    enabled: true,
+    platform: 'telegram',
+    freeAvailable: free.available,
+    nextFreeAt: free.nextAt,
+    remainingMs: free.remainingMs,
+    paidSpinsSinceLastFree,
+    nextPaidCost,
+    canAffordPaid: unlimitedBonus || balance >= nextPaidCost,
+    balance,
+    unlimitedBonus
+  };
+}
+
+async function spinTelegramWheel(userId, rawRequestKey) {
+  const requestKey = String(rawRequestKey || '').trim();
+  if (!/^[A-Za-z0-9-]{8,100}$/.test(requestKey)) {
+    throw Object.assign(new Error('Некорректный ключ вращения.'), { statusCode: 400 });
+  }
+  const storedRequestKey = `${userId}:${requestKey}`;
+  const client = await pool.connect();
+  let spinRow;
+  let idempotent = false;
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [userId]);
+
+    const existing = await client.query(
+      'SELECT * FROM wheel_spins WHERE request_key = $1',
+      [storedRequestKey]
+    );
+    if (existing.rowCount) {
+      spinRow = existing.rows[0];
+      idempotent = true;
+      await client.query('COMMIT');
+    } else {
+      const accountResult = await client.query(
+        `SELECT u.telegram_id, u.role, u.unlimited_bonus, w.balance
+         FROM users u
+         JOIN wallets w ON w.user_id = u.id
+         WHERE u.id = $1::bigint
+           AND u.merged_into_user_id IS NULL
+           AND u.deleted_at IS NULL
+         FOR UPDATE OF u, w`,
+        [userId]
+      );
+      if (!accountResult.rowCount) {
+        throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
+      }
+      const nowResult = await client.query('SELECT NOW() AS now');
+      const status = await getTelegramWheelStatus(userId, client, nowResult.rows[0].now);
+      const listedCost = status.freeAvailable ? 0 : status.nextPaidCost;
+      const kind = listedCost === 0 ? 'free' : listedCost === 50 ? 'paid_50' : 'paid_100';
+      const account = accountResult.rows[0];
+      const unlimitedBonus = hasUnlimitedBonus(account);
+      const currentBalance = Number(account.balance || 0);
+      if (!unlimitedBonus && listedCost > currentBalance) {
+        throw Object.assign(new Error(`Недостаточно бонусов: для вращения нужно ${listedCost}.`), {
+          statusCode: 409
+        });
+      }
+
+      const chargedCost = unlimitedBonus ? 0 : listedCost;
+      const { ticket, prize } = drawWheelPrize();
+      let balanceAfter = currentBalance;
+      if (unlimitedBonus && prize.bonus > 0) {
+        const walletResult = await client.query(
+          `UPDATE wallets
+           SET balance = balance + $1::bigint, updated_at = NOW()
+           WHERE user_id = $2::bigint
+           RETURNING balance`,
+          [prize.bonus, userId]
+        );
+        balanceAfter = Number(walletResult.rows[0].balance);
+      } else if (!unlimitedBonus) {
+        const walletResult = await client.query(
+          `UPDATE wallets
+           SET balance = balance - $1::bigint + $2::bigint, updated_at = NOW()
+           WHERE user_id = $3::bigint
+           RETURNING balance`,
+          [chargedCost, prize.bonus, userId]
+        );
+        balanceAfter = Number(walletResult.rows[0].balance);
+      }
+      if (prize.beerMl > 0) {
+        await client.query(
+          `UPDATE beer_loyalty
+           SET gift_ml_balance = gift_ml_balance + $1::integer, updated_at = NOW()
+           WHERE user_id = $2::bigint`,
+          [prize.beerMl, userId]
+        );
+      }
+
+      const inserted = await client.query(
+        `INSERT INTO wheel_spins (
+           request_key, user_id, platform, kind,
+           listed_bonus_cost, charged_bonus_cost, prize_code,
+           bonus_awarded, beer_awarded_ml, random_ticket
+         ) VALUES (
+           $1, $2::bigint, 'telegram', $3,
+           $4::bigint, $5::bigint, $6,
+           $7::bigint, $8::integer, $9::integer
+         )
+         RETURNING *`,
+        [
+          storedRequestKey,
+          userId,
+          kind,
+          listedCost,
+          chargedCost,
+          prize.code,
+          prize.bonus,
+          prize.beerMl,
+          ticket
+        ]
+      );
+      spinRow = inserted.rows[0];
+
+      await client.query(
+        `INSERT INTO transactions (
+           request_key, client_id, mode, status,
+           bonus_spent, bonus_earned, beer_gift_earned_ml,
+           balance_after, reason, reward_code, completed_at
+         ) VALUES (
+           $1, $2::bigint, 'adjustment', 'completed',
+           $3::bigint, $4::bigint, $5::integer,
+           $6::bigint, $7, $8, NOW()
+         )`,
+        [
+          `wheel:${storedRequestKey}`,
+          userId,
+          chargedCost,
+          prize.bonus,
+          prize.beerMl,
+          balanceAfter,
+          `Колесо Пивника: ${prize.title}`,
+          `wheel:${prize.code}`
+        ]
+      );
+
+      if (prize.annualSupply) {
+        await client.query(
+          `INSERT INTO wheel_annual_prizes (spin_id, user_id)
+           VALUES ($1::bigint, $2::bigint)`,
+          [spinRow.id, userId]
+        );
+      }
+      await client.query('COMMIT');
+    }
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const [status, beerResult] = await Promise.all([
+    getTelegramWheelStatus(userId),
+    pool.query('SELECT gift_ml_balance FROM beer_loyalty WHERE user_id = $1::bigint', [userId])
+  ]);
+  return {
+    spin: wheelPrizeResponse(spinRow),
+    status,
+    idempotent,
+    account: {
+      balance: status.balance,
+      unlimitedBonus: status.unlimitedBonus,
+      giftBeerLiters: litersFromMl(beerResult.rows[0]?.gift_ml_balance)
+    }
+  };
+}
+
+function deletedIdentityHash(provider, providerUserId) {
+  return crypto
+    .createHmac('sha256', identityTombstoneSecret)
+    .update(`deleted-identity:${provider}:${providerUserId}`)
+    .digest('hex');
+}
+
+async function hasDeletedIdentity(db, userId) {
+  const identities = await db.query(
+    'SELECT provider, provider_user_id FROM user_identities WHERE user_id = $1::bigint',
+    [userId]
+  );
+  for (const identity of identities.rows) {
+    const tombstone = await db.query(
+      'SELECT 1 FROM deleted_identity_tombstones WHERE provider = $1 AND identity_hash = $2 LIMIT 1',
+      [identity.provider, deletedIdentityHash(identity.provider, identity.provider_user_id)]
+    );
+    if (tombstone.rowCount) return true;
+  }
+  return false;
+}
+
 async function acceptConsent(userId, platform) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const canonical = await canonicalUserId(client, userId);
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
+    const rewardEligible = !(await hasDeletedIdentity(client, canonical));
     await client.query(
       `UPDATE users
        SET terms_accepted_at = NOW(), terms_version = $1, updated_at = NOW()
        WHERE id = $2::bigint`,
       [TERMS_VERSION, canonical]
     );
-    const reward = await grantReward(
-      client,
-      canonical,
-      'welcome-100',
-      WELCOME_BONUS,
-      'consent',
-      'Приветственный бонус за регистрацию',
-      'welcome'
-    );
+    const reward = rewardEligible
+      ? await grantReward(
+          client,
+          canonical,
+          'welcome-100',
+          WELCOME_BONUS,
+          'consent',
+          'Приветственный бонус за регистрацию',
+          'welcome'
+        )
+      : { granted: false, amount: 0 };
 
     const ordinalResult = await client.query(
       `SELECT (SELECT COUNT(*)::integer
@@ -1408,7 +1873,7 @@ async function acceptConsent(userId, platform) {
     );
     const betaNumber = Number(ordinalResult.rows[0]?.beta_number || 0);
     let betaReward = { granted: false };
-    if (betaNumber > 0 && betaNumber <= 30) {
+    if (rewardEligible && betaNumber > 0 && betaNumber <= 30) {
       betaReward = await grantReward(
         client,
         canonical,
@@ -1447,6 +1912,10 @@ async function claimBetaTester(userId, platform) {
     await client.query('BEGIN');
     const canonical = await canonicalUserId(client, userId);
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
+    if (await hasDeletedIdentity(client, canonical)) {
+      await client.query('COMMIT');
+      return { eligible: false, granted: false, profile: await getProfile(canonical, platform) };
+    }
 
     const userResult = await client.query(
       `SELECT terms_accepted_at, terms_version,
@@ -2277,12 +2746,21 @@ export async function renderAppIndex(platform) {
     '<script defer src="/account-link.js?v=2.3.0"></script>\n  <script defer src="app.js$1"></script>'
   );
 
-  if (platform !== 'vk') return withLinking;
+  if (platform !== 'vk') {
+    return withLinking.replace(
+      /<!-- telegram-wheel-legacy:start -->[\s\S]*?<!-- telegram-wheel-legacy:end -->/g,
+      ''
+    );
+  }
   return withLinking
+    .replace(
+      /<!-- telegram-wheel:start -->[\s\S]*?<!-- telegram-wheel:end -->/g,
+      ''
+    )
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.0"></script>\n  <script defer src="/account-link.js$1"></script>'
+      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.1-consent-gate"></script>\n  <script defer src="/account-link.js$1"></script>'
     );
 }
 
@@ -2358,6 +2836,45 @@ async function serveFile(res, filePath, contentType, cacheControl = 'no-store') 
   }
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+async function serveLegalDocument(res, filePath) {
+  try {
+    const template = await fs.readFile(filePath, 'utf8');
+    const replacements = {
+      '{{LEGAL_OPERATOR_NAME}}': legalOperatorName || 'Оператор не настроен',
+      '{{LEGAL_OPERATOR_ID}}': legalOperatorId || 'не настроено',
+      '{{LEGAL_CONTACT_EMAIL}}': legalContactEmail || 'не настроено',
+      '{{LEGAL_OPERATOR_ADDRESS}}': legalOperatorAddress || BAR_ADDRESS,
+      '{{LEGAL_DATA_RETENTION_POLICY}}': legalDataRetentionPolicy || 'не настроено'
+    };
+    const html = Object.entries(replacements).reduce(
+      (result, [token, value]) => result.replaceAll(
+        token,
+        escapeHtml(safeText(value, 1000, 'не настроено'))
+      ),
+      template
+    );
+    const body = Buffer.from(html);
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-length': body.length,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff'
+    });
+    res.end(body);
+  } catch {
+    sendJson(res, 404, { error: 'Документ не найден.' });
+  }
+}
+
 function platformFromRequest(req, fallback = 'unknown') {
   const signedPlatform = fallback === 'vk' ? 'vk' : 'telegram';
   const claimed = String(req.headers['x-pivnik-platform'] || '').toLowerCase();
@@ -2372,6 +2889,7 @@ function platformFromRequest(req, fallback = 'unknown') {
 function isConsentExempt(pathname) {
   return pathname === '/api/health'
     || pathname === '/api/platform-health'
+    || pathname === '/api/release-readiness'
     || pathname === '/api/auth'
     || pathname === '/api/bootstrap'
     || pathname === '/api/me'
@@ -2432,19 +2950,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
-      return serveFile(res, path.join(__dirname, 'legal', 'privacy.html'), 'text/html; charset=utf-8');
+      return serveLegalDocument(res, path.join(__dirname, 'legal', 'privacy.html'));
     }
 
     if (req.method === 'GET' && url.pathname === '/legal/terms') {
-      return serveFile(res, path.join(__dirname, 'legal', 'terms.html'), 'text/html; charset=utf-8');
+      return serveLegalDocument(res, path.join(__dirname, 'legal', 'terms.html'));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      if (!childReady || !platformReady) {
+      if (!childReady || !platformReady || !databaseFingerprint) {
         return sendJson(res, 503, {
           ok: false,
           database: childReady ? 'initializing' : 'unavailable',
-          unifiedAccounts: platformReady
+          unifiedAccounts: platformReady,
+          ...publicReleaseMetadata()
         });
       }
       const upstreamHealth = await fetch(`http://127.0.0.1:${internalPort}/api/health`, {
@@ -2455,20 +2974,59 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 503, {
           ok: false,
           database: 'error',
-          unifiedAccounts: true
+          unifiedAccounts: true,
+          ...publicReleaseMetadata()
         });
       }
-      return sendJson(res, 200, { ...health, ok: true, unifiedAccounts: true });
+      return sendJson(res, 200, {
+        ...health,
+        ok: true,
+        unifiedAccounts: false,
+        accountMode: PLATFORM_ACCOUNT_MODE,
+        ...publicReleaseMetadata()
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/platform-health') {
-      return sendJson(res, platformReady ? 200 : 503, {
-        ok: platformReady,
+      const ok = platformReady && Boolean(databaseFingerprint);
+      return sendJson(res, ok ? 200 : 503, {
+        ok,
         telegram: Boolean(telegramBotToken),
         vk: Boolean(vkAppId && vkAppSecret),
-        unifiedAccounts: true,
-        linkCodes: true,
+        unifiedAccounts: false,
+        linkCodes: false,
+        accountMode: PLATFORM_ACCOUNT_MODE,
         bar: BAR_CODE,
+        timestamp: new Date().toISOString(),
+        ...publicReleaseMetadata()
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/release-readiness') {
+      const legalConfigured = Boolean(
+        legalOperatorName
+          && legalOperatorId
+          && legalContactEmail
+          && legalOperatorAddress
+          && legalDataRetentionPolicy
+      );
+      const ready = platformReady
+        && childReady
+        && Boolean(databaseFingerprint)
+        && (process.env.NODE_ENV !== 'production' || legalConfigured)
+        && (process.env.NODE_ENV !== 'production' || configuredIdentityTombstoneSecret.length >= 32);
+      return sendJson(res, ready ? 200 : 503, {
+        ok: ready,
+        childReady,
+        platformReady,
+        legalConfigured,
+        identityTombstoneSecretConfigured: configuredIdentityTombstoneSecret.length >= 32,
+        telegramConfigured: Boolean(telegramBotToken),
+        vkConfigured: Boolean(vkAppId && vkAppSecret),
+        unifiedAccounts: false,
+        accountMode: PLATFORM_ACCOUNT_MODE,
+        linkCodes: false,
+        ...publicReleaseMetadata(),
         timestamp: new Date().toISOString()
       });
     }
@@ -2516,6 +3074,32 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await getAppPayload(user.id, platform));
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/wheel/status') {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      if (platform !== 'telegram') {
+        return sendJson(res, 404, { error: 'Колесо доступно только в Telegram.' });
+      }
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, await getTelegramWheelStatus(user.id));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wheel/spin') {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      if (platform !== 'telegram') {
+        return sendJson(res, 404, { error: 'Колесо доступно только в Telegram.' });
+      }
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      enforceRateLimit(`wheel:${user.id}:${requestAddress(req)}`, 30, 60 * 1000);
+      const body = parseJsonBody(await readRequestBody(req));
+      return sendJson(res, 200, await spinTelegramWheel(user.id, body.requestKey));
+    }
+
 
     if (req.method === 'PUT' && url.pathname === '/api/me/profile') {
       const user = await requireGatewayUser(req);
@@ -2529,11 +3113,13 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
       const user = await requireGatewayUser(req);
-      if (!user.termsAccepted) {
-        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
-      }
       const body = parseJsonBody(await readRequestBody(req));
-      return sendJson(res, 200, await deleteUnifiedAccount(user.id, body.confirmation));
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      return sendJson(
+        res,
+        200,
+        await deletePlatformAccount(user.id, platform, user.payload.pid, body.confirmation)
+      );
     }
 
     if (req.method === 'GET' && url.pathname === '/api/leaderboard/monthly') {
@@ -2569,6 +3155,17 @@ const server = http.createServer(async (req, res) => {
       const user = await requireGatewayUser(req);
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
       return sendJson(res, 200, await claimBetaTester(user.id, platform));
+    }
+
+    if (url.pathname.startsWith('/api/account-link/')) {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      return sendJson(res, 410, {
+        error: 'VK и Telegram работают как отдельные аккаунты. Объединение отключено.',
+        disabled: true,
+        accountMode: PLATFORM_ACCOUNT_MODE,
+        platform
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/account-link/status') {
@@ -2657,6 +3254,7 @@ if (!isTestImport) {
     try {
       await waitForChild();
       await initPlatformDatabase();
+      await refreshDatabaseFingerprint();
     } catch (error) {
       console.error(
         'Platform initialization failed:',

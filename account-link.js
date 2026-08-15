@@ -508,10 +508,10 @@
     const consent = document.getElementById('consentModal');
     if (!consent) return;
     const paragraph = consent.querySelector('.consent-sheet > p');
-    const paragraphCopy = 'Программа предназначена для пользователей 18+. Для работы используются идентификаторы привязанных аккаунтов VK и Telegram, имя, бонусный баланс и история операций.';
+    const paragraphCopy = 'Программа предназначена для пользователей 18+. В VK и Telegram создаются отдельные профили со своим балансом, историей операций и QR-кодом.';
     if (paragraph && paragraph.textContent !== paragraphCopy) paragraph.textContent = paragraphCopy;
     const firstListItem = consent.querySelector('li');
-    const listCopy = 'После привязки в VK и Telegram отображается один и тот же постоянный QR-код.';
+    const listCopy = 'Профили VK и Telegram не объединяются; общим остаётся только соревнование в Лиге Пивника.';
     if (firstListItem && firstListItem.textContent !== listCopy) firstListItem.textContent = listCopy;
   }
 
@@ -521,15 +521,8 @@
   }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
-    injectInterface();
     installAchievementInbox();
-    // Consent is action-gated by app.js. Do not watch or rewrite the whole DOM:
-    // observer callbacks that mutate the observed tree can starve the boot loop.
+    // Account linking is intentionally unavailable: VK and Telegram are separate profiles.
     updateConsentCopy();
-
-    const loadAfterBoot = () => window.setTimeout(() => void loadStatus(), 0);
-    const bootScreen = document.getElementById('bootScreen');
-    if (bootScreen?.classList.contains('hidden')) loadAfterBoot();
-    else window.addEventListener('pivnik:boot-complete', loadAfterBoot, { once: true });
   });
 })();

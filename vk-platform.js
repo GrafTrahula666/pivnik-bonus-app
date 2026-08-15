@@ -224,12 +224,21 @@
     else stopConsentGate();
   }
 
-  async function inspectApiResponse(response) {
+  async function inspectApiResponse(response, { allowOpen = true } = {}) {
     try {
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) return;
       const data = await response.clone().json();
-      if (data?.profile) updateConsentState(data.profile);
+      if (!data?.profile) return;
+
+      // Anna frame entitlement and consent persistence hotfix 2026-08-06. A returning VK user can receive a transient auth payload
+      // before the canonical /api/me profile is hydrated. A transient false
+      // must never reopen the terms window after the server already persisted consent.
+      if (data.profile.termsAccepted === true) {
+        updateConsentState(data.profile);
+      } else if (allowOpen) {
+        updateConsentState(data.profile);
+      }
     } catch (_) {}
   }
 
@@ -260,7 +269,7 @@
           response = await sendAuth(refreshedLaunchParams);
         }
       }
-      void inspectApiResponse(response);
+      await inspectApiResponse(response, { allowOpen: false });
       return response;
     }
 
@@ -270,8 +279,11 @@
 
     const response = await originalFetch(input, init);
     if (pathname === '/api/me' || pathname === '/api/me/consent') {
-      void inspectApiResponse(response);
-      if (pathname === '/api/me/consent') consentExplicit = false;
+      try {
+        await inspectApiResponse(response, { allowOpen: true });
+      } finally {
+        if (pathname === '/api/me/consent') consentExplicit = false;
+      }
     }
     return response;
   };
@@ -281,9 +293,25 @@
     const modal = document.getElementById('consentModal');
     const shell = document.getElementById('appShell');
     if (!modal || shell?.classList.contains('hidden')) return;
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
+
+    // VK consent gate idempotency hotfix. MutationObserver watches these exact attributes, so writing
+    // the same values repeatedly can create an endless microtask loop in VK iOS.
+    const alreadyOpen = modal.classList.contains('open')
+      && modal.getAttribute('aria-hidden') === 'false'
+      && document.body.classList.contains('modal-open');
+    if (!alreadyOpen) {
+      modal.classList.add('open');
+      if (modal.getAttribute('aria-hidden') !== 'false') {
+        modal.setAttribute('aria-hidden', 'false');
+      }
+      document.body.classList.add('modal-open');
+    }
+
+    // The app-level consent guard continues to protect every action. The
+    // observer is only needed to open the first gate and must not observe its
+    // own mutations indefinitely.
+    consentObserver?.disconnect();
+    consentObserver = null;
   }
 
   function scheduleConsentGate() {

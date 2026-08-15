@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=17.0-luxury-vip-space" />
-  <script defer src="app.js?v=17.0-luxury-vip-space"></script>
+  <link rel="stylesheet" href="styles.css?v=19.1-telegram-wheel-v2" />
+  <script defer src="app.js?v=19.1-telegram-wheel-v2"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -42,7 +42,7 @@
     <header class="topbar">
       <div class="brand-lockup">
         <div class="eyebrow" id="eyebrow">Telegram Mini App</div>
-        <div class="brand-line"><h1 id="brandTitle">Пивник</h1><span class="beta-badge">закрытая бета</span></div>
+        <div class="brand-line"><h1 id="brandTitle">Пивник</h1></div>
       </div>
       <div class="topbar-actions">
         <span class="network-badge" id="networkBadge"><i></i>онлайн</span>
@@ -77,12 +77,26 @@
           <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
 
+        <!-- telegram-wheel:start -->
+        <button class="home-promo-banner vip-glass-card" id="openWheelButton" type="button">
+          <span class="wheel-entry-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48" role="presentation">
+              <circle cx="24" cy="24" r="18"></circle>
+              <circle cx="24" cy="24" r="4"></circle>
+              <path d="M24 6v14M24 28v14M6 24h14M28 24h14M11.3 11.3l9.9 9.9M26.8 26.8l9.9 9.9M36.7 11.3l-9.9 9.9M21.2 26.8l-9.9 9.9"></path>
+            </svg>
+          </span>
+          <span><small>Ежедневная награда</small><strong>Колесо Пивника</strong><em id="homeWheelStatus">Бесплатное вращение раз в 24 часа</em></span>
+          <i>›</i>
+        </button>
+        <!-- telegram-wheel:end -->
+
         <article class="beer-loyalty-card vip-glass-card" id="beerLoyaltyCard">
           <div class="beer-card-top">
             <div>
               <span class="beer-kicker">Пивная дистанция</span>
-              <h2>15-й литр — в подарок</h2>
-              <p>Оплатите 14 литров разливного — следующий литр бесплатный.</p>
+              <h2>Каждый 15-й литр — бесплатно</h2>
+              <p>Оплатите 14 литров разливного пива — следующий 1 литр бесплатно.</p>
             </div>
             <div class="beer-gift-counter"><strong id="beerGiftBalance">0</strong><small>л подарка</small></div>
           </div>
@@ -95,7 +109,7 @@
           <article class="home-stat-card vip-glass-card">
             <span class="home-card-kicker">За всё время</span>
             <strong><span id="totalLitersHome">0</span> л</strong>
-            <small>выпито в Пивнике</small>
+            <small>учтено разливного</small>
           </article>
           <button class="home-stat-card vip-glass-card" id="openLeaderboardButton" type="button">
             <span class="home-card-kicker">Лига Пивника</span>
@@ -111,22 +125,65 @@
             <div class="achievement-count"><strong id="achievementCountHome">0</strong><span>получено</span></div>
             <div class="profile-achievement-showcase" id="profileAchievementShowcase"><div class="achievement-empty">Пока нет</div></div>
           </div>
+          <!-- telegram-wheel-legacy:start -->
           <button class="home-shop-card vip-glass-card" id="openShopButton" type="button">
             <div class="compact-card-head"><div><span class="home-card-kicker">Private stock</span><h2>Магазин</h2></div><span class="shop-arrow">›</span></div>
             <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
             <strong id="homeShopCaption">Крафт, награды и коллекционные вещи</strong>
             <span class="shop-cta">В магазин</span>
           </button>
+          <!-- telegram-wheel-legacy:end -->
         </div>
 
+        <!-- telegram-wheel-legacy:start -->
         <button class="home-promo-banner vip-glass-card" id="openPromosButton" type="button" data-config-section="promos">
           <span class="promo-orbit">✦</span>
           <span><small>Активная акция</small><strong id="homePromoTitle">Orange Blanche 1+1=3</strong><em>Все предложения в разделе «Акции»</em></span>
           <i>›</i>
         </button>
+        <!-- telegram-wheel-legacy:end -->
 
         <div class="byline" id="byline">by Kirill Gamilton △</div>
       </section>
+
+      <!-- telegram-wheel:start -->
+      <section class="screen client-screen wheel-screen" data-screen="wheel">
+        <div class="wheel-page-head">
+          <button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>
+          <h2>Колесо Пивника</h2>
+          <span class="wheel-head-spacer" aria-hidden="true"></span>
+        </div>
+
+        <div class="wheel-availability-line"><i aria-hidden="true"></i><span id="wheelAvailability">Бесплатное вращение доступно</span></div>
+
+        <div class="wheel-stage">
+          <div class="wheel-pointer" aria-hidden="true"></div>
+          <div class="wheel-rim" id="wheelRim">
+            <svg class="wheel-disk" id="wheelDisk" viewBox="0 0 320 320" role="img" aria-label="Колесо с призами"></svg>
+            <div class="wheel-emblem" aria-hidden="true">
+              <svg viewBox="0 0 74 66" role="presentation">
+                <path class="wheel-emblem-triangle" d="M37 5 69 61H5Z"></path>
+                <path class="wheel-emblem-eye" d="M17 39c9-14 31-14 40 0-9 14-31 14-40 0Z"></path>
+                <circle class="wheel-emblem-pupil" cx="37" cy="39" r="7"></circle>
+                <circle class="wheel-emblem-glint" cx="39" cy="36" r="1.8"></circle>
+              </svg>
+            </div>
+          </div>
+          <div class="wheel-result" id="wheelResult" aria-live="polite" aria-hidden="true">
+            <span id="wheelResultKicker">Ваше вращение готово</span>
+            <strong id="wheelResultTitle">Выберите приз на колесе</strong>
+          </div>
+        </div>
+
+        <div class="wheel-control-card">
+          <button class="primary full wheel-spin-button" id="wheelSpinButton" type="button">Крутить бесплатно</button>
+          <p id="wheelNextFreeHint">Следующее бесплатное вращение — через 24 часа после этого.</p>
+          <small id="wheelBalanceHint">Баланс: 0 бонусов</small>
+        </div>
+
+        <button class="wheel-rules-link" id="openWheelRulesButton" type="button"><span>Документы</span><i aria-hidden="true">›</i></button>
+      </section>
+      <!-- telegram-wheel:end -->
 
       <section class="screen client-screen" data-screen="actions">
         <div class="client-page-title"><span class="muted">Предложения Пивника</span><h2>Акции</h2><p>Все активные предложения, привилегии и будущие награды.</p></div>
@@ -144,7 +201,7 @@
           <span><i>1</i><b>Пока свободно</b></span><span><i>2</i><b>Пока свободно</b></span><span><i>3</i><b>Пока свободно</b></span>
         </div>
         <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
-        <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место появятся после бета-теста.</div>
+        <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место публикуются в условиях текущего сезона.</div>
       </section>
 
       <section class="screen client-screen" data-screen="profile">
@@ -373,6 +430,71 @@
     </nav>
   </div>
 
+  <!-- telegram-wheel:start -->
+  <div class="modal" id="wheelRulesModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet wheel-rules-sheet">
+      <button class="close" data-close="wheelRulesModal">×</button>
+      <span class="muted">Колесо Пивника</span>
+      <h2>Правила ежедневной акции</h2>
+      <p class="help-intro">Редакция от 15.08.2026. Организатор — ИП Иживильгин Виталий Викторович, ИНН 380415014659, бар «ПИВНИК», Санкт-Петербург, проспект Энгельса, д. 55.</p>
+
+      <div class="help-contents wheel-rules-contents">
+        <details class="help-section" open>
+          <summary><span>1</span><b>Участие и вращения</b></summary>
+          <div class="help-text">
+            <p>Акция доступна авторизованным пользователям Telegram Mini App, достигшим 18 лет и принявшим правила программы лояльности.</p>
+            <p>Нажимая кнопку вращения, участник подтверждает, что ознакомился с настоящими правилами акции и принимает их.</p>
+            <p>Первое вращение бесплатно. Следующее бесплатное вращение становится доступно ровно через 24 часа с момента предыдущего бесплатного вращения.</p>
+            <p>После бесплатного вращения первое дополнительное вращение стоит 50 бонусов. Все последующие дополнительные вращения до следующего бесплатного вращения стоят по 100 бонусов. Цена выше 100 бонусов не повышается.</p>
+          </div>
+        </details>
+
+        <details class="help-section">
+          <summary><span>2</span><b>Вероятности призов</b></summary>
+          <div class="help-text">
+            <p>Результат определяет сервер с помощью криптографически стойкого генератора. Используется ровно 500 000 равновероятных целочисленных билетов на каждое вращение.</p>
+            <ul class="wheel-odds-list">
+              <li><b>5 бонусов</b><span>40%</span></li>
+              <li><b>10 бонусов</b><span>20%</span></li>
+              <li><b>20 бонусов</b><span>20%</span></li>
+              <li><b>50 бонусов</b><span>10%</span></li>
+              <li><b>100 бонусов</b><span>5%</span></li>
+              <li><b>Бокал пива</b><span>4,9998%</span></li>
+              <li><b>Годовой запас пива</b><span>0,0002% · 1 из 500 000</span></li>
+            </ul>
+            <p>Размер и количество нарисованных секторов не задают вероятность. Крупный сектор годового запаса является только визуальным элементом; серверный шанс остаётся 1 из 500 000.</p>
+          </div>
+        </details>
+
+        <details class="help-section">
+          <summary><span>3</span><b>Получение призов</b></summary>
+          <div class="help-text">
+            <p>Бонусные призы зачисляются на бонусный счёт сразу после серверной фиксации результата. «Бокал пива» означает 0,5 л подарочного разливного пива и отражается в подарочном балансе.</p>
+            <p>«Годовой запас пива» означает право получать один бокал объёмом 0,5 л в день в течение 365 последовательных дней. Приз не обменивается на деньги, выдаётся совершеннолетнему победителю лично в баре после подтверждения возраста и результата в журнале системы.</p>
+            <p>Для годового приза система создаёт отдельную именную запись с датами начала и окончания. Порядок ежедневной выдачи согласуется с победителем по контактам его Telegram-профиля.</p>
+          </div>
+        </details>
+
+        <details class="help-section">
+          <summary><span>4</span><b>Техническая фиксация</b></summary>
+          <div class="help-text">
+            <p>Действительным считается результат успешно завершённого вращения, записанный сервером в журнал вместе с идентификатором запроса, типом вращения и номером случайного билета. Повтор одного и того же запроса не создаёт второй приз и не списывает бонусы повторно.</p>
+            <p>Результат может быть исправлен только при подтверждённом журналами техническом дубле, подмене запроса, несанкционированном доступе или вмешательстве в работу системы. Корректно зафиксированный выигрыш не аннулируется по усмотрению организатора.</p>
+          </div>
+        </details>
+
+        <details class="help-section">
+          <summary><span>5</span><b>Прочие условия</b></summary>
+          <div class="help-text">
+            <p>Бонусы не являются денежными средствами и используются в рамках программы лояльности. При недостаточном балансе платное вращение не проводится и бонусы не списываются.</p>
+            <p>Участник отвечает за сохранность своего Telegram-аккаунта. По вопросам результата следует обратиться к сотруднику бара и сообщить время вращения.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+  <!-- telegram-wheel:end -->
+
   <div class="modal" id="qrModal" aria-hidden="true">
     <div class="modal-sheet qr-sheet">
       <button class="close" data-close="qrModal">×</button>
@@ -493,16 +615,16 @@
           <div class="help-text">
             <p id="privacyPlatformCopy">Для работы приложение использует Telegram ID, имя, username, роль пользователя, бонусный баланс и историю операций.</p>
             <p>Эти данные нужны для авторизации, ведения бонусного счёта, разграничения доступа и рассмотрения спорных операций.</p>
-            <p>Административный доступ ограничивается ролями. Полные юридические реквизиты оператора и сроки хранения данных должны быть опубликованы перед открытым запуском.</p>
+            <p>Административный доступ ограничивается ролями. Юридические сведения и условия обработки данных опубликованы в правилах и политике конфиденциальности.</p>
           </div>
         </details>
 
         <details class="help-section">
-          <summary><span>11</span><b>Правила бета-тестирования</b></summary>
+          <summary><span>11</span><b>Работа приложения</b></summary>
           <div class="help-text">
-            <p>Приложение находится в режиме закрытого теста. Интерфейс, расчёты и отдельные функции могут изменяться.</p>
-            <p>Возможны временные ошибки, задержки обновления данных и недоступность отдельных разделов. О найденных проблемах нужно сообщать владельцу или сотруднику.</p>
-            <p>Планируется сохранить бонусы и статусы, накопленные в бета-тесте, если до завершения теста не будет объявлено иное.</p>
+            <p>Приложение работает как программа лояльности бара «ПИВНИК». Актуальные условия бонусной программы опубликованы в правилах.</p>
+            <p>При технической ошибке или задержке обновления данных обратитесь к сотруднику бара.</p>
+            <p>Бонусы, статусы и история операций сохраняются в профиле согласно действующим правилам программы.</p>
           </div>
         </details>
 
@@ -519,8 +641,8 @@
       </div>
 
       <div class="help-footer">
-        <b>Версия документа: бета 0.4</b>
-        <small>Текст является рабочей редакцией для закрытого теста и будет дополнен перед публичным запуском.</small>
+        <b>Редакция правил: 07.08.2026</b>
+        <small>Действующая редакция правил программы лояльности «ПИВНИК».</small>
       </div>
     </div>
   </div>
@@ -545,10 +667,10 @@
     <div class="achievement-celebration">
       <div class="achievement-burst" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <span class="achievement-celebration-kicker">Поздравляем!</span>
-      <div class="achievement-celebration-icon" id="achievementCelebrationIcon">β</div>
+      <div class="achievement-celebration-icon" id="achievementCelebrationIcon">✦</div>
       <span class="achievement-celebration-rarity" id="achievementCelebrationRarity">Легендарное достижение</span>
-      <h2 id="achievementCelebrationTitle">Тестировщик</h2>
-      <p id="achievementCelebrationDescription">Вы вошли в число первых участников закрытого бета-теста.</p>
+      <h2 id="achievementCelebrationTitle">Пионер Пивника</h2>
+      <p id="achievementCelebrationDescription">Вы вошли в число первых 30 участников «Пивника».</p>
       <div class="achievement-celebration-reward" id="achievementCelebrationReward">+150 бонусов</div>
       <button class="primary full" id="ackAchievementButton" type="button">Забрать награду</button>
     </div>
@@ -560,12 +682,12 @@
       <span class="muted">Личная статистика</span>
       <h2>Ваш путь в Пивнике</h2>
       <div class="profile-stats-grid">
-        <article><span>Выпито за всё время</span><strong><i id="statsTotalLiters">0</i> л</strong></article>
+        <article><span>Учтено разливного за всё время</span><strong><i id="statsTotalLiters">0</i> л</strong></article>
         <article><span>Покупки за 12 месяцев</span><strong id="statsSpend12m">0 ₽</strong></article>
         <article><span>Достижения</span><strong id="statsAchievements">0</strong></article>
         <article><span>Место в Лиге</span><strong>№<i id="statsLeaguePlace">—</i></strong></article>
       </div>
-      <p class="help-intro">Литры считаются за всё время, а Лига — только по фактически оплаченным покупкам текущего месяца.</p>
+      <p class="help-intro">Учитывается зафиксированный сотрудником объём разливного пива за всё время. Лига считается только по фактически оплаченным покупкам текущего месяца.</p>
     </div>
   </div>
 
@@ -742,7 +864,8 @@
       </ul>
       <button class="text-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
       <button class="primary full" id="acceptTerms" type="button">Принимаю и продолжить</button>
-      <small>Рабочая редакция для закрытого бета-теста, версия 0.4.</small>
+      <button class="text-link danger-text" id="deleteAccountFromConsent" type="button">Удалить аккаунт без принятия правил</button>
+      <small>Действующая редакция правил программы лояльности от 07.08.2026.</small>
     </div>
   </div>
 

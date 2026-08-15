@@ -104,7 +104,7 @@ $('#deleteAccountFromConsent')?.addEventListener('click', () => { if ($('#delete
     `async function acceptConsent(userId, platform) {`,
     `function deletedIdentityHash(provider, providerUserId) {
   return crypto
-    .createHmac('sha256', sessionSecret)
+    .createHmac('sha256', identityTombstoneSecret)
     .update(\`deleted-identity:\${provider}:\${providerUserId}\`)
     .digest('hex');
 }
@@ -248,14 +248,14 @@ async function verifyMaterializedState() {
   const pkg = JSON.parse(pkgText);
   const failures = [];
   if (pkg.scripts?.start !== FINAL_START_COMMAND) failures.push('package.json start');
-  if (!app.includes("const APP_VERSION = '17.3-vlad-poops';")) failures.push('app.js version');
+  if (!app.includes("const APP_VERSION = '19.1-telegram-wheel-v2';")) failures.push('app.js version');
   if (!app.includes("profileFrame === 'vladislav'")) failures.push('app.js Vladislav frame');
   if (!app.includes('consentSafeTarget')) failures.push('consent-safe deletion');
   if (!gateway.includes('vladislavTelegramId')) failures.push('universal-server.js Vladislav identity');
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  if (!index.includes('styles.css?v=17.3-vlad-poops')) failures.push('index.html asset version');
+  if (!index.includes('styles.css?v=19.1-telegram-wheel-v2')) failures.push('index.html asset version');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (failures.length) {
@@ -265,7 +265,6 @@ async function verifyMaterializedState() {
 
 async function alreadyMaterialized() {
   try {
-    await fs.access(markerPath);
     await verifyMaterializedState();
     return true;
   } catch {

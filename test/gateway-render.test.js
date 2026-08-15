@@ -20,12 +20,22 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.match(telegram, /\/account-link\.js/);
   assert.match(telegram, /\/loader-fix\.css/);
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
+  assert.match(telegram, /id="openWheelButton"/);
+  assert.match(telegram, /data-screen="wheel"/);
+  assert.match(telegram, /id="wheelRulesModal"/);
+  assert.doesNotMatch(telegram, /id="openShopButton"/);
+  assert.doesNotMatch(telegram, /id="openPromosButton"/);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
   assert.match(vk, /\/vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
+  assert.doesNotMatch(vk, /id="openWheelButton"/);
+  assert.doesNotMatch(vk, /data-screen="wheel"/);
+  assert.doesNotMatch(vk, /id="wheelRulesModal"/);
+  assert.match(vk, /id="openShopButton"/);
+  assert.match(vk, /id="openPromosButton"/);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
