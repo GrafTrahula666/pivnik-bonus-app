@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const RELEASE_VERSION = '17.3-vlad-poops';
+const RELEASE_VERSION = '19.1-telegram-wheel-v2';
 
 const read = (file) => fs.readFile(path.join(root, file), 'utf8');
 const write = (file, content) => fs.writeFile(path.join(root, file), content, 'utf8');

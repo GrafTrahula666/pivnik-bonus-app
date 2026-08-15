@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '17.0-luxury-vip-space';
+const APP_VERSION = '19.1-telegram-wheel-v2';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -9,6 +9,8 @@ let telegramBridgeInitialized = false;
 document.documentElement.classList.toggle('android-webview', isAndroid);
 document.documentElement.classList.toggle('lite-mode', isLiteRequested);
 document.documentElement.classList.toggle('reduce-effects', isAndroid || isLiteRequested);
+document.documentElement.classList.toggle('platform-vk', IS_VK);
+document.documentElement.classList.toggle('platform-telegram', !IS_VK);
 
 function readTelegramLaunchData() {
   for (const rawParams of [location.hash.slice(1), location.search.slice(1)]) {
@@ -99,7 +101,15 @@ const state = {
   achievementQueue: [],
   transactions: [],
   historyTab: 'purchases',
-  bootSecondaryStarted: false
+  bootSecondaryStarted: false,
+  wheel: {
+    status: null,
+    busy: false,
+    rotation: 0,
+    countdownTimer: 0,
+    artworkReady: false,
+    refreshPending: false
+  }
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -116,6 +126,10 @@ const compactBonus = (number) => {
 const roleCanStaff = (role) => ['staff', 'admin'].includes(role);
 const roleCanAdmin = (role) => ['viewer', 'admin'].includes(role);
 const roleCanWrite = (role) => role === 'admin';
+const publicReleaseLabel = (value) => String(value ?? '')
+  .replaceAll('Легендарное достижение «Пионер Пивника»', 'Легендарное достижение «Пионер Пивника»')
+  .replaceAll('закрытого бета-теста', 'первых участников')
+  .replaceAll('закрытой беты', 'программы лояльности');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -149,6 +163,8 @@ function avatarFrameClass(entity = {}) {
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
   if (entity.profileFrame === 'diamond') return 'avatar-frame avatar-frame-diamond';
   if (entity.profileFrame === 'anna') return 'avatar-frame avatar-frame-anna';
+  if (entity.profileFrame === 'olesya') return 'avatar-frame avatar-frame-olesya';
+  if (entity.profileFrame === 'vladislav') return 'avatar-frame avatar-frame-vladislav';
   return '';
 }
 
@@ -162,6 +178,14 @@ function avatarOrbitHtml(entity = {}) {
       '<span class="anna-18">18</span>', '<span class="anna-heart">💔</span>', '<span class="anna-whip">➰</span>', '<span class="anna-cash">$</span>'
     ];
     return `<span class="avatar-orbit anna-orbit" aria-hidden="true">${symbols.map((symbol, index) => `<i style="--orbit-index:${index}">${symbol}</i>`).join('')}</span>`;
+  }
+  if (entity.profileFrame === 'olesya') {
+    const hearts = ['♥','♡','❤','♥','♡','❤','♥','♡','❤','♥','♡','❤'];
+    return `<span class="avatar-orbit olesya-orbit" aria-hidden="true">${hearts.map((heart, index) => `<i style="--orbit-index:${index}"><span>${heart}</span></i>`).join('')}</span>`;
+  }
+  if (entity.profileFrame === 'vladislav') {
+    const poops = Array.from({ length: 12 }, () => '💩');
+    return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
   }
   return '';
 }
@@ -177,6 +201,8 @@ function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
+  element.classList.toggle('has-olesya-frame', entity.profileFrame === 'olesya');
+  element.classList.toggle('has-vladislav-frame', entity.profileFrame === 'vladislav');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 
@@ -325,7 +351,7 @@ function enhanceDom() {
         line.className = 'brand-line';
         title.before(line);
         line.append(title);
-        line.insertAdjacentHTML('beforeend', '<span class="beta-badge">закрытая бета</span>');
+        // Public release: no beta/test badge in the interface.
       }
     }
   }
@@ -350,7 +376,7 @@ function enhanceDom() {
   }
 
   const hero = $('.hero-card');
-  if (hero && !$('.client-tip')) {
+  if (IS_VK && hero && !$('.client-tip')) {
     const tip = document.createElement('div');
     tip.className = 'client-tip';
     tip.innerHTML = '<span class="client-tip-icon">⌗</span><div><b>Один личный код</b><small>QR постоянный. Не отправляйте его посторонним.</small></div>';
@@ -445,7 +471,7 @@ function enhanceDom() {
       .replace('подтвердите запрос в приложении, если подтверждение включено в текущей версии', 'сообщите сумму списания сотруднику — бонусы списываются сразу')
       .replace('Если в текущей версии включено подтверждение, клиент получает запрос и завершает списание в приложении. При отказе или истечении времени операция не проводится.', 'После сканирования QR сотрудник указывает сумму бонусов и проводит списание сразу. Результат сохраняется в истории операций.')
       .replace('Если QR не читается, обновите экран и попробуйте снова.', 'QR является постоянным. Если он не читается, сотрудник может ввести короткий код вручную.')
-      .replace('Версия документа: бета 0.1', 'Версия документа: бета 0.2');
+      .replace('Редакция правил: 08.08.2026', 'Редакция правил: 08.08.2026');
   }
 
   const pending = $('#pendingModal');
@@ -455,7 +481,7 @@ function enhanceDom() {
     document.body.insertAdjacentHTML('beforeend', `<div class="modal consent-modal" id="consentModal" aria-hidden="true">
       <div class="modal-sheet consent-sheet">
         <span class="consent-mark">П</span>
-        <span class="muted">Закрытая бета</span>
+        <span class="muted"></span>
         <h2>Добро пожаловать в «Пивник»</h2>
         <p>Продолжая, вы принимаете правила бонусной программы и условия обработки данных для работы приложения.</p>
         <button class="text-btn consent-link" id="openTermsFromConsent" type="button">Открыть справку и правила</button>
@@ -540,6 +566,240 @@ enhanceDom();
 function requestId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+
+const WHEEL_VISUAL_SECTORS = (() => {
+  const smallPrizes = [
+    'bonus-5', 'bonus-10', 'beer-glass', 'bonus-20', 'bonus-5',
+    'bonus-50', 'bonus-10', 'bonus-5', 'bonus-100', 'bonus-20',
+    'beer-glass', 'bonus-5', 'bonus-10', 'bonus-50', 'bonus-20',
+    'bonus-5', 'bonus-100', 'bonus-10', 'beer-glass', 'bonus-5'
+  ];
+  const labels = {
+    'bonus-5': '5 бонусов',
+    'bonus-10': '10 бонусов',
+    'bonus-20': '20 бонусов',
+    'bonus-50': '50 бонусов',
+    'bonus-100': '100 бонусов',
+    'beer-glass': 'Бокал пива',
+    'annual-beer': 'Годовой запас пива'
+  };
+  const sectors = [{ code: 'annual-beer', label: labels['annual-beer'], start: -22, end: 22, center: 0, jackpot: true }];
+  const size = 316 / smallPrizes.length;
+  smallPrizes.forEach((code, index) => {
+    const start = 22 + index * size;
+    sectors.push({ code, label: labels[code], start, end: start + size, center: start + size / 2, jackpot: false });
+  });
+  return sectors;
+})();
+
+function wheelPoint(angle, radius) {
+  const radians = angle * Math.PI / 180;
+  return {
+    x: 160 + Math.sin(radians) * radius,
+    y: 160 - Math.cos(radians) * radius
+  };
+}
+
+function wheelSectorPath(start, end) {
+  const first = wheelPoint(start, 154);
+  const last = wheelPoint(end, 154);
+  const largeArc = end - start > 180 ? 1 : 0;
+  return `M160 160 L${first.x.toFixed(3)} ${first.y.toFixed(3)} A154 154 0 ${largeArc} 1 ${last.x.toFixed(3)} ${last.y.toFixed(3)} Z`;
+}
+
+function renderWheelArtwork() {
+  if (IS_VK || state.wheel.artworkReady) return;
+  const disk = $('#wheelDisk');
+  if (!disk) return;
+  disk.innerHTML = WHEEL_VISUAL_SECTORS.map((sector, index) => {
+    const path = `<path class="wheel-sector ${sector.jackpot ? 'wheel-sector-jackpot' : `wheel-sector-${index % 3}`}" d="${wheelSectorPath(sector.start, sector.end)}"></path>`;
+    if (sector.jackpot) {
+      return `${path}<text class="wheel-sector-label wheel-jackpot-label" x="160" y="42" text-anchor="middle"><tspan x="160">ГОДОВОЙ ЗАПАС</tspan><tspan x="160" dy="11">ПИВА</tspan></text>`;
+    }
+    const flipped = sector.center > 90 && sector.center < 270;
+    const labelRotation = flipped ? 90 : -90;
+    const labelY = flipped ? 268 : 52;
+    return `${path}<g transform="rotate(${sector.center.toFixed(3)} 160 160)"><text class="wheel-sector-label" x="160" y="${labelY}" text-anchor="middle" transform="rotate(${labelRotation} 160 ${labelY})">${escapeHtml(sector.label)}</text></g>`;
+  }).join('');
+  state.wheel.artworkReady = true;
+}
+
+function wheelDurationLabel(ms) {
+  const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  return [hours, minutes, rest].map((value) => String(value).padStart(2, '0')).join(':');
+}
+
+function effectiveWheelStatus() {
+  const current = state.wheel.status;
+  if (!current) return null;
+  if (!current.freeAvailable && current.nextFreeAt && Date.now() >= new Date(current.nextFreeAt).getTime()) {
+    return { ...current, freeAvailable: true, remainingMs: 0 };
+  }
+  return current;
+}
+
+function renderWheelStatus() {
+  if (IS_VK) return;
+  const current = effectiveWheelStatus();
+  const button = $('#wheelSpinButton');
+  const availability = $('#wheelAvailability');
+  const nextFreeHint = $('#wheelNextFreeHint');
+  const balanceHint = $('#wheelBalanceHint');
+  const homeStatus = $('#homeWheelStatus');
+  if (!button || !availability || !nextFreeHint || !balanceHint) return;
+
+  if (!current) {
+    button.textContent = 'Проверяем доступность…';
+    button.disabled = true;
+    availability.textContent = 'Синхронизируем время последнего вращения.';
+    nextFreeHint.textContent = 'Проверяем время следующего бесплатного вращения.';
+    balanceHint.textContent = `Баланс: ${state.profile?.unlimitedBonus ? '∞' : fmt(state.profile?.balance || 0)} бонусов`;
+    return;
+  }
+
+  const free = current.freeAvailable;
+  const paidCost = Number(current.nextPaidCost || 50);
+  const canSpin = free || current.canAffordPaid;
+  button.textContent = state.wheel.busy
+    ? 'Колесо вращается…'
+    : free
+      ? 'Крутить бесплатно'
+      : `Крутить ещё раз — ${paidCost} бонусов`;
+  button.disabled = state.wheel.busy || !canSpin;
+  const remaining = current.nextFreeAt
+    ? Math.max(0, new Date(current.nextFreeAt).getTime() - Date.now())
+    : 0;
+  availability.textContent = free
+    ? 'Бесплатное вращение доступно'
+    : `Дополнительное вращение — ${paidCost} бонусов`;
+  nextFreeHint.textContent = free
+    ? 'Следующее бесплатное вращение — через 24 часа после этого.'
+    : `Следующее бесплатное вращение — через ${wheelDurationLabel(remaining)}.`;
+  balanceHint.textContent = current.unlimitedBonus
+    ? 'Баланс: ∞ бонусов'
+    : canSpin
+      ? `Баланс: ${fmt(current.balance)} бонусов`
+      : `На балансе ${fmt(current.balance)} · для вращения нужно ${paidCost}`;
+  if (homeStatus) {
+    homeStatus.textContent = free
+      ? 'Бесплатное вращение доступно'
+      : `Бесплатно через ${wheelDurationLabel(remaining)}`;
+  }
+}
+
+function startWheelCountdown() {
+  if (IS_VK || state.wheel.countdownTimer) return;
+  state.wheel.countdownTimer = window.setInterval(() => {
+    const before = state.wheel.status?.freeAvailable;
+    renderWheelStatus();
+    const current = effectiveWheelStatus();
+    if (!before && current?.freeAvailable && !state.wheel.refreshPending) {
+      state.wheel.refreshPending = true;
+      loadWheelStatus().finally(() => { state.wheel.refreshPending = false; });
+    }
+  }, 1000);
+}
+
+async function loadWheelStatus() {
+  if (IS_VK || !state.token || !state.profile?.termsAccepted) return null;
+  const status = await api('/api/wheel/status', { retries: 0, timeoutMs: 7000 });
+  state.wheel.status = status;
+  renderWheelStatus();
+  startWheelCountdown();
+  return status;
+}
+
+function visualSectorForPrize(code) {
+  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === code);
+  if (!candidates.length) return WHEEL_VISUAL_SECTORS[0];
+  const randomIndex = globalThis.crypto?.getRandomValues
+    ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % candidates.length
+    : Math.floor(Math.random() * candidates.length);
+  return candidates[randomIndex];
+}
+
+function waitForWheelStop(disk) {
+  return new Promise((resolve) => {
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      disk.removeEventListener('transitionend', done);
+      resolve();
+    };
+    disk.addEventListener('transitionend', done, { once: true });
+    window.setTimeout(done, 5600);
+  });
+}
+
+async function spinWheel() {
+  if (IS_VK || state.wheel.busy) return;
+  if (!state.wheel.status) await loadWheelStatus();
+  const current = effectiveWheelStatus();
+  if (!current?.freeAvailable && !current?.canAffordPaid) {
+    return toast(`Для вращения нужно ${current?.nextPaidCost || 50} бонусов.`);
+  }
+
+  const disk = $('#wheelDisk');
+  if (!disk) return;
+  state.wheel.busy = true;
+  renderWheelStatus();
+  const result = $('#wheelResult');
+  result?.classList.add('is-visible');
+  result?.setAttribute('aria-hidden', 'false');
+  $('#wheelResultKicker').textContent = 'Определяем результат на сервере';
+  $('#wheelResultTitle').textContent = 'Колесо набирает ход…';
+
+  try {
+    const data = await api('/api/wheel/spin', {
+      method: 'POST',
+      body: JSON.stringify({ requestKey: requestId() }),
+      retries: 1,
+      timeoutMs: 9000
+    });
+    const sector = visualSectorForPrize(data.spin?.prize?.code);
+    const currentAngle = ((state.wheel.rotation % 360) + 360) % 360;
+    const alignment = ((360 - sector.center - currentAngle) % 360 + 360) % 360;
+    state.wheel.rotation += 5 * 360 + alignment;
+    disk.classList.add('spinning');
+    disk.style.transform = `rotate(${state.wheel.rotation}deg)`;
+    await waitForWheelStop(disk);
+    disk.classList.remove('spinning');
+
+    state.wheel.status = data.status;
+    if (state.profile && data.account) {
+      state.profile.balance = data.account.balance;
+      state.profile.unlimitedBonus = data.account.unlimitedBonus;
+      if (state.profile.beer) state.profile.beer.giftLitersBalance = data.account.giftBeerLiters;
+      renderProfile();
+    }
+    $('#wheelResultKicker').textContent = 'Ваш приз';
+    $('#wheelResultTitle').textContent = data.spin?.prize?.title || 'Приз зачислен';
+    $('#wheelRim').classList.add('wheel-win');
+    window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
+    haptic('heavy');
+  } catch (error) {
+    $('#wheelResultKicker').textContent = 'Вращение не выполнено';
+    $('#wheelResultTitle').textContent = error.message;
+    await loadWheelStatus().catch(() => {});
+    toast(error.message);
+  } finally {
+    state.wheel.busy = false;
+    renderWheelStatus();
+  }
+}
+
+function openWheel() {
+  if (IS_VK) return;
+  renderWheelArtwork();
+  switchScreen('wheel');
+  loadWheelStatus().catch((error) => toast(error.message));
+}
+
+renderWheelArtwork();
 
 async function finishBoot() {
   if (bootCompleted) return;
@@ -711,6 +971,7 @@ function switchScreen(target) {
   $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
   $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
+  $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
@@ -1303,7 +1564,7 @@ function achievementIconHtml(item = {}) {
       <circle class="eye-pupil" cx="50" cy="51" r="8" />
     </svg>`;
   }
-  if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">β</span>';
+  if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">✦</span>';
   const symbols = {
     receipt: '▤',
     banknote: '₽',
@@ -1412,7 +1673,6 @@ async function loadAchievements() {
   }
   renderAchievements();
   renderAchievementCatalog();
-  window.setTimeout(maybeShowAchievementCelebration, 120);
   return state.achievements;
 }
 
@@ -1425,7 +1685,7 @@ async function acknowledgeAchievement(code) {
 }
 
 function maybeShowAchievementCelebration() {
-  if (!state.profile?.onboardingComplete || !state.profile?.termsAccepted) return;
+  if (!state.profile?.termsAccepted) return;
   const queue = state.profile?.unannouncedAchievements || [];
   const item = queue[0];
   if (!item || $('#achievementCelebrationModal')?.classList.contains('open')) return;
@@ -1537,18 +1797,18 @@ function renderTransaction(transaction) {
     detail = `Бесплатно выдано ${fmtLiters(transaction.beerGiftSpentLiters)} л разливного пива`;
   } else if (transaction.mode === 'welcome') {
     primary = `+${transaction.bonusEarned} Б`;
-    detail = transaction.reason || 'Бонус за первую регистрацию';
+    detail = publicReleaseLabel(transaction.reason) || 'Бонус за первую регистрацию';
   } else if (transaction.mode === 'shop') {
     primary = `−${transaction.bonusSpent} Б`;
-    detail = transaction.reason || 'Товар из магазина';
+    detail = publicReleaseLabel(transaction.reason) || 'Товар из магазина';
   } else if (transaction.mode === 'achievement') {
     primary = Number(transaction.beerGiftEarnedLiters || 0) > 0
       ? `+${fmtLiters(transaction.beerGiftEarnedLiters)} л`
       : `+${transaction.bonusEarned} Б`;
-    detail = transaction.reason || 'Награда за достижение';
+    detail = publicReleaseLabel(transaction.reason) || 'Награда за достижение';
   } else if (transaction.mode === 'adjustment') {
     primary = `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`;
-    detail = transaction.reason || 'Ручная корректировка';
+    detail = publicReleaseLabel(transaction.reason) || 'Ручная корректировка';
   } else {
     const beerDetails = transaction.beerLiters > 0
       ? ` · пиво ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
@@ -1570,6 +1830,7 @@ async function refreshMe() {
   const data = await api('/api/me');
   applyProfilePayload(data);
   void loadSecondaryData();
+  if (!IS_VK) void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
 }
 
 async function waitForTelegramInitData(maxWaitMs = 2800) {
@@ -1623,6 +1884,7 @@ async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
   const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
+  if (!IS_VK) jobs.push(loadWheelStatus());
   const results = await Promise.allSettled(jobs);
   const failures = results.filter((item) => item.status === 'rejected');
   failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
@@ -1659,6 +1921,10 @@ function schedulePostBootHydration() {
 
 function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
+  const consentSafeTarget = event.target?.closest?.(
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent'
+  );
+  if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
     '#appShell button, #appShell a, #appShell input, #appShell select, #appShell textarea, #appShell [role="button"]'
   );
@@ -2029,7 +2295,7 @@ function showOperationResult(transaction, client) {
     ? `<br>Учтено пива: ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · подарок +${fmtLiters(transaction.beerGiftEarnedLiters)} л` : ''}`
     : '';
   const detail = isShop
-    ? `${escapeHtml(transaction.reason || 'Товар')} · −${transaction.bonusSpent} Б`
+    ? `${escapeHtml(publicReleaseLabel(transaction.reason) || 'Товар')} · −${transaction.bonusSpent} Б`
     : isGift
       ? `−${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
       : isRedeem
@@ -2103,7 +2369,6 @@ async function createSale() {
     if (state.profile?.id === data.client.id) {
       state.profile = data.client;
       renderProfile();
-      window.setTimeout(maybeShowAchievementCelebration, 120);
     }
     await Promise.all([loadStaffRecent(), loadLeaderboard()]);
   } finally {
@@ -2501,7 +2766,40 @@ function renderUsers(users, target = '#usersList', compact = false) {
   const root = $(target);
   if (!root) return;
   root.className = `operation-list${users.length ? '' : ' empty-state'}`;
+  const normalizeAdminIdentity = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/[^a-zа-яё0-9]/gi, '');
+  const identityForMatch = (user) => ({
+    username: normalizeAdminIdentity(user.username),
+    name: normalizeAdminIdentity(user.name)
+  });
+  const sameApproximateIdentity = (left, right) => {
+    const a = identityForMatch(left);
+    const b = identityForMatch(right);
+    const usernameMatch = a.username.length >= 4 && a.username === b.username;
+    const nameMatch = a.name.length >= 6 && (
+      a.name === b.name
+      || a.name.includes(b.name)
+      || b.name.includes(a.name)
+    );
+    return usernameMatch || nameMatch;
+  };
   root.innerHTML = users.length ? users.map((user) => {
+    const platformDetails = [
+      user.telegramId ? `Telegram ${user.telegramId}` : '',
+      user.vkId ? `VK ${user.vkId}` : ''
+    ].filter(Boolean).join(' · ') || 'ID не указан';
+    const legacyLinked = Boolean(user.telegramId && user.vkId);
+    const possibleMatch = legacyLinked ? null : users.find((candidate) => {
+      if (String(candidate.id) === String(user.id)) return false;
+      if (candidate.telegramId && candidate.vkId) return false;
+      const differentPlatforms = Boolean(user.telegramId) !== Boolean(candidate.telegramId);
+      return differentPlatforms && sameApproximateIdentity(user, candidate);
+    });
+    const possibleMatchNote = possibleMatch
+      ? `<br><span class="user-pin-state">Возможное совпадение: ${escapeHtml(possibleMatch.name || possibleMatch.username || possibleMatch.id)} · только подсказка, без объединения</span>`
+      : '';
     const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
       ? `<div class="user-actions">
           <select data-role-user="${user.id}">
@@ -2515,7 +2813,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.telegramId ? `Telegram ${user.telegramId}` : user.vkId ? `VK ${user.vkId}` : 'ID не указан')}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
@@ -2594,7 +2892,15 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
 
 document.addEventListener('click', blockUnacceptedAction, true);
 
-$('#openAchievementsButton')?.addEventListener('click', () => openAchievements());
+function openAchievementHub() {
+  if ((state.profile?.unannouncedAchievements || []).length) {
+    maybeShowAchievementCelebration();
+    return;
+  }
+  openAchievements();
+}
+
+$('#openAchievementsButton')?.addEventListener('click', openAchievementHub);
 $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEventListener('click', () => {
   state.achievementTab = button.dataset.achievementTab;
   renderAchievementCatalog();
@@ -2622,19 +2928,24 @@ $$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('cli
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
-$('#openPromosButton').addEventListener('click', () => switchScreen('actions'));
-$('#openShopButton').addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
+$('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
+$('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
+$('#openWheelButton')?.addEventListener('click', openWheel);
+$('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
+$('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
 $('#openProfileAvatar')?.addEventListener('click', () => openProfileSetup(1));
 $('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
-$('#openProfileAchievements')?.addEventListener('click', () => openAchievements());
+$('#openProfileAchievements')?.addEventListener('click', openAchievementHub);
 $('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
 $('#openConnectedServices')?.addEventListener('click', openConnectedServices);
 $('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
 $('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
 $('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
+$('#deleteAccountFromConsent')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; closeModal('consentModal'); openModal('deleteAccountModal'); });
 $$('.history-tabs [data-history-tab]').forEach((button) => button.addEventListener('click', () => {
   state.historyTab = button.dataset.historyTab || 'purchases';
   renderHistoryTab();
@@ -2770,3 +3081,28 @@ window.addEventListener('online', updateNetworkBadge);
 window.addEventListener('offline', updateNetworkBadge);
 updateNetworkBadge();
 boot();
+
+
+// FINAL_PUBLIC_RELEASE_UI_GUARD_20260808
+function scrubLegacyStageUi(root = document) {
+  root.querySelectorAll?.('.beta-badge').forEach((node) => node.remove());
+  const replacements = new Map([
+    ['закрытая бета', ''],
+    ['ЗАКРЫТАЯ БЕТА', ''],
+    ['Правила бета-тестирования', 'Работа приложения'],
+    ['Версия документа: бета 0.4', 'Редакция правил: 08.08.2026'],
+    ['Награды за 1–3 место появятся после бета-теста.', 'Лига — информационный рейтинг по подтверждённой сумме покупок за текущий месяц.'],
+    ['Тестировщик', 'Пионер Пивника'],
+    ['Вы вошли в число первых участников закрытого бета-теста.', 'Вы вошли в число первых 30 участников «Пивника».']
+  ]);
+  const walker = document.createTreeWalker(root.body || root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    let text = node.nodeValue || '';
+    for (const [from, to] of replacements) text = text.split(from).join(to);
+    if (text !== node.nodeValue) node.nodeValue = text;
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  scrubLegacyStageUi(document);
+  new MutationObserver(() => scrubLegacyStageUi(document)).observe(document.body, { childList: true, subtree: true, characterData: true });
+});

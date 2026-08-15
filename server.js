@@ -28,6 +28,8 @@ const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerTelegramUsername = String(process.env.OWNER_TELEGRAM_USERNAME || '').replace(/^@/, '').trim();
 const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
+const olesyaTelegramId = String(process.env.OLESYA_TELEGRAM_ID || '').trim();
+const vladislavTelegramId = String(process.env.VLADISLAV_TELEGRAM_ID || '').trim();
 const appleWalletIssuerUrl = String(process.env.APPLE_WALLET_ISSUER_URL || '').trim();
 const googleWalletIssuerUrl = String(process.env.GOOGLE_WALLET_ISSUER_URL || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
@@ -70,7 +72,7 @@ const STATUS_LEVELS = [
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
-const TERMS_VERSION = 'beta-0.4';
+const TERMS_VERSION = '2026-08-08';
 const BEER_PAID_TARGET_ML = 14_000;
 const BEER_GIFT_ML = 1_000;
 const MAX_BEER_ML_PER_TRANSACTION = 100_000;
@@ -89,7 +91,7 @@ const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
   { code: 'orange-blanche-1-plus-1-3', title: 'Orange Blanche 1+1=3', description: 'Берите две Orange Blanche — третью пинту получите в подарок. Условия и наличие уточняйте у сотрудника бара.', badge: '1+1=3', active: true, sortOrder: 15 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
-  { code: 'referral-beta', title: 'Пригласить друга', description: 'После бета-теста: 200 бонусов после первой покупки приглашённого. Без процентов и цепочек.', badge: 'После беты', active: false, sortOrder: 30 }
+  { code: 'referral-beta', title: 'Пригласить друга', description: 'Реферальная программа пока недоступна.', badge: 'Скоро', active: false, sortOrder: 30 }
 ];
 const DEFAULT_SHOP_ITEMS = [
   { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, imageSrc: '/assets/shop/cider-dalnyaya-dacha.svg', active: true, sortOrder: 10 },
@@ -182,12 +184,16 @@ function hasUnlimitedBonus(row) {
   return Boolean(row?.unlimited_bonus) || isOwnerRow(row) || row?.role === 'viewer';
 }
 
+// Anna frame entitlement and consent persistence hotfix 2026-08-06. A persisted personal frame remains valid after role changes
+// and Telegram/VK account linking, even when optional identity env vars are absent.
 function profileFrameFromRow(row) {
   if (isOwnerRow(row)) return 'money';
-  if (isAnnaRow(row)) return 'anna';
+  if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
-  if (storedFrame === 'anna') return 'none';
+  if (storedFrame === 'olesya') return 'olesya';
+  if (storedFrame === 'vladislav') return 'vladislav';
+  if (storedFrame === 'anna') return 'anna';
   return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';
 }
 
@@ -208,9 +214,9 @@ function achievementsFromRow(row) {
   if (Number(row?.beta_number || 0) > 0 && Number(row.beta_number) <= 30) {
     achievements.push({
       code: 'beta-tester',
-      title: 'Тестировщик',
+      title: 'Пионер Пивника',
       rarity: 'legendary',
-      description: 'Легендарное достижение первых 30 участников закрытого бета-теста «Пивника».',
+      description: 'Легендарное достижение первых 30 участников «Пивника».',
       icon: 'beta',
       rewardBonus: 150,
       grantedAt: row.created_at || null,
@@ -223,6 +229,8 @@ function achievementsFromRow(row) {
 function availableFramesFromRow(row) {
   if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
+  if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
+  if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
   const frames = [{ code: 'none', title: 'Без рамки' }];
   if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
@@ -490,6 +498,111 @@ async function applyBetaUserRules(db, userId) {
       balanceAfter
     ]
   );
+}
+
+async function resolveOlesyaRow(db, userId = null) {
+  if (olesyaTelegramId) {
+    const exact = await db.query(
+      `SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.profile_frame, w.balance
+       FROM users u
+       JOIN wallets w ON w.user_id = u.id
+       WHERE u.telegram_id::text = $1
+         AND u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
+       LIMIT 1`,
+      [olesyaTelegramId]
+    );
+    if (!exact.rowCount) return null;
+    if (userId !== null && String(exact.rows[0].id) !== String(userId)) return null;
+    return exact.rows[0];
+  }
+
+  const candidates = await db.query(
+    `SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.profile_frame, w.balance
+     FROM users u
+     JOIN wallets w ON w.user_id = u.id
+     WHERE LOWER(BTRIM(u.first_name)) = LOWER('Олеся')
+       AND u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+     ORDER BY u.id
+     LIMIT 2`
+  );
+  if (candidates.rowCount !== 1) return null;
+  if (userId !== null && String(candidates.rows[0].id) !== String(userId)) return null;
+  return candidates.rows[0];
+}
+
+async function applyOlesyaGift(db, userId = null) {
+  const row = await resolveOlesyaRow(db, userId);
+  if (!row) return false;
+
+  if (String(row.profile_frame || '') !== 'olesya') {
+    await db.query(
+      "UPDATE users SET profile_frame = 'olesya', updated_at = NOW() WHERE id = $1",
+      [row.id]
+    );
+  }
+
+  const grant = await db.query(
+    `INSERT INTO beta_grants (code, user_id, amount)
+     VALUES ('olesya-heart-million', $1, 1000000)
+     ON CONFLICT (code, user_id) DO NOTHING
+     RETURNING user_id`,
+    [row.id]
+  );
+  if (!grant.rowCount) return true;
+
+  const wallet = await db.query(
+    `UPDATE wallets
+     SET balance = balance + 1000000, updated_at = NOW()
+     WHERE user_id = $1
+     RETURNING balance`,
+    [row.id]
+  );
+  const balanceAfter = Number(wallet.rows[0]?.balance || Number(row.balance || 0) + 1_000_000);
+  await db.query(
+    `INSERT INTO transactions (
+       request_key, client_id, mode, status, bonus_spent, bonus_earned,
+       balance_after, reason, reward_code, completed_at
+     ) VALUES (
+       $1, $2, 'adjustment', 'completed', 0, 1000000,
+       $3, 'Персональный подарок Олесе — 1 000 000 бонусов',
+       'olesya-heart-million', NOW()
+     )`,
+    [`reward:${row.id}:olesya-heart-million`, row.id, balanceAfter]
+  );
+  return true;
+}
+
+async function resolveVladislavRow(db, userId = null) {
+  if (vladislavTelegramId) {
+    const exact = await db.query(
+      "SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.profile_frame FROM users u WHERE u.telegram_id::text = $1 AND u.role = 'staff' AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL LIMIT 1",
+      [vladislavTelegramId]
+    );
+    if (!exact.rowCount) return null;
+    if (userId !== null && String(exact.rows[0].id) !== String(userId)) return null;
+    return exact.rows[0];
+  }
+
+  const candidates = await db.query(
+    "SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.profile_frame FROM users u WHERE u.role = 'staff' AND LOWER(BTRIM(u.first_name)) IN (LOWER('Владислав'), LOWER('Влад'), LOWER('Vladislav'), LOWER('Vlad')) AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL ORDER BY u.id LIMIT 2"
+  );
+  if (candidates.rowCount !== 1) return null;
+  if (userId !== null && String(candidates.rows[0].id) !== String(userId)) return null;
+  return candidates.rows[0];
+}
+
+async function applyVladislavFrame(db, userId = null) {
+  const row = await resolveVladislavRow(db, userId);
+  if (!row) return false;
+  if (String(row.profile_frame || '') !== 'vladislav') {
+    await db.query(
+      "UPDATE users SET profile_frame = 'vladislav', updated_at = NOW() WHERE id = $1",
+      [row.id]
+    );
+  }
+  return true;
 }
 
 async function initDatabase() {
@@ -834,6 +947,8 @@ async function initDatabase() {
       );
       if (anna.rowCount) await applyBetaUserRules(client, anna.rows[0].id);
     }
+    await applyOlesyaGift(client);
+    await applyVladislavFrame(client);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -898,6 +1013,8 @@ async function getRollingSpend(client, userId) {
 }
 
 async function getProfile(userId, db = pool) {
+  await applyOlesyaGift(db, userId);
+  await applyVladislavFrame(db, userId);
   const userResult = await db.query(
     `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance,
             (SELECT COUNT(*)::integer FROM users ux
@@ -1482,7 +1599,7 @@ app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
            balance_after, reason, reward_code, completed_at
          ) VALUES (
            $1, $2::bigint, 'adjustment', 'completed', $3::bigint,
-           $4::bigint, 'Легендарное достижение «Тестировщик»',
+           $4::bigint, 'Легендарное достижение «Пионер Пивника»',
            'beta-tester-legendary', NOW()
          )`,
         [`reward:${req.user.id}:beta-tester-legendary`, req.user.id, 150, balanceAfter]

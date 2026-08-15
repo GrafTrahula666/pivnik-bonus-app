@@ -13,10 +13,8 @@ const [pkgText, gateway, accountLink, app, workflow] = await Promise.all([
 
 const pkg = JSON.parse(pkgText);
 
-test('release materialization applies platform separation and safety', () => {
-  assert.match(pkg.scripts.materialize, /apply-platform-separation\.mjs/);
-  assert.match(pkg.scripts.materialize, /apply-platform-separation-safety\.mjs/);
-  assert.match(pkg.scripts.materialize, /apply-platform-profile-refresh\.mjs/);
+test('release materialization verifies the already applied platform separation and safety', () => {
+  assert.equal(pkg.scripts.materialize, 'node scripts/materialize-runtime-patches.mjs');
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-separation\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-separation-safety\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-profile-refresh\.mjs/);

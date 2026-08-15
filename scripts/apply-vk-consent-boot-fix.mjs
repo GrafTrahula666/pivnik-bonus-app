@@ -8,7 +8,7 @@ const universalServerPath = path.join(root, 'universal-server.js');
 const loaderCssPath = path.join(root, 'loader-fix.css');
 
 const marker = 'VK consent gate idempotency hotfix';
-const cacheVersion = '3.2.1-consent-gate';
+const cacheVersion = '3.2.2-anna-consent-persistence';
 
 const originalGate = `  function openConsentGate() {
     if (!consentRequired) return;
