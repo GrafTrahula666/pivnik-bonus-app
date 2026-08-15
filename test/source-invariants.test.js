@@ -98,8 +98,8 @@ test('Объединение блокирует строки, переносит
   assert.match(gateway, /verifiedLedgerBalance !== finalBalance/);
   assert.match(gateway, /account_merge_audit/);
   assert.doesNotMatch(gateway, /анна берман|аня берман|берман анна/i);
-  assert.match(gateway, /if \(storedFrame === 'anna'\) return 'none'/);
-  assert.match(server, /if \(storedFrame === 'anna'\) return 'none'/);
+  assert.match(gateway, /if \(storedFrame === 'anna'\) return 'anna'/);
+  assert.match(server, /if \(storedFrame === 'anna'\) return 'anna'/);
 });
 
 test('Все изменяющие бонусы маршруты используют requestKey и advisory lock', async () => {
@@ -233,7 +233,8 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(app, /async function hydrateAfterBoot\(\)[\s\S]*?\/api\/me[\s\S]*?loadSecondaryData\(\)/);
   assert.match(app, /const jobs = \[[^\]]*loadAchievements\(\)/);
   assert.match(app, /pivnik:boot-complete/);
-  assert.match(accountLink, /addEventListener\('pivnik:boot-complete'/);
+  assert.doesNotMatch(accountLink, /addEventListener\('pivnik:boot-complete'/);
+  assert.match(accountLink, /DOMContentLoaded'[\s\S]{0,160}installAchievementInbox\(\)/);
   assert.doesNotMatch(accountLink, /setTimeout\(\(\) => void loadStatus\(\), 1500\)/);
   assert.match(gateway, /getAppPayload\(userId, provider, \{ startup: true \}\)/);
   assert.match(gateway, /startup\s*\?\s*\[\s*0,\s*\{ earned: \[\], unannounced: \[\] \}/);

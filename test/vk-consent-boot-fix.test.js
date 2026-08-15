@@ -31,6 +31,6 @@ test('VK hotfix forces a fresh client script and fully removes the loader', () =
   const server = fs.readFileSync(path.join(root, 'universal-server.js'), 'utf8');
   const loader = fs.readFileSync(path.join(root, 'loader-fix.css'), 'utf8');
 
-  assert.match(server, /vk-platform\.js\?v=3\.2\.1-consent-gate/);
+  assert.match(server, /vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
   assert.match(loader, /\.boot-screen\.hidden\s*\{[\s\S]*display: none !important;/);
 });
