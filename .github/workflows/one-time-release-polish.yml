@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - '.github/workflows/one-time-release-polish.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -105,10 +106,7 @@ jobs:
   padding-bottom: 34px;
 }
 
-.screen[data-screen='admin'] > * {
-  min-width: 0;
-}
-
+.screen[data-screen='admin'] > * { min-width: 0; }
 .screen[data-screen='admin'] .admin-head { order: 0; }
 .screen[data-screen='admin'] .admin-quick-grid { order: 1; }
 .screen[data-screen='admin'] .metric-grid { order: 2; }
@@ -123,33 +121,13 @@ jobs:
   align-items: flex-start;
   border: 1px solid rgba(218, 161, 91, .24);
   border-radius: 21px;
-  background:
-    radial-gradient(circle at 88% 0%, rgba(122, 34, 49, .23), transparent 38%),
-    linear-gradient(145deg, rgba(24, 12, 16, .92), rgba(8, 6, 8, .9));
+  background: radial-gradient(circle at 88% 0%, rgba(122, 34, 49, .23), transparent 38%), linear-gradient(145deg, rgba(24, 12, 16, .92), rgba(8, 6, 8, .9));
   box-shadow: 0 15px 36px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.035);
 }
-
-.screen[data-screen='admin'] .admin-head > div {
-  min-width: 0;
-}
-
-.screen[data-screen='admin'] .admin-head h2 {
-  margin-top: 3px;
-  color: #f2dfbf;
-  font-size: 25px;
-  letter-spacing: -.025em;
-}
-
-.screen[data-screen='admin'] .admin-head .muted {
-  display: block;
-  color: #9c8264;
-  font-size: 11px;
-}
-
-.screen[data-screen='admin'] #adminRoleBadge {
-  margin-top: 4px;
-  flex: 0 0 auto;
-}
+.screen[data-screen='admin'] .admin-head > div { min-width: 0; }
+.screen[data-screen='admin'] .admin-head h2 { margin-top: 3px; color: #f2dfbf; font-size: 25px; letter-spacing: -.025em; }
+.screen[data-screen='admin'] .admin-head .muted { display: block; color: #9c8264; font-size: 11px; }
+.screen[data-screen='admin'] #adminRoleBadge { margin-top: 4px; flex: 0 0 auto; }
 
 .screen[data-screen='admin'] .admin-quick-grid {
   display: grid;
@@ -157,7 +135,6 @@ jobs:
   gap: 9px;
   margin: 0;
 }
-
 .screen[data-screen='admin'] .admin-quick-grid button {
   position: relative;
   display: grid;
@@ -169,14 +146,11 @@ jobs:
   overflow: hidden;
   border: 1px solid rgba(215, 157, 86, .2);
   border-radius: 18px;
-  background:
-    linear-gradient(150deg, rgba(255,226,178,.035), transparent 45%),
-    rgba(10, 6, 9, .7);
+  background: linear-gradient(150deg, rgba(255,226,178,.035), transparent 45%), rgba(10, 6, 9, .7);
   color: #efe0c8;
   text-align: left;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
 }
-
 .screen[data-screen='admin'] .admin-quick-grid button::before {
   display: grid;
   width: 35px;
@@ -189,25 +163,12 @@ jobs:
   color: #d9b37e;
   font-size: 17px;
 }
-
 .screen[data-screen='admin'] .admin-quick-grid button:nth-child(1)::before { content: '◎'; }
 .screen[data-screen='admin'] .admin-quick-grid button:nth-child(2)::before { content: '≡'; }
 .screen[data-screen='admin'] .admin-quick-grid button:nth-child(3)::before { content: '✉'; }
 .screen[data-screen='admin'] .admin-quick-grid button:nth-child(4)::before { content: '◇'; }
-
-.screen[data-screen='admin'] .admin-quick-grid button span {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 760;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-}
-
-.screen[data-screen='admin'] .admin-quick-grid button small {
-  color: #90775e;
-  font-size: 9px;
-  line-height: 1.32;
-}
+.screen[data-screen='admin'] .admin-quick-grid button span { overflow: hidden; font-size: 13px; font-weight: 760; line-height: 1.2; text-overflow: ellipsis; }
+.screen[data-screen='admin'] .admin-quick-grid button small { color: #90775e; font-size: 9px; line-height: 1.32; }
 
 .screen[data-screen='admin'] .metric-grid {
   display: grid;
@@ -215,7 +176,6 @@ jobs:
   gap: 8px;
   margin: 0;
 }
-
 .screen[data-screen='admin'] .metric {
   min-height: 94px;
   padding: 12px;
@@ -223,47 +183,20 @@ jobs:
   border-color: rgba(216, 158, 87, .16);
   background: rgba(10, 6, 8, .64);
 }
-
-.screen[data-screen='admin'] .metric:nth-child(5) {
-  min-height: 78px;
-  grid-column: 1 / -1;
-}
-
-.screen[data-screen='admin'] .metric > span {
-  color: #92795e;
-  font-size: 9px;
-}
-
-.screen[data-screen='admin'] .metric > strong {
-  margin: 4px 0 2px;
-  color: #efd6aa;
-  font-size: 27px;
-  font-weight: 760;
-  letter-spacing: -.035em;
-}
-
-.screen[data-screen='admin'] .metric > small {
-  color: #746351;
-  font-size: 9px;
-  line-height: 1.3;
-}
-
-.screen[data-screen='admin'] .metric-alert {
-  border-color: rgba(220, 103, 104, .25);
-  background: linear-gradient(145deg, rgba(90, 27, 35, .3), rgba(11, 6, 8, .68));
-}
+.screen[data-screen='admin'] .metric:nth-child(5) { min-height: 78px; grid-column: 1 / -1; }
+.screen[data-screen='admin'] .metric > span { color: #92795e; font-size: 9px; }
+.screen[data-screen='admin'] .metric > strong { margin: 4px 0 2px; color: #efd6aa; font-size: 27px; font-weight: 760; letter-spacing: -.035em; }
+.screen[data-screen='admin'] .metric > small { color: #746351; font-size: 9px; line-height: 1.3; }
+.screen[data-screen='admin'] .metric-alert { border-color: rgba(220, 103, 104, .25); background: linear-gradient(145deg, rgba(90, 27, 35, .3), rgba(11, 6, 8, .68)); }
 
 .screen[data-screen='admin'] > .card {
   margin: 0;
   padding: 15px;
   border: 1px solid rgba(214, 156, 84, .19);
   border-radius: 20px;
-  background:
-    linear-gradient(145deg, rgba(255,225,174,.025), transparent 42%),
-    rgba(9, 6, 8, .68);
+  background: linear-gradient(145deg, rgba(255,225,174,.025), transparent 42%), rgba(9, 6, 8, .68);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
 }
-
 .screen[data-screen='admin'] > .card .card-head {
   align-items: flex-start;
   gap: 10px;
@@ -271,106 +204,30 @@ jobs:
   padding-bottom: 11px;
   border-bottom: 1px solid rgba(214, 155, 83, .11);
 }
-
-.screen[data-screen='admin'] > .card .card-head h3 {
-  margin: 0;
-  color: #f0dfc4;
-  font-size: 16px;
-  line-height: 1.2;
-}
-
-.screen[data-screen='admin'] > .card .card-head p {
-  margin: 4px 0 0;
-  color: #88735c;
-  font-size: 10px;
-  line-height: 1.4;
-}
-
+.screen[data-screen='admin'] > .card .card-head h3 { margin: 0; color: #f0dfc4; font-size: 16px; line-height: 1.2; }
+.screen[data-screen='admin'] > .card .card-head p { margin: 4px 0 0; color: #88735c; font-size: 10px; line-height: 1.4; }
 .screen[data-screen='admin'] .shift-staff-options,
 .screen[data-screen='admin'] .admin-content-list,
 .screen[data-screen='admin'] .operation-list,
-.screen[data-screen='admin'] .inquiry-list {
-  border-radius: 15px;
-}
-
-.screen[data-screen='admin'] .content-admin-columns {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
-
-.screen[data-screen='admin'] .content-admin-columns > section {
-  min-width: 0;
-  padding: 11px;
-  border: 1px solid rgba(214, 156, 84, .12);
-  border-radius: 16px;
-  background: rgba(0,0,0,.14);
-}
-
-.screen[data-screen='admin'] .content-admin-title {
-  margin-bottom: 9px;
-}
-
-.screen[data-screen='admin'] .content-admin-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0,1fr));
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
+.screen[data-screen='admin'] .inquiry-list { border-radius: 15px; }
+.screen[data-screen='admin'] .content-admin-columns { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.screen[data-screen='admin'] .content-admin-columns > section { min-width: 0; padding: 11px; border: 1px solid rgba(214, 156, 84, .12); border-radius: 16px; background: rgba(0,0,0,.14); }
+.screen[data-screen='admin'] .content-admin-title { margin-bottom: 9px; }
+.screen[data-screen='admin'] .content-admin-actions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-bottom: 12px; }
 .screen[data-screen='admin'] .content-admin-actions button,
-.screen[data-screen='admin'] .two-buttons button {
-  min-height: 44px;
-}
-
-.screen[data-screen='admin'] > .owner-only {
-  opacity: .86;
-  border-style: dashed;
-}
-
-.screen[data-screen='admin'] > .owner-only::before {
-  content: 'Дополнительные настройки';
-  display: block;
-  margin-bottom: 10px;
-  color: #8d765d;
-  font-size: 9px;
-  font-weight: 760;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-}
-
-.screen[data-screen='admin'] .design-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.screen[data-screen='admin'] .toggle-list {
-  gap: 7px;
-}
-
+.screen[data-screen='admin'] .two-buttons button { min-height: 44px; }
+.screen[data-screen='admin'] > .owner-only { opacity: .86; border-style: dashed; }
+.screen[data-screen='admin'] > .owner-only::before { content: 'Дополнительные настройки'; display: block; margin-bottom: 10px; color: #8d765d; font-size: 9px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; }
+.screen[data-screen='admin'] .design-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.screen[data-screen='admin'] .toggle-list { gap: 7px; }
 .screen[data-screen='admin'] .toggle-list label,
-.screen[data-screen='admin'] .design-grid label {
-  border: 1px solid rgba(214, 156, 84, .1);
-  border-radius: 13px;
-}
-
+.screen[data-screen='admin'] .design-grid label { border: 1px solid rgba(214, 156, 84, .1); border-radius: 13px; }
 .screen[data-screen='admin'] .admin-hint,
-.screen[data-screen='admin'] .shift-meta {
-  display: block;
-  margin-top: 10px;
-  color: #766451;
-  font-size: 9px;
-  line-height: 1.45;
-}
+.screen[data-screen='admin'] .shift-meta { display: block; margin-top: 10px; color: #766451; font-size: 9px; line-height: 1.45; }
 
 @media (max-width: 355px) {
-  .wheel-page-head {
-    grid-template-columns: 78px minmax(0, 1fr) 78px;
-  }
-  .wheel-back {
-    min-width: 78px;
-    padding-inline: 9px;
-  }
+  .wheel-page-head { grid-template-columns: 78px minmax(0, 1fr) 78px; }
+  .wheel-back { min-width: 78px; padding-inline: 9px; }
   .wheel-head-spacer { width: 78px; }
   .wheel-page-head h2 { font-size: 18px; }
   .screen[data-screen='admin'] .admin-quick-grid button { min-height: 96px; padding: 11px; }
@@ -384,7 +241,7 @@ jobs:
         shell: bash
         run: |
           grep -Fq '/* V19.3 · release polish */' styles.css
-          grep -Fq ".wheel-back::after" styles.css
+          grep -Fq '.wheel-back::after' styles.css
           grep -Fq ".screen[data-screen='admin'].active" styles.css
 
       - name: Commit polish and remove helper workflow
