@@ -1,37 +1,12 @@
-name: One-time release polish
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/one-time-release-polish.yml'
-  workflow_dispatch:
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const stylesPath = path.join(root, 'styles.css');
+const marker = '/* V19.3 · release polish */';
 
-permissions:
-  contents: write
-
-jobs:
-  polish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Apply scoped UI polish
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('styles.css')
-          source = path.read_text(encoding='utf-8')
-          marker = '/* V19.3 · release polish */'
-          if marker not in source:
-              block = r'''
+const polishCss = String.raw`
 
 /* V19.3 · release polish */
 /* Larger, labelled back navigation for full-screen transitions. */
@@ -40,7 +15,6 @@ jobs:
   min-height: 48px;
   padding-inline: 2px;
 }
-
 .wheel-page-head h2 {
   overflow: hidden;
   font-size: 20px;
@@ -48,7 +22,6 @@ jobs:
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .wheel-back {
   display: inline-flex;
   width: auto;
@@ -66,7 +39,6 @@ jobs:
   line-height: 1;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
 }
-
 .wheel-back::after {
   content: 'Назад';
   position: relative;
@@ -75,10 +47,7 @@ jobs:
   font-weight: 720;
   line-height: 1;
 }
-
-.wheel-head-spacer {
-  width: 90px;
-}
+.wheel-head-spacer { width: 90px; }
 
 .screen[data-screen='staff'] .service-back,
 .screen[data-screen='admin'] .service-back {
@@ -98,14 +67,13 @@ jobs:
   text-decoration: none;
 }
 
-/* Owner panel: put operational tools first and keep editing tools out of the way. */
+/* Owner panel: operational tools first, editing tools last. */
 .screen[data-screen='admin'].active {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding-bottom: 34px;
 }
-
 .screen[data-screen='admin'] > * { min-width: 0; }
 .screen[data-screen='admin'] .admin-head { order: 0; }
 .screen[data-screen='admin'] .admin-quick-grid { order: 1; }
@@ -233,23 +201,10 @@ jobs:
   .screen[data-screen='admin'] .admin-quick-grid button { min-height: 96px; padding: 11px; }
   .screen[data-screen='admin'] .admin-quick-grid button small { font-size: 8px; }
 }
-'''
-              path.write_text(source.rstrip() + block + '\n', encoding='utf-8')
-          PY
+`;
 
-      - name: Verify scoped patch
-        shell: bash
-        run: |
-          grep -Fq '/* V19.3 · release polish */' styles.css
-          grep -Fq '.wheel-back::after' styles.css
-          grep -Fq ".screen[data-screen='admin'].active" styles.css
-
-      - name: Commit polish and remove helper workflow
-        shell: bash
-        run: |
-          git config user.name "Pivnik Release Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/one-time-release-polish.yml
-          git add styles.css
-          git commit -m "Polish back navigation and owner admin panel"
-          git push origin HEAD:main
+let styles = await fs.readFile(stylesPath, 'utf8');
+if (!styles.includes(marker)) {
+  styles = `${styles.trimEnd()}${polishCss}\n`;
+  await fs.writeFile(stylesPath, styles, 'utf8');
+}
