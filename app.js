@@ -618,7 +618,9 @@ function renderWheelArtwork() {
     }
     const flipped = sector.center > 90 && sector.center < 270;
     const labelRotation = flipped ? 90 : -90;
-    const labelY = flipped ? 268 : 52;
+    // Keep every label on the same radial ring. Moving flipped labels to y=268
+    // mirrors them into the upper half of the wheel and leaves the bottom empty.
+    const labelY = 52;
     return `${path}<g transform="rotate(${sector.center.toFixed(3)} 160 160)"><text class="wheel-sector-label" x="160" y="${labelY}" text-anchor="middle" transform="rotate(${labelRotation} 160 ${labelY})">${escapeHtml(sector.label)}</text></g>`;
   }).join('');
   state.wheel.artworkReady = true;
