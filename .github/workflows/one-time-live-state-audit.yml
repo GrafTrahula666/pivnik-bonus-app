@@ -1,4 +1,4 @@
-name: One-time Pivnik live data surface audit
+name: One-time Pivnik launch content verification
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  audit:
+  verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/restore-live-state'
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -24,18 +24,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Inventory API routes from release source
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          for (const file of ['server.js','universal-server.js','app.js']) {
-            const text=fs.readFileSync(file,'utf8');
-            const hits=[...text.matchAll(/["'`](\/api\/[A-Za-z0-9_./:${}-]+)/g)].map(m=>m[1]);
-            console.log(`${file.toUpperCase()}_API_ROUTES=`+JSON.stringify([...new Set(hits)].sort(),null,2));
-          }
-          NODE
-      - name: Authenticate owner and probe safe read-only API endpoints
+      - name: Authenticate owner and verify all read-only launch data
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -43,7 +32,7 @@ jobs:
           const botToken=process.env.TELEGRAM_BOT_TOKEN;
           const appUrl=process.env.APP_URL;
           const user={id:Number(process.env.OWNER_ID),first_name:'TopG',username:process.env.OWNER_USERNAME,language_code:'ru'};
-          const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),query_id:'AAE_PIVNIK_DATA_AUDIT_20260819',user:JSON.stringify(user)});
+          const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),query_id:'AAE_PIVNIK_LAUNCH_CONTENT_20260819',user:JSON.stringify(user)});
           const d=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');
           const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();
           params.set('hash',crypto.createHmac('sha256',secret).update(d).digest('hex'));
@@ -51,19 +40,27 @@ jobs:
           const a=await auth.json();
           if(!auth.ok||!a.token) throw new Error(`auth ${auth.status} ${JSON.stringify(a)}`);
           const headers={authorization:`Bearer ${a.token}`,'x-pivnik-platform':'telegram'};
-          const candidates=[
-            '/api/me','/api/leaderboard','/api/promotions','/api/shop','/api/design',
-            '/api/settings','/api/admin/users','/api/admin/transactions','/api/admin/shifts',
-            '/api/admin/settings','/api/admin/promotions','/api/admin/shop','/api/staff/shift',
-            '/api/staff/current-shift','/api/shift/current','/api/wheel/status'
+          const paths=[
+            '/api/bootstrap','/api/admin/content','/api/admin/summary','/api/admin/shift',
+            '/api/admin/promotions','/api/admin/shop-items','/api/shop/catalog',
+            '/api/leaderboard/monthly','/api/me/transactions','/api/achievements',
+            '/api/shift/current','/api/wheel/status'
           ];
-          for(const path of candidates){
-            try{
-              const r=await fetch(appUrl+path,{headers});
-              const ct=r.headers.get('content-type')||'';
-              const body=ct.includes('json')?await r.json():await r.text();
-              const safe=typeof body==='string'?body.slice(0,500):body;
-              console.log(`PROBE ${path} HTTP=${r.status} BODY=${JSON.stringify(safe).slice(0,5000)}`);
-            }catch(e){ console.log(`PROBE ${path} ERROR=${e.message}`); }
+          const results={};
+          for(const path of paths){
+            const r=await fetch(appUrl+path,{headers});
+            const ct=r.headers.get('content-type')||'';
+            const body=ct.includes('json')?await r.json():await r.text();
+            results[path]={status:r.status,body};
+            console.log(`ENDPOINT ${path} HTTP=${r.status} BODY=${JSON.stringify(body).slice(0,16000)}`);
           }
+          const promos=results['/api/admin/promotions'];
+          if(promos.status!==200) throw new Error('Admin promotions unavailable');
+          const shop=results['/api/admin/shop-items'];
+          if(shop.status!==200) throw new Error('Admin shop unavailable');
+          const bootstrap=results['/api/bootstrap'];
+          if(bootstrap.status!==200) throw new Error('Bootstrap unavailable');
+          const wheel=results['/api/wheel/status'];
+          if(wheel.status!==200 || wheel.body?.enabled!==true) throw new Error('Wheel unavailable');
+          console.log('SEEDED_LAUNCH_CONTENT_OK=true');
           NODE
