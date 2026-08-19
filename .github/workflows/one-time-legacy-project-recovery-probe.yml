@@ -17,6 +17,8 @@ jobs:
       TOKEN_API: ${{ secrets.RAILWAY_API_TOKEN }}
       TOKEN_PROJECT: ${{ secrets.RAILWAY_TOKEN }}
       TOKEN_PROJECT_ALT: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+      OLD_WORKSPACE_ID: fbffb30c-9091-432f-9e09-9c59e1440304
+      CURRENT_WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       OLD_PROJECT_ID: 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5
       OLD_ENVIRONMENT_ID: aa461df9-1dbb-4000-8906-f13dd8008a6f
       OLD_DB_SERVICE_ID: beb858e1-c412-42b8-b570-bda36ca82b59
@@ -29,7 +31,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci --ignore-scripts
-      - name: Probe legacy project with every stored Railway token
+      - name: Diagnose token scopes and probe legacy data
         shell: bash
         run: |
           set -euo pipefail
@@ -48,7 +50,7 @@ jobs:
             {name:'PROJECT_ALT',token:String(process.env.TOKEN_PROJECT_ALT||'').trim(),header:'project-access-token'}
           ];
           async function gql(candidate,query,variables={}){
-            const headers={'content-type':'application/json','user-agent':'pivnik-legacy-recovery-probe/2.0'};
+            const headers={'content-type':'application/json','user-agent':'pivnik-legacy-recovery-probe/3.0'};
             if(candidate.header==='authorization') headers.authorization=`Bearer ${candidate.token}`;
             else headers['Project-Access-Token']=candidate.token;
             const r=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({query,variables})});
@@ -66,9 +68,8 @@ jobs:
               console.log(`${candidate.name}_${serviceId.slice(0,8)}_VARS=false ERROR=${cleanError(r.payload,r.status)}`);
               return false;
             }
-            console.log(`${candidate.name}_${serviceId.slice(0,8)}_VARS=true`);
             const url=String(vars.DATABASE_PUBLIC_URL||vars.DATABASE_URL||'').trim();
-            console.log(`${candidate.name}_${serviceId.slice(0,8)}_URL_PRESENT=${Boolean(url)}`);
+            console.log(`${candidate.name}_${serviceId.slice(0,8)}_VARS=true URL_PRESENT=${Boolean(url)}`);
             if(!url) return true;
             try{
               const c=new Client({connectionString:url,ssl:/railway\.internal/i.test(url)?false:{rejectUnauthorized:false},connectionTimeoutMillis:8000,statement_timeout:8000});
@@ -91,9 +92,22 @@ jobs:
           for(const candidate of candidates){
             console.log(`TOKEN_${candidate.name}_PRESENT=${Boolean(candidate.token)}`);
             if(!candidate.token) continue;
-            const p=await gql(candidate,`query Project($id:String!){ project(id:$id){ id name } }`,{id:projectId});
+            if(candidate.header==='authorization'){
+              const me=await gql(candidate,'query { me { id name email } }');
+              console.log(`TOKEN_${candidate.name}_ME_VISIBLE=${Boolean(me.payload?.data?.me)} ERROR=${me.payload?.data?.me?'':cleanError(me.payload,me.status)}`);
+              for(const [label,id] of [['OLD',process.env.OLD_WORKSPACE_ID],['CURRENT',process.env.CURRENT_WORKSPACE_ID]]){
+                const w=await gql(candidate,'query W($id:String!){ workspace(workspaceId:$id){ id name } }',{id});
+                const node=w.payload?.data?.workspace;
+                console.log(`TOKEN_${candidate.name}_${label}_WORKSPACE_VISIBLE=${Boolean(node)}${node?` NAME=${String(node.name||'')}`:` ERROR=${cleanError(w.payload,w.status)}`}`);
+              }
+            }else{
+              const pt=await gql(candidate,'query { projectToken { projectId environmentId } }');
+              const node=pt.payload?.data?.projectToken;
+              console.log(`TOKEN_${candidate.name}_PROJECT_TOKEN_INFO=${node?JSON.stringify(node):`ERROR:${cleanError(pt.payload,pt.status)}`}`);
+            }
+            const p=await gql(candidate,'query Project($id:String!){ project(id:$id){ id name } }',{id:projectId});
             const project=p.payload?.data?.project;
-            console.log(`TOKEN_${candidate.name}_PROJECT_VISIBLE=${Boolean(project)}${project?` NAME=${String(project.name||'')}`:` ERROR=${cleanError(p.payload,p.status)}`}`);
+            console.log(`TOKEN_${candidate.name}_OLD_PROJECT_VISIBLE=${Boolean(project)}${project?` NAME=${String(project.name||'')}`:` ERROR=${cleanError(p.payload,p.status)}`}`);
             for(const serviceId of dbServices){ if(await inspectDb(candidate,serviceId)) any=true; }
           }
           console.log(`ANY_LEGACY_ACCESS=${any}`);
