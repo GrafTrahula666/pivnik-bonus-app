@@ -53,6 +53,8 @@ jobs:
           chmod 700 "$HOME/.ssh"
           ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/id_ed25519"
           chmod 600 "$HOME/.ssh/id_ed25519"
+          KEY_NAME="pivnik-ci-backup-${GITHUB_RUN_ID}"
+          railway ssh keys add --workspace "$WORKSPACE_ID" --key "$HOME/.ssh/id_ed25519.pub" --name "$KEY_NAME" >/tmp/ssh-key-add.log 2>&1
           railway connect "$POSTGRES_SERVICE" --environment production --tunnel-only --port 55432 >/tmp/railway-tunnel.log 2>&1 &
           TUNNEL_PID=$!
           cleanup(){ kill "$TUNNEL_PID" 2>/dev/null || true; wait "$TUNNEL_PID" 2>/dev/null || true; rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"; }
@@ -112,8 +114,9 @@ jobs:
           encrypted_dump_sha256=$ENC_SHA
           format=pg_dump custom, encrypted AES-256-CBC/PBKDF2 250000
           restore_check=pg_restore --list passed
+          temporary_workspace_ssh_key=$KEY_NAME
           EOF
-          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt /tmp/dbvars.json /tmp/railway-tunnel.log
+          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt /tmp/dbvars.json /tmp/railway-tunnel.log /tmp/ssh-key-add.log
           echo "ENCRYPTED_BACKUP_READY=true users=$USERS transactions=$TX bytes=$ENC_BYTES sha256=$ENC_SHA"
       - name: Upload encrypted backup outside Railway
         uses: actions/upload-artifact@v4
