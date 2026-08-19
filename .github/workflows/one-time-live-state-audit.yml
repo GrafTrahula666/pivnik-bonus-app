@@ -1,4 +1,4 @@
-name: One-time Pivnik live state audit
+name: One-time Pivnik owner launch restore
 
 on:
   pull_request:
@@ -8,10 +8,10 @@ permissions:
   contents: read
 
 jobs:
-  audit:
+  restore:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/restore-live-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -19,63 +19,74 @@ jobs:
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       APP_SERVICE: pivnik-bonus-app
+      APP_URL: https://pivnik-bonus-app-production-df60.up.railway.app
+      OWNER_ID: '6076253753'
+      OWNER_USERNAME: OriginalToPG
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm ci
       - run: npm install --global @railway/cli@latest
-      - name: Link live Pivnik service
+      - name: Link live Pivnik service only
         run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
-      - name: Inspect current database users and state via public Postgres URL
+      - name: Restore owner identity variables
         shell: bash
         run: |
           set -euo pipefail
-          services=$(railway service list --json)
-          db_service=$(node -e 'const x=JSON.parse(process.argv[1]); const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]); const s=list.find(v=>/postgres/i.test(String(v.name||""))); if(!s) process.exit(2); process.stdout.write(s.name)' "$services")
-          db_vars=$(railway variable list -s "$db_service" -e "$ENVIRONMENT_ID" --json)
-          public_url=$(node -e 'const x=JSON.parse(process.argv[1]); const v=x.DATABASE_PUBLIC_URL||x.POSTGRES_PUBLIC_URL||x.DATABASE_URL_PUBLIC||""; if(!v) process.exit(2); process.stdout.write(v)' "$db_vars")
-          DATABASE_PUBLIC_URL="$public_url" node --input-type=module <<'NODE'
-          import pg from 'pg';
-          const { Client } = pg;
-          const c = new Client({ connectionString: process.env.DATABASE_PUBLIC_URL, ssl: { rejectUnauthorized:false } });
-          await c.connect();
-          const users = await c.query(`
-            SELECT id, telegram_id, vk_id, username, first_name, last_name, role,
-                   unlimited_bonus, beta_number, profile_frame, created_at, updated_at
-            FROM users
-            WHERE merged_into_user_id IS NULL
-            ORDER BY created_at DESC
-            LIMIT 50
-          `);
-          console.log('CURRENT_USERS='+JSON.stringify(users.rows,null,2));
-          const counts = {};
-          for (const table of ['users','wallets','transactions','beer_loyalty','achievements','wheel_spins','staff']) {
-            try { const r=await c.query(`SELECT COUNT(*)::int AS n FROM ${table}`); counts[table]=r.rows[0].n; }
-            catch { counts[table]='missing'; }
-          }
-          console.log('TABLE_COUNTS='+JSON.stringify(counts));
-          const wallets = await c.query(`SELECT w.user_id,w.balance,u.telegram_id,u.username,u.first_name,u.role FROM wallets w JOIN users u ON u.id=w.user_id ORDER BY w.balance DESC LIMIT 30`);
-          console.log('WALLETS='+JSON.stringify(wallets.rows,null,2));
-          await c.end();
+          railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys \
+            "OWNER_TELEGRAM_ID=$OWNER_ID" \
+            "OWNER_TELEGRAM_USERNAME=$OWNER_USERNAME" \
+            "TELEGRAM_APP_URL=$APP_URL" \
+            "PIVNIK_APP_URL=$APP_URL" \
+            "PIVNIK_DOCUMENT_PLATFORM=telegram"
+          vars=$(railway variable list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --json)
+          node -e 'const x=JSON.parse(process.argv[1]); if(String(x.OWNER_TELEGRAM_ID)!==process.env.OWNER_ID) throw new Error("Owner ID not set"); if(String(x.OWNER_TELEGRAM_USERNAME)!==process.env.OWNER_USERNAME) throw new Error("Owner username not set"); console.log("OWNER_VARIABLES_OK=true")' "$vars"
+      - name: Redeploy exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway up --ci --message "Restore Pivnik owner state for launch"
+      - name: Authenticate owner through signed Telegram initData and verify profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import crypto from 'node:crypto';
+          const botToken=process.env.TELEGRAM_BOT_TOKEN;
+          const appUrl=process.env.APP_URL;
+          const user={id:Number(process.env.OWNER_ID),first_name:'TopG',username:process.env.OWNER_USERNAME,language_code:'ru'};
+          const params=new URLSearchParams();
+          params.set('auth_date',String(Math.floor(Date.now()/1000)));
+          params.set('query_id','AAE_PIVNIK_OWNER_RESTORE_20260819');
+          params.set('user',JSON.stringify(user));
+          const dataCheckString=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');
+          const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();
+          params.set('hash',crypto.createHmac('sha256',secret).update(dataCheckString).digest('hex'));
+          const response=await fetch(`${appUrl}/api/auth`,{method:'POST',headers:{'content-type':'application/json','x-pivnik-platform':'telegram'},body:JSON.stringify({platform:'telegram',initData:params.toString()})});
+          const data=await response.json().catch(()=>({}));
+          if(!response.ok) throw new Error(`Owner auth failed HTTP ${response.status}: ${JSON.stringify(data)}`);
+          const p=data.profile||{};
+          console.log('OWNER_PROFILE='+JSON.stringify({id:p.id,username:p.username,firstName:p.firstName,role:p.role,unlimitedBonus:p.unlimitedBonus,status:p.status,profileFrame:p.profileFrame,availableFrames:p.availableFrames,achievements:p.achievements,termsAccepted:p.termsAccepted,balance:p.balance},null,2));
+          if(p.role!=='admin') throw new Error(`Owner role is ${p.role}`);
+          if(p.profileFrame!=='money') throw new Error(`Owner frame is ${p.profileFrame}`);
+          const creator=Array.isArray(p.achievements)&&p.achievements.some(a=>a.code==='creator');
+          if(!creator) throw new Error('Creator achievement missing');
+          console.log('OWNER_STATE_RESTORED=true');
           NODE
-      - name: Inspect recent Telegram updates for account IDs
-        if: always()
+      - name: Verify production app, Telegram menu and cancellation runtime
         shell: bash
         run: |
           set -euo pipefail
-          reply=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?limit=100&timeout=0")
-          node -e '
-            const x=JSON.parse(process.argv[1]);
-            const rows=[];
-            for(const u of x.result||[]){
-              const m=u.message||u.edited_message||u.callback_query?.message;
-              const from=u.message?.from||u.edited_message?.from||u.callback_query?.from;
-              if(!from) continue;
-              rows.push({update_id:u.update_id,id:from.id,username:from.username||null,first_name:from.first_name||null,last_name:from.last_name||null,text:m?.text||u.callback_query?.data||null,date:m?.date||null});
-            }
-            console.log("TELEGRAM_UPDATES="+JSON.stringify(rows.slice(-50),null,2));
-          ' "$reply"
+          root=$(curl --fail --silent --show-error --location --max-time 20 "$APP_URL/")
+          printf '%s' "$root" | grep -q '<title>Пивник | Бонусы</title>'
+          health=$(curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health")
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("health not ok"); console.log(`HEALTH_OK users=${x.users}`)' "$health"
+          menu=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMenuButton")
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok||x.result?.type!=="web_app"||x.result?.text!=="Открыть ПРИЛОЖЕНИЕ") throw new Error(`Bad Telegram menu ${JSON.stringify(x.result)}`); console.log(`TELEGRAM_MENU_OK=${x.result.text}`)' "$menu"
+          logs=$(railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 300)
+          printf '%s\n' "$logs" | grep -q 'Applied unlimited cancellation for owner/admin; staff limits remain unchanged.'
+          echo 'OWNER_CANCEL_RUNTIME_OK=true'
