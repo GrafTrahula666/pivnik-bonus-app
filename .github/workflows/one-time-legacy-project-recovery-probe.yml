@@ -14,46 +14,31 @@ jobs:
     timeout-minutes: 8
     env:
       TOKEN_ACCOUNT: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-      OLD_PROJECT_ID: 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5
-      OLD_WORKSPACE_ID: fbffb30c-9091-432f-9e09-9c59e1440304
     steps:
-      - name: Search deleted projects and volume metadata
+      - name: Inspect projectClaim semantics without mutation
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const endpoint='https://backboard.railway.com/graphql/v2';
           const token=String(process.env.TOKEN_ACCOUNT||'').trim();
-          const oldProject=process.env.OLD_PROJECT_ID;
-          if(!token) throw new Error('account token missing');
-          async function gql(query,variables={}){
-            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'pivnik-deleted-project-search/1.0'},body:JSON.stringify({query,variables})});
-            const p=await r.json().catch(()=>({}));
-            return {status:r.status,p};
-          }
-          const me=await gql('query { me { id name email } }');
-          const userId=me.p?.data?.me?.id;
-          console.log('ME_OK='+Boolean(userId));
-          if(!userId) throw new Error('Could not resolve Railway user id');
-
-          const q=`query Projects($userId:String!){
-            projects(first:100,includeDeleted:true,userId:$userId){
-              edges{ node{ id name deletedAt workspaceId
-                services(first:100){ edges{ node{ id name deletedAt } } }
-                volumes(first:100){ edges{ node{ id projectId } } }
-              } }
+          const query=`query ClaimMeta {
+            __schema {
+              mutationType {
+                fields {
+                  name description isDeprecated deprecationReason
+                  args { name description defaultValue type { kind name ofType { kind name ofType { kind name } } } }
+                  type { kind name ofType { kind name ofType { kind name } } }
+                }
+              }
             }
+            projectType: __type(name:"Project") { name fields { name description type { kind name ofType { kind name } } } }
           }`;
-          const all=await gql(q,{userId});
-          const errors=(all.p?.errors||[]).map(x=>x.message).join(' | ');
-          console.log('PROJECTS_HTTP='+all.status+' ERROR='+errors.slice(0,300));
-          const nodes=(all.p?.data?.projects?.edges||[]).map(e=>e.node).filter(Boolean);
-          console.log('PROJECT_COUNT_INCLUDE_DELETED='+nodes.length);
-          console.log('PROJECT_SUMMARY='+JSON.stringify(nodes.map(x=>({id:x.id,name:x.name,deletedAt:x.deletedAt,workspaceId:x.workspaceId,services:(x.services?.edges||[]).map(e=>({id:e.node?.id,name:e.node?.name,deletedAt:e.node?.deletedAt})),volumes:(x.volumes?.edges||[]).map(e=>({id:e.node?.id,projectId:e.node?.projectId}))})),null,2));
-          const hit=nodes.find(x=>x.id===oldProject);
-          console.log('OLD_PROJECT_IN_DELETED_LIST='+Boolean(hit));
-
-          const byIds=await gql(`query ByIds($ids:[String!]!){ projectsByIds(ids:$ids){ id name deletedAt workspaceId volumes(first:100){edges{node{id projectId}}} services(first:100){edges{node{id name deletedAt}}} } }`,{ids:[oldProject]});
-          console.log('PROJECTS_BY_IDS='+JSON.stringify(byIds.p?.data?.projectsByIds||null));
-          console.log('PROJECTS_BY_IDS_ERROR='+(byIds.p?.errors||[]).map(x=>x.message).join(' | ').slice(0,300));
+          const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query})});
+          const p=await r.json();
+          if(p.errors?.length) throw new Error(p.errors.map(x=>x.message).join('; '));
+          const field=(p.data.__schema.mutationType.fields||[]).find(x=>x.name==='projectClaim');
+          console.log('PROJECT_CLAIM_META='+JSON.stringify(field,null,2));
+          const projectFields=(p.data.projectType?.fields||[]).filter(f=>/claim|temp|delete|workspace|volume|service/i.test(f.name));
+          console.log('PROJECT_RECOVERY_FIELDS='+JSON.stringify(projectFields,null,2));
           NODE
