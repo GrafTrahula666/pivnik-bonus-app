@@ -1,0 +1,37 @@
+name: One-time Railway account discovery
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/account-discovery'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+      - name: Verify account token identity
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway whoami
+      - name: List every Railway project across account workspaces
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway list --json
