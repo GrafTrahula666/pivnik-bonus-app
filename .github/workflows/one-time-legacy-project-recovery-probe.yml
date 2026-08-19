@@ -14,28 +14,49 @@ jobs:
     timeout-minutes: 8
     env:
       TOKEN_ACCOUNT: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      CURRENT_WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
+      OLD_WORKSPACE_ID: fbffb30c-9091-432f-9e09-9c59e1440304
     steps:
-      - name: Inspect billing and subscription API surface
+      - name: Inspect Railway customer and workspace subscription relationships
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const endpoint='https://backboard.railway.com/graphql/v2';
           const token=String(process.env.TOKEN_ACCOUNT||'').trim();
-          const query=`query BillingMeta {
+          if(!token) throw new Error('account token missing');
+          async function gql(query,variables={}){
+            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'pivnik-customer-recovery-probe/1.0'},body:JSON.stringify({query,variables})});
+            const p=await r.json().catch(()=>({}));
+            return {status:r.status,p};
+          }
+          const meta=await gql(`query Meta {
             __schema {
-              queryType { fields { name description args { name description type { kind name ofType { kind name } } } type { kind name ofType { kind name } } } }
-              mutationType { fields { name description args { name description type { kind name ofType { kind name } } } type { kind name ofType { kind name } } } }
-              types { name kind fields { name description type { kind name ofType { kind name } } } }
+              queryType { fields { name description args { name description type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name } } } }
+              mutationType { fields { name description args { name description type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name } } } }
             }
-          }`;
-          const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query})});
-          const p=await r.json();
-          if(p.errors?.length) throw new Error(p.errors.map(x=>x.message).join('; '));
-          const hit=/bill|subscription|plan|trial|payment|checkout|invoice|free/i;
-          const fmt=f=>({name:f.name,description:f.description,args:(f.args||[]).map(a=>({name:a.name,description:a.description,type:a.type.name||a.type.ofType?.name||a.type.kind})),returnType:f.type?.name||f.type?.ofType?.name||f.type?.kind});
-          console.log('BILLING_QUERIES='+JSON.stringify((p.data.__schema.queryType?.fields||[]).filter(f=>hit.test(f.name)||hit.test(f.description||'')).map(fmt),null,2));
-          console.log('BILLING_MUTATIONS='+JSON.stringify((p.data.__schema.mutationType?.fields||[]).filter(f=>hit.test(f.name)||hit.test(f.description||'')).map(fmt),null,2));
-          const types=(p.data.__schema.types||[]).filter(t=>hit.test(t.name||''));
-          console.log('BILLING_TYPES='+JSON.stringify(types.map(t=>({name:t.name,kind:t.kind,fields:(t.fields||[]).map(f=>({name:f.name,description:f.description,type:f.type?.name||f.type?.ofType?.name||f.type?.kind}))})),null,2));
+            workspaceType: __type(name:"Workspace") { name fields { name description args { name type { kind name ofType { kind name } } } type { kind name ofType { kind name } } } }
+            customerType: __type(name:"Customer") { name fields { name description args { name type { kind name ofType { kind name } } } type { kind name ofType { kind name } } } }
+            userType: __type(name:"User") { name fields { name description type { kind name ofType { kind name } } } }
+          }`);
+          if(meta.p.errors?.length) throw new Error(meta.p.errors.map(x=>x.message).join('; '));
+          const hit=/customer|workspace|subscription|billing|plan|trial/i;
+          const fmt=f=>({name:f.name,description:f.description,args:(f.args||[]).map(a=>({name:a.name,type:a.type.name||a.type.ofType?.name||a.type.kind})),returnType:f.type?.name||f.type?.ofType?.name||f.type?.kind});
+          console.log('CUSTOMER_QUERIES='+JSON.stringify((meta.p.data.__schema.queryType?.fields||[]).filter(f=>hit.test(f.name)||hit.test(f.description||'')).map(fmt),null,2));
+          console.log('CUSTOMER_MUTATIONS='+JSON.stringify((meta.p.data.__schema.mutationType?.fields||[]).filter(f=>hit.test(f.name)||hit.test(f.description||'')).map(fmt),null,2));
+          console.log('WORKSPACE_FIELDS='+JSON.stringify((meta.p.data.workspaceType?.fields||[]).filter(f=>hit.test(f.name)||hit.test(f.description||'')).map(fmt),null,2));
+          console.log('CUSTOMER_FIELDS='+JSON.stringify((meta.p.data.customerType?.fields||[]).map(fmt),null,2));
+          console.log('USER_CUSTOMER_FIELDS='+JSON.stringify((meta.p.data.userType?.fields||[]).filter(f=>hit.test(f.name)||hit.test(f.description||'')).map(fmt),null,2));
+
+          // Learn the relationship from the currently accessible workspace without changing anything.
+          const current=await gql(`query Current($id:String!){ workspace(workspaceId:$id){
+            id name
+            __typename
+          } }`,{id:process.env.CURRENT_WORKSPACE_ID});
+          console.log('CURRENT_WORKSPACE_BASE='+JSON.stringify(current.p?.data?.workspace||null));
+          console.log('CURRENT_WORKSPACE_BASE_ERROR='+(current.p?.errors||[]).map(x=>x.message).join(' | ').slice(0,500));
+
+          const old=await gql(`query Old($id:String!){ workspace(workspaceId:$id){ id name __typename } }`,{id:process.env.OLD_WORKSPACE_ID});
+          console.log('OLD_WORKSPACE_BASE='+JSON.stringify(old.p?.data?.workspace||null));
+          console.log('OLD_WORKSPACE_BASE_ERROR='+(old.p?.errors||[]).map(x=>x.message).join(' | ').slice(0,500));
           NODE
