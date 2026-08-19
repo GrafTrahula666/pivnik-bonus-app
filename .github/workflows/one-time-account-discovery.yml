@@ -35,3 +35,16 @@ jobs:
         run: |
           set -euo pipefail
           railway list --json
+      - name: Probe legacy Pivnik project directly
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl --silent --show-error \
+            --request POST \
+            --url https://backboard.railway.com/graphql/v2 \
+            --header "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data '{"query":"query Legacy($id: String!) { project(id: $id) { id name deletedAt workspace { id name } environments { edges { node { id name } } } services { edges { node { id name } } } } }","variables":{"id":"9a940d7a-b0b0-4893-a90d-1b0a8b6850d5"}}')
+          echo "$response" | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s); if(x.errors?.length){console.log("LEGACY_ERRORS="+x.errors.map(e=>e.message).join(" | ")); process.exit(0)}; console.log(JSON.stringify(x.data?.project||null,null,2));})'
