@@ -1,4 +1,4 @@
-name: One-time VK/TG launch audit
+name: One-time VK/TG launch restore
 
 on:
   pull_request:
@@ -8,22 +8,21 @@ permissions:
   contents: read
 
 jobs:
-  audit:
+  restore:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/restore-vk-and-harden-tg'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       TG_SERVICE: pivnik-bonus-app
+      VK_SERVICE: pivnik-vk-test
       TG_URL: https://pivnik-bonus-app-production-df60.up.railway.app
-      VK_OLD_URL: https://pivnik-vk-test-production.up.railway.app
-      GH_VK_APP_ID: ${{ secrets.VK_APP_ID }}
       GH_VK_APP_SECRET: ${{ secrets.VK_APP_SECRET }}
       GH_OWNER_VK_ID: ${{ secrets.OWNER_VK_ID }}
-      GH_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      MAIN_SHA: 6865538eafab7164801ddf24887f951f3f3ba095
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,71 +33,157 @@ jobs:
           node-version: '20'
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Link current Hobby project and inventory services
+      - name: Link current Hobby project and ensure VK service exists
         shell: bash
         run: |
           set -euo pipefail
           railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
-          railway service list --json | tee /tmp/services.json
-          node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/services.json','utf8'));
+          railway service list --json >/tmp/services.json
+          VK_EXISTS=$(node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/services.json','utf8'));
           const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]);
-          console.log('SERVICES='+list.map(s=>s.name).join(','));
-          console.log('VK_SERVICE_PRESENT='+list.some(s=>/pivnik.*vk|vk.*pivnik/i.test(String(s.name||''))));
-          console.log('POSTGRES_PRESENT='+list.some(s=>/postgres/i.test(String(s.name||''))));
-          console.log('TG_SERVICE_PRESENT='+list.some(s=>s.name==='pivnik-bonus-app'));
+          process.stdout.write(list.some(s=>s.name==='pivnik-vk-test')?'yes':'no');
           NODE
-      - name: Check critical secret availability without exposing values
-        shell: bash
-        run: |
+          )
+          if [ "$VK_EXISTS" != "yes" ]; then
+            railway add -s "$VK_SERVICE" --json >/tmp/add-vk.json
+          fi
+          railway service list --json >/tmp/services-after.json
           node - <<'NODE'
-          const env=process.env;
-          for (const k of ['GH_VK_APP_ID','GH_VK_APP_SECRET','GH_OWNER_VK_ID','GH_TELEGRAM_BOT_TOKEN']) {
-            console.log(`${k}_PRESENT=${Boolean(String(env[k]||'').trim())}`);
-          }
-          console.log('VK_APP_ID_MATCHES_EXPECTED='+(String(env.GH_VK_APP_ID||'').trim()==='54694987'));
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/services-after.json','utf8'));
+          const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]);
+          const vk=list.find(s=>s.name==='pivnik-vk-test');
+          if(!vk) throw new Error('VK service was not created');
+          console.log(`VK_SERVICE_READY=${vk.id}`);
           NODE
-      - name: Inspect live Telegram service configuration safely
+      - name: Copy shared production database and secrets from Telegram service
         shell: bash
         run: |
           set -euo pipefail
           railway variable list -s "$TG_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/tgvars.json
-          node - <<'NODE'
+          copy_var(){
+            key="$1"
+            value=$(KEY="$key" node - <<'NODE'
           const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/tgvars.json','utf8'));
-          const keys=['DATABASE_URL','SESSION_SECRET','IDENTITY_TOMBSTONE_SECRET','TELEGRAM_BOT_TOKEN','OWNER_TELEGRAM_ID','TELEGRAM_APP_URL','PIVNIK_DOCUMENT_PLATFORM','NODE_ENV','ALLOW_DEMO','VK_APP_ID','VK_APP_SECRET'];
-          for(const k of keys) console.log(`TG_${k}_PRESENT=${Boolean(String(x[k]||'').trim())}`);
-          console.log('TG_PLATFORM='+String(x.PIVNIK_DOCUMENT_PLATFORM||''));
-          console.log('TG_NODE_ENV='+String(x.NODE_ENV||''));
-          console.log('TG_ALLOW_DEMO='+String(x.ALLOW_DEMO||''));
+          process.stdout.write(String(x[process.env.KEY]||''));
           NODE
-      - name: Probe old VK URL and current Telegram URL
-        shell: bash
-        run: |
-          set -euo pipefail
-          old_code=$(curl --silent --location --output /tmp/old-vk.html --write-out '%{http_code}' --max-time 15 "$VK_OLD_URL/" || true)
-          tg_code=$(curl --silent --location --output /tmp/tg.html --write-out '%{http_code}' --max-time 15 "$TG_URL/" || true)
-          echo "OLD_VK_HTTP=$old_code"
-          echo "TG_HTTP=$tg_code"
-          if [ "$tg_code" = "200" ]; then
-            grep -q '<title>Пивник | Бонусы</title>' /tmp/tg.html && echo 'TG_HTML_OK=true' || echo 'TG_HTML_OK=false'
-          fi
-          if [ -s /tmp/old-vk.html ]; then
-            grep -q 'The train has not arrived at the station' /tmp/old-vk.html && echo 'OLD_VK_RAILWAY_NOT_FOUND=true' || echo 'OLD_VK_RAILWAY_NOT_FOUND=false'
+            )
+            if [ -z "$value" ]; then echo "Missing source variable $key" >&2; exit 1; fi
+            printf '%s' "$value" | railway variable set -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin "$key" >/dev/null
+          }
+          copy_var DATABASE_URL
+          copy_var SESSION_SECRET
+          copy_var IDENTITY_TOMBSTONE_SECRET
+          railway variable set -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys \
+            'NODE_ENV=production' \
+            'ALLOW_DEMO=false' \
+            'PIVNIK_DOCUMENT_PLATFORM=vk' \
+            'VK_APP_ID=54694987' \
+            "GIT_COMMIT_SHA=$MAIN_SHA" >/dev/null
+          if [ -n "${GH_VK_APP_SECRET:-}" ]; then
+            printf '%s' "$GH_VK_APP_SECRET" | railway variable set -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin VK_APP_SECRET >/dev/null
+            echo 'VK_APP_SECRET_CONFIGURED=true'
           else
-            echo 'OLD_VK_RAILWAY_NOT_FOUND=unknown'
+            echo 'VK_APP_SECRET_CONFIGURED=false'
           fi
-      - name: Check Telegram health and VK-capable source invariants
+          if [ -n "${GH_OWNER_VK_ID:-}" ]; then
+            printf '%s' "$GH_OWNER_VK_ID" | railway variable set -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin OWNER_VK_ID >/dev/null
+            echo 'OWNER_VK_ID_CONFIGURED=true'
+          else
+            echo 'OWNER_VK_ID_CONFIGURED=false'
+          fi
+      - name: Generate VK public domain before deploy
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 20 "$TG_URL/api/health" | tee /tmp/health.json
-          node -e 'const x=require("/tmp/health.json"); if(!x.ok) process.exit(1); console.log("TG_HEALTH_OK=true"); console.log("TG_USERS="+x.users); console.log("TG_RELEASE="+(x.releaseCommit||"unknown"));'
-          grep -q "EXPECTED_VK_APP_ID = '54694987'" universal-server.js
-          grep -q "VK_APP_ID или VK_APP_SECRET не настроены" platform-core.js
-          grep -q "configuredDocumentPlatform" universal-server.js
-          echo 'VK_SOURCE_GATE_OK=true'
-      - name: Run release tests
+          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$VK_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link-vk.json
+          railway domain -s "$VK_SERVICE" --json >/tmp/domain.json
+          DOMAIN=$(node - <<'NODE'
+          const fs=require('fs'); const raw=fs.readFileSync('/tmp/domain.json','utf8').trim();
+          let x; try{x=JSON.parse(raw)}catch{x=raw}
+          let d='';
+          if(typeof x==='string') d=x;
+          else if(Array.isArray(x)) d=x[0]?.domain||x[0]?.url||x[0]||'';
+          else d=x?.domain||x?.url||x?.serviceDomain||'';
+          d=String(d).replace(/^https?:\/\//,'').replace(/\/$/,'');
+          if(!d) throw new Error(`Cannot parse Railway domain: ${raw}`);
+          process.stdout.write(d);
+          NODE
+          )
+          echo "VK_URL=https://$DOMAIN" >> "$GITHUB_ENV"
+          printf '%s' "https://$DOMAIN" | railway variable set -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin VK_APP_URL >/dev/null
+          echo "VK_PUBLIC_URL=https://$DOMAIN"
+      - name: Deploy exact current main to VK service
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway up --ci --message "Restore VK Mini App before testing"
+      - name: Verify VK public root, shared database and Telegram health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 48); do
+            code=$(curl --silent --location --output /tmp/vk.html --write-out '%{http_code}' --max-time 15 "$VK_URL/" || true)
+            if [ "$code" = "200" ] && grep -q '<title>Пивник | Бонусы</title>' /tmp/vk.html && grep -q 'vk-platform.js' /tmp/vk.html; then
+              echo 'VK_ROOT_OK=true'
+              break
+            fi
+            if [ "$i" = "48" ]; then
+              echo "VK root failed HTTP=$code" >&2
+              head -c 1200 /tmp/vk.html >&2 || true
+              exit 1
+            fi
+            sleep 5
+          done
+          curl --fail --silent --show-error --max-time 20 "$VK_URL/api/health" >/tmp/vkhealth.json
+          curl --fail --silent --show-error --max-time 20 "$TG_URL/api/health" >/tmp/tghealth.json
+          node - <<'NODE'
+          const fs=require('fs'); const vk=JSON.parse(fs.readFileSync('/tmp/vkhealth.json')); const tg=JSON.parse(fs.readFileSync('/tmp/tghealth.json'));
+          if(!vk.ok||!tg.ok) throw new Error('One platform health endpoint is not ready');
+          if(vk.databaseFingerprint!==tg.databaseFingerprint) throw new Error(`Database mismatch VK=${vk.databaseFingerprint} TG=${tg.databaseFingerprint}`);
+          console.log('SHARED_DATABASE_OK=true');
+          console.log('DATABASE_FINGERPRINT='+vk.databaseFingerprint);
+          console.log('VK_USERS='+vk.users);
+          console.log('TG_USERS='+tg.users);
+          NODE
+      - name: Verify VK auth configuration state without weakening signature validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway variable list -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/vkvars.json
+          node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/vkvars.json','utf8'));
+          const secret=Boolean(String(x.VK_APP_SECRET||'').trim());
+          console.log('VK_APP_ID='+String(x.VK_APP_ID||''));
+          console.log('VK_APP_SECRET_PRESENT='+secret);
+          console.log('VK_DOCUMENT_PLATFORM='+String(x.PIVNIK_DOCUMENT_PLATFORM||''));
+          console.log('VK_AUTH_READY='+secret);
+          NODE
+      - name: Re-verify Telegram button, health and release code
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 "$TG_URL/" >/tmp/tg.html
+          grep -q '<title>Пивник | Бонусы</title>' /tmp/tg.html
+          curl --fail --silent --show-error --max-time 20 "$TG_URL/api/health" >/tmp/tghealth.json
+          node -e 'const x=require("/tmp/tghealth.json"); if(!x.ok) process.exit(1); console.log("TG_HEALTH_OK=true users="+x.users+" transactions="+x.transactions);'
+          if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            curl --fail --silent --show-error "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMenuButton" >/tmp/menu.json
+            node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/menu.json','utf8'));
+          if(!x.ok) throw new Error('Telegram getChatMenuButton failed');
+          const b=x.result||{};
+          console.log('TG_MENU_TYPE='+String(b.type||''));
+          console.log('TG_MENU_TEXT='+String(b.text||''));
+          console.log('TG_MENU_URL='+String(b.web_app?.url||''));
+          if(b.type!=='web_app') throw new Error('Telegram default menu is not web_app');
+          if(String(b.text||'')!=='Открыть ПРИЛОЖЕНИЕ') throw new Error('Telegram button text regressed');
+          if(!String(b.web_app?.url||'').startsWith('https://pivnik-bonus-app-production-df60.up.railway.app')) throw new Error('Telegram button URL is wrong');
+          NODE
+          fi
+      - name: Run full release tests
         run: |
           npm ci
           npm run check
