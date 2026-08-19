@@ -29,7 +29,7 @@ if (!isVkService && botToken && /^https:\/\//i.test(appUrl)) {
   await telegramApi('setChatMenuButton', {
     menu_button: {
       type: 'web_app',
-      text: 'Открыть ПИВНИК',
+      text: 'Открыть ПРИЛОЖЕНИЕ',
       web_app: { url: appUrl }
     }
   });
