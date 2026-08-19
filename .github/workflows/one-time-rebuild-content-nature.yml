@@ -18,9 +18,6 @@ jobs:
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       APP_SERVICE: pivnik-bonus-app
-      GH_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      GH_OWNER_TELEGRAM_ID: ${{ secrets.OWNER_TELEGRAM_ID }}
-      GH_OWNER_TELEGRAM_USERNAME: ${{ secrets.OWNER_TELEGRAM_USERNAME }}
     steps:
       - name: Checkout exact current main
         uses: actions/checkout@v4
@@ -39,165 +36,109 @@ jobs:
           npm ci
           npm install --global @railway/cli@latest
 
-      - name: Link only the empty content-nature project
+      - name: Link exact isolated Pivnik service
+        shell: bash
         run: |
           set -euo pipefail
-          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
-          railway status --json >/tmp/status-before.json
+          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
+          railway status --json >/tmp/status.json
           node - <<'NODE'
           const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/status-before.json','utf8'));
-          if(x.id!=='20a942f9-3164-484a-a6f1-565439e38705') throw new Error(`Wrong Railway project linked: ${x.id}`);
-          console.log(`Linked project: ${x.name} (${x.id})`);
+          const x=JSON.parse(fs.readFileSync('/tmp/status.json','utf8'));
+          if(x.id!=='20a942f9-3164-484a-a6f1-565439e38705') throw new Error(`Wrong project: ${x.id}`);
+          const linked=x.linkedService || x.service || null;
+          console.log(`Linked Railway project: ${x.name} (${x.id})`);
+          console.log(`Linked service: ${linked?.name || 'pivnik-bonus-app'}`);
           NODE
 
-      - name: Ensure a fresh Postgres and Pivnik app service exist
+      - name: Verify required database and runtime variables exist
         shell: bash
         run: |
           set -euo pipefail
-          railway service list --json >/tmp/services-before.json
-          DB_SERVICE=$(node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/services-before.json','utf8'));
-          const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]);
-          const db=list.find(s=>/postgres/i.test(String(s.name||'')));
-          process.stdout.write(db?.name||'');
+          railway variable list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/app-vars.json
+          node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/app-vars.json','utf8'));
+          for(const key of ['DATABASE_URL','SESSION_SECRET','IDENTITY_TOMBSTONE_SECRET']) {
+            if(!x[key]) throw new Error(`Missing Railway variable: ${key}`);
+          }
+          console.log('Required Railway variables are present.');
+          console.log('TELEGRAM_BOT_TOKEN_PRESENT='+Boolean(x.TELEGRAM_BOT_TOKEN));
+          console.log('OWNER_TELEGRAM_ID_PRESENT='+Boolean(x.OWNER_TELEGRAM_ID));
           NODE
-          )
-          if [ -z "$DB_SERVICE" ]; then
-            railway add -d postgres --json >/tmp/add-postgres.json
-            sleep 3
-            railway service list --json >/tmp/services-after-db.json
-            DB_SERVICE=$(node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/services-after-db.json','utf8'));
-          const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]);
-          const db=list.find(s=>/postgres/i.test(String(s.name||'')));
-          if(!db) throw new Error('Postgres service was not created');
-          process.stdout.write(db.name);
-          NODE
-            )
-          fi
-          railway service list --json >/tmp/services-current.json
-          APP_EXISTS=$(node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/services-current.json','utf8'));
-          const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]);
-          process.stdout.write(list.some(s=>s.name==='pivnik-bonus-app')?'yes':'no');
-          NODE
-          )
-          if [ "$APP_EXISTS" != "yes" ]; then
-            railway add -s "$APP_SERVICE" --json >/tmp/add-app.json
-          fi
-          echo "DB_SERVICE=$DB_SERVICE" >> "$GITHUB_ENV"
-          echo "Database and app service ensured."
-
-      - name: Configure safe production variables without touching giveaway bot
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway variable list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/app-vars.json || echo '{}' >/tmp/app-vars.json
-          HAS_SESSION=$(node -e "const x=require('/tmp/app-vars.json'); process.stdout.write(Object.prototype.hasOwnProperty.call(x,'SESSION_SECRET')?'yes':'no')")
-          HAS_TOMBSTONE=$(node -e "const x=require('/tmp/app-vars.json'); process.stdout.write(Object.prototype.hasOwnProperty.call(x,'IDENTITY_TOMBSTONE_SECRET')?'yes':'no')")
-          DOLLAR='$'
-          DB_REF="${DOLLAR}{{${DB_SERVICE}.DATABASE_URL}}"
-          railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys \
-            "DATABASE_URL=$DB_REF" \
-            "NODE_ENV=production" \
-            "ALLOW_DEMO=false"
-          if [ "$HAS_SESSION" != "yes" ]; then
-            SESSION_SECRET=$(openssl rand -hex 48)
-            printf '%s' "$SESSION_SECRET" | railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin SESSION_SECRET
-          fi
-          if [ "$HAS_TOMBSTONE" != "yes" ]; then
-            TOMBSTONE_SECRET=$(openssl rand -hex 48)
-            printf '%s' "$TOMBSTONE_SECRET" | railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin IDENTITY_TOMBSTONE_SECRET
-          fi
-          if [ -n "${GH_TELEGRAM_BOT_TOKEN:-}" ]; then
-            printf '%s' "$GH_TELEGRAM_BOT_TOKEN" | railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin TELEGRAM_BOT_TOKEN
-            echo 'Telegram bot token restored from existing GitHub secret.'
-          else
-            echo 'No TELEGRAM_BOT_TOKEN repository secret exists; app shell can deploy, Telegram authentication will remain disconnected.'
-          fi
-          if [ -n "${GH_OWNER_TELEGRAM_ID:-}" ]; then
-            printf '%s' "$GH_OWNER_TELEGRAM_ID" | railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin OWNER_TELEGRAM_ID
-          fi
-          if [ -n "${GH_OWNER_TELEGRAM_USERNAME:-}" ]; then
-            printf '%s' "$GH_OWNER_TELEGRAM_USERNAME" | railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin OWNER_TELEGRAM_USERNAME
-          fi
 
       - name: Verify code before deploy
         run: |
           npm run check
           npm test
 
-      - name: Deploy current main to the new isolated app service
-        run: |
-          set -euo pipefail
-          railway up . --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --ci --message "Restore Pivnik bonus app infrastructure"
-
-      - name: Generate or discover public Railway domain
+      - name: Deploy current main through linked service
         shell: bash
         run: |
           set -euo pipefail
-          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link-app.json
+          railway up --ci --message "Restore Pivnik bonus app infrastructure" --verbose
+
+      - name: Generate Railway domain
+        shell: bash
+        run: |
+          set -euo pipefail
           railway domain -s "$APP_SERVICE" --json >/tmp/domain.json 2>/tmp/domain.err || true
-          railway status --json >/tmp/status-after.json
+          cat /tmp/domain.err >&2 || true
           DOMAIN=$(node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/status-after.json','utf8'));
-          const env=(x.environments?.edges||[]).map(e=>e.node).find(e=>e.id==='cdd9d26c-2aab-45d9-95ed-ef487fafaa8f') || (x.environments?.edges||[])[0]?.node;
-          const svc=(env?.serviceInstances?.edges||[]).map(e=>e.node).find(s=>s.serviceName==='pivnik-bonus-app' || s.name==='pivnik-bonus-app');
-          const d=svc?.domains?.serviceDomains?.[0]?.domain || svc?.domains?.serviceDomains?.[0] || '';
-          process.stdout.write(typeof d==='string'?d:'');
+          const fs=require('fs'); let x={};
+          try{x=JSON.parse(fs.readFileSync('/tmp/domain.json','utf8'))}catch{}
+          let d='';
+          if(typeof x==='string') d=x;
+          else d=x.domain || x.url || x.serviceDomain || '';
+          d=String(d).replace(/^https?:\/\//,'').replace(/\/$/,'');
+          process.stdout.write(d);
           NODE
           )
-          if [ -z "$DOMAIN" ] && [ -s /tmp/domain.json ]; then
+          if [ -z "$DOMAIN" ]; then
+            railway status --json >/tmp/status-after.json
             DOMAIN=$(node - <<'NODE'
-          const fs=require('fs'); let x={}; try{x=JSON.parse(fs.readFileSync('/tmp/domain.json','utf8'))}catch{};
-          process.stdout.write(x.domain||x.url?.replace(/^https?:\/\//,'')||'');
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/status-after.json','utf8'));
+          const env=(x.environments?.edges||[]).map(e=>e.node).find(e=>e.id==='cdd9d26c-2aab-45d9-95ed-ef487fafaa8f') || (x.environments?.edges||[])[0]?.node;
+          const svc=(env?.serviceInstances?.edges||[]).map(e=>e.node).find(s=>s.serviceName==='pivnik-bonus-app' || s.name==='pivnik-bonus-app');
+          const raw=svc?.domains?.serviceDomains?.[0];
+          const d=typeof raw==='string'?raw:(raw?.domain||'');
+          process.stdout.write(d);
           NODE
             )
           fi
           if [ -z "$DOMAIN" ]; then
-            echo 'Could not discover generated domain.' >&2
-            cat /tmp/domain.err >&2 || true
+            echo 'No public Railway domain found for Pivnik service.' >&2
             exit 1
           fi
-          echo "APP_DOMAIN=$DOMAIN" >> "$GITHUB_ENV"
           echo "APP_URL=https://$DOMAIN" >> "$GITHUB_ENV"
           echo "PIVNIK_APP_URL=https://$DOMAIN"
 
-      - name: Verify the public root really serves Pivnik, not Railway Not Found
+      - name: Verify public Pivnik root and health
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 36); do
+          for i in $(seq 1 48); do
             code=$(curl --silent --location --output /tmp/root.html --write-out '%{http_code}' --max-time 15 "$APP_URL/" || true)
             if [ "$code" = "200" ] && grep -q '<title>Пивник | Бонусы</title>' /tmp/root.html && grep -q 'id="bootScreen"' /tmp/root.html && ! grep -q 'The train has not arrived at the station' /tmp/root.html; then
               echo "PUBLIC_ROOT_OK=$APP_URL"
-              exit 0
+              break
+            fi
+            if [ "$i" = "48" ]; then
+              echo "Pivnik root failed at $APP_URL (HTTP $code)" >&2
+              head -c 1200 /tmp/root.html >&2 || true
+              exit 1
             fi
             sleep 5
           done
-          echo "Pivnik public root did not become healthy at $APP_URL" >&2
-          head -c 1500 /tmp/root.html >&2 || true
-          exit 1
-
-      - name: Verify health endpoint and report Telegram connection state
-        shell: bash
-        run: |
-          set -euo pipefail
           curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health" >/tmp/health.json
           node - <<'NODE'
           const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));
-          if(!x.ok) throw new Error('Pivnik health endpoint is not ready');
+          if(!x.ok) throw new Error('Health endpoint is not ready');
           console.log('HEALTH_OK=true');
           console.log('DATABASE_FINGERPRINT='+(x.databaseFingerprint||'missing'));
           NODE
           curl --silent --show-error --max-time 20 "$APP_URL/api/platform-health" >/tmp/platform.json || true
           node - <<'NODE'
-          const fs=require('fs'); let x={}; try{x=JSON.parse(fs.readFileSync('/tmp/platform.json','utf8'))}catch{};
+          const fs=require('fs'); let x={}; try{x=JSON.parse(fs.readFileSync('/tmp/platform.json','utf8'))}catch{}
           console.log('TELEGRAM_CONFIGURED='+Boolean(x.telegram));
           console.log('VK_CONFIGURED='+Boolean(x.vk));
           NODE
