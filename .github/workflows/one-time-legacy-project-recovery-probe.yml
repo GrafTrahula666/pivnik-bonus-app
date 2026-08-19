@@ -14,31 +14,31 @@ jobs:
     timeout-minutes: 8
     env:
       TOKEN_ACCOUNT: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      OLD_PROJECT_ID: 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5
+      CURRENT_WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
     steps:
-      - name: Inspect projectClaim semantics without mutation
+      - name: Claim legacy Pivnik project into active workspace
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const endpoint='https://backboard.railway.com/graphql/v2';
           const token=String(process.env.TOKEN_ACCOUNT||'').trim();
-          const query=`query ClaimMeta {
-            __schema {
-              mutationType {
-                fields {
-                  name description isDeprecated deprecationReason
-                  args { name description defaultValue type { kind name ofType { kind name ofType { kind name } } } }
-                  type { kind name ofType { kind name ofType { kind name } } }
-                }
-              }
+          const id=process.env.OLD_PROJECT_ID;
+          const workspaceId=process.env.CURRENT_WORKSPACE_ID;
+          if(!token) throw new Error('account token missing');
+          const mutation=`mutation Claim($id:String!,$workspaceId:String!){
+            projectClaim(id:$id,workspaceId:$workspaceId){
+              id name deletedAt workspaceId isTempProject
+              services(first:100){edges{node{id name deletedAt}}}
+              volumes(first:100){edges{node{id projectId}}}
             }
-            projectType: __type(name:"Project") { name fields { name description type { kind name ofType { kind name } } } }
           }`;
-          const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query})});
-          const p=await r.json();
-          if(p.errors?.length) throw new Error(p.errors.map(x=>x.message).join('; '));
-          const field=(p.data.__schema.mutationType.fields||[]).find(x=>x.name==='projectClaim');
-          console.log('PROJECT_CLAIM_META='+JSON.stringify(field,null,2));
-          const projectFields=(p.data.projectType?.fields||[]).filter(f=>/claim|temp|delete|workspace|volume|service/i.test(f.name));
-          console.log('PROJECT_RECOVERY_FIELDS='+JSON.stringify(projectFields,null,2));
+          const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'pivnik-legacy-claim/1.0'},body:JSON.stringify({query:mutation,variables:{id,workspaceId}})});
+          const p=await r.json().catch(()=>({}));
+          const errors=(p.errors||[]).map(x=>String(x.message||'')).join(' | ');
+          console.log('CLAIM_HTTP='+r.status);
+          console.log('CLAIM_OK='+Boolean(p.data?.projectClaim));
+          console.log('CLAIM_ERROR='+errors.slice(0,1000));
+          if(p.data?.projectClaim) console.log('CLAIM_PROJECT='+JSON.stringify(p.data.projectClaim,null,2));
           NODE
