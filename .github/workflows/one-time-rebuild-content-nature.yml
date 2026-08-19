@@ -11,13 +11,8 @@ jobs:
   verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/rebuild-content-nature'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
-      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-      PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
-      ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
-      WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
-      APP_SERVICE: pivnik-bonus-app
       APP_URL: https://pivnik-bonus-app-production-df60.up.railway.app
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     steps:
@@ -25,13 +20,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 1
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Railway CLI
-        run: npm install --global @railway/cli@latest
       - name: Confirm exact label is committed
         shell: bash
         run: |
@@ -39,14 +27,18 @@ jobs:
           grep -Fq "text: 'Открыть ПРИЛОЖЕНИЕ'" scripts/repair-telegram-runtime.mjs
           ! grep -Fq "text: 'Открыть ПИВНИК'" scripts/repair-telegram-runtime.mjs
           echo 'SOURCE_LABEL_OK=true'
-      - name: Link restored Pivnik service
-        run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
-      - name: Deploy current main so runtime applies the new label
+      - name: Force exact Telegram menu button text
         shell: bash
         run: |
           set -euo pipefail
-          railway up --ci --message "Rename Telegram menu button to Открыть ПРИЛОЖЕНИЕ"
-      - name: Verify Telegram menu exact text and URL
+          payload=$(node -e 'console.log(JSON.stringify({menu_button:{type:"web_app",text:"Открыть ПРИЛОЖЕНИЕ",web_app:{url:process.env.APP_URL}}}))')
+          reply=$(curl --fail --silent --show-error --max-time 20 \
+            -X POST \
+            -H 'content-type: application/json' \
+            --data "$payload" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setChatMenuButton")
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok||x.result!==true) throw new Error(`setChatMenuButton failed: ${process.argv[1]}`); console.log("SET_MENU_OK=true")' "$reply"
+      - name: Read menu back and verify exact text and URL
         shell: bash
         run: |
           set -euo pipefail
