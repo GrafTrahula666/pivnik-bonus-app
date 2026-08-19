@@ -1,5 +1,6 @@
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
-const TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
+const PROJECT_TOKEN = String(process.env.RAILWAY_TOKEN || '').trim();
+const API_TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const COMMIT_SHA = String(process.env.RELEASE_COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
 const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
 const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
@@ -18,18 +19,23 @@ const POLL_INTERVAL_MS = 10_000;
 const DEPLOY_TIMEOUT_MS = 15 * 60_000;
 const HEALTH_TIMEOUT_MS = 8 * 60_000;
 
-if (!TOKEN) throw new Error('RAILWAY_API_TOKEN is required.');
+if (!PROJECT_TOKEN && !API_TOKEN) {
+  throw new Error('RAILWAY_TOKEN (project token) or RAILWAY_API_TOKEN is required.');
+}
 if (!/^[0-9a-f]{40}$/i.test(COMMIT_SHA)) throw new Error('A full 40-character RELEASE_COMMIT_SHA is required.');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const railwayAuthHeaders = PROJECT_TOKEN
+  ? { 'Project-Access-Token': PROJECT_TOKEN }
+  : { authorization: `Bearer ${API_TOKEN}` };
 
 async function graphql(query, variables = {}) {
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${TOKEN}`,
+      ...railwayAuthHeaders,
       'content-type': 'application/json',
-      'user-agent': 'pivnik-production-deployer/1.0'
+      'user-agent': 'pivnik-production-deployer/1.1'
     },
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(30_000)
