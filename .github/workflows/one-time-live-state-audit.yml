@@ -30,14 +30,18 @@ jobs:
       - run: npm install --global @railway/cli@latest
       - name: Link live Pivnik service
         run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
-      - name: Inspect current database users and state
+      - name: Inspect current database users and state via public Postgres URL
         shell: bash
         run: |
           set -euo pipefail
-          railway run -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" node --input-type=module <<'NODE'
+          services=$(railway service list --json)
+          db_service=$(node -e 'const x=JSON.parse(process.argv[1]); const list=Array.isArray(x)?x:(x.services||x.edges?.map(e=>e.node)||[]); const s=list.find(v=>/postgres/i.test(String(v.name||""))); if(!s) process.exit(2); process.stdout.write(s.name)' "$services")
+          db_vars=$(railway variable list -s "$db_service" -e "$ENVIRONMENT_ID" --json)
+          public_url=$(node -e 'const x=JSON.parse(process.argv[1]); const v=x.DATABASE_PUBLIC_URL||x.POSTGRES_PUBLIC_URL||x.DATABASE_URL_PUBLIC||""; if(!v) process.exit(2); process.stdout.write(v)' "$db_vars")
+          DATABASE_PUBLIC_URL="$public_url" node --input-type=module <<'NODE'
           import pg from 'pg';
           const { Client } = pg;
-          const c = new Client({ connectionString: process.env.DATABASE_URL, ssl: String(process.env.DATABASE_URL||'').includes('railway.internal') ? false : { rejectUnauthorized:false } });
+          const c = new Client({ connectionString: process.env.DATABASE_PUBLIC_URL, ssl: { rejectUnauthorized:false } });
           await c.connect();
           const users = await c.query(`
             SELECT id, telegram_id, vk_id, username, first_name, last_name, role,
@@ -59,6 +63,7 @@ jobs:
           await c.end();
           NODE
       - name: Inspect recent Telegram updates for account IDs
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
