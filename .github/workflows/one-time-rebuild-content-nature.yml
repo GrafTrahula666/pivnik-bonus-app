@@ -1,4 +1,4 @@
-name: One-time Pivnik runtime diagnostics
+name: One-time Pivnik rebuild verification
 
 on:
   pull_request:
@@ -8,22 +8,22 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/rebuild-content-nature'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       APP_SERVICE: pivnik-bonus-app
-      FAILED_DEPLOYMENT_ID: 5cff2e41-9c80-4433-8f22-70dcd7123aef
     steps:
-      - name: Checkout
+      - name: Checkout current main
         uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 1
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -32,13 +32,63 @@ jobs:
         run: npm install --global @railway/cli@latest
       - name: Link exact isolated Pivnik service
         run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
-      - name: Show failed deployment metadata
+      - name: Confirm fresh-database guard is present
         shell: bash
         run: |
           set -euo pipefail
-          railway deployment list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --limit 10 --json
-      - name: Show failed deployment runtime logs
+          grep -q "to_regclass('public.users')" scripts/repair-telegram-runtime.mjs
+          grep -q "TELEGRAM_APP_URL" scripts/repair-telegram-runtime.mjs
+      - name: Deploy current main
         shell: bash
         run: |
           set -euo pipefail
-          railway logs "$FAILED_DEPLOYMENT_ID" -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --lines 300
+          railway up --ci --message "Boot Pivnik after fresh database guard"
+      - name: Generate or return Railway public domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway domain -s "$APP_SERVICE" --json > /tmp/domain.json
+          cat /tmp/domain.json
+          DOMAIN=$(node - <<'NODE'
+          const fs=require('fs'); const raw=fs.readFileSync('/tmp/domain.json','utf8').trim();
+          let x; try{x=JSON.parse(raw)}catch{x=raw}
+          let d='';
+          if(typeof x==='string') d=x;
+          else if(Array.isArray(x)) d=x[0]?.domain || x[0]?.url || x[0] || '';
+          else d=x?.domain || x?.url || x?.serviceDomain || '';
+          d=String(d).replace(/^https?:\/\//,'').replace(/\/$/,'');
+          if(!d) throw new Error(`Could not parse Railway domain from: ${raw}`);
+          process.stdout.write(d);
+          NODE
+          )
+          echo "APP_URL=https://$DOMAIN" >> "$GITHUB_ENV"
+          echo "PIVNIK_APP_URL=https://$DOMAIN"
+      - name: Verify real public root and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 48); do
+            code=$(curl --silent --location --output /tmp/root.html --write-out '%{http_code}' --max-time 15 "$APP_URL/" || true)
+            if [ "$code" = "200" ] && grep -q '<title>Пивник | Бонусы</title>' /tmp/root.html && grep -q 'id="bootScreen"' /tmp/root.html && ! grep -q 'The train has not arrived at the station' /tmp/root.html; then
+              echo "PUBLIC_ROOT_OK=$APP_URL"
+              break
+            fi
+            if [ "$i" = "48" ]; then
+              echo "Pivnik root failed at $APP_URL (HTTP $code)" >&2
+              head -c 1500 /tmp/root.html >&2 || true
+              exit 1
+            fi
+            sleep 5
+          done
+          curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health" | tee /tmp/health.json
+          node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));
+          if(!x.ok) throw new Error('Health endpoint returned ok=false');
+          console.log('HEALTH_OK=true');
+          NODE
+      - name: Show latest runtime logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          railway deployment list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --limit 3 --json || true
+          railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 250 || true
