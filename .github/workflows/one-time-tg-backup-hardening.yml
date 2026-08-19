@@ -1,0 +1,79 @@
+name: One-time TG metadata and backup hardening
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  harden:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/restore-vk-and-harden-tg'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
+      ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
+      WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
+      TG_SERVICE: pivnik-bonus-app
+      MAIN_SHA: 6865538eafab7164801ddf24887f951f3f3ba095
+      TG_URL: https://pivnik-bonus-app-production-df60.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+      - name: Pin Telegram release metadata to exact main and redeploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$TG_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
+          railway variable set -s "$TG_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys "GIT_COMMIT_SHA=$MAIN_SHA" >/dev/null
+          railway up --ci --message "Pin Pivnik Telegram release metadata"
+      - name: Verify Telegram exact release and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 36); do
+            body=$(curl --silent --show-error --max-time 15 "$TG_URL/api/health" || true)
+            if BODY="$body" MAIN_SHA="$MAIN_SHA" node - <<'NODE'
+          let x={}; try{x=JSON.parse(process.env.BODY||'{}')}catch{}
+          process.exit(x.ok && x.releaseCommit===process.env.MAIN_SHA ? 0 : 1);
+          NODE
+            then
+              printf '%s\n' "$body"
+              echo 'TG_RELEASE_PINNED=true'
+              break
+            fi
+            if [ "$i" = "36" ]; then echo "Telegram release metadata did not converge: $body" >&2; exit 1; fi
+            sleep 5
+          done
+      - name: Inspect Railway volume backup GraphQL API and current Postgres volume IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const endpoint='https://backboard.railway.com/graphql/v2';
+          const token=String(process.env.RAILWAY_API_TOKEN||'').trim();
+          async function gql(query,variables={}){
+            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query,variables})});
+            const x=await r.json().catch(()=>({}));
+            if(x.errors?.length) console.log('ERRORS='+x.errors.map(e=>e.message).join(' | '));
+            return x.data;
+          }
+          const schema=await gql(`query {
+            q:__type(name:"Query"){fields(includeDeprecated:true){name args{name type{kind name ofType{kind name}}} type{kind name ofType{kind name}}}}
+            m:__type(name:"Mutation"){fields(includeDeprecated:true){name args{name type{kind name ofType{kind name}}} type{kind name ofType{kind name}}}}
+          }`);
+          const pick=a=>(a||[]).filter(f=>/(volume|backup|snapshot)/i.test(f.name));
+          console.log('BACKUP_QUERY_FIELDS='+JSON.stringify(pick(schema?.q?.fields),null,2));
+          console.log('BACKUP_MUTATION_FIELDS='+JSON.stringify(pick(schema?.m?.fields),null,2));
+          const project=await gql(`query($id:String!){ project(id:$id){ id name environments{edges{node{id name volumeInstances{edges{node{id volumeId serviceId mountPath currentSizeMB}}}}}} } }`,{id:process.env.PROJECT_ID});
+          console.log('PROJECT_VOLUMES='+JSON.stringify(project?.project?.environments?.edges?.map(e=>({environmentId:e.node.id,environment:e.node.name,volumes:e.node.volumeInstances?.edges?.map(v=>v.node)||[]}))||[],null,2));
+          NODE
