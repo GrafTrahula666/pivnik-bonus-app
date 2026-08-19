@@ -14,36 +14,20 @@ jobs:
     timeout-minutes: 8
     env:
       TOKEN_ACCOUNT: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-      OLD_PROJECT_ID: 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5
       OLD_WORKSPACE_ID: fbffb30c-9091-432f-9e09-9c59e1440304
     steps:
-      - name: Probe external workspace and token access context
+      - name: Read API-token workspace context
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const endpoint='https://backboard.railway.com/graphql/v2';
           const token=String(process.env.TOKEN_ACCOUNT||'').trim();
-          if(!token) throw new Error('account token missing');
-          async function gql(query,variables={}){
-            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'pivnik-external-workspace-probe/1.0'},body:JSON.stringify({query,variables})});
-            const p=await r.json().catch(()=>({}));
-            return {status:r.status,p};
-          }
-          const meta=await gql(`query Meta {
-            externalType: __type(name:"ExternalWorkspace") { name fields { name description type { kind name ofType { kind name } } } }
-            apiTokenType: __type(name:"ApiTokenContext") { name fields { name description type { kind name ofType { kind name } } } }
-            explicitOwnerType: __type(name:"ExplicitOwnerInput") { name inputFields { name description type { kind name ofType { kind name } } } }
-            accessType: __type(name:"ResourceAccess") { name fields { name description type { kind name ofType { kind name } } } }
-          }`);
-          console.log('TYPE_META='+JSON.stringify(meta.p?.data||null,null,2));
-          console.log('TYPE_META_ERROR='+(meta.p?.errors||[]).map(x=>x.message).join(' | ').slice(0,500));
-
-          const ext=await gql(`query Ext($projectId:String!){ externalWorkspaces(projectId:$projectId){ id name } }`,{projectId:process.env.OLD_PROJECT_ID});
-          console.log('EXTERNAL_WORKSPACES='+JSON.stringify(ext.p?.data||null,null,2));
-          console.log('EXTERNAL_WORKSPACES_ERROR='+(ext.p?.errors||[]).map(x=>x.message).join(' | ').slice(0,500));
-
-          const ctx=await gql(`query Ctx { apiToken { id name } }`);
-          console.log('TOKEN_CONTEXT='+JSON.stringify(ctx.p?.data||null,null,2));
-          console.log('TOKEN_CONTEXT_ERROR='+(ctx.p?.errors||[]).map(x=>x.message).join(' | ').slice(0,500));
+          const q=`query { apiToken { workspaces { id name customerId customerState currentSessionHasAccess isTrialing plan } } }`;
+          const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query:q})});
+          const p=await r.json().catch(()=>({}));
+          console.log('TOKEN_WORKSPACES='+JSON.stringify(p.data?.apiToken?.workspaces||null,null,2));
+          console.log('TOKEN_WORKSPACES_ERROR='+(p.errors||[]).map(x=>x.message).join(' | ').slice(0,800));
+          const rows=p.data?.apiToken?.workspaces||[];
+          console.log('OLD_WORKSPACE_FOUND='+rows.some(x=>x.id===process.env.OLD_WORKSPACE_ID));
           NODE
