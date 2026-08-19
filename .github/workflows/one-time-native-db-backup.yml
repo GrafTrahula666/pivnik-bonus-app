@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
-      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
@@ -55,6 +55,7 @@ jobs:
           chmod 600 "$HOME/.ssh/id_ed25519"
           KEY_NAME="pivnik-ci-backup-${GITHUB_RUN_ID}"
           railway ssh keys add --workspace "$WORKSPACE_ID" --key "$HOME/.ssh/id_ed25519.pub" --name "$KEY_NAME" >/tmp/ssh-key-add.log 2>&1
+          sleep 2
           railway connect "$POSTGRES_SERVICE" --environment production --tunnel-only --port 55432 >/tmp/railway-tunnel.log 2>&1 &
           TUNNEL_PID=$!
           cleanup(){ kill "$TUNNEL_PID" 2>/dev/null || true; wait "$TUNNEL_PID" 2>/dev/null || true; rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"; }
