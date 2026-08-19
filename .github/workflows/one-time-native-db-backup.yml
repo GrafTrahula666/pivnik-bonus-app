@@ -13,11 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
-      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       POSTGRES_SERVICE: Postgres
+      POSTGRES_SERVICE_ID: 4f0c39c3-cd84-4f41-a97e-c95b342653c4
       BACKUP_KEY_A: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       BACKUP_KEY_B: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
     steps:
@@ -29,7 +30,7 @@ jobs:
           node-version: '20'
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Create verified encrypted custom-format dump through private SSH tunnel
+      - name: Create verified encrypted dump through temporary Railway TCP proxy
         shell: bash
         run: |
           set -euo pipefail
@@ -39,44 +40,58 @@ jobs:
           railway variable list -s "$POSTGRES_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/dbvars.json
           eval "$(node - <<'NODE'
           const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/dbvars.json','utf8'));
-          const need=['PGUSER','PGPASSWORD','PGDATABASE'];
-          for(const k of need){
+          for(const k of ['PGUSER','PGPASSWORD','PGDATABASE']){
             const v=String(x[k]||'');
             if(!v) throw new Error(`Missing ${k}`);
-            const q=v.replace(/'/g,"'\\''");
-            console.log(`${k}='${q}'`);
+            console.log(`${k}='${v.replace(/'/g,"'\\''")}'`);
           }
           NODE
           )"
           export PGUSER PGPASSWORD PGDATABASE
-          mkdir -p /tmp/pivnik-backup "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-          ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
-          KEY_NAME="pivnik-ci-backup-${GITHUB_RUN_ID}"
-          railway ssh keys add --workspace "$WORKSPACE_ID" --key "$HOME/.ssh/id_ed25519.pub" --name "$KEY_NAME" >/tmp/ssh-key-add.log 2>&1
-          sleep 2
-          railway connect "$POSTGRES_SERVICE" --environment production --tunnel-only --port 55432 >/tmp/railway-tunnel.log 2>&1 &
-          TUNNEL_PID=$!
-          cleanup(){ kill "$TUNNEL_PID" 2>/dev/null || true; wait "$TUNNEL_PID" 2>/dev/null || true; rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"; }
+          mkdir -p /tmp/pivnik-backup
+          node --input-type=module <<'NODE' >/tmp/proxy.json
+          const endpoint='https://backboard.railway.com/graphql/v2';
+          const token=String(process.env.RAILWAY_API_TOKEN||'').trim();
+          const input={serviceId:process.env.POSTGRES_SERVICE_ID,environmentId:process.env.ENVIRONMENT_ID,applicationPort:5432};
+          const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query:'mutation($input: TCPProxyCreateInput!){ tcpProxyCreate(input:$input){ id domain proxyPort applicationPort } }',variables:{input}})});
+          const x=await r.json().catch(()=>({}));
+          if(!r.ok||x.errors?.length||!x.data?.tcpProxyCreate?.id) throw new Error((x.errors||[]).map(e=>e.message).join(' | ')||`TCP proxy create HTTP ${r.status}`);
+          process.stdout.write(JSON.stringify(x.data.tcpProxyCreate));
+          NODE
+          eval "$(node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/proxy.json','utf8'));
+          for(const [k,v] of [['PROXY_ID',x.id],['PGHOST',x.domain],['PGPORT',String(x.proxyPort)]]){
+            if(!v) throw new Error(`Missing ${k}`);
+            console.log(`${k}='${String(v).replace(/'/g,"'\\''")}'`);
+          }
+          NODE
+          )"
+          export PROXY_ID PGHOST PGPORT
+          cleanup(){
+            if [ -n "${PROXY_ID:-}" ]; then
+              node --input-type=module <<'NODE' >/dev/null 2>&1 || true
+          const endpoint='https://backboard.railway.com/graphql/v2';
+          const token=String(process.env.RAILWAY_API_TOKEN||'').trim();
+          const id=String(process.env.PROXY_ID||'').trim();
+          if(id) await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query:'mutation($id:String!){ tcpProxyDelete(id:$id) }',variables:{id}})});
+          NODE
+            fi
+            rm -f /tmp/proxy.json /tmp/dbvars.json
+          }
           trap cleanup EXIT
           ready=false
-          for i in $(seq 1 40); do
-            if (echo > /dev/tcp/127.0.0.1/55432) >/dev/null 2>&1; then ready=true; break; fi
-            if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
-              echo 'Railway SSH tunnel exited before becoming ready.' >&2
-              sed -E 's#postgres(ql)?://[^[:space:]]+#postgresql://[REDACTED]#g' /tmp/railway-tunnel.log >&2 || true
-              exit 1
-            fi
+          for i in $(seq 1 30); do
+            if (echo > "/dev/tcp/$PGHOST/$PGPORT") >/dev/null 2>&1; then ready=true; break; fi
             sleep 1
           done
-          [ "$ready" = true ] || { echo 'Railway SSH tunnel did not become ready.' >&2; exit 1; }
-          docker run --rm --network host \
-            -e PGHOST=127.0.0.1 \
-            -e PGPORT=55432 \
+          [ "$ready" = true ] || { echo 'Temporary Postgres TCP proxy did not become ready.' >&2; exit 1; }
+          docker run --rm \
+            -e PGHOST="$PGHOST" \
+            -e PGPORT="$PGPORT" \
             -e PGUSER="$PGUSER" \
             -e PGPASSWORD="$PGPASSWORD" \
             -e PGDATABASE="$PGDATABASE" \
+            -e PGSSLMODE=prefer \
             -v /tmp/pivnik-backup:/backup \
             postgres:18-alpine sh -lc '
               set -eu
@@ -105,7 +120,7 @@ jobs:
           created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           source_project=content-nature
           source_environment=production
-          source_transport=Railway SSH tunnel
+          source_transport=temporary Railway TCP proxy (removed after dump)
           database_bytes=$DB_BYTES
           users=$USERS
           transactions=$TX
@@ -115,9 +130,10 @@ jobs:
           encrypted_dump_sha256=$ENC_SHA
           format=pg_dump custom, encrypted AES-256-CBC/PBKDF2 250000
           restore_check=pg_restore --list passed
-          temporary_workspace_ssh_key=$KEY_NAME
           EOF
-          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt /tmp/dbvars.json /tmp/railway-tunnel.log /tmp/ssh-key-add.log
+          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt
+          cleanup
+          trap - EXIT
           echo "ENCRYPTED_BACKUP_READY=true users=$USERS transactions=$TX bytes=$ENC_BYTES sha256=$ENC_SHA"
       - name: Upload encrypted backup outside Railway
         uses: actions/upload-artifact@v4
