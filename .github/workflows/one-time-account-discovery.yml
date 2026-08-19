@@ -19,13 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install Railway CLI
-        run: npm install --global @railway/cli@latest
-      - name: Verify account token identity
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        run: railway whoami
-      - name: Inspect Railway recovery candidates
+      - name: Query deleted and external Railway projects
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
         shell: bash
@@ -39,18 +33,10 @@ jobs:
             if(x.errors?.length) console.log('ERRORS='+x.errors.map(e=>e.message).join(' | '));
             return x.data;
           }
-          function shape(t){ if(!t)return null; return {kind:t.kind,name:t.name,ofType:t.ofType?shape(t.ofType):null}; }
-          const data=await gql(`query {
-            q: __type(name:"Query") { fields(includeDeprecated:true) { name description args { name description defaultValue type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name ofType { kind name } } } } }
-            m: __type(name:"Mutation") { fields(includeDeprecated:true) { name description args { name description defaultValue type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name ofType { kind name } } } } }
-          }`);
-          const wantedQ=new Set(['externalWorkspaces','projectsByIds','projects','workspace','workspaceByCode']);
-          const wantedM=new Set(['projectClaim','projectTransfer','projectTransferInitiate','projectTransferConfirm','projectTransferToTeam']);
-          const clean=f=>({name:f.name,description:f.description,args:f.args.map(a=>({name:a.name,description:a.description,defaultValue:a.defaultValue,type:shape(a.type)})),type:shape(f.type)});
-          console.log('QUERY_SCHEMA='+JSON.stringify(data?.q?.fields?.filter(f=>wantedQ.has(f.name)).map(clean)||[],null,2));
-          console.log('MUTATION_SCHEMA='+JSON.stringify(data?.m?.fields?.filter(f=>wantedM.has(f.name)).map(clean)||[],null,2));
-          const ext=await gql('query { externalWorkspaces { id name } }');
-          console.log('EXTERNAL_WORKSPACES='+JSON.stringify(ext?.externalWorkspaces??null,null,2));
-          const byIds=await gql('query($ids:[String!]!){ projectsByIds(ids:$ids){ id name deletedAt workspace { id name } } }',{ids:['9a940d7a-b0b0-4893-a90d-1b0a8b6850d5']});
-          console.log('PROJECTS_BY_IDS='+JSON.stringify(byIds?.projectsByIds??null,null,2));
+          const all=await gql(`query { projects(first:100, includeDeleted:true) { edges { node { id name createdAt updatedAt deletedAt workspace { id name } services { edges { node { id name } } } } } } }`);
+          console.log('ALL_WITH_DELETED='+JSON.stringify(all?.projects?.edges?.map(e=>e.node)||[],null,2));
+          const ext=await gql('query($projectId:String){ externalWorkspaces(projectId:$projectId){ id name } }',{projectId:'9a940d7a-b0b0-4893-a90d-1b0a8b6850d5'});
+          console.log('EXTERNAL_FOR_LEGACY='+JSON.stringify(ext?.externalWorkspaces??null,null,2));
+          const oldWs=await gql('query($id:String!){ workspace(workspaceId:$id){ id name } }',{id:'fbffb30c-9091-432f-9e09-9c59e1440304'});
+          console.log('OLD_WORKSPACE='+JSON.stringify(oldWs?.workspace??null,null,2));
           NODE
