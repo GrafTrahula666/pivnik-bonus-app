@@ -1,4 +1,4 @@
-name: One-time safe Pivnik rebuild in content-nature
+name: One-time Pivnik runtime diagnostics
 
 on:
   pull_request:
@@ -8,137 +8,37 @@ permissions:
   contents: read
 
 jobs:
-  rebuild:
+  diagnose:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/rebuild-content-nature'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 10
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       APP_SERVICE: pivnik-bonus-app
+      FAILED_DEPLOYMENT_ID: 5cff2e41-9c80-4433-8f22-70dcd7123aef
     steps:
-      - name: Checkout exact current main
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 1
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-
-      - name: Install dependencies and Railway CLI
-        run: |
-          npm ci
-          npm install --global @railway/cli@latest
-
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
       - name: Link exact isolated Pivnik service
+        run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
+      - name: Show failed deployment metadata
         shell: bash
         run: |
           set -euo pipefail
-          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
-          railway status --json >/tmp/status.json
-          node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/status.json','utf8'));
-          if(x.id!=='20a942f9-3164-484a-a6f1-565439e38705') throw new Error(`Wrong project: ${x.id}`);
-          const linked=x.linkedService || x.service || null;
-          console.log(`Linked Railway project: ${x.name} (${x.id})`);
-          console.log(`Linked service: ${linked?.name || 'pivnik-bonus-app'}`);
-          NODE
-
-      - name: Verify required database and runtime variables exist
+          railway deployment list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --limit 10 --json
+      - name: Show failed deployment runtime logs
         shell: bash
         run: |
           set -euo pipefail
-          railway variable list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/app-vars.json
-          node - <<'NODE'
-          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/app-vars.json','utf8'));
-          for(const key of ['DATABASE_URL','SESSION_SECRET','IDENTITY_TOMBSTONE_SECRET']) {
-            if(!x[key]) throw new Error(`Missing Railway variable: ${key}`);
-          }
-          console.log('Required Railway variables are present.');
-          console.log('TELEGRAM_BOT_TOKEN_PRESENT='+Boolean(x.TELEGRAM_BOT_TOKEN));
-          console.log('OWNER_TELEGRAM_ID_PRESENT='+Boolean(x.OWNER_TELEGRAM_ID));
-          NODE
-
-      - name: Verify code before deploy
-        run: |
-          npm run check
-          npm test
-
-      - name: Deploy current main through linked service
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway up --ci --message "Restore Pivnik bonus app infrastructure" --verbose
-
-      - name: Generate Railway domain
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway domain -s "$APP_SERVICE" --json >/tmp/domain.json 2>/tmp/domain.err || true
-          cat /tmp/domain.err >&2 || true
-          DOMAIN=$(node - <<'NODE'
-          const fs=require('fs'); let x={};
-          try{x=JSON.parse(fs.readFileSync('/tmp/domain.json','utf8'))}catch{}
-          let d='';
-          if(typeof x==='string') d=x;
-          else d=x.domain || x.url || x.serviceDomain || '';
-          d=String(d).replace(/^https?:\/\//,'').replace(/\/$/,'');
-          process.stdout.write(d);
-          NODE
-          )
-          if [ -z "$DOMAIN" ]; then
-            railway status --json >/tmp/status-after.json
-            DOMAIN=$(node - <<'NODE'
-          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/status-after.json','utf8'));
-          const env=(x.environments?.edges||[]).map(e=>e.node).find(e=>e.id==='cdd9d26c-2aab-45d9-95ed-ef487fafaa8f') || (x.environments?.edges||[])[0]?.node;
-          const svc=(env?.serviceInstances?.edges||[]).map(e=>e.node).find(s=>s.serviceName==='pivnik-bonus-app' || s.name==='pivnik-bonus-app');
-          const raw=svc?.domains?.serviceDomains?.[0];
-          const d=typeof raw==='string'?raw:(raw?.domain||'');
-          process.stdout.write(d);
-          NODE
-            )
-          fi
-          if [ -z "$DOMAIN" ]; then
-            echo 'No public Railway domain found for Pivnik service.' >&2
-            exit 1
-          fi
-          echo "APP_URL=https://$DOMAIN" >> "$GITHUB_ENV"
-          echo "PIVNIK_APP_URL=https://$DOMAIN"
-
-      - name: Verify public Pivnik root and health
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 48); do
-            code=$(curl --silent --location --output /tmp/root.html --write-out '%{http_code}' --max-time 15 "$APP_URL/" || true)
-            if [ "$code" = "200" ] && grep -q '<title>Пивник | Бонусы</title>' /tmp/root.html && grep -q 'id="bootScreen"' /tmp/root.html && ! grep -q 'The train has not arrived at the station' /tmp/root.html; then
-              echo "PUBLIC_ROOT_OK=$APP_URL"
-              break
-            fi
-            if [ "$i" = "48" ]; then
-              echo "Pivnik root failed at $APP_URL (HTTP $code)" >&2
-              head -c 1200 /tmp/root.html >&2 || true
-              exit 1
-            fi
-            sleep 5
-          done
-          curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health" >/tmp/health.json
-          node - <<'NODE'
-          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));
-          if(!x.ok) throw new Error('Health endpoint is not ready');
-          console.log('HEALTH_OK=true');
-          console.log('DATABASE_FINGERPRINT='+(x.databaseFingerprint||'missing'));
-          NODE
-          curl --silent --show-error --max-time 20 "$APP_URL/api/platform-health" >/tmp/platform.json || true
-          node - <<'NODE'
-          const fs=require('fs'); let x={}; try{x=JSON.parse(fs.readFileSync('/tmp/platform.json','utf8'))}catch{}
-          console.log('TELEGRAM_CONFIGURED='+Boolean(x.telegram));
-          console.log('VK_CONFIGURED='+Boolean(x.vk));
-          NODE
+          railway logs "$FAILED_DEPLOYMENT_ID" -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --lines 300
