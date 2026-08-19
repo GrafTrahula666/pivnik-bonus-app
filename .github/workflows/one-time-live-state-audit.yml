@@ -1,4 +1,4 @@
-name: One-time Pivnik owner launch restore
+name: One-time Pivnik owner launch verify
 
 on:
   pull_request:
@@ -8,10 +8,10 @@ permissions:
   contents: read
 
 jobs:
-  restore:
+  verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/restore-live-state'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 12
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -26,31 +26,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - run: npm install --global @railway/cli@latest
-      - name: Link live Pivnik service only
+      - name: Link live Pivnik service
         run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
-      - name: Restore owner identity variables
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys \
-            "OWNER_TELEGRAM_ID=$OWNER_ID" \
-            "OWNER_TELEGRAM_USERNAME=$OWNER_USERNAME" \
-            "TELEGRAM_APP_URL=$APP_URL" \
-            "PIVNIK_APP_URL=$APP_URL" \
-            "PIVNIK_DOCUMENT_PLATFORM=telegram"
-          vars=$(railway variable list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --json)
-          node -e 'const x=JSON.parse(process.argv[1]); if(String(x.OWNER_TELEGRAM_ID)!==process.env.OWNER_ID) throw new Error("Owner ID not set"); if(String(x.OWNER_TELEGRAM_USERNAME)!==process.env.OWNER_USERNAME) throw new Error("Owner username not set"); console.log("OWNER_VARIABLES_OK=true")' "$vars"
-      - name: Redeploy exact current main
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway up --ci --message "Restore Pivnik owner state for launch"
-      - name: Authenticate owner through signed Telegram initData and verify profile
+      - name: Authenticate as owner and verify full /api/me profile
         shell: bash
         run: |
           set -euo pipefail
@@ -61,32 +43,42 @@ jobs:
           const user={id:Number(process.env.OWNER_ID),first_name:'TopG',username:process.env.OWNER_USERNAME,language_code:'ru'};
           const params=new URLSearchParams();
           params.set('auth_date',String(Math.floor(Date.now()/1000)));
-          params.set('query_id','AAE_PIVNIK_OWNER_RESTORE_20260819');
+          params.set('query_id','AAE_PIVNIK_OWNER_VERIFY_20260819');
           params.set('user',JSON.stringify(user));
-          const dataCheckString=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');
+          const d=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');
           const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();
-          params.set('hash',crypto.createHmac('sha256',secret).update(dataCheckString).digest('hex'));
-          const response=await fetch(`${appUrl}/api/auth`,{method:'POST',headers:{'content-type':'application/json','x-pivnik-platform':'telegram'},body:JSON.stringify({platform:'telegram',initData:params.toString()})});
-          const data=await response.json().catch(()=>({}));
-          if(!response.ok) throw new Error(`Owner auth failed HTTP ${response.status}: ${JSON.stringify(data)}`);
-          const p=data.profile||{};
-          console.log('OWNER_PROFILE='+JSON.stringify({id:p.id,username:p.username,firstName:p.firstName,role:p.role,unlimitedBonus:p.unlimitedBonus,status:p.status,profileFrame:p.profileFrame,availableFrames:p.availableFrames,achievements:p.achievements,termsAccepted:p.termsAccepted,balance:p.balance},null,2));
+          params.set('hash',crypto.createHmac('sha256',secret).update(d).digest('hex'));
+          const auth=await fetch(`${appUrl}/api/auth`,{method:'POST',headers:{'content-type':'application/json','x-pivnik-platform':'telegram'},body:JSON.stringify({platform:'telegram',initData:params.toString()})});
+          const startup=await auth.json().catch(()=>({}));
+          if(!auth.ok||!startup.token) throw new Error(`Owner auth failed ${auth.status}: ${JSON.stringify(startup)}`);
+          const meRes=await fetch(`${appUrl}/api/me`,{headers:{authorization:`Bearer ${startup.token}`,'x-pivnik-platform':'telegram'}});
+          const me=await meRes.json().catch(()=>({}));
+          if(!meRes.ok) throw new Error(`/api/me failed ${meRes.status}: ${JSON.stringify(me)}`);
+          const p=me.profile||{};
+          console.log('FULL_OWNER_PROFILE='+JSON.stringify({id:p.id,telegramId:p.telegramId,username:p.username,firstName:p.firstName,role:p.role,unlimitedBonus:p.unlimitedBonus,status:p.status,profileFrame:p.profileFrame,availableFrames:p.availableFrames,achievements:p.achievements,termsAccepted:p.termsAccepted,balance:p.balance,beer:p.beer,spend12m:p.spend12m},null,2));
+          if(String(p.telegramId)!==process.env.OWNER_ID) throw new Error(`Wrong owner Telegram ID ${p.telegramId}`);
           if(p.role!=='admin') throw new Error(`Owner role is ${p.role}`);
+          if(p.unlimitedBonus!==true) throw new Error('Owner unlimited bonus is off');
           if(p.profileFrame!=='money') throw new Error(`Owner frame is ${p.profileFrame}`);
-          const creator=Array.isArray(p.achievements)&&p.achievements.some(a=>a.code==='creator');
-          if(!creator) throw new Error('Creator achievement missing');
-          console.log('OWNER_STATE_RESTORED=true');
+          if(!Array.isArray(p.achievements)||!p.achievements.some(a=>a.code==='creator')) throw new Error('Creator achievement missing in full profile');
+          if(p.termsAccepted!==true) throw new Error('Owner consent state is missing');
+          console.log('OWNER_FULL_STATE_OK=true');
           NODE
-      - name: Verify production app, Telegram menu and cancellation runtime
+      - name: Verify live launch endpoints and Telegram button
         shell: bash
         run: |
           set -euo pipefail
-          root=$(curl --fail --silent --show-error --location --max-time 20 "$APP_URL/")
-          printf '%s' "$root" | grep -q '<title>Пивник | Бонусы</title>'
+          curl --fail --silent --show-error --location --max-time 20 "$APP_URL/" >/tmp/root.html
+          grep -q '<title>Пивник | Бонусы</title>' /tmp/root.html
+          grep -q 'id="bootScreen"' /tmp/root.html
           health=$(curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health")
-          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("health not ok"); console.log(`HEALTH_OK users=${x.users}`)' "$health"
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("health not ok"); console.log(`LIVE_HEALTH_OK users=${x.users}`)' "$health"
           menu=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMenuButton")
-          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok||x.result?.type!=="web_app"||x.result?.text!=="Открыть ПРИЛОЖЕНИЕ") throw new Error(`Bad Telegram menu ${JSON.stringify(x.result)}`); console.log(`TELEGRAM_MENU_OK=${x.result.text}`)' "$menu"
-          logs=$(railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 300)
+          node -e 'const x=JSON.parse(process.argv[1]); const u=String(x.result?.web_app?.url||"").replace(/\/+$/,""); const e=String(process.env.APP_URL).replace(/\/+$/,""); if(!x.ok||x.result?.type!=="web_app"||x.result?.text!=="Открыть ПРИЛОЖЕНИЕ"||u!==e) throw new Error(`Bad Telegram menu ${JSON.stringify(x.result)}`); console.log(`TELEGRAM_BUTTON_OK=${x.result.text}`)' "$menu"
+      - name: Verify owner cancellation patch is active in deployed runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          logs=$(railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 350)
           printf '%s\n' "$logs" | grep -q 'Applied unlimited cancellation for owner/admin; staff limits remain unchanged.'
           echo 'OWNER_CANCEL_RUNTIME_OK=true'
