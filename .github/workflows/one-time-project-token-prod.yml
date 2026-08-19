@@ -1,0 +1,50 @@
+name: One-time project-token production verification
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/verify-project-token-prod'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact main release
+        uses: actions/checkout@v4
+        with:
+          ref: 686ff749fc922bbb6019d7eefa062b83eb6e0852
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Deploy exact main commit and verify Railway readiness
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RELEASE_COMMIT_SHA: 686ff749fc922bbb6019d7eefa062b83eb6e0852
+          TELEGRAM_APP_URL: https://pivnik-bonus-app-production.up.railway.app
+          VK_APP_URL: https://pivnik-vk-test-production.up.railway.app
+        run: node scripts/railway-deploy-and-verify-production.mjs
+      - name: Verify Telegram public root is Pivnik Mini App
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(curl --fail --silent --show-error --location --max-time 20 https://pivnik-bonus-app-production.up.railway.app/)
+          echo "$body" | grep -q '<title>Пивник | Бонусы</title>'
+          echo "$body" | grep -q 'id="bootScreen"'
+          if echo "$body" | grep -q 'The train has not arrived at the station'; then
+            echo 'Railway Not Found page is still being served' >&2
+            exit 1
+          fi
+      - name: Verify production release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(curl --fail --silent --show-error --max-time 20 https://pivnik-bonus-app-production.up.railway.app/api/release-readiness)
+          echo "$body" | grep -q '686ff749fc922bbb6019d7eefa062b83eb6e0852'
