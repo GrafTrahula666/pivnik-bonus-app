@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
       VOLUME_INSTANCE_ID: fb6abedc-482e-4898-ad58-76888f263f54
       BACKUP_NAME: Pivnik-launch-2026-08-20
     steps:
@@ -23,7 +23,8 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           const endpoint='https://backboard.railway.com/graphql/v2';
-          const token=String(process.env.RAILWAY_API_TOKEN||'').trim();
+          const token=String(process.env.RAILWAY_WORKSPACE_TOKEN||'').trim();
+          if(!token) throw new Error('Current Hobby workspace token is missing');
           const vi=process.env.VOLUME_INSTANCE_ID;
           const name=process.env.BACKUP_NAME;
           async function gql(query,variables={}){
@@ -41,7 +42,7 @@ jobs:
           let backup=(before.volumeInstanceBackupList||[]).find(x=>x.name===name);
           if(!backup){
             await gql('mutation($id:String!,$name:String){ volumeInstanceBackupCreate(volumeInstanceId:$id,name:$name){ __typename } }',{id:vi,name});
-            for(let i=0;i<30;i++){
+            for(let i=0;i<40;i++){
               await new Promise(r=>setTimeout(r,2000));
               const after=await gql(listQuery,{id:vi});
               backup=(after.volumeInstanceBackupList||[]).find(x=>x.name===name);
