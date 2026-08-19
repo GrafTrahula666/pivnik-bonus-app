@@ -1,0 +1,84 @@
+name: One-time verified Pivnik production repair
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    if: github.head_ref == 'ops/force-prod-repair-20260819'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout exact verified main release
+        uses: actions/checkout@v4
+        with:
+          ref: 8a8f2616bfaca57a69594ccee3069d0258b02117
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Re-run release checks
+        run: |
+          npm run materialize
+          npm run check
+          npm test
+          npm audit --omit=dev --audit-level=high
+
+      - name: Deploy exact verified commit to Telegram and VK
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RELEASE_COMMIT_SHA: 8a8f2616bfaca57a69594ccee3069d0258b02117
+          TELEGRAM_APP_URL: https://pivnik-bonus-app-production.up.railway.app
+          VK_APP_URL: https://pivnik-vk-test-production.up.railway.app
+        run: node scripts/railway-deploy-and-verify-production.mjs
+
+      - name: Strictly verify Telegram public root is the Pivnik Mini App
+        run: |
+          node --input-type=module <<'NODE'
+          const url = 'https://pivnik-bonus-app-production.up.railway.app/';
+          const response = await fetch(url, {
+            redirect: 'follow',
+            signal: AbortSignal.timeout(20000),
+            headers: { 'user-agent': 'pivnik-live-root-verifier/1.0', accept: 'text/html' }
+          });
+          const html = await response.text();
+          const required = [
+            '<title>Пивник | Бонусы</title>',
+            'telegram-web-app.js',
+            'id="appShell"',
+            'Пивник | Бонусы'
+          ];
+          if (!response.ok) throw new Error(`Telegram root HTTP ${response.status}`);
+          for (const marker of required) {
+            if (!html.includes(marker)) throw new Error(`Telegram root is missing marker: ${marker}`);
+          }
+          if (/The train has not arrived|Go to Railway|Not Found/i.test(html)) {
+            throw new Error('Telegram root is still serving a Railway Not Found page.');
+          }
+          console.log(`Telegram public root verified: HTTP ${response.status}, ${html.length} bytes, Pivnik markers present.`);
+          NODE
+
+      - name: Strictly verify readiness commit
+        run: |
+          node --input-type=module <<'NODE'
+          const url = 'https://pivnik-bonus-app-production.up.railway.app/api/release-readiness';
+          const response = await fetch(url, { signal: AbortSignal.timeout(20000), headers: { accept: 'application/json' } });
+          const data = await response.json();
+          if (!response.ok || !data?.ok) throw new Error(`Readiness failed: HTTP ${response.status}`);
+          if (data.releaseCommit !== '8a8f2616bfaca57a69594ccee3069d0258b02117') {
+            throw new Error(`Wrong production release: ${data.releaseCommit}`);
+          }
+          console.log(`Telegram readiness verified on release ${data.releaseCommit}.`);
+          NODE
