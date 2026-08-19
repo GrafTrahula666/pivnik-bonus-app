@@ -20,6 +20,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Confirm exact label is committed
         shell: bash
         run: |
@@ -27,35 +31,38 @@ jobs:
           grep -Fq "text: 'Открыть ПРИЛОЖЕНИЕ'" scripts/repair-telegram-runtime.mjs
           ! grep -Fq "text: 'Открыть ПИВНИК'" scripts/repair-telegram-runtime.mjs
           echo 'SOURCE_LABEL_OK=true'
-      - name: Force exact Telegram menu button text
+      - name: Force and poll exact Telegram menu text
         shell: bash
         run: |
           set -euo pipefail
-          payload=$(node -e 'console.log(JSON.stringify({menu_button:{type:"web_app",text:"Открыть ПРИЛОЖЕНИЕ",web_app:{url:process.env.APP_URL}}}))')
-          reply=$(curl --fail --silent --show-error --max-time 20 \
-            -X POST \
-            -H 'content-type: application/json' \
-            --data "$payload" \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setChatMenuButton")
-          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok||x.result!==true) throw new Error(`setChatMenuButton failed: ${process.argv[1]}`); console.log("SET_MENU_OK=true")' "$reply"
-      - name: Read menu back and verify exact text and URL
-        shell: bash
-        run: |
-          set -euo pipefail
-          menu=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMenuButton")
-          node -e '
-            const menu=JSON.parse(process.argv[1]);
-            const expectedUrl=String(process.env.APP_URL||"").replace(/\/+$/,"");
-            const actualUrl=String(menu.result?.web_app?.url||"").replace(/\/+$/,"");
-            const text=String(menu.result?.text||"");
-            console.log(`MENU_TYPE=${menu.result?.type||""}`);
-            console.log(`MENU_TEXT=${text}`);
-            console.log(`MENU_URL=${actualUrl}`);
-            if(!menu.ok || menu.result?.type!=="web_app") throw new Error("Telegram menu is not web_app");
-            if(text!=="Открыть ПРИЛОЖЕНИЕ") throw new Error(`Wrong menu text: ${text}`);
-            if(actualUrl!==expectedUrl) throw new Error(`Wrong menu URL: ${actualUrl}`);
-            console.log("TELEGRAM_MENU_LABEL_OK=true");
-          ' "$menu"
+          node - <<'NODE'
+          const token=process.env.TELEGRAM_BOT_TOKEN;
+          const url=String(process.env.APP_URL||'').replace(/\/+$/,'');
+          const desired='Открыть ПРИЛОЖЕНИЕ';
+          const api=async(method,payload)=>{
+            const r=await fetch(`https://api.telegram.org/bot${token}/${method}`,{
+              method:payload?'POST':'GET',
+              headers:payload?{'content-type':'application/json'}:undefined,
+              body:payload?JSON.stringify(payload):undefined
+            });
+            const x=await r.json();
+            if(!r.ok||!x.ok) throw new Error(`${method} failed: ${JSON.stringify(x)}`);
+            return x.result;
+          };
+          let last=null;
+          for(let attempt=1; attempt<=10; attempt++){
+            await api('setChatMenuButton',{menu_button:{type:'web_app',text:desired,web_app:{url}}});
+            await new Promise(r=>setTimeout(r,2500));
+            last=await api('getChatMenuButton');
+            const actualUrl=String(last?.web_app?.url||'').replace(/\/+$/,'');
+            console.log(`ATTEMPT=${attempt} MENU_TEXT=${last?.text||''} MENU_URL=${actualUrl}`);
+            if(last?.type==='web_app' && last?.text===desired && actualUrl===url){
+              console.log('TELEGRAM_MENU_LABEL_OK=true');
+              process.exit(0);
+            }
+          }
+          throw new Error(`Telegram kept unexpected menu: ${JSON.stringify(last)}`);
+          NODE
       - name: Verify live app stayed healthy
         shell: bash
         run: |
