@@ -24,18 +24,34 @@ jobs:
       - name: Verify account token identity
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway whoami
-      - name: List every Railway project across account workspaces
+        run: railway whoami
+      - name: List visible Railway projects
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+        run: railway list --json
+      - name: Inspect project and deletion related Railway API fields
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          railway list --json
-      - name: Probe legacy Pivnik project directly
+          response=$(curl --fail --silent --show-error \
+            --request POST \
+            --url https://backboard.railway.com/graphql/v2 \
+            --header "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data '{"query":"query { q: __type(name: \"Query\") { fields { name args { name type { kind name ofType { kind name } } } } } m: __type(name: \"Mutation\") { fields { name args { name type { kind name ofType { kind name } } } } } } }"}')
+          echo "$response" | node <<'NODE'
+          let s='';
+          process.stdin.on('data',d=>s+=d).on('end',()=>{
+            const x=JSON.parse(s);
+            if(x.errors?.length) throw new Error(x.errors.map(e=>e.message).join('; '));
+            const pick=(fields)=>fields.filter(f=>/(project|workspace|delete|restore|recover|trash)/i.test(f.name));
+            console.log('QUERY_FIELDS='+JSON.stringify(pick(x.data.q.fields),null,2));
+            console.log('MUTATION_FIELDS='+JSON.stringify(pick(x.data.m.fields),null,2));
+          });
+          NODE
+      - name: Probe legacy project by exact ID
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
         shell: bash
@@ -46,5 +62,5 @@ jobs:
             --url https://backboard.railway.com/graphql/v2 \
             --header "Authorization: Bearer $RAILWAY_API_TOKEN" \
             --header 'Content-Type: application/json' \
-            --data '{"query":"query Legacy($id: String!) { project(id: $id) { id name deletedAt workspace { id name } environments { edges { node { id name } } } services { edges { node { id name } } } } }","variables":{"id":"9a940d7a-b0b0-4893-a90d-1b0a8b6850d5"}}')
-          echo "$response" | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s); if(x.errors?.length){console.log("LEGACY_ERRORS="+x.errors.map(e=>e.message).join(" | ")); process.exit(0)}; console.log(JSON.stringify(x.data?.project||null,null,2));})'
+            --data '{"query":"query Legacy($id: String!) { project(id: $id) { id name deletedAt workspace { id name } } }","variables":{"id":"9a940d7a-b0b0-4893-a90d-1b0a8b6850d5"}}')
+          echo "$response"
