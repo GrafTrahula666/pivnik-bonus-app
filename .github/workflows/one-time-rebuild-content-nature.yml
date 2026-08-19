@@ -1,4 +1,4 @@
-name: One-time Pivnik test-client seed verification
+name: One-time Pivnik Telegram connection verification
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ jobs:
   verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/rebuild-content-nature'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
@@ -19,6 +19,7 @@ jobs:
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
       APP_SERVICE: pivnik-bonus-app
       APP_URL: https://pivnik-bonus-app-production-df60.up.railway.app
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     steps:
       - name: Checkout current main
         uses: actions/checkout@v4
@@ -30,24 +31,55 @@ jobs:
           node-version: '20'
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
+      - name: Require Telegram bot token secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo 'TELEGRAM_BOT_TOKEN GitHub secret is missing.' >&2
+            exit 1
+          fi
+          echo 'TELEGRAM_BOT_TOKEN secret is present.'
+      - name: Verify token belongs to pivnik_bonus_bot
+        shell: bash
+        run: |
+          set -euo pipefail
+          reply=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe")
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("Telegram getMe failed"); const u=String(x.result?.username||"").toLowerCase(); console.log(`BOT_USERNAME=@${u}`); if(u!=="pivnik_bonus_bot") throw new Error(`Wrong bot token: @${u}`);' "$reply"
       - name: Link exact isolated Pivnik service
         run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
-      - name: Redeploy current main so prestart seeds the real test client
+      - name: Sync Telegram variables into Railway without exposing token
         shell: bash
         run: |
           set -euo pipefail
-          railway up --ci --message "Seed Pivnik test client after database initialization"
-      - name: Verify test client was seeded and service stayed healthy
+          printf '%s' "$TELEGRAM_BOT_TOKEN" | railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin TELEGRAM_BOT_TOKEN
+          railway variable set -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys \
+            "TELEGRAM_APP_URL=$APP_URL" \
+            "PIVNIK_APP_URL=$APP_URL" \
+            "PIVNIK_DOCUMENT_PLATFORM=telegram"
+          vars=$(railway variable list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --json)
+          node -e 'const x=JSON.parse(process.argv[1]); for(const k of ["TELEGRAM_BOT_TOKEN","TELEGRAM_APP_URL","PIVNIK_APP_URL"]){if(!x[k]) throw new Error(`Missing ${k}`)}; console.log("Telegram Railway variables are present.")' "$vars"
+      - name: Redeploy current main with Telegram connected
         shell: bash
         run: |
           set -euo pipefail
-          logs=$(railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 250)
+          railway up --ci --message "Connect pivnik_bonus_bot to restored Pivnik app"
+      - name: Verify runtime repaired Telegram menu and test client
+        shell: bash
+        run: |
+          set -euo pipefail
+          logs=$(railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 350)
           printf '%s\n' "$logs"
+          printf '%s\n' "$logs" | grep -Fq "Telegram bot menu repaired: $APP_URL"
           printf '%s\n' "$logs" | grep -q 'Pivnik test client ready:'
-          body=$(curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health")
-          printf '%s\n' "$body"
-          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) process.exit(1); if(Number(x.users)<1) throw new Error(`Expected at least one seeded user, got ${x.users}`); console.log(`TEST_CLIENT_HEALTH_OK users=${x.users}`)' "$body"
-      - name: Verify public root still serves Pivnik
+          echo 'RUNTIME_TELEGRAM_REPAIR_OK=true'
+      - name: Verify Telegram chat menu button points to restored Pivnik
+        shell: bash
+        run: |
+          set -euo pipefail
+          reply=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMenuButton")
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("getChatMenuButton failed"); const r=x.result||{}; console.log(`MENU_TYPE=${r.type||""}`); console.log(`MENU_TEXT=${r.text||""}`); console.log(`MENU_URL=${r.web_app?.url||""}`); if(r.type!=="web_app") throw new Error("Menu button is not web_app"); if(r.web_app?.url!==process.env.APP_URL) throw new Error(`Wrong menu URL: ${r.web_app?.url}`);' "$reply"
+      - name: Verify public Pivnik root and health
         shell: bash
         run: |
           set -euo pipefail
@@ -55,10 +87,11 @@ jobs:
           grep -q '<title>Пивник | Бонусы</title>' /tmp/root.html
           grep -q 'id="bootScreen"' /tmp/root.html
           ! grep -q 'The train has not arrived at the station' /tmp/root.html
-          echo "PUBLIC_ROOT_OK=$APP_URL"
+          body=$(curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health")
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("Health failed"); if(Number(x.users)<1) throw new Error("Test user missing"); console.log(`PUBLIC_HEALTH_OK users=${x.users}`);' "$body"
       - name: Show latest logs on failure
         if: failure()
         shell: bash
         run: |
           railway deployment list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --limit 3 --json || true
-          railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 300 || true
+          railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 350 || true
