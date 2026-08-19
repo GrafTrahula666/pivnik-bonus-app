@@ -1,0 +1,59 @@
+name: One-time native Postgres backup
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/native-db-backup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      VOLUME_INSTANCE_ID: fb6abedc-482e-4898-ad58-76888f263f54
+      BACKUP_NAME: Pivnik-launch-2026-08-20
+    steps:
+      - name: Create native Railway volume backup and lock it
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const endpoint='https://backboard.railway.com/graphql/v2';
+          const token=String(process.env.RAILWAY_API_TOKEN||'').trim();
+          const vi=process.env.VOLUME_INSTANCE_ID;
+          const name=process.env.BACKUP_NAME;
+          async function gql(query,variables={}){
+            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query,variables})});
+            const x=await r.json().catch(()=>({}));
+            if(!r.ok||x.errors?.length) throw new Error((x.errors||[]).map(e=>e.message).join(' | ')||`HTTP ${r.status}`);
+            return x.data;
+          }
+          const type=await gql('query { __type(name:"VolumeInstanceBackup"){ fields { name } } }');
+          const available=new Set((type?.__type?.fields||[]).map(f=>f.name));
+          const wanted=['id','name','createdAt','updatedAt','status','locked','expiresAt','sizeMB'].filter(x=>available.has(x));
+          if(!wanted.includes('id')) throw new Error('VolumeInstanceBackup.id is unavailable');
+          const listQuery=`query($id:String!){ volumeInstanceBackupList(volumeInstanceId:$id){ ${wanted.join(' ')} } }`;
+          const before=await gql(listQuery,{id:vi});
+          let backup=(before.volumeInstanceBackupList||[]).find(x=>x.name===name);
+          if(!backup){
+            await gql('mutation($id:String!,$name:String){ volumeInstanceBackupCreate(volumeInstanceId:$id,name:$name){ __typename } }',{id:vi,name});
+            for(let i=0;i<30;i++){
+              await new Promise(r=>setTimeout(r,2000));
+              const after=await gql(listQuery,{id:vi});
+              backup=(after.volumeInstanceBackupList||[]).find(x=>x.name===name);
+              if(backup) break;
+            }
+          }
+          if(!backup) throw new Error('Created backup did not appear in backup list');
+          if(available.has('locked') ? !backup.locked : true){
+            await gql('mutation($vi:String!,$bid:String!){ volumeInstanceBackupLock(volumeInstanceId:$vi,volumeInstanceBackupId:$bid) }',{vi,bid:backup.id});
+          }
+          const final=await gql(listQuery,{id:vi});
+          const item=(final.volumeInstanceBackupList||[]).find(x=>x.id===backup.id);
+          console.log('BACKUP_CREATED_AND_LOCKED=true');
+          console.log('BACKUP_SAFE='+JSON.stringify(item));
+          NODE
