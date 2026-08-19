@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Query deleted and external Railway projects
+      - name: Query Railway projects by authenticated user
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
         shell: bash
@@ -33,10 +33,13 @@ jobs:
             if(x.errors?.length) console.log('ERRORS='+x.errors.map(e=>e.message).join(' | '));
             return x.data;
           }
-          const all=await gql(`query { projects(first:100, includeDeleted:true) { edges { node { id name createdAt updatedAt deletedAt workspace { id name } services { edges { node { id name } } } } } } }`);
-          console.log('ALL_WITH_DELETED='+JSON.stringify(all?.projects?.edges?.map(e=>e.node)||[],null,2));
-          const ext=await gql('query($projectId:String){ externalWorkspaces(projectId:$projectId){ id name } }',{projectId:'9a940d7a-b0b0-4893-a90d-1b0a8b6850d5'});
-          console.log('EXTERNAL_FOR_LEGACY='+JSON.stringify(ext?.externalWorkspaces??null,null,2));
-          const oldWs=await gql('query($id:String!){ workspace(workspaceId:$id){ id name } }',{id:'fbffb30c-9091-432f-9e09-9c59e1440304'});
-          console.log('OLD_WORKSPACE='+JSON.stringify(oldWs?.workspace??null,null,2));
+          const me=await gql('query { me { id email name } }');
+          console.log('ME='+JSON.stringify(me?.me||null));
+          const uid=me?.me?.id;
+          if(uid){
+            const all=await gql(`query($uid:String!){ projects(first:100, includeDeleted:true, userId:$uid) { edges { node { id name createdAt updatedAt deletedAt workspace { id name } services { edges { node { id name } } } } } } }`,{uid});
+            console.log('USER_PROJECTS_WITH_DELETED='+JSON.stringify(all?.projects?.edges?.map(e=>e.node)||[],null,2));
+          }
+          const current=await gql(`query { projects(first:100, includeDeleted:true, workspaceId:"fb7b2ccc-bf39-4fcb-81df-b33235cc4717") { edges { node { id name deletedAt } } } }`);
+          console.log('CURRENT_WS_WITH_DELETED='+JSON.stringify(current?.projects?.edges?.map(e=>e.node)||[],null,2));
           NODE
