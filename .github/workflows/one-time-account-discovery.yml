@@ -29,38 +29,27 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
         run: railway list --json
-      - name: Inspect project and deletion related Railway API fields
+      - name: Inspect Railway query and mutation names
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
         shell: bash
         run: |
-          set -euo pipefail
-          response=$(curl --fail --silent --show-error \
-            --request POST \
-            --url https://backboard.railway.com/graphql/v2 \
-            --header "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            --header 'Content-Type: application/json' \
-            --data '{"query":"query { q: __type(name: \"Query\") { fields { name args { name type { kind name ofType { kind name } } } } } m: __type(name: \"Mutation\") { fields { name args { name type { kind name ofType { kind name } } } } } } }"}')
-          echo "$response" | node <<'NODE'
-          let s='';
-          process.stdin.on('data',d=>s+=d).on('end',()=>{
-            const x=JSON.parse(s);
-            if(x.errors?.length) throw new Error(x.errors.map(e=>e.message).join('; '));
-            const pick=(fields)=>fields.filter(f=>/(project|workspace|delete|restore|recover|trash)/i.test(f.name));
-            console.log('QUERY_FIELDS='+JSON.stringify(pick(x.data.q.fields),null,2));
-            console.log('MUTATION_FIELDS='+JSON.stringify(pick(x.data.m.fields),null,2));
-          });
+          node - <<'NODE'
+          const endpoint='https://backboard.railway.com/graphql/v2';
+          const token=process.env.RAILWAY_API_TOKEN;
+          async function gql(query, variables={}) {
+            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query,variables})});
+            const text=await r.text();
+            console.log('HTTP='+r.status);
+            let x; try{x=JSON.parse(text)}catch{console.log(text); return null}
+            if(x.errors?.length) console.log('ERRORS='+x.errors.map(e=>e.message).join(' | '));
+            return x.data;
+          }
+          const q=await gql('query { __type(name: "Query") { fields(includeDeprecated: true) { name } } }');
+          const m=await gql('query { __type(name: "Mutation") { fields(includeDeprecated: true) { name } } }');
+          const pick=(a)=>a?.__type?.fields?.map(x=>x.name).filter(n=>/(project|workspace|delete|restore|recover|trash)/i.test(n))||[];
+          console.log('QUERY_FIELDS='+JSON.stringify(pick(q)));
+          console.log('MUTATION_FIELDS='+JSON.stringify(pick(m)));
+          const legacy=await gql('query Legacy($id: String!) { project(id: $id) { id name deletedAt workspace { id name } } }',{id:'9a940d7a-b0b0-4893-a90d-1b0a8b6850d5'});
+          console.log('LEGACY='+JSON.stringify(legacy?.project??null));
           NODE
-      - name: Probe legacy project by exact ID
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          response=$(curl --silent --show-error \
-            --request POST \
-            --url https://backboard.railway.com/graphql/v2 \
-            --header "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            --header 'Content-Type: application/json' \
-            --data '{"query":"query Legacy($id: String!) { project(id: $id) { id name deletedAt workspace { id name } } }","variables":{"id":"9a940d7a-b0b0-4893-a90d-1b0a8b6850d5"}}')
-          echo "$response"
