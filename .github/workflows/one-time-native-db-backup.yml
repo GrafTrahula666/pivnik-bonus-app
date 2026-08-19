@@ -49,10 +49,13 @@ jobs:
           NODE
           )"
           export PGUSER PGPASSWORD PGDATABASE
-          mkdir -p /tmp/pivnik-backup
+          mkdir -p /tmp/pivnik-backup "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
           railway connect "$POSTGRES_SERVICE" --environment production --tunnel-only --port 55432 >/tmp/railway-tunnel.log 2>&1 &
           TUNNEL_PID=$!
-          cleanup(){ kill "$TUNNEL_PID" 2>/dev/null || true; wait "$TUNNEL_PID" 2>/dev/null || true; }
+          cleanup(){ kill "$TUNNEL_PID" 2>/dev/null || true; wait "$TUNNEL_PID" 2>/dev/null || true; rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"; }
           trap cleanup EXIT
           ready=false
           for i in $(seq 1 40); do
