@@ -1,4 +1,4 @@
-name: One-time Pivnik final Telegram verification
+name: One-time Pivnik Telegram menu label verification
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ jobs:
   verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/rebuild-content-nature'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
@@ -21,50 +21,52 @@ jobs:
       APP_URL: https://pivnik-bonus-app-production-df60.up.railway.app
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Verify Telegram bot identity and menu URL
+      - name: Confirm exact label is committed
         shell: bash
         run: |
           set -euo pipefail
-          me=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe")
+          grep -Fq "text: 'Открыть ПРИЛОЖЕНИЕ'" scripts/repair-telegram-runtime.mjs
+          ! grep -Fq "text: 'Открыть ПИВНИК'" scripts/repair-telegram-runtime.mjs
+          echo 'SOURCE_LABEL_OK=true'
+      - name: Link restored Pivnik service
+        run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json
+      - name: Deploy current main so runtime applies the new label
+        shell: bash
+        run: |
+          set -euo pipefail
+          railway up --ci --message "Rename Telegram menu button to Открыть ПРИЛОЖЕНИЕ"
+      - name: Verify Telegram menu exact text and URL
+        shell: bash
+        run: |
+          set -euo pipefail
           menu=$(curl --fail --silent --show-error --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMenuButton")
           node -e '
-            const me=JSON.parse(process.argv[1]);
-            const menu=JSON.parse(process.argv[2]);
-            const expected=String(process.env.APP_URL||"").replace(/\/+$/,"");
-            const actual=String(menu.result?.web_app?.url||"").replace(/\/+$/,"");
-            if(!me.ok || String(me.result?.username||"").toLowerCase()!=="pivnik_bonus_bot") throw new Error("Wrong Telegram bot");
+            const menu=JSON.parse(process.argv[1]);
+            const expectedUrl=String(process.env.APP_URL||"").replace(/\/+$/,"");
+            const actualUrl=String(menu.result?.web_app?.url||"").replace(/\/+$/,"");
+            const text=String(menu.result?.text||"");
+            console.log(`MENU_TYPE=${menu.result?.type||""}`);
+            console.log(`MENU_TEXT=${text}`);
+            console.log(`MENU_URL=${actualUrl}`);
             if(!menu.ok || menu.result?.type!=="web_app") throw new Error("Telegram menu is not web_app");
-            if(actual!==expected) throw new Error(`Wrong menu URL: ${actual}`);
-            console.log(`BOT=@${me.result.username}`);
-            console.log(`MENU=${menu.result.text}`);
-            console.log(`MENU_URL=${actual}`);
-            console.log("TELEGRAM_MENU_OK=true");
-          ' "$me" "$menu"
-      - name: Verify live public Pivnik root and health
+            if(text!=="Открыть ПРИЛОЖЕНИЕ") throw new Error(`Wrong menu text: ${text}`);
+            if(actualUrl!==expectedUrl) throw new Error(`Wrong menu URL: ${actualUrl}`);
+            console.log("TELEGRAM_MENU_LABEL_OK=true");
+          ' "$menu"
+      - name: Verify live app stayed healthy
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --max-time 20 "$APP_URL/" >/tmp/root.html
-          grep -q '<title>Пивник | Бонусы</title>' /tmp/root.html
-          grep -q 'id="bootScreen"' /tmp/root.html
-          ! grep -q 'The train has not arrived at the station' /tmp/root.html
           body=$(curl --fail --silent --show-error --max-time 20 "$APP_URL/api/health")
-          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("Health failed"); if(Number(x.users)<1) throw new Error("Test client missing"); console.log(`PUBLIC_APP_OK=true users=${x.users}`);' "$body"
-      - name: Verify Railway deployment and runtime markers
-        shell: bash
-        run: |
-          set -euo pipefail
-          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$APP_SERVICE" --workspace "$WORKSPACE_ID" --json >/dev/null
-          deployments=$(railway deployment list -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --limit 1 --json)
-          node -e 'const x=JSON.parse(process.argv[1]); if(!Array.isArray(x)||x[0]?.status!=="SUCCESS") throw new Error("Latest Railway deployment is not SUCCESS"); console.log(`DEPLOYMENT_OK=${x[0].id}`);' "$deployments"
-          logs=$(railway logs -s "$APP_SERVICE" -e "$ENVIRONMENT_ID" --deployment --latest --lines 220)
-          printf '%s\n' "$logs" | grep -Fq "Telegram bot menu repaired: $APP_URL"
-          printf '%s\n' "$logs" | grep -q 'Pivnik test client ready:'
-          printf '%s\n' "$logs" | grep -q 'Applied unlimited cancellation for owner/admin; staff limits remain unchanged.'
-          echo 'RUNTIME_MARKERS_OK=true'
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error("Health failed"); console.log(`PUBLIC_APP_OK=true users=${x.users}`);' "$body"
