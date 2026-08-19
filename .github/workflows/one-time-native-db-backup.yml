@@ -11,13 +11,13 @@ jobs:
   backup:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/native-db-backup'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
       PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
       ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
       WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
-      POSTGRES_SERVICE_ID: 4f0c39c3-cd84-4f41-a97e-c95b342653c4
+      POSTGRES_SERVICE: Postgres
       BACKUP_KEY_A: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       BACKUP_KEY_B: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
     steps:
@@ -29,30 +29,54 @@ jobs:
           node-version: '20'
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Create verified encrypted custom-format dump
+      - name: Create verified encrypted custom-format dump through private SSH tunnel
         shell: bash
         run: |
           set -euo pipefail
           test -n "$BACKUP_KEY_A"
           test -n "$BACKUP_KEY_B"
-          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
-          railway variable list -s "$POSTGRES_SERVICE_ID" -e "$ENVIRONMENT_ID" --json >/tmp/dbvars.json
-          DB_URL=$(node - <<'NODE'
+          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$POSTGRES_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
+          railway variable list -s "$POSTGRES_SERVICE" -e "$ENVIRONMENT_ID" --json >/tmp/dbvars.json
+          eval "$(node - <<'NODE'
           const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/dbvars.json','utf8'));
-          const v=String(x.DATABASE_PUBLIC_URL||'').trim();
-          if(!/^postgres(?:ql)?:\/\//i.test(v)) throw new Error('DATABASE_PUBLIC_URL is unavailable');
-          process.stdout.write(v);
+          const need=['PGUSER','PGPASSWORD','PGDATABASE'];
+          for(const k of need){
+            const v=String(x[k]||'');
+            if(!v) throw new Error(`Missing ${k}`);
+            const q=v.replace(/'/g,"'\\''");
+            console.log(`${k}='${q}'`);
+          }
           NODE
-          )
+          )"
+          export PGUSER PGPASSWORD PGDATABASE
           mkdir -p /tmp/pivnik-backup
-          docker run --rm \
-            -e SOURCE_DATABASE_URL="$DB_URL" \
+          railway connect "$POSTGRES_SERVICE" --environment production --tunnel-only --port 55432 >/tmp/railway-tunnel.log 2>&1 &
+          TUNNEL_PID=$!
+          cleanup(){ kill "$TUNNEL_PID" 2>/dev/null || true; wait "$TUNNEL_PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=false
+          for i in $(seq 1 40); do
+            if (echo > /dev/tcp/127.0.0.1/55432) >/dev/null 2>&1; then ready=true; break; fi
+            if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+              echo 'Railway SSH tunnel exited before becoming ready.' >&2
+              sed -E 's#postgres(ql)?://[^[:space:]]+#postgresql://[REDACTED]#g' /tmp/railway-tunnel.log >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+          [ "$ready" = true ] || { echo 'Railway SSH tunnel did not become ready.' >&2; exit 1; }
+          docker run --rm --network host \
+            -e PGHOST=127.0.0.1 \
+            -e PGPORT=55432 \
+            -e PGUSER="$PGUSER" \
+            -e PGPASSWORD="$PGPASSWORD" \
+            -e PGDATABASE="$PGDATABASE" \
             -v /tmp/pivnik-backup:/backup \
             postgres:18-alpine sh -lc '
               set -eu
-              pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner --no-privileges --file=/backup/pivnik-production.dump
+              pg_dump --format=custom --no-owner --no-privileges --file=/backup/pivnik-production.dump
               pg_restore --list /backup/pivnik-production.dump >/backup/restore-list.txt
-              psql "$SOURCE_DATABASE_URL" -v ON_ERROR_STOP=1 -At -F "|" -c "SELECT pg_database_size(current_database()), (SELECT count(*) FROM users), (SELECT count(*) FROM transactions)" >/backup/safe-counts.txt
+              psql -v ON_ERROR_STOP=1 -At -F "|" -c "SELECT pg_database_size(current_database()), (SELECT count(*) FROM users), (SELECT count(*) FROM transactions)" >/backup/safe-counts.txt
             '
           test -s /tmp/pivnik-backup/pivnik-production.dump
           test -s /tmp/pivnik-backup/restore-list.txt
@@ -75,6 +99,7 @@ jobs:
           created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           source_project=content-nature
           source_environment=production
+          source_transport=Railway SSH tunnel
           database_bytes=$DB_BYTES
           users=$USERS
           transactions=$TX
@@ -85,7 +110,7 @@ jobs:
           format=pg_dump custom, encrypted AES-256-CBC/PBKDF2 250000
           restore_check=pg_restore --list passed
           EOF
-          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt
+          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt /tmp/dbvars.json /tmp/railway-tunnel.log
           echo "ENCRYPTED_BACKUP_READY=true users=$USERS transactions=$TX bytes=$ENC_BYTES sha256=$ENC_SHA"
       - name: Upload encrypted backup outside Railway
         uses: actions/upload-artifact@v4
