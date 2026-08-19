@@ -1,4 +1,4 @@
-name: One-time native Postgres backup
+name: One-time encrypted Postgres launch backup
 
 on:
   pull_request:
@@ -11,50 +11,89 @@ jobs:
   backup:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/native-db-backup'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
-      RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-      VOLUME_INSTANCE_ID: fb6abedc-482e-4898-ad58-76888f263f54
-      BACKUP_NAME: Pivnik-launch-2026-08-20
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
+      ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
+      WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
+      POSTGRES_SERVICE_ID: 4f0c39c3-cd84-4f41-a97e-c95b342653c4
+      BACKUP_KEY_A: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      BACKUP_KEY_B: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
     steps:
-      - name: Create native Railway volume backup and lock it
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+      - name: Create verified encrypted custom-format dump
         shell: bash
         run: |
           set -euo pipefail
-          node --input-type=module <<'NODE'
-          const endpoint='https://backboard.railway.com/graphql/v2';
-          const token=String(process.env.RAILWAY_WORKSPACE_TOKEN||'').trim();
-          if(!token) throw new Error('Current Hobby workspace token is missing');
-          const vi=process.env.VOLUME_INSTANCE_ID;
-          const name=process.env.BACKUP_NAME;
-          async function gql(query,variables={}){
-            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query,variables})});
-            const x=await r.json().catch(()=>({}));
-            if(!r.ok||x.errors?.length) throw new Error((x.errors||[]).map(e=>e.message).join(' | ')||`HTTP ${r.status}`);
-            return x.data;
-          }
-          const type=await gql('query { __type(name:"VolumeInstanceBackup"){ fields { name } } }');
-          const available=new Set((type?.__type?.fields||[]).map(f=>f.name));
-          const wanted=['id','name','createdAt','updatedAt','status','locked','expiresAt','sizeMB'].filter(x=>available.has(x));
-          if(!wanted.includes('id')) throw new Error('VolumeInstanceBackup.id is unavailable');
-          const listQuery=`query($id:String!){ volumeInstanceBackupList(volumeInstanceId:$id){ ${wanted.join(' ')} } }`;
-          const before=await gql(listQuery,{id:vi});
-          let backup=(before.volumeInstanceBackupList||[]).find(x=>x.name===name);
-          if(!backup){
-            await gql('mutation($id:String!,$name:String){ volumeInstanceBackupCreate(volumeInstanceId:$id,name:$name){ __typename } }',{id:vi,name});
-            for(let i=0;i<40;i++){
-              await new Promise(r=>setTimeout(r,2000));
-              const after=await gql(listQuery,{id:vi});
-              backup=(after.volumeInstanceBackupList||[]).find(x=>x.name===name);
-              if(backup) break;
-            }
-          }
-          if(!backup) throw new Error('Created backup did not appear in backup list');
-          if(available.has('locked') ? !backup.locked : true){
-            await gql('mutation($vi:String!,$bid:String!){ volumeInstanceBackupLock(volumeInstanceId:$vi,volumeInstanceBackupId:$bid) }',{vi,bid:backup.id});
-          }
-          const final=await gql(listQuery,{id:vi});
-          const item=(final.volumeInstanceBackupList||[]).find(x=>x.id===backup.id);
-          console.log('BACKUP_CREATED_AND_LOCKED=true');
-          console.log('BACKUP_SAFE='+JSON.stringify(item));
+          test -n "$BACKUP_KEY_A"
+          test -n "$BACKUP_KEY_B"
+          railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
+          railway variable list -s "$POSTGRES_SERVICE_ID" -e "$ENVIRONMENT_ID" --json >/tmp/dbvars.json
+          DB_URL=$(node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/dbvars.json','utf8'));
+          const v=String(x.DATABASE_PUBLIC_URL||'').trim();
+          if(!/^postgres(?:ql)?:\/\//i.test(v)) throw new Error('DATABASE_PUBLIC_URL is unavailable');
+          process.stdout.write(v);
           NODE
+          )
+          mkdir -p /tmp/pivnik-backup
+          docker run --rm \
+            -e SOURCE_DATABASE_URL="$DB_URL" \
+            -v /tmp/pivnik-backup:/backup \
+            postgres:18-alpine sh -lc '
+              set -eu
+              pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner --no-privileges --file=/backup/pivnik-production.dump
+              pg_restore --list /backup/pivnik-production.dump >/backup/restore-list.txt
+              psql "$SOURCE_DATABASE_URL" -v ON_ERROR_STOP=1 -At -F "|" -c "SELECT pg_database_size(current_database()), (SELECT count(*) FROM users), (SELECT count(*) FROM transactions)" >/backup/safe-counts.txt
+            '
+          test -s /tmp/pivnik-backup/pivnik-production.dump
+          test -s /tmp/pivnik-backup/restore-list.txt
+          RAW_SHA=$(sha256sum /tmp/pivnik-backup/pivnik-production.dump | awk '{print $1}')
+          COUNTS=$(cat /tmp/pivnik-backup/safe-counts.txt)
+          PASSPHRASE=$(printf '%s\n%s' "$BACKUP_KEY_A" "$BACKUP_KEY_B" | sha256sum | awk '{print $1}')
+          export PASSPHRASE
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 250000 \
+            -pass env:PASSPHRASE \
+            -in /tmp/pivnik-backup/pivnik-production.dump \
+            -out /tmp/pivnik-backup/PIVNIK_PRODUCTION_2026-08-20.dump.enc
+          ENC_SHA=$(sha256sum /tmp/pivnik-backup/PIVNIK_PRODUCTION_2026-08-20.dump.enc | awk '{print $1}')
+          RAW_BYTES=$(stat -c%s /tmp/pivnik-backup/pivnik-production.dump)
+          ENC_BYTES=$(stat -c%s /tmp/pivnik-backup/PIVNIK_PRODUCTION_2026-08-20.dump.enc)
+          DB_BYTES=$(printf '%s' "$COUNTS" | cut -d'|' -f1)
+          USERS=$(printf '%s' "$COUNTS" | cut -d'|' -f2)
+          TX=$(printf '%s' "$COUNTS" | cut -d'|' -f3)
+          cat > /tmp/pivnik-backup/manifest.txt <<EOF
+          PIVNIK production encrypted launch backup
+          created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          source_project=content-nature
+          source_environment=production
+          database_bytes=$DB_BYTES
+          users=$USERS
+          transactions=$TX
+          raw_dump_bytes=$RAW_BYTES
+          encrypted_dump_bytes=$ENC_BYTES
+          raw_dump_sha256=$RAW_SHA
+          encrypted_dump_sha256=$ENC_SHA
+          format=pg_dump custom, encrypted AES-256-CBC/PBKDF2 250000
+          restore_check=pg_restore --list passed
+          EOF
+          rm -f /tmp/pivnik-backup/pivnik-production.dump /tmp/pivnik-backup/restore-list.txt /tmp/pivnik-backup/safe-counts.txt
+          echo "ENCRYPTED_BACKUP_READY=true users=$USERS transactions=$TX bytes=$ENC_BYTES sha256=$ENC_SHA"
+      - name: Upload encrypted backup outside Railway
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIVNIK_PRODUCTION_BACKUP_2026-08-20
+          path: |
+            /tmp/pivnik-backup/PIVNIK_PRODUCTION_2026-08-20.dump.enc
+            /tmp/pivnik-backup/manifest.txt
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
