@@ -1,0 +1,91 @@
+name: One-time legacy Railway project recovery probe
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/recover-legacy-railway-db'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_ACCOUNT_TOKEN }}
+      OLD_PROJECT_ID: 9a940d7a-b0b0-4893-a90d-1b0a8b6850d5
+      OLD_ENVIRONMENT_ID: aa461df9-1dbb-4000-8906-f13dd8008a6f
+      OLD_DB_SERVICE_ID: beb858e1-c412-42b8-b570-bda36ca82b59
+      OLD_VK_DB_SERVICE_ID: de5da1be-76c1-4976-a88c-efcce93600e6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts
+      - name: Probe legacy project and Postgres safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import crypto from 'node:crypto';
+          import pg from 'pg';
+          const { Client } = pg;
+          const endpoint='https://backboard.railway.com/graphql/v2';
+          const token=String(process.env.RAILWAY_API_TOKEN||'').trim();
+          if(!token) throw new Error('RAILWAY_ACCOUNT_TOKEN missing');
+          async function gql(query, variables={}){
+            const r=await fetch(endpoint,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'pivnik-legacy-recovery-probe/1.0'},body:JSON.stringify({query,variables})});
+            const p=await r.json().catch(()=>({}));
+            return {status:r.status,payload:p};
+          }
+          const projectId=process.env.OLD_PROJECT_ID;
+          const environmentId=process.env.OLD_ENVIRONMENT_ID;
+          const serviceIds=[process.env.OLD_DB_SERVICE_ID,process.env.OLD_VK_DB_SERVICE_ID];
+          const projectProbe=await gql(`query Project($id: String!){ project(id:$id){ id name environments{ edges{ node{ id name } } } services{ edges{ node{ id name } } } } }`,{id:projectId});
+          const projectErrors=(projectProbe.payload.errors||[]).map(x=>String(x.message||'')).join(' | ');
+          const project=projectProbe.payload?.data?.project;
+          console.log('OLD_PROJECT_HTTP='+projectProbe.status);
+          console.log('OLD_PROJECT_VISIBLE='+Boolean(project));
+          if(project){
+            console.log('OLD_PROJECT_NAME='+String(project.name||''));
+            console.log('OLD_PROJECT_ENVIRONMENTS='+JSON.stringify((project.environments?.edges||[]).map(e=>({id:e.node?.id,name:e.node?.name}))));
+            console.log('OLD_PROJECT_SERVICES='+JSON.stringify((project.services?.edges||[]).map(e=>({id:e.node?.id,name:e.node?.name}))));
+          }else{
+            console.log('OLD_PROJECT_ERROR_CLASS='+crypto.createHash('sha256').update(projectErrors||`http:${projectProbe.status}`).digest('hex').slice(0,16));
+            console.log('OLD_PROJECT_ERROR_TEXT='+projectErrors.replace(/postgres(?:ql)?:\/\/[^\s]+/gi,'[redacted]').slice(0,500));
+          }
+          for(const serviceId of serviceIds){
+            const varsProbe=await gql(`query Vars($projectId:String!,$environmentId:String!,$serviceId:String!){ variables(projectId:$projectId,environmentId:$environmentId,serviceId:$serviceId,unrendered:false) }`,{projectId,environmentId,serviceId});
+            const vars=varsProbe.payload?.data?.variables;
+            const err=(varsProbe.payload.errors||[]).map(x=>String(x.message||'')).join(' | ');
+            console.log(`SERVICE_${serviceId.slice(0,8)}_VARIABLES_HTTP=${varsProbe.status}`);
+            console.log(`SERVICE_${serviceId.slice(0,8)}_VARIABLES_VISIBLE=${Boolean(vars&&typeof vars==='object')}`);
+            if(!vars||typeof vars!=='object'){
+              console.log(`SERVICE_${serviceId.slice(0,8)}_ERROR=${err.replace(/postgres(?:ql)?:\/\/[^\s]+/gi,'[redacted]').slice(0,300)}`);
+              continue;
+            }
+            const url=String(vars.DATABASE_PUBLIC_URL||vars.DATABASE_URL||'').trim();
+            console.log(`SERVICE_${serviceId.slice(0,8)}_DB_URL_PRESENT=${Boolean(url)}`);
+            if(!url) continue;
+            const safeHost=(()=>{try{return new URL(url).hostname}catch{return 'invalid'}})();
+            console.log(`SERVICE_${serviceId.slice(0,8)}_DB_HOST_HASH=${crypto.createHash('sha256').update(safeHost).digest('hex').slice(0,16)}`);
+            try{
+              const c=new Client({connectionString:url,ssl:/railway\.internal/i.test(url)?false:{rejectUnauthorized:false},connectionTimeoutMillis:8000,statement_timeout:8000});
+              await c.connect();
+              const counts={};
+              for(const table of ['users','wallets','transactions','beer_loyalty','shifts','user_identities','achievements','beta_grants']){
+                try{const q=await c.query(`SELECT COUNT(*)::int AS n FROM ${table}`); counts[table]=q.rows[0].n}catch{counts[table]='missing'}
+              }
+              let dbIdentity='unknown';
+              try{const q=await c.query("SELECT value FROM app_meta WHERE key='database_identity' LIMIT 1"); if(q.rows[0]?.value) dbIdentity=crypto.createHash('sha256').update(String(q.rows[0].value)).digest('hex').slice(0,20)}catch{}
+              console.log(`SERVICE_${serviceId.slice(0,8)}_DB_REACHABLE=true COUNTS=${JSON.stringify(counts)} FINGERPRINT=${dbIdentity}`);
+              await c.end();
+            }catch(e){
+              console.log(`SERVICE_${serviceId.slice(0,8)}_DB_REACHABLE=false ERROR_CLASS=${String(e.code||e.name||'error').slice(0,50)}`);
+            }
+          }
+          NODE
