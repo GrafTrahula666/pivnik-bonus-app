@@ -92,7 +92,7 @@ jobs:
           else
             echo 'OWNER_VK_ID_CONFIGURED=false'
           fi
-      - name: Generate VK public domain before deploy
+      - name: Resolve VK public domain before deploy
         shell: bash
         run: |
           set -euo pipefail
@@ -104,6 +104,7 @@ jobs:
           let d='';
           if(typeof x==='string') d=x;
           else if(Array.isArray(x)) d=x[0]?.domain||x[0]?.url||x[0]||'';
+          else if(Array.isArray(x?.domains)) d=x.domains[0]||'';
           else d=x?.domain||x?.url||x?.serviceDomain||'';
           d=String(d).replace(/^https?:\/\//,'').replace(/\/$/,'');
           if(!d) throw new Error(`Cannot parse Railway domain: ${raw}`);
@@ -158,6 +159,7 @@ jobs:
           console.log('VK_APP_SECRET_PRESENT='+secret);
           console.log('VK_DOCUMENT_PLATFORM='+String(x.PIVNIK_DOCUMENT_PLATFORM||''));
           console.log('VK_AUTH_READY='+secret);
+          if(!secret) throw new Error('VK_APP_SECRET is still missing; VK authentication cannot be considered ready');
           NODE
       - name: Re-verify Telegram button, health and release code
         shell: bash
