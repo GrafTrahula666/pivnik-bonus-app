@@ -219,9 +219,9 @@ const catalog = [
   },
   {
     code: 'active-beta-participant',
-    title: 'За активное участие в бета-тесте',
-    description: 'Уникальная благодарность двум Telegram-пользователям, активно участвовавшим в бета-тестировании приложения.',
-    condition: 'Активно участвовать в бета-тестировании приложения.',
+    title: 'Поднять щиты',
+    description: 'Выдано самым активным участникам бета-теста за помощь в проверке и доработке приложения на раннем этапе.',
+    condition: 'Выдано самым активным участникам бета-теста за помощь в проверке и доработке приложения на раннем этапе.',
     rarity: 'legendary',
     type: 'unique',
     icon: 'beta-active',
@@ -700,8 +700,11 @@ async function resolveTelegramAchievementUser(db, telegramUsername) {
        ON ui.user_id = u.id AND ui.provider = 'telegram'
      WHERE u.merged_into_user_id IS NULL
        AND u.deleted_at IS NULL
-       AND LOWER(REGEXP_REPLACE(COALESCE(u.username, ''), '^@+', '')) = $1::text
-       AND (u.telegram_id IS NOT NULL OR ui.provider_user_id IS NOT NULL)
+        AND (
+          LOWER(REGEXP_REPLACE(COALESCE(u.username, ''), '^@+', '')) = $1::text
+          OR LOWER(REGEXP_REPLACE(COALESCE(ui.provider_username, ''), '^@+', '')) = $1::text
+        )
+        AND (u.telegram_id IS NOT NULL OR ui.provider_user_id IS NOT NULL)
      ORDER BY u.id
      LIMIT 2`,
     [normalizedUsername]
@@ -898,6 +901,17 @@ export async function initializeAchievementGrants(db, options = {}) {
     }
 
     const verificationIds = batchAlreadyCompleted ? [] : activeBetaUserIds;
+    const additionalActiveBetaUsername = normalizeTelegramUsername(
+      options.additionalActiveBetaTesterTelegramUsername || 'KSEMAR'
+    );
+    const additionalActiveBetaUserId = additionalActiveBetaUsername
+      ? await resolveTelegramAchievementUser(client, additionalActiveBetaUsername)
+      : null;
+    const ownerActiveBetaUserId = ownerId || null;
+    const extraActiveBetaUserIds = [...new Set(
+      [ownerActiveBetaUserId, additionalActiveBetaUserId].filter(Boolean)
+    )];
+
     const activeBetaLedger = await client.query(
       `SELECT
          COUNT(*)::integer AS grant_count,
@@ -905,11 +919,14 @@ export async function initializeAchievementGrants(db, options = {}) {
          COALESCE(SUM(amount), 0)::bigint AS grant_amount,
          COUNT(*) FILTER (
            WHERE user_id = ANY($1::bigint[])
-         )::integer AS intended_count
+         )::integer AS intended_count,
+         COUNT(*) FILTER (
+           WHERE user_id = ANY($2::bigint[])
+         )::integer AS extra_count
        FROM reward_grants
        WHERE source = 'achievement'
          AND achievement_code = 'active-beta-participant'`,
-      [verificationIds]
+      [verificationIds, extraActiveBetaUserIds]
     );
     const activeBetaTransactions = await client.query(
       `SELECT
@@ -918,32 +935,68 @@ export async function initializeAchievementGrants(db, options = {}) {
          COALESCE(SUM(bonus_earned), 0)::bigint AS transaction_amount,
          COUNT(*) FILTER (
            WHERE client_id = ANY($1::bigint[])
-         )::integer AS intended_count
+         )::integer AS intended_count,
+         COUNT(*) FILTER (
+           WHERE client_id = ANY($2::bigint[])
+         )::integer AS extra_count
        FROM transactions
        WHERE status = 'completed'
          AND reward_code = 'achievement:active-beta-participant'`,
-      [verificationIds]
+      [verificationIds, extraActiveBetaUserIds]
     );
     const grantCheck = activeBetaLedger.rows[0] || {};
     const transactionCheck = activeBetaTransactions.rows[0] || {};
     const grantCount = number(grantCheck.grant_count);
-    const validGrantRecipients = batchAlreadyCompleted
-      ? grantCount <= expectedRecipients
-        && number(grantCheck.user_count) === grantCount
-        && number(grantCheck.grant_amount) === grantCount * rewardPerUser
-      : grantCount === expectedRecipients
-        && number(grantCheck.user_count) === expectedRecipients
-        && number(grantCheck.grant_amount) === expectedRecipients * rewardPerUser
-        && number(grantCheck.intended_count) === expectedRecipients;
+    const extraGrantCount = number(grantCheck.extra_count);
+    const transactionCount = number(transactionCheck.transaction_count);
+    const extraTransactionCount = number(transactionCheck.extra_count);
+    const batchGrantCount = grantCount - extraGrantCount;
+    const batchTransactionCount = transactionCount - extraTransactionCount;
+
+    const validGrantRecipients = (
+      (batchAlreadyCompleted ? batchGrantCount <= expectedRecipients : batchGrantCount === expectedRecipients)
+      && number(grantCheck.user_count) === grantCount
+      && number(grantCheck.grant_amount) === grantCount * rewardPerUser
+      && extraGrantCount <= extraActiveBetaUserIds.length
+      && (batchAlreadyCompleted || number(grantCheck.intended_count) === expectedRecipients)
+    );
     const validActiveBetaLedger = (
       validGrantRecipients
-      && number(transactionCheck.transaction_count) === expectedRecipients
-      && number(transactionCheck.user_count) === expectedRecipients
-      && number(transactionCheck.transaction_amount) === expectedRecipients * rewardPerUser
+      && batchTransactionCount === expectedRecipients
+      && number(transactionCheck.user_count) === transactionCount
+      && number(transactionCheck.transaction_amount) === transactionCount * rewardPerUser
+      && extraTransactionCount <= extraActiveBetaUserIds.length
       && (batchAlreadyCompleted || number(transactionCheck.intended_count) === expectedRecipients)
     );
     if (!validActiveBetaLedger) {
       throw new Error('Журнал уникального beta-достижения не прошёл проверку идемпотентности.');
+    }
+
+    let activeBetaOwnerGranted = 0;
+    let activeBetaAdditionalGranted = 0;
+    for (const [kind, userId] of [
+      ['owner', ownerActiveBetaUserId],
+      ['additional', additionalActiveBetaUserId]
+    ]) {
+      if (!userId) continue;
+      await client.query(
+        `SELECT id
+         FROM users
+         WHERE id = $1::bigint
+           AND merged_into_user_id IS NULL
+           AND deleted_at IS NULL
+         FOR UPDATE`,
+        [userId]
+      );
+      await ensureUserRewardAccounts(client, userId);
+      if (await awardAchievement(
+        client,
+        userId,
+        definitionByCode('active-beta-participant')
+      )) {
+        if (kind === 'owner') activeBetaOwnerGranted = 1;
+        if (kind === 'additional') activeBetaAdditionalGranted = 1;
+      }
     }
 
     await client.query('COMMIT');
@@ -955,10 +1008,14 @@ export async function initializeAchievementGrants(db, options = {}) {
         ? number(completedBatch.rows[0].expected_recipients)
         : activeBetaUserIds.length,
       activeBetaGranted,
-      activeBetaLedgerCount: number(grantCheck.grant_count),
-      activeBetaLedgerAmount: number(grantCheck.grant_amount),
-      activeBetaTransactionCount: number(transactionCheck.transaction_count),
-      activeBetaTransactionAmount: number(transactionCheck.transaction_amount)
+      activeBetaOwnerResolved: Boolean(ownerActiveBetaUserId),
+      activeBetaOwnerGranted,
+      activeBetaAdditionalResolved: Boolean(additionalActiveBetaUserId),
+      activeBetaAdditionalGranted,
+      activeBetaLedgerCount: number(grantCheck.grant_count) + activeBetaOwnerGranted + activeBetaAdditionalGranted,
+      activeBetaLedgerAmount: number(grantCheck.grant_amount) + (activeBetaOwnerGranted + activeBetaAdditionalGranted) * rewardPerUser,
+      activeBetaTransactionCount: number(transactionCheck.transaction_count) + activeBetaOwnerGranted + activeBetaAdditionalGranted,
+      activeBetaTransactionAmount: number(transactionCheck.transaction_amount) + (activeBetaOwnerGranted + activeBetaAdditionalGranted) * rewardPerUser
     };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}

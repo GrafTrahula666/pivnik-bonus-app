@@ -12,6 +12,12 @@ import {
   initializeAchievementGrants
 } from './achievements.js';
 import {
+  applyReferralCode,
+  expireOverdueReferrals,
+  getReferralOverview,
+  reconcileReferral
+} from './referrals.js';
+import {
   chooseCanonicalUser,
   hashLinkCode,
   normalizeLinkCode as normalizeCoreLinkCode,
@@ -574,7 +580,7 @@ async function initPlatformDatabase() {
     }
     platformReady = true;
     console.log(
-      `Achievement ledger is ready: active beta ${achievementInitialization.activeBetaResolved}, new grants ${achievementInitialization.activeBetaGranted}, deferred ${achievementInitialization.deferred}.`
+      `Achievement ledger is ready: active beta ${achievementInitialization.activeBetaResolved}, new grants ${achievementInitialization.activeBetaGranted}, owner shield ${Boolean(achievementInitialization.activeBetaOwnerResolved)}, owner new grant ${achievementInitialization.activeBetaOwnerGranted || 0}, KSEMAR resolved ${Boolean(achievementInitialization.activeBetaAdditionalResolved)}, KSEMAR new grant ${achievementInitialization.activeBetaAdditionalGranted || 0}, deferred ${achievementInitialization.deferred}.`
     );
     console.log('Separate Telegram/VK account mode is ready.');
   } catch (error) {
@@ -1473,6 +1479,9 @@ async function resolveProviderUser(provider, externalUser) {
     void ensureSupplementalRecords(userId).catch((error) => {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
     });
+  });
+  await reconcileReferral(pool, userId).catch((error) => {
+    console.error('Referral reconciliation after auth failed:', error?.code || error?.message || 'unknown');
   });
   return { token, ...(await getAppPayload(userId, provider, { startup: true })) };
 }
@@ -2971,6 +2980,31 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await getAppPayload(user.id, platform));
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/me/referral') {
+      const user = await requireGatewayUser(req);
+      platformFromRequest(req, user.payload.platform || 'unknown');
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, await getReferralOverview(pool, user.id));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/me/referral/apply') {
+      const user = await requireGatewayUser(req);
+      platformFromRequest(req, user.payload.platform || 'unknown');
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      enforceRateLimit(
+        `referral-apply:${user.id}:${requestAddress(req)}`,
+        12,
+        15 * 60 * 1000
+      );
+      const body = parseJsonBody(await readRequestBody(req));
+      await applyReferralCode(pool, user.id, body.code);
+      return sendJson(res, 200, await getReferralOverview(pool, user.id));
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/achievements') {
       const user = await requireGatewayUser(req);
       platformFromRequest(req, user.payload.platform || 'unknown');
@@ -3183,6 +3217,12 @@ if (!isTestImport) {
       await waitForChild();
       await initPlatformDatabase();
       await refreshDatabaseFingerprint();
+      const referralExpiryTimer = setInterval(() => {
+        void expireOverdueReferrals(pool).catch((error) => {
+          console.error('Referral expiry reconciliation failed:', error?.code || error?.message || 'unknown');
+        });
+      }, 5 * 60 * 1000);
+      referralExpiryTimer.unref();
     } catch (error) {
       console.error(
         'Platform initialization failed:',
