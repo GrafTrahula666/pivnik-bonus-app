@@ -375,23 +375,19 @@ test('PostgreSQL: единый журнал выдерживает переза�
     const second = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
     assert.equal(first.activeBetaResolved, 2);
     assert.equal(first.activeBetaGranted, 2);
-    assert.equal(first.activeBetaOwnerResolved, true);
-    assert.equal(first.activeBetaOwnerGranted, 1);
     assert.equal(first.activeBetaAdditionalResolved, true);
     assert.equal(first.activeBetaAdditionalGranted, 1);
-    assert.equal(first.activeBetaLedgerCount, 4);
-    assert.equal(first.activeBetaLedgerAmount, 4000);
-    assert.equal(first.activeBetaTransactionCount, 4);
-    assert.equal(first.activeBetaTransactionAmount, 4000);
+    assert.equal(first.activeBetaLedgerCount, 3);
+    assert.equal(first.activeBetaLedgerAmount, 3000);
+    assert.equal(first.activeBetaTransactionCount, 3);
+    assert.equal(first.activeBetaTransactionAmount, 3000);
     assert.equal(second.activeBetaGranted, 0);
-    assert.equal(second.activeBetaOwnerResolved, true);
-    assert.equal(second.activeBetaOwnerGranted, 0);
     assert.equal(second.activeBetaAdditionalResolved, true);
     assert.equal(second.activeBetaAdditionalGranted, 0);
-    assert.equal(second.activeBetaLedgerCount, 4);
-    assert.equal(second.activeBetaLedgerAmount, 4000);
-    assert.equal(second.activeBetaTransactionCount, 4);
-    assert.equal(second.activeBetaTransactionAmount, 4000);
+    assert.equal(second.activeBetaLedgerCount, 3);
+    assert.equal(second.activeBetaLedgerAmount, 3000);
+    assert.equal(second.activeBetaTransactionCount, 3);
+    assert.equal(second.activeBetaTransactionAmount, 3000);
     assert.equal(second.creatorGranted, false);
     const completedBatch = await db.query(
       `SELECT COUNT(*)::integer AS count
@@ -415,24 +411,45 @@ test('PostgreSQL: единый журнал выдерживает переза�
        FROM reward_grants
        WHERE achievement_code = 'active-beta-participant'`
     );
-    assert.equal(Number(activeGrants.rows[0].count), 4);
-    assert.equal(Number(activeGrants.rows[0].amount), 4000);
+    assert.equal(Number(activeGrants.rows[0].count), 3);
+    assert.equal(Number(activeGrants.rows[0].amount), 3000);
     const activeLedger = await db.query(
       `SELECT COUNT(*)::integer AS count
        FROM transactions
-       WHERE reward_code = 'achievement:active-beta-participant'`
+       WHERE reward_code = 'achievement:active-beta-participant'
+          OR reward_code LIKE 'achievement:raise-shields:%'`
     );
-    assert.equal(Number(activeLedger.rows[0].count), 4);
+    assert.equal(Number(activeLedger.rows[0].count), 3);
     const ownerWallet = await db.query(
       'SELECT balance FROM wallets WHERE user_id = $1',
       [users[3]]
     );
-    assert.equal(Number(ownerWallet.rows[0].balance), 1000);
+    assert.equal(Number(ownerWallet.rows[0].balance), 0);
     const ksemarWallet = await db.query(
       'SELECT balance FROM wallets WHERE user_id = $1',
       [users[4]]
     );
     assert.equal(Number(ksemarWallet.rows[0].balance), 1000);
+    const ksemarGrant = await db.query(
+      `SELECT code
+       FROM reward_grants
+       WHERE user_id = $1
+         AND achievement_code = 'active-beta-participant'`,
+      [users[4]]
+    );
+    assert.equal(ksemarGrant.rows[0].code, `achievement:raise-shields:${users[4]}`);
+
+    await db.query('UPDATE users SET username = $2 WHERE id = $1', [users[4], 'renamed-ksemar']);
+    await db.query(
+      `UPDATE user_identities
+       SET provider_username = 'renamed-ksemar'
+       WHERE user_id = $1 AND provider = 'telegram'`,
+      [users[4]]
+    );
+    const afterUsernameChange = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
+    assert.equal(afterUsernameChange.activeBetaAdditionalResolved, true);
+    assert.equal(afterUsernameChange.activeBetaAdditionalGranted, 0);
+    assert.equal(afterUsernameChange.activeBetaLedgerCount, 3);
 
     const unrelatedState = await getUserAchievementState(db, users[2]);
     assert.equal(
@@ -512,8 +529,10 @@ test('PostgreSQL: единый журнал выдерживает переза�
     const afterDeletion = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
     assert.equal(afterDeletion.activeBetaResolved, 2);
     assert.equal(afterDeletion.activeBetaGranted, 0);
-    assert.equal(afterDeletion.activeBetaLedgerCount, 3);
-    assert.equal(afterDeletion.activeBetaLedgerAmount, 3000);
+    assert.equal(afterDeletion.activeBetaLedgerCount, 2);
+    assert.equal(afterDeletion.activeBetaLedgerAmount, 2000);
+    assert.equal(afterDeletion.activeBetaTransactionCount, 3);
+    assert.equal(afterDeletion.activeBetaTransactionAmount, 3000);
     const ksemarAfterRestart = await db.query(
       `SELECT w.balance,
               COUNT(rg.*)::integer AS grants

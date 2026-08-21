@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '21.0-referral-v2';
+const APP_VERSION = '21.0-referral-v2.1';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -1942,6 +1942,8 @@ function formatReferralRemaining(seconds) {
 }
 
 function referralShareUrl(code) {
+  const serverUrl = String(state.referral?.shareUrl || '').trim();
+  if (serverUrl) return serverUrl;
   const url = new URL(IS_VK ? '/vk' : '/', location.origin);
   url.searchParams.set('ref', code);
   return url.toString();
@@ -1954,10 +1956,6 @@ function renderReferral() {
   if ($('#referralOwnCode')) $('#referralOwnCode').textContent = data.ownCode || '—';
   if ($('#referralInvitedCount')) $('#referralInvitedCount').textContent = fmt(data.inviterStats?.invited || 0);
   if ($('#referralRewardedCount')) $('#referralRewardedCount').textContent = fmt(data.inviterStats?.rewarded || 0);
-  if ($('#referralMonthlyCount')) {
-    $('#referralMonthlyCount').textContent =
-      `${fmt(data.inviterStats?.rewardedThisMonth || 0)} / ${fmt(data.inviterStats?.monthlyRewardLimit || 10)}`;
-  }
 
   const canApply = Boolean(data.registrationWindow?.canApply);
   const linked = Boolean(data.referral?.linked);
@@ -2008,7 +2006,7 @@ async function applyReferralCodeFromUi(code, { silent = false } = {}) {
 
 async function applyLaunchReferral() {
   const launchCode = referralLaunchCode || readReferralLaunchCode();
-  if (!launchCode || !state.token) return;
+  if (!launchCode || !state.token || !state.profile?.termsAccepted) return;
   try {
     await applyReferralCodeFromUi(launchCode, { silent: true });
   } catch (error) {
@@ -2198,6 +2196,7 @@ async function acceptTerms() {
     closeModal('consentModal');
     renderProfile();
     toast('Правила приняты');
+    await applyLaunchReferral();
     void loadSecondaryData();
   } finally {
     if (button) button.disabled = false;

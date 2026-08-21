@@ -5,11 +5,11 @@ import { PGlite } from '@electric-sql/pglite';
 import {
   applyReferralCode,
   ensureReferralCode,
+  expireOverdueReferrals,
   getReferralOverview,
   reconcileReferral,
   REFERRAL_CODE_TTL_MS,
-  REFERRAL_QUALIFICATION_MS,
-  REFERRER_MONTHLY_REWARD_LIMIT
+  REFERRAL_QUALIFICATION_MS
 } from '../referrals.js';
 
 async function dbFixture() {
@@ -135,9 +135,16 @@ test('code is attachable only in first 24h, immutable, and self-referral is bloc
 
   const boughtBeforeCode = await addUser(db, 'bought_before_code', BASE);
   await addPurchase(db, boughtBeforeCode, 100, hour(1));
-  await assert.rejects(
-    () => applyReferralCode(db, boughtBeforeCode, code, { now: hour(2) }),
-    (error) => error.code === 'REFERRAL_PURCHASE_ALREADY_EXISTS'
+  await applyReferralCode(db, boughtBeforeCode, code, { now: hour(2) });
+  const afterBinding = await reconcileReferral(db, boughtBeforeCode, { now: hour(2) });
+  assert.equal(afterBinding.amountCents, 0);
+
+  const exactBoundary = await addUser(db, 'exact_boundary', BASE);
+  await applyReferralCode(
+    db,
+    exactBoundary,
+    code,
+    { now: new Date(BASE.getTime() + REFERRAL_CODE_TTL_MS) }
   );
 
   const selfCode = await ensureReferralCode(db, late);
@@ -196,6 +203,29 @@ test('200 + 150 + 150 RUB in 72h rewards 100 / 50 exactly once', async () => {
   );
   assert.equal(history.rows.length, 2);
   assert.ok(history.rows.every((row) => row.mode === 'referral'));
+  await db.close();
+});
+
+test('scheduled reconciliation catches a qualifying purchase after a transient handler failure', async () => {
+  const db = await dbFixture();
+  const inviter = await addUser(db, 'scheduled-inviter', hour(-48));
+  const invited = await addUser(db, 'scheduled-invited', BASE);
+  const code = await ensureReferralCode(db, inviter);
+  await applyReferralCode(db, invited, code, { now: BASE });
+  await addPurchase(db, invited, 500, hour(1));
+
+  const result = await expireOverdueReferrals(db, { now: hour(2) });
+  assert.deepEqual(result, { checked: 1, rewarded: 1, expired: 0 });
+
+  const balances = await db.query(
+    'SELECT user_id, balance FROM wallets WHERE user_id IN ($1::bigint, $2::bigint)',
+    [inviter, invited]
+  );
+  const balanceByUser = Object.fromEntries(
+    balances.rows.map((row) => [String(row.user_id), Number(row.balance)])
+  );
+  assert.equal(balanceByUser[inviter], 100);
+  assert.equal(balanceByUser[invited], 50);
   await db.close();
 });
 
@@ -271,12 +301,13 @@ test('late purchases never activate expired referral; late worker preserves in-w
   await db.close();
 });
 
-test('inviter monthly payout is capped while invited user still receives 50', async () => {
+test('every qualified friend rewards inviter 100 and invited user 50 without a hidden cap', async () => {
   const db = await dbFixture();
   const inviter = await addUser(db, 'popular_inviter', hour(-48));
   const code = await ensureReferralCode(db, inviter);
+  const referralCount = 11;
 
-  for (let index = 0; index < REFERRER_MONTHLY_REWARD_LIMIT + 1; index += 1) {
+  for (let index = 0; index < referralCount; index += 1) {
     const invited = await addUser(db, `friend_${index}`, BASE);
     await applyReferralCode(db, invited, code, { now: hour(index / 10) });
     await addPurchase(db, invited, 500, hour(2 + index / 10));
@@ -295,13 +326,12 @@ test('inviter monthly payout is capped while invited user still receives 50', as
   );
   assert.equal(
     Number(inviterBalance.rows[0].balance),
-    REFERRER_MONTHLY_REWARD_LIMIT * 100
+    referralCount * 100
   );
 
   const overview = await getReferralOverview(db, inviter, { now: hour(6) });
-  assert.equal(overview.inviterStats.invited, REFERRER_MONTHLY_REWARD_LIMIT + 1);
-  assert.equal(overview.inviterStats.rewarded, REFERRER_MONTHLY_REWARD_LIMIT + 1);
-  assert.equal(overview.inviterStats.rewardedThisMonth, REFERRER_MONTHLY_REWARD_LIMIT);
+  assert.equal(overview.inviterStats.invited, referralCount);
+  assert.equal(overview.inviterStats.rewarded, referralCount);
   await db.close();
 });
 
@@ -313,7 +343,8 @@ test('public overview exposes UX state, not internal status enum', async () => {
   assert.match(overview.ownCode, /^PVK-[A-Z2-9]{8}$/);
   assert.equal(overview.inviterStats.invited, 0);
   assert.equal(overview.inviterStats.rewarded, 0);
-  assert.equal(overview.inviterStats.monthlyRewardLimit, REFERRER_MONTHLY_REWARD_LIMIT);
+  assert.equal('monthlyRewardLimit' in overview.inviterStats, false);
+  assert.equal('rewardedThisMonth' in overview.inviterStats, false);
   assert.equal('status' in (overview.referral || {}), false);
   await db.close();
 });

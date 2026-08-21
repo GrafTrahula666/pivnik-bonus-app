@@ -5,7 +5,6 @@ export const REFERRAL_QUALIFICATION_MS = 72 * 60 * 60 * 1000;
 export const REFERRAL_TARGET_CENTS = 50_000;
 export const REFERRER_REWARD_BONUS = 100;
 export const INVITED_REWARD_BONUS = 50;
-export const REFERRER_MONTHLY_REWARD_LIMIT = 10;
 
 const REFERRAL_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -109,26 +108,6 @@ async function qualifyingPurchases(db, referral, now = new Date()) {
   };
 }
 
-async function inviterRewardCountThisMonth(db, inviterUserId, now = new Date()) {
-  const result = await db.query(
-    `SELECT COUNT(*)::integer AS count
-     FROM reward_grants
-     WHERE user_id = $1::bigint
-       AND source = 'referral'
-       AND amount = $2::bigint
-       AND created_at >= (
-         date_trunc('month', $3::timestamptz AT TIME ZONE 'Europe/Moscow')
-         AT TIME ZONE 'Europe/Moscow'
-       )
-       AND created_at < (
-         (date_trunc('month', $3::timestamptz AT TIME ZONE 'Europe/Moscow') + INTERVAL '1 month')
-         AT TIME ZONE 'Europe/Moscow'
-       )`,
-    [inviterUserId, REFERRER_REWARD_BONUS, now]
-  );
-  return number(result.rows[0]?.count);
-}
-
 async function grantReferralReward(db, {
   rewardCode,
   userId,
@@ -193,19 +172,12 @@ async function reconcileReferralLocked(db, referral, now = new Date()) {
 
   if (progress.amountCents >= REFERRAL_TARGET_CENTS) {
     const rewardCode = `referral:${referral.invited_user_id}:qualified`;
-    const inviterRewardsThisMonth = await inviterRewardCountThisMonth(
-      db,
-      referral.inviter_user_id,
-      nowDate
-    );
-    if (inviterRewardsThisMonth < REFERRER_MONTHLY_REWARD_LIMIT) {
-      await grantReferralReward(db, {
-        rewardCode,
-        userId: referral.inviter_user_id,
-        amount: REFERRER_REWARD_BONUS,
-        reason: 'Награда за приглашённого друга'
-      });
-    }
+    await grantReferralReward(db, {
+      rewardCode,
+      userId: referral.inviter_user_id,
+      amount: REFERRER_REWARD_BONUS,
+      reason: 'Награда за приглашённого друга'
+    });
     await grantReferralReward(db, {
       rewardCode,
       userId: referral.invited_user_id,
@@ -358,9 +330,7 @@ export async function getReferralOverview(db, userId, options = {}) {
     },
     inviterStats: {
       invited: number(inviterStatsResult.rows[0]?.invited_count),
-      rewarded: number(inviterStatsResult.rows[0]?.rewarded_count),
-      monthlyRewardLimit: REFERRER_MONTHLY_REWARD_LIMIT,
-      rewardedThisMonth: await inviterRewardCountThisMonth(db, userId, now)
+      rewarded: number(inviterStatsResult.rows[0]?.rewarded_count)
     },
     referral: publicReferralState(referral, progress, now)
   };
@@ -423,26 +393,6 @@ export async function applyReferralCode(db, invitedUserId, rawCode, options = {}
       );
     }
 
-    const priorPurchase = await client.query(
-      `SELECT 1
-       FROM transactions
-       WHERE client_id = $1::bigint
-         AND status = 'completed'
-         AND mode IN ('accrue', 'redeem')
-         AND cash_paid_cents > 0
-         AND completed_at IS NOT NULL
-         AND completed_at < $2::timestamptz
-       LIMIT 1`,
-      [invitedUserId, now]
-    );
-    if (priorPurchase.rows.length) {
-      throw httpError(
-        'Referral-код нужно применить до первой покупки.',
-        409,
-        'REFERRAL_PURCHASE_ALREADY_EXISTS'
-      );
-    }
-
     const inviterResult = await client.query(
       `SELECT rc.user_id, rc.code
        FROM referral_codes rc
@@ -450,7 +400,8 @@ export async function applyReferralCode(db, invitedUserId, rawCode, options = {}
        WHERE rc.code = $1
          AND u.merged_into_user_id IS NULL
          AND u.deleted_at IS NULL
-       LIMIT 1`,
+       LIMIT 1
+       FOR UPDATE OF u`,
       [code]
     );
     if (!inviterResult.rows.length) {
@@ -530,13 +481,22 @@ export async function expireOverdueReferrals(db, options = {}) {
   const now = options.now ? date(options.now) : new Date();
   const limit = Math.max(1, Math.min(1000, Math.trunc(number(options.limit) || 200)));
   const due = await db.query(
-    `SELECT invited_user_id
-     FROM referrals
-     WHERE status = 'active'
-       AND qualified_deadline < $1::timestamptz
-     ORDER BY qualified_deadline
+    `SELECT r.invited_user_id
+     FROM referrals r
+     LEFT JOIN transactions t
+       ON t.client_id = r.invited_user_id
+      AND t.status = 'completed'
+      AND t.mode IN ('accrue', 'redeem')
+      AND t.cash_paid_cents > 0
+      AND t.completed_at >= r.applied_at
+      AND t.completed_at <= r.qualified_deadline
+     WHERE r.status = 'active'
+     GROUP BY r.id, r.invited_user_id, r.qualified_deadline
+     HAVING r.qualified_deadline < $1::timestamptz
+         OR COALESCE(SUM(t.cash_paid_cents), 0) >= $3::bigint
+     ORDER BY r.qualified_deadline
      LIMIT $2::integer`,
-    [now, limit]
+    [now, limit, REFERRAL_TARGET_CENTS]
   );
 
   let rewarded = 0;

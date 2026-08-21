@@ -68,3 +68,4 @@ SET
   active = TRUE,
   updated_at = NOW()
 WHERE code = 'referral-beta';
+

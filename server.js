@@ -1441,7 +1441,11 @@ app.post('/api/auth', async (req, res, next) => {
       const uniqueAchievementState = await initializeAchievementGrants(pool, {
         ownerTelegramId
       });
-      if (uniqueAchievementState.activeBetaGranted > 0 || uniqueAchievementState.creatorGranted) {
+      if (
+        uniqueAchievementState.activeBetaGranted > 0
+        || uniqueAchievementState.activeBetaAdditionalGranted > 0
+        || uniqueAchievementState.creatorGranted
+      ) {
         profile = await getProfile(userId, pool, { syncAchievements: false });
       }
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
