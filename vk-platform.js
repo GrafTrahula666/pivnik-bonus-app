@@ -9,11 +9,37 @@
     const queryIndex = hash.indexOf('?');
     return (queryIndex >= 0 ? hash.slice(queryIndex + 1) : hash).replace(/^\?/, '');
   })();
+  const VK_MINI_APP_URL = 'https://vk.com/app54694987';
   const REQUIRED_LAUNCH_PARAMS = ['vk_app_id', 'vk_user_id', 'vk_ts', 'sign'];
 
   function hasSignedLaunchParams(value) {
     const params = new URLSearchParams(String(value || ''));
     return REQUIRED_LAUNCH_PARAMS.every((key) => Boolean(params.get(key)));
+  }
+
+  function isStandaloneExternalEntry() {
+    try {
+      const isTopLevel = Boolean(window.top && window.self) && window.top === window.self;
+      const isVkMobileShell = /(?:VKAndroidApp|VK-iPhone|VKApp)/i.test(
+        String(window.navigator?.userAgent || '')
+      );
+      return isTopLevel
+        && !isVkMobileShell
+        && !hasSignedLaunchParams(rawSearchLaunchParams)
+        && !hasSignedLaunchParams(rawHashLaunchParams);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  if (isStandaloneExternalEntry()) {
+    window.__PIVNIK_PLATFORM__ = 'vk';
+    window.__PIVNIK_REDIRECTING_TO_VK__ = true;
+    const bootText = document.getElementById?.('bootText');
+    if (bootText) bootText.textContent = 'Открываем приложение во VK…';
+    try { window.location.replace(VK_MINI_APP_URL); }
+    catch (_) { window.location.href = VK_MINI_APP_URL; }
+    return;
   }
 
   function serializeLaunchParams(value) {
