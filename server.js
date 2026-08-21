@@ -13,6 +13,7 @@ import {
   initializeAchievementGrants,
   syncUserAchievements
 } from './achievements.js';
+import { reconcileReferral } from './referrals.js';
 import {
   normalizeRequestKey,
   signSession as signCoreSession,
@@ -92,7 +93,7 @@ const DEFAULT_PROMOTIONS = [
   { code: 'welcome-100', title: '100 бонусов за первый вход', description: 'Начисляются автоматически при первой регистрации в приложении.', badge: '+100 Б', active: true, sortOrder: 10 },
   { code: 'orange-blanche-1-plus-1-3', title: 'Orange Blanche 1+1=3', description: 'Берите две Orange Blanche — третью пинту получите в подарок. Условия и наличие уточняйте у сотрудника бара.', badge: '1+1=3', active: true, sortOrder: 15 },
   { code: 'beer-15', title: 'Каждый 15-й литр — подарок', description: 'Оплатите 14 литров разливного пива и получите 1 литр бесплатно.', badge: '14 → 1', active: true, sortOrder: 20 },
-  { code: 'referral-beta', title: 'Пригласить друга', description: 'Реферальная программа пока недоступна.', badge: 'Скоро', active: false, sortOrder: 30 }
+  { code: 'referral-beta', title: 'Пригласить друга', description: 'Пригласи друга — получишь 100 бонусов. Друг получит 50 бонусов. Ему нужно ввести твой код в первый день после регистрации и за следующие 3 дня купить в Пивнике в общей сложности на 500 ₽.', badge: '100 Б + 50 Б', active: true, sortOrder: 30 }
 ];
 const DEFAULT_SHOP_ITEMS = [
   { code: 'cider-dalnyaya-dacha', title: 'Сидр «Дальняя дача»', subtitle: 'Бутылочная позиция. Выдача только в баре, 18+.', category: 'craft', priceType: 'bonus', bonusPrice: 499, cashPrice: 0, imageSrc: '/assets/shop/cider-dalnyaya-dacha.svg', active: true, sortOrder: 10 },
@@ -701,7 +702,7 @@ async function initDatabase() {
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_cancel_request_key ON transactions(cancel_request_key) WHERE cancel_request_key IS NOT NULL'
     );
     await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_mode_check');
-    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop','achievement'))");
+    await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_mode_check CHECK (mode IN ('accrue','redeem','adjustment','beer_gift','welcome','shop','achievement','referral'))");
     const pendingCleanup = await client.query(
       `INSERT INTO platform_migrations (code)
        VALUES ('cancel-legacy-pending-transactions-v1')
@@ -1440,7 +1441,11 @@ app.post('/api/auth', async (req, res, next) => {
       const uniqueAchievementState = await initializeAchievementGrants(pool, {
         ownerTelegramId
       });
-      if (uniqueAchievementState.activeBetaGranted > 0 || uniqueAchievementState.creatorGranted) {
+      if (
+        uniqueAchievementState.activeBetaGranted > 0
+        || uniqueAchievementState.activeBetaAdditionalGranted > 0
+        || uniqueAchievementState.creatorGranted
+      ) {
         profile = await getProfile(userId, pool, { syncAchievements: false });
       }
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
@@ -1906,6 +1911,9 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       });
       await client.query('COMMIT');
       await syncUserAchievements(pool, existing.rows[0].client_id);
+      await reconcileReferral(pool, existing.rows[0].client_id).catch((error) => {
+        console.error('Referral reconciliation after replayed purchase failed:', error?.code || error?.message || 'unknown');
+      });
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id)
@@ -1971,7 +1979,9 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     );
     await client.query('COMMIT');
     await syncUserAchievements(pool, targetUser.id);
-
+    await reconcileReferral(pool, targetUser.id).catch((error) => {
+      console.error('Referral reconciliation after purchase failed:', error?.code || error?.message || 'unknown');
+    });
     const tx = txResult.rows[0];
     const beerText = beerMl > 0
       ? `
@@ -2267,6 +2277,9 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       { staffId: actingStaff.id, notBefore: quota.countFrom }
     );
     await client.query('COMMIT');
+    await reconcileReferral(pool, tx.client_id).catch((error) => {
+      console.error('Referral reconciliation after staff cancellation failed:', error?.code || error?.message || 'unknown');
+    });
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
 Причина: ${reason}
@@ -2479,7 +2492,7 @@ app.get('/api/admin/transactions', authRequired, requireRole('viewer', 'admin'),
       params.push(`%${q}%`);
       where.push(`(CONCAT_WS(' ', c.first_name, c.last_name) ILIKE $${params.length} OR c.telegram_id::text ILIKE $${params.length} OR COALESCE(c.username,'') ILIKE $${params.length})`);
     }
-    if (mode && ['accrue','redeem','adjustment','beer_gift','welcome','shop'].includes(mode)) { params.push(mode); where.push(`t.mode = $${params.length}`); }
+    if (mode && ['accrue','redeem','adjustment','beer_gift','welcome','shop','achievement','referral'].includes(mode)) { params.push(mode); where.push(`t.mode = $${params.length}`); }
     params.push(limit);
     const result = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name, CONCAT_WS(' ', s.first_name, s.last_name) AS staff_name
@@ -2697,6 +2710,9 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
       requestKey
     );
     await client.query('COMMIT');
+    await reconcileReferral(pool, tx.client_id).catch((error) => {
+      console.error('Referral reconciliation after admin cancellation failed:', error?.code || error?.message || 'unknown');
+    });
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
 Причина: ${reason}

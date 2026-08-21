@@ -5979,3 +5979,104 @@ body {
     animation: none;
   }
 }
+
+/* REFERRAL_V2_UI */
+.referral-sheet {
+  overflow: auto;
+}
+.referral-copy {
+  line-height: 1.55;
+}
+.referral-code-card,
+.referral-status-card,
+.referral-apply {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 18px;
+  background: rgba(37, 8, 16, .42);
+  backdrop-filter: blur(16px);
+}
+.referral-code-card > small,
+.referral-apply > small,
+.referral-status-card > small {
+  display: block;
+  margin-top: 7px;
+  opacity: .72;
+}
+.referral-code-card > strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 24px;
+  letter-spacing: .08em;
+}
+.referral-actions,
+.referral-input-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.referral-actions > *,
+.referral-input-row > * {
+  min-width: 0;
+  flex: 1;
+}
+.referral-input-row input {
+  width: 100%;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.referral-status-card strong {
+  display: block;
+  line-height: 1.35;
+}
+.referral-inviter-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.referral-inviter-stats > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  background: rgba(37, 8, 16, .34);
+}
+.referral-inviter-stats small {
+  display: block;
+  min-height: 24px;
+  font-size: 9px;
+  line-height: 1.25;
+  opacity: .72;
+}
+.referral-inviter-stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+}
+.referral-done {
+  border-color: rgba(255,255,255,.22);
+}
+@media (max-width: 390px) {
+  .referral-actions,
+  .referral-input-row {
+    flex-direction: column;
+  }
+}
+
+/* RAISE_SHIELDS_ART */
+.raise-shields-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.achievement-tile-icon:has(.raise-shields-art),
+.achievement-details-icon:has(.raise-shields-art),
+.achievement-celebration-icon:has(.raise-shields-art) {
+  overflow: hidden;
+  padding: 0;
+  background: rgba(0,0,0,.18);
+}

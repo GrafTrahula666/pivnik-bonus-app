@@ -8,6 +8,7 @@ process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
 test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
   const {
+    buildReferralShareUrl,
     documentSecurityHeaders,
     platformForDocumentRequest,
     renderAppIndex
@@ -111,6 +112,16 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
     ),
     'vk'
   );
+
+  assert.equal(
+    buildReferralShareUrl('telegram', 'pvk-abcde234', '@PivnikBonusBot'),
+    'https://t.me/PivnikBonusBot?startapp=PVK-ABCDE234'
+  );
+  assert.equal(
+    buildReferralShareUrl('vk', 'PVK-ABCDE234'),
+    'https://vk.com/app54694987#ref=PVK-ABCDE234'
+  );
+  assert.equal(buildReferralShareUrl('telegram', 'not-a-code', 'PivnikBonusBot'), '');
 });
 
 test('VK Railway service serves VK document from the bare root URL', async () => {

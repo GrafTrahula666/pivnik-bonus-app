@@ -12,6 +12,12 @@ import {
   initializeAchievementGrants
 } from './achievements.js';
 import {
+  applyReferralCode,
+  expireOverdueReferrals,
+  getReferralOverview,
+  reconcileReferral
+} from './referrals.js';
+import {
   chooseCanonicalUser,
   hashLinkCode,
   normalizeLinkCode as normalizeCoreLinkCode,
@@ -39,6 +45,12 @@ const publicPort = Number(process.env.PORT || 3000);
 const internalPort = Number(process.env.PIVNIK_INTERNAL_PORT || (publicPort === 3101 ? 3102 : 3101));
 const databaseUrl = String(process.env.DATABASE_URL || '');
 const telegramBotToken = String(process.env.TELEGRAM_BOT_TOKEN || '');
+const configuredTelegramBotUsername = normalizeTelegramUsername(
+  process.env.TELEGRAM_BOT_USERNAME
+);
+const telegramMiniAppShortName = normalizeTelegramMiniAppShortName(
+  process.env.TELEGRAM_MINI_APP_SHORT_NAME
+);
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
@@ -93,6 +105,63 @@ const MIGRATION_CHECKSUM_UPGRADES = Object.freeze({
     to: 'ee37be489bbf1675930a0af7e90d4e02a5f6cf37689c002cf56b3e8d37ba4c54'
   })
 });
+
+let telegramBotUsernameLookup = null;
+
+function normalizeTelegramUsername(value) {
+  const normalized = String(value || '').trim().replace(/^@/, '');
+  return /^[A-Za-z0-9_]{5,32}$/.test(normalized) ? normalized : '';
+}
+
+function normalizeTelegramMiniAppShortName(value) {
+  const normalized = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{3,64}$/.test(normalized) ? normalized : '';
+}
+
+async function resolveTelegramBotUsername() {
+  if (configuredTelegramBotUsername) return configuredTelegramBotUsername;
+  if (!telegramBotToken) return '';
+  if (!telegramBotUsernameLookup) {
+    telegramBotUsernameLookup = fetch(
+      `https://api.telegram.org/bot${telegramBotToken}/getMe`,
+      { signal: AbortSignal.timeout(2500) }
+    )
+      .then(async (response) => {
+        if (!response.ok) return '';
+        const payload = await response.json();
+        return payload?.ok ? normalizeTelegramUsername(payload.result?.username) : '';
+      })
+      .catch(() => '');
+  }
+  return telegramBotUsernameLookup;
+}
+
+export function buildReferralShareUrl(platform, code, telegramBotUsername = '') {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!/^PVK-[A-Z2-9]{8}$/.test(normalizedCode)) return '';
+
+  if (platform === 'vk') {
+    return `https://vk.com/app${EXPECTED_VK_APP_ID}#ref=${encodeURIComponent(normalizedCode)}`;
+  }
+
+  const username = normalizeTelegramUsername(telegramBotUsername);
+  if (!username) return '';
+  const appPath = telegramMiniAppShortName
+    ? `/${encodeURIComponent(telegramMiniAppShortName)}`
+    : '';
+  return `https://t.me/${username}${appPath}?startapp=${encodeURIComponent(normalizedCode)}`;
+}
+
+async function getReferralResponse(userId, platform) {
+  const overview = await getReferralOverview(pool, userId);
+  const botUsername = platform === 'telegram'
+    ? await resolveTelegramBotUsername()
+    : '';
+  return {
+    ...overview,
+    shareUrl: buildReferralShareUrl(platform, overview.ownCode, botUsername)
+  };
+}
 
 const STATUS_LEVELS = [
   { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
@@ -574,7 +643,7 @@ async function initPlatformDatabase() {
     }
     platformReady = true;
     console.log(
-      `Achievement ledger is ready: active beta ${achievementInitialization.activeBetaResolved}, new grants ${achievementInitialization.activeBetaGranted}, deferred ${achievementInitialization.deferred}.`
+      `Achievement ledger is ready: active beta ${achievementInitialization.activeBetaResolved}, new grants ${achievementInitialization.activeBetaGranted}, KSEMAR resolved ${Boolean(achievementInitialization.activeBetaAdditionalResolved)}, KSEMAR new grant ${achievementInitialization.activeBetaAdditionalGranted || 0}, deferred ${achievementInitialization.deferred}.`
     );
     console.log('Separate Telegram/VK account mode is ready.');
   } catch (error) {
@@ -1473,6 +1542,9 @@ async function resolveProviderUser(provider, externalUser) {
     void ensureSupplementalRecords(userId).catch((error) => {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
     });
+  });
+  await reconcileReferral(pool, userId).catch((error) => {
+    console.error('Referral reconciliation after auth failed:', error?.code || error?.message || 'unknown');
   });
   return { token, ...(await getAppPayload(userId, provider, { startup: true })) };
 }
@@ -2971,6 +3043,31 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await getAppPayload(user.id, platform));
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/me/referral') {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, await getReferralResponse(user.id, platform));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/me/referral/apply') {
+      const user = await requireGatewayUser(req);
+      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      enforceRateLimit(
+        `referral-apply:${user.id}:${requestAddress(req)}`,
+        12,
+        15 * 60 * 1000
+      );
+      const body = parseJsonBody(await readRequestBody(req));
+      await applyReferralCode(pool, user.id, body.code);
+      return sendJson(res, 200, await getReferralResponse(user.id, platform));
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/achievements') {
       const user = await requireGatewayUser(req);
       platformFromRequest(req, user.payload.platform || 'unknown');
@@ -3183,6 +3280,12 @@ if (!isTestImport) {
       await waitForChild();
       await initPlatformDatabase();
       await refreshDatabaseFingerprint();
+      const referralExpiryTimer = setInterval(() => {
+        void expireOverdueReferrals(pool).catch((error) => {
+          console.error('Scheduled referral reconciliation failed:', error?.code || error?.message || 'unknown');
+        });
+      }, 5 * 60 * 1000);
+      referralExpiryTimer.unref();
     } catch (error) {
       console.error(
         'Platform initialization failed:',

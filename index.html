@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20.0-achievement-ledger" />
-  <script defer src="app.js?v=20.0-achievement-ledger"></script>
+  <link rel="stylesheet" href="styles.css?v=21.0-referral-v2.1" />
+  <script defer src="app.js?v=21.0-referral-v2.1"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -230,6 +230,7 @@
 
         <div class="profile-menu vip-glass-card">
           <button type="button" id="openConnectedServices"><span>↔</span><div><b>Telegram и VK</b><small id="profileServicesValue">Подключён текущий сервис</small></div><i>›</i></button>
+          <button type="button" id="openReferral"><span>↗</span><div><b>Пригласить друга</b><small>100 Б вам · 50 Б другу</small></div><i>›</i></button>
           <button type="button" id="openNotifications"><span>◉</span><div><b>Уведомления</b><small>Награды, бонусы и важные новости</small></div><i>›</i></button>
           <button type="button" id="openProfilePrivacy"><span>◌</span><div><b>Конфиденциальность</b><small>Имя, аватар и видимость в Лиге</small></div><i>›</i></button>
           <button type="button" id="openHelpButton"><span>?</span><div><b>Правила и помощь</b><small>Бонусы, статусы, QR и данные</small></div><i>›</i></button>
@@ -707,6 +708,57 @@
     </div>
   </div>
 
+
+  <div class="modal" id="referralModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet premium-sheet referral-sheet">
+      <button class="close" data-close="referralModal">×</button>
+      <span class="muted">Профиль</span>
+      <h2>Пригласить друга</h2>
+      <p class="help-intro referral-copy">Пригласи друга — получишь 100 бонусов. Друг получит 50 бонусов. Ему нужно ввести твой код в первый день после регистрации и за следующие 3 дня купить в Пивнике в общей сложности на 500 ₽.</p>
+
+      <div class="referral-code-card">
+        <small>Ваш код</small>
+        <strong id="referralOwnCode">—</strong>
+        <div class="referral-actions">
+          <button type="button" class="secondary" id="copyReferralCode">Скопировать код</button>
+          <button type="button" class="secondary" id="copyReferralLink">Скопировать ссылку</button>
+        </div>
+      </div>
+
+      <div class="referral-inviter-stats">
+        <div><small>Приглашено</small><strong id="referralInvitedCount">0</strong></div>
+        <div><small>Выполнили условие</small><strong id="referralRewardedCount">0</strong></div>
+      </div>
+
+      <div id="referralApplyBlock" class="referral-apply hidden">
+        <label for="referralCodeInput">Код друга</label>
+        <div class="referral-input-row">
+          <input id="referralCodeInput" type="text" maxlength="16" autocomplete="off" autocapitalize="characters" placeholder="PVK-XXXXXXXX">
+          <button type="button" class="primary" id="applyReferralCode">Применить</button>
+        </div>
+        <small>Код можно применить только в первые 24 часа после регистрации.</small>
+      </div>
+
+      <div id="referralWindowClosed" class="referral-status-card hidden">
+        <strong>Срок ввода кода завершён</strong>
+        <small>После первых 24 часов пригласившего изменить или привязать нельзя.</small>
+      </div>
+
+      <div id="referralProgress" class="referral-status-card hidden">
+        <strong id="referralProgressAmount">Покупки: 0 / 500 ₽</strong>
+        <small id="referralProgressRemaining">Осталось: —</small>
+      </div>
+
+      <div id="referralDone" class="referral-status-card referral-done hidden">
+        <strong>Условие выполнено — награды начислены</strong>
+      </div>
+
+      <div id="referralExpired" class="referral-status-card hidden">
+        <strong>Срок выполнения условия завершён</strong>
+        <small>Покупки после окончания трёхдневного окна не учитываются.</small>
+      </div>
+    </div>
+  </div>
   <div class="modal" id="notificationsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
       <button class="close" data-close="notificationsModal">×</button>

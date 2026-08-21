@@ -1,10 +1,11 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '20.0-achievement-ledger';
+const APP_VERSION = '21.0-referral-v2.1';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 const telegramInitDataFromUrl = readTelegramLaunchData();
+const referralLaunchCode = readReferralLaunchCode();
 let telegramBridgeInitialized = false;
 document.documentElement.classList.toggle('android-webview', isAndroid);
 document.documentElement.classList.toggle('lite-mode', isLiteRequested);
@@ -19,6 +20,27 @@ function readTelegramLaunchData() {
       const initData = new URLSearchParams(rawParams).get('tgWebAppData');
       if (initData) return initData;
     } catch (_) {}
+  }
+  return '';
+}
+
+function readReferralLaunchCode() {
+  const values = [];
+  for (const rawParams of [location.hash.slice(1), location.search.slice(1)]) {
+    if (!rawParams) continue;
+    try {
+      const params = new URLSearchParams(rawParams);
+      for (const key of ['ref', 'referral', 'startapp', 'start_param', 'tgWebAppStartParam']) {
+        if (params.get(key)) values.push(params.get(key));
+      }
+    } catch (_) {}
+  }
+  const telegramStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+  if (telegramStartParam) values.push(telegramStartParam);
+
+  for (const raw of values) {
+    const match = String(raw || '').toUpperCase().match(/PVK-[A-Z2-9]{8}/);
+    if (match) return match[0];
   }
   return '';
 }
@@ -102,6 +124,8 @@ const state = {
   achievementNotificationBusy: false,
   transactions: [],
   historyTab: 'purchases',
+  referral: null,
+  referralLoading: false,
   bootSecondaryStarted: false,
   wheel: {
     status: null,
@@ -1567,7 +1591,7 @@ function achievementIconHtml(item = {}) {
       <circle class="eye-pupil" cx="50" cy="51" r="8" />
     </svg>`;
   }
-  if (item.icon === 'beta-active' || item.code === 'active-beta-participant') return '<span class="beta-achievement-icon">★</span>';
+  if (item.icon === 'beta-active' || item.code === 'active-beta-participant') return '<img class="raise-shields-art" src="/assets/achievements/raise-shields.webp?v=1" alt="Поднять щиты">';
   if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">✦</span>';
   const symbols = {
     receipt: '▤',
@@ -1866,7 +1890,8 @@ function renderTransaction(transaction) {
     beer_gift: ['Подарочный литр', '🍺'],
     welcome: ['Приветственный бонус', '100'],
     shop: ['Покупка в магазине', '□'],
-    achievement: ['Достижение', '◆']
+    achievement: ['Достижение', '◆'],
+    referral: ['Пригласи друга', '↗']
   };
   const [mode, icon] = labels[transaction.mode] || ['Операция', '•'];
   let primary = `${fmt(transaction.checkAmount)} ₽`;
@@ -1885,6 +1910,9 @@ function renderTransaction(transaction) {
       ? `+${fmtLiters(transaction.beerGiftEarnedLiters)} л`
       : `+${transaction.bonusEarned} Б`;
     detail = publicReleaseLabel(transaction.reason) || 'Награда за достижение';
+  } else if (transaction.mode === 'referral') {
+    primary = `+${transaction.bonusEarned} Б`;
+    detail = publicReleaseLabel(transaction.reason) || 'Referral-награда';
   } else if (transaction.mode === 'adjustment') {
     primary = `${transaction.bonusEarned ? '+' : '-'}${transaction.bonusEarned || transaction.bonusSpent} Б`;
     detail = publicReleaseLabel(transaction.reason) || 'Ручная корректировка';
@@ -1903,6 +1931,98 @@ function renderTransaction(transaction) {
     <div><b>${mode}${cancelled ? '<span class="op-cancelled">отменено</span>' : ''}${suspicious}</b><small>${new Date(transaction.createdAt).toLocaleString('ru-RU')}<br>${escapeHtml(detail)}</small></div>
     <strong>${primary}</strong>
   </div>`;
+}
+
+function formatReferralRemaining(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds || 0)));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  if (days > 0) return `Осталось: ${days} ${days === 1 ? 'день' : 'дн.'} ${hours} ч.`;
+  return `Осталось: ${hours} ч.`;
+}
+
+function referralShareUrl(code) {
+  const serverUrl = String(state.referral?.shareUrl || '').trim();
+  if (serverUrl) return serverUrl;
+  const url = new URL(IS_VK ? '/vk' : '/', location.origin);
+  url.searchParams.set('ref', code);
+  return url.toString();
+}
+
+function renderReferral() {
+  const data = state.referral;
+  if (!data) return;
+
+  if ($('#referralOwnCode')) $('#referralOwnCode').textContent = data.ownCode || '—';
+  if ($('#referralInvitedCount')) $('#referralInvitedCount').textContent = fmt(data.inviterStats?.invited || 0);
+  if ($('#referralRewardedCount')) $('#referralRewardedCount').textContent = fmt(data.inviterStats?.rewarded || 0);
+
+  const canApply = Boolean(data.registrationWindow?.canApply);
+  const linked = Boolean(data.referral?.linked);
+  $('#referralApplyBlock')?.classList.toggle('hidden', linked || !canApply);
+  $('#referralWindowClosed')?.classList.toggle('hidden', linked || canApply);
+
+  const progress = $('#referralProgress');
+  const done = $('#referralDone');
+  const expired = $('#referralExpired');
+  progress?.classList.toggle('hidden', !linked || data.referral.completed || data.referral.expired);
+  done?.classList.toggle('hidden', !data.referral?.completed);
+  expired?.classList.toggle('hidden', !data.referral?.expired);
+
+  if (linked && $('#referralProgressAmount')) {
+    $('#referralProgressAmount').textContent =
+      `Покупки: ${fmt(Number(data.referral.purchasesCents || 0) / 100)} / ${fmt(Number(data.referral.targetCents || 50000) / 100)} ₽`;
+  }
+  if (linked && $('#referralProgressRemaining')) {
+    $('#referralProgressRemaining').textContent =
+      formatReferralRemaining(data.referral.remainingSeconds);
+  }
+}
+
+async function loadReferral() {
+  const data = await api('/api/me/referral', { retries: 1, timeoutMs: 7000 });
+  state.referral = data;
+  renderReferral();
+  return data;
+}
+
+async function applyReferralCodeFromUi(code, { silent = false } = {}) {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!normalized) {
+    if (!silent) toast('Введите referral-код');
+    return null;
+  }
+  const data = await api('/api/me/referral/apply', {
+    method: 'POST',
+    body: JSON.stringify({ code: normalized }),
+    retries: 0,
+    timeoutMs: 7000
+  });
+  state.referral = data;
+  renderReferral();
+  if (!silent) toast('Referral-код применён');
+  return data;
+}
+
+async function applyLaunchReferral() {
+  const launchCode = referralLaunchCode || readReferralLaunchCode();
+  if (!launchCode || !state.token || !state.profile?.termsAccepted) return;
+  try {
+    await applyReferralCodeFromUi(launchCode, { silent: true });
+  } catch (error) {
+    // Deep-link must never cause a popup on every launch. 24h/duplicate/self
+    // constraints remain server-side and are intentionally only logged here.
+    console.warn('Referral deep-link was not applied:', error?.status || error?.message || 'unknown');
+  }
+}
+
+async function openReferral() {
+  openModal('referralModal');
+  if (!state.referralLoading) {
+    state.referralLoading = true;
+    try { await loadReferral(); }
+    finally { state.referralLoading = false; }
+  }
 }
 
 async function refreshMe() {
@@ -1974,7 +2094,7 @@ function applyProfilePayload(data) {
 async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
-  const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
+  const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig(), loadReferral()];
   if (!IS_VK) jobs.push(loadWheelStatus());
   const results = await Promise.allSettled(jobs);
   const failures = results.filter((item) => item.status === 'rejected');
@@ -2045,6 +2165,7 @@ async function boot() {
       await authenticate();
     }
     $('#bootText').textContent = 'Открываем профиль…';
+    await applyLaunchReferral();
     renderCoreProfile();
     await finishBoot();
     closeModal('consentModal');
@@ -2075,6 +2196,7 @@ async function acceptTerms() {
     closeModal('consentModal');
     renderProfile();
     toast('Правила приняты');
+    await applyLaunchReferral();
     void loadSecondaryData();
   } finally {
     if (button) button.disabled = false;
@@ -2104,7 +2226,7 @@ async function copyQrCode() {
 }
 
 function historyMatchesTab(transaction, tab = state.historyTab) {
-  if (tab === 'rewards') return ['beer_gift', 'shop', 'achievement'].includes(transaction.mode);
+  if (tab === 'rewards') return ['beer_gift', 'shop', 'achievement', 'referral'].includes(transaction.mode);
   if (tab === 'bonuses') return ['accrue', 'redeem', 'welcome', 'adjustment'].includes(transaction.mode);
   return ['accrue', 'redeem', 'shop'].includes(transaction.mode);
 }
@@ -2500,8 +2622,10 @@ function adminTransactionHtml(transaction) {
   const type = transaction.mode === 'beer_gift' ? 'Подарочный литр'
     : transaction.mode === 'shop' ? 'Магазин'
       : transaction.mode === 'welcome' ? 'Приветственный бонус'
-        : transaction.mode === 'redeem' ? 'Списание'
-          : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
+        : transaction.mode === 'referral' ? 'Referral-награда'
+          : transaction.mode === 'achievement' ? 'Достижение'
+            : transaction.mode === 'redeem' ? 'Списание'
+              : transaction.mode === 'adjustment' ? 'Корректировка' : 'Начисление';
   const beerInfo = transaction.mode === 'beer_gift'
     ? ` · −${fmtLiters(transaction.beerGiftSpentLiters)} л подарка`
     : transaction.beerLiters ? ` · ${fmtLiters(transaction.beerLiters)} л${transaction.beerGiftEarnedLiters ? ` · +${fmtLiters(transaction.beerGiftEarnedLiters)} л подарка` : ''}` : '';
@@ -3014,6 +3138,22 @@ $('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
 $('#openProfileAchievements')?.addEventListener('click', openAchievementHub);
 $('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
 $('#openConnectedServices')?.addEventListener('click', openConnectedServices);
+$('#openReferral')?.addEventListener('click', () => openReferral().catch((error) => toast(error.message)));
+$('#copyReferralCode')?.addEventListener('click', async () => {
+  const code = state.referral?.ownCode || $('#referralOwnCode')?.textContent || '';
+  try { await navigator.clipboard.writeText(code); toast('Referral-код скопирован'); }
+  catch (_) { toast(`Код: ${code}`); }
+});
+$('#copyReferralLink')?.addEventListener('click', async () => {
+  const code = state.referral?.ownCode || $('#referralOwnCode')?.textContent || '';
+  if (!code || code === '—') return;
+  const link = referralShareUrl(code);
+  try { await navigator.clipboard.writeText(link); toast('Referral-ссылка скопирована'); }
+  catch (_) { toast(link); }
+});
+$('#applyReferralCode')?.addEventListener('click', () => {
+  applyReferralCodeFromUi($('#referralCodeInput')?.value || '').catch((error) => toast(error.message));
+});
 $('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
 $('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
 $('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
