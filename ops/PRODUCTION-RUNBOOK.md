@@ -4,8 +4,13 @@
 
 Подтверждённые публичные сервисы:
 
-- Telegram: `https://pivnik-bonus-app-production.up.railway.app`
-- VK: `https://pivnik-vk-test-production.up.railway.app`
+- Telegram: `https://pivnik-bonus-app-production-df60.up.railway.app`
+- VK: `https://pivnik-vk-test-production-b6b5.up.railway.app`
+
+Для VK Mini App `54694987` production URL для `vk.ru`, iOS/Android и `m.vk.ru`,
+а также URL для разработки должны указывать на
+`https://pivnik-vk-test-production-b6b5.up.railway.app/vk`. Для администратора VK
+использует URL для разработки, поэтому его необходимо обновлять вместе с production URL.
 
 Проверка 4 августа 2026 года показала, что сервисы используют разные базы:
 
@@ -86,8 +91,8 @@ DATABASE_URL='postgresql://...' npm run verify:database
 3. Выполнить автоматическую сверку:
 
 ```bash
-TELEGRAM_APP_URL='https://pivnik-bonus-app-production.up.railway.app' \
-VK_APP_URL='https://pivnik-vk-test-production.up.railway.app' \
+TELEGRAM_APP_URL='https://pivnik-bonus-app-production-df60.up.railway.app' \
+VK_APP_URL='https://pivnik-vk-test-production-b6b5.up.railway.app' \
 npm run verify:production
 ```
 
