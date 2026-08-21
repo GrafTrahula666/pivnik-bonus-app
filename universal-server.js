@@ -42,8 +42,6 @@ const telegramBotToken = String(process.env.TELEGRAM_BOT_TOKEN || '');
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
-const olesyaTelegramId = String(process.env.OLESYA_TELEGRAM_ID || '').trim();
-const vladislavTelegramId = String(process.env.VLADISLAV_TELEGRAM_ID || '').trim();
 const vkAppId = String(process.env.VK_APP_ID || '').trim();
 const vkAppSecret = String(process.env.VK_APP_SECRET || '').trim();
 const allowDemo = String(process.env.ALLOW_DEMO || '').toLowerCase() === 'true';
@@ -567,15 +565,10 @@ async function initPlatformDatabase() {
 
     await client.query('COMMIT');
     const achievementInitialization = await initializeAchievementGrants(pool, {
-      ownerTelegramId,
-      activeBetaTesterTelegramIds: [
-        annaTelegramId,
-        olesyaTelegramId,
-        vladislavTelegramId
-      ]
+      ownerTelegramId
     });
-    if (!achievementInitialization.deferred && achievementInitialization.activeBetaResolved !== 3) {
-      throw new Error('Не удалось подтвердить три Telegram beta-профиля.');
+    if (!achievementInitialization.deferred && achievementInitialization.activeBetaResolved !== 2) {
+      throw new Error('Не удалось подтвердить два Telegram beta-профиля.');
     }
     platformReady = true;
     console.log(
