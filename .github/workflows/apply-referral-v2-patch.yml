@@ -1,0 +1,55 @@
+name: Apply reviewed referral v2 patch
+
+on:
+  push:
+    branches:
+      - feature/referral-v2-raise-shields
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Apply reviewed patch
+        run: python3 .pivnik-patch/referral-v2/apply_referral_v2.py .
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Syntax and source checks
+        run: npm run check
+
+      - name: Full regression suite
+        run: npm test
+
+      - name: Diff hygiene
+        run: git diff --check
+
+      - name: Commit generated source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add achievements.js app.js index.html package.json referrals.js server.js styles.css universal-server.js migrations/008_referral_v2.sql test/achievements.integration.test.js test/referrals.integration.test.js
+          if git diff --cached --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git commit -m "Add referral v2 and Raise Shields achievement"
+          git push origin HEAD
