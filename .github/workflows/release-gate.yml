@@ -22,12 +22,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - name: Install exact dependencies
@@ -53,7 +53,14 @@ jobs:
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             echo "::group::Failing test diagnostics"
-            details=$(awk '/^not ok 13 - Gateway render:|^not ok 14 - VK Railway service/{capture=1} capture{print}' /tmp/pivnik-tests.log | tail -c 14000)
+            details=$(awk '
+              /^not ok [0-9]+ - / { capture=1 }
+              capture { print }
+              capture && /^  \.\.\.$/ { capture=0 }
+            ' /tmp/pivnik-tests.log | tail -c 14000)
+            if [ -z "$details" ]; then
+              details=$(tail -c 14000 /tmp/pivnik-tests.log)
+            fi
             safe=${details//'%'/'%25'}
             safe=${safe//$'\r'/'%0D'}
             safe=${safe//$'\n'/'%0A'}
