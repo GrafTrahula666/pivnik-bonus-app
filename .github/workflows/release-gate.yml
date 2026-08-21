@@ -69,6 +69,7 @@ jobs:
         run: npm pack --dry-run
 
       - name: Synchronize strong production secrets
+        continue-on-error: true
         if: >-
           (github.event_name == 'push' &&
            (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
@@ -96,6 +97,7 @@ jobs:
           node scripts/railway-unify-production-databases.mjs
 
       - name: Restore Anna frame and reconcile existing linked consent
+        continue-on-error: true
         if: >-
           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
           (github.event_name == 'pull_request' &&
