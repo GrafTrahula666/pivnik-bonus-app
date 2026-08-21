@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/referral-v2-raise-shields
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -17,6 +20,7 @@ jobs:
       - name: Checkout patch branch
         uses: actions/checkout@v7
         with:
+          ref: feature/referral-v2-raise-shields
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -52,4 +56,4 @@ jobs:
             exit 0
           fi
           git commit -m "Add referral v2 and Raise Shields achievement"
-          git push origin HEAD
+          git push origin HEAD:feature/referral-v2-raise-shields
