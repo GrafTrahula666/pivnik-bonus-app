@@ -68,60 +68,20 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
-      - name: Synchronize strong production secrets
-        continue-on-error: true
-        if: >-
-          (github.event_name == 'push' &&
-           (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: |
-          node --check scripts/railway-ensure-production-secrets.mjs
-          node scripts/railway-ensure-production-secrets.mjs
-
-      - name: Unify VK legacy database into canonical production
-        if: >-
-          (github.event_name == 'push' &&
-           github.ref == 'refs/heads/audit/final-release-gate-20260804') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_UNIFY_CONFIRM: UNIFY_PIVNIK_20260804
-        run: |
-          node --check scripts/railway-unify-production-databases.mjs
-          node scripts/railway-unify-production-databases.mjs
-
-      - name: Restore Anna frame and reconcile existing linked consent
-        continue-on-error: true
-        if: >-
-          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'hotfix/anna-frame-consent-persistence-20260806')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_ANNA_CONSENT_REPAIR_CONFIRM: REPAIR_ANNA_FRAME_AND_CONSENT_20260806
-        run: node scripts/railway-repair-anna-frame-and-consent.mjs
-
       - name: Deploy exact commit and verify both production services
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RELEASE_COMMIT_SHA: ${{ github.sha }}
-          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app' }}
-          VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app' }}
+          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production-df60.up.railway.app' }}
+          VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production-b6b5.up.railway.app' }}
         run: node scripts/railway-deploy-and-verify-production.mjs
 
       - name: Verify separate Telegram and VK production accounts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           RELEASE_COMMIT_SHA: ${{ github.sha }}
-          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app' }}
-          VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app' }}
+          TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production-df60.up.railway.app' }}
+          VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production-b6b5.up.railway.app' }}
         run: node scripts/verify-platform-separation-production.mjs
