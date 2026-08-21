@@ -5,6 +5,23 @@ import sys
 
 repo = Path(sys.argv[1] if len(sys.argv) > 1 else '.').resolve()
 
+# The Codex module used node-postgres Result.rowCount. PGlite intentionally
+# exposes returned rows without the same rowCount behavior for these queries.
+# rows.length works with both and is the actual invariant we need for all
+# RETURNING/SELECT checks in this module.
+for relative in [
+    '.pivnik-patch/referral-v2/referrals.js',
+    '.pivnik-patch/referral-v2/test/referrals.integration.test.js'
+]:
+    source = repo / relative
+    source_text = source.read_text(encoding='utf-8')
+    fixed = source_text.replace('.rowCount', '.rows.length')
+    if fixed != source_text:
+        source.write_text(fixed, encoding='utf-8')
+        print(f'[ok] preflight rows.length compatibility: {relative}')
+    else:
+        print(f'[skip] preflight rows.length compatibility: {relative}')
+
 # achievements.js: make the Telegram resolver exactly match the idempotent
 # replacement expected by the reviewed Codex patch.
 achievements = repo / 'achievements.js'
