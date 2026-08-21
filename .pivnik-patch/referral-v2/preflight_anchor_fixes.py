@@ -51,3 +51,52 @@ else:
         raise RuntimeError('Could not align completed purchase referral hook')
     server.write_text(server_text, encoding='utf-8')
     print('[ok] preflight completed purchase referral hook aligned exactly')
+
+# universal-server.js: preserve the current deferred supplemental-user setup and
+# add referral reconciliation after it. The Codex archive was authored against
+# an older synchronous ensureSupplementalRecords() flow.
+universal = repo / 'universal-server.js'
+universal_text = universal.read_text(encoding='utf-8')
+auth_desired = """  setImmediate(() => {
+    void ensureSupplementalRecords(userId).catch((error) => {
+      console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
+    });
+  });
+  await reconcileReferral(pool, userId).catch((error) => {
+    console.error('Referral reconciliation after auth failed:', error?.code || error?.message || 'unknown');
+  });
+  return { token, ...(await getAppPayload(userId, provider, { startup: true })) };"""
+if auth_desired in universal_text:
+    print('[skip] preflight auth referral hook already aligned')
+else:
+    auth_pattern = re.compile(
+        r"  setImmediate\(\(\) => \{\n"
+        r"    void ensureSupplementalRecords\(userId\)\.catch\(\(error\) => \{\n"
+        r"      console\.warn\('Deferred user setup skipped:', error\?\.code \|\| error\?\.message \|\| 'unknown'\);\n"
+        r"    \}\);\n"
+        r"  \}\);\n"
+        r"  return \{ token, \.\.\.\(await getAppPayload\(userId, provider, \{ startup: true \}\)\) \};"
+    )
+    universal_text, count = auth_pattern.subn(auth_desired, universal_text, count=1)
+    if count != 1:
+        raise RuntimeError('Could not align current deferred auth referral hook')
+    universal.write_text(universal_text, encoding='utf-8')
+    print('[ok] preflight current deferred auth referral hook aligned')
+
+# Teach the archived patch that the current deferred auth form above is the
+# desired final state. This keeps the patch idempotent without reverting the
+# newer authentication architecture.
+patch_script = repo / '.pivnik-patch' / 'referral-v2' / 'apply_referral_v2.py'
+patch_text = patch_script.read_text(encoding='utf-8')
+stale_auth_new = """      await client.query('COMMIT');
+      await ensureSupplementalRecords(userId);
+      await reconcileReferral(pool, userId).catch((error) => {
+        console.error('Referral reconciliation after auth failed:', error?.code || error?.message || 'unknown');
+      });
+      return { token, ...(await getAppPayload(userId, provider, { startup: true })) };"""
+if stale_auth_new in patch_text:
+    patch_text = patch_text.replace(stale_auth_new, auth_desired, 1)
+    patch_script.write_text(patch_text, encoding='utf-8')
+    print('[ok] preflight adapted Codex auth target to current main')
+else:
+    print('[skip] preflight Codex auth target already adapted')
