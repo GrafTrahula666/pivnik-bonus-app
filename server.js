@@ -1438,12 +1438,7 @@ app.post('/api/auth', async (req, res, next) => {
 
       let profile = await getProfile(userId, pool, { syncAchievements: true });
       const uniqueAchievementState = await initializeAchievementGrants(pool, {
-        ownerTelegramId,
-        activeBetaTesterTelegramIds: [
-          annaTelegramId,
-          olesyaTelegramId,
-          vladislavTelegramId
-        ]
+        ownerTelegramId
       });
       if (uniqueAchievementState.activeBetaGranted > 0 || uniqueAchievementState.creatorGranted) {
         profile = await getProfile(userId, pool, { syncAchievements: false });

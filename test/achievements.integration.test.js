@@ -227,13 +227,14 @@ test('PostgreSQL: достижения и пинта выдаются один �
   }
 });
 
-test('PostgreSQL: единый журнал выдерживает перезапуски, повторные запросы и идемпотентную выдачу трём beta-тестерам', async () => {
+test('PostgreSQL: единый журнал выдерживает перезапуски, повторные запросы и идемпотентную выдачу двум beta-тестерам', async () => {
   const db = new PGlite();
   try {
     await db.exec(`
       CREATE TABLE users (
         id BIGSERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE,
+        username TEXT,
         first_name TEXT NOT NULL,
         profile_frame TEXT NOT NULL DEFAULT 'none',
         merged_into_user_id BIGINT REFERENCES users(id),
@@ -307,8 +308,8 @@ test('PostgreSQL: единый журнал выдерживает переза�
     await db.exec(ledgerMigration);
 
     const waitingUser = await db.query(
-      `INSERT INTO users (telegram_id, first_name)
-       VALUES (8999, 'Ожидает beta-профили')
+      `INSERT INTO users (telegram_id, username, first_name, profile_frame)
+       VALUES (8999, 'legacy-anna', 'Ожидает beta-профили', 'anna')
        RETURNING id`
     );
     await db.query('INSERT INTO wallets (user_id, balance) VALUES ($1, 0)', [waitingUser.rows[0].id]);
@@ -318,10 +319,7 @@ test('PostgreSQL: единый журнал выдерживает переза�
        VALUES ($1, 'telegram', '8999')`,
       [waitingUser.rows[0].id]
     );
-    const deferred = await initializeAchievementGrants(db, {
-      ownerTelegramId: '9004',
-      activeBetaTesterTelegramIds: ['9001', '9002', '9003']
-    });
+    const deferred = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
     assert.equal(deferred.deferred, true);
     assert.equal(deferred.activeBetaResolved, 0);
     const deferredBatch = await db.query(
@@ -332,17 +330,17 @@ test('PostgreSQL: единый журнал выдерживает переза�
     assert.equal(Number(deferredBatch.rows[0].count), 0);
 
     const users = [];
-    for (const [telegramId, firstName, frame] of [
-      [9001, 'Анна', 'anna'],
-      [9002, 'Олеся', 'olesya'],
-      [9003, 'Владислав', 'vladislav'],
-      [9004, 'Создатель', 'money']
+    for (const [telegramId, username, firstName, frame] of [
+      [9001, 'DrolTed', 'Первый тестировщик', 'anna'],
+      [9002, 'distraktor', 'Второй тестировщик', 'olesya'],
+      [9003, 'not-selected-beta', 'Другой участник', 'vladislav'],
+      [9004, 'owner', 'Создатель', 'money']
     ]) {
       const inserted = await db.query(
-        `INSERT INTO users (telegram_id, first_name, profile_frame)
-         VALUES ($1, $2, $3)
+        `INSERT INTO users (telegram_id, username, first_name, profile_frame)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [telegramId, firstName, frame]
+        [telegramId, username, firstName, frame]
       );
       const userId = inserted.rows[0].id;
       users.push(userId);
@@ -366,25 +364,19 @@ test('PostgreSQL: единый журнал выдерживает переза�
     await db.exec(ledgerMigration);
     await db.exec(ledgerMigration);
 
-    const first = await initializeAchievementGrants(db, {
-      ownerTelegramId: '9004',
-      activeBetaTesterTelegramIds: ['9001', '9002', '9003']
-    });
-    const second = await initializeAchievementGrants(db, {
-      ownerTelegramId: '9004',
-      activeBetaTesterTelegramIds: ['9001', '9002', '9003']
-    });
-    assert.equal(first.activeBetaResolved, 3);
-    assert.equal(first.activeBetaGranted, 3);
-    assert.equal(first.activeBetaLedgerCount, 3);
-    assert.equal(first.activeBetaLedgerAmount, 3000);
-    assert.equal(first.activeBetaTransactionCount, 3);
-    assert.equal(first.activeBetaTransactionAmount, 3000);
+    const first = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
+    const second = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
+    assert.equal(first.activeBetaResolved, 2);
+    assert.equal(first.activeBetaGranted, 2);
+    assert.equal(first.activeBetaLedgerCount, 2);
+    assert.equal(first.activeBetaLedgerAmount, 2000);
+    assert.equal(first.activeBetaTransactionCount, 2);
+    assert.equal(first.activeBetaTransactionAmount, 2000);
     assert.equal(second.activeBetaGranted, 0);
-    assert.equal(second.activeBetaLedgerCount, 3);
-    assert.equal(second.activeBetaLedgerAmount, 3000);
-    assert.equal(second.activeBetaTransactionCount, 3);
-    assert.equal(second.activeBetaTransactionAmount, 3000);
+    assert.equal(second.activeBetaLedgerCount, 2);
+    assert.equal(second.activeBetaLedgerAmount, 2000);
+    assert.equal(second.activeBetaTransactionCount, 2);
+    assert.equal(second.activeBetaTransactionAmount, 2000);
     assert.equal(second.creatorGranted, false);
     const completedBatch = await db.query(
       `SELECT COUNT(*)::integer AS count
@@ -401,21 +393,27 @@ test('PostgreSQL: единый журнал выдерживает переза�
     );
     assert.deepEqual(
       betaBalances.rows.map((row) => Number(row.balance)),
-      [1150, 1000, 1000]
+      [1150, 1000, 0]
     );
     const activeGrants = await db.query(
       `SELECT COUNT(*)::integer AS count, SUM(amount)::bigint AS amount
        FROM reward_grants
        WHERE achievement_code = 'active-beta-participant'`
     );
-    assert.equal(Number(activeGrants.rows[0].count), 3);
-    assert.equal(Number(activeGrants.rows[0].amount), 3000);
+    assert.equal(Number(activeGrants.rows[0].count), 2);
+    assert.equal(Number(activeGrants.rows[0].amount), 2000);
     const activeLedger = await db.query(
       `SELECT COUNT(*)::integer AS count
        FROM transactions
        WHERE reward_code = 'achievement:active-beta-participant'`
     );
-    assert.equal(Number(activeLedger.rows[0].count), 3);
+    assert.equal(Number(activeLedger.rows[0].count), 2);
+
+    const unrelatedState = await getUserAchievementState(db, users[2]);
+    assert.equal(
+      unrelatedState.earned.some((item) => item.code === 'active-beta-participant'),
+      false
+    );
 
     const betaState = await getUserAchievementState(db, users[0]);
     assert.ok(betaState.earned.some((item) => item.code === 'active-beta-participant'));
@@ -483,17 +481,14 @@ test('PostgreSQL: единый журнал выдерживает переза�
     await db.query(
       `DELETE FROM reward_grants
        WHERE user_id = $1 AND achievement_code = 'active-beta-participant'`,
-      [users[2]]
+      [users[1]]
     );
-    await db.query('UPDATE users SET deleted_at = NOW() WHERE id = $1', [users[2]]);
-    const afterDeletion = await initializeAchievementGrants(db, {
-      ownerTelegramId: '9004',
-      activeBetaTesterTelegramIds: []
-    });
-    assert.equal(afterDeletion.activeBetaResolved, 3);
+    await db.query('UPDATE users SET deleted_at = NOW() WHERE id = $1', [users[1]]);
+    const afterDeletion = await initializeAchievementGrants(db, { ownerTelegramId: '9004' });
+    assert.equal(afterDeletion.activeBetaResolved, 2);
     assert.equal(afterDeletion.activeBetaGranted, 0);
-    assert.equal(afterDeletion.activeBetaLedgerCount, 2);
-    assert.equal(afterDeletion.activeBetaLedgerAmount, 2000);
+    assert.equal(afterDeletion.activeBetaLedgerCount, 1);
+    assert.equal(afterDeletion.activeBetaLedgerAmount, 1000);
   } finally {
     await db.close();
   }

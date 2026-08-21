@@ -567,15 +567,10 @@ async function initPlatformDatabase() {
 
     await client.query('COMMIT');
     const achievementInitialization = await initializeAchievementGrants(pool, {
-      ownerTelegramId,
-      activeBetaTesterTelegramIds: [
-        annaTelegramId,
-        olesyaTelegramId,
-        vladislavTelegramId
-      ]
+      ownerTelegramId
     });
-    if (!achievementInitialization.deferred && achievementInitialization.activeBetaResolved !== 3) {
-      throw new Error('Не удалось подтвердить три Telegram beta-профиля.');
+    if (!achievementInitialization.deferred && achievementInitialization.activeBetaResolved !== 2) {
+      throw new Error('Не удалось подтвердить два Telegram beta-профиля.');
     }
     platformReady = true;
     console.log(
