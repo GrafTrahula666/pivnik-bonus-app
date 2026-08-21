@@ -707,10 +707,10 @@ async function resolveTelegramAchievementUser(db, telegramId, profileFrame) {
      LIMIT 2`,
     [String(telegramId || '').trim(), profileFrame]
   );
-  if (result.rows.length !== 1) {
+  if (result.rows.length > 1) {
     throw new Error(`Не удалось однозначно определить Telegram beta-тестера для профиля ${profileFrame}.`);
   }
-  return String(result.rows[0].id);
+  return result.rows.length === 1 ? String(result.rows[0].id) : null;
 }
 
 async function resolveOwnerAchievementUser(db, telegramId) {
@@ -762,38 +762,31 @@ export async function initializeAchievementGrants(db, options = {}) {
     }
 
     const ownerId = await resolveOwnerAchievementUser(client, options.ownerTelegramId);
-    const claimedBatch = await client.query(
-      `INSERT INTO achievement_award_batches (
-         code, expected_recipients, reward_per_user
-       ) VALUES ($1, 3, 1000)
-       ON CONFLICT (code) DO NOTHING
-       RETURNING code`,
-      [activeBetaBatchCode]
-    );
-    const completedBatch = await client.query(
+    let completedBatch = await client.query(
       `SELECT expected_recipients, reward_per_user
        FROM achievement_award_batches
        WHERE code = $1
        FOR UPDATE`,
       [activeBetaBatchCode]
     );
-    const batchAlreadyCompleted = !hasRows(claimedBatch);
-    if (
+    let batchAlreadyCompleted = hasRows(completedBatch);
+    if (batchAlreadyCompleted && (
       number(completedBatch.rows[0]?.expected_recipients) !== 3
       || number(completedBatch.rows[0]?.reward_per_user) !== 1000
-    ) {
+    )) {
       throw new Error('Параметры уникальной beta-выдачи не совпадают с ожидаемыми.');
     }
     const activeBetaUserIds = [];
     if (!batchAlreadyCompleted) {
       for (let index = 0; index < frames.length; index += 1) {
-        activeBetaUserIds.push(await resolveTelegramAchievementUser(
+        const resolvedUserId = await resolveTelegramAchievementUser(
           client,
           configuredIds[index] || '',
           frames[index]
-        ));
+        );
+        if (resolvedUserId) activeBetaUserIds.push(resolvedUserId);
       }
-      if (new Set(activeBetaUserIds).size !== 3) {
+      if (new Set(activeBetaUserIds).size !== activeBetaUserIds.length) {
         throw new Error('Три beta-профиля должны принадлежать трём разным Telegram-пользователям.');
       }
     }
@@ -833,6 +826,63 @@ export async function initializeAchievementGrants(db, options = {}) {
       || (ownerId && number(creatorCheck.intended_count) !== 1)
     ) {
       throw new Error('Уникальное достижение создателя связано не с тем профилем.');
+    }
+
+    if (!batchAlreadyCompleted && activeBetaUserIds.length < 3) {
+      const pendingLedger = await client.query(
+        `SELECT
+           (SELECT COUNT(*)::integer
+              FROM reward_grants
+             WHERE source = 'achievement'
+               AND achievement_code = 'active-beta-participant') AS grant_count,
+           (SELECT COUNT(*)::integer
+              FROM transactions
+             WHERE status = 'completed'
+               AND reward_code = 'achievement:active-beta-participant') AS transaction_count`
+      );
+      if (
+        number(pendingLedger.rows[0]?.grant_count) !== 0
+        || number(pendingLedger.rows[0]?.transaction_count) !== 0
+      ) {
+        throw new Error('Обнаружена незавершённая уникальная beta-выдача без пакетного журнала.');
+      }
+      await client.query('COMMIT');
+      return {
+        deferred: true,
+        creatorResolved: Boolean(ownerId),
+        creatorGranted,
+        activeBetaResolved: activeBetaUserIds.length,
+        activeBetaGranted: 0,
+        activeBetaLedgerCount: 0,
+        activeBetaLedgerAmount: 0,
+        activeBetaTransactionCount: 0,
+        activeBetaTransactionAmount: 0
+      };
+    }
+
+    if (!batchAlreadyCompleted) {
+      const claimedBatch = await client.query(
+        `INSERT INTO achievement_award_batches (
+           code, expected_recipients, reward_per_user
+         ) VALUES ($1, 3, 1000)
+         ON CONFLICT (code) DO NOTHING
+         RETURNING code`,
+        [activeBetaBatchCode]
+      );
+      batchAlreadyCompleted = !hasRows(claimedBatch);
+      completedBatch = await client.query(
+        `SELECT expected_recipients, reward_per_user
+         FROM achievement_award_batches
+         WHERE code = $1
+         FOR UPDATE`,
+        [activeBetaBatchCode]
+      );
+      if (
+        number(completedBatch.rows[0]?.expected_recipients) !== 3
+        || number(completedBatch.rows[0]?.reward_per_user) !== 1000
+      ) {
+        throw new Error('Параметры уникальной beta-выдачи не совпадают с ожидаемыми.');
+      }
     }
 
     let activeBetaGranted = 0;
