@@ -619,18 +619,20 @@ function awardedAchievementState(grants) {
     }
   }
 
-  const byCode = new Map(ACHIEVEMENT_CATALOG.map((definition) => {
+  const byCode = new Map();
+  for (const definition of ACHIEVEMENT_CATALOG) {
     const grant = latestByAchievement.get(definition.code);
-    return [definition.code, {
+    if (!grant) continue;
+    byCode.set(definition.code, {
       ...publicDefinition(definition, definition.target),
-      earned: Boolean(grant),
-      locked: !grant,
-      grantCode: grant?.code || null,
-      grantedAt: grant?.created_at || null,
-      announced: grant ? Boolean(grant.announced_at) : false,
-      periodKey: grant?.achievement_period || null
-    }];
-  }));
+      earned: true,
+      locked: false,
+      grantCode: grant.code,
+      grantedAt: grant.created_at,
+      announced: Boolean(grant.announced_at),
+      periodKey: grant.achievement_period || null
+    });
+  }
   return {
     byCode,
     unannouncedRows: grants.filter((row) => !row.announced_at)
