@@ -164,22 +164,23 @@ async function acceptConsent(userId, platform) {`,
       : { granted: false, amount: 0 };`,
     'условная приветственная награда'
   );
-  gateway = replaceRequired(
-    gateway,
-    `    if (betaNumber > 0 && betaNumber <= 30) {
+  if (!gateway.includes('initializeAchievementGrants')) {
+    gateway = replaceRequired(
+      gateway,
+      `    if (betaNumber > 0 && betaNumber <= 30) {
       betaReward = await grantReward(`,
-    `    if (rewardEligible && betaNumber > 0 && betaNumber <= 30) {
+      `    if (rewardEligible && betaNumber > 0 && betaNumber <= 30) {
       betaReward = await grantReward(`,
-    'условная beta-награда'
-  );
-  gateway = replaceRequired(
-    gateway,
-    `    const canonical = await canonicalUserId(client, userId);
+      'условная beta-награда'
+    );
+    gateway = replaceRequired(
+      gateway,
+      `    const canonical = await canonicalUserId(client, userId);
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
 
     const userResult = await client.query(
       \`SELECT terms_accepted_at, terms_version,`,
-    `    const canonical = await canonicalUserId(client, userId);
+      `    const canonical = await canonicalUserId(client, userId);
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
     if (await hasDeletedIdentity(client, canonical)) {
       await client.query('COMMIT');
@@ -188,8 +189,9 @@ async function acceptConsent(userId, platform) {`,
 
     const userResult = await client.query(
       \`SELECT terms_accepted_at, terms_version,`,
-    'запрет ручного получения beta-награды после удаления'
-  );
+      'запрет ручного получения beta-награды после удаления'
+    );
+  }
   gateway = replaceRequired(
     gateway,
     `    await client.query('DELETE FROM account_link_codes WHERE user_id = $1::bigint OR used_by_user_id = $1::bigint', [canonical]);
@@ -249,14 +251,14 @@ async function verifyMaterializedState() {
   const pkg = JSON.parse(pkgText);
   const failures = [];
   if (pkg.scripts?.start !== FINAL_START_COMMAND) failures.push('package.json start');
-  if (!app.includes("const APP_VERSION = '19.1-telegram-wheel-v2';")) failures.push('app.js version');
+  if (!app.includes("const APP_VERSION = '20.0-achievement-ledger';")) failures.push('app.js version');
   if (!app.includes("profileFrame === 'vladislav'")) failures.push('app.js Vladislav frame');
   if (!app.includes('consentSafeTarget')) failures.push('consent-safe deletion');
   if (!gateway.includes('vladislavTelegramId')) failures.push('universal-server.js Vladislav identity');
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  if (!index.includes('styles.css?v=19.1-telegram-wheel-v2')) failures.push('index.html asset version');
+  if (!index.includes('styles.css?v=20.0-achievement-ledger')) failures.push('index.html asset version');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (!app.includes('WHEEL_VISUAL_SECTORS')) failures.push('app.js wheel artwork');

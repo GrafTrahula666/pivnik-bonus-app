@@ -197,35 +197,6 @@ function profileFrameFromRow(row) {
   return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';
 }
 
-function achievementsFromRow(row) {
-  const achievements = [];
-  if (isOwnerRow(row)) {
-    achievements.push({
-      code: 'creator',
-      title: 'Создатель',
-      rarity: 'legendary',
-      description: 'Единственное в своём роде. Выдано создателю приложения «Пивник» и навсегда закреплено только за ним.',
-      icon: 'all-seeing-eye',
-      rewardBonus: 0,
-      grantedAt: null,
-      announced: true
-    });
-  }
-  if (Number(row?.beta_number || 0) > 0 && Number(row.beta_number) <= 30) {
-    achievements.push({
-      code: 'beta-tester',
-      title: 'Пионер Пивника',
-      rarity: 'legendary',
-      description: 'Легендарное достижение первых 30 участников «Пивника».',
-      icon: 'beta',
-      rewardBonus: 150,
-      grantedAt: row.created_at || null,
-      announced: true
-    });
-  }
-  return achievements;
-}
-
 function availableFramesFromRow(row) {
   if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
@@ -1012,13 +983,11 @@ async function getRollingSpend(client, userId) {
   return Number(result.rows[0].spend || 0);
 }
 
-async function getProfile(userId, db = pool) {
+async function getProfile(userId, db = pool, options = {}) {
   await applyOlesyaGift(db, userId);
   await applyVladislavFrame(db, userId);
   const userResult = await db.query(
     `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance,
-            (SELECT COUNT(*)::integer FROM users ux
-             WHERE ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id)) AS beta_number,
             EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame
      FROM users u
      JOIN wallets w ON w.user_id = u.id
@@ -1030,6 +999,7 @@ async function getProfile(userId, db = pool) {
   );
   if (!userResult.rowCount) return null;
   const row = userResult.rows[0];
+  if (options.syncAchievements === true) await syncUserAchievements(db, userId);
   const [spend12mCents, achievementState] = await Promise.all([
     getRollingSpend(db, userId),
     getUserEarnedAchievementState(db, userId)
@@ -1047,8 +1017,9 @@ async function getProfile(userId, db = pool) {
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: [...achievementsFromRow(row), ...achievementState.earned],
+    achievements: achievementState.earned,
     unannouncedAchievements: achievementState.unannounced,
+    achievementRevision: achievementState.revision,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
@@ -1464,7 +1435,7 @@ app.post('/api/auth', async (req, res, next) => {
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
-      const profile = await getProfile(userId);
+      const profile = await getProfile(userId, pool, { syncAchievements: true });
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
       const sessionResult = await pool.query(
         'SELECT session_version FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
@@ -1492,7 +1463,7 @@ app.post('/api/auth', async (req, res, next) => {
 app.get('/api/me', authRequired, async (req, res, next) => {
   try {
     const [profile, designResult] = await Promise.all([
-      getProfile(req.user.id),
+      getProfile(req.user.id, pool, { syncAchievements: true }),
       pool.query('SELECT published FROM app_settings WHERE id = 1')
     ]);
     res.json({ profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
@@ -1514,11 +1485,11 @@ app.delete('/api/me/account', authRequired, async (req, res, next) => {
 app.get('/api/achievements', authRequired, async (req, res, next) => {
   try {
     const state = await getUserAchievementState(pool, req.user.id);
-    const legendary = (req.user.achievements || []).filter((item) => item.rarity === 'legendary');
     res.json({
       achievements: state.achievements,
-      profileAchievements: [...legendary, ...state.earned],
+      profileAchievements: state.earned,
       unannouncedAchievements: state.unannounced,
+      achievementRevision: state.revision,
       comingSoon: false
     });
   } catch (error) {
@@ -1554,65 +1525,16 @@ app.post('/api/me/consent', authRequired, async (req, res, next) => {
 });
 
 app.post('/api/me/beta-tester/claim', authRequired, async (req, res, next) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [req.user.id]);
-    const ordinalResult = await client.query(
-      `SELECT u.terms_accepted_at, u.terms_version,
-              (SELECT COUNT(*)::integer FROM users ux
-               WHERE ux.merged_into_user_id IS NULL
-                 AND (ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id))) AS beta_number
-       FROM users u
-       WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
-      [req.user.id]
-    );
-    if (
-      !ordinalResult.rowCount
-      || !ordinalResult.rows[0].terms_accepted_at
-      || ordinalResult.rows[0].terms_version !== TERMS_VERSION
-    ) {
-      throw Object.assign(new Error('Сначала примите правила программы.'), { statusCode: 428 });
-    }
-    const betaNumber = Number(ordinalResult.rows[0]?.beta_number || 0);
-    if (!betaNumber || betaNumber > 30) {
-      await client.query('COMMIT');
-      return res.json({ eligible: false, granted: false, profile: await getProfile(req.user.id) });
-    }
-    const grant = await client.query(
-      `INSERT INTO beta_grants (code, user_id, amount)
-       VALUES ('beta-tester-legendary', $1::bigint, 150::bigint)
-       ON CONFLICT (code, user_id) DO NOTHING
-       RETURNING user_id`,
-      [req.user.id]
-    );
-    let granted = false;
-    if (grant.rowCount) {
-      const wallet = await client.query(
-        'UPDATE wallets SET balance = balance + 150::bigint, updated_at = NOW() WHERE user_id = $1::bigint RETURNING balance',
-        [req.user.id]
-      );
-      const balanceAfter = Number(wallet.rows[0]?.balance || 0);
-      await client.query(
-        `INSERT INTO transactions (
-           request_key, client_id, mode, status, bonus_earned,
-           balance_after, reason, reward_code, completed_at
-         ) VALUES (
-           $1, $2::bigint, 'adjustment', 'completed', $3::bigint,
-           $4::bigint, 'Легендарное достижение «Пионер Пивника»',
-           'beta-tester-legendary', NOW()
-         )`,
-        [`reward:${req.user.id}:beta-tester-legendary`, req.user.id, 150, balanceAfter]
-      );
-      granted = true;
-    }
-    await client.query('COMMIT');
-    res.json({ eligible: true, granted, profile: await getProfile(req.user.id) });
+    const state = await getUserAchievementState(pool, req.user.id);
+    const earned = state.earned.some((item) => item.code === 'beta-tester');
+    res.json({
+      eligible: earned,
+      granted: false,
+      profile: await getProfile(req.user.id)
+    });
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
     next(error);
-  } finally {
-    client.release();
   }
 });
 

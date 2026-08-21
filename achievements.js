@@ -191,15 +191,56 @@ const catalog = [
     metric: 'purchaseDays',
     target: 20,
     rewardBonus: 30
+  },
+  {
+    code: 'creator',
+    title: 'Создатель',
+    description: 'Единственное в своём роде достижение создателя приложения «Пивник».',
+    condition: 'Быть создателем приложения «Пивник».',
+    rarity: 'legendary',
+    type: 'unique',
+    icon: 'all-seeing-eye',
+    target: 1,
+    rewardBonus: 0,
+    rewardLabel: 'Уникальное достижение',
+    automatic: false
+  },
+  {
+    code: 'beta-tester',
+    title: 'Пионер Пивника',
+    description: 'Легендарное достижение первых участников программы лояльности «Пивник».',
+    condition: 'Войти в число первых 30 участников программы.',
+    rarity: 'legendary',
+    type: 'unique',
+    icon: 'beta',
+    target: 1,
+    rewardBonus: 150,
+    automatic: false
+  },
+  {
+    code: 'active-beta-participant',
+    title: 'За активное участие в бета-тесте',
+    description: 'Уникальная благодарность трём Telegram-пользователям, активно участвовавшим в бета-тестировании приложения.',
+    condition: 'Активно участвовать в бета-тестировании приложения.',
+    rarity: 'legendary',
+    type: 'unique',
+    icon: 'beta-active',
+    target: 1,
+    rewardBonus: 1000,
+    automatic: false
   }
 ];
 
 export const ACHIEVEMENT_CATALOG = Object.freeze(
   catalog.map((item) => Object.freeze({
+    automatic: true,
     rewardBeerMl: 0,
     rewardBonus: 0,
+    rewardLabel: null,
+    type: 'countable',
     unit: 'count',
     recurring: null,
+    condition: item.description,
     ...item
   }))
 );
@@ -245,20 +286,26 @@ function publicDefinition(definition, current = 0) {
     code: definition.code,
     title: definition.title,
     description: definition.description,
+    condition: definition.condition || definition.description,
     rarity: definition.rarity,
+    type: definition.type,
     icon: definition.icon,
     rewardBonus: number(definition.rewardBonus),
     rewardBeerMl: number(definition.rewardBeerMl),
     rewardBeerLiters: litersFromMl(definition.rewardBeerMl),
-    rewardLabel: definition.rewardBeerMl
+    rewardLabel: definition.rewardLabel || (definition.rewardBeerMl
       ? '1 бесплатная пинта · 0,5 л'
-      : `+${formatNumber(definition.rewardBonus)} бонусов`,
+      : definition.rewardBonus
+        ? `+${formatNumber(definition.rewardBonus)} бонусов`
+        : 'Без бонусной награды'),
     recurring: definition.recurring,
     progress: {
       current: Math.min(normalizedCurrent, target),
       target,
       percent: Math.min(100, Math.round((normalizedCurrent / target) * 100)),
-      label: progressLabel(definition, Math.min(normalizedCurrent, target))
+      label: definition.type === 'unique'
+        ? (normalizedCurrent >= target ? 'Получено' : 'Уникальное условие')
+        : progressLabel(definition, Math.min(normalizedCurrent, target))
     }
   };
 }
@@ -268,7 +315,7 @@ export function evaluateAchievementCatalog(metrics = {}) {
     const current = number(metrics[definition.metric]);
     return {
       ...publicDefinition(definition, current),
-      eligible: current >= definition.target
+      eligible: definition.automatic !== false && current >= definition.target
     };
   });
 }
@@ -374,15 +421,15 @@ function achievementRequestKey(definition, userId, periodKey = '') {
     : `achievement:${userId}:${definition.code}`;
 }
 
-async function awardAchievement(db, userId, definition, periodKey = '') {
+async function awardAchievement(db, userId, definition, periodKey = '', options = {}) {
   const code = grantCode(definition, periodKey);
   const requestKey = achievementRequestKey(definition, userId, periodKey);
   const inserted = await db.query(
     `INSERT INTO reward_grants (
        code, user_id, amount, source, achievement_code,
-       achievement_period, reward_beer_ml
+       achievement_period, reward_beer_ml, announced_at
      ) VALUES (
-       $1, $2::bigint, $3::bigint, 'achievement', $4, $5, $6::bigint
+       $1, $2::bigint, $3::bigint, 'achievement', $4, $5, $6::bigint, $7
      )
      ON CONFLICT (code, user_id) DO NOTHING
      RETURNING code`,
@@ -392,7 +439,8 @@ async function awardAchievement(db, userId, definition, periodKey = '') {
       number(definition.rewardBonus),
       definition.code,
       periodKey || null,
-      number(definition.rewardBeerMl)
+      number(definition.rewardBeerMl),
+      options.announcedAt || null
     ]
   );
   if (!hasRows(inserted)) return false;
@@ -483,6 +531,7 @@ export async function syncUserAchievements(db, userId) {
 
     const granted = [];
     for (const definition of ACHIEVEMENT_CATALOG) {
+      if (definition.automatic === false) continue;
       if (number(metrics[definition.metric]) < definition.target) continue;
       const periodKey = definition.recurring === 'monthly' ? monthly.periodKey : '';
       if (definition.recurring === 'monthly' && !periodKey) continue;
@@ -529,6 +578,9 @@ export async function getUserAchievementState(db, userId, { sync = true } = {}) 
       periodKey: null
     })
   }));
+  if (sync && achievements.some((item) => item.eligible && !item.earned)) {
+    throw new Error('Достижение с выполненным условием не было зафиксировано в журнале наград.');
+  }
   const byCode = new Map(achievements.map((item) => [item.code, item]));
   const earned = achievements.filter((item) => item.earned);
   const unannounced = awarded.unannouncedRows
@@ -544,7 +596,19 @@ export async function getUserAchievementState(db, userId, { sync = true } = {}) 
     }))
     .filter((item) => item.code);
 
-  return { achievements, earned, unannounced };
+  return {
+    achievements,
+    earned,
+    unannounced,
+    revision: achievementRevision(grants)
+  };
+}
+
+function achievementRevision(grants) {
+  return grants.reduce((latest, row) => {
+    const value = new Date(row.announced_at || row.created_at || 0).getTime();
+    return Number.isFinite(value) && value > latest ? value : latest;
+  }, 0);
 }
 
 function awardedAchievementState(grants) {
@@ -555,18 +619,20 @@ function awardedAchievementState(grants) {
     }
   }
 
-  const byCode = new Map(ACHIEVEMENT_CATALOG.map((definition) => {
+  const byCode = new Map();
+  for (const definition of ACHIEVEMENT_CATALOG) {
     const grant = latestByAchievement.get(definition.code);
-    return [definition.code, {
+    if (!grant) continue;
+    byCode.set(definition.code, {
       ...publicDefinition(definition, definition.target),
-      earned: Boolean(grant),
-      locked: !grant,
-      grantCode: grant?.code || null,
-      grantedAt: grant?.created_at || null,
-      announced: grant ? Boolean(grant.announced_at) : false,
-      periodKey: grant?.achievement_period || null
-    }];
-  }));
+      earned: true,
+      locked: false,
+      grantCode: grant.code,
+      grantedAt: grant.created_at,
+      announced: Boolean(grant.announced_at),
+      periodKey: grant.achievement_period || null
+    });
+  }
   return {
     byCode,
     unannouncedRows: grants.filter((row) => !row.announced_at)
@@ -598,7 +664,257 @@ export async function getUserEarnedAchievementState(db, userId) {
       rewardBeerLiters: litersFromMl(row.reward_beer_ml)
     }))
     .filter((item) => item.code);
-  return { earned, unannounced };
+  return { earned, unannounced, revision: achievementRevision(result.rows) };
+}
+
+function definitionByCode(code) {
+  return ACHIEVEMENT_CATALOG.find((definition) => definition.code === code) || null;
+}
+
+async function ensureUserRewardAccounts(db, userId) {
+  await db.query(
+    `INSERT INTO wallets (user_id, balance)
+     VALUES ($1::bigint, 0)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId]
+  );
+  await db.query(
+    `INSERT INTO beer_loyalty (user_id)
+     VALUES ($1::bigint)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId]
+  );
+}
+
+async function resolveTelegramAchievementUser(db, telegramId, profileFrame) {
+  const result = await db.query(
+    `SELECT DISTINCT u.id
+     FROM users u
+     LEFT JOIN user_identities ui
+       ON ui.user_id = u.id AND ui.provider = 'telegram'
+     WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+       AND (
+         ($1::text <> '' AND (
+           u.telegram_id::text = $1::text
+           OR ui.provider_user_id = $1::text
+         ))
+         OR ($1::text = '' AND u.profile_frame = $2::text AND (
+           u.telegram_id IS NOT NULL OR ui.provider_user_id IS NOT NULL
+         ))
+       )
+     ORDER BY u.id
+     LIMIT 2`,
+    [String(telegramId || '').trim(), profileFrame]
+  );
+  if (result.rows.length !== 1) {
+    throw new Error(`Не удалось однозначно определить Telegram beta-тестера для профиля ${profileFrame}.`);
+  }
+  return String(result.rows[0].id);
+}
+
+async function resolveOwnerAchievementUser(db, telegramId) {
+  if (!String(telegramId || '').trim()) return null;
+  const result = await db.query(
+    `SELECT DISTINCT u.id
+     FROM users u
+     LEFT JOIN user_identities ui
+       ON ui.user_id = u.id AND ui.provider = 'telegram'
+     WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+       AND (u.telegram_id::text = $1::text OR ui.provider_user_id = $1::text)
+     ORDER BY u.id
+     LIMIT 2`,
+    [String(telegramId).trim()]
+  );
+  if (result.rows.length > 1) throw new Error('Telegram identity создателя связан с несколькими активными пользователями.');
+  return result.rows.length === 1 ? String(result.rows[0].id) : null;
+}
+
+export async function initializeAchievementGrants(db, options = {}) {
+  const activeBetaBatchCode = 'active-beta-participant-v1';
+  const frames = ['anna', 'olesya', 'vladislav'];
+  const configuredIds = Array.isArray(options.activeBetaTesterTelegramIds)
+    ? options.activeBetaTesterTelegramIds.map((value) => String(value || '').trim())
+    : [];
+  const { client, release } = await acquireClient(db);
+  try {
+    await client.query('BEGIN');
+
+    const activeUsers = await client.query(
+      `SELECT COUNT(*)::integer AS count
+       FROM users
+       WHERE merged_into_user_id IS NULL AND deleted_at IS NULL`
+    );
+    if (Number(activeUsers.rows[0]?.count || 0) === 0) {
+      await client.query('COMMIT');
+      return {
+        deferred: true,
+        creatorResolved: false,
+        creatorGranted: false,
+        activeBetaResolved: 0,
+        activeBetaGranted: 0,
+        activeBetaLedgerCount: 0,
+        activeBetaLedgerAmount: 0,
+        activeBetaTransactionCount: 0,
+        activeBetaTransactionAmount: 0
+      };
+    }
+
+    const ownerId = await resolveOwnerAchievementUser(client, options.ownerTelegramId);
+    const claimedBatch = await client.query(
+      `INSERT INTO achievement_award_batches (
+         code, expected_recipients, reward_per_user
+       ) VALUES ($1, 3, 1000)
+       ON CONFLICT (code) DO NOTHING
+       RETURNING code`,
+      [activeBetaBatchCode]
+    );
+    const completedBatch = await client.query(
+      `SELECT expected_recipients, reward_per_user
+       FROM achievement_award_batches
+       WHERE code = $1
+       FOR UPDATE`,
+      [activeBetaBatchCode]
+    );
+    const batchAlreadyCompleted = !hasRows(claimedBatch);
+    if (
+      number(completedBatch.rows[0]?.expected_recipients) !== 3
+      || number(completedBatch.rows[0]?.reward_per_user) !== 1000
+    ) {
+      throw new Error('Параметры уникальной beta-выдачи не совпадают с ожидаемыми.');
+    }
+    const activeBetaUserIds = [];
+    if (!batchAlreadyCompleted) {
+      for (let index = 0; index < frames.length; index += 1) {
+        activeBetaUserIds.push(await resolveTelegramAchievementUser(
+          client,
+          configuredIds[index] || '',
+          frames[index]
+        ));
+      }
+      if (new Set(activeBetaUserIds).size !== 3) {
+        throw new Error('Три beta-профиля должны принадлежать трём разным Telegram-пользователям.');
+      }
+    }
+
+    const locks = [...new Set([
+      ...(ownerId ? [ownerId] : []),
+      ...activeBetaUserIds
+    ])].sort((left, right) => Number(left) - Number(right));
+    for (const userId of locks) {
+      await client.query('SELECT id FROM users WHERE id = $1::bigint FOR UPDATE', [userId]);
+      await ensureUserRewardAccounts(client, userId);
+    }
+
+    let creatorGranted = false;
+    if (ownerId) {
+      creatorGranted = await awardAchievement(
+        client,
+        ownerId,
+        definitionByCode('creator'),
+        '',
+        { announcedAt: new Date() }
+      );
+    }
+    const creatorLedger = await client.query(
+      `SELECT
+         COUNT(*)::integer AS grant_count,
+         COUNT(DISTINCT user_id)::integer AS user_count,
+         COUNT(*) FILTER (WHERE user_id = $1::bigint)::integer AS intended_count
+       FROM reward_grants
+       WHERE source = 'achievement' AND achievement_code = 'creator'`,
+      [ownerId || '-1']
+    );
+    const creatorCheck = creatorLedger.rows[0] || {};
+    if (
+      number(creatorCheck.grant_count) > 1
+      || number(creatorCheck.user_count) > 1
+      || (ownerId && number(creatorCheck.intended_count) !== 1)
+    ) {
+      throw new Error('Уникальное достижение создателя связано не с тем профилем.');
+    }
+
+    let activeBetaGranted = 0;
+    if (!batchAlreadyCompleted) {
+      for (const userId of activeBetaUserIds) {
+        if (await awardAchievement(client, userId, definitionByCode('active-beta-participant'))) {
+          activeBetaGranted += 1;
+        }
+      }
+    }
+
+    const verificationIds = batchAlreadyCompleted
+      ? ['-1', '-2', '-3']
+      : activeBetaUserIds;
+    const activeBetaLedger = await client.query(
+      `SELECT
+         COUNT(*)::integer AS grant_count,
+         COUNT(DISTINCT user_id)::integer AS user_count,
+         COALESCE(SUM(amount), 0)::bigint AS grant_amount,
+         COUNT(*) FILTER (
+           WHERE user_id IN ($1::bigint, $2::bigint, $3::bigint)
+         )::integer AS intended_count
+       FROM reward_grants
+       WHERE source = 'achievement'
+         AND achievement_code = 'active-beta-participant'`,
+      verificationIds
+    );
+    const activeBetaTransactions = await client.query(
+      `SELECT
+         COUNT(*)::integer AS transaction_count,
+         COUNT(DISTINCT client_id)::integer AS user_count,
+         COALESCE(SUM(bonus_earned), 0)::bigint AS transaction_amount,
+         COUNT(*) FILTER (
+           WHERE client_id IN ($1::bigint, $2::bigint, $3::bigint)
+         )::integer AS intended_count
+       FROM transactions
+       WHERE status = 'completed'
+         AND reward_code = 'achievement:active-beta-participant'`,
+      verificationIds
+    );
+    const grantCheck = activeBetaLedger.rows[0] || {};
+    const transactionCheck = activeBetaTransactions.rows[0] || {};
+    const grantCount = number(grantCheck.grant_count);
+    const validGrantRecipients = batchAlreadyCompleted
+      ? grantCount <= 3
+        && number(grantCheck.user_count) === grantCount
+        && number(grantCheck.grant_amount) === grantCount * 1000
+      : grantCount === 3
+        && number(grantCheck.user_count) === 3
+        && number(grantCheck.grant_amount) === 3000
+        && number(grantCheck.intended_count) === 3;
+    const validActiveBetaLedger = (
+      validGrantRecipients
+      && number(transactionCheck.transaction_count) === 3
+      && number(transactionCheck.user_count) === 3
+      && number(transactionCheck.transaction_amount) === 3000
+      && (batchAlreadyCompleted || number(transactionCheck.intended_count) === 3)
+    );
+    if (!validActiveBetaLedger) {
+      throw new Error('Журнал уникального beta-достижения не прошёл проверку идемпотентности.');
+    }
+
+    await client.query('COMMIT');
+    return {
+      deferred: false,
+      creatorResolved: Boolean(ownerId),
+      creatorGranted,
+      activeBetaResolved: batchAlreadyCompleted
+        ? number(completedBatch.rows[0].expected_recipients)
+        : activeBetaUserIds.length,
+      activeBetaGranted,
+      activeBetaLedgerCount: number(grantCheck.grant_count),
+      activeBetaLedgerAmount: number(grantCheck.grant_amount),
+      activeBetaTransactionCount: number(transactionCheck.transaction_count),
+      activeBetaTransactionAmount: number(transactionCheck.transaction_amount)
+    };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    release();
+  }
 }
 
 export async function acknowledgeAchievement(db, userId, code) {

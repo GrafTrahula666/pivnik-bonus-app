@@ -6,7 +6,10 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {
-  getUserEarnedAchievementState
+  acknowledgeAchievement,
+  getUserAchievementState,
+  getUserEarnedAchievementState,
+  initializeAchievementGrants
 } from './achievements.js';
 import {
   chooseCanonicalUser,
@@ -73,7 +76,6 @@ const isTestImport = process.env.NODE_ENV === 'test'
 const TERMS_VERSION = '2026-08-04';
 const EXPECTED_VK_APP_ID = '54694987';
 const WELCOME_BONUS = 100;
-const BETA_TESTER_BONUS = 150;
 const LINK_CODE_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -335,35 +337,6 @@ function availableFramesFromRow(row) {
   return frames;
 }
 
-function achievementsFromRow(row) {
-  const achievements = [];
-  if (isOwnerRow(row)) {
-    achievements.push({
-      code: 'creator',
-      title: 'Создатель',
-      rarity: 'legendary',
-      description: 'Единственное в своём роде. Выдано создателю приложения «Пивник».',
-      icon: 'all-seeing-eye',
-      rewardBonus: 0,
-      grantedAt: null,
-      announced: true
-    });
-  }
-  if (Number(row?.beta_number || 0) > 0 && Number(row.beta_number) <= 30) {
-    achievements.push({
-      code: 'beta-tester',
-      title: 'Тестировщик',
-      rarity: 'legendary',
-      description: 'Легендарное достижение первых 30 участников закрытого бета-теста «Пивника».',
-      icon: 'beta',
-      rewardBonus: BETA_TESTER_BONUS,
-      grantedAt: row.created_at || null,
-      announced: true
-    });
-  }
-  return achievements;
-}
-
 function getStatus(spendCents) {
   return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
 }
@@ -593,7 +566,21 @@ async function initPlatformDatabase() {
     `);
 
     await client.query('COMMIT');
+    const achievementInitialization = await initializeAchievementGrants(pool, {
+      ownerTelegramId,
+      activeBetaTesterTelegramIds: [
+        annaTelegramId,
+        olesyaTelegramId,
+        vladislavTelegramId
+      ]
+    });
+    if (!achievementInitialization.deferred && achievementInitialization.activeBetaResolved !== 3) {
+      throw new Error('Не удалось подтвердить три Telegram beta-профиля.');
+    }
     platformReady = true;
+    console.log(
+      `Achievement ledger is ready: active beta ${achievementInitialization.activeBetaResolved}, new grants ${achievementInitialization.activeBetaGranted}, deferred ${achievementInitialization.deferred}.`
+    );
     console.log('Separate Telegram/VK account mode is ready.');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
@@ -777,10 +764,6 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
   const detailColumns = startup
     ? ''
     : `,
-            (SELECT COUNT(*)::integer
-             FROM users ux
-             WHERE ux.merged_into_user_id IS NULL
-               AND (ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id))) AS beta_number,
             EXISTS(
               SELECT 1 FROM beta_grants bg
               WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
@@ -799,22 +782,20 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
   if (!result.rowCount) return null;
 
   const row = result.rows[0];
-  const [spend12mCents, achievementState, identitySummary] = startup
-    ? [
-      0,
-      { earned: [], unannounced: [] },
-      {
+  const [spend12mCents, achievementState, identitySummary] = await Promise.all([
+    startup ? Promise.resolve(0) : getRollingSpend(db, canonical),
+    startup
+      ? getUserEarnedAchievementState(db, canonical)
+      : getUserAchievementState(db, canonical),
+    startup
+      ? Promise.resolve({
         identities: [],
         linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],
         accountLinked: false,
         legacyLinked: false
-      }
-    ]
-    : await Promise.all([
-      getRollingSpend(db, canonical),
-      getUserEarnedAchievementState(db, canonical),
-      getIdentitySummary(db, canonical)
-    ]);
+      })
+      : getIdentitySummary(db, canonical)
+  ]);
   const unlimitedBonus = hasUnlimitedBonus(row);
   const status = getEffectiveStatus(row, spend12mCents);
 
@@ -829,8 +810,9 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
     avatarKey: row.avatar_key || null,
     profileFrame: profileFrameFromRow(row),
     availableFrames: availableFramesFromRow(row),
-    achievements: startup ? [] : [...achievementsFromRow(row), ...achievementState.earned],
+    achievements: achievementState.earned,
     unannouncedAchievements: achievementState.unannounced,
+    achievementRevision: achievementState.revision,
     unlimitedBonus,
     onboardingComplete: Boolean(row.onboarding_completed_at),
     ageGroup: row.age_group || null,
@@ -1862,40 +1844,11 @@ async function acceptConsent(userId, platform) {
         )
       : { granted: false, amount: 0 };
 
-    const ordinalResult = await client.query(
-      `SELECT (SELECT COUNT(*)::integer
-               FROM users ux
-               WHERE ux.merged_into_user_id IS NULL
-                 AND (ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id))) AS beta_number
-       FROM users u
-       WHERE u.id = $1::bigint`,
-      [canonical]
-    );
-    const betaNumber = Number(ordinalResult.rows[0]?.beta_number || 0);
-    let betaReward = { granted: false };
-    if (rewardEligible && betaNumber > 0 && betaNumber <= 30) {
-      betaReward = await grantReward(
-        client,
-        canonical,
-        'beta-tester-legendary',
-        BETA_TESTER_BONUS,
-        'closed-beta',
-        'Легендарное достижение «Тестировщик»',
-        'adjustment'
-      );
-      await client.query(
-        `INSERT INTO beta_grants (code, user_id, amount)
-         VALUES ('beta-tester-legendary', $1::bigint, $2::bigint)
-         ON CONFLICT (code, user_id) DO NOTHING`,
-        [canonical, BETA_TESTER_BONUS]
-      );
-    }
-
     await client.query('COMMIT');
     return {
       ok: true,
       grantedWelcome: reward.granted,
-      grantedBetaTester: betaReward.granted,
+      grantedBetaTester: false,
       profile: await getProfile(canonical, platform)
     };
   } catch (error) {
@@ -1907,65 +1860,14 @@ async function acceptConsent(userId, platform) {
 }
 
 async function claimBetaTester(userId, platform) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const canonical = await canonicalUserId(client, userId);
-    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [canonical]);
-    if (await hasDeletedIdentity(client, canonical)) {
-      await client.query('COMMIT');
-      return { eligible: false, granted: false, profile: await getProfile(canonical, platform) };
-    }
-
-    const userResult = await client.query(
-      `SELECT terms_accepted_at, terms_version,
-              (SELECT COUNT(*)::integer
-               FROM users ux
-               WHERE ux.merged_into_user_id IS NULL
-                 AND (ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id))) AS beta_number
-       FROM users u
-       WHERE u.id = $1::bigint`,
-      [canonical]
-    );
-    if (!userResult.rowCount) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
-    const row = userResult.rows[0];
-    if (!row.terms_accepted_at || row.terms_version !== TERMS_VERSION) {
-      throw Object.assign(new Error('Сначала примите правила программы.'), { statusCode: 428 });
-    }
-
-    const betaNumber = Number(row.beta_number || 0);
-    if (!betaNumber || betaNumber > 30) {
-      await client.query('COMMIT');
-      return { eligible: false, granted: false, profile: await getProfile(canonical, platform) };
-    }
-
-    const reward = await grantReward(
-      client,
-      canonical,
-      'beta-tester-legendary',
-      BETA_TESTER_BONUS,
-      'closed-beta',
-      'Легендарное достижение «Тестировщик»',
-      'adjustment'
-    );
-    await client.query(
-      `INSERT INTO beta_grants (code, user_id, amount)
-       VALUES ('beta-tester-legendary', $1::bigint, $2::bigint)
-       ON CONFLICT (code, user_id) DO NOTHING`,
-      [canonical, BETA_TESTER_BONUS]
-    );
-    await client.query('COMMIT');
-    return {
-      eligible: true,
-      granted: reward.granted,
-      profile: await getProfile(canonical, platform)
-    };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
+  const canonical = await canonicalUserId(pool, userId);
+  if (!canonical) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
+  const state = await getUserAchievementState(pool, canonical);
+  return {
+    eligible: state.earned.some((item) => item.code === 'beta-tester'),
+    granted: false,
+    profile: await getProfile(canonical, platform)
+  };
 }
 
 async function getCurrentProvider(db, userId, requestedProvider) {
@@ -3072,6 +2974,37 @@ const server = http.createServer(async (req, res) => {
       const user = await requireGatewayUser(req);
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
       return sendJson(res, 200, await getAppPayload(user.id, platform));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/achievements') {
+      const user = await requireGatewayUser(req);
+      platformFromRequest(req, user.payload.platform || 'unknown');
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      const state = await getUserAchievementState(pool, user.id);
+      return sendJson(res, 200, {
+        achievements: state.achievements,
+        profileAchievements: state.earned,
+        unannouncedAchievements: state.unannounced,
+        achievementRevision: state.revision,
+        comingSoon: false
+      });
+    }
+
+    const achievementAckMatch = url.pathname.match(/^\/api\/me\/achievements\/([^/]+)\/ack$/);
+    if (req.method === 'POST' && achievementAckMatch) {
+      const user = await requireGatewayUser(req);
+      platformFromRequest(req, user.payload.platform || 'unknown');
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      let grantCode = achievementAckMatch[1];
+      try { grantCode = decodeURIComponent(grantCode); }
+      catch { return sendJson(res, 400, { error: 'Некорректный код достижения.' }); }
+      const acknowledged = await acknowledgeAchievement(pool, user.id, grantCode);
+      if (!acknowledged) return sendJson(res, 404, { error: 'Награда достижения не найдена.' });
+      return sendJson(res, 200, { ok: true });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/wheel/status') {

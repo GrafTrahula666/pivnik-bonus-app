@@ -8,9 +8,6 @@
   let linkStatus = null;
   let activeCode = null;
   let countdownTimer = null;
-  let pendingAchievements = [];
-  let achievementInboxOpened = false;
-  let originalAchievementCelebration = null;
 
   function storageKey(key) {
     const prefix = String(window.__PIVNIK_STORAGE_PREFIX__ || 'pivnik_tg_');
@@ -33,84 +30,6 @@
     catch { return requestUrl; }
   }
 
-  function achievementIdentity(item = {}) {
-    return String(item.grantCode || item.code || '');
-  }
-
-  function ensureAchievementNotice() {
-    const section = document.getElementById('profileAchievementsSection');
-    if (!section) return null;
-    let notice = document.getElementById('achievementInboxNotice');
-    if (notice) return notice;
-
-    notice = document.createElement('button');
-    notice.id = 'achievementInboxNotice';
-    notice.className = 'achievement-inbox-notice hidden';
-    notice.type = 'button';
-    notice.innerHTML = `
-      <span class="achievement-inbox-mark">◆</span>
-      <span class="achievement-inbox-copy">
-        <b id="achievementInboxTitle">У вас новое достижение</b>
-        <small>Нажмите, чтобы открыть и получить</small>
-      </span>
-      <i>›</i>
-    `;
-
-    const showcase = document.getElementById('profileAchievementShowcase');
-    section.insertBefore(notice, showcase || null);
-    notice.addEventListener('click', () => {
-      const opener = document.getElementById('openAchievementsButton');
-      if (opener) {
-        opener.click();
-        return;
-      }
-      achievementInboxOpened = true;
-      if (typeof window.openAchievements === 'function') window.openAchievements();
-      window.setTimeout(() => originalAchievementCelebration?.(), 180);
-    });
-    return notice;
-  }
-
-  function updateAchievementNotice() {
-    const notice = ensureAchievementNotice();
-    if (!notice) return;
-    const count = pendingAchievements.length;
-    notice.classList.toggle('hidden', count === 0);
-    notice.setAttribute('aria-hidden', count === 0 ? 'true' : 'false');
-    const title = document.getElementById('achievementInboxTitle');
-    if (title) {
-      title.textContent = count > 1
-        ? `У вас новые достижения · ${count}`
-        : 'У вас новое достижение';
-    }
-  }
-
-  function installAchievementInbox() {
-    ensureAchievementNotice();
-    updateAchievementNotice();
-
-    if (typeof window.maybeShowAchievementCelebration === 'function') {
-      originalAchievementCelebration = window.maybeShowAchievementCelebration;
-      window.maybeShowAchievementCelebration = function guardedAchievementCelebration(...args) {
-        updateAchievementNotice();
-        if (!achievementInboxOpened) return undefined;
-        return originalAchievementCelebration.apply(this, args);
-      };
-    }
-
-    document.addEventListener('click', (event) => {
-      const opener = event.target?.closest?.(
-        '#openAchievementsButton, #achievementEmptyOpen, [data-profile-achievement]'
-      );
-      if (!opener) return;
-      achievementInboxOpened = true;
-      window.setTimeout(() => {
-        updateAchievementNotice();
-        originalAchievementCelebration?.();
-      }, 180);
-    }, true);
-  }
-
   async function inspectResponse(response) {
     try {
       const contentType = response.headers.get('content-type') || '';
@@ -119,10 +38,6 @@
       if (data?.profile) {
         lastProfile = data.profile;
         updateLinkCardFromProfile(data.profile);
-      }
-      if (Array.isArray(data?.unannouncedAchievements)) {
-        pendingAchievements = data.unannouncedAchievements;
-        updateAchievementNotice();
       }
     } catch (_) {}
   }
@@ -144,23 +59,10 @@
       pathname === '/api/auth'
       || pathname === '/api/me'
       || pathname === '/api/me/consent'
-      || pathname === '/api/achievements'
       || pathname === '/api/account-link/status'
       || pathname === '/api/account-link/consume'
     ) {
       void inspectResponse(response);
-    }
-
-    if (response.ok && /^\/api\/me\/achievements\/[^/]+\/ack$/.test(pathname)) {
-      const parts = pathname.split('/');
-      const encodedCode = parts[parts.length - 2] || '';
-      let code = encodedCode;
-      try { code = decodeURIComponent(encodedCode); } catch (_) {}
-      pendingAchievements = pendingAchievements.filter((item) => {
-        const identity = achievementIdentity(item);
-        return identity !== code && String(item.code || '') !== code;
-      });
-      updateAchievementNotice();
     }
 
     if (pathname === '/api/me/consent') {
@@ -417,13 +319,6 @@
       .account-link-consume input{text-transform:uppercase;letter-spacing:1px}
       .account-link-warning{font-size:12px;line-height:1.45;opacity:.65}
       .account-link-empty{padding:12px;opacity:.65}
-      .achievement-inbox-notice{width:100%;margin:10px 0 12px;padding:12px 14px;border:1px solid rgba(246,188,86,.42);border-radius:16px;background:linear-gradient(135deg,rgba(246,188,86,.18),rgba(255,255,255,.05));display:flex;align-items:center;gap:11px;text-align:left;color:inherit;box-shadow:0 12px 28px rgba(0,0,0,.18)}
-      .achievement-inbox-notice.hidden{display:none}
-      .achievement-inbox-mark{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border-radius:13px;background:rgba(246,188,86,.2);font-size:18px}
-      .achievement-inbox-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
-      .achievement-inbox-copy b{font-size:14px}
-      .achievement-inbox-copy small{font-size:11px;opacity:.72}
-      .achievement-inbox-notice>i{font-style:normal;font-size:25px;opacity:.72}
     `;
     document.head.appendChild(style);
   }
@@ -521,7 +416,6 @@
   }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
-    installAchievementInbox();
     // Account linking is intentionally unavailable: VK and Telegram are separate profiles.
     updateConsentCopy();
   });

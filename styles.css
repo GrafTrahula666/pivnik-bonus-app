@@ -3491,6 +3491,20 @@ body {
   border: 1px solid rgba(255,211,94,.42); background: radial-gradient(circle at 50% 28%, rgba(255,185,51,.22), transparent 32%), linear-gradient(180deg,#171006,#080a10 68%);
   box-shadow: 0 0 80px rgba(255,167,32,.2);
 }
+.achievement-celebration-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0,0,0,.28);
+  font-size: 25px;
+  cursor: pointer;
+}
 .achievement-celebration::before { content: ''; position: absolute; inset: -50%; background: conic-gradient(from 0deg,transparent,rgba(255,217,112,.12),transparent 18%); animation: achievementRay 7s linear infinite; }
 .achievement-celebration > * { position: relative; z-index: 2; }
 .achievement-celebration-kicker { text-transform: uppercase; letter-spacing: .22em; color: #ffdf83; font-size: 12px; }
@@ -3817,6 +3831,10 @@ body {
 .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .achievement-tile {
   position: relative;
+  width: 100%;
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
   align-items: flex-start;
   min-height: 220px;
   padding: 13px;
@@ -3827,8 +3845,8 @@ body {
     linear-gradient(150deg, rgba(20,23,29,.98), rgba(8,10,14,.98));
 }
 .achievement-tile.locked {
-  filter: none;
-  color: rgba(255,255,255,.76);
+  filter: grayscale(1);
+  color: rgba(255,255,255,.62);
   opacity: .78;
 }
 .achievement-tile.locked::after { display: none; }
@@ -3877,10 +3895,23 @@ body {
   border-color: rgba(179,96,230,.3);
   background: radial-gradient(circle at 85% 9%, rgba(157,68,218,.16), transparent 32%), linear-gradient(150deg,#1a1421,#09090e);
 }
-.achievement-tile.rarity-legendary {
+.achievement-tile.earned.rarity-legendary {
   border-color: rgba(230,184,78,.38);
   background: radial-gradient(circle at 85% 9%, rgba(229,176,54,.17), transparent 34%), linear-gradient(150deg,#211a0d,#0b0a08);
 }
+.achievement-tile.locked,
+.achievement-tile.locked.rarity-rare,
+.achievement-tile.locked.rarity-epic,
+.achievement-tile.locked.rarity-legendary {
+  border-color: rgba(255,255,255,.11);
+  background: linear-gradient(150deg, rgba(25,27,31,.98), rgba(10,11,13,.98));
+  box-shadow: none;
+}
+.achievement-tile.locked .achievement-progress i {
+  background: #777;
+  box-shadow: none;
+}
+.achievement-tile.locked > strong { color: rgba(255,255,255,.5); }
 .achievement-tile.earned {
   opacity: 1;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 13px 30px rgba(0,0,0,.23);
@@ -3894,6 +3925,54 @@ body {
   line-height: 1.45;
   background: rgba(255,255,255,.025);
 }
+
+.achievement-details-sheet {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: linear-gradient(155deg, rgba(22,24,29,.99), rgba(8,9,12,.99));
+}
+.achievement-details-sheet.rarity-legendary {
+  border-color: rgba(230,184,78,.52);
+  background: radial-gradient(circle at 50% 0, rgba(229,176,54,.18), transparent 38%), linear-gradient(155deg,#211a0d,#0b0a08);
+}
+.achievement-details-sheet.rarity-rare { border-color: rgba(87,144,214,.42); }
+.achievement-details-sheet.rarity-epic { border-color: rgba(179,96,230,.46); }
+.achievement-details-sheet.rarity-locked {
+  filter: grayscale(1);
+  color: rgba(255,255,255,.75);
+}
+.achievement-details-icon {
+  width: 82px;
+  height: 82px;
+  margin: 8px auto 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  background: rgba(255,255,255,.05);
+}
+.achievement-details-rarity {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.achievement-details-sheet h2,
+.achievement-details-sheet > p { margin: 0; text-align: center; }
+.achievement-details-sheet > p { color: var(--muted); line-height: 1.45; }
+.achievement-details-list { display: grid; gap: 8px; margin: 4px 0 0; }
+.achievement-details-list > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+.achievement-details-list dt { color: var(--muted); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.achievement-details-list dd { margin: 0; line-height: 1.4; }
 
 @media (max-width: 360px) {
   .shop-private-stock { grid-template-columns: 46px minmax(0,1fr); }
