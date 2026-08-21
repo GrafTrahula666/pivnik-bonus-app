@@ -266,7 +266,7 @@ async function verifyMaterializedState() {
   if (!gateway.includes("url.pathname === '/api/wheel/spin'")) failures.push('wheel spin endpoint');
   if (!gateway.includes("const PLATFORM_ACCOUNT_MODE = 'separate';")) failures.push('separate platform accounts');
   if (!gateway.includes('linkCodes: false')) failures.push('disabled account linking');
-  if (!gateway.includes('/vk-platform.js?v=3.2.2-anna-consent-persistence')) failures.push('VK client cache version');
+  if (!gateway.includes('/vk-platform.js?v=3.3.0-direct-entry')) failures.push('VK client cache version');
   if (!index.includes('id="openWheelButton"')) failures.push('Telegram wheel entry');
   if (!index.includes('id="wheelSpinButton"')) failures.push('Telegram wheel screen');
   if (!wheelMigration.includes('CREATE TABLE IF NOT EXISTS wheel_spins')) failures.push('wheel migration');

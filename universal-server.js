@@ -2729,7 +2729,7 @@ export async function renderAppIndex(platform) {
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
-      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.2-anna-consent-persistence"></script>\n  <script defer src="/account-link.js$1"></script>'
+      '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.3.0-direct-entry"></script>\n  <script defer src="/account-link.js$1"></script>'
     );
 }
 

@@ -3,6 +3,40 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
+test('standalone VK service entry redirects into the official Mini App', async () => {
+  const source = await readFile(new URL('../vk-platform.js', import.meta.url), 'utf8');
+  const redirects = [];
+  const location = {
+    href: 'https://pivnik-vk-test-production-b6b5.up.railway.app/',
+    search: '',
+    hash: '',
+    replace(url) {
+      redirects.push(url);
+    }
+  };
+  const window = {
+    location,
+    navigator: {
+      userAgent: 'Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0'
+    },
+    fetch: async () => {
+      throw new Error('Direct entry must redirect before authentication');
+    }
+  };
+  window.top = window;
+  window.self = window;
+
+  vm.runInNewContext(source, {
+    URL,
+    URLSearchParams,
+    console: { warn() {} },
+    document: { referrer: '' },
+    window
+  });
+
+  assert.deepEqual(redirects, ['https://vk.com/app54694987']);
+});
+
 test('VK auth reaches the server when Bridge acknowledgements never settle', async () => {
   const source = await readFile(new URL('../vk-platform.js', import.meta.url), 'utf8');
   const originalFetchCalls = [];
@@ -14,6 +48,7 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
   };
   const window = {
     location,
+    navigator: { userAgent: 'Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36' },
     vkBridge: {
       send(method) {
         assert.ok(['VKWebAppInit', 'VKWebAppGetUserInfo'].includes(method));
@@ -34,6 +69,8 @@ test('VK auth reaches the server when Bridge acknowledgements never settle', asy
     },
     clearTimeout() {}
   };
+  window.top = window;
+  window.self = window;
   const document = {
     documentElement: { classList: { add() {} } },
     addEventListener() {}
@@ -145,6 +182,7 @@ test('VK auth falls back to VKWebAppGetLaunchParams when the URL has no signatur
   };
   const window = {
     location,
+    navigator: { userAgent: 'VK-iPhone/8.120' },
     vkBridge: {
       send(method) {
         if (method === 'VKWebAppGetLaunchParams') {
@@ -169,6 +207,8 @@ test('VK auth falls back to VKWebAppGetLaunchParams when the URL has no signatur
     setTimeout() { return 1; },
     clearTimeout() {}
   };
+  window.top = window;
+  window.self = window;
   const document = {
     documentElement: { classList: { add() {} } },
     addEventListener() {}

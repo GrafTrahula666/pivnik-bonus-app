@@ -7,7 +7,7 @@ const gatewayPath = path.join(root, 'universal-server.js');
 const serverPath = path.join(root, 'server.js');
 const vkPlatformPath = path.join(root, 'vk-platform.js');
 const marker = 'Anna frame entitlement and consent persistence hotfix 2026-08-06';
-const cacheVersion = '3.2.2-anna-consent-persistence';
+const cacheVersion = '3.3.0-direct-entry';
 
 function patchFrameEntitlement(source) {
   if (source.includes(marker)) return source;
