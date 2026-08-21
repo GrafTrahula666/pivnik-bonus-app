@@ -65,7 +65,8 @@ test('Последняя identity удаляет весь профиль и со
   assert.doesNotMatch(gateway.slice(hashStart, hashEnd), /sessionSecret/);
 
   assert.match(gateway, /const rewardEligible = !\(await hasDeletedIdentity/);
-  assert.match(gateway, /if \(rewardEligible && betaNumber > 0 && betaNumber <= 30\)/);
+  assert.match(gateway, /initializeAchievementGrants/);
+  assert.doesNotMatch(gateway, /betaNumber > 0 && betaNumber <= 30/);
   assert.match(gateway, /INSERT INTO deleted_identity_tombstones/);
   assert.match(gateway, /DELETE FROM user_identities/);
   assert.ok(

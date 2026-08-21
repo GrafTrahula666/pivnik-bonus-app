@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '19.1-telegram-wheel-v2';
+const APP_VERSION = '20.0-achievement-ledger';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -98,7 +98,8 @@ const state = {
   achievements: [],
   achievementsLoaded: false,
   achievementTab: 'common',
-  achievementQueue: [],
+  acknowledgedAchievementCodes: new Set(),
+  achievementNotificationBusy: false,
   transactions: [],
   historyTab: 'purchases',
   bootSecondaryStarted: false,
@@ -1566,6 +1567,7 @@ function achievementIconHtml(item = {}) {
       <circle class="eye-pupil" cx="50" cy="51" r="8" />
     </svg>`;
   }
+  if (item.icon === 'beta-active' || item.code === 'active-beta-participant') return '<span class="beta-achievement-icon">★</span>';
   if (item.icon === 'beta' || item.code === 'beta-tester') return '<span class="beta-achievement-icon">✦</span>';
   const symbols = {
     receipt: '▤',
@@ -1606,9 +1608,28 @@ function renderProfileAchievements() {
 }
 
 function achievementRewardLabel(item = {}) {
+  if (item.rewardLabel) return item.rewardLabel;
   if (Number(item.rewardBeerMl || 0) > 0) return '1 бесплатная пинта · 0,5 л';
   if (Number(item.rewardBonus || 0) > 0) return `+${fmt(item.rewardBonus)} бонусов`;
-  return 'Особая награда';
+  return 'Без бонусной награды';
+}
+
+function achievementIdentity(item = {}) {
+  return String(item.grantCode || item.code || '');
+}
+
+function filterAcknowledgedAchievements(items = []) {
+  return items.filter((item) => {
+    const identity = achievementIdentity(item);
+    return !state.acknowledgedAchievementCodes.has(identity)
+      && !state.acknowledgedAchievementCodes.has(String(item.code || ''));
+  });
+}
+
+function findAchievement(code) {
+  return state.achievements.find((item) => item.code === code)
+    || (state.profile?.achievements || []).find((item) => item.code === code)
+    || null;
 }
 
 function renderAchievementCatalog() {
@@ -1616,9 +1637,7 @@ function renderAchievementCatalog() {
   if (!catalog) return;
   const rarity = state.achievementTab || 'common';
   $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.classList.toggle('active', button.dataset.achievementTab === rarity));
-  const items = rarity === 'legendary'
-    ? (state.profile?.achievements || []).filter((item) => item.rarity === 'legendary').map((item) => ({ ...item, earned: true, locked: false }))
-    : state.achievements.filter((item) => item.rarity === rarity);
+  const items = state.achievements.filter((item) => item.rarity === rarity);
   if (!items.length) {
     const message = rarity === 'legendary'
       ? 'Легендарные достижения выдаются только за уникальные события.'
@@ -1635,25 +1654,51 @@ function renderAchievementCatalog() {
     </div>
     <div class="achievement-grid">${items.map((item) => {
       const progress = item.progress || { percent: item.earned ? 100 : 0, label: item.earned ? 'Получено' : 'Уникальное условие' };
-      return `<article class="achievement-tile ${item.earned ? 'earned' : 'locked'} rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}">
+      const status = item.earned
+        ? 'Получено'
+        : item.type === 'unique'
+          ? 'Заблокировано'
+          : `${fmt(progress.percent)}%`;
+      return `<button class="achievement-tile ${item.earned ? 'earned' : 'locked'} rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}" type="button" aria-label="Открыть достижение ${escapeHtml(item.title)}">
         <span class="achievement-tile-icon">${achievementIconHtml(item)}</span>
-        <span class="achievement-state">${item.earned ? 'Получено' : `${fmt(progress.percent)}%`}</span>
+        <span class="achievement-state">${status}</span>
         <b>${escapeHtml(item.title)}</b>
         <p>${escapeHtml(item.description || '')}</p>
         <div class="achievement-progress"><i style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></i></div>
         <small>${escapeHtml(progress.label || '')}</small>
         <strong>${escapeHtml(achievementRewardLabel(item))}</strong>
-      </article>`;
+      </button>`;
     }).join('')}</div>`;
+  catalog.querySelectorAll('[data-achievement-code]').forEach((button) => {
+    button.addEventListener('click', () => openAchievementDetails(button.dataset.achievementCode));
+  });
+}
+
+function openAchievementDetails(code) {
+  const item = findAchievement(code);
+  if (!item) return;
+  $('#achievementDetailsIcon').innerHTML = achievementIconHtml(item);
+  $('#achievementDetailsRarity').textContent = achievementRarityLabel(item.rarity);
+  $('#achievementDetailsTitle').textContent = item.title;
+  $('#achievementDetailsDescription').textContent = item.description || '';
+  $('#achievementDetailsCondition').textContent = item.condition || item.description || '';
+  $('#achievementDetailsReward').textContent = achievementRewardLabel(item);
+  $('#achievementDetailsStatus').textContent = item.earned ? 'Получено' : 'Не получено';
+  const sheet = $('#achievementDetailsSheet');
+  if (sheet) {
+    sheet.className = `modal-sheet achievement-details-sheet rarity-${item.earned ? item.rarity : 'locked'}`;
+  }
+  openModal('achievementDetailsModal');
 }
 
 function openAchievements(code = '') {
   if (code) {
-    const item = (state.profile?.achievements || []).find((achievement) => achievement.code === code);
+    const item = findAchievement(code);
     if (item) state.achievementTab = item.rarity;
   }
   renderAchievementCatalog();
   openModal('achievementsModal');
+  if (code) window.setTimeout(() => openAchievementDetails(code), 0);
 }
 
 function renderAchievements() {
@@ -1667,23 +1712,55 @@ function renderAchievements() {
 
 async function loadAchievements() {
   const data = await api('/api/achievements');
-  state.achievements = data.achievements || [];
+  const incomingRevision = Number(data.achievementRevision || 0);
+  const currentRevision = Number(state.profile?.achievementRevision || 0);
+  if (!state.achievementsLoaded || incomingRevision >= currentRevision) {
+    state.achievements = data.achievements || [];
+  }
   state.achievementsLoaded = true;
-  if (state.profile) {
+  if (state.profile && incomingRevision >= currentRevision) {
     state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
-    state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
+    state.profile.unannouncedAchievements = filterAcknowledgedAchievements(data.unannouncedAchievements || []);
+    state.profile.achievementRevision = incomingRevision;
   }
   renderAchievements();
   renderAchievementCatalog();
+  window.setTimeout(maybeShowAchievementCelebration, 0);
   return state.achievements;
 }
 
 async function acknowledgeAchievement(code) {
   await api(`/api/me/achievements/${encodeURIComponent(code)}/ack`, { method: 'POST', body: '{}', retries: 0 });
+  state.acknowledgedAchievementCodes.add(String(code));
   const item = state.profile?.achievements?.find((achievement) => achievement.grantCode === code || achievement.code === code);
-  if (item) item.announced = true;
-  state.profile.unannouncedAchievements = (state.profile.unannouncedAchievements || []).filter((achievement) => achievement.grantCode !== code);
+  if (item) {
+    item.announced = true;
+    state.acknowledgedAchievementCodes.add(String(item.code || ''));
+  }
+  state.profile.unannouncedAchievements = filterAcknowledgedAchievements(
+    state.profile.unannouncedAchievements || []
+  );
   renderAchievements();
+}
+
+async function dismissAchievementNotification() {
+  if (state.achievementNotificationBusy) return;
+  const code = String($('#ackAchievementButton')?.dataset.achievementCode || '');
+  if (!code) return;
+  state.achievementNotificationBusy = true;
+  $('#ackAchievementButton').disabled = true;
+  $('#dismissAchievementButton').disabled = true;
+  try {
+    await acknowledgeAchievement(code);
+    closeModal('achievementCelebrationModal');
+    window.setTimeout(maybeShowAchievementCelebration, 180);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    state.achievementNotificationBusy = false;
+    $('#ackAchievementButton').disabled = false;
+    $('#dismissAchievementButton').disabled = false;
+  }
 }
 
 function maybeShowAchievementCelebration() {
@@ -1873,7 +1950,19 @@ function renderCoreProfile() {
 
 function applyProfilePayload(data) {
   if (!data?.profile) throw new Error('Сервер не передал профиль.');
-  state.profile = data.profile;
+  const incoming = data.profile;
+  const incomingRevision = Number(incoming.achievementRevision || 0);
+  const currentRevision = Number(state.profile?.achievementRevision || 0);
+  if (state.profile && incomingRevision < currentRevision) {
+    incoming.achievements = state.profile.achievements || [];
+    incoming.unannouncedAchievements = state.profile.unannouncedAchievements || [];
+    incoming.achievementRevision = currentRevision;
+  } else {
+    incoming.unannouncedAchievements = filterAcknowledgedAchievements(
+      incoming.unannouncedAchievements || []
+    );
+  }
+  state.profile = incoming;
   state.statuses = data.statuses || state.statuses || [];
   if (data.design) {
     try { applyDesign(data.design); }
@@ -1989,18 +2078,6 @@ async function acceptTerms() {
     void loadSecondaryData();
   } finally {
     if (button) button.disabled = false;
-  }
-}
-
-async function claimBetaTesterReward() {
-  try {
-    const data = await api('/api/me/beta-tester/claim', { method: 'POST', body: '{}', timeoutMs: 7000 });
-    if (data?.profile) {
-      state.profile = data.profile;
-      renderProfile();
-    }
-  } catch (error) {
-    console.warn('Beta tester reward claim skipped:', error);
   }
 }
 
@@ -2907,17 +2984,10 @@ $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.addEv
   state.achievementTab = button.dataset.achievementTab;
   renderAchievementCatalog();
 }));
-$('#ackAchievementButton')?.addEventListener('click', async () => {
-  const button = $('#ackAchievementButton');
-  const code = button.dataset.achievementCode;
-  button.disabled = true;
-  try {
-    await acknowledgeAchievement(code);
-    closeModal('achievementCelebrationModal');
-    renderAchievements();
-    window.setTimeout(maybeShowAchievementCelebration, 180);
-  } catch (error) { toast(error.message); }
-  finally { button.disabled = false; }
+$('#ackAchievementButton')?.addEventListener('click', dismissAchievementNotification);
+$('#dismissAchievementButton')?.addEventListener('click', dismissAchievementNotification);
+$('#achievementCelebrationModal')?.addEventListener('click', (event) => {
+  if (event.target === event.currentTarget) void dismissAchievementNotification();
 });
 $('#bootRetry')?.addEventListener('click', () => {
   state.bootSecondaryStarted = false;
@@ -2928,7 +2998,7 @@ $('#bootLite')?.addEventListener('click', enableLiteMode);
 
 $$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('click', () => switchScreen(button.dataset.target)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
-$$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
+$$('.modal:not(.consent-modal):not(#achievementCelebrationModal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });

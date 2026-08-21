@@ -196,23 +196,36 @@ test('Повторные миграции защищены реестром, che
   assert.match(gateway, /server\.close\(\(\) => process\.exit\(1\)\)/);
 });
 
-test('Достижения считаются по журналу и добавлены в оба профиля', async () => {
-  const [achievements, server, gateway, app, migration] = await Promise.all([
+test('Достижения считаются и уведомляются только через единый журнал', async () => {
+  const [achievements, server, gateway, app, accountLink, migration, ledgerMigration] = await Promise.all([
     source('achievements.js'),
     source('server.js'),
     source('universal-server.js'),
     source('app.js'),
-    source('migrations/002_countable_achievements.sql')
+    source('account-link.js'),
+    source('migrations/002_countable_achievements.sql'),
+    source('migrations/007_achievement_source_of_truth.sql')
   ]);
   assert.match(achievements, /single-check-1000/);
   assert.match(achievements, /monthly-top-spender/);
   assert.match(achievements, /Europe\/Moscow/);
   assert.match(achievements, /mode IN \('accrue','redeem'\)/);
   assert.match(achievements, /ON CONFLICT \(code, user_id\) DO NOTHING/);
+  assert.match(achievements, /active-beta-participant/);
+  assert.match(achievements, /initializeAchievementGrants/);
+  assert.match(achievements, /validActiveBetaLedger/);
+  assert.doesNotMatch(achievements, /LIMIT 30/);
   assert.match(server, /getUserAchievementState/);
-  assert.doesNotMatch(gateway, /syncUserAchievements/);
+  assert.doesNotMatch(server, /function achievementsFromRow|beta_number/);
+  assert.doesNotMatch(gateway, /function achievementsFromRow|beta_number/);
+  assert.match(gateway, /url\.pathname === '\/api\/achievements'/);
+  assert.match(gateway, /initializeAchievementGrants/);
   assert.match(app, /loadAchievements\(\)/);
+  assert.match(app, /dismissAchievementNotification/);
+  assert.doesNotMatch(accountLink, /pendingAchievements|achievementInboxOpened/);
   assert.match(migration, /'achievement'/);
+  assert.match(ledgerMigration, /idx_reward_grants_achievement_identity/);
+  assert.match(ledgerMigration, /achievement_award_batches/);
 });
 
 test('Загрузчик снимается до профиля, начислений и достижений', async () => {
@@ -234,10 +247,10 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(app, /const jobs = \[[^\]]*loadAchievements\(\)/);
   assert.match(app, /pivnik:boot-complete/);
   assert.doesNotMatch(accountLink, /addEventListener\('pivnik:boot-complete'/);
-  assert.match(accountLink, /DOMContentLoaded'[\s\S]{0,160}installAchievementInbox\(\)/);
+  assert.doesNotMatch(accountLink, /installAchievementInbox|pendingAchievements|achievementInboxOpened/);
   assert.doesNotMatch(accountLink, /setTimeout\(\(\) => void loadStatus\(\), 1500\)/);
   assert.match(gateway, /getAppPayload\(userId, provider, \{ startup: true \}\)/);
-  assert.match(gateway, /startup\s*\?\s*\[\s*0,\s*\{ earned: \[\], unannounced: \[\] \}/);
+  assert.match(gateway, /startup[\s\S]*?getUserEarnedAchievementState\(db, canonical\)/);
   assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });
 
@@ -251,7 +264,7 @@ test('Первый вход не открывает цепочку модало�
   const bootEnd = app.indexOf('async function acceptTerms()', bootStart);
   const bootSource = app.slice(bootStart, bootEnd);
   const acceptTermsStart = bootEnd;
-  const acceptTermsEnd = app.indexOf('async function claimBetaTesterReward()', acceptTermsStart);
+  const acceptTermsEnd = app.indexOf('async function createQr()', acceptTermsStart);
   const acceptTermsSource = app.slice(acceptTermsStart, acceptTermsEnd);
   assert.match(app, /function blockUnacceptedAction\(event\)[\s\S]*?openModal\('consentModal'\)/);
   assert.match(app, /document\.addEventListener\('click', blockUnacceptedAction, true\)/);

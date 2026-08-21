@@ -25,12 +25,12 @@ test('Telegram auth limits valid identities separately and throttles only invali
   assert.doesNotMatch(gateway, /`auth:\$\{requestAddress\(req\)\}:\$\{platform\}`/);
 });
 
-test('Achievement inbox and consent copy never install a self-triggering DOM observer', async () => {
-  const accountLink = await source('account-link.js');
+test('Achievement notifications have one owner and consent copy never installs a DOM observer', async () => {
+  const [accountLink, app] = await Promise.all([source('account-link.js'), source('app.js')]);
 
-  assert.match(accountLink, /pendingAchievements = data\.unannouncedAchievements/);
-  assert.match(accountLink, /У вас новое достижение/);
-  assert.match(accountLink, /if \(!achievementInboxOpened\) return undefined/);
-  assert.match(accountLink, /#openAchievementsButton, #achievementEmptyOpen, \[data-profile-achievement\]/);
+  assert.doesNotMatch(accountLink, /pendingAchievements|achievementInboxOpened|maybeShowAchievementCelebration/);
+  assert.match(app, /async function dismissAchievementNotification\(\)/);
+  assert.match(app, /acknowledgedAchievementCodes/);
+  assert.match(app, /window\.setTimeout\(maybeShowAchievementCelebration, 0\)/);
   assert.doesNotMatch(accountLink, /MutationObserver/);
 });

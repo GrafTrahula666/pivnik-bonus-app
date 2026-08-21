@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=19.1-telegram-wheel-v2" />
-  <script defer src="app.js?v=19.1-telegram-wheel-v2"></script>
+  <link rel="stylesheet" href="styles.css?v=20.0-achievement-ledger" />
+  <script defer src="app.js?v=20.0-achievement-ledger"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -663,8 +663,24 @@
     </div>
   </div>
 
+  <div class="modal" id="achievementDetailsModal" aria-hidden="true">
+    <div class="modal-sheet achievement-details-sheet rarity-locked" id="achievementDetailsSheet">
+      <button class="close" data-close="achievementDetailsModal" type="button">×</button>
+      <div class="achievement-details-icon" id="achievementDetailsIcon">◆</div>
+      <span class="achievement-details-rarity" id="achievementDetailsRarity">Обычное</span>
+      <h2 id="achievementDetailsTitle">Достижение</h2>
+      <p id="achievementDetailsDescription"></p>
+      <dl class="achievement-details-list">
+        <div><dt>Условие</dt><dd id="achievementDetailsCondition"></dd></div>
+        <div><dt>Награда</dt><dd id="achievementDetailsReward"></dd></div>
+        <div><dt>Статус</dt><dd id="achievementDetailsStatus"></dd></div>
+      </dl>
+    </div>
+  </div>
+
   <div class="modal achievement-celebration-modal" id="achievementCelebrationModal" aria-hidden="true">
     <div class="achievement-celebration">
+      <button class="achievement-celebration-close" id="dismissAchievementButton" type="button" aria-label="Закрыть уведомление">×</button>
       <div class="achievement-burst" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <span class="achievement-celebration-kicker">Поздравляем!</span>
       <div class="achievement-celebration-icon" id="achievementCelebrationIcon">✦</div>
@@ -672,7 +688,7 @@
       <h2 id="achievementCelebrationTitle">Пионер Пивника</h2>
       <p id="achievementCelebrationDescription">Вы вошли в число первых 30 участников «Пивника».</p>
       <div class="achievement-celebration-reward" id="achievementCelebrationReward">+150 бонусов</div>
-      <button class="primary full" id="ackAchievementButton" type="button">Забрать награду</button>
+      <button class="primary full" id="ackAchievementButton" type="button">Понятно</button>
     </div>
   </div>
 
