@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 env:
-  TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app' }}
-  VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app' }}
+  TELEGRAM_APP_URL: ${{ vars.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production-df60.up.railway.app' }}
+  VK_APP_URL: ${{ vars.VK_APP_URL || 'https://pivnik-vk-test-production-b6b5.up.railway.app' }}
 
 jobs:
   verify-production:
