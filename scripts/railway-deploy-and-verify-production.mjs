@@ -2,16 +2,16 @@ const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const PROJECT_TOKEN = String(process.env.RAILWAY_TOKEN || '').trim();
 const API_TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const COMMIT_SHA = String(process.env.RELEASE_COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
-const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
-const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
+const PROJECT_ID = '20a942f9-3164-484a-a6f1-565439e38705';
+const ENVIRONMENT_ID = 'cdd9d26c-2aab-45d9-95ed-ef487fafaa8f';
 const SERVICES = Object.freeze({
   telegram: {
-    id: '4c4d5f11-e3af-4ffb-8ae9-21a8854b6c90',
-    url: String(process.env.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app').replace(/\/+$/, '')
+    id: 'd8d26f64-9ac1-4a03-9036-1a60f43c0be6',
+    url: String(process.env.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production-df60.up.railway.app').replace(/\/+$/, '')
   },
   vk: {
-    id: '61352beb-78fe-4293-939c-c1f93294b204',
-    url: String(process.env.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app').replace(/\/+$/, '')
+    id: '0573c420-0f9c-43bd-8e87-e1788ce3eefd',
+    url: String(process.env.VK_APP_URL || 'https://pivnik-vk-test-production-b6b5.up.railway.app').replace(/\/+$/, '')
   }
 });
 const TERMINAL_FAILURES = new Set(['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED']);

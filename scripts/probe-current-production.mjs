@@ -1,11 +1,11 @@
 const services = [
   {
     name: 'telegram',
-    baseUrl: 'https://pivnik-bonus-app-production.up.railway.app'
+    baseUrl: 'https://pivnik-bonus-app-production-df60.up.railway.app'
   },
   {
     name: 'vk',
-    baseUrl: 'https://pivnik-vk-test-production.up.railway.app'
+    baseUrl: 'https://pivnik-vk-test-production-b6b5.up.railway.app'
   }
 ];
 
