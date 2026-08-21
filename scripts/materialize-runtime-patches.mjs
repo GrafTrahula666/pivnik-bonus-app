@@ -251,14 +251,14 @@ async function verifyMaterializedState() {
   const pkg = JSON.parse(pkgText);
   const failures = [];
   if (pkg.scripts?.start !== FINAL_START_COMMAND) failures.push('package.json start');
-  if (!app.includes("const APP_VERSION = '20.0-achievement-ledger';")) failures.push('app.js version');
+  if (!app.includes("const APP_VERSION = '21.0-referral-v2.1';")) failures.push('app.js version');
   if (!app.includes("profileFrame === 'vladislav'")) failures.push('app.js Vladislav frame');
   if (!app.includes('consentSafeTarget')) failures.push('consent-safe deletion');
   if (!gateway.includes('vladislavTelegramId')) failures.push('universal-server.js Vladislav identity');
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  if (!index.includes('styles.css?v=20.0-achievement-ledger')) failures.push('index.html asset version');
+  if (!index.includes('styles.css?v=21.0-referral-v2.1')) failures.push('index.html asset version');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (!app.includes('WHEEL_VISUAL_SECTORS')) failures.push('app.js wheel artwork');
