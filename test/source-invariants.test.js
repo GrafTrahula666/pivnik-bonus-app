@@ -20,6 +20,29 @@ test('Запуск использует единый gateway и локальны
   assert.doesNotMatch(gateway, /unpkg|cdn\.jsdelivr/i);
 });
 
+test('Документация и release-проверки используют действующие production-домены', async () => {
+  const [env, setup, runbook, readiness, releaseGate, probe, deploy] = await Promise.all([
+    source('.env.example'),
+    source('VK-SETUP.md'),
+    source('ops/PRODUCTION-RUNBOOK.md'),
+    source('.github/workflows/production-readiness.yml'),
+    source('.github/workflows/release-gate.yml'),
+    source('scripts/probe-current-production.mjs'),
+    source('scripts/railway-deploy-and-verify-production.mjs')
+  ]);
+  const telegramUrl = 'https://pivnik-bonus-app-production-df60.up.railway.app';
+  const vkUrl = 'https://pivnik-vk-test-production-b6b5.up.railway.app';
+
+  for (const file of [env, runbook, readiness, releaseGate, probe, deploy]) {
+    assert.ok(file.includes(telegramUrl), 'Telegram production URL drifted');
+    assert.ok(file.includes(vkUrl), 'VK production URL drifted');
+  }
+  assert.ok(setup.includes(`${vkUrl}/vk`));
+  assert.match(setup, /URL для разработки/);
+  assert.doesNotMatch(env + setup + runbook, /pivnik-vk-test-production\.up\.railway\.app/);
+  assert.doesNotMatch(env + runbook, /pivnik-bonus-app-production\.up\.railway\.app/);
+});
+
 test('VK запускается через подписанный ID и сохраняет изолированную сессию аккаунта', async () => {
   const vk = await source('vk-platform.js');
   const initPosition = vk.indexOf("VKWebAppInit");
