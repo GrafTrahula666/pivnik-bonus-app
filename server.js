@@ -10,6 +10,7 @@ import {
   acknowledgeAchievement,
   getUserAchievementState,
   getUserEarnedAchievementState,
+  initializeAchievementGrants,
   syncUserAchievements
 } from './achievements.js';
 import {
@@ -1435,7 +1436,18 @@ app.post('/api/auth', async (req, res, next) => {
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
 
-      const profile = await getProfile(userId, pool, { syncAchievements: true });
+      let profile = await getProfile(userId, pool, { syncAchievements: true });
+      const uniqueAchievementState = await initializeAchievementGrants(pool, {
+        ownerTelegramId,
+        activeBetaTesterTelegramIds: [
+          annaTelegramId,
+          olesyaTelegramId,
+          vladislavTelegramId
+        ]
+      });
+      if (uniqueAchievementState.activeBetaGranted > 0 || uniqueAchievementState.creatorGranted) {
+        profile = await getProfile(userId, pool, { syncAchievements: false });
+      }
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
       const sessionResult = await pool.query(
         'SELECT session_version FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
