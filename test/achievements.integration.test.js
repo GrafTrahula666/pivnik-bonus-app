@@ -300,6 +300,36 @@ test('PostgreSQL: единый журнал выдерживает переза�
       'utf8'
     );
     await db.exec(countableMigration);
+    const ledgerMigration = await readFile(
+      new URL('../migrations/007_achievement_source_of_truth.sql', import.meta.url),
+      'utf8'
+    );
+    await db.exec(ledgerMigration);
+
+    const waitingUser = await db.query(
+      `INSERT INTO users (telegram_id, first_name)
+       VALUES (8999, 'Ожидает beta-профили')
+       RETURNING id`
+    );
+    await db.query('INSERT INTO wallets (user_id, balance) VALUES ($1, 0)', [waitingUser.rows[0].id]);
+    await db.query('INSERT INTO beer_loyalty (user_id) VALUES ($1)', [waitingUser.rows[0].id]);
+    await db.query(
+      `INSERT INTO user_identities (user_id, provider, provider_user_id)
+       VALUES ($1, 'telegram', '8999')`,
+      [waitingUser.rows[0].id]
+    );
+    const deferred = await initializeAchievementGrants(db, {
+      ownerTelegramId: '9004',
+      activeBetaTesterTelegramIds: ['9001', '9002', '9003']
+    });
+    assert.equal(deferred.deferred, true);
+    assert.equal(deferred.activeBetaResolved, 0);
+    const deferredBatch = await db.query(
+      `SELECT COUNT(*)::integer AS count
+       FROM achievement_award_batches
+       WHERE code = 'active-beta-participant-v1'`
+    );
+    assert.equal(Number(deferredBatch.rows[0].count), 0);
 
     const users = [];
     for (const [telegramId, firstName, frame] of [
@@ -332,10 +362,6 @@ test('PostgreSQL: единый журнал выдерживает переза�
       `INSERT INTO beta_grants (code, user_id, amount)
        VALUES ('beta-tester-legendary', $1, 150)`,
       [users[0]]
-    );
-    const ledgerMigration = await readFile(
-      new URL('../migrations/007_achievement_source_of_truth.sql', import.meta.url),
-      'utf8'
     );
     await db.exec(ledgerMigration);
     await db.exec(ledgerMigration);
