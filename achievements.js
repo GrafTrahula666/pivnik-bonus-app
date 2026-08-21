@@ -705,7 +705,7 @@ async function resolveTelegramAchievementUser(db, telegramId, profileFrame) {
      LIMIT 2`,
     [String(telegramId || '').trim(), profileFrame]
   );
-  if (result.rowCount !== 1) {
+  if (result.rows.length !== 1) {
     throw new Error(`Не удалось однозначно определить Telegram beta-тестера для профиля ${profileFrame}.`);
   }
   return String(result.rows[0].id);
@@ -725,8 +725,8 @@ async function resolveOwnerAchievementUser(db, telegramId) {
      LIMIT 2`,
     [String(telegramId).trim()]
   );
-  if (result.rowCount > 1) throw new Error('Telegram identity создателя связан с несколькими активными пользователями.');
-  return result.rowCount === 1 ? String(result.rows[0].id) : null;
+  if (result.rows.length > 1) throw new Error('Telegram identity создателя связан с несколькими активными пользователями.');
+  return result.rows.length === 1 ? String(result.rows[0].id) : null;
 }
 
 export async function initializeAchievementGrants(db, options = {}) {
