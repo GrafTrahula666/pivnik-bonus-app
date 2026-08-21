@@ -91,8 +91,8 @@ DATABASE_URL='postgresql://...' npm run verify:database
 3. Выполнить автоматическую сверку:
 
 ```bash
-TELEGRAM_APP_URL='https://pivnik-bonus-app-production.up.railway.app' \
-VK_APP_URL='https://pivnik-vk-test-production.up.railway.app' \
+TELEGRAM_APP_URL='https://pivnik-bonus-app-production-df60.up.railway.app' \
+VK_APP_URL='https://pivnik-vk-test-production-b6b5.up.railway.app' \
 npm run verify:production
 ```
 
