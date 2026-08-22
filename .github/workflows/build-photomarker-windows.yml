@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-build.txt
       - name: Core tests
-        run: pytest -q
+        run: python -m pytest -q
       - name: Build EXE
         run: pyinstaller --clean --noconfirm PhotoMarker.spec
       - name: Smoke inspect
