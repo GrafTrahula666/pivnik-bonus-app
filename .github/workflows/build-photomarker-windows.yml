@@ -1,0 +1,46 @@
+name: Build PhotoMarker Windows
+
+on:
+  pull_request:
+    paths:
+      - 'photomarker/**'
+      - '.github/workflows/build-photomarker-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: photomarker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -r requirements-build.txt
+      - name: Core tests
+        run: pytest -q
+      - name: Build EXE
+        run: pyinstaller --clean --noconfirm PhotoMarker.spec
+      - name: Smoke inspect
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path .\dist\PhotoMarker_1.1.exe
+          if (!(Test-Path $exe)) { throw 'EXE not found' }
+          $item = Get-Item $exe
+          if ($item.Length -lt 1000000) { throw 'EXE unexpectedly small' }
+          Write-Host "Built $($item.FullName) $($item.Length) bytes"
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item .\dist\PhotoMarker_1.1.exe .\package\PhotoMarker_1.1.exe
+          Copy-Item .\README.txt .\package\README.txt
+          Compress-Archive -Path .\package\* -DestinationPath .\PhotoMarker_1.1_Windows.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhotoMarker_1.1_Windows
+          path: photomarker/PhotoMarker_1.1_Windows.zip
+          if-no-files-found: error
