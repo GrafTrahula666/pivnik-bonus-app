@@ -24,14 +24,19 @@ jobs:
         run: python -m pytest -q
       - name: Build EXE
         run: pyinstaller --clean --noconfirm PhotoMarker.spec
-      - name: Smoke inspect
+      - name: Smoke inspect and launch
         shell: pwsh
         run: |
           $exe = Resolve-Path .\dist\PhotoMarker_1.1.exe
           if (!(Test-Path $exe)) { throw 'EXE not found' }
           $item = Get-Item $exe
           if ($item.Length -lt 1000000) { throw 'EXE unexpectedly small' }
+          if ($item.Length -gt 190000000) { throw "EXE unexpectedly large: $($item.Length) bytes" }
           Write-Host "Built $($item.FullName) $($item.Length) bytes"
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($p.HasExited) { throw "PhotoMarker exited during startup smoke test. ExitCode=$($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
       - name: Package
         shell: pwsh
         run: |
