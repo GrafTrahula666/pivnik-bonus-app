@@ -21,14 +21,12 @@ jobs:
         run: |
           set -euo pipefail
           for url in \
+            'https://pivnik-vk-proxy.vercel.app/vk' \
             'https://pivnik-vk-proxy-js7d8vskv8-3167s-projects.vercel.app/vk' \
             'https://pivnik-vk-proxy-968weaq3r-js7d8vskv8-3167s-projects.vercel.app/vk'; do
             echo "URL=$url"
             code=$(curl -L -sS --connect-timeout 10 --max-time 20 -D /tmp/headers -o /tmp/body -w '%{http_code}' "$url" || true)
             echo "HTTP=$code"
-            echo '---HEADERS---'
-            sed -n '1,20p' /tmp/headers
-            echo '---BODY---'
-            sed -n '1,25p' /tmp/body
-            echo '---END---'
+            if [ "$code" = '200' ] && grep -q 'Пивник | Бонусы' /tmp/body; then echo 'PIVNIK_HTML=true'; else echo 'PIVNIK_HTML=false'; fi
+            echo 'TITLE='$(grep -o '<title>[^<]*</title>' /tmp/body | head -1 || true)
           done
