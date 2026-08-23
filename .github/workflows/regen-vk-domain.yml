@@ -1,0 +1,97 @@
+name: Regenerate VK Railway domain
+
+on:
+  push:
+    branches:
+      - ops/regen-vk-domain-20260823
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      PROJECT_ID: 20a942f9-3164-484a-a6f1-565439e38705
+      ENVIRONMENT_ID: cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
+      WORKSPACE_ID: fb7b2ccc-bf39-4fcb-81df-b33235cc4717
+      VK_SERVICE: pivnik-vk-test
+      OLD_DOMAIN: pivnik-vk-test-production-b6b5.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+      - name: Link VK service
+        run: railway link --project "$PROJECT_ID" --environment "$ENVIRONMENT_ID" --service "$VK_SERVICE" --workspace "$WORKSPACE_ID" --json >/tmp/link.json
+      - name: Remove broken generated domain
+        run: |
+          set -euo pipefail
+          railway domain delete "$OLD_DOMAIN" --yes --service "$VK_SERVICE" || true
+      - name: Generate fresh Railway domain
+        id: domain
+        run: |
+          set -euo pipefail
+          railway domain --service "$VK_SERVICE" --json >/tmp/new-domain.json
+          cat /tmp/new-domain.json
+          NEW_DOMAIN=$(node - <<'NODE'
+          const fs=require('fs');
+          const raw=fs.readFileSync('/tmp/new-domain.json','utf8').trim();
+          let x; try{x=JSON.parse(raw)}catch{x=raw}
+          let d='';
+          if(typeof x==='string') d=x;
+          else if(Array.isArray(x)) d=x[0]?.domain||x[0]?.url||x[0]||'';
+          else if(Array.isArray(x?.domains)) d=x.domains[0]?.domain||x.domains[0]||'';
+          else d=x?.domain||x?.url||x?.serviceDomain||'';
+          d=String(d).replace(/^https?:\/\//,'').replace(/\/$/,'');
+          if(!d) throw new Error('Could not parse generated domain: '+raw);
+          process.stdout.write(d);
+          NODE
+          )
+          echo "NEW_DOMAIN=$NEW_DOMAIN" >> "$GITHUB_ENV"
+          echo "NEW_VK_URL=https://$NEW_DOMAIN/vk" >> "$GITHUB_ENV"
+          echo "NEW_DOMAIN=$NEW_DOMAIN"
+      - name: Wait for public DNS and HTTPS
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const dns=require('dns').promises;
+          const host=process.env.NEW_DOMAIN;
+          (async()=>{
+            let ok=false;
+            for(let i=1;i<=36;i++){
+              try{
+                const a=await dns.resolve4(host);
+                console.log(`DNS_OK attempt=${i} host=${host} A=${a.join(',')}`);
+                ok=true; break;
+              }catch(e){
+                console.log(`DNS_WAIT attempt=${i} code=${e.code||e.message}`);
+                await new Promise(r=>setTimeout(r,5000));
+              }
+            }
+            if(!ok) process.exit(2);
+          })();
+          NODE
+          for i in $(seq 1 24); do
+            code=$(curl --silent --location --output /tmp/vk.html --write-out '%{http_code}' --max-time 15 "https://$NEW_DOMAIN/vk" || true)
+            if [ "$code" = "200" ] && grep -q '<title>Пивник | Бонусы</title>' /tmp/vk.html; then
+              echo "HTTPS_OK=true code=$code"
+              break
+            fi
+            echo "HTTPS_WAIT attempt=$i code=$code"
+            if [ "$i" = "24" ]; then exit 3; fi
+            sleep 5
+          done
+      - name: Set exact VK URL in Railway
+        run: |
+          printf '%s' "$NEW_VK_URL" | railway variable set -s "$VK_SERVICE" -e "$ENVIRONMENT_ID" --skip-deploys --stdin VK_APP_URL >/dev/null
+          echo "VK_APP_URL_SET=$NEW_VK_URL"
+      - name: Final check
+        run: |
+          curl --fail --silent --show-error --max-time 20 "$NEW_VK_URL" >/tmp/final.html
+          grep -q '<title>Пивник | Бонусы</title>' /tmp/final.html
+          echo "FINAL_VK_URL=$NEW_VK_URL"
