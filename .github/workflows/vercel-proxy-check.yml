@@ -1,0 +1,29 @@
+name: Temporary Vercel VK proxy check
+
+on:
+  push:
+    branches:
+      - ops/vk-testing-group-audit-20260823
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check proxy from independent network
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            'https://pivnik-vk-proxy-js7d8vskv8-3167s-projects.vercel.app/vk' \
+            'https://pivnik-vk-proxy-968weaq3r-js7d8vskv8-3167s-projects.vercel.app/vk'; do
+            echo "URL=$url"
+            code=$(curl -L -sS --connect-timeout 10 --max-time 20 -o /tmp/body -w '%{http_code}' "$url" || true)
+            echo "HTTP=$code"
+            if [ "$code" = '200' ]; then
+              grep -q 'Пивник | Бонусы' /tmp/body && echo 'PIVNIK_HTML=true' || echo 'PIVNIK_HTML=false'
+            fi
+          done
