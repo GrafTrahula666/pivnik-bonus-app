@@ -22,6 +22,7 @@ jobs:
           T2: ${{ secrets.VK_SERVICE_ACCESS_TOKEN }}
           T3: ${{ secrets.VK_ACCESS_TOKEN }}
           T4: ${{ secrets.VK_APP_SERVICE_TOKEN }}
+          APP_SECRET: ${{ secrets.VK_APP_SECRET }}
         shell: bash
         run: |
           set -euo pipefail
@@ -32,13 +33,31 @@ jobs:
             value="${pair#*:}"
             if [ -n "$value" ]; then TOKEN="$value"; TOKEN_NAME="$name"; break; fi
           done
+
+          if [ -z "$TOKEN" ] && [ -n "$APP_SECRET" ]; then
+            oauth=$(curl -sS --get 'https://oauth.vk.com/access_token' \
+              --data-urlencode 'client_id=54694987' \
+              --data-urlencode "client_secret=$APP_SECRET" \
+              --data-urlencode 'grant_type=client_credentials' \
+              --data-urlencode 'v=5.199')
+            TOKEN=$(echo "$oauth" | jq -r '.access_token // empty')
+            if [ -n "$TOKEN" ]; then
+              echo "::add-mask::$TOKEN"
+              TOKEN_NAME="oauth_client_credentials"
+            else
+              echo "VK_OAUTH_CLIENT_CREDENTIALS=false"
+              echo "$oauth" | jq '{error:(.error // null), error_description:(.error_description // null)}'
+            fi
+          fi
+
           if [ -z "$TOKEN" ]; then
             echo "VK_SERVICE_TOKEN_PRESENT=false"
             exit 0
           fi
           echo "VK_SERVICE_TOKEN_PRESENT=true"
           echo "VK_SERVICE_TOKEN_SOURCE=$TOKEN_NAME"
-          response=$(curl -fsS --get 'https://api.vk.com/method/apps.getTestingGroups' \
+
+          response=$(curl -sS --get 'https://api.vk.com/method/apps.getTestingGroups' \
             --data-urlencode "access_token=$TOKEN" \
             --data-urlencode 'v=5.199')
           if echo "$response" | jq -e '.error' >/dev/null; then
