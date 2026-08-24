@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
-const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
-const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
+const PROJECT_ID = RAILWAY_PRODUCTION.projectId;
+const ENVIRONMENT_ID = RAILWAY_PRODUCTION.environmentId;
 const WORKSPACE_ID = 'fbffb30c-9091-432f-9e09-9c59e1440304';
 
 const services = {
-  telegram: '4c4d5f11-e3af-4ffb-8ae9-21a8854b6c90',
-  vk: '61352beb-78fe-4293-939c-c1f93294b204',
-  postgres: 'beb858e1-c412-42b8-b570-bda36ca82b59',
-  vkDatabase: 'de5da1be-76c1-4976-a88c-efcce93600e6'
+  telegram: RAILWAY_PRODUCTION.services.telegram,
+  vk: RAILWAY_PRODUCTION.services.vk,
+  postgres: RAILWAY_PRODUCTION.services.postgres
 };
 
 const requiredCommon = [
