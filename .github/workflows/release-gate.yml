@@ -118,3 +118,14 @@ jobs:
         env:
           RELEASE_COMMIT_SHA: ${{ github.sha }}
         run: node scripts/verify-platform-separation-production.mjs
+
+      - name: Verify signed Telegram and VK production sessions
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.head_ref == 'repair/production-runtime-20260824')
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RELEASE_COMMIT_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+        run: node scripts/railway-production-auth-smoke.mjs
