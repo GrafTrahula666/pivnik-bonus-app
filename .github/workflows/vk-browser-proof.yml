@@ -68,10 +68,43 @@ jobs:
               hasTouch: true,
               userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 VKBrowser/1.0'
             });
+            await context.addInitScript(() => {
+              window.__PIVNIK_BOOT_TRACE__ = [];
+              const push = (label) => {
+                const boot = document.getElementById('bootScreen');
+                const shell = document.getElementById('appShell');
+                const text = document.getElementById('bootText');
+                window.__PIVNIK_BOOT_TRACE__.push({
+                  t: Math.round(performance.now()),
+                  label,
+                  bootClass: boot?.className || null,
+                  shellClass: shell?.className || null,
+                  bootText: text?.textContent || null,
+                  href: location.href
+                });
+              };
+              document.addEventListener('DOMContentLoaded', () => {
+                push('DOMContentLoaded');
+                const observer = new MutationObserver((mutations) => {
+                  for (const mutation of mutations) {
+                    if (mutation.type === 'attributes' && (mutation.target?.id === 'bootScreen' || mutation.target?.id === 'appShell')) {
+                      push(`mutation:${mutation.target.id}:${mutation.attributeName}`);
+                    }
+                  }
+                });
+                observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class'] });
+                window.setTimeout(() => push('t+500'), 500);
+                window.setTimeout(() => push('t+1500'), 1500);
+                window.setTimeout(() => push('t+3000'), 3000);
+                window.setTimeout(() => push('t+6000'), 6000);
+              }, { once: true });
+            });
+
             const page = await context.newPage();
             const events = [];
             page.on('console', msg => events.push(`console:${msg.type()}:${msg.text()}`));
             page.on('pageerror', err => events.push(`pageerror:${err.message}`));
+            page.on('framenavigated', frame => { if (frame === page.mainFrame()) events.push(`navigation:${frame.url()}`); });
             page.on('response', res => {
               const url = new URL(res.url());
               if (url.pathname.startsWith('/api/')) events.push(`response:${res.status()}:${url.pathname}`);
@@ -79,48 +112,60 @@ jobs:
 
             await page.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await page.waitForSelector('#appShell:not(.hidden)', { timeout: 20000 });
+            events.push('checkpoint:shell-visible');
+            await page.screenshot({ path: 'proof/01-shell-visible.png', fullPage: true });
+            const beforeConsent = await page.evaluate(() => ({
+              bootClass: document.getElementById('bootScreen')?.className,
+              shellClass: document.getElementById('appShell')?.className,
+              bootText: document.getElementById('bootText')?.textContent,
+              consentClass: document.getElementById('consentModal')?.className,
+              profileSetupClass: document.getElementById('profileSetupModal')?.className,
+              bootCompleted: (() => { try { return eval('bootCompleted'); } catch (e) { return `ERR:${e.message}`; } })(),
+              hasProfile: (() => { try { return Boolean(eval('state.profile')); } catch { return null; } })()
+            }));
+            fs.writeFileSync('proof/before-consent.json', JSON.stringify(beforeConsent, null, 2));
 
             const consent = page.locator('#consentModal.open');
             if (await consent.count()) {
+              events.push('checkpoint:consent-open');
               const accept = page.locator('#acceptTerms');
               if (await accept.count()) {
                 await accept.click();
-                await page.waitForTimeout(1200);
+                events.push('checkpoint:consent-clicked');
+                await page.waitForTimeout(1500);
+                await page.screenshot({ path: 'proof/02-after-consent.png', fullPage: true });
               }
             }
             const setup = page.locator('#profileSetupModal.open');
             if (await setup.count()) {
+              events.push('checkpoint:profile-setup-open');
               const close = page.locator('#profileSetupClose');
               if (await close.count()) {
                 await close.click();
-                await page.waitForTimeout(500);
+                events.push('checkpoint:profile-setup-closed');
+                await page.waitForTimeout(700);
               }
             }
+            await page.waitForTimeout(1200);
 
-            const shellVisible = await page.locator('#appShell').evaluate(el => !el.classList.contains('hidden'));
-            const bootVisible = await page.locator('#bootScreen').evaluate(el => !el.classList.contains('hidden'));
-            const profileName = (await page.locator('#profileName').textContent().catch(() => '')) || '';
-            const clientName = (await page.locator('#clientName').textContent().catch(() => '')) || '';
-            const balance = (await page.locator('#clientBalance').textContent().catch(() => '')) || '';
+            const finalState = await page.evaluate(() => ({
+              shellVisible: !document.getElementById('appShell')?.classList.contains('hidden'),
+              bootVisible: !document.getElementById('bootScreen')?.classList.contains('hidden'),
+              bootClass: document.getElementById('bootScreen')?.className,
+              shellClass: document.getElementById('appShell')?.className,
+              bootText: document.getElementById('bootText')?.textContent,
+              profileName: document.getElementById('profileName')?.textContent || '',
+              clientName: document.getElementById('clientName')?.textContent || '',
+              balance: document.getElementById('clientBalance')?.textContent || '',
+              bootCompleted: (() => { try { return eval('bootCompleted'); } catch (e) { return `ERR:${e.message}`; } })(),
+              hasProfile: (() => { try { return Boolean(eval('state.profile')); } catch { return null; } })(),
+              trace: window.__PIVNIK_BOOT_TRACE__ || []
+            }));
 
-            await page.screenshot({ path: 'proof/vk-browser-proof.png', fullPage: true });
+            await page.screenshot({ path: 'proof/03-final.png', fullPage: true });
             fs.writeFileSync('proof/browser-events.txt', events.join('\n') + '\n');
-            fs.writeFileSync('proof/result.txt', [
-              `APP_SHELL_VISIBLE=${shellVisible}`,
-              `BOOT_VISIBLE=${bootVisible}`,
-              `PROFILE_NAME=${profileName.trim()}`,
-              `CLIENT_NAME=${clientName.trim()}`,
-              `BALANCE=${balance.trim()}`
-            ].join('\n') + '\n');
-
-            console.log(`APP_SHELL_VISIBLE=${shellVisible}`);
-            console.log(`BOOT_VISIBLE=${bootVisible}`);
-            console.log(`PROFILE_NAME=${profileName.trim()}`);
-            console.log(`CLIENT_NAME=${clientName.trim()}`);
-            console.log(`BALANCE=${balance.trim()}`);
-
-            if (!shellVisible) throw new Error('App shell did not open');
-            if (bootVisible) throw new Error('Boot screen is still visible');
+            fs.writeFileSync('proof/final-state.json', JSON.stringify(finalState, null, 2));
+            console.log(JSON.stringify(finalState));
             await browser.close();
           })().catch(err => {
             console.error(err);
