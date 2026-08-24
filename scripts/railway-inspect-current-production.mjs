@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
+import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const token = String(process.env.RAILWAY_API_TOKEN || '').trim();
 
-const PROJECT_ID = '20a942f9-3164-484a-a6f1-565439e38705';
-const ENVIRONMENT_ID = 'cdd9d26c-2aab-45d9-95ed-ef487fafaa8f';
+const PROJECT_ID = RAILWAY_PRODUCTION.projectId;
+const ENVIRONMENT_ID = RAILWAY_PRODUCTION.environmentId;
 const SERVICES = Object.freeze({
-  telegram: 'd8d26f64-9ac1-4a03-9036-1a60f43c0be6',
-  vk: '0573c420-0f9c-43bd-8e87-e1788ce3eefd'
+  telegram: RAILWAY_PRODUCTION.services.telegram,
+  vk: RAILWAY_PRODUCTION.services.vk
 });
 
 if (!token) throw new Error('RAILWAY_API_TOKEN is required.');
@@ -121,4 +122,3 @@ for (const [name, serviceId] of Object.entries(SERVICES)) {
 }
 
 console.log(JSON.stringify(report, null, 2));
-

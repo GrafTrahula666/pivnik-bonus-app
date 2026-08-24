@@ -4,15 +4,14 @@
 
 Подтверждённые публичные сервисы:
 
-- Telegram: `https://pivnik-bonus-app-production.up.railway.app`
-- VK: `https://pivnik-vk-test-production.up.railway.app`
+- Telegram: `https://pivnik-bonus-app-production-df60.up.railway.app`
+- VK Mini App: `https://pivnik-vk-proxy.vercel.app`
+- VK Railway origin: `https://pivnik-vk-test-production-3474.up.railway.app`
 
-Проверка 4 августа 2026 года показала, что сервисы используют разные базы:
-
-- Telegram: 29 пользователей, 127 операций;
-- VK: 3 пользователя, 10 операций.
-
-До миграции нельзя просто заменить `DATABASE_URL` у VK: сначала требуется backup обеих баз и перенос 3 VK-профилей и 10 операций в каноническую Telegram-базу с дедупликацией identity и сверкой ledger.
+Оба Railway-сервиса используют одну PostgreSQL-базу, одинаковые `SESSION_SECRET` и
+`IDENTITY_TOMBSTONE_SECRET`, но сохраняют независимые аккаунты VK и Telegram.
+Общими являются база, релиз, версия правил и рейтинг; автоматическое объединение
+платформенных профилей отключено.
 
 ## 2. Доступ Railway для автоматизации
 
@@ -68,7 +67,10 @@ DATABASE_URL='postgresql://...' npm run verify:database
 - наличие migration `005_runtime_identity.sql`;
 - fingerprint логической базы.
 
-## 6. Миграция VK в каноническую базу
+## 6. Архивная миграция VK в каноническую базу
+
+Миграция завершена. Этот раздел хранится только как процедура восстановления истории;
+повторно запускать её на текущем production нельзя.
 
 1. Остановить новые изменяющие операции на время короткого окна миграции.
 2. Создать backup Telegram и VK баз.
@@ -86,8 +88,8 @@ DATABASE_URL='postgresql://...' npm run verify:database
 3. Выполнить автоматическую сверку:
 
 ```bash
-TELEGRAM_APP_URL='https://pivnik-bonus-app-production.up.railway.app' \
-VK_APP_URL='https://pivnik-vk-test-production.up.railway.app' \
+TELEGRAM_APP_URL='https://pivnik-bonus-app-production-df60.up.railway.app' \
+VK_APP_URL='https://pivnik-vk-test-production-3474.up.railway.app' \
 npm run verify:production
 ```
 
@@ -100,12 +102,11 @@ npm run verify:production
 1. Войти новым пользователем в Telegram.
 2. Принять правила и проверить однократные стартовые награды.
 3. Начислить и списать бонусы через QR.
-4. Привязать VK к Telegram.
-5. Сверить баланс, историю, статус, достижения, подарочное пиво и рейтинг.
-6. Выполнить операцию через VK и проверить её в Telegram.
-7. Повторить в обратном направлении.
-8. Проверить двойное нажатие, обрыв сети и два устройства одновременно.
-9. Удалить тестовый аккаунт, войти снова и убедиться, что стартовые награды повторно не выданы.
+4. Войти в существующий Telegram-профиль и проверить сохранение баланса, истории и достижений.
+5. Повторить новый и существующий вход в VK.
+6. Проверить общий рейтинг VK + Telegram и независимость платформенных профилей.
+7. Проверить двойное нажатие, обрыв сети и два устройства одновременно.
+8. Удалить тестовый аккаунт, войти снова и убедиться, что стартовые награды повторно не выданы.
 
 ## 9. Rollback кода
 
