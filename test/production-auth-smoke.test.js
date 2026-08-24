@@ -17,6 +17,9 @@ test('production auth smoke signs both platforms and checks repeat login state',
   assert.match(source, /authenticateTwice/);
   assert.match(source, /waitForReleaseReadiness/);
   assert.match(source, /Date\.now\(\) \+ 2 \* 60_000/);
+  assert.match(source, /const telegramUrl = productionUrl\('telegram'\)/);
+  assert.match(source, /const vkUrl = productionUrl\('vk'\)/);
+  assert.doesNotMatch(source, /productionUrl\('vk', vkVariables\.VK_APP_URL\)/);
   assert.match(source, /profile state changed after repeated authentication/);
   assert.match(source, /qrShortCode/);
   assert.match(source, /achievementCodes/);
