@@ -68,6 +68,15 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
+      - name: Inspect current Pivnik Railway routing
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.head_ref == 'repair/production-runtime-20260824'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: node scripts/railway-inspect-current-production.mjs
+
       - name: Synchronize strong production secrets
         if: >-
           (github.event_name == 'push' &&
