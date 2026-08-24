@@ -1,13 +1,30 @@
 import crypto from 'node:crypto';
-import pg from 'pg';
 import { RAILWAY_PRODUCTION, productionUrl } from './railway-production-config.mjs';
 
-const { Client } = pg;
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const EXPECTED_COMMIT = String(process.env.RELEASE_COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
 
 if (!TOKEN) throw new Error('RAILWAY_API_TOKEN is required.');
+
+const CANARIES = Object.freeze({
+  telegram: Object.freeze({
+    provider_user_id: '900000000000001',
+    username: 'pivnik_release_telegram',
+    first_name: 'Тест Telegram',
+    last_name: '',
+    photo_url: null,
+    language_code: 'ru'
+  }),
+  vk: Object.freeze({
+    provider_user_id: '2147483001',
+    username: 'pivnik_release_vk',
+    first_name: 'Тест VK',
+    last_name: '',
+    photo_url: null,
+    language_code: 'ru'
+  })
+});
 
 async function graphql(query, variables = {}) {
   const response = await fetch(ENDPOINT, {
@@ -149,52 +166,12 @@ async function authenticateTwice({ platform, baseUrl, body }) {
   };
 }
 
-const [telegramVariables, vkVariables, databaseVariables] = await Promise.all([
+const [telegramVariables, vkVariables] = await Promise.all([
   serviceVariables(RAILWAY_PRODUCTION.services.telegram),
-  serviceVariables(RAILWAY_PRODUCTION.services.vk),
-  serviceVariables(RAILWAY_PRODUCTION.services.postgres)
+  serviceVariables(RAILWAY_PRODUCTION.services.vk)
 ]);
-const databaseUrl = String(databaseVariables.DATABASE_PUBLIC_URL || '').trim();
-if (!databaseUrl) throw new Error('Postgres DATABASE_PUBLIC_URL is missing.');
 if (!telegramVariables.TELEGRAM_BOT_TOKEN) throw new Error('Telegram bot token is missing.');
 if (!vkVariables.VK_APP_ID || !vkVariables.VK_APP_SECRET) throw new Error('VK credentials are missing.');
-
-const database = new Client({
-  connectionString: databaseUrl,
-  ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 30_000,
-  statement_timeout: 30_000,
-  query_timeout: 30_000
-});
-await database.connect();
-let candidates;
-try {
-  const result = await database.query(`
-    SELECT DISTINCT ON (ui.provider)
-           ui.provider,
-           ui.provider_user_id,
-           u.username,
-           u.first_name,
-           u.last_name,
-           u.photo_url,
-           u.language_code
-      FROM user_identities ui
-      JOIN users u ON u.id = ui.user_id
-      JOIN wallets w ON w.user_id = u.id
-     WHERE ui.provider IN ('telegram', 'vk')
-       AND u.deleted_at IS NULL
-       AND u.merged_into_user_id IS NULL
-       AND u.qr_token IS NOT NULL
-       AND u.qr_short_code IS NOT NULL
-     ORDER BY ui.provider, u.created_at ASC
-  `);
-  candidates = new Map(result.rows.map((row) => [row.provider, row]));
-} finally {
-  await database.end();
-}
-
-if (!candidates.get('telegram')) throw new Error('No persistent Telegram profile is available for smoke testing.');
-if (!candidates.get('vk')) throw new Error('No persistent VK profile is available for smoke testing.');
 
 const telegramUrl = productionUrl('telegram', telegramVariables.TELEGRAM_APP_URL);
 const vkUrl = productionUrl('vk', vkVariables.VK_APP_URL);
@@ -211,14 +188,14 @@ const [telegram, vk] = await Promise.all([
     platform: 'telegram',
     baseUrl: telegramUrl,
     body: () => ({
-      initData: telegramInitData(telegramVariables.TELEGRAM_BOT_TOKEN, candidates.get('telegram'))
+      initData: telegramInitData(telegramVariables.TELEGRAM_BOT_TOKEN, CANARIES.telegram)
     })
   }),
   authenticateTwice({
     platform: 'vk',
     baseUrl: vkUrl,
     body: () => {
-      const user = candidates.get('vk');
+      const user = CANARIES.vk;
       return {
         platform: 'vk',
         launchParams: vkLaunchParams(vkVariables.VK_APP_ID, vkVariables.VK_APP_SECRET, user.provider_user_id),

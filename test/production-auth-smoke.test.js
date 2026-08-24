@@ -6,6 +6,10 @@ const source = await readFile(
   new URL('../scripts/railway-production-auth-smoke.mjs', import.meta.url),
   'utf8'
 );
+const runtimeRepair = await readFile(
+  new URL('../scripts/repair-telegram-runtime.mjs', import.meta.url),
+  'utf8'
+);
 
 test('production auth smoke signs both platforms and checks repeat login state', () => {
   assert.match(source, /telegramInitData/);
@@ -17,11 +21,15 @@ test('production auth smoke signs both platforms and checks repeat login state',
 });
 
 test('production auth smoke reuses persistent profiles without bonus writes', () => {
-  assert.match(source, /FROM user_identities/);
-  assert.match(source, /u\.qr_token IS NOT NULL/);
+  assert.match(source, /const CANARIES/);
+  assert.match(source, /pivnik_release_telegram/);
+  assert.match(source, /pivnik_release_vk/);
   assert.doesNotMatch(source, /INSERT\s+INTO/i);
   assert.doesNotMatch(source, /UPDATE\s+(users|wallets|transactions|reward_grants)/i);
   assert.doesNotMatch(source, /api\/(wheel\/spin|me\/consent|staff\/transaction|shop\/purchase)/);
   assert.match(source, /productionDataCreated:\s*false/);
   assert.match(source, /bonusOperationsCreated:\s*false/);
+  assert.match(runtimeRepair, /releaseCanaries/);
+  assert.match(runtimeRepair, /profile_public = FALSE/);
+  assert.match(runtimeRepair, /release canary identity belongs to another user/);
 });
