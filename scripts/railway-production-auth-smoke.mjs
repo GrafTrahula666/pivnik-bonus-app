@@ -192,8 +192,10 @@ const [telegramVariables, vkVariables] = await Promise.all([
 if (!telegramVariables.TELEGRAM_BOT_TOKEN) throw new Error('Telegram bot token is missing.');
 if (!vkVariables.VK_APP_ID || !vkVariables.VK_APP_SECRET) throw new Error('VK credentials are missing.');
 
-const telegramUrl = productionUrl('telegram', telegramVariables.TELEGRAM_APP_URL);
-const vkUrl = productionUrl('vk', vkVariables.VK_APP_URL);
+// Railway application variables may intentionally contain a launch pathname such as /vk.
+// Release probes must use the service origins from the central deployment configuration.
+const telegramUrl = productionUrl('telegram');
+const vkUrl = productionUrl('vk');
 const readiness = await waitForReleaseReadiness([telegramUrl, vkUrl]);
 
 const [telegram, vk] = await Promise.all([
