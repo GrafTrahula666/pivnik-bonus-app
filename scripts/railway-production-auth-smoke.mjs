@@ -166,6 +166,25 @@ async function authenticateTwice({ platform, baseUrl, body }) {
   };
 }
 
+async function waitForReleaseReadiness(urls) {
+  const deadline = Date.now() + 2 * 60_000;
+  let observed = [];
+  while (Date.now() < deadline) {
+    try {
+      const readiness = await Promise.all(urls.map((url) => fetchJson(`${url}/api/release-readiness`)));
+      observed = readiness.map((item) => item.releaseCommit || 'missing');
+      if (readiness.every((item) => item.ok === true)
+          && (!EXPECTED_COMMIT || observed.every((commit) => commit === EXPECTED_COMMIT))) {
+        return readiness;
+      }
+    } catch (error) {
+      observed = [error?.message || String(error)];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+  throw new Error(`Production auth smoke did not reach the release commit: ${observed.join(', ')}`);
+}
+
 const [telegramVariables, vkVariables] = await Promise.all([
   serviceVariables(RAILWAY_PRODUCTION.services.telegram),
   serviceVariables(RAILWAY_PRODUCTION.services.vk)
@@ -175,13 +194,7 @@ if (!vkVariables.VK_APP_ID || !vkVariables.VK_APP_SECRET) throw new Error('VK cr
 
 const telegramUrl = productionUrl('telegram', telegramVariables.TELEGRAM_APP_URL);
 const vkUrl = productionUrl('vk', vkVariables.VK_APP_URL);
-const readiness = await Promise.all([
-  fetchJson(`${telegramUrl}/api/release-readiness`),
-  fetchJson(`${vkUrl}/api/release-readiness`)
-]);
-if (EXPECTED_COMMIT && readiness.some((item) => item.releaseCommit !== EXPECTED_COMMIT)) {
-  throw new Error('Production auth smoke reached a different release commit.');
-}
+const readiness = await waitForReleaseReadiness([telegramUrl, vkUrl]);
 
 const [telegram, vk] = await Promise.all([
   authenticateTwice({
