@@ -1,127 +1,81 @@
-name: Pivnik release gate
+name: Pivnik source export
 
 on:
-  pull_request:
   push:
     branches:
-      - main
-      - 'audit/**'
-
-concurrency:
-  group: release-gate-${{ github.ref }}
-  cancel-in-progress: true
+      - 'audit/source-export-20260825'
 
 permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Syntax, tests and dependency audit
+  export:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout repository
+      - name: Checkout exact production main commit
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: npm
+          ref: d1c32f425c23756d8831b555d137d141e3d1b5ca
 
-      - name: Install exact dependencies
-        run: npm ci
-
-      - name: Materialize release sources
-        run: npm run materialize
-
-      - name: Verify materialized release state
-        run: test -f .pivnik-materialized
-
-      - name: Check JavaScript syntax
-        run: npm run check
-
-      - name: Check backup and restore scripts
-        run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
-
-      - name: Run automated tests
+      - name: Count source lines
         shell: bash
         run: |
-          set +e
-          npm test 2>&1 | tee /tmp/pivnik-tests.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            echo "::group::Failing test diagnostics"
-            details=$(awk '/^not ok 13 - Gateway render:|^not ok 14 - VK Railway service/{capture=1} capture{print}' /tmp/pivnik-tests.log | tail -c 14000)
-            safe=${details//'%'/'%25'}
-            safe=${safe//$'\r'/'%0D'}
-            safe=${safe//$'\n'/'%0A'}
-            echo "::error title=Gateway test diagnostics::$safe"
-            echo "::endgroup::"
-            exit "$status"
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import defaultdict
 
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+          root = Path('.')
+          code_exts = {'.js','.mjs','.cjs','.html','.css','.sql','.sh'}
+          text_exts = code_exts | {'.json','.md','.yml','.yaml','.txt','.env','.example'}
+          excluded = {'.git','node_modules'}
+          by_ext = defaultdict(lambda: [0,0,0])
+          code_files = code_lines = code_nonblank = 0
+          text_files = text_lines = text_nonblank = 0
 
-      - name: Verify package contents
-        run: npm pack --dry-run
+          for p in root.rglob('*'):
+              if not p.is_file() or any(part in excluded for part in p.parts):
+                  continue
+              ext = p.suffix.lower()
+              if p.name == '.env.example': ext = '.env'
+              if ext not in text_exts:
+                  continue
+              try:
+                  s = p.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  continue
+              lines = s.splitlines()
+              nonblank = sum(bool(x.strip()) for x in lines)
+              text_files += 1; text_lines += len(lines); text_nonblank += nonblank
+              by_ext[ext][0] += 1; by_ext[ext][1] += len(lines); by_ext[ext][2] += nonblank
+              if ext in code_exts:
+                  code_files += 1; code_lines += len(lines); code_nonblank += nonblank
 
-      - name: Synchronize strong production secrets
-        if: >-
-          (github.event_name == 'push' &&
-           (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          with open('LINE_COUNT.txt','w',encoding='utf-8') as f:
+              f.write('PIVNIK source line count\n')
+              f.write('Commit: d1c32f425c23756d8831b555d137d141e3d1b5ca\n\n')
+              f.write(f'PROGRAM CODE: {code_lines} physical lines, {code_nonblank} nonblank lines, {code_files} files\n')
+              f.write(f'ALL TEXT SOURCE: {text_lines} physical lines, {text_nonblank} nonblank lines, {text_files} files\n\n')
+              f.write('Breakdown:\n')
+              for ext,(files,lines,nonblank) in sorted(by_ext.items(), key=lambda kv:(-kv[1][1],kv[0])):
+                  f.write(f'{ext:8} files={files:3} lines={lines:7} nonblank={nonblank:7}\n')
+          print(Path('LINE_COUNT.txt').read_text())
+          PY
+
+      - name: Package exact source snapshot
+        shell: bash
         run: |
-          node --check scripts/railway-ensure-production-secrets.mjs
-          node scripts/railway-ensure-production-secrets.mjs
+          rm -f pivnik-bonus-app-main-d1c32f4.zip
+          zip -qr pivnik-bonus-app-main-d1c32f4.zip . -x '.git/*' 'pivnik-bonus-app-main-d1c32f4.zip'
+          unzip -t pivnik-bonus-app-main-d1c32f4.zip >/dev/null
+          ls -lh pivnik-bonus-app-main-d1c32f4.zip LINE_COUNT.txt
 
-      - name: Unify VK legacy database into canonical production
-        if: >-
-          (github.event_name == 'push' &&
-           github.ref == 'refs/heads/audit/final-release-gate-20260804') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_UNIFY_CONFIRM: UNIFY_PIVNIK_20260804
-        run: |
-          node --check scripts/railway-unify-production-databases.mjs
-          node scripts/railway-unify-production-databases.mjs
-
-      - name: Restore Anna frame and reconcile existing linked consent
-        if: >-
-          github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'hotfix/anna-frame-consent-persistence-20260806'
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_ANNA_CONSENT_REPAIR_CONFIRM: REPAIR_ANNA_FRAME_AND_CONSENT_20260806
-        run: node scripts/railway-repair-anna-frame-and-consent.mjs
-
-      - name: Deploy exact commit and verify both production services
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RELEASE_COMMIT_SHA: ${{ github.sha }}
-        run: node scripts/railway-deploy-and-verify-production.mjs
-
-      - name: Verify separate Telegram and VK production accounts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          RELEASE_COMMIT_SHA: ${{ github.sha }}
-        run: node scripts/verify-platform-separation-production.mjs
-
-      - name: Verify signed Telegram and VK production sessions
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RELEASE_COMMIT_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
-        run: node scripts/railway-production-auth-smoke.mjs
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-source-main-d1c32f4
+          path: |
+            pivnik-bonus-app-main-d1c32f4.zip
+            LINE_COUNT.txt
+          if-no-files-found: error
+          retention-days: 1
