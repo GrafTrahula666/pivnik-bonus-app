@@ -17,9 +17,12 @@ async function writeIfChanged(filePath, before, after) {
 let source = await fs.readFile(gatewayPath, 'utf8');
 
 const oldScripts = `'<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\\n  <script defer src="/vk-platform.js?v=3.2.2-anna-consent-persistence"></script>\\n  <script defer src="/account-link.js$1"></script>'`;
-const newScripts = `'<script src="/vendor/vk-bridge.js?v=2.15.11"></script>\\n  <script src="/vk-early-init.js?v=1.0.0"></script>\\n  <script defer src="/vk-platform.js?v=3.2.2-anna-consent-persistence"></script>\\n  <script defer src="/account-link.js$1"></script>'`;
+const previousScripts = `'<script src="/vendor/vk-bridge.js?v=2.15.11"></script>\\n  <script src="/vk-early-init.js?v=1.0.0"></script>\\n  <script defer src="/vk-platform.js?v=3.2.2-anna-consent-persistence"></script>\\n  <script defer src="/account-link.js$1"></script>'`;
+const newScripts = `'<script src="/vk-early-init.js?v=1.1.0-ios-native"></script>\\n  <script src="/vendor/vk-bridge.js?v=2.15.11"></script>\\n  <script defer src="/vk-platform.js?v=3.2.2-anna-consent-persistence"></script>\\n  <script defer src="/account-link.js$1"></script>'`;
 
-if (!source.includes('/vk-early-init.js?v=1.0.0')) {
+if (source.includes(previousScripts)) {
+  source = source.replace(previousScripts, newScripts);
+} else if (!source.includes('/vk-early-init.js?v=1.1.0-ios-native')) {
   if (!source.includes(oldScripts)) {
     throw new Error('VK script injection anchor not found; refusing unsafe patch.');
   }
@@ -31,8 +34,13 @@ if (!source.includes("url.pathname === '/vk-early-init.js'")) {
   if (!source.includes(routeAnchor)) {
     throw new Error('VK early-init route anchor not found; refusing unsafe patch.');
   }
-  const route = `    if (req.method === 'GET' && url.pathname === '/vk-early-init.js') {\n      return serveFile(res, path.join(__dirname, 'vk-early-init.js'), 'text/javascript; charset=utf-8', 'no-cache');\n    }\n\n`;
+  const route = `    if (req.method === 'GET' && url.pathname === '/vk-early-init.js') {\n      return serveFile(res, path.join(__dirname, 'vk-early-init.js'), 'text/javascript; charset=utf-8', 'no-store');\n    }\n\n`;
   source = source.replace(routeAnchor, route + routeAnchor);
+} else {
+  source = source.replace(
+    "'text/javascript; charset=utf-8', 'no-cache'",
+    "'text/javascript; charset=utf-8', 'no-store'"
+  );
 }
 
 // A VK launch URL may be normalized from /vk to /vk/. Without root-absolute
@@ -66,18 +74,7 @@ if (!childSource.includes('path.extname(pathname)')) {
   await fs.writeFile(childServerPath, childSource, 'utf8');
 }
 
-let earlyInit = await fs.readFile(earlyInitPath, 'utf8');
-if (!earlyInit.includes("window.__PIVNIK_PLATFORM__ = 'vk';")) {
-  const strictAnchor = "  'use strict';\n";
-  if (!earlyInit.includes(strictAnchor)) {
-    throw new Error('VK early-init strict-mode anchor not found; refusing unsafe patch.');
-  }
-  earlyInit = earlyInit.replace(
-    strictAnchor,
-    `${strictAnchor}\n  window.__PIVNIK_PLATFORM__ = 'vk';\n`
-  );
-  await fs.writeFile(earlyInitPath, earlyInit, 'utf8');
-}
+const earlyInit = await fs.readFile(earlyInitPath, 'utf8');
 
 const failures = [];
 if (!indexSource.includes('href="/styles.css') || !indexSource.includes('src="/app.js')) {
@@ -91,8 +88,18 @@ if (!source.includes('src="\\/?app\\.js') || !source.includes('src="/app.js$1"')
 }
 if (!childSource.includes('path.extname(pathname)')) failures.push('asset 404 fallback');
 if (!earlyInit.includes("window.__PIVNIK_PLATFORM__ = 'vk';")) failures.push('early VK platform marker');
+if (!earlyInit.includes('messageHandlers?.VKWebAppInit')) failures.push('direct iOS VK init');
+if (!earlyInit.includes('AndroidBridge?.VKWebAppInit')) failures.push('direct Android VK init');
+if (!earlyInit.includes('ReactNativeWebView.postMessage')) failures.push('direct React Native VK init');
+if (!earlyInit.includes("bridge.send('VKWebAppInit', {})")) failures.push('VK Bridge init fallback');
+const earlyInitIndex = source.indexOf('/vk-early-init.js?v=1.1.0-ios-native');
+const bridgeIndex = source.indexOf('/vendor/vk-bridge.js?v=2.15.11');
+if (!(earlyInitIndex >= 0 && bridgeIndex >= 0 && earlyInitIndex < bridgeIndex)) {
+  failures.push('native init before bridge bundle');
+}
+if (!source.includes("'text/javascript; charset=utf-8', 'no-store'")) failures.push('uncached VK early init');
 if (failures.length) {
   throw new Error(`VK boot hardening incomplete: ${failures.join(', ')}`);
 }
 
-console.log('Applied early VK Mini App initialization and trailing-slash boot hardening.');
+console.log('Applied VK native early initialization and trailing-slash boot hardening.');
