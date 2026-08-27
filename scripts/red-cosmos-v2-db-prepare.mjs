@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const databaseUrl = String(process.env.DATABASE_URL || '').trim();
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';
+const TESTER_HANDLES = Object.freeze(['drolted', 'distraktor', 'ksemar']);
 
 if (!databaseUrl) {
   if (isProduction) throw new Error('RED COSMOS DB prepare: DATABASE_URL is required in production');
@@ -40,6 +41,17 @@ async function connectWithRetry() {
     }
   }
   throw lastError || new Error('RED COSMOS DB connection failed');
+}
+
+async function tableExists(client, schema, table) {
+  const result = await client.query(
+    `SELECT EXISTS(
+       SELECT 1 FROM information_schema.tables
+       WHERE table_schema=$1 AND table_name=$2
+     ) AS ok`,
+    [schema, table]
+  );
+  return Boolean(result.rows[0]?.ok);
 }
 
 async function createBackup(client) {
@@ -89,6 +101,98 @@ async function reconcileExistingTesterRecipients(client) {
     }
   }
   return claims;
+}
+
+async function safeCount(client, schema, table, where = '') {
+  if (!(await tableExists(client, schema, table))) return null;
+  const result = await client.query(`SELECT COUNT(*)::int AS count FROM ${qi(schema)}.${qi(table)} ${where}`);
+  return Number(result.rows[0]?.count || 0);
+}
+
+async function safeNumber(client, schema, table, expression) {
+  if (!(await tableExists(client, schema, table))) return null;
+  const result = await client.query(`SELECT COALESCE(${expression},0)::text AS value FROM ${qi(schema)}.${qi(table)}`);
+  const number = Number(result.rows[0]?.value || 0);
+  return Number.isFinite(number) ? number : null;
+}
+
+async function schemaTesterMatches(client, schema) {
+  const matches = new Set();
+  if (await tableExists(client, schema, 'users')) {
+    const columns = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='users'`,
+      [schema]
+    );
+    if (columns.rows.some((row) => row.column_name === 'username')) {
+      const result = await client.query(
+        `SELECT LOWER(REGEXP_REPLACE(COALESCE(username,''),'^@+','')) AS handle
+         FROM ${qi(schema)}.users
+         WHERE LOWER(REGEXP_REPLACE(COALESCE(username,''),'^@+','')) = ANY($1::text[])`,
+        [TESTER_HANDLES]
+      );
+      result.rows.forEach((row) => matches.add(row.handle));
+    }
+  }
+  if (await tableExists(client, schema, 'user_identities')) {
+    const result = await client.query(
+      `SELECT LOWER(REGEXP_REPLACE(COALESCE(provider_username,''),'^@+','')) AS handle
+       FROM ${qi(schema)}.user_identities
+       WHERE LOWER(REGEXP_REPLACE(COALESCE(provider_username,''),'^@+','')) = ANY($1::text[])`,
+      [TESTER_HANDLES]
+    );
+    result.rows.forEach((row) => matches.add(row.handle));
+  }
+  return [...matches].sort();
+}
+
+async function inspectHistoricalSchemas(client) {
+  const schemaRows = await client.query(`
+    SELECT schema_name
+    FROM information_schema.schemata
+    WHERE schema_name NOT IN ('pg_catalog','information_schema','pg_toast')
+      AND schema_name NOT LIKE 'pg_temp_%'
+      AND schema_name NOT LIKE 'pg_toast_temp_%'
+    ORDER BY schema_name
+  `);
+  const summaries = [];
+  for (const { schema_name: schema } of schemaRows.rows) {
+    const users = await safeCount(client, schema, 'users');
+    const transactions = await safeCount(client, schema, 'transactions');
+    const completedTransactions = await safeCount(client, schema, 'transactions', "WHERE status='completed'");
+    const wallets = await safeCount(client, schema, 'wallets');
+    const walletBalance = await safeNumber(client, schema, 'wallets', 'SUM(balance)');
+    const beerRows = await safeCount(client, schema, 'beer_loyalty');
+    const paidBeerMl = await safeNumber(client, schema, 'beer_loyalty', 'SUM(paid_ml_total)');
+    const rewardGrants = await safeCount(client, schema, 'reward_grants');
+    const betaGrants = await safeCount(client, schema, 'beta_grants');
+    const identities = await safeCount(client, schema, 'user_identities');
+    const testerHandles = await schemaTesterMatches(client, schema);
+    if ([users, transactions, wallets, beerRows, rewardGrants, betaGrants, identities].some((value) => value !== null)) {
+      summaries.push({
+        schema,
+        users,
+        wallets,
+        walletBalance,
+        transactions,
+        completedTransactions,
+        beerRows,
+        paidBeerMl,
+        rewardGrants,
+        betaGrants,
+        identities,
+        testerHandles
+      });
+    }
+  }
+  const publicSummary = summaries.find((item) => item.schema === 'public') || null;
+  const richerSchemas = publicSummary
+    ? summaries.filter((item) => item.schema !== 'public' && (
+      Number(item.users || 0) > Number(publicSummary.users || 0)
+      || Number(item.transactions || 0) > Number(publicSummary.transactions || 0)
+      || Number(item.paidBeerMl || 0) > Number(publicSummary.paidBeerMl || 0)
+    )).map((item) => item.schema)
+    : [];
+  return { summaries, richerSchemas };
 }
 
 const client = await connectWithRetry();
@@ -141,10 +245,12 @@ try {
     (SELECT COUNT(*)::int FROM transactions WHERE status='completed') AS transactions,
     (SELECT COUNT(*)::int FROM pending_special_achievement_recipients WHERE granted_user_id IS NOT NULL) AS tester_recipients_granted,
     (SELECT COUNT(*)::int FROM pending_special_achievement_recipients WHERE granted_user_id IS NULL) AS tester_recipients_pending`);
+  const historicalAudit = await inspectHistoricalSchemas(client);
   console.log(JSON.stringify({
     redCosmosDbPrepared: true,
     backupSchema: isProduction ? BACKUP_SCHEMA : null,
     testerClaims,
+    historicalAudit,
     ...audit.rows[0]
   }));
 } catch (error) {

@@ -36,24 +36,9 @@ replaceRequired(
   'preserve identity profile metadata on partial auth payload'
 );
 
-replaceRequired(
-  `      await initPlatformDatabase();
-      await refreshDatabaseFingerprint();`,
-  `      await initPlatformDatabase();
-      await refreshDatabaseFingerprint();
-      if (configuredDocumentPlatform === 'telegram' && process.env.NODE_ENV === 'production') {
-        setTimeout(() => {
-          const auditUrl = new URL('./scripts/v22-data-audit-and-repair.mjs', import.meta.url);
-          auditUrl.searchParams.set('startup-readonly', String(Date.now()));
-          delete process.env.PIVNIK_V22_REPAIR_CONFIRM;
-          void import(auditUrl.href).catch((auditError) => {
-            console.warn('V22 read-only startup audit skipped:', auditError?.code || auditError?.message || 'unknown');
-          });
-        }, 1200).unref();
-      }`,
-  'read-only startup audit after database readiness'
-);
-
+// RED COSMOS v2 owns the production DB prepare/audit lifecycle. The old v22
+// delayed audit referenced a superseded schema shape and produced a noisy 42703
+// warning after every healthy Telegram startup, so it is intentionally retired.
 source += `\n// ${MARKER}\n`;
 await fs.writeFile(gatewayPath, source, 'utf8');
-console.log('Pivnik v22 production polish applied: photo persistence and read-only startup audit.');
+console.log('Pivnik v22 production polish applied: photo persistence; legacy startup audit retired.');

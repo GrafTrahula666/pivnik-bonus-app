@@ -18,8 +18,21 @@ test('production auth smoke signs both platforms and checks repeat login state',
   assert.match(source, /RAILWAY_PRODUCTION\.services\.vk/);
 });
 
-test('production auth smoke performs no bonus or purchase mutations', () => {
-  assert.doesNotMatch(source, /api\/(wheel\/spin|me\/consent|staff\/transaction|shop\/purchase)/);
+test('production smoke verifies the four-item shop, local artwork, shared wheel route and league on both platforms', () => {
+  assert.match(source, /RED_COSMOS_SHOP_CODES/);
+  assert.match(source, /api\/shop\/catalog/);
+  assert.match(source, /api\/wheel\/status/);
+  assert.match(source, /api\/leaderboard\/monthly/);
+  assert.match(source, /shop catalog must contain exactly the four RED COSMOS frames/);
+  assert.match(source, /wheel status returned 404/);
+  assert.match(source, /shopArtworkLoaded/);
+  assert.match(source, /safeFeatureSmoke\(\{ platform: 'telegram'/);
+  assert.match(source, /safeFeatureSmoke\(\{ platform: 'vk'/);
+});
+
+test('production auth smoke performs no bonus, shop purchase or wheel-spin mutations', () => {
+  assert.doesNotMatch(source, /api\/(wheel\/spin|me\/consent|staff\/transaction|shop\/buy|shop\/purchase)/);
   assert.match(source, /productionDataCreated:\s*false/);
   assert.match(source, /bonusOperationsCreated:\s*false/);
+  assert.match(source, /mutatingFeatureOperationsCreated:\s*false/);
 });
