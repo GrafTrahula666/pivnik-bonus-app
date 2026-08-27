@@ -1,0 +1,272 @@
+/* PIVNIK v22 — red cosmos product layer.
+   Loaded after the legacy stylesheet so the core visual identity cannot be
+   overwritten by stale server-side design colors. */
+
+:root {
+  --bg: #070204 !important;
+  --header: #0b0306 !important;
+  --surface: #13060a !important;
+  --card: #19080e !important;
+  --text: #fff6f8 !important;
+  --muted: #c3a9b1 !important;
+  --gold: #ff334f !important;
+  --gold2: #ff7a8f !important;
+  --v22-red: #d90f32;
+  --v22-red-bright: #ff3154;
+  --v22-wine: #500819;
+  --v22-line: rgba(255, 86, 117, .24);
+}
+
+html,
+body {
+  background: #070204 !important;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 14% 17%, rgba(255, 36, 79, .13) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 76% 8%, rgba(255, 217, 226, .20) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 38% 68%, rgba(255, 61, 95, .12) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 89% 74%, rgba(255, 229, 235, .14) 0 1px, transparent 1.4px),
+    radial-gradient(ellipse at 78% 24%, rgba(138, 0, 35, .34), transparent 38%),
+    radial-gradient(ellipse at 20% 72%, rgba(91, 0, 27, .30), transparent 42%),
+    linear-gradient(155deg, #050103 0%, #0b0307 37%, #13040a 67%, #060103 100%);
+  background-size: 97px 97px, 151px 151px, 127px 127px, 181px 181px, auto, auto, auto;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -2;
+  pointer-events: none;
+  opacity: .48;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 0 44%, rgba(112, 0, 31, .15) 62%, transparent 76%),
+    conic-gradient(from 205deg at 66% 35%, transparent 0 31%, rgba(240, 19, 69, .08) 36%, transparent 44% 100%);
+  filter: blur(18px);
+}
+
+.app-shell,
+.topbar,
+.bottom-nav {
+  background-color: rgba(8, 2, 5, .86) !important;
+}
+
+.vip-glass-card,
+.card,
+.modal-sheet,
+.hero-card,
+.profile-identity-card,
+.profile-history-card,
+.wheel-control-card,
+.league-summary {
+  border-color: var(--v22-line) !important;
+  background-image: linear-gradient(145deg, rgba(41, 9, 18, .88), rgba(15, 4, 8, .90)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 18px 55px rgba(0,0,0,.26) !important;
+}
+
+/* Achievement truth state: locked is unmistakably grey; earned restores color. */
+.achievement-tile.locked {
+  filter: grayscale(1) saturate(.05);
+  opacity: .56;
+  border-color: rgba(178, 178, 184, .18) !important;
+  background: linear-gradient(145deg, rgba(35,35,39,.82), rgba(16,16,19,.90)) !important;
+}
+
+.achievement-tile.locked .achievement-tile-icon,
+.achievement-tile.locked strong,
+.achievement-tile.locked .achievement-state {
+  color: #a8a8ae !important;
+}
+
+.achievement-tile.locked .achievement-progress > i {
+  background: #777980 !important;
+}
+
+.achievement-tile.earned {
+  filter: none;
+  opacity: 1;
+  border-color: rgba(255, 64, 99, .42) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,73,108,.08), 0 12px 34px rgba(92,0,27,.18) !important;
+}
+
+.achievement-tile.earned .achievement-state {
+  color: #ff8095 !important;
+}
+
+/* Every explicit back/close control becomes a large, reserved-layout button. */
+.v22-back-button,
+.v22-modal-back,
+.service-back.v22-back-button,
+.wheel-back.v22-back-button {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 112px;
+  min-height: 44px;
+  padding: 9px 15px !important;
+  margin: 0 0 14px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(255, 82, 115, .32) !important;
+  background: rgba(33, 7, 14, .78) !important;
+  color: #fff5f7 !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
+  z-index: 5;
+}
+
+.v22-back-button:active,
+.v22-modal-back:active {
+  transform: translateY(1px);
+}
+
+.modal-sheet > .v22-modal-back {
+  align-self: flex-start;
+}
+
+.wheel-page-head {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+  padding-top: max(4px, env(safe-area-inset-top)) !important;
+}
+
+.wheel-page-head .v22-back-button {
+  margin: 0 !important;
+}
+
+.wheel-page-head h2 {
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.wheel-head-spacer { display: none !important; }
+
+/* Admin is tabbed instead of one endless page. */
+.v22-admin-tabs {
+  position: sticky;
+  top: max(0px, env(safe-area-inset-top));
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -4px 14px;
+  padding: 8px 4px 10px;
+  scrollbar-width: none;
+  background: linear-gradient(180deg, rgba(7,2,4,.98) 0%, rgba(7,2,4,.91) 80%, transparent 100%);
+}
+
+.v22-admin-tabs::-webkit-scrollbar { display: none; }
+
+.v22-admin-tab {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.035);
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.v22-admin-tab.active {
+  color: #fff;
+  border-color: rgba(255,72,106,.42);
+  background: rgba(146, 9, 42, .28);
+}
+
+[data-v22-admin-panel].v22-admin-hidden {
+  display: none !important;
+}
+
+.screen[data-screen="admin"] .metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.screen[data-screen="admin"] .admin-quick-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+/* New permanent profile frames. */
+.avatar-frame-beer-mugs,
+.avatar-frame-beer-bottles,
+.avatar-frame-lights,
+.avatar-frame-middle-finger {
+  isolation: isolate;
+  border-radius: 50%;
+}
+
+.avatar-frame-beer-mugs {
+  box-shadow: 0 0 0 2px rgba(255,185,53,.85), 0 0 20px rgba(255,138,27,.32) !important;
+}
+
+.avatar-frame-beer-bottles {
+  box-shadow: 0 0 0 2px rgba(103,188,91,.82), 0 0 20px rgba(62,138,58,.32) !important;
+}
+
+.avatar-frame-lights {
+  box-shadow: 0 0 0 2px rgba(255,72,107,.88), 0 0 12px rgba(255,42,85,.55), 0 0 28px rgba(142,13,226,.28) !important;
+  animation: v22-frame-lights 1.8s ease-in-out infinite alternate;
+}
+
+.avatar-frame-middle-finger {
+  box-shadow: 0 0 0 2px rgba(255,222,67,.95), 0 0 22px rgba(255,61,91,.35) !important;
+}
+
+.v22-frame-orbit i {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 13px;
+  transform: rotate(calc(var(--orbit-index) * 45deg)) translateY(-38px) rotate(calc(var(--orbit-index) * -45deg));
+}
+
+@keyframes v22-frame-lights {
+  from { filter: brightness(.9); }
+  to { filter: brightness(1.28); }
+}
+
+/* Platform chip under leaderboard avatars/names. */
+.v22-platform-label {
+  display: inline-flex;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,84,117,.22);
+  color: #d9b7c1;
+  background: rgba(255,255,255,.025);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .02em;
+}
+
+/* On VK the permanent-code warning is intentionally not shown. */
+.platform-vk #qrModal .qr-warning {
+  display: none !important;
+}
+
+@media (max-width: 520px) {
+  .screen[data-screen="admin"] .metric-grid,
+  .screen[data-screen="admin"] .admin-quick-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .v22-back-button,
+  .v22-modal-back { min-height: 46px; }
+}
