@@ -989,17 +989,12 @@ function currentLevelIndex() {
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
-  const root = document.documentElement;
-  const colors = design.colors || {};
-  root.style.setProperty('--bg', colors.background || '#0e0c0a');
-  root.style.setProperty('--header', colors.header || '#15110e');
-  root.style.setProperty('--surface', colors.surface || '#1c1612');
-  root.style.setProperty('--card', colors.card || '#231a14');
-  root.style.setProperty('--text', colors.text || '#f7eee5');
-  root.style.setProperty('--muted', colors.muted || '#a99580');
-  root.style.setProperty('--gold', colors.accent || '#e9a83b');
-  root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
-  root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
+  // Keep server-side design data for texts and section visibility, while styles.css
+  // remains the single source of truth for the Luxury VIP Space visual system.
+  const platformUiColors = {
+    background: '#050609',
+    header: '#06070a'
+  };
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
@@ -1013,8 +1008,8 @@ function applyDesign(design) {
   });
 
   try {
-    tg?.setHeaderColor(colors.header || '#15110e');
-    tg?.setBackgroundColor(colors.background || '#0e0c0a');
+    tg?.setHeaderColor(platformUiColors.header);
+    tg?.setBackgroundColor(platformUiColors.background);
   } catch (_) {}
 }
 
