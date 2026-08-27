@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-labelledby="t d">
+  <title id="t">Рамка Пивные кружки</title><desc id="d">Красно-космическая карточка с золотыми пивными кружками по кругу</desc>
+  <defs>
+    <radialGradient id="bg" cx="70%" cy="20%" r="90%"><stop stop-color="#5c1048"/><stop offset=".48" stop-color="#250717"/><stop offset="1" stop-color="#0d0002"/></radialGradient>
+    <linearGradient id="beer" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffe485"/><stop offset=".35" stop-color="#f6b828"/><stop offset="1" stop-color="#b55c08"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="600" height="600" rx="54" fill="url(#bg)"/>
+  <g fill="#fff" opacity=".65"><circle cx="70" cy="90" r="2"/><circle cx="490" cy="74" r="2"/><circle cx="532" cy="238" r="1.5"/><circle cx="90" cy="430" r="1.5"/><circle cx="450" cy="485" r="2"/></g>
+  <circle cx="300" cy="292" r="198" fill="none" stroke="#ffd700" stroke-width="7" opacity=".85" filter="url(#glow)"/>
+  <circle cx="300" cy="292" r="154" fill="#140208" stroke="#8b0000" stroke-width="3"/>
+  <g transform="translate(300 292)">
+    <g transform="translate(0 -196)"><rect x="-27" y="-30" width="48" height="70" rx="8" fill="url(#beer)" stroke="#fff1b8" stroke-width="3"/><path d="M21-15h19c22 0 22 39 0 39H21" fill="none" stroke="#fff1b8" stroke-width="7"/><path d="M-23-25h40" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g>
+    <g transform="rotate(60) translate(0 -196) rotate(-60)"><rect x="-27" y="-30" width="48" height="70" rx="8" fill="url(#beer)" stroke="#fff1b8" stroke-width="3"/><path d="M21-15h19c22 0 22 39 0 39H21" fill="none" stroke="#fff1b8" stroke-width="7"/><path d="M-23-25h40" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g>
+    <g transform="rotate(120) translate(0 -196) rotate(-120)"><rect x="-27" y="-30" width="48" height="70" rx="8" fill="url(#beer)" stroke="#fff1b8" stroke-width="3"/><path d="M21-15h19c22 0 22 39 0 39H21" fill="none" stroke="#fff1b8" stroke-width="7"/><path d="M-23-25h40" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g>
+    <g transform="rotate(180) translate(0 -196) rotate(-180)"><rect x="-27" y="-30" width="48" height="70" rx="8" fill="url(#beer)" stroke="#fff1b8" stroke-width="3"/><path d="M21-15h19c22 0 22 39 0 39H21" fill="none" stroke="#fff1b8" stroke-width="7"/><path d="M-23-25h40" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g>
+    <g transform="rotate(240) translate(0 -196) rotate(-240)"><rect x="-27" y="-30" width="48" height="70" rx="8" fill="url(#beer)" stroke="#fff1b8" stroke-width="3"/><path d="M21-15h19c22 0 22 39 0 39H21" fill="none" stroke="#fff1b8" stroke-width="7"/><path d="M-23-25h40" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g>
+    <g transform="rotate(300) translate(0 -196) rotate(-300)"><rect x="-27" y="-30" width="48" height="70" rx="8" fill="url(#beer)" stroke="#fff1b8" stroke-width="3"/><path d="M21-15h19c22 0 22 39 0 39H21" fill="none" stroke="#fff1b8" stroke-width="7"/><path d="M-23-25h40" stroke="#fff" stroke-width="9" stroke-linecap="round"/></g>
+  </g>
+  <text x="300" y="285" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="42" font-weight="800">ПИВНЫЕ</text>
+  <text x="300" y="335" text-anchor="middle" fill="#ffd700" font-family="Arial,sans-serif" font-size="42" font-weight="900">КРУЖКИ</text>
+  <text x="300" y="548" text-anchor="middle" fill="#eacbd5" font-family="Arial,sans-serif" font-size="22">RED COSMOS FRAME</text>
+</svg>
