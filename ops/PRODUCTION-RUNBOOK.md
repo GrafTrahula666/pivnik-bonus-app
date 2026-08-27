@@ -4,28 +4,34 @@
 
 Подтверждённые публичные сервисы:
 
-- Telegram: `https://pivnik-bonus-app-production.up.railway.app`
-- VK: `https://pivnik-vk-test-production.up.railway.app`
+- Telegram: `https://pivnik-bonus-app-production-df60.up.railway.app`
+- VK Railway origin: `https://pivnik-vk-test-production-3474.up.railway.app`
+- VK Mini App document: `https://pivnik-vk-test-production-3474.up.railway.app/vk`
 
-Проверка 4 августа 2026 года показала, что сервисы используют разные базы:
+Активная Railway production-конфигурация:
 
-- Telegram: 29 пользователей, 127 операций;
-- VK: 3 пользователя, 10 операций.
+- project: `20a942f9-3164-484a-a6f1-565439e38705`
+- environment: `cdd9d26c-2aab-45d9-95ed-ef487fafaa8f`
+- Telegram service: `d8d26f64-9ac1-4a03-9036-1a60f43c0be6`
+- VK service: `0573c420-0f9c-43bd-8e87-e1788ce3eefd`
+- Postgres service: `4f0c39c3-cd84-4f41-a97e-c95b342653c4`
 
-До миграции нельзя просто заменить `DATABASE_URL` у VK: сначала требуется backup обеих баз и перенос 3 VK-профилей и 10 операций в каноническую Telegram-базу с дедупликацией identity и сверкой ledger.
+Старые адреса без суффиксов `-df60` / `-3474` не являются production-адресами и не должны использоваться в VK, GitHub Actions, Railway variables или проверочных скриптах.
+
+Vercel `pivnik-vk-proxy.vercel.app` не является текущей точкой запуска VK Mini App. VK должен открывать Railway document `/vk` напрямую.
 
 ## 2. Доступ Railway для автоматизации
 
-Создать account token в Railway и сохранить его только как GitHub Actions repository secret:
+Railway account/project token хранится только как GitHub Actions repository secret:
 
-- имя секрета: `RAILWAY_TOKEN`;
-- токен не публиковать в issue, PR, коде или чате.
+- `RAILWAY_TOKEN`
+- `RAILWAY_API_TOKEN`
 
-После добавления секрета запустить workflow `Pivnik Railway operator`. Команда `npm run railway:discover` автоматически найдёт project ID, environments и сервисы `pivnik-bonus-app` / `pivnik-vk-test`.
+Токены не публиковать в issue, PR, коде или логах.
 
 ## 3. Обязательные Railway variables
 
-После миграции оба сервиса должны использовать один и тот же `DATABASE_URL`, `SESSION_SECRET`, `IDENTITY_TOMBSTONE_SECRET` и одинаковые юридические значения:
+Оба production-сервиса должны использовать один и тот же `DATABASE_URL`, `SESSION_SECRET`, `IDENTITY_TOMBSTONE_SECRET` и одинаковые юридические значения:
 
 - `NODE_ENV=production`
 - `ALLOW_DEMO=false`
@@ -38,13 +44,23 @@
 - `LEGAL_OPERATOR_ADDRESS`
 - `LEGAL_DATA_RETENTION_POLICY`
 
-Telegram-сервис дополнительно получает `TELEGRAM_BOT_TOKEN` и Telegram owner IDs. VK-сервис получает `VK_APP_ID`, `VK_APP_SECRET` и `OWNER_VK_ID`.
+Telegram:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_APP_URL=https://pivnik-bonus-app-production-df60.up.railway.app`
+- `PIVNIK_APP_URL=https://pivnik-bonus-app-production-df60.up.railway.app`
+
+VK:
+
+- `VK_APP_ID=54694987`
+- `VK_APP_SECRET`
+- `VK_APP_URL=https://pivnik-vk-test-production-3474.up.railway.app`
 
 `IDENTITY_TOMBSTONE_SECRET` нельзя менять вместе с обычной ротацией `SESSION_SECRET`. Его потеря снимет защиту от повторных стартовых наград для ранее удалённых аккаунтов.
 
 ## 4. Backup перед релизом
 
-Для каждой текущей базы выполнить отдельный backup:
+Для production-базы выполнить backup:
 
 ```bash
 DATABASE_URL='postgresql://...' \
@@ -52,67 +68,60 @@ BACKUP_DIR='./backups' \
 bash ops/backup-postgres.sh
 ```
 
-Сохранить `.dump` и `.dump.sha256` вне Railway. Проверка архива выполняется автоматически через `pg_restore --list`.
+Сохранить `.dump` и `.dump.sha256` вне Railway. Проверка архива выполняется через `pg_restore --list`.
 
-## 5. Проверка базы до переключения
+## 5. Проверка базы
 
 ```bash
 DATABASE_URL='postgresql://...' npm run verify:database
 ```
 
-Команда должна вернуть `"ok": true`. Она проверяет:
+Команда должна вернуть `"ok": true`.
 
-- отсутствие дублирующихся VK/Telegram identity;
-- совпадение wallet с журналом операций;
-- отсутствие identity у архивированных объединённых профилей;
-- наличие migration `005_runtime_identity.sql`;
-- fingerprint логической базы.
+## 6. Деплой
 
-## 6. Миграция VK в каноническую базу
+Один и тот же commit должен работать на Telegram и VK Railway-сервисах. Release gate сам получает актуальные публичные домены из Railway API, поэтому старые hostname нельзя хардкодить в workflow.
 
-1. Остановить новые изменяющие операции на время короткого окна миграции.
-2. Создать backup Telegram и VK баз.
-3. Выбрать Telegram-базу канонической, так как в ней находится основная история.
-4. Перенести VK users, identities, ledger, purchases, achievements, aliases и служебные связи.
-5. При совпадении профилей использовать правила `mergeUsers` и не складывать wallet напрямую — итоговый баланс рассчитывать по ledger.
-6. Проверить уникальность `(provider, provider_user_id)` и `request_key`.
-7. Выполнить `npm run verify:database` на итоговой базе.
-8. Переключить VK-сервис на канонический `DATABASE_URL`.
-
-## 7. Деплой
-
-1. Развернуть один и тот же commit на VK и Telegram Railway-сервисах.
-2. Дождаться успешного `/api/health` у обоих сервисов.
-3. Выполнить автоматическую сверку:
+После деплоя обязательны:
 
 ```bash
-TELEGRAM_APP_URL='https://pivnik-bonus-app-production.up.railway.app' \
-VK_APP_URL='https://pivnik-vk-test-production.up.railway.app' \
+npm run probe:production
 npm run verify:production
+npm run verify:platform-separation
 ```
 
-Либо запустить GitHub Actions workflow `Pivnik production readiness` — реальные URL уже заданы как безопасные значения по умолчанию.
+Production release gate дополнительно выполняет подписанный auth smoke для Telegram и VK через реальные production credentials и проверяет повторную авторизацию, профиль, QR и достижения.
 
-Релиз запрещён, если fingerprint базы, commit или версия правил отличаются.
+Релиз считается невалидным, если отличаются database fingerprint, commit, версия правил или один из production endpoint не готов.
+
+## 7. VK Mini App
+
+VK App ID: `54694987`.
+
+Во всех URL-полях платформы VK должен быть сохранён:
+
+`https://pivnik-vk-test-production-3474.up.railway.app/vk`
+
+При реальном запуске VK добавляет подписанные `vk_*` параметры и `sign`. Если Request URL указывает на `https://pivnik-vk-test-production.up.railway.app/...` без `-3474`, VK использует устаревшую настройку — такой запуск не достигает текущего Railway-сервиса.
+
+Смена Railway hostname не требует новых `VK_APP_ID` или `VK_APP_SECRET`, пока используется тот же VK App ID `54694987`.
 
 ## 8. E2E после деплоя
 
-1. Войти новым пользователем в Telegram.
-2. Принять правила и проверить однократные стартовые награды.
-3. Начислить и списать бонусы через QR.
-4. Привязать VK к Telegram.
-5. Сверить баланс, историю, статус, достижения, подарочное пиво и рейтинг.
-6. Выполнить операцию через VK и проверить её в Telegram.
-7. Повторить в обратном направлении.
-8. Проверить двойное нажатие, обрыв сети и два устройства одновременно.
-9. Удалить тестовый аккаунт, войти снова и убедиться, что стартовые награды повторно не выданы.
+1. Открыть Telegram Mini App и проверить авторизацию, профиль, QR, баланс и достижения.
+2. Открыть `https://vk.ru/app54694987` и проверить, что Request URL ведёт на hostname с `-3474`.
+3. Проверить авторизацию VK, профиль, QR, баланс и достижения.
+4. Проверить одну безопасную тестовую операцию и повторный вход.
+5. Проверить, что Telegram и VK используют одну production-базу, но отдельные платформенные identity согласно текущей модели аккаунтов.
 
 ## 9. Rollback кода
 
-1. Не откатывать базу автоматически при обычном дефекте интерфейса.
-2. Вернуть оба Railway-сервиса на один и тот же предыдущий commit.
-3. Повторить `npm run verify:production`.
-4. Проверить `/api/health`, авторизацию и одну тестовую операцию.
+1. Не откатывать базу автоматически при дефекте интерфейса.
+2. Возвращать оба Railway-сервиса на один и тот же предыдущий commit.
+3. Не восстанавливать старые Railway project/service IDs и старые hostname вместе с rollback исходников.
+4. Повторить `npm run probe:production`, `npm run verify:production` и auth smoke.
+
+Критически важно: rollback source tree не должен откатывать инфраструктурную маршрутизацию. Текущие Railway IDs и домены задаются в `scripts/railway-production-config.mjs` и защищены regression-тестами.
 
 ## 10. Restore базы
 
@@ -125,21 +134,19 @@ CONFIRM_RESTORE='RESTORE_PIVNIK' \
 bash ops/restore-postgres.sh
 ```
 
-После восстановления выполнить:
+После восстановления:
 
 ```bash
 DATABASE_URL='postgresql://target...' npm run verify:database
 ```
 
-Затем переключить оба сервиса одновременно и проверить общий fingerprint.
-
 ## 11. Запрет релиза
 
-Не выпускать приложение и не запускать рекламу при любом из условий:
+Не выпускать приложение при любом из условий:
 
-- `verify:database` или `verify:production` возвращает ошибку;
+- `verify:database`, `probe:production`, `verify:production` или signed auth smoke возвращает ошибку;
 - VK и Telegram имеют разные fingerprint или commit;
+- VK runtime Request URL указывает на старый hostname без `-3474`;
 - юридические значения не заполнены;
 - отсутствует проверенный backup;
-- не выполнен E2E на реальных VK и Telegram аккаунтах;
 - есть BLOCKER или CRITICAL дефект.
