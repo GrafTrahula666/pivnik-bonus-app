@@ -19,10 +19,28 @@ const pool = new Pool({
   connectionString: databaseUrl,
   ssl: databaseUrl.includes('railway.internal') ? false : { rejectUnauthorized: false },
   max: 1,
-  connectionTimeoutMillis: 10_000
+  connectionTimeoutMillis: 8_000
 });
 
 function qi(value) { return '"' + String(value).replaceAll('"', '""') + '"'; }
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function connectWithRetry() {
+  const waits = [0, 1_000, 2_000, 4_000, 6_000, 8_000];
+  let lastError;
+  for (let attempt = 0; attempt < waits.length; attempt += 1) {
+    if (waits[attempt]) await sleep(waits[attempt]);
+    try {
+      const client = await pool.connect();
+      if (attempt > 0) console.log(`RED COSMOS DB connection recovered on attempt ${attempt + 1}.`);
+      return client;
+    } catch (error) {
+      lastError = error;
+      console.warn(`RED COSMOS DB connection attempt ${attempt + 1}/${waits.length} failed: ${error?.code || error?.message || 'unknown'}`);
+    }
+  }
+  throw lastError || new Error('RED COSMOS DB connection failed');
+}
 
 async function createBackup(client) {
   if (!isProduction) return;
@@ -73,7 +91,7 @@ async function reconcileExistingTesterRecipients(client) {
   return claims;
 }
 
-const client = await pool.connect();
+const client = await connectWithRetry();
 try {
   await client.query('BEGIN');
   await createBackup(client);
@@ -116,7 +134,7 @@ try {
   const testerClaims = await reconcileExistingTesterRecipients(client);
 
   await client.query('COMMIT');
-  const audit = await pool.query(`SELECT
+  const audit = await client.query(`SELECT
     (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL) AS users,
     (SELECT COUNT(*)::int FROM user_frames) AS frames,
     (SELECT COUNT(*)::int FROM user_achievements_v2 WHERE is_granted) AS achievements,
