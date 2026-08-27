@@ -24,5 +24,15 @@ if (source.includes('Колесо доступно только в Telegram.')) 
   throw new Error('v22 preflight: Telegram-only wheel guard остался в gateway');
 }
 
+const multilineDiamondFrame = `  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') {
+    frames.push({ code: 'diamond', title: 'Алмазная рамка' });
+  }
+  return frames;`;
+const normalizedDiamondFrame = `  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
+  return frames;`;
+if (source.includes(multilineDiamondFrame)) {
+  source = source.replace(multilineDiamondFrame, normalizedDiamondFrame);
+}
+
 await fs.writeFile(gatewayPath, source, 'utf8');
 console.log(`Pivnik v22 preflight ready; removed ${removed} Telegram-only wheel guards.`);
