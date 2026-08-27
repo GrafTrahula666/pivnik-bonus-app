@@ -262,6 +262,62 @@ body::after {
   display: none !important;
 }
 
+/* VK interaction hardening.
+   Decorative layers must never become hit-test targets, and any opened sheet
+   must sit above the VK fixed navigation injected by vk-platform.js. */
+.platform-vk .app-shell::before,
+.platform-vk .app-shell::after,
+.platform-vk .boot-scene::after,
+.platform-vk .boot-overlay,
+.platform-vk .hero-glow,
+.platform-vk .avatar-orbit,
+.platform-vk .achievement-burst {
+  pointer-events: none !important;
+}
+
+.platform-vk #appShell:not(.hidden),
+.platform-vk #appShell > main,
+.platform-vk .screen.active,
+.platform-vk .bottom-nav,
+.platform-vk .bottom-nav button,
+.platform-vk button:not(:disabled),
+.platform-vk a,
+.platform-vk [role="button"] {
+  pointer-events: auto !important;
+}
+
+.platform-vk .bottom-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  z-index: 2500 !important;
+}
+
+.platform-vk .modal:not(.open) {
+  pointer-events: none !important;
+}
+
+.platform-vk .modal.open {
+  display: flex !important;
+  pointer-events: auto !important;
+  z-index: 4000 !important;
+}
+
+.platform-vk .achievement-celebration-modal.open {
+  display: grid !important;
+}
+
+.platform-vk #consentModal.open {
+  z-index: 5000 !important;
+}
+
+.platform-vk .modal.open .modal-sheet,
+.platform-vk .modal.open button,
+.platform-vk .modal.open input,
+.platform-vk .modal.open select,
+.platform-vk .modal.open textarea,
+.platform-vk .modal.open a {
+  pointer-events: auto !important;
+}
+
 @media (max-width: 520px) {
   .screen[data-screen="admin"] .metric-grid,
   .screen[data-screen="admin"] .admin-quick-grid {
