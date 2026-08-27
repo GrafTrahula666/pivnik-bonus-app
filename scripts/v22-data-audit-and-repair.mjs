@@ -25,6 +25,13 @@ function cleanHandle(value) {
   return String(value || '').trim().replace(/^@/, '').toLowerCase();
 }
 
+function cleanName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9]+/gi, '');
+}
+
 async function tableExists(name) {
   const result = await pool.query(
     `SELECT EXISTS(
@@ -36,27 +43,39 @@ async function tableExists(name) {
   return Boolean(result.rows[0]?.ok);
 }
 
+async function groupedIfExists(table, sql) {
+  return (await tableExists(table)) ? (await pool.query(sql)).rows : [];
+}
+
 async function audit() {
-  const [users, wallets, tx, beer, frames, identities, fingerprint] = await Promise.all([
+  const [users, wallets, tx, beer, framesActive, framesAll, identities, fingerprint] = await Promise.all([
     pool.query(`
-      SELECT COUNT(*) FILTER (WHERE merged_into_user_id IS NULL AND deleted_at IS NULL)::int AS active,
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE merged_into_user_id IS NULL AND deleted_at IS NULL)::int AS active,
              COUNT(*) FILTER (WHERE merged_into_user_id IS NOT NULL)::int AS merged,
-             COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted
+             COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted,
+             MIN(created_at) AS first_created_at,
+             MAX(created_at) AS last_created_at,
+             COUNT(*) FILTER (WHERE created_at < TIMESTAMPTZ '2026-08-22 00:00:00+00')::int AS created_before_troubleshooting
       FROM users
     `),
     pool.query(`
       SELECT COUNT(*)::int AS total,
-             COUNT(*) FILTER (WHERE balance > 0)::int AS nonzero,
-             COUNT(*) FILTER (WHERE balance = 0)::int AS zero,
-             COALESCE(SUM(balance),0)::bigint AS total_balance
-      FROM wallets
+             COUNT(*) FILTER (WHERE w.balance > 0)::int AS nonzero,
+             COUNT(*) FILTER (WHERE w.balance = 0)::int AS zero,
+             COALESCE(SUM(w.balance),0)::bigint AS total_balance,
+             COUNT(*) FILTER (WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL)::int AS active_wallets,
+             COALESCE(SUM(w.balance) FILTER (WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL),0)::bigint AS active_total_balance
+      FROM wallets w
+      JOIN users u ON u.id=w.user_id
     `),
     pool.query(`
       SELECT COUNT(*)::int AS total,
              COUNT(*) FILTER (WHERE status='completed')::int AS completed,
              COUNT(DISTINCT client_id) FILTER (WHERE status='completed')::int AS clients,
              MIN(created_at) AS first_at,
-             MAX(created_at) AS last_at
+             MAX(created_at) AS last_at,
+             COUNT(*) FILTER (WHERE created_at < TIMESTAMPTZ '2026-08-22 00:00:00+00')::int AS before_troubleshooting
       FROM transactions
     `),
     pool.query(`
@@ -68,17 +87,39 @@ async function audit() {
       FROM beer_loyalty
     `),
     pool.query(`
-      SELECT profile_frame, COUNT(*)::int AS users
+      SELECT COALESCE(NULLIF(profile_frame,''),'none') AS profile_frame, COUNT(*)::int AS users
       FROM users
       WHERE merged_into_user_id IS NULL AND deleted_at IS NULL
-      GROUP BY profile_frame ORDER BY users DESC, profile_frame
+      GROUP BY COALESCE(NULLIF(profile_frame,''),'none') ORDER BY users DESC, profile_frame
+    `),
+    pool.query(`
+      SELECT COALESCE(NULLIF(profile_frame,''),'none') AS profile_frame, COUNT(*)::int AS users
+      FROM users
+      GROUP BY COALESCE(NULLIF(profile_frame,''),'none') ORDER BY users DESC, profile_frame
     `),
     tableExists('user_identities').then((exists) => exists
-      ? pool.query(`SELECT provider, COUNT(*)::int AS identities, COUNT(DISTINCT user_id)::int AS users FROM user_identities GROUP BY provider ORDER BY provider`)
+      ? pool.query(`
+          SELECT ui.provider,
+                 COUNT(*)::int AS identities,
+                 COUNT(DISTINCT ui.user_id)::int AS users,
+                 COUNT(*) FILTER (WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL)::int AS active_identities
+          FROM user_identities ui
+          JOIN users u ON u.id=ui.user_id
+          GROUP BY ui.provider ORDER BY ui.provider
+        `)
       : { rows: [] }),
     tableExists('runtime_identity').then((exists) => exists
       ? pool.query('SELECT database_instance_id::text AS id FROM runtime_identity WHERE singleton = TRUE LIMIT 1')
       : { rows: [] })
+  ]);
+
+  const [txByMode, txByStatus, betaGrants, rewardGrants, wheel, shopPurchases] = await Promise.all([
+    pool.query(`SELECT mode, COUNT(*)::int AS count, COALESCE(SUM(bonus_earned),0)::bigint AS earned, COALESCE(SUM(bonus_spent),0)::bigint AS spent FROM transactions GROUP BY mode ORDER BY mode`).then((r) => r.rows),
+    pool.query(`SELECT status, COUNT(*)::int AS count FROM transactions GROUP BY status ORDER BY status`).then((r) => r.rows),
+    groupedIfExists('beta_grants', `SELECT code, COUNT(*)::int AS count, COALESCE(SUM(amount),0)::bigint AS amount FROM beta_grants GROUP BY code ORDER BY code`),
+    groupedIfExists('reward_grants', `SELECT code, source, COALESCE(achievement_code,'') AS achievement_code, COUNT(*)::int AS count, COALESCE(SUM(amount),0)::bigint AS amount FROM reward_grants GROUP BY code, source, achievement_code ORDER BY code`),
+    groupedIfExists('wheel_spins', `SELECT platform, COUNT(*)::int AS count FROM wheel_spins GROUP BY platform ORDER BY platform`),
+    groupedIfExists('shop_purchases', `SELECT item_code, status, COUNT(*)::int AS count FROM shop_purchases GROUP BY item_code, status ORDER BY item_code, status`)
   ]);
 
   const mismatch = await pool.query(`
@@ -88,13 +129,26 @@ async function audit() {
       WHERE status='completed' AND balance_after IS NOT NULL
       ORDER BY client_id, completed_at DESC NULLS LAST, created_at DESC, id DESC
     )
-    SELECT COUNT(*)::int AS count
+    SELECT COUNT(*)::int AS count,
+           COUNT(*) FILTER (WHERE w.balance=0 AND l.balance_after>0)::int AS zero_now_but_ledger_positive
     FROM latest l
     JOIN wallets w ON w.user_id=l.client_id
     JOIN users u ON u.id=l.client_id
-    WHERE u.unlimited_bonus IS NOT TRUE
+    WHERE u.merged_into_user_id IS NULL
+      AND u.deleted_at IS NULL
+      AND u.unlimited_bonus IS NOT TRUE
       AND u.role <> 'viewer'
       AND w.balance <> l.balance_after
+  `);
+
+  const historicalRows = await pool.query(`
+    SELECT
+      COUNT(*) FILTER (WHERE u.merged_into_user_id IS NOT NULL)::int AS merged_users_with_wallet,
+      COALESCE(SUM(w.balance) FILTER (WHERE u.merged_into_user_id IS NOT NULL),0)::bigint AS merged_wallet_balance,
+      COUNT(*) FILTER (WHERE u.deleted_at IS NOT NULL)::int AS deleted_users_with_wallet,
+      COALESCE(SUM(w.balance) FILTER (WHERE u.deleted_at IS NOT NULL),0)::bigint AS deleted_wallet_balance
+    FROM users u
+    LEFT JOIN wallets w ON w.user_id=u.id
   `);
 
   const testerRows = await pool.query(`
@@ -102,7 +156,8 @@ async function audit() {
       SELECT u.id, u.username, u.first_name, u.last_name, u.profile_frame,
              w.balance,
              COALESCE((SELECT COUNT(*) FROM transactions t WHERE t.client_id=u.id AND t.status='completed'),0)::int AS completed_ops,
-             ARRAY_REMOVE(ARRAY_AGG(DISTINCT LOWER(COALESCE(ui.provider_username,''))), '') AS identity_usernames
+             ARRAY_REMOVE(ARRAY_AGG(DISTINCT LOWER(COALESCE(ui.provider_username,''))), '') AS identity_usernames,
+             ARRAY_REMOVE(ARRAY_AGG(DISTINCT ui.provider), NULL) AS platforms
       FROM users u
       JOIN wallets w ON w.user_id=u.id
       LEFT JOIN user_identities ui ON ui.user_id=u.id
@@ -126,11 +181,72 @@ async function audit() {
           name: [row.first_name, row.last_name].filter(Boolean).join(' '),
           balance: Number(row.balance || 0),
           completedOperations: Number(row.completed_ops || 0),
-          frame: row.profile_frame || 'none'
+          frame: row.profile_frame || 'none',
+          platforms: row.platforms || []
         });
       }
     }
   }
+
+  const adminRows = await pool.query(`
+    SELECT u.id, u.username, u.first_name, u.last_name, u.role, u.profile_frame, w.balance,
+           ARRAY_REMOVE(ARRAY_AGG(DISTINCT ui.provider), NULL) AS platforms,
+           ARRAY_REMOVE(ARRAY_AGG(DISTINCT LOWER(COALESCE(ui.provider_username,''))), '') AS identity_usernames
+    FROM users u
+    JOIN wallets w ON w.user_id=u.id
+    LEFT JOIN user_identities ui ON ui.user_id=u.id
+    WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.role='admin'
+    GROUP BY u.id, w.balance
+    ORDER BY u.created_at ASC
+  `);
+
+  const vkRows = await pool.query(`
+    SELECT u.id, u.username, u.first_name, u.last_name, u.role, u.profile_frame, w.balance,
+           LOWER(COALESCE(ui.provider_username,'')) AS provider_username
+    FROM user_identities ui
+    JOIN users u ON u.id=ui.user_id
+    JOIN wallets w ON w.user_id=u.id
+    WHERE ui.provider='vk' AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+    ORDER BY u.created_at ASC
+  `);
+
+  const adminProfiles = adminRows.rows.map((row) => ({
+    username: row.username || null,
+    identityUsernames: row.identity_usernames || [],
+    name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+    frame: row.profile_frame || 'none',
+    balance: Number(row.balance || 0),
+    platforms: row.platforms || []
+  }));
+
+  const ownerVkCandidates = [];
+  for (const admin of adminRows.rows) {
+    const adminHandles = new Set([cleanHandle(admin.username), ...(admin.identity_usernames || []).map(cleanHandle)].filter(Boolean));
+    const adminFullName = cleanName(`${admin.first_name || ''}${admin.last_name || ''}`);
+    for (const vk of vkRows.rows) {
+      if (String(vk.id) === String(admin.id)) continue;
+      const vkHandles = [cleanHandle(vk.username), cleanHandle(vk.provider_username)].filter(Boolean);
+      const vkFullName = cleanName(`${vk.first_name || ''}${vk.last_name || ''}`);
+      const exactHandle = vkHandles.some((handle) => adminHandles.has(handle));
+      const exactName = adminFullName.length >= 6 && adminFullName === vkFullName;
+      if (!exactHandle && !exactName) continue;
+      ownerVkCandidates.push({
+        username: vk.username || vk.provider_username || null,
+        name: [vk.first_name, vk.last_name].filter(Boolean).join(' '),
+        role: vk.role,
+        frame: vk.profile_frame || 'none',
+        balance: Number(vk.balance || 0),
+        matchedBy: exactHandle ? 'username' : 'full_name'
+      });
+    }
+  }
+
+  const publicTesterMatches = Object.fromEntries(
+    Object.entries(testerMatches).map(([handle, matches]) => [
+      handle,
+      matches.map(({ userId: _hidden, ...safe }) => safe)
+    ])
+  );
 
   console.log(JSON.stringify({
     mode: repairConfirmed ? 'REPAIR_CONFIRMED' : 'READ_ONLY_DRY_RUN',
@@ -138,11 +254,22 @@ async function audit() {
     users: users.rows[0],
     wallets: wallets.rows[0],
     transactions: tx.rows[0],
+    transactionsByMode: txByMode,
+    transactionsByStatus: txByStatus,
     beer: beer.rows[0],
     platformIdentities: identities.rows,
-    profileFrames: frames.rows,
+    profileFramesActive: framesActive.rows,
+    profileFramesAllRows: framesAll.rows,
+    betaGrants,
+    rewardGrants,
+    wheelSpins: wheel,
+    shopPurchases,
     walletVsLastLedgerMismatchCount: Number(mismatch.rows[0]?.count || 0),
-    testers: testerMatches
+    zeroWalletButLastLedgerPositiveCount: Number(mismatch.rows[0]?.zero_now_but_ledger_positive || 0),
+    historicalInactiveRows: historicalRows.rows[0],
+    testers: publicTesterMatches,
+    adminProfiles,
+    possibleOwnerVkMatches: ownerVkCandidates
   }, null, 2));
 
   return testerMatches;
@@ -173,7 +300,7 @@ async function repairTesters(testerMatches) {
       );
 
       if (!inserted.rowCount) {
-        results.push({ handle, userId, granted: false, reason: 'already_granted' });
+        results.push({ handle, granted: false, reason: 'already_granted' });
         continue;
       }
 
@@ -199,7 +326,7 @@ async function repairTesters(testerMatches) {
           GRANT_CODE
         ]
       );
-      results.push({ handle, userId, granted: true, amount: TESTER_REWARD, balanceAfter: Number(wallet.rows[0].balance) });
+      results.push({ handle, granted: true, amount: TESTER_REWARD, balanceAfter: Number(wallet.rows[0].balance) });
     }
 
     await client.query('COMMIT');
