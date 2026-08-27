@@ -1,0 +1,72 @@
+/* PIVNIK RED COSMOS v2.0
+   Platform-neutral final visual layer for VK and Telegram. */
+:root {
+  --primary-red: #c41e3a;
+  --dark-red: #8b0000;
+  --cosmic-purple: #4a0d3a;
+  --cosmic-dark: #0d0002;
+  --gold-accent: #ffd700;
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --border-color: var(--primary-red);
+  --button-bg: var(--dark-red);
+  --button-hover: var(--primary-red);
+  --bg: #0d0002 !important;
+  --header: #16030e !important;
+  --surface: rgba(28, 5, 18, .94) !important;
+  --card: rgba(38, 7, 25, .90) !important;
+  --text: var(--text-primary) !important;
+  --muted: #c7b9c3 !important;
+  --gold: var(--primary-red) !important;
+  --gold2: #f06a82 !important;
+  --theme-color: var(--primary-red) !important;
+  --panel-bg: rgba(13, 0, 2, .95) !important;
+}
+html, body, .app-shell, main {
+  background: linear-gradient(135deg,#0d0002 0%,#2a0a1f 25%,#4a0d3a 50%,#2a0a1f 75%,#0d0002 100%) !important;
+  background-attachment: fixed !important;
+  background-size: 400% 400% !important;
+  animation: cosmicShift 15s ease infinite !important;
+}
+html, body { min-height: 100%; color: var(--text-primary) !important; }
+body { position: relative; isolation: isolate; }
+body::before { content:""; position:fixed; inset:0; z-index:-2; pointer-events:none; background:radial-gradient(circle at 12% 18%,rgba(255,255,255,.70) 0 1px,transparent 1.5px),radial-gradient(circle at 82% 14%,rgba(255,210,220,.55) 0 1px,transparent 1.4px),radial-gradient(circle at 68% 70%,rgba(255,255,255,.42) 0 1px,transparent 1.5px),radial-gradient(circle at 24% 76%,rgba(255,104,135,.45) 0 1px,transparent 1.6px),radial-gradient(ellipse at 78% 25%,rgba(196,30,58,.26),transparent 38%),radial-gradient(ellipse at 18% 70%,rgba(96,12,84,.32),transparent 42%); background-size:139px 139px,181px 181px,223px 223px,167px 167px,auto,auto; opacity:.72; }
+body::after { content:""; position:fixed; inset:-25%; z-index:-1; pointer-events:none; background:conic-gradient(from 215deg at 63% 36%,transparent 0 30%,rgba(255,48,91,.10) 36%,transparent 43% 100%),radial-gradient(ellipse at 50% 52%,transparent 0 42%,rgba(105,4,55,.15) 58%,transparent 75%); filter:blur(24px); animation:cosmosNebula 20s ease-in-out infinite alternate; }
+@keyframes cosmicShift { 0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%} }
+@keyframes cosmosNebula { from{transform:translate3d(-2%,-1%,0) scale(1);opacity:.55}to{transform:translate3d(3%,2%,0) scale(1.05);opacity:.90} }
+@media (prefers-reduced-motion:reduce){html,body,.app-shell,main,body::after{animation:none!important}}
+.app-shell { --background:unset!important; --bg-primary:unset!important; --palette-bg-1:unset!important; }
+.platform-vk,.platform-telegram,html.platform-vk,html.platform-telegram { --theme-color:var(--primary-red)!important; --panel-bg:rgba(13,0,2,.95)!important; }
+.topbar,.bottom-nav { background:rgba(13,0,2,.82)!important; border-color:rgba(196,30,58,.24)!important; backdrop-filter:blur(18px) saturate(1.2); }
+.vip-glass-card,.hero-card,.card,.modal-sheet,.profile-identity-card,.profile-history-card,.league-summary,.wheel-control-card,.admin-card,.admin-preview-card,.shift-admin-card { background:linear-gradient(145deg,rgba(47,8,31,.90),rgba(13,0,2,.92))!important; border-color:rgba(196,30,58,.30)!important; box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 50px rgba(0,0,0,.26)!important; }
+.primary,.buy-button,.v2-back-button { background:linear-gradient(135deg,var(--primary-red),var(--dark-red))!important; border-color:rgba(255,215,0,.50)!important; color:#fff!important; }
+.achievement-tile.locked,.achievement-card.locked { background:linear-gradient(135deg,#38383d,#242428)!important; border-color:rgba(180,180,186,.24)!important; box-shadow:none!important; filter:grayscale(1) saturate(.05)!important; opacity:.64!important; }
+.achievement-tile.locked .achievement-tile-icon,.achievement-tile.locked .achievement-state,.achievement-tile.locked b,.achievement-tile.locked strong,.achievement-card.locked * { color:#b7b7bd!important; }
+.achievement-tile.locked .achievement-progress>i,.achievement-card.locked .progress-fill { background:#7a7a80!important; }
+.achievement-tile.earned,.achievement-card.granted { background:linear-gradient(135deg,rgba(105,75,0,.94),rgba(255,215,0,.22))!important; border:1px solid rgba(255,215,0,.75)!important; box-shadow:0 0 22px rgba(255,215,0,.24),inset 0 1px 0 rgba(255,255,255,.10)!important; filter:none!important; opacity:1!important; }
+.achievement-tile.earned .achievement-state,.achievement-tile.earned strong,.achievement-card.granted .progress-text { color:#ffe77c!important; }
+.achievement-tile.earned .achievement-progress>i,.achievement-card.granted .progress-fill { background:linear-gradient(90deg,#d8a800,#ffd700,#fff2a0)!important; }
+.shop-category-grid,.red-cosmos-shop-grid { display:grid!important; grid-template-columns:repeat(auto-fit,minmax(180px,1fr))!important; gap:14px!important; }
+.shop-list-card,.red-cosmos-shop-card { position:relative; overflow:hidden; border:1px solid rgba(196,30,58,.34)!important; border-radius:16px!important; background:rgba(13,0,2,.82)!important; transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease; }
+.shop-list-card:hover,.red-cosmos-shop-card:hover { border-color:var(--primary-red)!important; box-shadow:0 0 22px rgba(196,30,58,.26)!important; transform:translateY(-2px); }
+.shop-list-card.v2-premium,.red-cosmos-shop-card.v2-premium { border:2px solid rgba(255,215,0,.80)!important; background:linear-gradient(145deg,rgba(95,57,0,.30),rgba(61,4,26,.60))!important; box-shadow:0 0 26px rgba(255,215,0,.16)!important; }
+.shop-list-media,.red-cosmos-shop-image { width:100%!important; min-height:160px!important; aspect-ratio:1/1!important; background:linear-gradient(135deg,#2a0a1f,#0d0002)!important; overflow:hidden; }
+.shop-list-media img,.red-cosmos-shop-image img,img.shop-list-media { width:100%!important; height:100%!important; object-fit:contain!important; }
+.v2-premium-badge { position:absolute; top:10px; right:10px; z-index:2; padding:5px 8px; border-radius:999px; background:#ffd700; color:#160b00; font-size:10px; font-weight:900; letter-spacing:.04em; }
+.v2-owned-button,.v2-owned-button:disabled { background:#38383d!important; border-color:#666!important; color:#c6c6ca!important; cursor:default!important; opacity:.85!important; }
+.v2-back-button,.v2-modal-back,#wheelBackButton.v2-back-button,#backToProfileFromAdmin.v2-back-button,#backToProfileFromStaff.v2-back-button { position:static!important; inset:auto!important; display:inline-flex!important; align-items:center!important; justify-content:center!important; gap:8px!important; min-height:46px!important; min-width:118px!important; padding:11px 16px!important; margin:max(8px,env(safe-area-inset-top)) 0 14px!important; border:2px solid rgba(255,215,0,.55)!important; border-radius:12px!important; color:#fff!important; font-size:15px!important; font-weight:850!important; line-height:1!important; z-index:4; }
+.v2-back-button:active,.v2-modal-back:active { transform:scale(.97); }
+.wheel-page-head { display:grid!important; grid-template-columns:auto minmax(0,1fr)!important; align-items:center!important; gap:12px!important; }
+.wheel-page-head .v2-back-button { margin-top:0!important; margin-bottom:0!important; }
+.wheel-head-spacer { display:none!important; }
+.modal-sheet>.v2-modal-back { align-self:flex-start; }
+.red-cosmos-admin-tabs { position:sticky; top:max(0px,env(safe-area-inset-top)); z-index:20; display:flex; gap:8px; overflow-x:auto; padding:8px 2px 12px; margin-bottom:12px; scrollbar-width:none; background:linear-gradient(180deg,rgba(13,0,2,.98),rgba(13,0,2,.88),transparent); }
+.red-cosmos-admin-tabs::-webkit-scrollbar{display:none}.red-cosmos-admin-tab{flex:0 0 auto;min-height:40px;padding:8px 12px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:rgba(255,255,255,.04);color:#cfc2c8;font-weight:780}.red-cosmos-admin-tab.active{color:#fff;background:rgba(196,30,58,.30);border-color:rgba(255,73,108,.58)}[data-red-cosmos-admin-panel].red-cosmos-admin-hidden{display:none!important}
+.red-cosmos-platform-label { display:inline-flex; margin-top:3px; padding:2px 7px; border:1px solid rgba(196,30,58,.30); border-radius:999px; color:#d7c2ca!important; font-size:10px!important; font-weight:800; }
+.avatar-frame-beer-mugs{box-shadow:0 0 0 3px #e4a52b,0 0 20px rgba(255,176,39,.36)!important}.avatar-frame-beer-bottles{box-shadow:0 0 0 3px #4f9a4c,0 0 20px rgba(67,147,64,.34)!important}.avatar-frame-lights{box-shadow:0 0 0 3px #ff4266,0 0 12px #ff3154,0 0 28px rgba(170,49,225,.44)!important;animation:redCosmosFramePulse 1.6s ease-in-out infinite alternate}.avatar-frame-premium-smiling-fuck{box-shadow:0 0 0 3px #ffd700,0 0 28px rgba(255,215,0,.42)!important}@keyframes redCosmosFramePulse{from{filter:brightness(.88)}to{filter:brightness(1.25)}}
+/* VK interaction hardening: decorative layers never capture taps, opened sheets always sit above fixed navigation. */
+.platform-vk .app-shell::before,.platform-vk .app-shell::after,.platform-vk .boot-scene::after,.platform-vk .boot-overlay,.platform-vk .hero-glow,.platform-vk .avatar-orbit,.platform-vk .achievement-burst{pointer-events:none!important}
+.platform-vk #appShell:not(.hidden),.platform-vk #appShell>main,.platform-vk .screen.active,.platform-vk .bottom-nav,.platform-vk .bottom-nav button,.platform-vk button:not(:disabled),.platform-vk a,.platform-vk [role="button"]{pointer-events:auto!important}
+.platform-vk .bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr))!important;z-index:2500!important}.platform-vk .modal:not(.open){pointer-events:none!important}.platform-vk .modal.open{display:flex!important;pointer-events:auto!important;z-index:4000!important}.platform-vk .achievement-celebration-modal.open{display:grid!important}.platform-vk #consentModal.open{z-index:5000!important}.platform-vk .modal.open .modal-sheet,.platform-vk .modal.open button,.platform-vk .modal.open input,.platform-vk .modal.open select,.platform-vk .modal.open textarea,.platform-vk .modal.open a{pointer-events:auto!important}
+.platform-vk #qrModal .qr-warning{display:none!important}
+@media(max-width:520px){.shop-category-grid,.red-cosmos-shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.v2-back-button,.v2-modal-back{min-height:48px!important}}
