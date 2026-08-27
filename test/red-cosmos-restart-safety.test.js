@@ -26,3 +26,15 @@ test('RED COSMOS DB prepare tolerates Railway private-network warmup and keeps o
   assert.match(dbPrepare, /const audit = await client\.query/);
   assert.doesNotMatch(dbPrepare, /const audit = await pool\.query/);
 });
+
+test('RED COSMOS production DB prepare audits archive schemas without guessing or restoring data', () => {
+  assert.match(dbPrepare, /async function inspectHistoricalSchemas/);
+  assert.match(dbPrepare, /information_schema\.schemata/);
+  assert.match(dbPrepare, /richerSchemas/);
+  assert.match(dbPrepare, /TESTER_HANDLES/);
+  assert.match(dbPrepare, /drolted/);
+  assert.match(dbPrepare, /distraktor/);
+  assert.match(dbPrepare, /ksemar/);
+  assert.doesNotMatch(dbPrepare, /DROP SCHEMA/);
+  assert.doesNotMatch(dbPrepare, /DELETE FROM .*users/i);
+});
