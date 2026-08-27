@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { productionUrl } from './railway-production-config.mjs';
 
 function normalizeBaseUrl(value, name) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
@@ -81,14 +82,12 @@ export async function verifyPlatformSeparatedProduction({ telegramUrl, vkUrl }) 
   };
 }
 
-// Compatibility export for existing operational imports. The verification now
-// requires separate accounts while still requiring one production database.
 export const verifyUnifiedProduction = verifyPlatformSeparatedProduction;
 
 async function main() {
   const result = await verifyPlatformSeparatedProduction({
-    telegramUrl: process.env.TELEGRAM_APP_URL,
-    vkUrl: process.env.VK_APP_URL
+    telegramUrl: productionUrl('telegram', process.env.TELEGRAM_APP_URL),
+    vkUrl: productionUrl('vk', process.env.VK_APP_URL)
   });
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
