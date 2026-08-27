@@ -1,19 +1,17 @@
-import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
-
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const PROJECT_TOKEN = String(process.env.RAILWAY_TOKEN || '').trim();
 const API_TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const COMMIT_SHA = String(process.env.RELEASE_COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
-const PROJECT_ID = RAILWAY_PRODUCTION.projectId;
-const ENVIRONMENT_ID = RAILWAY_PRODUCTION.environmentId;
+const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
+const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
 const SERVICES = Object.freeze({
   telegram: {
-    id: RAILWAY_PRODUCTION.services.telegram,
-    verifyUrl: String(process.env.TELEGRAM_SERVICE_VERIFY_URL || '').trim().replace(/\/+$/, '')
+    id: '4c4d5f11-e3af-4ffb-8ae9-21a8854b6c90',
+    url: String(process.env.TELEGRAM_APP_URL || 'https://pivnik-bonus-app-production.up.railway.app').replace(/\/+$/, '')
   },
   vk: {
-    id: RAILWAY_PRODUCTION.services.vk,
-    verifyUrl: String(process.env.VK_SERVICE_VERIFY_URL || '').trim().replace(/\/+$/, '')
+    id: '61352beb-78fe-4293-939c-c1f93294b204',
+    url: String(process.env.VK_APP_URL || 'https://pivnik-vk-test-production.up.railway.app').replace(/\/+$/, '')
   }
 });
 const TERMINAL_FAILURES = new Set(['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED']);
@@ -27,9 +25,9 @@ if (!PROJECT_TOKEN && !API_TOKEN) {
 if (!/^[0-9a-f]{40}$/i.test(COMMIT_SHA)) throw new Error('A full 40-character RELEASE_COMMIT_SHA is required.');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const railwayAuthHeaders = API_TOKEN
-  ? { authorization: `Bearer ${API_TOKEN}` }
-  : { 'Project-Access-Token': PROJECT_TOKEN };
+const railwayAuthHeaders = PROJECT_TOKEN
+  ? { 'Project-Access-Token': PROJECT_TOKEN }
+  : { authorization: `Bearer ${API_TOKEN}` };
 
 async function graphql(query, variables = {}) {
   const response = await fetch(ENDPOINT, {
@@ -48,22 +46,6 @@ async function graphql(query, variables = {}) {
       || `Railway API returned HTTP ${response.status}`);
   }
   return payload.data;
-}
-
-async function servicePublicUrl(serviceName, service) {
-  if (service.verifyUrl) return service.verifyUrl;
-  const data = await graphql(`
-    query ProductionServiceDomains($projectId: String!, $environmentId: String!, $serviceId: String!) {
-      domains(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) {
-        serviceDomains { domain }
-        customDomains { domain }
-      }
-    }
-  `, { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id });
-  const domains = data?.domains;
-  const domain = domains?.serviceDomains?.[0]?.domain || domains?.customDomains?.[0]?.domain;
-  if (!domain) throw new Error(`${serviceName}: Railway returned no public domain.`);
-  return `https://${domain}`;
 }
 
 function renderType(type) {
@@ -156,7 +138,7 @@ async function recentDeployments(serviceId) {
         }
       }
     }
-  `, { input: { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId } });
+  `, { input: { projectId: PROJECT_ID, serviceId } });
   return data?.deployments?.edges?.map((edge) => edge.node) || [];
 }
 
@@ -204,14 +186,14 @@ function readinessFailures(telegram, vk) {
   return failures;
 }
 
-async function waitForSeparatedReadiness(serviceUrls) {
+async function waitForSeparatedReadiness() {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
   let lastFailures = ['readiness has not been checked'];
   while (Date.now() < deadline) {
     try {
       const [telegram, vk] = await Promise.all([
-        fetchReadiness('Telegram', serviceUrls.telegram),
-        fetchReadiness('VK', serviceUrls.vk)
+        fetchReadiness('Telegram', SERVICES.telegram.url),
+        fetchReadiness('VK', SERVICES.vk.url)
       ]);
       lastFailures = readinessFailures(telegram, vk);
       if (!lastFailures.length) return { telegram, vk };
@@ -226,9 +208,6 @@ async function waitForSeparatedReadiness(serviceUrls) {
 }
 
 const schema = await deployMutationSchema();
-const serviceUrls = Object.fromEntries(await Promise.all(
-  Object.entries(SERVICES).map(async ([name, service]) => [name, await servicePublicUrl(name, service)])
-));
 const deploymentIds = {};
 for (const [name, service] of Object.entries(SERVICES)) {
   deploymentIds[name] = await deployService(name, service, schema);
@@ -236,14 +215,13 @@ for (const [name, service] of Object.entries(SERVICES)) {
 for (const [name, service] of Object.entries(SERVICES)) {
   await waitForDeployment(name, service.id, deploymentIds[name]);
 }
-const readiness = await waitForSeparatedReadiness(serviceUrls);
+const readiness = await waitForSeparatedReadiness();
 
 console.log(JSON.stringify({
   ok: true,
   accountMode: 'separate',
   releaseCommit: COMMIT_SHA,
   deployments: deploymentIds,
-  serviceUrls,
   databaseFingerprint: readiness.telegram.databaseFingerprint,
   termsVersion: readiness.telegram.termsVersion,
   telegram: {

@@ -1,5 +1,4 @@
 import { pathToFileURL } from 'node:url';
-import { productionUrl } from './railway-production-config.mjs';
 
 function normalizeBaseUrl(value, name) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
@@ -88,8 +87,8 @@ export const verifyUnifiedProduction = verifyPlatformSeparatedProduction;
 
 async function main() {
   const result = await verifyPlatformSeparatedProduction({
-    telegramUrl: productionUrl('telegram', process.env.TELEGRAM_APP_URL),
-    vkUrl: productionUrl('vk', process.env.VK_APP_URL)
+    telegramUrl: process.env.TELEGRAM_APP_URL,
+    vkUrl: process.env.VK_APP_URL
   });
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
