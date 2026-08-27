@@ -40,13 +40,16 @@ test('RED COSMOS backend implements idempotent direct frame purchases', async ()
 });
 
 test('RED COSMOS client removes all VK-only wheel guards and renders premium frame', async () => {
-  const client = await read('scripts/apply-red-cosmos-v2-client-final.mjs');
+  const [client, fragment] = await Promise.all([
+    read('scripts/apply-red-cosmos-v2-client-final.mjs'),
+    read('scripts/fragments/red-cosmos-shop-client.fragment.txt')
+  ]);
   for (const name of ['renderWheelStatus', 'startWheelCountdown', 'loadWheelStatus', 'spinWheel', 'openWheel']) {
     assert.match(client, new RegExp(name));
   }
   assert.match(client, /premium-smiling-fuck/);
-  assert.match(client, /\/api\/shop\/buy/);
-  assert.match(client, /Рамка куплена и сохранена в профиле/);
+  assert.match(fragment, /\/api\/shop\/buy/);
+  assert.match(fragment, /Рамка куплена и сохранена в профиле/);
 });
 
 test('RED COSMOS UI reserves visible layout space for back controls and modal stacking', async () => {
