@@ -46,6 +46,33 @@ async function createBackup(client) {
   if (!row.users_ok || !row.wallets_ok || !row.tx_ok || !row.meta_ok) throw new Error('RED COSMOS DB backup verification failed');
 }
 
+async function reconcileExistingTesterRecipients(client) {
+  const identities = await client.query(`
+    SELECT DISTINCT ui.user_id,ui.provider,ui.provider_user_id,ui.provider_username
+    FROM user_identities ui
+    JOIN users u ON u.id=ui.user_id
+    WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+      AND ui.provider IN ('telegram','vk')
+    ORDER BY ui.user_id,ui.provider
+  `);
+  const claims = [];
+  for (const identity of identities.rows) {
+    const result = await client.query(
+      'SELECT * FROM pivnik_claim_pending_special_achievement($1::bigint,$2::text,$3::text,$4::text)',
+      [identity.user_id, identity.provider, identity.provider_user_id, identity.provider_username || null]
+    );
+    const claim = result.rows[0];
+    if (claim?.claimed) {
+      claims.push({
+        handle: claim.recipient_handle,
+        userId: String(identity.user_id),
+        awardedBonus: Number(claim.awarded_bonus || 0)
+      });
+    }
+  }
+  return claims;
+}
+
 const client = await pool.connect();
 try {
   await client.query('BEGIN');
@@ -86,13 +113,22 @@ try {
       last_progress_check_at=NOW()
   `);
 
+  const testerClaims = await reconcileExistingTesterRecipients(client);
+
   await client.query('COMMIT');
   const audit = await pool.query(`SELECT
     (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL) AS users,
     (SELECT COUNT(*)::int FROM user_frames) AS frames,
     (SELECT COUNT(*)::int FROM user_achievements_v2 WHERE is_granted) AS achievements,
-    (SELECT COUNT(*)::int FROM transactions WHERE status='completed') AS transactions`);
-  console.log(JSON.stringify({ redCosmosDbPrepared: true, backupSchema: isProduction ? BACKUP_SCHEMA : null, ...audit.rows[0] }));
+    (SELECT COUNT(*)::int FROM transactions WHERE status='completed') AS transactions,
+    (SELECT COUNT(*)::int FROM pending_special_achievement_recipients WHERE granted_user_id IS NOT NULL) AS tester_recipients_granted,
+    (SELECT COUNT(*)::int FROM pending_special_achievement_recipients WHERE granted_user_id IS NULL) AS tester_recipients_pending`);
+  console.log(JSON.stringify({
+    redCosmosDbPrepared: true,
+    backupSchema: isProduction ? BACKUP_SCHEMA : null,
+    testerClaims,
+    ...audit.rows[0]
+  }));
 } catch (error) {
   try { await client.query('ROLLBACK'); } catch {}
   throw error;
