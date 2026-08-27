@@ -8,14 +8,15 @@ let source = await fs.readFile(appPath, 'utf8');
 const MARKER = '// RED_COSMOS_V2_FINAL_CLIENT_RUNTIME';
 
 function replaceOptional(from, to) {
-  if (source.includes(to)) return;
   if (source.includes(from)) source = source.replace(from, to);
 }
 
 function replaceRequired(from, to, label) {
-  if (source.includes(to)) return;
-  if (!source.includes(from)) throw new Error(`RED COSMOS v2 client: missing ${label}`);
-  source = source.replace(from, to);
+  if (source.includes(from)) {
+    source = source.replace(from, to);
+    return;
+  }
+  if (!source.includes(to)) throw new Error(`RED COSMOS v2 client: missing ${label}`);
 }
 
 if (!source.includes(MARKER)) {
@@ -92,22 +93,22 @@ async function buyShopItem(code, button = null) {
 function renderShopCatalog() {
   const clientList = $('#shopCatalog');
   if (clientList) {
-    clientList.className = \`shop-catalog\${state.catalog.length ? '' : ' empty-state'}\`;
+    clientList.className = `shop-catalog${state.catalog.length ? '' : ' empty-state'}`;
     if (!state.catalog.length) {
       clientList.innerHTML = 'Каталог пока пуст';
     } else {
-      clientList.innerHTML = \`<div class="red-cosmos-shop-grid">\${state.catalog.map((item) => {
+      clientList.innerHTML = `<div class="red-cosmos-shop-grid">${state.catalog.map((item) => {
         const owned = shopFrameOwned(item);
         const premium = item.code === 'frame-premium-smiling-fuck';
-        return \`<article class="shop-list-card \${premium ? 'v2-premium' : ''}">
-          \${premium ? '<span class="v2-premium-badge">★ PREMIUM</span>' : ''}
-          \${shopImageMarkup(item, 'shop-list-media')}
-          <div class="shop-list-copy"><b>\${escapeHtml(item.title)}</b><p>\${escapeHtml(item.subtitle)}</p><small>\${owned ? 'Навсегда в вашей коллекции' : 'Покупка за бонусы'}</small></div>
-          <div class="shop-list-price"><strong>\${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions">
-            <button class="secondary \${owned ? 'v2-owned-button' : ''}" data-shop-buy="\${escapeHtml(item.code)}" type="button" \${owned ? 'disabled' : ''}>\${escapeHtml(shopActionLabel(item))}</button>
+        return `<article class="shop-list-card ${premium ? 'v2-premium' : ''}">
+          ${premium ? '<span class="v2-premium-badge">★ PREMIUM</span>' : ''}
+          ${shopImageMarkup(item, 'shop-list-media')}
+          <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${owned ? 'Навсегда в вашей коллекции' : 'Покупка за бонусы'}</small></div>
+          <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions">
+            <button class="secondary ${owned ? 'v2-owned-button' : ''}" data-shop-buy="${escapeHtml(item.code)}" type="button" ${owned ? 'disabled' : ''}>${escapeHtml(shopActionLabel(item))}</button>
           </div></div>
-        </article>\`;
-      }).join('')}</div>\`;
+        </article>`;
+      }).join('')}</div>`;
       bindContentImageFallbacks(clientList);
       clientList.querySelectorAll('[data-shop-buy]').forEach((button) => button.addEventListener('click', () => buyShopItem(button.dataset.shopBuy, button).catch((error) => toast(error.message))));
     }
@@ -116,8 +117,8 @@ function renderShopCatalog() {
   if (staffList) {
     const activeItems = state.catalog.filter((item) => item.active && item.priceType === 'bonus' && Number(item.bonusPrice) > 0);
     if (!activeItems.some((item) => item.code === state.selectedShopItem)) state.selectedShopItem = activeItems[0]?.code || '';
-    staffList.className = \`staff-shop-items\${activeItems.length ? '' : ' empty-state'}\`;
-    staffList.innerHTML = activeItems.length ? activeItems.map((item) => \`<label class="staff-shop-item"><input type="radio" name="staff-shop-item" value="\${escapeHtml(item.code)}" \${item.code === state.selectedShopItem ? 'checked' : ''} /><span><b>\${escapeHtml(item.title)}</b><small>\${fmt(item.bonusPrice)} Б</small></span></label>\`).join('') : 'Активных товаров пока нет';
+    staffList.className = `staff-shop-items${activeItems.length ? '' : ' empty-state'}`;
+    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item"><input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} /><span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span></label>`).join('') : 'Активных товаров пока нет';
     staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => { state.selectedShopItem = input.value; updateCalculation(); }));
   }
 }
