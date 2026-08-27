@@ -31,13 +31,17 @@ test('v22 shop contains only the requested default catalog and permanent frame e
   assert.match(server, /profile-frame-middle-finger/);
 });
 
-test('v22 achievements keep deterministic progress and add manual top-tester award', async () => {
-  const achievements = await text('achievements.js');
-  assert.match(achievements, /code: 'raise-shields'/);
-  assert.match(achievements, /rewardBonus: 750/);
-  assert.match(achievements, /manualOnly: true/);
-  assert.match(achievements, /if \(definition\.manualOnly\) continue/);
+test('v22 keeps 18 deterministic countable achievements and exposes tester award separately', async () => {
+  const [achievements, server, gateway] = await Promise.all([
+    text('achievements.js'), text('server.js'), text('universal-server.js')
+  ]);
+  assert.doesNotMatch(achievements, /code: 'raise-shields'/);
   assert.match(achievements, /label: 'Получено'/);
+  assert.match(server, /code: 'raise-shields'/);
+  assert.match(server, /rewardBonus: 750/);
+  assert.match(server, /achievement_code = 'raise-shields'/);
+  assert.match(gateway, /code: 'raise-shields'/);
+  assert.match(gateway, /achievement_code = 'raise-shields'/);
 });
 
 test('v22 enables one wheel backend for VK and Telegram', async () => {
