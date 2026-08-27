@@ -1,0 +1,26 @@
+name: Pivnik v22 read-only data audit
+
+on:
+  push:
+    branches:
+      - audit/v22-readonly-20260827
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Read-only production data audit
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: node scripts/v22-railway-data-audit.mjs
