@@ -4,6 +4,12 @@ import { RAILWAY_PRODUCTION, productionUrl } from './railway-production-config.m
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const EXPECTED_COMMIT = String(process.env.RELEASE_COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
+const RED_COSMOS_SHOP_CODES = Object.freeze([
+  'frame-beer-mugs',
+  'frame-beer-bottles',
+  'frame-lights',
+  'frame-premium-smiling-fuck'
+]);
 
 if (!TOKEN) throw new Error('RAILWAY_API_TOKEN is required.');
 
@@ -32,7 +38,7 @@ async function graphql(query, variables = {}) {
     headers: {
       authorization: `Bearer ${TOKEN}`,
       'content-type': 'application/json',
-      'user-agent': 'pivnik-production-auth-smoke/1.0'
+      'user-agent': 'pivnik-production-auth-smoke/2.0'
     },
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(30_000)
@@ -103,20 +109,37 @@ function vkLaunchParams(appId, appSecret, userId) {
   return params.toString();
 }
 
-async function fetchJson(url, options = {}) {
+async function fetchJsonResponse(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     headers: {
       accept: 'application/json',
       'content-type': 'application/json',
-      'user-agent': 'pivnik-production-auth-smoke/1.0',
+      'user-agent': 'pivnik-production-auth-smoke/2.0',
       ...(options.headers || {})
     },
     signal: AbortSignal.timeout(15_000)
   });
   const body = await response.json().catch(() => ({}));
+  return { response, body };
+}
+
+async function fetchJson(url, options = {}) {
+  const { response, body } = await fetchJsonResponse(url, options);
   if (!response.ok) throw new Error(`${new URL(url).pathname}: HTTP ${response.status} ${body.error || ''}`.trim());
   return body;
+}
+
+async function assertStaticAsset(url) {
+  const response = await fetch(url, {
+    headers: { 'user-agent': 'pivnik-production-auth-smoke/2.0' },
+    signal: AbortSignal.timeout(15_000)
+  });
+  if (!response.ok) throw new Error(`${new URL(url).pathname}: HTTP ${response.status}`);
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (!contentType.includes('svg') && !contentType.includes('image')) {
+    throw new Error(`${new URL(url).pathname}: unexpected content-type ${contentType || 'missing'}`);
+  }
 }
 
 async function authenticateTwice({ platform, baseUrl, body }) {
@@ -156,13 +179,62 @@ async function authenticateTwice({ platform, baseUrl, body }) {
   if (!firstProfile.profile.qrShortCode) throw new Error(`${platform}: profile QR is missing.`);
 
   return {
-    authenticated: true,
-    repeatedLoginStable: true,
-    profileLoaded: true,
-    balanceStable: true,
-    qrLoaded: true,
-    achievementsLoaded: Array.isArray(firstProfile.profile.achievements),
-    achievementCount: firstProfile.profile.achievements.length
+    token: secondAuth.token,
+    profile: secondProfile.profile,
+    summary: {
+      authenticated: true,
+      repeatedLoginStable: true,
+      profileLoaded: true,
+      balanceStable: true,
+      qrLoaded: true,
+      achievementsLoaded: Array.isArray(firstProfile.profile.achievements),
+      achievementCount: firstProfile.profile.achievements.length
+    }
+  };
+}
+
+async function safeFeatureSmoke({ platform, baseUrl, token }) {
+  const authHeaders = { authorization: `Bearer ${token}` };
+  const catalog = await fetchJson(`${baseUrl}/api/shop/catalog`, { headers: authHeaders });
+  const items = Array.isArray(catalog.items) ? catalog.items : [];
+  const codes = items.map((item) => item.code).sort();
+  const expectedCodes = [...RED_COSMOS_SHOP_CODES].sort();
+  if (JSON.stringify(codes) !== JSON.stringify(expectedCodes)) {
+    throw new Error(`${platform}: shop catalog must contain exactly the four RED COSMOS frames; got ${codes.join(', ') || 'empty'}.`);
+  }
+  for (const item of items) {
+    if (!item.imageSrc || !String(item.imageSrc).startsWith('/assets/shop/')) {
+      throw new Error(`${platform}: shop item ${item.code} has no local artwork.`);
+    }
+    await assertStaticAsset(`${baseUrl}${item.imageSrc}`);
+  }
+
+  const leaderboard = await fetchJson(`${baseUrl}/api/leaderboard/monthly`, { headers: authHeaders });
+  if (!Array.isArray(leaderboard.leaders)) {
+    throw new Error(`${platform}: leaderboard response has no leaders array.`);
+  }
+
+  // Canary accounts may intentionally have not accepted the user terms. The
+  // read-only smoke therefore accepts the consent gate, but a Telegram-only
+  // 404 on VK is always a release blocker.
+  const wheel = await fetchJsonResponse(`${baseUrl}/api/wheel/status`, { headers: authHeaders });
+  if (wheel.response.status === 404) {
+    throw new Error(`${platform}: wheel status returned 404; shared VK/TG wheel is not deployed.`);
+  }
+  if (!wheel.response.ok && ![401, 403].includes(wheel.response.status)) {
+    throw new Error(`${platform}: wheel status returned unexpected HTTP ${wheel.response.status} ${wheel.body.error || ''}`.trim());
+  }
+  if (wheel.response.ok && wheel.body.enabled !== true) {
+    throw new Error(`${platform}: wheel status did not report enabled=true.`);
+  }
+
+  return {
+    shopExactlyFourFrames: true,
+    shopArtworkLoaded: true,
+    leaderboardLoaded: true,
+    leaderboardCount: leaderboard.leaders.length,
+    wheelRouteAvailable: true,
+    wheelStatus: wheel.response.status
   };
 }
 
@@ -183,7 +255,7 @@ if (EXPECTED_COMMIT && readiness.some((item) => item.releaseCommit !== EXPECTED_
   throw new Error('Production auth smoke reached a different release commit.');
 }
 
-const [telegram, vk] = await Promise.all([
+const [telegramSession, vkSession] = await Promise.all([
   authenticateTwice({
     platform: 'telegram',
     baseUrl: telegramUrl,
@@ -211,12 +283,18 @@ const [telegram, vk] = await Promise.all([
   })
 ]);
 
+const [telegramFeatures, vkFeatures] = await Promise.all([
+  safeFeatureSmoke({ platform: 'telegram', baseUrl: telegramUrl, token: telegramSession.token }),
+  safeFeatureSmoke({ platform: 'vk', baseUrl: vkUrl, token: vkSession.token })
+]);
+
 console.log(JSON.stringify({
   ok: true,
   releaseCommit: readiness[0].releaseCommit,
   databaseFingerprint: readiness[0].databaseFingerprint,
-  telegram,
-  vk,
+  telegram: { ...telegramSession.summary, ...telegramFeatures },
+  vk: { ...vkSession.summary, ...vkFeatures },
   productionDataCreated: false,
-  bonusOperationsCreated: false
+  bonusOperationsCreated: false,
+  mutatingFeatureOperationsCreated: false
 }, null, 2));
