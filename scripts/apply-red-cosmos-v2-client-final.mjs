@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appPath = path.join(root, 'app.js');
+const shopFragmentPath = path.join(root, 'scripts', 'fragments', 'red-cosmos-shop-client.fragment.txt');
 let source = await fs.readFile(appPath, 'utf8');
 const MARKER = '// RED_COSMOS_V2_FINAL_CLIENT_RUNTIME';
 
@@ -52,78 +53,10 @@ if (!source.includes(MARKER)) {
   const shopPattern = /function shopActionLabel\(item = \{\}\) \{[\s\S]*?\n\}\n\nfunction renderShopCatalog\(\) \{[\s\S]*?\n\}\n\nasync function loadCatalog/;
   if (!source.includes('RED_COSMOS_SHOP_FRAMES')) {
     if (!shopPattern.test(source)) throw new Error('RED COSMOS v2 client: shop renderer not found');
-    const replacement = `const RED_COSMOS_SHOP_FRAMES = Object.freeze({
-  'frame-beer-mugs': 'beer-mugs',
-  'frame-beer-bottles': 'beer-bottles',
-  'frame-lights': 'lights',
-  'frame-premium-smiling-fuck': 'premium-smiling-fuck'
-});
-
-function shopFrameOwned(item = {}) {
-  const frameId = RED_COSMOS_SHOP_FRAMES[item.code];
-  if (!frameId) return false;
-  return (state.profile?.availableFrames || []).some((frame) => frame.code === frameId);
-}
-
-function shopActionLabel(item = {}) {
-  return shopFrameOwned(item) ? '✓ Куплено' : 'Купить';
-}
-
-async function buyShopItem(code, button = null) {
-  const item = findShopItem(code);
-  if (!item) throw new Error('Товар не найден.');
-  if (shopFrameOwned(item)) return toast('✓ Эта рамка уже куплена.');
-  if (button) button.disabled = true;
-  try {
-    const data = await api('/api/shop/buy', {
-      method: 'POST',
-      body: JSON.stringify({ itemCode: code, requestKey: requestId() }),
-      retries: 1
-    });
-    if (data.profile) state.profile = data.profile;
-    renderProfile();
-    await loadCatalog();
-    toast('Рамка куплена и сохранена в профиле');
-  } finally {
-    const refreshed = findShopItem(code);
-    if (button && !shopFrameOwned(refreshed || item)) button.disabled = false;
-  }
-}
-
-function renderShopCatalog() {
-  const clientList = $('#shopCatalog');
-  if (clientList) {
-    clientList.className = `shop-catalog${state.catalog.length ? '' : ' empty-state'}`;
-    if (!state.catalog.length) {
-      clientList.innerHTML = 'Каталог пока пуст';
-    } else {
-      clientList.innerHTML = `<div class="red-cosmos-shop-grid">${state.catalog.map((item) => {
-        const owned = shopFrameOwned(item);
-        const premium = item.code === 'frame-premium-smiling-fuck';
-        return `<article class="shop-list-card ${premium ? 'v2-premium' : ''}">
-          ${premium ? '<span class="v2-premium-badge">★ PREMIUM</span>' : ''}
-          ${shopImageMarkup(item, 'shop-list-media')}
-          <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${owned ? 'Навсегда в вашей коллекции' : 'Покупка за бонусы'}</small></div>
-          <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions">
-            <button class="secondary ${owned ? 'v2-owned-button' : ''}" data-shop-buy="${escapeHtml(item.code)}" type="button" ${owned ? 'disabled' : ''}>${escapeHtml(shopActionLabel(item))}</button>
-          </div></div>
-        </article>`;
-      }).join('')}</div>`;
-      bindContentImageFallbacks(clientList);
-      clientList.querySelectorAll('[data-shop-buy]').forEach((button) => button.addEventListener('click', () => buyShopItem(button.dataset.shopBuy, button).catch((error) => toast(error.message))));
+    const replacement = (await fs.readFile(shopFragmentPath, 'utf8')).trimEnd();
+    if (!replacement.includes('RED_COSMOS_SHOP_FRAMES') || !replacement.endsWith('async function loadCatalog')) {
+      throw new Error('RED COSMOS v2 client: shop fragment is invalid');
     }
-  }
-  const staffList = $('#staffShopItems');
-  if (staffList) {
-    const activeItems = state.catalog.filter((item) => item.active && item.priceType === 'bonus' && Number(item.bonusPrice) > 0);
-    if (!activeItems.some((item) => item.code === state.selectedShopItem)) state.selectedShopItem = activeItems[0]?.code || '';
-    staffList.className = `staff-shop-items${activeItems.length ? '' : ' empty-state'}`;
-    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item"><input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} /><span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span></label>`).join('') : 'Активных товаров пока нет';
-    staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => { state.selectedShopItem = input.value; updateCalculation(); }));
-  }
-}
-
-async function loadCatalog`;
     source = source.replace(shopPattern, replacement);
   }
 
