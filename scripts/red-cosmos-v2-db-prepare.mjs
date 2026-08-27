@@ -7,8 +7,9 @@ const { Pool } = pg;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const databaseUrl = String(process.env.DATABASE_URL || '').trim();
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
+const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';
-const TESTER_HANDLES = Object.freeze(['drolted', 'distraktor', 'ksemar']);
 
 if (!databaseUrl) {
   if (isProduction) throw new Error('RED COSMOS DB prepare: DATABASE_URL is required in production');
@@ -41,17 +42,6 @@ async function connectWithRetry() {
     }
   }
   throw lastError || new Error('RED COSMOS DB connection failed');
-}
-
-async function tableExists(client, schema, table) {
-  const result = await client.query(
-    `SELECT EXISTS(
-       SELECT 1 FROM information_schema.tables
-       WHERE table_schema=$1 AND table_name=$2
-     ) AS ok`,
-    [schema, table]
-  );
-  return Boolean(result.rows[0]?.ok);
 }
 
 async function createBackup(client) {
@@ -92,107 +82,75 @@ async function reconcileExistingTesterRecipients(client) {
       [identity.user_id, identity.provider, identity.provider_user_id, identity.provider_username || null]
     );
     const claim = result.rows[0];
-    if (claim?.claimed) {
-      claims.push({
-        handle: claim.recipient_handle,
-        userId: String(identity.user_id),
-        awardedBonus: Number(claim.awarded_bonus || 0)
-      });
-    }
+    if (claim?.claimed) claims.push({ handle: claim.recipient_handle, userId: String(identity.user_id), awardedBonus: Number(claim.awarded_bonus || 0) });
   }
   return claims;
 }
 
-async function safeCount(client, schema, table, where = '') {
-  if (!(await tableExists(client, schema, table))) return null;
-  const result = await client.query(`SELECT COUNT(*)::int AS count FROM ${qi(schema)}.${qi(table)} ${where}`);
-  return Number(result.rows[0]?.count || 0);
-}
+async function ensureOwnerCreator(client) {
+  const result = await client.query(`
+    SELECT DISTINCT u.id
+    FROM users u
+    LEFT JOIN user_identities ui ON ui.user_id=u.id
+    WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+      AND (
+        ($1::text <> '' AND u.telegram_id::text=$1::text)
+        OR ($2::text <> '' AND ui.provider='vk' AND ui.provider_user_id=$2::text)
+      )
+    ORDER BY u.id
+  `, [ownerTelegramId, ownerVkId]);
 
-async function safeNumber(client, schema, table, expression) {
-  if (!(await tableExists(client, schema, table))) return null;
-  const result = await client.query(`SELECT COALESCE(${expression},0)::text AS value FROM ${qi(schema)}.${qi(table)}`);
-  const number = Number(result.rows[0]?.value || 0);
-  return Number.isFinite(number) ? number : null;
-}
-
-async function schemaTesterMatches(client, schema) {
-  const matches = new Set();
-  if (await tableExists(client, schema, 'users')) {
-    const columns = await client.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='users'`,
-      [schema]
+  for (const row of result.rows) {
+    await client.query(
+      `INSERT INTO reward_grants(code,user_id,amount,source,achievement_code,achievement_period)
+       VALUES ('achievement:creator',$1::bigint,0,'achievement','creator',NULL)
+       ON CONFLICT (code,user_id) DO NOTHING`,
+      [row.id]
     );
-    if (columns.rows.some((row) => row.column_name === 'username')) {
-      const result = await client.query(
-        `SELECT LOWER(REGEXP_REPLACE(COALESCE(username,''),'^@+','')) AS handle
-         FROM ${qi(schema)}.users
-         WHERE LOWER(REGEXP_REPLACE(COALESCE(username,''),'^@+','')) = ANY($1::text[])`,
-        [TESTER_HANDLES]
-      );
-      result.rows.forEach((row) => matches.add(row.handle));
-    }
-  }
-  if (await tableExists(client, schema, 'user_identities')) {
-    const result = await client.query(
-      `SELECT LOWER(REGEXP_REPLACE(COALESCE(provider_username,''),'^@+','')) AS handle
-       FROM ${qi(schema)}.user_identities
-       WHERE LOWER(REGEXP_REPLACE(COALESCE(provider_username,''),'^@+','')) = ANY($1::text[])`,
-      [TESTER_HANDLES]
+    await client.query(
+      `INSERT INTO user_achievements_v2(
+         user_id,achievement_code,is_granted,granted_at,current_progress,required_progress,
+         last_progress_check_at,first_unlock_notification_sent_at
+       ) VALUES ($1::bigint,'creator',TRUE,NOW(),1,1,NOW(),NOW())
+       ON CONFLICT(user_id,achievement_code) DO UPDATE SET
+         is_granted=TRUE,
+         granted_at=COALESCE(user_achievements_v2.granted_at,EXCLUDED.granted_at),
+         current_progress=1,
+         required_progress=1,
+         last_progress_check_at=NOW()`,
+      [row.id]
     );
-    result.rows.forEach((row) => matches.add(row.handle));
+    await client.query(
+      `UPDATE users SET unlimited_bonus=TRUE, profile_frame='money', updated_at=NOW()
+       WHERE id=$1::bigint`,
+      [row.id]
+    );
   }
-  return [...matches].sort();
+  return result.rows.map((row) => String(row.id));
 }
 
-async function inspectHistoricalSchemas(client) {
-  const schemaRows = await client.query(`
-    SELECT schema_name
-    FROM information_schema.schemata
-    WHERE schema_name NOT IN ('pg_catalog','information_schema','pg_toast')
-      AND schema_name NOT LIKE 'pg_temp_%'
-      AND schema_name NOT LIKE 'pg_toast_temp_%'
-    ORDER BY schema_name
+// Temporary read-only diagnostic: only four current VK identities exist. This is
+// logged to determine which exact provider id belongs to the owner, then OWNER_VK_ID
+// can be configured without granting privileges to any unrelated account.
+async function ownerVkCandidates(client) {
+  if (ownerVkId) return [];
+  const result = await client.query(`
+    SELECT u.id AS user_id,u.first_name,u.last_name,u.role,u.unlimited_bonus,
+           ui.provider_user_id,ui.provider_username
+    FROM user_identities ui
+    JOIN users u ON u.id=ui.user_id
+    WHERE ui.provider='vk' AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+    ORDER BY u.updated_at DESC,u.id DESC
+    LIMIT 10
   `);
-  const summaries = [];
-  for (const { schema_name: schema } of schemaRows.rows) {
-    const users = await safeCount(client, schema, 'users');
-    const transactions = await safeCount(client, schema, 'transactions');
-    const completedTransactions = await safeCount(client, schema, 'transactions', "WHERE status='completed'");
-    const wallets = await safeCount(client, schema, 'wallets');
-    const walletBalance = await safeNumber(client, schema, 'wallets', 'SUM(balance)');
-    const beerRows = await safeCount(client, schema, 'beer_loyalty');
-    const paidBeerMl = await safeNumber(client, schema, 'beer_loyalty', 'SUM(paid_ml_total)');
-    const rewardGrants = await safeCount(client, schema, 'reward_grants');
-    const betaGrants = await safeCount(client, schema, 'beta_grants');
-    const identities = await safeCount(client, schema, 'user_identities');
-    const testerHandles = await schemaTesterMatches(client, schema);
-    if ([users, transactions, wallets, beerRows, rewardGrants, betaGrants, identities].some((value) => value !== null)) {
-      summaries.push({
-        schema,
-        users,
-        wallets,
-        walletBalance,
-        transactions,
-        completedTransactions,
-        beerRows,
-        paidBeerMl,
-        rewardGrants,
-        betaGrants,
-        identities,
-        testerHandles
-      });
-    }
-  }
-  const publicSummary = summaries.find((item) => item.schema === 'public') || null;
-  const richerSchemas = publicSummary
-    ? summaries.filter((item) => item.schema !== 'public' && (
-      Number(item.users || 0) > Number(publicSummary.users || 0)
-      || Number(item.transactions || 0) > Number(publicSummary.transactions || 0)
-      || Number(item.paidBeerMl || 0) > Number(publicSummary.paidBeerMl || 0)
-    )).map((item) => item.schema)
-    : [];
-  return { summaries, richerSchemas };
+  return result.rows.map((row) => ({
+    userId: String(row.user_id),
+    providerUserId: String(row.provider_user_id),
+    providerUsername: row.provider_username || null,
+    name: [row.first_name,row.last_name].filter(Boolean).join(' '),
+    role: row.role,
+    unlimitedBonus: Boolean(row.unlimited_bonus)
+  }));
 }
 
 const client = await connectWithRetry();
@@ -202,7 +160,6 @@ try {
   const migration = await fs.readFile(path.join(root, 'migrations', '007_red_cosmos_v2.sql'), 'utf8');
   await client.query(migration);
 
-  // Preserve all v22 frame entitlements in the permanent v2 ownership table.
   await client.query(`
     INSERT INTO user_frames(user_id,frame_id,acquired_source,acquired_at,restored_from_legacy)
     SELECT bg.user_id,
@@ -220,7 +177,6 @@ try {
     ON CONFLICT(user_id,frame_id) DO NOTHING
   `);
 
-  // Existing immutable achievement grants seed the v2 state without changing rewards.
   await client.query(`
     INSERT INTO user_achievements_v2(user_id,achievement_code,is_granted,granted_at,current_progress,required_progress,last_progress_check_at,first_unlock_notification_sent_at)
     SELECT rg.user_id,rg.achievement_code,TRUE,MIN(rg.created_at),1,1,NOW(),MIN(rg.created_at)
@@ -235,22 +191,23 @@ try {
       last_progress_check_at=NOW()
   `);
 
+  const ownerCreatorUserIds = await ensureOwnerCreator(client);
   const testerClaims = await reconcileExistingTesterRecipients(client);
+  const vkCandidates = await ownerVkCandidates(client);
 
   await client.query('COMMIT');
   const audit = await client.query(`SELECT
-    (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL) AS users,
     (SELECT COUNT(*)::int FROM user_frames) AS frames,
     (SELECT COUNT(*)::int FROM user_achievements_v2 WHERE is_granted) AS achievements,
-    (SELECT COUNT(*)::int FROM transactions WHERE status='completed') AS transactions,
     (SELECT COUNT(*)::int FROM pending_special_achievement_recipients WHERE granted_user_id IS NOT NULL) AS tester_recipients_granted,
     (SELECT COUNT(*)::int FROM pending_special_achievement_recipients WHERE granted_user_id IS NULL) AS tester_recipients_pending`);
-  const historicalAudit = await inspectHistoricalSchemas(client);
   console.log(JSON.stringify({
     redCosmosDbPrepared: true,
     backupSchema: isProduction ? BACKUP_SCHEMA : null,
+    ownerCreatorUserIds,
+    ownerVkConfigured: Boolean(ownerVkId),
+    ownerVkCandidates: vkCandidates,
     testerClaims,
-    historicalAudit,
     ...audit.rows[0]
   }));
 } catch (error) {
