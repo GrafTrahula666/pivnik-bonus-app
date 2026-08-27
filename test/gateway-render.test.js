@@ -6,7 +6,7 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.SESSION_SECRET = 'render-test-session-secret-only';
 
-test('Gateway render: / and /vk load the correct platform scripts and loader fix', async () => {
+test('Gateway render: / and /vk load the correct platform scripts and shared wheel', async () => {
   const {
     documentSecurityHeaders,
     platformForDocumentRequest,
@@ -31,9 +31,9 @@ test('Gateway render: / and /vk load the correct platform scripts and loader fix
   assert.match(vk, /\/vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
-  assert.doesNotMatch(vk, /id="openWheelButton"/);
-  assert.doesNotMatch(vk, /data-screen="wheel"/);
-  assert.doesNotMatch(vk, /id="wheelRulesModal"/);
+  assert.match(vk, /id="openWheelButton"/);
+  assert.match(vk, /data-screen="wheel"/);
+  assert.match(vk, /id="wheelRulesModal"/);
   assert.match(vk, /id="openShopButton"/);
   assert.match(vk, /id="openPromosButton"/);
 
@@ -128,6 +128,8 @@ test('VK Railway service serves VK document from the bare root URL', async () =>
     assert.match(html, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
     assert.match(html, /\/vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
     assert.doesNotMatch(html, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
+    assert.match(html, /id="openWheelButton"/);
+    assert.match(html, /data-screen="wheel"/);
   } finally {
     if (previous === undefined) delete process.env.PIVNIK_DOCUMENT_PLATFORM;
     else process.env.PIVNIK_DOCUMENT_PLATFORM = previous;
