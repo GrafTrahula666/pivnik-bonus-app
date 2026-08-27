@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-labelledby="t d">
+  <title id="t">Рамка Огоньки</title><desc id="d">Красно-космическая карточка с сияющими огоньками</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="72%"><stop stop-color="#5c123e"/><stop offset=".48" stop-color="#260618"/><stop offset="1" stop-color="#0d0002"/></radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff3154"/><stop offset=".45" stop-color="#ffd700"/><stop offset="1" stop-color="#ae4cff"/></linearGradient>
+  </defs>
+  <rect width="600" height="600" rx="54" fill="url(#bg)"/>
+  <circle cx="300" cy="292" r="198" fill="none" stroke="url(#ring)" stroke-width="8" filter="url(#glow)"/>
+  <circle cx="300" cy="292" r="155" fill="#120207" stroke="#8b0000" stroke-width="3"/>
+  <g filter="url(#glow)">
+    <circle cx="300" cy="94" r="12" fill="#ffd700"/><circle cx="415" cy="130" r="10" fill="#ff3154"/><circle cx="492" cy="226" r="13" fill="#ff8bc0"/>
+    <circle cx="492" cy="360" r="10" fill="#ffd700"/><circle cx="414" cy="455" r="13" fill="#ae4cff"/><circle cx="300" cy="490" r="10" fill="#ff3154"/>
+    <circle cx="184" cy="455" r="13" fill="#ffd700"/><circle cx="108" cy="360" r="10" fill="#ae4cff"/><circle cx="108" cy="226" r="13" fill="#ff3154"/><circle cx="185" cy="130" r="10" fill="#ffd700"/>
+  </g>
+  <g fill="#fff" opacity=".8"><circle cx="62" cy="92" r="2"/><circle cx="530" cy="76" r="2"/><circle cx="545" cy="464" r="1.5"/><circle cx="82" cy="492" r="2"/></g>
+  <text x="300" y="300" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="56" font-weight="900">ОГОНЬКИ</text>
+  <text x="300" y="350" text-anchor="middle" fill="#ffd86a" font-family="Arial,sans-serif" font-size="22">LIGHT FRAME</text>
+  <text x="300" y="548" text-anchor="middle" fill="#eacbd5" font-family="Arial,sans-serif" font-size="22">RED COSMOS FRAME</text>
+</svg>
