@@ -26,47 +26,42 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('app.js')
           source = path.read_text(encoding='utf-8')
+          start = source.index('function applyDesign(design) {')
+          end = source.index('\nfunction renderBeer(', start)
+          block = source[start:end]
 
-          old_style = """  const root = document.documentElement;
-          const colors = design.colors || {};
-          root.style.setProperty('--bg', colors.background || '#0e0c0a');
-          root.style.setProperty('--header', colors.header || '#15110e');
-          root.style.setProperty('--surface', colors.surface || '#1c1612');
-          root.style.setProperty('--card', colors.card || '#231a14');
-          root.style.setProperty('--text', colors.text || '#f7eee5');
-          root.style.setProperty('--muted', colors.muted || '#a99580');
-          root.style.setProperty('--gold', colors.accent || '#e9a83b');
-          root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
-          root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
-          """
-          new_style = """  // Keep server-side design data for texts and section visibility, while styles.css
-          // remains the single source of truth for the Luxury VIP Space visual system.
-          const platformUiColors = {
-            background: '#050609',
-            header: '#06070a'
-          };
-          """
+          style_pattern = re.compile(
+              r"\n\s*const root = document\.documentElement;"
+              r"\n\s*const colors = design\.colors \|\| \{\};"
+              r"(?:\n\s*root\.style\.setProperty\([^\n]+\);){9}"
+          )
+          style_replacement = """
+            // Keep server-side design data for texts and section visibility, while styles.css
+            // remains the single source of truth for the Luxury VIP Space visual system.
+            const platformUiColors = {
+              background: '#050609',
+              header: '#06070a'
+            };"""
 
-          old_bridge = """  try {
-            tg?.setHeaderColor(colors.header || '#15110e');
-            tg?.setBackgroundColor(colors.background || '#0e0c0a');
-          } catch (_) {}
-          """
-          new_bridge = """  try {
-            tg?.setHeaderColor(platformUiColors.header);
-            tg?.setBackgroundColor(platformUiColors.background);
-          } catch (_) {}
-          """
+          block, style_count = style_pattern.subn(style_replacement, block, count=1)
+          if style_count != 1:
+              raise SystemExit(f'Expected one legacy style block in applyDesign(), replaced {style_count}')
 
-          if source.count(old_style) != 1:
-              raise SystemExit(f'Expected exactly one legacy style block, found {source.count(old_style)}')
-          if source.count(old_bridge) != 1:
-              raise SystemExit(f'Expected exactly one legacy bridge color block, found {source.count(old_bridge)}')
+          bridge_pattern = re.compile(
+              r"tg\?\.setHeaderColor\(colors\.header \|\| '#15110e'\);"
+              r"\n\s*tg\?\.setBackgroundColor\(colors\.background \|\| '#0e0c0a'\);"
+          )
+          bridge_replacement = """tg?.setHeaderColor(platformUiColors.header);
+              tg?.setBackgroundColor(platformUiColors.background);"""
+          block, bridge_count = bridge_pattern.subn(bridge_replacement, block, count=1)
+          if bridge_count != 1:
+              raise SystemExit(f'Expected one legacy bridge color block in applyDesign(), replaced {bridge_count}')
 
-          source = source.replace(old_style, new_style, 1).replace(old_bridge, new_bridge, 1)
+          source = source[:start] + block + source[end:]
           path.write_text(source, encoding='utf-8')
           PY
 
@@ -91,7 +86,6 @@ jobs:
             assert.match(source, /state\.design = deepClone\(design\)/, 'server design data must still be stored');
             assert.match(source, /Object\.entries\(design\.sections \|\| \{\}\)/, 'section visibility must still be applied');
             assert.match(source, /design\.texts\?\.brand/, 'server-managed copy must still be applied');
-
             assert.doesNotMatch(source, /root\.style\.setProperty\(/, 'server payload must not rewrite CSS custom properties');
             assert.doesNotMatch(source, /const colors = design\.colors/, 'applyDesign must not consume legacy server colors');
             assert.match(source, /background: '#050609'/, 'fixed Luxury background must be preserved for platform chrome');
