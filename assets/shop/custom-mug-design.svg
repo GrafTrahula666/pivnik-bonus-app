@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-labelledby="t d">
+  <title id="t">Кружка с индивидуальным дизайном</title><desc id="d">Премиальная кружка Пивника с персональным дизайном</desc>
+  <defs>
+    <radialGradient id="bg" cx="70%" cy="20%" r="92%"><stop stop-color="#571043"/><stop offset=".5" stop-color="#250716"/><stop offset="1" stop-color="#0d0002"/></radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".22" stop-color="#b9bbc0"/><stop offset=".48" stop-color="#f6f6f6"/><stop offset=".75" stop-color="#8c8e94"/><stop offset="1" stop-color="#e8e8ea"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="600" height="600" rx="54" fill="url(#bg)"/>
+  <g fill="#fff" opacity=".6"><circle cx="68" cy="92" r="2"/><circle cx="510" cy="104" r="2"/><circle cx="525" cy="410" r="1.5"/><circle cx="102" cy="472" r="2"/></g>
+  <path d="M155 155h265l-22 271c-3 35-30 60-65 60H241c-35 0-62-25-65-60z" fill="url(#metal)" stroke="#ffd700" stroke-width="5" filter="url(#glow)"/>
+  <path d="M417 207h42c70 0 76 132 5 147h-53" fill="none" stroke="url(#metal)" stroke-width="30" stroke-linecap="round"/>
+  <rect x="206" y="234" width="168" height="142" rx="22" fill="#170207" stroke="#c41e3a" stroke-width="4"/>
+  <path d="M290 256l37 66h-74z" fill="none" stroke="#ffd700" stroke-width="4"/><path d="M268 311c12-19 33-19 45 0-12 18-33 18-45 0z" fill="none" stroke="#fff" stroke-width="3"/><circle cx="290" cy="311" r="7" fill="#c41e3a"/>
+  <text x="290" y="354" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="22" font-weight="900">ТВОЙ ДИЗАЙН</text>
+  <text x="300" y="535" text-anchor="middle" fill="#ffd700" font-family="Arial,sans-serif" font-size="25" font-weight="900">ИНДИВИДУАЛЬНАЯ КРУЖКА</text>
+</svg>
