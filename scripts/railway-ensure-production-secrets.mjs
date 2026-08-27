@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
-const PROJECT_ID = '9a940d7a-b0b0-4893-a90d-1b0a8b6850d5';
-const ENVIRONMENT_ID = 'aa461df9-1dbb-4000-8906-f13dd8008a6f';
+const PROJECT_ID = RAILWAY_PRODUCTION.projectId;
+const ENVIRONMENT_ID = RAILWAY_PRODUCTION.environmentId;
 const SERVICES = Object.freeze({
-  telegram: '4c4d5f11-e3af-4ffb-8ae9-21a8854b6c90',
-  vk: '61352beb-78fe-4293-939c-c1f93294b204'
+  telegram: RAILWAY_PRODUCTION.services.telegram,
+  vk: RAILWAY_PRODUCTION.services.vk
 });
 
 if (!TOKEN) throw new Error('RAILWAY_API_TOKEN is required.');
