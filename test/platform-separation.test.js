@@ -13,11 +13,16 @@ const [pkgText, gateway, accountLink, app, workflow] = await Promise.all([
 
 const pkg = JSON.parse(pkgText);
 
-test('release materialization verifies platform separation, safety and v22 fail-closed patches', () => {
+test('release materialization verifies platform separation and restart-safe v22 patches', () => {
   assert.match(pkg.scripts.materialize, /^node scripts\/materialize-runtime-patches\.mjs/);
   assert.match(pkg.scripts.materialize, /apply-v22-preflight-fixes\.mjs/);
-  assert.match(pkg.scripts.materialize, /apply-v22-product-rebuild\.mjs/);
-  assert.match(pkg.scripts.materialize, /apply-v22-special-achievement\.mjs/);
+  assert.match(pkg.scripts.materialize, /apply-v22-runtime\.mjs/);
+  assert.match(pkg.scripts.materialize, /apply-v22-production-polish\.mjs/);
+  assert.doesNotMatch(pkg.scripts.materialize, /apply-v22-product-rebuild\.mjs/);
+  assert.match(pkg.scripts.check, /node --check scripts\/apply-v22-product-rebuild\.mjs/);
+  assert.match(pkg.scripts.check, /node --check scripts\/apply-v22-special-achievement\.mjs/);
+  assert.match(pkg.scripts.check, /node --check scripts\/apply-v22-runtime\.mjs/);
+  assert.match(pkg.scripts.check, /node --check scripts\/apply-v22-production-polish\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-separation\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-separation-safety\.mjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/apply-platform-profile-refresh\.mjs/);
