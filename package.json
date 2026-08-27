@@ -23,7 +23,7 @@
     "verify:platform-separation": "node scripts/verify-platform-separation-production.mjs",
     "verify:auth-smoke": "node scripts/railway-production-auth-smoke.mjs",
     "audit:v22": "node scripts/v22-data-audit-and-repair.mjs",
-    "repair:anna-consent": "node scripts/railway-repair-anna-consent.mjs"
+    "repair:anna-consent": "node scripts/railway-repair-anna-frame-and-consent.mjs"
   },
   "dependencies": {
     "@vkontakte/vk-bridge": "2.15.11",
