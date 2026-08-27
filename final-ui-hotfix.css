@@ -1,0 +1,103 @@
+/* PIVNIK FINAL UI HOTFIX 2026-08-27
+   Last loaded layer. Mobile navigation is deliberately simple and touch-safe. */
+
+.bottom-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  pointer-events: auto !important;
+  z-index: 5000 !important;
+  isolation: isolate;
+}
+.bottom-nav button,
+.bottom-nav [data-target],
+#navQrButton {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
+}
+.bottom-nav button:not(.qr-nav-button) {
+  min-height: 52px;
+}
+.qr-nav-button {
+  z-index: 4 !important;
+}
+
+.final-back-button,
+.modal-sheet > .close.final-back-button,
+.service-back.final-back-button,
+.wheel-back.final-back-button {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 116px !important;
+  min-height: 46px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  margin: max(6px, env(safe-area-inset-top)) 0 14px !important;
+  padding: 10px 16px !important;
+  border: 2px solid rgba(255, 215, 0, .72) !important;
+  border-radius: 14px !important;
+  background: linear-gradient(135deg, rgba(196,30,58,.96), rgba(75,4,29,.96)) !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  box-shadow: 0 7px 22px rgba(0,0,0,.28) !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  z-index: 40 !important;
+}
+.final-screen-back {
+  align-self: flex-start;
+  margin-left: max(2px, env(safe-area-inset-left)) !important;
+}
+.modal-sheet > .close.final-back-button {
+  align-self: flex-start !important;
+}
+
+/* VK must show the QR itself, not a reusable personal short-code UI. */
+.platform-vk #qrToken,
+.platform-vk #copyQrCode,
+.platform-vk .copy-code,
+.platform-vk .qr-warning {
+  display: none !important;
+}
+
+/* Nothing decorative may intercept taps. */
+.app-shell::before,
+.app-shell::after,
+body::before,
+body::after,
+.hero-glow,
+.cosmic-star-field {
+  pointer-events: none !important;
+}
+
+/* Explicitly keep active pages interactive. */
+.screen.active,
+.screen.active button,
+.screen.active a,
+.modal.open,
+.modal.open button,
+.modal.open a {
+  pointer-events: auto;
+}
+
+/* Owner privilege is visually explicit instead of incorrectly looking like 5%. */
+.owner-unlimited-ui #bonusPercent,
+.owner-unlimited-ui #profileStatus {
+  color: #ffd700 !important;
+}
+
+@media (max-width: 360px) {
+  .bottom-nav { padding-inline: 5px !important; }
+  .bottom-nav button { font-size: 9px !important; }
+  .bottom-nav button span { font-size: 20px !important; }
+  .final-back-button { min-width: 104px !important; padding-inline: 12px !important; }
+}
