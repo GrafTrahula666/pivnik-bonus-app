@@ -6,6 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serverPath = path.join(root, 'server.js');
 const appPath = path.join(root, 'app.js');
 const indexPath = path.join(root, 'index.html');
+const finalUiPath = path.join(root, 'final-ui-hotfix.js');
 const VERSION = '2.0.3-final-ui';
 const SERVER_MARKER = '// PIVNIK_FINAL_ROOT_BROWSER_ASSETS_20260827';
 const APP_MARKER = '// PIVNIK_FINAL_WHEEL_UI_20260827';
@@ -75,6 +76,13 @@ const forbidden = [
 ];
 for (const token of forbidden) if (app.includes(token)) throw new Error(`Final UI hotfix: VK wheel guard remains: ${token}`);
 await fs.writeFile(appPath, app, 'utf8');
+
+let finalUi = await fs.readFile(finalUiPath, 'utf8');
+finalUi = finalUi.replaceAll(
+  "button.textContent = '← Назад';",
+  "if (button.textContent !== '← Назад') button.textContent = '← Назад';"
+);
+await fs.writeFile(finalUiPath, finalUi, 'utf8');
 
 let index = await fs.readFile(indexPath, 'utf8');
 index = index
