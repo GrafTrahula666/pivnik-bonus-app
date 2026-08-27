@@ -7,9 +7,12 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const isVk = () => document.documentElement.classList.contains('platform-vk');
 
   function upgradeModalBackButtons() {
     $$('.modal-sheet > .close').forEach((button) => {
+      if (button.dataset.v22BackReady === '1') return;
+      button.dataset.v22BackReady = '1';
       button.classList.add('v22-modal-back');
       button.textContent = '← Назад';
       button.setAttribute('aria-label', 'Назад');
@@ -17,33 +20,38 @@
     });
   }
 
+  function attachHistoryBack(button) {
+    if (!button || button.dataset.v22HistoryBackReady === '1') return;
+    button.dataset.v22HistoryBackReady = '1';
+    button.addEventListener('click', (event) => {
+      if (typeof window.__PIVNIK_GO_BACK__ !== 'function') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.__PIVNIK_GO_BACK__();
+    }, true);
+  }
+
   function upgradeExistingBackButtons() {
     const wheelBack = $('#wheelBackButton');
-    if (wheelBack) {
+    if (wheelBack && wheelBack.dataset.v22BackReady !== '1') {
+      wheelBack.dataset.v22BackReady = '1';
       wheelBack.classList.remove('icon-btn');
       wheelBack.classList.add('v22-back-button');
       wheelBack.innerHTML = '<span aria-hidden="true">←</span><span>Назад</span>';
       wheelBack.setAttribute('aria-label', 'Назад');
-      wheelBack.addEventListener('click', (event) => {
-        if (typeof window.__PIVNIK_GO_BACK__ !== 'function') return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        window.__PIVNIK_GO_BACK__();
-      }, true);
     }
+    attachHistoryBack(wheelBack);
 
     ['#backToProfileFromAdmin', '#backToProfileFromStaff'].forEach((selector) => {
       const button = $(selector);
       if (!button) return;
-      button.classList.add('v22-back-button');
-      button.textContent = '← Назад';
-      button.setAttribute('aria-label', 'Назад');
-      button.addEventListener('click', (event) => {
-        if (typeof window.__PIVNIK_GO_BACK__ !== 'function') return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        window.__PIVNIK_GO_BACK__();
-      }, true);
+      if (button.dataset.v22BackReady !== '1') {
+        button.dataset.v22BackReady = '1';
+        button.classList.add('v22-back-button');
+        button.textContent = '← Назад';
+        button.setAttribute('aria-label', 'Назад');
+      }
+      attachHistoryBack(button);
     });
   }
 
@@ -119,30 +127,58 @@
     });
   }
 
-  function hideVkPermanentQrWarning() {
-    if (!document.documentElement.classList.contains('platform-vk')) return;
-    $('#qrModal .qr-warning')?.setAttribute('hidden', '');
+  function cleanVkQrCopy() {
+    if (!isVk()) return;
+    const modal = $('#qrModal');
+    if (modal && modal.dataset.v22VkQrReady !== '1') {
+      modal.dataset.v22VkQrReady = '1';
+      $('.qr-warning', modal)?.setAttribute('hidden', '');
+      const intro = $('p', modal);
+      if (intro) intro.textContent = 'Покажите QR сотруднику «Пивника» для начисления или списания.';
+    }
+
+    $$('.client-tip').forEach((tip) => {
+      if (/qr\s+постоян/i.test(tip.textContent || '')) tip.remove();
+    });
+
+    const help = $('#helpModal');
+    if (help && help.dataset.v22VkQrReady !== '1') {
+      help.dataset.v22VkQrReady = '1';
+      $$('p, li', help).forEach((node) => {
+        const text = node.textContent || '';
+        if (!/QR является постоянным/i.test(text)) return;
+        node.textContent = 'Показывайте свой QR сотруднику «Пивника» при начислении или списании.';
+      });
+    }
   }
 
   function enhanceLeaderboardPlatformLabels() {
     $$('#leaderboardList .leaderboard-row').forEach((row) => {
       const detail = $('div', row);
       const small = $('small', detail);
-      if (!detail || !small || $('.v22-platform-label', detail)) return;
+      if (!detail || !small || small.classList.contains('v22-platform-label')) return;
       const text = small.textContent?.trim() || '';
       if (!/^(VK|Telegram|VK · Telegram)$/.test(text)) return;
       small.classList.add('v22-platform-label');
     });
   }
 
+  let scheduled = false;
   function run() {
+    scheduled = false;
     upgradeModalBackButtons();
     upgradeExistingBackButtons();
     setupAdminTabs();
-    hideVkPermanentQrWarning();
+    cleanVkQrCopy();
     enhanceLeaderboardPlatformLabels();
   }
 
+  function scheduleRun() {
+    if (scheduled) return;
+    scheduled = true;
+    queueMicrotask(run);
+  }
+
   run();
-  new MutationObserver(run).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(scheduleRun).observe(document.body, { childList: true, subtree: true });
 })();
