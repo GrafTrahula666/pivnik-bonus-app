@@ -19,6 +19,28 @@ async function importFresh(relativePath, tag) {
 const [app, server, gateway] = await Promise.all([
   read('app.js'), read('server.js'), read('universal-server.js')
 ]);
+
+// A Railway healthcheck retry restarts npm in the same writable container.
+// Once RED COSMOS has already transformed the legacy v22 files, the old v22
+// version/frame assertions are no longer valid. Treat that state as the final
+// materialized target and verify RED COSMOS invariants instead of trying to
+// rebuild v22 over it again.
+const redCosmosAlreadyApplied = app.includes('RED_COSMOS_V2_THEME_LOCK')
+  || server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')
+  || gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME');
+
+if (redCosmosAlreadyApplied) {
+  const failures = [];
+  if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) failures.push('theme lock');
+  if (!server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')) failures.push('server runtime');
+  if (!gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME')) failures.push('gateway runtime');
+  if (gateway.includes('Колесо доступно только в Telegram.')) failures.push('VK wheel guard');
+  if (!gateway.includes('platformLabel')) failures.push('leaderboard platform');
+  if (failures.length) throw new Error(`RED COSMOS restart verification failed: ${failures.join(', ')}`);
+  console.log('RED COSMOS runtime already materialized; restart-safe legacy v22 skip.');
+  process.exit(0);
+}
+
 const productApplied = app.includes(`// ${PRODUCT_MARKER}:app`)
   && server.includes(`// ${PRODUCT_MARKER}:server`)
   && gateway.includes(`// ${PRODUCT_MARKER}:gateway`);
