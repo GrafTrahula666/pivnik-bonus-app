@@ -6,32 +6,22 @@ async function text(file) {
   return fs.readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 }
 
-test('RED COSMOS final shell replaces obsolete UI and cache-busts interaction clients', async () => {
-  const [index, css, ui, shell] = await Promise.all([
+test('RED COSMOS final shell replaces the obsolete v22 visual layer', async () => {
+  const [index, css, ui] = await Promise.all([
     text('index.html'),
     text('red-cosmos-v2.css'),
-    text('red-cosmos-v2.js'),
-    text('scripts/apply-red-cosmos-v2-shell-final.mjs')
+    text('red-cosmos-v2.js')
   ]);
-  assert.match(index, /\/red-cosmos-v2\.css\?v=2\.0\.1-interactions/);
-  assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.1-interactions/);
-  assert.match(index, /app\.js\?v=19\.1-telegram-clickfix-20260828/);
-  assert.doesNotMatch(index, /app\.js\?v=19\.1-telegram-wheel-v2/);
-  assert.doesNotMatch(index, /\/red-cosmos-v2\.(?:css|js)\?v=2\.0\.0/);
+  assert.match(index, /\/red-cosmos-v2\.css\?v=2\.0\.0/);
+  assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
   assert.doesNotMatch(index, /\/v22\.css/);
   assert.doesNotMatch(index, /\/v22-ui\.js/);
-  assert.match(shell, /ASSET_VERSION = '2\.0\.1-interactions'/);
-  assert.match(shell, /APP_ASSET_VERSION = '19\.1-telegram-clickfix-20260828'/);
-  assert.match(shell, /replace\(\/\\\/red-cosmos-v2\\\.css/);
-  assert.match(shell, /replace\(\/\\\/red-cosmos-v2\\\.js/);
-  assert.match(shell, /replace\(\/app\\\.js\\\?v=/);
   assert.match(css, /--primary-red:\s*#c41e3a/);
   assert.match(css, /\.achievement-tile\.locked/);
   assert.match(css, /\.achievement-tile\.earned/);
   assert.match(css, /\.red-cosmos-admin-tabs/);
   assert.match(ui, /← Назад/);
-  assert.match(ui, /installInteractionFallback/);
-  assert.doesNotMatch(ui, /installVkInteractionFallback/);
+  assert.match(ui, /installVkInteractionFallback/);
 });
 
 test('RED COSMOS client shop is exactly four permanent frame products with artwork', async () => {
@@ -94,7 +84,7 @@ test('one wheel backend is enabled for VK and Telegram', async () => {
   assert.doesNotMatch(app, /if \(!IS_VK\) jobs\.push\(loadWheelStatus\(\)\)/);
 });
 
-test('league exposes platform labels and shared interaction fallback covers core controls', async () => {
+test('league exposes platform labels and VK interaction fallback covers core controls', async () => {
   const [gateway, app, ui] = await Promise.all([
     text('universal-server.js'), text('app.js'), text('red-cosmos-v2.js')
   ]);
@@ -107,7 +97,6 @@ test('league exposes platform labels and shared interaction fallback covers core
   assert.match(ui, /\.bottom-nav \[data-target\]/);
   assert.match(ui, /forceOpenModal/);
   assert.match(ui, /forceScreen/);
-  assert.match(ui, /installInteractionFallback/);
 });
 
 test('RED COSMOS database migration is additive and protects permanent ownership', async () => {

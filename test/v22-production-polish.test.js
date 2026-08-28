@@ -33,8 +33,7 @@ test('RED COSMOS UI upgrades are idempotent and do not pile duplicate event hand
   const ui = await text('red-cosmos-v2.js');
   assert.match(ui, /dataset\.redCosmosBack/);
   assert.match(ui, /dataset\.redCosmosHistoryBound/);
-  assert.match(ui, /window\.__RED_COSMOS_INTERACTIONS__/);
-  assert.doesNotMatch(ui, /window\.__RED_COSMOS_VK_INTERACTIONS__/);
+  assert.match(ui, /window\.__RED_COSMOS_VK_INTERACTIONS__/);
   assert.match(ui, /let mutationScheduled = false/);
   assert.match(ui, /new MutationObserver\(scheduleEnhancements\)/);
 });

@@ -211,14 +211,6 @@
     return true;
   }
 
-  function forceCloseModal(id) {
-    const modal = $(`#${id}`);
-    if (!modal) return false;
-    modal.classList.remove('open');
-    modal.setAttribute('aria-hidden', 'true');
-    return true;
-  }
-
   function callMaybe(name, ...args) {
     const fn = window[name];
     if (typeof fn !== 'function') return false;
@@ -239,109 +231,46 @@
     }, delay);
   }
 
-  function openProfileSetupFallback(step = 1) {
-    callMaybe('openProfileSetup', step);
-    return forceOpenModal('profileSetupModal');
-  }
-
-  function installInteractionFallback() {
-    if (window.__RED_COSMOS_INTERACTIONS__) return;
-    window.__RED_COSMOS_INTERACTIONS__ = true;
-
-    /*
-     * Shared VK + Telegram capture fallback. Normal app handlers always run first.
-     * We only repair navigation/modal state if the expected state did not appear,
-     * so purchases, bonus mutations and other non-idempotent actions are never duplicated.
-     */
+  function installVkInteractionFallback() {
+    if (!isVk() || window.__RED_COSMOS_VK_INTERACTIONS__) return;
+    window.__RED_COSMOS_VK_INTERACTIONS__ = true;
     window.addEventListener('click', (event) => {
       const target = event.target instanceof Element ? event.target.closest('button,a,[role="button"]') : null;
       if (!target || target.disabled) return;
       if (consentGateVisible() && !target.closest('#consentModal,#helpModal,#deleteAccountModal')) return;
-
-      const closeId = target.dataset.close;
-      if (closeId) {
-        scheduleFallback(
-          () => !$(`#${CSS.escape(closeId)}`)?.classList.contains('open'),
-          () => callMaybe('closeModal', closeId) || forceCloseModal(closeId),
-          35
-        );
-        return;
-      }
-
       if (target.matches('.bottom-nav [data-target]')) {
         const screen = target.dataset.target;
-        scheduleFallback(
-          () => $(`.screen[data-screen="${CSS.escape(screen)}"]`)?.classList.contains('active'),
-          () => callMaybe('switchScreen', screen) || forceScreen(screen),
-          35
-        );
+        scheduleFallback(() => $(`.screen[data-screen="${CSS.escape(screen)}"]`)?.classList.contains('active'), () => callMaybe('switchScreen', screen) || forceScreen(screen), 35);
         return;
       }
-
       const id = target.id;
-      const screenRoutes = {
-        openPromosButton: 'actions',
-        openLeaderboardButton: 'league',
-        profileStaffNav: 'staff',
-        profileAdminNav: 'admin',
-        backToProfileFromStaff: 'profile',
-        backToProfileFromAdmin: 'profile'
+      const routes = {
+        navQrButton: ['qrModal', 'showQr'],
+        openShopButton: ['shopModal', null],
+        openStatuses: ['statusesModal', 'renderStatuses'],
+        openHelpButton: ['helpModal', null],
+        openTermsFromConsent: ['helpModal', null],
+        openProfileSettings: ['profileSetupModal', 'openProfileSetup'],
+        profileAvatar: ['profileSetupModal', 'openProfileSetup'],
+        openProfileAvatar: ['profileSetupModal', 'openProfileSetup'],
+        openProfileFrames: ['profileSetupModal', 'openProfileSetup'],
+        openAchievementsButton: ['achievementsModal', 'openAchievementHub'],
+        openProfileAchievements: ['achievementsModal', 'openAchievementHub']
       };
-      if (screenRoutes[id]) {
-        const screen = screenRoutes[id];
-        scheduleFallback(
-          () => $(`.screen[data-screen="${CSS.escape(screen)}"]`)?.classList.contains('active'),
-          () => callMaybe('switchScreen', screen) || forceScreen(screen),
-          35
-        );
-        return;
-      }
-
       if (id === 'openWheelButton') {
-        scheduleFallback(
-          () => $('.screen[data-screen="wheel"]')?.classList.contains('active'),
-          () => callMaybe('openWheel') || forceScreen('wheel'),
-          45
-        );
+        scheduleFallback(() => $('.screen[data-screen="wheel"]')?.classList.contains('active'), () => callMaybe('openWheel') || forceScreen('wheel'));
         return;
       }
-
-      const modalRoutes = {
-        navQrButton: ['qrModal', 'showQr', 0],
-        openShopButton: ['shopModal', 'renderShopCatalog', 0],
-        openStatuses: ['statusesModal', 'renderStatuses', 0],
-        openHelpButton: ['helpModal', null, 0],
-        openTermsFromConsent: ['helpModal', null, 0],
-        openWheelRulesButton: ['wheelRulesModal', null, 0],
-        openProfileSettings: ['profileSetupModal', 'openProfileSetup', 1],
-        profileAvatar: ['profileSetupModal', 'openProfileSetup', 1],
-        openProfileAvatar: ['profileSetupModal', 'openProfileSetup', 1],
-        openProfileFrames: ['profileSetupModal', 'openProfileSetup', 1],
-        openProfilePrivacy: ['profileSetupModal', 'openProfileSetup', 2],
-        openAchievementsButton: ['achievementsModal', 'openAchievementHub', 0],
-        openProfileAchievements: ['achievementsModal', 'openAchievementHub', 0],
-        openProfileStatistics: ['profileStatsModal', null, 0],
-        openNotifications: ['notificationsModal', 'renderNotificationPreferences', 0],
-        openDeleteAccount: ['deleteAccountModal', null, 0],
-        deleteAccountFromConsent: ['deleteAccountModal', null, 0]
-      };
-
-      if (modalRoutes[id]) {
-        const [modalId, fn, arg] = modalRoutes[id];
+      if (routes[id]) {
+        const [modalId, fn] = routes[id];
         scheduleFallback(
-          () => $(`#${modalId}`)?.classList.contains('open') || ((id === 'openAchievementsButton' || id === 'openProfileAchievements') && $('#achievementCelebrationModal')?.classList.contains('open')),
+          () => $(`#${modalId}`)?.classList.contains('open') || (id.includes('Achievements') && $('#achievementCelebrationModal')?.classList.contains('open')),
           () => {
-            if (fn === 'openProfileSetup') openProfileSetupFallback(arg || 1);
-            else {
-              if (fn) callMaybe(fn);
-              forceOpenModal(modalId);
-            }
-            if (id === 'navQrButton') {
-              callMaybe('createQr');
-              callMaybe('loadWalletConfig');
-            }
-          },
-          55
+            if (fn === 'openProfileSetup') callMaybe(fn, 1);
+            else if (fn) callMaybe(fn);
+            forceOpenModal(modalId);
+            if (id === 'openShopButton') callMaybe('renderShopCatalog');
+          }
         );
       }
     }, true);
@@ -360,7 +289,7 @@
     upgradeBackButtons();
     cleanVkQrCopy();
     installAdminTabs();
-    installInteractionFallback();
+    installVkInteractionFallback();
     enhanceLeagueLabels();
   }
 
