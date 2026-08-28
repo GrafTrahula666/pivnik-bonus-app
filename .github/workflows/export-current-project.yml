@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - artifact/export-current-project-20260828
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
