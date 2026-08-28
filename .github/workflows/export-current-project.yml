@@ -1,0 +1,29 @@
+name: Export current project ZIP
+
+on:
+  push:
+    branches:
+      - artifact/export-current-project-20260828
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact production commit
+        uses: actions/checkout@v4
+        with:
+          ref: d63eda7a4eafb787f30cf2043f469bcd7cbaee08
+          fetch-depth: 1
+      - name: Build exact project ZIP
+        run: |
+          zip -r pivnik-bonus-app-current-d63eda7.zip . -x '.git/*'
+      - name: Upload project ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-bonus-app-current-d63eda7
+          path: pivnik-bonus-app-current-d63eda7.zip
+          if-no-files-found: error
+          retention-days: 1
