@@ -16,16 +16,16 @@ test('RED COSMOS skips obsolete v22 assertions after an in-container healthcheck
   assert.match(runtime, /restart-safe legacy v22 skip/);
   const detection = runtime.indexOf('const redCosmosAlreadyApplied');
   const legacyVersionAssertion = runtime.indexOf("APP_VERSION = '22.0-pivnik-rebuild'");
-  assert.ok(detection >= 0 && legacyVersionAssertion > detection);
+  assert.ok(detection >= 0 && legacyVersionAssertion > detection, 'RED COSMOS detection must run before legacy v22 assertions');
 });
 
 test('RED COSMOS DB prepare tolerates Railway private-network warmup and keeps one connection for audit', () => {
   assert.match(dbPrepare, /async function connectWithRetry/);
-  assert.match(dbPrepare, /PIVNIK_DB_CONNECT_ATTEMPTS/);
-  assert.match(dbPrepare, /PIVNIK_DB_CONNECT_RETRY_MS/);
-  assert.match(dbPrepare, /pool\.connect\(\)/);
-  assert.match(dbPrepare, /await client\.query\('BEGIN'\)/);
-  assert.match(dbPrepare, /await inspectHistoricalSchemas\(client\)/);
+  assert.match(dbPrepare, /connectionTimeoutMillis: 8_000/);
+  assert.match(dbPrepare, /RED COSMOS DB connection attempt/);
+  assert.match(dbPrepare, /const client = await connectWithRetry\(\)/);
+  assert.match(dbPrepare, /const audit = await client\.query/);
+  assert.doesNotMatch(dbPrepare, /const audit = await pool\.query/);
 });
 
 test('RED COSMOS production DB prepare audits archive schemas without guessing or restoring data', () => {
@@ -39,7 +39,6 @@ test('RED COSMOS production DB prepare audits archive schemas without guessing o
   assert.doesNotMatch(dbPrepare, /DROP SCHEMA/);
   assert.doesNotMatch(dbPrepare, /DELETE FROM .*users/i);
 });
-
 
 test('full materialize recognizes the RED COSMOS client version on repeated runs', () => {
   assert.match(materializer, /supportedAppVersion/);
