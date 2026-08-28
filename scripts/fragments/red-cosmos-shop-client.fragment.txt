@@ -11,6 +11,20 @@ function shopFrameOwned(item = {}) {
   return (state.profile?.availableFrames || []).some((frame) => frame.code === frameId);
 }
 
+function shopFramePreviewMarkup(item = {}) {
+  const frameId = RED_COSMOS_SHOP_FRAMES[item.code];
+  if (!frameId) return shopImageMarkup(item, 'shop-list-media');
+  const entity = {
+    ...(state.profile || {}),
+    firstName: state.profile?.firstName || 'П',
+    profileFrame: frameId
+  };
+  return `<div class="shop-list-media shop-frame-live-preview" data-frame-preview="${escapeHtml(frameId)}">
+    ${avatarInlineHtml(entity, 'shop-frame-preview-avatar')}
+    <span class="shop-frame-preview-caption">Так выглядит рамка</span>
+  </div>`;
+}
+
 function shopActionLabel(item = {}) {
   return shopFrameOwned(item) ? '✓ Куплено' : 'Купить';
 }
@@ -48,7 +62,7 @@ function renderShopCatalog() {
         const premium = item.code === 'frame-premium-smiling-fuck';
         return `<article class="shop-list-card ${premium ? 'v2-premium' : ''}">
           ${premium ? '<span class="v2-premium-badge">★ PREMIUM</span>' : ''}
-          ${shopImageMarkup(item, 'shop-list-media')}
+          ${shopFramePreviewMarkup(item)}
           <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${owned ? 'Навсегда в вашей коллекции' : 'Покупка за бонусы'}</small></div>
           <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions">
             <button class="secondary ${owned ? 'v2-owned-button' : ''}" data-shop-buy="${escapeHtml(item.code)}" type="button" ${owned ? 'disabled' : ''}>${escapeHtml(shopActionLabel(item))}</button>
