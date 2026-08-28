@@ -19,12 +19,15 @@ test('RED COSMOS final scripts are wired into materialize and prestart in a dete
   assert.doesNotMatch(pkg.scripts.materialize, /red-cosmos-v2-db-prepare\.mjs/);
 });
 
-test('RED COSMOS shell hard-removes obsolete v22 UI assets after legacy code patches', async () => {
+test('RED COSMOS shell hard-removes obsolete v22 UI assets and cache-busts current UI assets after legacy code patches', async () => {
   const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
   assert.match(shell, /v22\\\.css/);
   assert.match(shell, /v22-ui\\\.js/);
-  assert.match(shell, /red-cosmos-v2\.css\?v=2\.0\.0/);
-  assert.match(shell, /red-cosmos-v2\.js\?v=2\.0\.0/);
+  assert.match(shell, /ASSET_VERSION = '2\.0\.1-interactions'/);
+  assert.match(shell, /CSS_ASSET/);
+  assert.match(shell, /JS_ASSET/);
+  assert.doesNotMatch(shell, /red-cosmos-v2\.css\?v=2\.0\.0/);
+  assert.doesNotMatch(shell, /red-cosmos-v2\.js\?v=2\.0\.0/);
   assert.match(shell, /RED_COSMOS_V2_THEME_LOCK/);
 });
 
