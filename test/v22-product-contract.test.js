@@ -21,7 +21,8 @@ test('RED COSMOS final shell replaces the obsolete v22 visual layer', async () =
   assert.match(css, /\.achievement-tile\.earned/);
   assert.match(css, /\.red-cosmos-admin-tabs/);
   assert.match(ui, /← Назад/);
-  assert.match(ui, /installVkInteractionFallback/);
+  assert.match(ui, /installInteractionFallback/);
+  assert.doesNotMatch(ui, /installVkInteractionFallback/);
 });
 
 test('RED COSMOS client shop is exactly four permanent frame products with artwork', async () => {
@@ -84,7 +85,7 @@ test('one wheel backend is enabled for VK and Telegram', async () => {
   assert.doesNotMatch(app, /if \(!IS_VK\) jobs\.push\(loadWheelStatus\(\)\)/);
 });
 
-test('league exposes platform labels and VK interaction fallback covers core controls', async () => {
+test('league exposes platform labels and shared interaction fallback covers core controls', async () => {
   const [gateway, app, ui] = await Promise.all([
     text('universal-server.js'), text('app.js'), text('red-cosmos-v2.js')
   ]);
@@ -97,6 +98,7 @@ test('league exposes platform labels and VK interaction fallback covers core con
   assert.match(ui, /\.bottom-nav \[data-target\]/);
   assert.match(ui, /forceOpenModal/);
   assert.match(ui, /forceScreen/);
+  assert.match(ui, /installInteractionFallback/);
 });
 
 test('RED COSMOS database migration is additive and protects permanent ownership', async () => {
