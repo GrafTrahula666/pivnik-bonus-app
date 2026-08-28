@@ -19,23 +19,32 @@ test('Gateway render: / and /vk load the correct platform scripts and shared whe
   assert.match(telegram, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(telegram, /\/account-link\.js/);
   assert.match(telegram, /\/loader-fix\.css/);
+  assert.match(telegram, /href="\/styles\.css\?v=/);
+  assert.match(telegram, /src="\/app\.js\?v=/);
   assert.doesNotMatch(telegram, /\/vk-platform\.js/);
   assert.match(telegram, /id="openWheelButton"/);
   assert.match(telegram, /data-screen="wheel"/);
   assert.match(telegram, /id="wheelRulesModal"/);
-  assert.doesNotMatch(telegram, /id="openShopButton"/);
-  assert.doesNotMatch(telegram, /id="openPromosButton"/);
+  assert.match(telegram, /id="openShopButton"/);
+  assert.match(telegram, /id="openPromosButton"/);
+  assert.match(telegram, /id="openProfileShop"/);
+  assert.match(telegram, /<body class="platform-telegram">/);
 
   assert.doesNotMatch(vk, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
   assert.match(vk, /\/vendor\/vk-bridge\.js\?v=2\.15\.11/);
   assert.match(vk, /\/vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
   assert.match(vk, /\/account-link\.js/);
   assert.match(vk, /\/loader-fix\.css/);
+  assert.match(vk, /href="\/styles\.css\?v=/);
+  assert.match(vk, /src="\/app\.js\?v=/);
+  assert.doesNotMatch(vk, /(?:href|src)="\/vk\/(?:styles\.css|app\.js)/);
   assert.match(vk, /id="openWheelButton"/);
   assert.match(vk, /data-screen="wheel"/);
   assert.match(vk, /id="wheelRulesModal"/);
   assert.match(vk, /id="openShopButton"/);
   assert.match(vk, /id="openPromosButton"/);
+  assert.match(vk, /id="openProfileShop"/);
+  assert.match(vk, /<body class="platform-vk">/);
 
   const bridgePosition = vk.indexOf('/vendor/vk-bridge.js');
   const platformPosition = vk.indexOf('/vk-platform.js');
