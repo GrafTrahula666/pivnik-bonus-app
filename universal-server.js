@@ -213,6 +213,48 @@ function enforceRateLimit(key, limit, windowMs) {
   }
 }
 
+function configuredMutationOrigins() {
+  return [
+    process.env.PIVNIK_ALLOWED_ORIGINS,
+    process.env.PIVNIK_APP_URL,
+    process.env.TELEGRAM_APP_URL,
+    process.env.VK_APP_URL
+  ];
+}
+
+function splitConfiguredOrigins(values) {
+  return (Array.isArray(values) ? values : [values])
+    .flatMap((value) => String(value || '').split(/[\s,]+/))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+export function mutationOriginAllowed(headers = {}, allowedOrigins = configuredMutationOrigins()) {
+  const origin = String(headers.origin || '').trim();
+  if (!origin) return true;
+
+  let originUrl;
+  try {
+    originUrl = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  const requestHosts = [headers['x-forwarded-host'], headers.host]
+    .flatMap((value) => String(value || '').split(','))
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (requestHosts.includes(originUrl.host.toLowerCase())) return true;
+
+  return splitConfiguredOrigins(allowedOrigins).some((value) => {
+    try {
+      return new URL(value).origin === originUrl.origin;
+    } catch {
+      return false;
+    }
+  });
+}
+
 function enforceMutationOrigin(req) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(String(req.method || '').toUpperCase())) return;
   const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
@@ -221,17 +263,14 @@ function enforceMutationOrigin(req) {
   }
   const origin = String(req.headers.origin || '');
   if (!origin) return;
-  try {
-    const originUrl = new URL(origin);
-    const expectedHost = String(req.headers['x-forwarded-host'] || req.headers.host || '');
-    if (originUrl.host !== expectedHost) {
-      throw Object.assign(new Error('Источник запроса не совпадает с приложением.'), {
-        statusCode: 403
-      });
-    }
-  } catch (error) {
-    if (error?.statusCode) throw error;
+  try { new URL(origin); }
+  catch {
     throw Object.assign(new Error('Некорректный источник запроса.'), { statusCode: 403 });
+  }
+  if (!mutationOriginAllowed(req.headers)) {
+    throw Object.assign(new Error('Источник запроса не совпадает с приложением.'), {
+      statusCode: 403
+    });
   }
 }
 
