@@ -64,38 +64,10 @@ body::after { content:""; position:fixed; inset:-25%; z-index:-1; pointer-events
 .red-cosmos-admin-tabs::-webkit-scrollbar{display:none}.red-cosmos-admin-tab{flex:0 0 auto;min-height:40px;padding:8px 12px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:rgba(255,255,255,.04);color:#cfc2c8;font-weight:780}.red-cosmos-admin-tab.active{color:#fff;background:rgba(196,30,58,.30);border-color:rgba(255,73,108,.58)}[data-red-cosmos-admin-panel].red-cosmos-admin-hidden{display:none!important}
 .red-cosmos-platform-label { display:inline-flex; margin-top:3px; padding:2px 7px; border:1px solid rgba(196,30,58,.30); border-radius:999px; color:#d7c2ca!important; font-size:10px!important; font-weight:800; }
 .avatar-frame-beer-mugs{box-shadow:0 0 0 3px #e4a52b,0 0 20px rgba(255,176,39,.36)!important}.avatar-frame-beer-bottles{box-shadow:0 0 0 3px #4f9a4c,0 0 20px rgba(67,147,64,.34)!important}.avatar-frame-lights{box-shadow:0 0 0 3px #ff4266,0 0 12px #ff3154,0 0 28px rgba(170,49,225,.44)!important;animation:redCosmosFramePulse 1.6s ease-in-out infinite alternate}.avatar-frame-premium-smiling-fuck{box-shadow:0 0 0 3px #ffd700,0 0 28px rgba(255,215,0,.42)!important}@keyframes redCosmosFramePulse{from{filter:brightness(.88)}to{filter:brightness(1.25)}}
-
-/* Interaction hardening for BOTH VK and Telegram. Decorative layers never capture taps,
-   interactive controls are hit-testable, and opened sheets always sit above fixed navigation. */
-:is(.platform-vk,.platform-telegram) .app-shell::before,
-:is(.platform-vk,.platform-telegram) .app-shell::after,
-:is(.platform-vk,.platform-telegram) .boot-scene::after,
-:is(.platform-vk,.platform-telegram) .boot-overlay,
-:is(.platform-vk,.platform-telegram) .hero-glow,
-:is(.platform-vk,.platform-telegram) .avatar-orbit,
-:is(.platform-vk,.platform-telegram) .achievement-burst { pointer-events:none!important; }
-
-:is(.platform-vk,.platform-telegram) #appShell:not(.hidden),
-:is(.platform-vk,.platform-telegram) #appShell>main,
-:is(.platform-vk,.platform-telegram) .screen.active,
-:is(.platform-vk,.platform-telegram) .bottom-nav,
-:is(.platform-vk,.platform-telegram) .bottom-nav button,
-:is(.platform-vk,.platform-telegram) button:not(:disabled),
-:is(.platform-vk,.platform-telegram) a,
-:is(.platform-vk,.platform-telegram) [role="button"] { pointer-events:auto!important; }
-
-:is(.platform-vk,.platform-telegram) .bottom-nav { grid-template-columns:repeat(5,minmax(0,1fr))!important; z-index:2500!important; }
-:is(.platform-vk,.platform-telegram) .modal:not(.open) { pointer-events:none!important; }
-:is(.platform-vk,.platform-telegram) .modal.open { display:flex!important; pointer-events:auto!important; z-index:10000!important; }
-:is(.platform-vk,.platform-telegram) .achievement-celebration-modal.open { display:grid!important; }
-:is(.platform-vk,.platform-telegram) #consentModal.open { z-index:11000!important; }
-:is(.platform-vk,.platform-telegram) .modal.open .modal-sheet,
-:is(.platform-vk,.platform-telegram) .modal.open button,
-:is(.platform-vk,.platform-telegram) .modal.open input,
-:is(.platform-vk,.platform-telegram) .modal.open select,
-:is(.platform-vk,.platform-telegram) .modal.open textarea,
-:is(.platform-vk,.platform-telegram) .modal.open a { pointer-events:auto!important; }
-
+/* VK interaction hardening: decorative layers never capture taps, opened sheets always sit above fixed navigation. */
+.platform-vk .app-shell::before,.platform-vk .app-shell::after,.platform-vk .boot-scene::after,.platform-vk .boot-overlay,.platform-vk .hero-glow,.platform-vk .avatar-orbit,.platform-vk .achievement-burst{pointer-events:none!important}
+.platform-vk #appShell:not(.hidden),.platform-vk #appShell>main,.platform-vk .screen.active,.platform-vk .bottom-nav,.platform-vk .bottom-nav button,.platform-vk button:not(:disabled),.platform-vk a,.platform-vk [role="button"]{pointer-events:auto!important}
+.platform-vk .bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr))!important;z-index:2500!important}.platform-vk .modal:not(.open){pointer-events:none!important}.platform-vk .modal.open{display:flex!important;pointer-events:auto!important;z-index:10000!important}.platform-vk .achievement-celebration-modal.open{display:grid!important}.platform-vk #consentModal.open{z-index:11000!important}.platform-vk .modal.open .modal-sheet,.platform-vk .modal.open button,.platform-vk .modal.open input,.platform-vk .modal.open select,.platform-vk .modal.open textarea,.platform-vk .modal.open a{pointer-events:auto!important}
 .platform-vk #qrModal .qr-warning{display:none!important}
 
 /* Frame shop hotfix 2026-08-28: show the real frame around the user's avatar. */
