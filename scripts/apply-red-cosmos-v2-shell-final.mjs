@@ -7,19 +7,23 @@ const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const ASSET_VERSION = '2.0.1-interactions';
+const APP_ASSET_VERSION = '19.1-telegram-clickfix-20260828';
 const CSS_ASSET = `/red-cosmos-v2.css?v=${ASSET_VERSION}`;
 const JS_ASSET = `/red-cosmos-v2.js?v=${ASSET_VERSION}`;
+const APP_ASSET = `app.js?v=${APP_ASSET_VERSION}`;
 
 let index = await fs.readFile(indexPath, 'utf8');
 index = index
   .replace(/\s*<link rel="stylesheet" href="\/v22\.css[^"]*"\s*\/>/g, '')
   .replace(/\s*<script defer src="\/v22-ui\.js[^"]*"><\/script>/g, '')
   .replace(/\/red-cosmos-v2\.css\?v=[^"']+/g, CSS_ASSET)
-  .replace(/\/red-cosmos-v2\.js\?v=[^"']+/g, JS_ASSET);
+  .replace(/\/red-cosmos-v2\.js\?v=[^"']+/g, JS_ASSET)
+  .replace(/app\.js\?v=[^"']+/g, APP_ASSET);
 
 if (!index.includes(CSS_ASSET)) {
   index = index.replace(/(<link rel="stylesheet" href="styles\.css[^"]*"\s*\/>)/, `$1\n  <link rel="stylesheet" href="${CSS_ASSET}" />`);
 }
+if (!index.includes(APP_ASSET)) throw new Error('RED COSMOS v2 shell app client asset not wired');
 if (!index.includes(JS_ASSET)) {
   index = index.replace(/(<script defer src="app\.js[^"]*"><\/script>)/, `$1\n  <script defer src="${JS_ASSET}"></script>`);
 }
@@ -27,6 +31,7 @@ if (!index.includes(INDEX_MARKER)) index += `\n${INDEX_MARKER}\n`;
 
 if (!index.includes(CSS_ASSET) || !index.includes(JS_ASSET)) throw new Error('RED COSMOS v2 shell assets not wired');
 if (/\/red-cosmos-v2\.(?:css|js)\?v=(?!2\.0\.1-interactions)[^"']+/.test(index)) throw new Error('RED COSMOS v2 shell still references a stale asset version');
+if (/app\.js\?v=(?!19\.1-telegram-clickfix-20260828)[^"']+/.test(index)) throw new Error('RED COSMOS v2 shell still references a stale app client');
 if (index.includes('/v22.css') || index.includes('/v22-ui.js')) throw new Error('RED COSMOS v2 shell still loads obsolete v22 UI layer');
 await fs.writeFile(indexPath, index, 'utf8');
 
@@ -58,4 +63,4 @@ if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
 function renderBeer`);
 }
 await fs.writeFile(appPath, app, 'utf8');
-console.log(`RED COSMOS v2 shell wired (${ASSET_VERSION}) and server palette overrides disabled.`);
+console.log(`RED COSMOS v2 shell wired (${ASSET_VERSION}; app ${APP_ASSET_VERSION}) and server palette overrides disabled.`);

@@ -7,6 +7,9 @@ const appPath = path.join(root, 'app.js');
 const shopFragmentPath = path.join(root, 'scripts', 'fragments', 'red-cosmos-shop-client.fragment.txt');
 let source = await fs.readFile(appPath, 'utf8');
 const MARKER = '// RED_COSMOS_V2_FINAL_CLIENT_RUNTIME';
+const LEGACY_GLOBAL_CONSENT_BLOCKER = "document.addEventListener('click', blockUnacceptedAction, true);";
+const LEGACY_GLOBAL_CONSENT_BLOCKER_LINE = /^document\.addEventListener\('click', blockUnacceptedAction, true\);$/m;
+const SAFE_CONSENT_GATE_MARKER = `// RED_COSMOS_NO_GLOBAL_CLICK_BLOCKER: ${LEGACY_GLOBAL_CONSENT_BLOCKER}`;
 
 function replaceOptional(from, to) {
   if (source.includes(from)) source = source.replace(from, to);
@@ -65,6 +68,16 @@ if (!source.includes(MARKER)) {
   source += `\n${MARKER}\n`;
 }
 
+// The old capture-phase consent listener stopped propagation for every control in #appShell
+// whenever the client-side consent flag was stale or temporarily absent. That made Telegram
+// look fully frozen even though auth and APIs were healthy. Consent remains an explicit modal
+// and protected server routes still enforce it; navigation itself must never be globally killed.
+if (LEGACY_GLOBAL_CONSENT_BLOCKER_LINE.test(source)) {
+  source = source.replace(LEGACY_GLOBAL_CONSENT_BLOCKER_LINE, SAFE_CONSENT_GATE_MARKER);
+} else if (!source.includes(SAFE_CONSENT_GATE_MARKER)) {
+  throw new Error('RED COSMOS v2 client: global consent blocker state is unknown');
+}
+
 const forbiddenWheel = [
   'function renderWheelStatus() {\\n  if (IS_VK) return;',
   'function startWheelCountdown() {\\n  if (IS_VK ||',
@@ -76,5 +89,7 @@ for (const token of forbiddenWheel) {
   if (source.includes(token.replaceAll('\\n', '\n'))) throw new Error(`RED COSMOS v2 client: VK wheel guard remains: ${token}`);
 }
 if (!source.includes('RED_COSMOS_SHOP_FRAMES')) throw new Error('RED COSMOS v2 client: direct shop missing');
+if (LEGACY_GLOBAL_CONSENT_BLOCKER_LINE.test(source)) throw new Error('RED COSMOS v2 client: executable global click blocker remains');
+if (!source.includes(SAFE_CONSENT_GATE_MARKER)) throw new Error('RED COSMOS v2 client: safe consent marker missing');
 await fs.writeFile(appPath, source, 'utf8');
-console.log('RED COSMOS v2 client finalized: VK wheel, direct shop, frames and achievement copy.');
+console.log('RED COSMOS v2 client finalized: VK/TG interactions, direct shop, frames and achievement copy.');
