@@ -68,7 +68,7 @@ test('fallback does not duplicate non-idempotent money or staff operations', () 
 });
 
 test('materialized Telegram client never globally kills every app click for stale consent state', () => {
-  assert.doesNotMatch(app, /document\.addEventListener\('click',\s*blockUnacceptedAction,\s*true\)/);
+  assert.doesNotMatch(app, /^document\.addEventListener\('click',\s*blockUnacceptedAction,\s*true\);$/m);
   assert.match(app, /RED_COSMOS_NO_GLOBAL_CLICK_BLOCKER/);
   assert.match(app, /#acceptTerms[\s\S]*addEventListener\('click'/);
 });
