@@ -67,6 +67,12 @@ test('fallback does not duplicate non-idempotent money or staff operations', () 
   ]) assert.doesNotMatch(ui, new RegExp(`\\b${dangerousId}\\b`));
 });
 
+test('materialized Telegram client never globally kills every app click for stale consent state', () => {
+  assert.doesNotMatch(app, /document\.addEventListener\('click',\s*blockUnacceptedAction,\s*true\)/);
+  assert.match(app, /RED_COSMOS_NO_GLOBAL_CLICK_BLOCKER/);
+  assert.match(app, /#acceptTerms[\s\S]*addEventListener\('click'/);
+});
+
 test('production HTML exposes the five expected bottom navigation controls and app has normal handlers too', () => {
   for (const target of ['client', 'actions', 'league', 'profile']) {
     assert.match(html, new RegExp(`data-target="${target}"`));
