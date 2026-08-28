@@ -7,8 +7,24 @@ const { Pool } = pg;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const databaseUrl = String(process.env.DATABASE_URL || '').trim();
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
+const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';
 const TESTER_HANDLES = Object.freeze(['drolted', 'distraktor', 'ksemar']);
+const FRAME_GRANTS = Object.freeze({
+  'beer-mugs': 'profile-frame-beer-mugs',
+  'beer-bottles': 'profile-frame-beer-bottles',
+  lights: 'profile-frame-lights',
+  'middle-finger': 'profile-frame-middle-finger',
+  'premium-smiling-fuck': 'profile-frame-premium-smiling-fuck',
+  diamond: 'profile-frame-diamond'
+});
+const SHOP_FRAME_IMAGES = Object.freeze({
+  'frame-beer-mugs': '/assets/shop/frame-beer-mugs.svg',
+  'frame-beer-bottles': '/assets/shop/frame-beer-bottles.svg',
+  'frame-lights': '/assets/shop/frame-lights.svg',
+  'frame-premium-smiling-fuck': '/assets/shop/frame-premium-smiling-fuck.svg'
+});
 
 if (!databaseUrl) {
   if (isProduction) throw new Error('RED COSMOS DB prepare: DATABASE_URL is required in production');
@@ -76,9 +92,81 @@ async function createBackup(client) {
   if (!row.users_ok || !row.wallets_ok || !row.tx_ok || !row.meta_ok) throw new Error('RED COSMOS DB backup verification failed');
 }
 
+async function syncPermanentFrameOwnership(client) {
+  let restored = 0;
+  for (const [frameId, grantCode] of Object.entries(FRAME_GRANTS)) {
+    const result = await client.query(
+      `INSERT INTO beta_grants(code,user_id,amount)
+       SELECT $1,uf.user_id,0
+       FROM user_frames uf
+       JOIN users u ON u.id=uf.user_id
+       WHERE uf.frame_id=$2
+         AND u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
+       ON CONFLICT(code,user_id) DO NOTHING`,
+      [grantCode, frameId]
+    );
+    restored += result.rowCount;
+  }
+  return restored;
+}
+
+async function restoreOwnerMoneyFrames(client) {
+  if (!ownerTelegramId && !ownerVkId) return [];
+  const ownerRows = await client.query(
+    `SELECT DISTINCT u.id
+     FROM users u
+     LEFT JOIN user_identities ui ON ui.user_id=u.id
+     WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+       AND (
+         ($1::text<>'' AND (CAST(COALESCE(u.telegram_id,0) AS text)=$1 OR (ui.provider='telegram' AND ui.provider_user_id=$1)))
+         OR
+         ($2::text<>'' AND ui.provider='vk' AND ui.provider_user_id=$2)
+       )
+     ORDER BY u.id`,
+    [ownerTelegramId, ownerVkId]
+  );
+  const restored = [];
+  for (const row of ownerRows.rows) {
+    await client.query(
+      `INSERT INTO user_frames(user_id,frame_id,acquired_source,restored_from_legacy)
+       VALUES($1::bigint,'money','owner-identity-restore',TRUE)
+       ON CONFLICT(user_id,frame_id) DO NOTHING`,
+      [row.id]
+    );
+    const selected = await client.query(
+      `UPDATE users
+       SET profile_frame='money',updated_at=NOW()
+       WHERE id=$1::bigint
+         AND COALESCE(NULLIF(profile_frame,''),'none')='none'
+       RETURNING id`,
+      [row.id]
+    );
+    restored.push({ userId: String(row.id), selected: Boolean(selected.rowCount) });
+  }
+  return restored;
+}
+
+async function repairShopFrameImages(client) {
+  const results = [];
+  for (const [code, imageSrc] of Object.entries(SHOP_FRAME_IMAGES)) {
+    const result = await client.query(
+      `UPDATE shop_items
+       SET image_src=$2,active=TRUE,is_hidden=FALSE,is_purchasable=TRUE,updated_at=NOW()
+       WHERE code=$1
+       RETURNING code`,
+      [code, imageSrc]
+    );
+    if (result.rowCount) results.push(code);
+  }
+  return results;
+}
+
 async function reconcileExistingTesterRecipients(client) {
   const identities = await client.query(`
-    SELECT DISTINCT ui.user_id,ui.provider,ui.provider_user_id,ui.provider_username
+    SELECT DISTINCT ui.user_id,ui.provider,ui.provider_user_id,
+           COALESCE(NULLIF(ui.provider_username,''),NULLIF(u.username,'')) AS provider_username
     FROM user_identities ui
     JOIN users u ON u.id=ui.user_id
     WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
@@ -220,6 +308,12 @@ try {
     ON CONFLICT(user_id,frame_id) DO NOTHING
   `);
 
+  // The permanent collection is the durable source of truth. Re-create legacy
+  // entitlement markers if an older runtime lost them, without charging again.
+  const frameEntitlementsRestored = await syncPermanentFrameOwnership(client);
+  const ownerFramesRestored = await restoreOwnerMoneyFrames(client);
+  const shopFrameImagesRepaired = await repairShopFrameImages(client);
+
   // Existing immutable achievement grants seed the v2 state without changing rewards.
   await client.query(`
     INSERT INTO user_achievements_v2(user_id,achievement_code,is_granted,granted_at,current_progress,required_progress,last_progress_check_at,first_unlock_notification_sent_at)
@@ -249,6 +343,9 @@ try {
   console.log(JSON.stringify({
     redCosmosDbPrepared: true,
     backupSchema: isProduction ? BACKUP_SCHEMA : null,
+    frameEntitlementsRestored,
+    ownerFramesRestored,
+    shopFrameImagesRepaired,
     testerClaims,
     historicalAudit,
     ...audit.rows[0]
