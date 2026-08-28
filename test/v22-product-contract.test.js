@@ -6,7 +6,7 @@ async function text(file) {
   return fs.readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 }
 
-test('RED COSMOS final shell replaces the obsolete v22 visual layer and cache-busts the interaction layer', async () => {
+test('RED COSMOS final shell replaces obsolete UI and cache-busts interaction clients', async () => {
   const [index, css, ui, shell] = await Promise.all([
     text('index.html'),
     text('red-cosmos-v2.css'),
@@ -15,12 +15,16 @@ test('RED COSMOS final shell replaces the obsolete v22 visual layer and cache-bu
   ]);
   assert.match(index, /\/red-cosmos-v2\.css\?v=2\.0\.1-interactions/);
   assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.1-interactions/);
+  assert.match(index, /app\.js\?v=19\.1-telegram-clickfix-20260828/);
+  assert.doesNotMatch(index, /app\.js\?v=19\.1-telegram-wheel-v2/);
   assert.doesNotMatch(index, /\/red-cosmos-v2\.(?:css|js)\?v=2\.0\.0/);
   assert.doesNotMatch(index, /\/v22\.css/);
   assert.doesNotMatch(index, /\/v22-ui\.js/);
   assert.match(shell, /ASSET_VERSION = '2\.0\.1-interactions'/);
+  assert.match(shell, /APP_ASSET_VERSION = '19\.1-telegram-clickfix-20260828'/);
   assert.match(shell, /replace\(\/\\\/red-cosmos-v2\\\.css/);
   assert.match(shell, /replace\(\/\\\/red-cosmos-v2\\\.js/);
+  assert.match(shell, /replace\(\/app\\\.js\\\?v=/);
   assert.match(css, /--primary-red:\s*#c41e3a/);
   assert.match(css, /\.achievement-tile\.locked/);
   assert.match(css, /\.achievement-tile\.earned/);
