@@ -56,6 +56,13 @@ function json(res: ServerResponse, statusCode: number, payload: unknown): void {
 }
 const routeParts=(pathname:string)=>pathname.split('/').filter(Boolean)
 const isMethod=(req:IncomingMessage,method:string)=>String(req.method||'GET').toUpperCase()===method
+const sessionCapabilities=()=>({
+  writes:config.enableWrites,
+  productionBonusWrites:config.enableProductionBonusWrites,
+  productionAchievementWrites:config.enableProductionAchievementWrites,
+  productionEntitlementWrites:config.enableProductionEntitlementWrites,
+  demo:config.demoEnabled,
+})
 
 export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
   if(!url.pathname.startsWith('/api/admin/')) return false
@@ -89,7 +96,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     const body=await readJsonBody<{email?:string;password?:string}>(req)
     const result=await login(req,res,body.email,body.password)
     await recordAudit({admin:result.admin,action:'auth.login',entityType:'admin_session',metadata:{ipHashOnly:true}}).catch(()=>undefined)
-    json(res,200,result);return true
+    json(res,200,{...result,capabilities:sessionCapabilities()});return true
   }
 
   const session=await loadSession(req)
@@ -97,13 +104,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/auth/session'){
     json(res,200,{
       admin:session.admin,csrfToken:session.csrfToken,
-      capabilities:{
-        writes:config.enableWrites,
-        productionBonusWrites:config.enableProductionBonusWrites,
-        productionAchievementWrites:config.enableProductionAchievementWrites,
-        productionEntitlementWrites:config.enableProductionEntitlementWrites,
-        demo:config.demoEnabled,
-      },
+      capabilities:sessionCapabilities(),
     });return true
   }
   if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/logout'){
