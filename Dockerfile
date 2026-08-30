@@ -8,7 +8,8 @@ WORKDIR /staging-loader
 COPY admin-staging/parts/ ./parts/
 COPY admin-staging/staging-preflight.mjs ./staging-preflight.mjs
 
-RUN cat ./parts/part* | tr -d '\r\n' | base64 -d > /tmp/admin-source.tar.xz \
+RUN cat ./parts/part* | base64 --ignore-garbage -d > /tmp/admin-source.tar.xz \
+  && xz -t /tmp/admin-source.tar.xz \
   && mkdir -p /tmp/admin-source \
   && tar -xJf /tmp/admin-source.tar.xz -C /tmp/admin-source \
   && mkdir -p /app \
