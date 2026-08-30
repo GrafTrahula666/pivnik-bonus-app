@@ -1,0 +1,42 @@
+import pg from 'pg';
+const {Client}=pg;
+const url=process.env.ADMIN_DATABASE_URL;
+if(!url) throw new Error('ADMIN_DATABASE_URL required');
+const c=new Client({connectionString:url,ssl:false});
+await c.connect();
+await c.query(`
+CREATE TABLE IF NOT EXISTS bars(id BIGSERIAL PRIMARY KEY,code TEXT UNIQUE NOT NULL,name TEXT NOT NULL,address TEXT,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS users(id BIGSERIAL PRIMARY KEY,first_name TEXT NOT NULL,last_name TEXT,username TEXT,photo_url TEXT,role TEXT NOT NULL DEFAULT 'client',created_at TIMESTAMPTZ DEFAULT NOW(),merged_into_user_id BIGINT,deleted_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS bar_customers(bar_id BIGINT REFERENCES bars(id),user_id BIGINT REFERENCES users(id),status TEXT NOT NULL DEFAULT 'active',joined_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW(),PRIMARY KEY(bar_id,user_id));
+CREATE TABLE IF NOT EXISTS user_identities(id BIGSERIAL PRIMARY KEY,user_id BIGINT REFERENCES users(id),provider TEXT NOT NULL,provider_user_id TEXT NOT NULL,provider_username TEXT,profile_url TEXT,UNIQUE(provider,provider_user_id));
+CREATE TABLE IF NOT EXISTS wallets(user_id BIGINT PRIMARY KEY REFERENCES users(id),balance BIGINT NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS beer_loyalty(user_id BIGINT PRIMARY KEY REFERENCES users(id),paid_ml_total BIGINT DEFAULT 0,gift_ml_balance INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS transactions(id BIGSERIAL PRIMARY KEY,request_key TEXT UNIQUE,client_id BIGINT REFERENCES users(id),staff_id BIGINT,mode TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'completed',check_amount_cents BIGINT DEFAULT 0,discount_cents BIGINT DEFAULT 0,bonus_spent BIGINT DEFAULT 0,bonus_earned BIGINT DEFAULT 0,cash_paid_cents BIGINT DEFAULT 0,balance_after BIGINT,reason TEXT,reward_code TEXT,is_suspicious BOOLEAN DEFAULT FALSE,created_at TIMESTAMPTZ DEFAULT NOW(),completed_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS reward_grants(code TEXT NOT NULL,user_id BIGINT REFERENCES users(id),amount BIGINT NOT NULL DEFAULT 0,source TEXT NOT NULL DEFAULT 'system',created_at TIMESTAMPTZ DEFAULT NOW(),achievement_code TEXT,achievement_period TEXT,reward_beer_ml BIGINT NOT NULL DEFAULT 0,announced_at TIMESTAMPTZ,PRIMARY KEY(code,user_id));
+CREATE TABLE IF NOT EXISTS user_achievements_v2(id BIGSERIAL PRIMARY KEY,user_id BIGINT REFERENCES users(id),achievement_code TEXT NOT NULL,is_granted BOOLEAN DEFAULT FALSE,granted_at TIMESTAMPTZ,current_progress NUMERIC DEFAULT 0,required_progress NUMERIC DEFAULT 1,last_progress_check_at TIMESTAMPTZ,UNIQUE(user_id,achievement_code));
+CREATE TABLE IF NOT EXISTS user_frames(id BIGSERIAL PRIMARY KEY,user_id BIGINT REFERENCES users(id),frame_id TEXT NOT NULL,acquired_source TEXT,UNIQUE(user_id,frame_id));
+CREATE TABLE IF NOT EXISTS wheel_spins(id BIGSERIAL PRIMARY KEY,user_id BIGINT REFERENCES users(id),kind TEXT DEFAULT 'free',prize_code TEXT,charged_bonus_cost BIGINT DEFAULT 0,bonus_awarded BIGINT DEFAULT 0,beer_awarded_ml INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS shop_items(id BIGSERIAL PRIMARY KEY,code TEXT UNIQUE,title TEXT,subtitle TEXT,category TEXT,price_type TEXT,bonus_price BIGINT DEFAULT 0,cash_price BIGINT DEFAULT 0,image_src TEXT,active BOOLEAN DEFAULT TRUE,sort_order INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS shop_purchases(id BIGSERIAL PRIMARY KEY,request_key TEXT UNIQUE,user_id BIGINT REFERENCES users(id),item_code TEXT,bonus_price BIGINT DEFAULT 0,transaction_id BIGINT UNIQUE,created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS promotions(id BIGSERIAL PRIMARY KEY,code TEXT UNIQUE,title TEXT,description TEXT,badge TEXT,image_src TEXT,active BOOLEAN DEFAULT TRUE,sort_order INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS app_settings(id INTEGER PRIMARY KEY,published JSONB,updated_at TIMESTAMPTZ DEFAULT NOW());
+`);
+const bar=(await c.query(`INSERT INTO bars(code,name,address) VALUES('pivnik','ПИВНИК · STAGING','Synthetic staging venue') ON CONFLICT(code) DO UPDATE SET name=EXCLUDED.name,address=EXCLUDED.address RETURNING id`)).rows[0].id;
+for(let i=1;i<=8;i++){
+  const u=(await c.query(`INSERT INTO users(first_name,last_name,username,created_at) SELECT $1,$2,$3,NOW()-($4||' days')::interval WHERE NOT EXISTS(SELECT 1 FROM users WHERE username=$3) RETURNING id`,[`Клиент ${i}`,'STAGING',`stage_client_${i}`,String(i*3)])).rows[0];
+  const userId=u?.id ?? (await c.query(`SELECT id FROM users WHERE username=$1`,[`stage_client_${i}`])).rows[0].id;
+  await c.query(`INSERT INTO bar_customers(bar_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,[bar,userId]);
+  await c.query(`INSERT INTO wallets(user_id,balance) VALUES($1,$2) ON CONFLICT(user_id) DO NOTHING`,[userId,300+i*175]);
+  await c.query(`INSERT INTO beer_loyalty(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING`,[userId]);
+  await c.query(`INSERT INTO user_identities(user_id,provider,provider_user_id,provider_username) VALUES($1,$2,$3,$4) ON CONFLICT(provider,provider_user_id) DO NOTHING`,[userId,i%2?'telegram':'vk',`stage-${i}`,`stage_client_${i}`]);
+  await c.query(`INSERT INTO transactions(request_key,client_id,mode,status,check_amount_cents,cash_paid_cents,bonus_earned,bonus_spent,balance_after,completed_at) VALUES($1,$2,'accrue','completed',$3,$3,$4,0,$5,NOW()-($6||' days')::interval) ON CONFLICT(request_key) DO NOTHING`,[`stage-tx-${i}`,userId,25000+i*9000,100+i*20,300+i*175,String(i)]);
+}
+await c.end();
+const parsed=new URL(url);parsed.pathname='/postgres';
+const admin=new Client({connectionString:parsed.toString(),ssl:false});
+await admin.connect();
+const dbName='codex_admin_test_staging';
+const exists=(await admin.query('SELECT 1 FROM pg_database WHERE datname=$1',[dbName])).rowCount;
+if(!exists) await admin.query(`CREATE DATABASE ${dbName}`);
+await admin.end();
+console.log('Isolated staging legacy schema and synthetic data ready.');
