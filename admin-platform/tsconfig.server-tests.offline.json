@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.server.offline.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "pg": [
+        "offline-types/pg.d.ts"
+      ],
+      "vitest": [
+        "offline-types/vitest.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "server/**/*.ts",
+    "offline-types/vitest.d.ts"
+  ],
+  "exclude": []
+}

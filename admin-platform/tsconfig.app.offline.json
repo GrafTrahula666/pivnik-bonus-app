@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "react": [
+        "offline-types/react.d.ts"
+      ],
+      "react/jsx-runtime": [
+        "offline-types/react.d.ts"
+      ],
+      "react-dom/client": [
+        "offline-types/react-dom.d.ts"
+      ],
+      "lucide-react": [
+        "offline-types/lucide-react.d.ts"
+      ],
+      "recharts": [
+        "offline-types/recharts.d.ts"
+      ],
+      "vitest": [
+        "offline-types/vitest.d.ts"
+      ],
+      "@testing-library/jest-dom": [
+        "offline-types/vitest.d.ts"
+      ]
+    }
+  }
+}
