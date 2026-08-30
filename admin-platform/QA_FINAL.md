@@ -1,81 +1,139 @@
-# FINAL QA — frozen Admin Platform snapshot
+# FINAL QA — Admin Platform staging release candidate
 
-Date: 2026-08-29
+Date: 2026-08-31
 
 ## Status
 
-- Visual QA: PASS in local Chromium QA runtime.
-- Browser QA: PASS in local Chromium QA runtime.
-- Production pilot: NOT READY because normal npm dependencies and PostgreSQL integration environment were not available in this sandbox.
-- Production VK/TG changed: NO.
-- Production deploy: NO.
-- Production migrations: NO.
+**READY FOR CONTROLLED PRODUCTION PILOT**
 
-## Final available checks
+This status means the isolated staging release candidate passed the required standard build, PostgreSQL integration and real-browser acceptance checks. It does **not** authorize or perform production writes, production migrations, a merge to `main`, or a production customer-config switch.
 
-```text
-syntax: PASS — 50 TypeScript/TSX files, 0 syntax errors
-frontend offline strict typecheck: PASS
-server offline strict typecheck: PASS
-server-tests offline strict typecheck: PASS
-security logic: PASS — 8/8
-isolation check: PASS
+## Git / isolation
 
-customer runtime imports: 0
-destructive legacy migrations: 0
-Demo Mode production API writes: 0
-Admin service customer API namespace: 0
-```
+- Canonical branch: `admin-platform/staging-qa`
+- Repository: `GrafTrahula666/pivnik-bonus-app`
+- `main` was not merged or modified by this staging QA continuation.
+- Customer VK/TG production runtime was not changed by this staging QA continuation.
+- Admin Platform remains a separate service and is not a runtime dependency of the customer apps.
 
-Security logic cases:
+## Railway staging
 
-```text
-PASS scrypt authentication primitives
-PASS tenant URL/body-independent authorization query
-PASS bonus amount/user/idempotency validation
-PASS decimal-safe wheel probability = exactly 100%
-PASS loyalty threshold invariants
-PASS server-side promotion state
-PASS Demo Mode cannot perform production API writes
-PASS additive-only migration policy
-```
+Project: `pivnik-admin-staging`
 
-## Browser QA
+Services:
 
-Final local Chromium run:
+- `admin-platform-staging` — real Admin frontend/API staging service
+- `admin-postgres` — isolated PostgreSQL staging database
+- `admin-platform-staging-2` — temporary Playwright runner; returned to sleep/manual-only mode after QA
+
+Public staging URL:
+
+`https://admin-platform-staging-production.up.railway.app`
+
+## Standard toolchain
+
+Final Railway build pipeline: **PASS**
 
 ```text
-Browser QA: PASS
-Screenshots: 15
-Console errors: 0
-Unhandled/page errors: 0
-Unexpected failed requests: 0
+typecheck: PASS
+lint: PASS
+unit: PASS — 45 passed, 14 PostgreSQL tests intentionally skipped in the build-stage unit run
+security: PASS — 31/31
+build: PASS — real TypeScript + Vite production build
 ```
+
+The PostgreSQL integration suite is executed separately during staging deploy against the real isolated staging PostgreSQL database.
+
+## PostgreSQL staging deploy
+
+Final staging deploy: **PASS**
+
+```text
+STAGING_PREFLIGHT: PASS
+Admin migrations: PASS
+Repeat migration / idempotency: PASS
+Synthetic tenant seed: PASS
+Schema verification: PASS
+PostgreSQL integration: PASS — 14/14
+```
+
+Verified staging seed state:
+
+```text
+migrations: 3
+admins: 3
+synthetic customers: 16
+wheel prizes: 6
+shop items: 4
+```
+
+Tenants exercised:
+
+- `ПИВНИК TEST` / `ПИВНИК TEST VENUE`
+- `NORTH HOSPITALITY` / `NORTH BAR`
+
+No real PIVNIK customer records were required for these tests.
+
+## Browser / E2E
+
+Real Playwright Chromium was run against the public Railway staging URL using the real React/Vite/Recharts frontend, Admin API and staging PostgreSQL stack.
+
+Final full Phase C suite: **PASS — 11 scenarios, process exit SUCCESS**.
 
 Covered:
 
-- SUPER ADMIN login
-- Platform overview
-- Companies
-- Venues
-- company/venue switch
-- Venue Dashboard
-- period selectors
-- Analytics
-- VENUE ADMIN login
-- tenant-scoped CRM
-- client search
-- client drawer/profile
+- SUPER ADMIN login and platform flow
+- Companies and Venues
+- Venue Dashboard and Analytics
+- CRM and Customer Profile
 - Loyalty
 - Wheel
-- Shop
 - Achievements
+- Shop
 - Promotions
 - Branding
 - Settings
-- Audit
-- Demo Mode
-- mobile navigation
+- Audit Log
+- real synthetic staging bonus write → API → PostgreSQL → refreshed UI → Audit Log
+- VENUE ADMIN PIVNIK → NORTH tenant isolation
+- NORTH VENUE ADMIN → PIVNIK tenant isolation
+- URL/query/body/entity substitution attempts
+- Demo Mode with zero Admin API mutation requests
+- responsive desktop/tablet/mobile checks
+
+The browser harness fails on:
+
+- console errors
+- unhandled page errors
+- failed requests
+- unexpected HTTP >= 400 responses in normal flows
+- React/Recharts warnings
+- horizontal document overflow above 1 px
+
+Final accepted run exited successfully.
+
+## Responsive regression
+
+A real-browser diagnostic reproduced the only remaining Work-session defect at 1366×768:
+
+```text
+before: document scroll width 1376, viewport 1366, overflow +10 px
+cause: topbar .profile-menu / .profile-button intrinsic flex width
+```
+
+The fix allows only the profile control/text wrapper to shrink while preserving the existing ellipsis behavior. It does not hide overflow globally.
+
+Post-fix real-browser result:
+
+```text
+viewport: 1366 px
+document scroll width: 1366 px
+overflow: 0 px
+targeted diagnostic: PASS
+```
+
+Full responsive suite covers:
+
 - 1920×1080
 - 1440×900
 - 1366×768
@@ -83,55 +141,47 @@ Covered:
 - 768×1024 tablet
 - 390×844 mobile
 
-Control QA:
+Each case asserts `document.scrollWidth - clientWidth <= 1`.
+
+## Visual evidence
+
+The existing real staging screenshot set under `artifacts/screenshots/` covers the required primary surfaces, including:
+
+- Super Admin Platform Dashboard
+- Companies
+- Venues
+- Venue Dashboard
+- Analytics
+- CRM
+- Customer Profile
+- Loyalty
+- Wheel
+- Shop
+- Achievements
+- Promotions
+- Branding
+- Demo Mode
+- Mobile Dashboard
+
+The final responsive browser suite additionally exercised all required viewport sizes after the 1366 overflow fix.
+
+## Production safety
+
+During this staging continuation:
 
 ```text
-PASS Loyalty add/toggle/remove
-PASS Wheel add/toggle/remove
-PASS Achievements editor open/cancel
-PASS Shop editor open/cancel
-PASS Promotions editor open/cancel
-PASS Branding edit/save
-PASS Settings toggle/save
-PASS Logout
-
-Console errors: 0
-Page errors: 0
-Failed requests: 0
+production VK changed: NO
+production TG changed: NO
+production PostgreSQL writes: NO
+production Admin migrations: NO
+production config switch: NO
+merge to main: NO
+production Admin pilot: NOT STARTED
 ```
 
-## Normal npm toolchain result in this sandbox
+The next permitted step is a **separately approved controlled production pilot**, beginning read-only. Any real production write remains a separate gate.
 
-`npm install` was attempted again before packaging and timed out because the sandbox cannot resolve/reach the npm registry.
+## Remaining non-blocking items
 
-Consequences:
-
-- normal `npm run build`: BLOCKED because React/Node type packages are not installed;
-- normal `npm run typecheck`: BLOCKED for the same dependency reason;
-- `npm run lint`: BLOCKED because ESLint is not installed;
-- `npm test`: BLOCKED because Vitest is not installed;
-- `npm run test:security`: BLOCKED because Vitest is not installed;
-- `npm run test:integration`: BLOCKED because Vitest/PostgreSQL are unavailable;
-- Node `npm run test:e2e`: BLOCKED because `@playwright/test` is not installed.
-
-The browser QA above used the installed Python Playwright + system Chromium and the included self-contained synthetic QA runtime generated from current TSX/CSS.
-
-## Data status
-
-REAL:
-- Admin server/auth/tenant/config/write-path source code and production-schema adapters are the real implementation.
-- No live production DB was connected for this frozen visual QA run.
-
-DEMO:
-- Sales Demo Mode is synthetic and explicitly marked.
-- Local QA screenshots use synthetic staging data and are explicitly marked.
-
-PARTIAL:
-- Production-mode visual screens in the screenshots were exercised against the synthetic local QA API contract, not live production data.
-- PostgreSQL concurrency/transaction integration tests exist but were not executable in this sandbox.
-
-## Required final screenshots
-
-See `artifacts/screenshots/`.
-
-The screenshot data is synthetic QA data and must never be presented as production PIVNIK metrics.
+- Vite reports the existing large JavaScript chunk warning; build succeeds. This is a performance/code-splitting improvement, not a pilot blocker.
+- Temporary Playwright runner infrastructure is retained in manual/sleep mode for repeatable staging regression testing and does not run continuously.
