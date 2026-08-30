@@ -1,0 +1,38 @@
+name: Export production snapshot
+
+on:
+  push:
+    branches:
+      - export/current-production-f2e7b887
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact production commit
+        uses: actions/checkout@v4
+        with:
+          ref: f2e7b8879c2985535e5a4105a0c6507b03856e24
+          fetch-depth: 1
+
+      - name: Verify exact commit
+        run: test "$(git rev-parse HEAD)" = "f2e7b8879c2985535e5a4105a0c6507b03856e24"
+
+      - name: Create production ZIP
+        run: |
+          rm -rf .git
+          zip -rq PIVNIK_PRODUCTION_f2e7b887.zip . -x 'PIVNIK_PRODUCTION_f2e7b887.zip'
+          unzip -t PIVNIK_PRODUCTION_f2e7b887.zip
+          sha256sum PIVNIK_PRODUCTION_f2e7b887.zip | tee PIVNIK_PRODUCTION_f2e7b887.sha256
+
+      - name: Upload production ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIVNIK_PRODUCTION_f2e7b887
+          path: |
+            PIVNIK_PRODUCTION_f2e7b887.zip
+            PIVNIK_PRODUCTION_f2e7b887.sha256
+          if-no-files-found: error
+          retention-days: 7
