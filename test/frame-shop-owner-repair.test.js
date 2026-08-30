@@ -44,6 +44,8 @@ test('tester reconciliation remains exact and idempotent while accepting canonic
   assert.match(dbPrepare, /COALESCE\(NULLIF\(ui\.provider_username,''\),NULLIF\(u\.username,''\)\)/);
   assert.match(dbPrepare, /drolted/);
   assert.match(dbPrepare, /distraktor/);
+  assert.match(dbPrepare, /olesyaolese/);
+  assert.match(dbPrepare, /drollted/);
   assert.match(dbPrepare, /ksemar/);
   assert.doesNotMatch(dbPrepare, /ILIKE/);
 });
