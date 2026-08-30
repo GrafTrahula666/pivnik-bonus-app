@@ -16,6 +16,7 @@
     "db:migrate": "tsx server/migrate.ts",
     "admin:bootstrap": "tsx server/bootstrap-admin.ts",
     "seed:test-tenant": "tsx server/seed-test-tenant.ts",
+    "staging:deploy": "node scripts/run-staging-deploy.mjs",
     "staging:preflight": "node scripts/staging-preflight.mjs",
     "staging:verify": "node scripts/staging-verify.mjs",
     "staging:integration": "node scripts/run-staging-integration.mjs",
