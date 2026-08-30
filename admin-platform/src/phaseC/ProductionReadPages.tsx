@@ -6,6 +6,7 @@ import type { ApiVenue } from '../api'
 import type { Period } from './Layout'
 import { CardTitle,PageHead,Status,rub } from '../ui'
 import { ErrorCard,LivePill,LoadingCard,SourceNote,dt,useResource } from './common'
+import { auditValueSummary,businessLabel } from './labels'
 
 const days=(p:Period)=>p==='Сегодня'?1:p==='7 дней'?7:p==='30 дней'?30:p==='3 месяца'?90:365
 
@@ -25,7 +26,7 @@ export function ProductionOperations({venue}:{venue:ApiVenue}){
       <div className="table-card card"><div className="table-scroll"><table>
         <thead><tr><th>Дата</th><th>Клиент</th><th>Тип</th><th>Статус</th><th>Чек</th><th>Оплачено</th><th>Бонусы</th><th>Комментарий</th></tr></thead>
         <tbody>{data.rows.map(r=><tr key={r.id}><td>{dt(r.occurred_at)}</td><td><b>{[r.first_name,r.last_name].filter(Boolean).join(' ')}</b><br/><small>клиент #{r.user_id}</small></td>
-          <td>{r.mode}</td><td><Status value={r.status==='completed'?'Успешно':r.status}/></td><td>₽ {rub.format(Math.round(r.checkAmount||0))}</td><td>₽ {rub.format(Math.round(r.cashPaid||0))}</td>
+          <td>{businessLabel(r.mode)}</td><td><Status value={businessLabel(r.status)}/></td><td>₽ {rub.format(Math.round(r.checkAmount||0))}</td><td>₽ {rub.format(Math.round(r.cashPaid||0))}</td>
           <td>+{r.bonusEarned||0} / −{r.bonusSpent||0}</td><td>{r.reason||r.reward_code||'—'}</td></tr>)}</tbody>
       </table></div></div>
     </>}
@@ -100,7 +101,7 @@ export function ProductionAudit({venue,superAdmin}:{venue:ApiVenue;superAdmin:bo
     {data&&<div className="table-card card"><div className="table-scroll"><table>
       <thead><tr><th>Дата</th><th>Администратор</th><th>Роль</th><th>Компания</th><th>Заведение</th><th>Действие</th><th>Объект</th><th>Причина</th><th>Было → Стало</th></tr></thead>
       <tbody>{data.rows.map(r=><tr key={r.id}><td>{dt(r.created_at)}</td><td><b>{r.admin_name||r.admin_email||'system'}</b></td><td>{r.admin_role||'—'}</td><td>{r.company_name||'—'}</td><td>{r.venue_name||'—'}</td>
-        <td>{r.action}</td><td>{r.entity_type}{r.entity_id?` #${r.entity_id}`:''}</td><td>{r.reason||'—'}</td><td className="audit-json">{r.before_value?JSON.stringify(r.before_value):'—'} → {r.after_value?JSON.stringify(r.after_value):'—'}</td></tr>)}</tbody>
+        <td>{businessLabel(r.action)}</td><td>{businessLabel(r.entity_type)}{r.entity_id?` #${r.entity_id}`:''}</td><td>{r.reason||'—'}</td><td className="audit-json">{auditValueSummary(r.before_value)} → {auditValueSummary(r.after_value)}</td></tr>)}</tbody>
     </table></div></div>}
   </div>
 }

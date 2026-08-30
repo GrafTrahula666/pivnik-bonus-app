@@ -58,6 +58,7 @@ describe('wheel exact probabilities',()=>{
 
 describe('promotion server state',()=>{
   const now=new Date('2026-08-29T10:00:00Z')
+  it('DRAFT has no schedule and is not enabled',()=>expect(promotionState({enabled:false},now)).toBe('DRAFT'))
   it('DISABLED wins',()=>expect(promotionState({enabled:false,starts_at:'2026-08-30T00:00:00Z'},now)).toBe('DISABLED'))
   it('SCHEDULED before start',()=>expect(promotionState({enabled:true,starts_at:'2026-08-30T00:00:00Z'},now)).toBe('SCHEDULED'))
   it('ACTIVE inside period',()=>expect(promotionState({enabled:true,starts_at:'2026-08-28T00:00:00Z',ends_at:'2026-08-30T00:00:00Z'},now)).toBe('ACTIVE'))

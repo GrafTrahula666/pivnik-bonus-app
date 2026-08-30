@@ -308,8 +308,8 @@ export async function saveFeatureSettings(admin:AdminPrincipal,scope:VenueScope,
 }
 
 export function promotionState(row:{enabled:boolean;starts_at?:string|null;ends_at?:string|null}, now=new Date()):'DRAFT'|'SCHEDULED'|'ACTIVE'|'FINISHED'|'DISABLED'{
-  if(!row.enabled)return 'DISABLED'
   const start=row.starts_at?new Date(row.starts_at):null,end=row.ends_at?new Date(row.ends_at):null
+  if(!row.enabled)return start||end?'DISABLED':'DRAFT'
   if(start&&start>now)return 'SCHEDULED'
   if(end&&end<=now)return 'FINISHED'
   return 'ACTIVE'

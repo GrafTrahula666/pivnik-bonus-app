@@ -32,7 +32,7 @@ async function main(){
     `)
     const pivnikCompanyId=pivnikCompany.rows[0]!.id
     const pivnikVenue=await client.query<{id:string}>(`
-      UPDATE venues SET name='ПИВНИК TEST VENUE',address='Synthetic staging venue A',active=TRUE,updated_at=NOW()
+      UPDATE venues SET name='ПИВНИК TEST VENUE',address='Тестовая улица, 1',active=TRUE,updated_at=NOW()
       WHERE company_id=$1::bigint AND code='pivnik' RETURNING id::text
     `,[pivnikCompanyId])
     if(!pivnikVenue.rowCount)throw new Error('PIVNIK staging venue was not created by migration 001.')
@@ -47,16 +47,16 @@ async function main(){
     if(!northBar.rowCount)throw new Error('NORTH staging legacy bar is missing.')
     const northVenue=await client.query<{id:string}>(`
       INSERT INTO venues(company_id,code,name,address,legacy_bar_id)
-      VALUES($1::bigint,'north-bar','NORTH BAR','Synthetic staging venue B',$2::bigint)
+      VALUES($1::bigint,'north-bar','NORTH BAR','Северный проспект, 10',$2::bigint)
       ON CONFLICT(company_id,code) DO UPDATE
       SET name=EXCLUDED.name,address=EXCLUDED.address,legacy_bar_id=EXCLUDED.legacy_bar_id,active=TRUE,updated_at=NOW()
       RETURNING id::text
     `,[northCompanyId,northBar.rows[0]!.id])
 
     const accounts=[
-      {email:'super-admin@pivnik.test',name:'Platform Owner',role:'SUPER_ADMIN',password:passwords.super,companyId:null},
-      {email:'venue-admin-a@pivnik.test',name:'ПИВНИК TEST Owner',role:'VENUE_ADMIN',password:passwords.pivnik,companyId:pivnikCompanyId},
-      {email:'venue-admin-b@pivnik.test',name:'NORTH HOSPITALITY Owner',role:'VENUE_ADMIN',password:passwords.north,companyId:northCompanyId},
+      {email:'super-admin@pivnik.test',name:'Владелец платформы',role:'SUPER_ADMIN',password:passwords.super,companyId:null},
+      {email:'venue-admin-a@pivnik.test',name:'Владелец ПИВНИК TEST',role:'VENUE_ADMIN',password:passwords.pivnik,companyId:pivnikCompanyId},
+      {email:'venue-admin-b@pivnik.test',name:'Владелец NORTH HOSPITALITY',role:'VENUE_ADMIN',password:passwords.north,companyId:northCompanyId},
     ] as const
     for(const account of accounts){
       const saved=await client.query<{id:string}>(`
@@ -89,7 +89,7 @@ async function main(){
           ($1::bigint,'start','Старт',0,5,0,TRUE,0),
           ($1::bigint,'regular','Постоянный гость',500000,7,0,TRUE,1),
           ($1::bigint,'vip','VIP',1500000,10,0,TRUE,2)
-        ON CONFLICT(venue_id,code) DO NOTHING
+        ON CONFLICT(venue_id,code) DO UPDATE SET title=EXCLUDED.title
       `,[venueId])
       await client.query(`
         INSERT INTO wheel_configs(venue_id,enabled,cooldown_minutes,retry_cost)
@@ -101,34 +101,34 @@ async function main(){
           ($1::bigint,'bonus-5','5 бонусов','bonus','{"amount":5}'::jsonb,600000000,NULL,TRUE,0),
           ($1::bigint,'bonus-50','50 бонусов','bonus','{"amount":50}'::jsonb,399999900,NULL,TRUE,1),
           ($1::bigint,'rare','Редкий приз','item','{"code":"rare"}'::jsonb,100,1,TRUE,2)
-        ON CONFLICT(venue_id,code) DO NOTHING
+        ON CONFLICT(venue_id,code) DO UPDATE SET title=EXCLUDED.title
       `,[venueId])
       await client.query(`
         INSERT INTO achievement_configs(venue_id,code,title,description,condition_type,threshold_value,reward_value,enabled,sort_order)
-        VALUES($1::bigint,'welcome','Добро пожаловать','Первое достижение','manual',1,'{"bonus":25}'::jsonb,TRUE,0)
-        ON CONFLICT(venue_id,code) DO NOTHING
+        VALUES($1::bigint,'welcome','Добро пожаловать','Награда за первый визит','manual',1,'{"bonus":25}'::jsonb,TRUE,0)
+        ON CONFLICT(venue_id,code) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description
       `,[venueId])
       await client.query(`
         INSERT INTO shop_item_configs(venue_id,code,title,description,category,reward_type,reward_value,bonus_price,stock,purchase_limit,enabled,sort_order)
         VALUES
-          ($1::bigint,'test-frame','Тестовая рамка','Synthetic staging item','digital','frame','{"code":"test-frame"}'::jsonb,300,5,1,TRUE,0),
-          ($1::bigint,'disabled-item','Недоступный товар','Synthetic disabled item','other','item','{}'::jsonb,100,0,1,FALSE,1)
-        ON CONFLICT(venue_id,code) DO NOTHING
+          ($1::bigint,'test-frame','Тестовая рамка','Рамка профиля для тестовой программы','digital','frame','{"code":"test-frame"}'::jsonb,300,5,1,TRUE,0),
+          ($1::bigint,'disabled-item','Недоступный товар','Товар временно недоступен','other','item','{}'::jsonb,100,0,1,FALSE,1)
+        ON CONFLICT(venue_id,code) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description
       `,[venueId])
       await client.query(`
         INSERT INTO promotion_configs(venue_id,code,title,description,starts_at,ends_at,mechanic,reward,enabled,sort_order)
         VALUES
-          ($1::bigint,'active-test','Активная акция','Synthetic active promotion',NOW()-INTERVAL '1 day',NOW()+INTERVAL '1 day','{}'::jsonb,'{}'::jsonb,TRUE,0),
-          ($1::bigint,'draft-test','Черновик','Synthetic draft promotion',NULL,NULL,'{}'::jsonb,'{}'::jsonb,FALSE,1)
-        ON CONFLICT(venue_id,code) DO NOTHING
+          ($1::bigint,'active-test','Активная акция','Двойной кешбэк на тестовые покупки',NOW()-INTERVAL '1 day',NOW()+INTERVAL '1 day','{}'::jsonb,'{}'::jsonb,TRUE,0),
+          ($1::bigint,'draft-test','Черновик','Акция готовится к публикации',NULL,NULL,'{}'::jsonb,'{}'::jsonb,FALSE,1)
+        ON CONFLICT(venue_id,code) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description
       `,[venueId])
     }
 
     await client.query(`
       INSERT INTO admin_audit_log(admin_role,company_id,venue_id,action,entity_type,entity_id,reason,metadata)
       VALUES
-        ('SUPER_ADMIN',$1::bigint,$2::bigint,'staging.seed','venue',$2::text,'Synthetic staging seed','{"synthetic":true}'::jsonb),
-        ('SUPER_ADMIN',$3::bigint,$4::bigint,'staging.seed','venue',$4::text,'Synthetic staging seed','{"synthetic":true}'::jsonb)
+        ('SUPER_ADMIN',$1::bigint,$2::bigint,'staging.seed','venue',$2::text,'Подготовка тестовых данных','{"synthetic":true}'::jsonb),
+        ('SUPER_ADMIN',$3::bigint,$4::bigint,'staging.seed','venue',$4::text,'Подготовка тестовых данных','{"synthetic":true}'::jsonb)
     `,[pivnikCompanyId,pivnikVenue.rows[0]!.id,northCompanyId,northVenue.rows[0]!.id])
     await client.query('COMMIT')
     console.log('STAGING_SEED PASS: PIVNIK TEST and NORTH HOSPITALITY tenants are ready.')

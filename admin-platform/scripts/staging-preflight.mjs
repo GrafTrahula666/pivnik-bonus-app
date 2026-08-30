@@ -192,8 +192,8 @@ try {
   const bars = await client.query(`
     INSERT INTO bars(code,name,address)
     VALUES
-      ('pivnik','ПИВНИК TEST VENUE','Synthetic staging venue A'),
-      ('north-bar','NORTH BAR','Synthetic staging venue B')
+      ('pivnik','ПИВНИК TEST VENUE','Тестовая улица, 1'),
+      ('north-bar','NORTH BAR','Северный проспект, 10')
     ON CONFLICT(code) DO UPDATE
     SET name=EXCLUDED.name,address=EXCLUDED.address,active=TRUE,updated_at=NOW()
     RETURNING id::text,code

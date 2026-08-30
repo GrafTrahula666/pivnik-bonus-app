@@ -99,14 +99,18 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     json(res,200,{...result,capabilities:sessionCapabilities()});return true
   }
 
-  const session=await loadSession(req)
-
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/auth/session'){
-    json(res,200,{
-      admin:session.admin,csrfToken:session.csrfToken,
-      capabilities:sessionCapabilities(),
-    });return true
+    try{
+      const session=await loadSession(req)
+      json(res,200,{admin:session.admin,csrfToken:session.csrfToken,capabilities:sessionCapabilities()})
+    }catch(error){
+      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false})
+      else throw error
+    }
+    return true
   }
+
+  const session=await loadSession(req)
   if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/logout'){
     requireCsrf(req,session.rawToken)
     await recordAudit({admin:session.admin,action:'auth.logout',entityType:'admin_session',metadata:{ipPresent:Boolean(requestIp(req))}}).catch(()=>undefined)

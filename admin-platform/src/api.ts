@@ -4,6 +4,7 @@ export interface AdminSession {
   csrfToken:string
   capabilities:{writes:boolean;productionBonusWrites:boolean;productionAchievementWrites:boolean;productionEntitlementWrites:boolean;demo:boolean}
 }
+interface GuestSession {authenticated:false}
 export interface ApiVenue {
   id:string;companyId:string;companyCode:string;companyName:string;code:string;name:string;address:string|null;legacyBarId:string|null
 }
@@ -21,7 +22,12 @@ async function request<T>(path:string,init:RequestInit={}):Promise<T>{
   if(!response.ok)throw new ApiError(response.status,String(data.code||'API_ERROR'),String(data.error||`HTTP ${response.status}`),data.details)
   return data as T
 }
-export async function getSession(){const s=await request<AdminSession>('/api/admin/auth/session');csrf=s.csrfToken;return s}
+export async function getSession(){
+  const s=await request<AdminSession|GuestSession>('/api/admin/auth/session')
+  if('authenticated' in s)throw new ApiError(401,'AUTH_REQUIRED','Требуется вход в Admin Platform.')
+  csrf=s.csrfToken
+  return s
+}
 export async function login(email:string,password:string){const s=await request<AdminSession>('/api/admin/auth/login',{method:'POST',body:JSON.stringify({email,password})});csrf=s.csrfToken;return s}
 export async function logout(){await request('/api/admin/auth/logout',{method:'POST'});csrf=''}
 export const apiGet=<T,>(path:string)=>request<T>(path)

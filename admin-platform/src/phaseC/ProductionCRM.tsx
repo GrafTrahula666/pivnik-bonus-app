@@ -9,6 +9,7 @@ import {
   ConfirmModal,Detail,EditorModal,EmptyState,Field,LevelBadge,PageHead,PlatformTag,Status,rub,
 } from '../ui'
 import { ErrorCard,LivePill,LoadingCard,SourceNote,WriteGatePill,dt,useResource } from './common'
+import { businessLabel } from './labels'
 
 interface Client {
   id:string;name:string;username:string|null;registeredAt:string;membershipStatus:string;balance:number;
@@ -83,7 +84,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
         <h3 className="section-title">Лояльность</h3>
         <div className="progress-card"><div><LevelBadge level={client.level}/><b>{client.cashbackPercent}% кэшбэк</b></div><span>Индивидуальные условия клиента сохраняются отдельно от общих настроек заведения.</span></div>
         <h3 className="section-title">История операций</h3>
-        <div className="timeline">{client.timeline.map(x=><div className="timeline-row" key={x.id}><i/><div><span>{dt(x.occurred_at)}</span><b>{x.mode} · {x.status}</b><p>Чек ₽ {rub.format(Math.round(x.checkAmount||0))} · оплачено ₽ {rub.format(Math.round(x.cashPaid||0))} · +{x.bonusEarned||0} / −{x.bonusSpent||0} Б</p>{x.reason&&<p>{x.reason}</p>}</div></div>)}</div>
+        <div className="timeline">{client.timeline.map(x=><div className="timeline-row" key={x.id}><i/><div><span>{dt(x.occurred_at)}</span><b>{businessLabel(x.mode)} · {businessLabel(x.status)}</b><p>Чек ₽ {rub.format(Math.round(x.checkAmount||0))} · оплачено ₽ {rub.format(Math.round(x.cashPaid||0))} · +{x.bonusEarned||0} / −{x.bonusSpent||0} Б</p>{x.reason&&<p>{x.reason}</p>}</div></div>)}</div>
       </>}
     </aside>
     {bonusMode&&client&&<BonusModal venue={venue} client={client} mode={bonusMode} onCancel={()=>setBonusMode(null)} onSaved={()=>{setBonusMode(null);refresh()}}/>}

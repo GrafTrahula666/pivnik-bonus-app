@@ -164,13 +164,42 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect(Number((await setup!.query(`SELECT balance FROM wallets WHERE user_id=$1`,[pivnikUser])).rows[0]!.balance)).toBe(20)
   })
 
-  it('NORTH can save its own wheel config but cannot mutate PIVNIK because scope resolution denies it',async()=>{
+  it('loyalty config persists valid ordered levels, rejects invalid thresholds and audits the mutation',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getManagedLoyalty,saveLoyalty}=await import('../writes.js')
+    const scope=await resolveVenueScope(northAdmin,northVenue)
+    const valid={baseCashbackPercent:6,registrationBonus:125,referralBonus:75,levels:[
+      {code:'start',title:'Start',thresholdRub:0,bonusPercent:5,discountPercent:0,enabled:true,sortOrder:0},
+      {code:'regular',title:'Regular',thresholdRub:10_000,bonusPercent:7,discountPercent:0,enabled:true,sortOrder:1},
+      {code:'vip',title:'VIP',thresholdRub:50_000,bonusPercent:10,discountPercent:2,enabled:true,sortOrder:2},
+    ]}
+    await saveLoyalty(northAdmin,scope,valid)
+    const saved=await getManagedLoyalty(scope)
+    expect(saved.levels.map(level=>level.code)).toEqual(['start','regular','vip'])
+    expect(saved.levels.map(level=>level.thresholdRub)).toEqual([0,10_000,50_000])
+    await expect(saveLoyalty(northAdmin,scope,{...valid,levels:[
+      {...valid.levels[0],thresholdRub:100},
+      {...valid.levels[1],thresholdRub:100},
+    ]})).rejects.toMatchObject({code:'INVALID_LEVEL_THRESHOLDS'})
+    expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE venue_id=$1 AND action='loyalty.config.save'`,[northVenue])).rows[0]!.n).toBe('1')
+  })
+
+  it('NORTH wheel preserves exact tiny probability, ignores disabled prizes, rejects invalid total and stays tenant scoped',async()=>{
     const {resolveVenueScope}=await import('../tenant.js');const {saveWheel,getManagedWheel}=await import('../writes.js')
     const north=await resolveVenueScope(northAdmin,northVenue)
-    await saveWheel(northAdmin,north,{enabled:true,cooldownMinutes:60,retryCost:10,prizes:[{code:'north-win',title:'NORTH Win',rewardType:'bonus',rewardValue:{amount:10},probability:'100',inventoryLimit:null,enabled:true,sortOrder:0}]})
-    expect((await getManagedWheel(north)).prizes[0]?.code).toBe('north-win')
+    const valid={enabled:true,cooldownMinutes:60,retryCost:10,prizes:[
+      {code:'north-rare',title:'NORTH Rare',rewardType:'item',rewardValue:{code:'north-rare'},probability:'0.0000001',inventoryLimit:1,enabled:true,sortOrder:0},
+      {code:'north-rest',title:'NORTH Rest',rewardType:'none',rewardValue:{},probability:'99.9999999',inventoryLimit:null,enabled:true,sortOrder:1},
+      {code:'north-disabled',title:'Disabled',rewardType:'bonus',rewardValue:{amount:10},probability:'50',inventoryLimit:0,enabled:false,sortOrder:2},
+    ]}
+    await saveWheel(northAdmin,north,valid)
+    const saved=await getManagedWheel(north)
+    expect(saved.prizes.map(prize=>prize.probability)).toEqual(['0.0000001','99.9999999','50'])
+    expect(saved.prizes[2]?.enabled).toBe(false)
+    await expect(saveWheel(northAdmin,north,{...valid,prizes:[{...valid.prizes[1],probability:'99.9'}]})).rejects.toMatchObject({code:'WHEEL_PROBABILITY_TOTAL'})
     await expect(resolveVenueScope(northAdmin,pivnikVenue)).rejects.toMatchObject({code:'VENUE_NOT_FOUND'})
     expect((await setup!.query(`SELECT COUNT(*) AS n FROM wheel_prizes WHERE venue_id=$1`,[pivnikVenue])).rows[0]!.n).toBe('0')
+    expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE venue_id=$1 AND action='wheel.config.save'`,[northVenue])).rows[0]!.n).toBe('1')
   })
 
   it('manual achievement grant writes reward_grants + user achievement + bonus exactly once',async()=>{
@@ -189,7 +218,9 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect((await setup!.query(`SELECT is_granted FROM user_achievements_v2 WHERE user_id=$1 AND achievement_code='admin-test-achievement'`,[pivnikUser])).rows[0]!.is_granted).toBe(true)
     const duplicate=await manualGrantAchievement(pivnikAdmin,scope,pivnikUser,body)
     expect(duplicate.idempotent).toBe(true)
+    await expect(manualGrantAchievement(pivnikAdmin,scope,pivnikUser,{...body,idempotencyKey:'achievement:integration:2'})).rejects.toMatchObject({code:'ACHIEVEMENT_ALREADY_GRANTED'})
     expect(Number((await setup!.query(`SELECT balance FROM wallets WHERE user_id=$1`,[pivnikUser])).rows[0]!.balance)).toBe(125)
+    expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='customer.achievement.grant'`)).rows[0]!.n).toBe('1')
   })
 
   it('shop config preserves stock, limits and disabled state in tenant-owned config',async()=>{
@@ -205,6 +236,26 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect(Number((shop.items[0] as any).stock)).toBe(5)
     expect(Number((shop.items[0] as any).purchase_limit)).toBe(1)
     expect((shop.items[1] as any).enabled).toBe(false)
+    expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE venue_id=$1 AND action='shop.config.save'`,[northVenue])).rows[0]!.n).toBe('1')
+  })
+
+  it('promotion config derives draft, scheduled, active, finished and disabled states and audits the mutation',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getManagedPromotions,savePromotions}=await import('../writes.js')
+    const scope=await resolveVenueScope(northAdmin,northVenue)
+    const now=Date.now()
+    await savePromotions(northAdmin,scope,{items:[
+      {code:'draft',title:'Draft',description:'Draft',startsAt:null,endsAt:null,mechanic:{},reward:{},multiplier:null,enabled:false,sortOrder:0},
+      {code:'scheduled',title:'Scheduled',description:'Scheduled',startsAt:new Date(now+86_400_000).toISOString(),endsAt:new Date(now+172_800_000).toISOString(),mechanic:{},reward:{},multiplier:null,enabled:true,sortOrder:1},
+      {code:'active',title:'Active',description:'Active',startsAt:new Date(now-86_400_000).toISOString(),endsAt:new Date(now+86_400_000).toISOString(),mechanic:{},reward:{},multiplier:2,enabled:true,sortOrder:2},
+      {code:'finished',title:'Finished',description:'Finished',startsAt:new Date(now-172_800_000).toISOString(),endsAt:new Date(now-86_400_000).toISOString(),mechanic:{},reward:{},multiplier:null,enabled:true,sortOrder:3},
+      {code:'disabled',title:'Disabled',description:'Disabled',startsAt:new Date(now-86_400_000).toISOString(),endsAt:new Date(now+86_400_000).toISOString(),mechanic:{},reward:{},multiplier:null,enabled:false,sortOrder:4},
+    ]})
+    const saved=await getManagedPromotions(scope)
+    expect(Object.fromEntries(saved.items.map((item:any)=>[item.code,item.state]))).toEqual({
+      draft:'DRAFT',scheduled:'SCHEDULED',active:'ACTIVE',finished:'FINISHED',disabled:'DISABLED',
+    })
+    expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE venue_id=$1 AND action='promotions.config.save'`,[northVenue])).rows[0]!.n).toBe('1')
   })
 
 })
