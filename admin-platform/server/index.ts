@@ -88,7 +88,7 @@ const server = http.createServer(async (req, res) => {
 })
 
 server.listen(config.port, '0.0.0.0', () => {
-  console.log(`CODEX Admin Platform listening on ${config.port} (writes=${config.enableWrites}, productionBonusWrites=${config.enableProductionBonusWrites})`)
+  console.log(`PIVNIK Admin Platform listening on ${config.port} (writes=${config.enableWrites}, bonusWrites=${config.enableProductionBonusWrites})`)
   void purgeExpiredSessions().catch((error) => {
     console.error('Admin session cleanup failed:', error instanceof Error ? error.message : error)
   })

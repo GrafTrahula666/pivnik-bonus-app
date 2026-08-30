@@ -16,7 +16,7 @@ export const config = {
   productionWriteDatabaseUrl: String(process.env.ADMIN_PRODUCTION_WRITE_DATABASE_URL || ''),
   publicOrigin: String(process.env.ADMIN_PUBLIC_ORIGIN || '').replace(/\/+$/,''),
   csrfSecret: String(process.env.ADMIN_CSRF_SECRET || ''),
-  sessionCookie: String(process.env.ADMIN_SESSION_COOKIE || (process.env.NODE_ENV==='production' ? '__Host-codex_admin_session' : 'codex_admin_session')),
+  sessionCookie: String(process.env.ADMIN_SESSION_COOKIE || (process.env.NODE_ENV==='production' ? '__Host-pivnik_admin_session' : 'pivnik_admin_session')),
   sessionTtlMs: int('ADMIN_SESSION_TTL_HOURS', 8) * 3600_000,
   secureCookies: bool('ADMIN_SECURE_COOKIES', process.env.NODE_ENV==='production'),
   trustProxy: bool('ADMIN_TRUST_PROXY', true),
