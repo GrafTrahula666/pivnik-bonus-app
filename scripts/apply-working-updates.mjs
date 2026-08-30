@@ -25,11 +25,12 @@ function replaceRequired(source, from, to, label) {
 const payloadParts = ['working-updates-runtime-1.txt', 'working-updates-runtime-2.txt', 'working-updates-runtime-3.txt'];
 const payloadBase64 = (await Promise.all(payloadParts.map((name) => fs.readFile(path.join(scriptDir, name), 'utf8')))).join('').trim();
 const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base64')).toString('utf8'));
+// Applied SQL migrations are immutable. Updates to RED COSMOS recipients live in migration 008.
+delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
 const runtimeAnchors = {
   'red-cosmos-v2.css': '--primary-red: #c41e3a',
   'red-cosmos-v2.js': "const EXPECTED_PRIMARY = '#c41e3a';",
   'vk-platform.js': "window.__PIVNIK_PLATFORM__ = 'vk';",
-  'migrations/007_red_cosmos_v2.sql': '-- PIVNIK RED COSMOS v2.0',
   'scripts/red-cosmos-v2-db-prepare.mjs': "const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';",
   'scripts/v22-data-audit-and-repair.mjs': "const ACHIEVEMENT_CODE = 'raise-shields';"
 };

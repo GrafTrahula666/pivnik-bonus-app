@@ -69,3 +69,17 @@ test('VK help no longer tells clients that a visible short code sits under the Q
   assert.match(overlay, /короткий код\|указан\[\^\.\]\*под QR/);
   assert.match(overlay, /служебный ручной ввод/);
 });
+
+const crypto = await import('node:crypto');
+const workingUpdateScript = fs.readFileSync(new URL('../scripts/apply-working-updates.mjs', import.meta.url), 'utf8');
+const historicalMigration007 = fs.readFileSync(new URL('../migrations/007_red_cosmos_v2.sql', import.meta.url), 'utf8');
+const followupMigration008 = fs.readFileSync(new URL('../migrations/008_tester_recipient_aliases.sql', import.meta.url), 'utf8');
+
+test('working updates never rewrite applied migration 007 and use follow-up migration 008', () => {
+  const checksum = crypto.createHash('sha256').update(historicalMigration007).digest('hex');
+  assert.equal(checksum, '0e3a5dd048705b9eb445d25eb3083a1c8e123950035ed38b608a261f1f301a07');
+  assert.match(workingUpdateScript, /delete runtimeFiles\['migrations\/007_red_cosmos_v2\.sql'\]/);
+  assert.match(followupMigration008, /INSERT INTO pending_special_achievement_recipients/);
+  assert.match(followupMigration008, /'olesyaolese'/);
+  assert.match(followupMigration008, /p\.handle = 'drolted' AND normalized_username = 'drollted'/);
+});
