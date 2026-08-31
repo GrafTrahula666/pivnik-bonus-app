@@ -42,13 +42,63 @@ app = replaceRequired(
 );
 await write('app.js', app);
 
+let redCss = await read('red-cosmos-v2.css');
+const vkBackgroundFix = `
+/* PIVNIK_VK_COSMOS_BACKGROUND_20260831
+   One visible, low-cost VK background. Inner page containers stay transparent
+   so the actual RED COSMOS field is not hidden by their own opaque gradients. */
+html.platform-vk,
+html.platform-vk body {
+  background:#050103!important;
+}
+html.platform-vk body {
+  min-height:100dvh!important;
+  background:
+    radial-gradient(circle at 12% 13%,rgba(255,255,255,.34) 0 1px,transparent 1.45px),
+    radial-gradient(circle at 78% 9%,rgba(255,214,223,.28) 0 1px,transparent 1.4px),
+    radial-gradient(circle at 31% 63%,rgba(255,113,142,.22) 0 1px,transparent 1.55px),
+    radial-gradient(circle at 89% 76%,rgba(255,255,255,.19) 0 1px,transparent 1.35px),
+    radial-gradient(ellipse at 79% 22%,rgba(145,8,46,.34) 0%,rgba(84,4,35,.17) 33%,transparent 58%),
+    radial-gradient(ellipse at 18% 76%,rgba(83,8,78,.27) 0%,rgba(64,5,52,.14) 36%,transparent 61%),
+    linear-gradient(158deg,#040102 0%,#090205 30%,#16050d 60%,#0a0206 82%,#040102 100%)!important;
+  background-size:113px 113px,173px 173px,211px 211px,149px 149px,auto,auto,auto!important;
+  background-position:0 0,27px 18px,11px 53px,71px 31px,center,center,center!important;
+  animation:none!important;
+}
+html.platform-vk body::before,
+html.platform-vk body::after {
+  content:none!important;
+  display:none!important;
+  animation:none!important;
+}
+html.platform-vk #appShell,
+html.platform-vk #appShell>main,
+html.platform-vk .screen {
+  background:transparent!important;
+  background-image:none!important;
+  animation:none!important;
+}
+html.platform-vk #appShell {
+  position:relative!important;
+  isolation:isolate!important;
+}
+`;
+if (!redCss.includes('PIVNIK_VK_COSMOS_BACKGROUND_20260831')) {
+  redCss += vkBackgroundFix;
+  await write('red-cosmos-v2.css', redCss);
+}
+
 const finalVk = await read('vk-platform.js');
 const finalApp = await read('app.js');
+const finalCss = await read('red-cosmos-v2.css');
 const failures = [];
 if (!finalVk.includes('__PIVNIK_VK_REFRESH_PROFILE__')) failures.push('refresh hook');
 if (!finalVk.includes("window.dispatchEvent(new CustomEvent('pivnik:vk-profile-hydrated'")) failures.push('hydration event');
 if (!finalApp.includes('button.disabled = !hasPlatformPhoto && !IS_VK')) failures.push('actionable VK photo button');
 if (!finalApp.includes('VK profile photo refresh failed:')) failures.push('on-demand photo selection');
+if (!finalCss.includes('PIVNIK_VK_COSMOS_BACKGROUND_20260831')) failures.push('VK cosmos background marker');
+if (!finalCss.includes('html.platform-vk #appShell>main')) failures.push('transparent VK page canvas');
+if (!finalCss.includes('radial-gradient(ellipse at 79% 22%')) failures.push('VK nebula layer');
 if (failures.length) throw new Error(`VK production hotfix verification failed: ${failures.join(', ')}`);
 
-console.log('VK production avatar hotfix is applied and verified.');
+console.log('VK production avatar/background hotfix is applied and verified.');
