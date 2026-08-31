@@ -4,7 +4,6 @@ import { pool, readPool, writePool } from './db.js'
 import { config } from './config.js'
 import {
   getAchievementAnalytics,
-  getAudit,
   getCapabilities,
   getClientDetail,
   getClients,
@@ -18,6 +17,7 @@ import {
   parsePeriod,
 } from './data.js'
 import { recordAudit } from './audit.js'
+import { getAdminAudit } from './admin-metadata-read.js'
 import { enforceOrigin, readJsonBody, requestIp, securityHeaders } from './security.js'
 import {
   listAuthorizedVenues,
@@ -125,7 +125,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     requireSuperAdmin(session.admin);json(res,200,await getPlatformSummary());return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/audit'){
-    requireSuperAdmin(session.admin);json(res,200,await getAudit(null,Number(url.searchParams.get('limit')||100)));return true
+    requireSuperAdmin(session.admin);json(res,200,await getAdminAudit(null,Number(url.searchParams.get('limit')||100)));return true
   }
 
   const parts=routeParts(url.pathname)
@@ -196,7 +196,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(resource==='promotions'){json(res,200,await getPromotions(scope));return true}
     if(resource==='design'){json(res,200,await getLegacyDesign(scope));return true}
     if(resource==='capabilities'){json(res,200,await getCapabilities(scope));return true}
-    if(resource==='audit'){json(res,200,await getAudit(scope,Number(url.searchParams.get('limit')||100)));return true}
+    if(resource==='audit'){json(res,200,await getAdminAudit(scope,Number(url.searchParams.get('limit')||100)));return true}
     throw new HttpError(404,'ADMIN_ROUTE_NOT_FOUND','Admin API route not found.')
   }
 
