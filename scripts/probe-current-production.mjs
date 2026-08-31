@@ -1,13 +1,22 @@
-import { productionUrl } from './railway-production-config.mjs';
+import { RAILWAY_PRODUCTION, productionUrl } from './railway-production-config.mjs';
 
 const services = [
   {
     name: 'telegram',
+    platform: 'telegram',
     baseUrl: productionUrl('telegram', process.env.TELEGRAM_APP_URL)
   },
   {
-    name: 'vk',
+    name: 'vk-origin',
+    platform: 'vk',
     baseUrl: productionUrl('vk', process.env.VK_APP_URL)
+  },
+  {
+    name: 'vk-public',
+    platform: 'vk',
+    baseUrl: String(process.env.VK_PUBLIC_PROXY_URL || RAILWAY_PRODUCTION.urls.vkProxy)
+      .trim()
+      .replace(/\/+$/, '')
   }
 ];
 
@@ -36,7 +45,7 @@ async function probe(service, pathname) {
       redirect: 'follow',
       signal: AbortSignal.timeout(15_000),
       headers: {
-        'user-agent': 'pivnik-release-probe/2.0',
+        'user-agent': 'pivnik-release-probe/2.1',
         accept: pathname.startsWith('/api/') ? 'application/json' : 'text/html,*/*;q=0.8'
       }
     });
@@ -50,10 +59,10 @@ async function probe(service, pathname) {
       catch { failures.push('invalid JSON'); }
       if (json && json.ok !== true) failures.push('ok is not true');
     }
-    if (pathname === '/' && service.name === 'telegram' && !body.includes('telegram-web-app.js')) {
+    if (pathname === '/' && service.platform === 'telegram' && !body.includes('telegram-web-app.js')) {
       failures.push('Telegram document is missing the Telegram SDK');
     }
-    if ((pathname === '/vk' || (pathname === '/' && service.name === 'vk'))
+    if ((pathname === '/vk' || (pathname === '/' && service.platform === 'vk'))
         && !body.includes('/vk-platform.js')) {
       failures.push('VK document is missing the VK runtime');
     }
