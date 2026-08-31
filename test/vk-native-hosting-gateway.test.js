@@ -19,7 +19,7 @@ test('VK hosting builder injects a separate API base and refuses Railway/Vercel 
   const source = await read('scripts/build-vk-hosting.mjs');
   assert.match(source, /__PIVNIK_VK_API_BASE__/);
   assert.match(source, /resolveGatewayInput/);
-  assert.match(source, /originalFetch\\\(resolveGatewayInput\\\(input\\\)/);
+  assert.match(source, /originalFetch\(resolveGatewayInput\(input\)/);
   assert.match(source, /VK Hosting gateway must not use vercel\.app/);
   assert.match(source, /VK Hosting gateway must not expose Railway directly/);
   assert.match(source, /telegram-wheel:start/);
