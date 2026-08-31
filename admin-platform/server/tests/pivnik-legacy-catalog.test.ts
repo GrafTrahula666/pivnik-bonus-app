@@ -8,7 +8,7 @@ import {
 
 describe('Pivnik production legacy read catalog',()=>{
   it('mirrors the pinned production runtime commit',()=>{
-    expect(PIVNIK_RUNTIME_COMMIT).toBe('f49c69dbdd50711b15d907e3096fca1125a639d6')
+    expect(PIVNIK_RUNTIME_COMMIT).toBe('bd5ce4df161c724e3097ce70ebdde3bc458429b3')
   })
 
   it('covers the entire 500000-ticket wheel with exact production prize codes',()=>{
