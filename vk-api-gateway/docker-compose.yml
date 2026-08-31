@@ -1,0 +1,31 @@
+services:
+  gateway:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      RAILWAY_ORIGIN: "${RAILWAY_ORIGIN}"
+      GATEWAY_ALLOWED_ORIGINS: "${GATEWAY_ALLOWED_ORIGINS:-}"
+      UPSTREAM_TIMEOUT_MS: "${UPSTREAM_TIMEOUT_MS:-20000}"
+      MAX_BODY_BYTES: "${MAX_BODY_BYTES:-8388608}"
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    environment:
+      GATEWAY_DOMAIN: "${GATEWAY_DOMAIN}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
