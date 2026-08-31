@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { login, loadSession, logout, requireCsrf } from './auth.js'
+import { changePassword, login, loadSession, logout, requireCsrf } from './auth.js'
 import { pool, readPool, writePool } from './db.js'
 import { config } from './config.js'
 import {
@@ -116,6 +116,19 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     requireCsrf(req,session.rawToken)
     await recordAudit({admin:session.admin,action:'auth.logout',entityType:'admin_session',metadata:{ipPresent:Boolean(requestIp(req))}}).catch(()=>undefined)
     await logout(req,res);json(res,200,{ok:true});return true
+  }
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/password'){
+    requireCsrf(req,session.rawToken)
+    const body=await readJsonBody<{currentPassword?:string;newPassword?:string}>(req)
+    const result=await changePassword(session.admin,session.rawToken,body.currentPassword,body.newPassword)
+    await recordAudit({
+      admin:session.admin,
+      action:'auth.password_change',
+      entityType:'admin_account',
+      entityId:session.admin.id,
+      metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
+    }).catch(()=>undefined)
+    json(res,200,result);return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/venues'){
     json(res,200,{venues:await listAuthorizedVenues(session.admin)});return true
