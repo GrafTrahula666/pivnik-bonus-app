@@ -10,9 +10,10 @@ import {
   CompanyVenuesOverview,ProductionAnalytics,ProductionAudit,ProductionOperations,ProductionPlatform,
 } from './phaseC/ProductionReadPages'
 import {
-  BrandingManager,FeatureFlagsManager,LoyaltyManager,PromotionManager,ShopManager,
+  BrandingManager,LoyaltyManager,PromotionManager,ShopManager,
 } from './phaseC/ProductionManagers'
 import { PivnikLegacyAchievementManager,PivnikLegacyWheelManager } from './phaseC/PivnikLegacyManagers'
+import { SettingsPage } from './phaseC/SettingsPage'
 import { DemoMode } from './phaseC/DemoMode'
 
 type AuthState='loading'|'guest'|'authenticated'|'error'
@@ -88,7 +89,7 @@ export default function App(){
           {selected&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&<PromotionManager venue={selected} session={session}/>}
           {selected&&page==='brand'&&<BrandingManager venue={selected} session={session}/>}
-          {selected&&page==='settings'&&<FeatureFlagsManager venue={selected} session={session}/>}
+          {selected&&page==='settings'&&<SettingsPage venue={selected} session={session}/>}
           {selected&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}
 
           {isSuper&&page==='platform'&&<ProductionPlatform mode="platform" venues={venues} onOpenVenue={openVenue}/>}
