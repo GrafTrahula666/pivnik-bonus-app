@@ -24,8 +24,8 @@ import {
   requireSuperAdmin,
   resolveVenueScope,
 } from './tenant.js'
+import { adjustPivnikBonusPilot } from './bonus-pilot-writer.js'
 import {
-  adjustPivnikBonus,
   getManagedAchievements,
   getManagedBranding,
   getManagedFeatures,
@@ -138,7 +138,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     // Customer mutation routes always derive tenant from URL scope + authenticated session.
     if(resource==='clients'&&child&&grandchild==='bonus-adjustments'&&isMethod(req,'POST')){
       const body=await readJsonBody(req)
-      json(res,200,await adjustPivnikBonus(session.admin,scope,child,body));return true
+      json(res,200,await adjustPivnikBonusPilot(session.admin,scope,child,body));return true
     }
     if(resource==='clients'&&child&&grandchild==='entitlements'&&isMethod(req,'POST')){
       json(res,200,await grantCustomerEntitlement(session.admin,scope,child,await readJsonBody(req)));return true
