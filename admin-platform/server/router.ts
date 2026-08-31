@@ -26,13 +26,11 @@ import {
 } from './tenant.js'
 import { adjustPivnikBonusPilot } from './bonus-pilot-writer.js'
 import {
-  getManagedAchievements,
   getManagedBranding,
   getManagedFeatures,
   getManagedLoyalty,
   getManagedPromotions,
   getManagedShop,
-  getManagedWheel,
   grantCustomerEntitlement,
   manualGrantAchievement,
   saveAchievements,
@@ -44,6 +42,10 @@ import {
   saveWheel,
   setCustomerCashbackOverride,
 } from './writes.js'
+import {
+  getPivnikManagedAchievementsRead,
+  getPivnikManagedWheelRead,
+} from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -158,11 +160,11 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       if(isMethod(req,'PUT')){json(res,200,await saveLoyalty(session.admin,scope,await readJsonBody(req)));return true}
     }
     if(resource==='wheel'&&child==='manage'){
-      if(isMethod(req,'GET')){json(res,200,await getManagedWheel(scope));return true}
+      if(isMethod(req,'GET')){json(res,200,await getPivnikManagedWheelRead(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveWheel(session.admin,scope,await readJsonBody(req)));return true}
     }
     if(resource==='achievements'&&child==='manage'){
-      if(isMethod(req,'GET')){json(res,200,await getManagedAchievements(scope));return true}
+      if(isMethod(req,'GET')){json(res,200,await getPivnikManagedAchievementsRead(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveAchievements(session.admin,scope,await readJsonBody(req)));return true}
     }
     if(resource==='shop'&&child==='manage'){
