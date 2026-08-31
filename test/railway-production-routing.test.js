@@ -13,6 +13,9 @@ test('production routing points at the active Railway project and services', () 
   assert.equal(RAILWAY_PRODUCTION.services.postgres, '4f0c39c3-cd84-4f41-a97e-c95b342653c4');
   assert.equal(RAILWAY_PRODUCTION.urls.telegram, 'https://pivnik-bonus-app-production-df60.up.railway.app');
   assert.equal(RAILWAY_PRODUCTION.urls.vk, 'https://pivnik-vk-test-production-3474.up.railway.app');
+  assert.equal(RAILWAY_PRODUCTION.urls.vkProxy, 'https://pivnik-vk-proxy.vercel.app');
+  assert.equal(RAILWAY_PRODUCTION.urls.vkLaunch, 'https://pivnik-vk-proxy.vercel.app/vk');
+  assert.doesNotMatch(RAILWAY_PRODUCTION.urls.vkLaunch, /\.up\.railway\.app/);
 });
 
 test('release gate resolves live service domains and does not contain dead production hosts', async () => {
@@ -42,6 +45,8 @@ test('public production probes use the same central routing configuration', asyn
   for (const source of [probe, unified, separated]) {
     assert.match(source, /railway-production-config\.mjs/);
   }
+  assert.match(probe, /vk-public/);
+  assert.match(probe, /RAILWAY_PRODUCTION\.urls\.vkProxy/);
   assert.match(probe, /if \(!response\.ok\) failures\.push/);
   assert.match(probe, /if \(failures\.length\)[\s\S]*process\.exitCode = 1/);
   assert.doesNotMatch(probe, /process\.exitCode = 0/);
