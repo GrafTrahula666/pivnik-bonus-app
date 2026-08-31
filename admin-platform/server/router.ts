@@ -4,13 +4,11 @@ import { pool, readPool, writePool } from './db.js'
 import { config } from './config.js'
 import {
   getAchievementAnalytics,
-  getAudit,
   getCapabilities,
   getClientDetail,
   getClients,
   getLegacyDesign,
   getOperations,
-  getPlatformSummary,
   getPromotions,
   getShop,
   getVenueDashboard,
@@ -18,6 +16,7 @@ import {
   parsePeriod,
 } from './data.js'
 import { recordAudit } from './audit.js'
+import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js'
 import { enforceOrigin, readJsonBody, requestIp, securityHeaders } from './security.js'
 import {
   listAuthorizedVenues,
@@ -26,13 +25,11 @@ import {
 } from './tenant.js'
 import { adjustPivnikBonusPilot } from './bonus-pilot-writer.js'
 import {
-  getManagedAchievements,
   getManagedBranding,
   getManagedFeatures,
   getManagedLoyalty,
   getManagedPromotions,
   getManagedShop,
-  getManagedWheel,
   grantCustomerEntitlement,
   manualGrantAchievement,
   saveAchievements,
@@ -44,6 +41,10 @@ import {
   saveWheel,
   setCustomerCashbackOverride,
 } from './writes.js'
+import {
+  getPivnikManagedAchievementsRead,
+  getPivnikManagedWheelRead,
+} from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -120,10 +121,10 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     json(res,200,{venues:await listAuthorizedVenues(session.admin)});return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/platform'){
-    requireSuperAdmin(session.admin);json(res,200,await getPlatformSummary());return true
+    requireSuperAdmin(session.admin);json(res,200,await getAdminPlatformSummary());return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/audit'){
-    requireSuperAdmin(session.admin);json(res,200,await getAudit(null,Number(url.searchParams.get('limit')||100)));return true
+    requireSuperAdmin(session.admin);json(res,200,await getAdminAudit(null,Number(url.searchParams.get('limit')||100)));return true
   }
 
   const parts=routeParts(url.pathname)
@@ -135,7 +136,6 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
 
     if(!isMethod(req,'GET')) requireCsrf(req,session.rawToken)
 
-    // Customer mutation routes always derive tenant from URL scope + authenticated session.
     if(resource==='clients'&&child&&grandchild==='bonus-adjustments'&&isMethod(req,'POST')){
       const body=await readJsonBody(req)
       json(res,200,await adjustPivnikBonusPilot(session.admin,scope,child,body));return true
@@ -152,17 +152,16 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       json(res,200,await manualGrantAchievement(session.admin,scope,child,body));return true
     }
 
-    // Whole-config manager routes.
     if(resource==='loyalty'&&child==='manage'){
       if(isMethod(req,'GET')){json(res,200,await getManagedLoyalty(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveLoyalty(session.admin,scope,await readJsonBody(req)));return true}
     }
     if(resource==='wheel'&&child==='manage'){
-      if(isMethod(req,'GET')){json(res,200,await getManagedWheel(scope));return true}
+      if(isMethod(req,'GET')){json(res,200,await getPivnikManagedWheelRead(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveWheel(session.admin,scope,await readJsonBody(req)));return true}
     }
     if(resource==='achievements'&&child==='manage'){
-      if(isMethod(req,'GET')){json(res,200,await getManagedAchievements(scope));return true}
+      if(isMethod(req,'GET')){json(res,200,await getPivnikManagedAchievementsRead(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveAchievements(session.admin,scope,await readJsonBody(req)));return true}
     }
     if(resource==='shop'&&child==='manage'){
@@ -182,7 +181,6 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       if(isMethod(req,'PUT')){json(res,200,await saveFeatureSettings(session.admin,scope,await readJsonBody(req)));return true}
     }
 
-    // Read adapters.
     if(!isMethod(req,'GET')) throw new HttpError(405,'METHOD_NOT_ALLOWED','Эта операция не поддерживается.')
     if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
     if(resource==='clients'&&child){json(res,200,await getClientDetail(scope,child));return true}
@@ -194,7 +192,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(resource==='promotions'){json(res,200,await getPromotions(scope));return true}
     if(resource==='design'){json(res,200,await getLegacyDesign(scope));return true}
     if(resource==='capabilities'){json(res,200,await getCapabilities(scope));return true}
-    if(resource==='audit'){json(res,200,await getAudit(scope,Number(url.searchParams.get('limit')||100)));return true}
+    if(resource==='audit'){json(res,200,await getAdminAudit(scope,Number(url.searchParams.get('limit')||100)));return true}
     throw new HttpError(404,'ADMIN_ROUTE_NOT_FOUND','Admin API route not found.')
   }
 
