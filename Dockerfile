@@ -7,7 +7,8 @@ RUN npm ci
 
 COPY admin-platform/ ./
 
-RUN npm run typecheck \
+RUN node scripts/patch-operations-role-visibility.mjs \
+  && npm run typecheck \
   && npm run lint \
   && npm test \
   && npm run test:security \
