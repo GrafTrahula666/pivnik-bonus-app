@@ -1,9 +1,10 @@
 const labels:Record<string,string>={
-  accrue:'Начисление',redeem:'Списание',adjustment:'Корректировка',achievement:'Достижение',shop:'Покупка',
+  accrue:'Начисление за покупку',redeem:'Оплата бонусами',adjustment:'Ручное изменение',achievement:'Награда за достижение',wheel:'Приз колеса',shop:'Покупка в магазине',shop_purchase:'Покупка в магазине',
   completed:'Успешно',pending:'В обработке',failed:'Ошибка',cancelled:'Отменено',
-  purchase_count:'Количество покупок',single_check:'Сумма одного чека',lifetime_spend:'Общая сумма покупок',wheel_spin:'Прокруты колеса',shop_purchase:'Покупки в магазине',manual:'Ручная выдача',
+  purchase_count:'Количество покупок',single_check:'Сумма одного чека',lifetime_spend:'Общая сумма покупок',wheel_spin:'Прокруты колеса',manual:'Ручная выдача',
   bonus:'Бонусы',beer_ml:'Напиток',item:'Товар',digital_reward:'Цифровой подарок',frame:'Рамка профиля',retry:'Повторная попытка',none:'Без награды',
   digital:'Цифровые товары',merch:'Сувениры',other:'Другое',
+  common:'Обычное',uncommon:'Необычное',rare:'Редкое',epic:'Эпическое',legendary:'Легендарное',
   DRAFT:'Черновик',SCHEDULED:'Запланирована',ACTIVE:'Активна',FINISHED:'Завершена',DISABLED:'Отключена',
   'auth.login':'Вход в панель','auth.logout':'Выход из панели','staging.seed':'Подготовка тестового заведения',
   'customer.bonus.credit':'Начисление бонусов','customer.bonus.debit':'Списание бонусов','customer.achievement.grant':'Выдача достижения','customer.entitlement.grant':'Выдача награды','customer.cashback.override':'Индивидуальный кешбэк',
