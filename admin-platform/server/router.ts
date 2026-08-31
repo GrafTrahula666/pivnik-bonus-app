@@ -9,7 +9,6 @@ import {
   getClients,
   getLegacyDesign,
   getOperations,
-  getPlatformSummary,
   getPromotions,
   getShop,
   getVenueDashboard,
@@ -17,7 +16,7 @@ import {
   parsePeriod,
 } from './data.js'
 import { recordAudit } from './audit.js'
-import { getAdminAudit } from './admin-metadata-read.js'
+import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js'
 import { enforceOrigin, readJsonBody, requestIp, securityHeaders } from './security.js'
 import {
   listAuthorizedVenues,
@@ -122,7 +121,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     json(res,200,{venues:await listAuthorizedVenues(session.admin)});return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/platform'){
-    requireSuperAdmin(session.admin);json(res,200,await getPlatformSummary());return true
+    requireSuperAdmin(session.admin);json(res,200,await getAdminPlatformSummary());return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/audit'){
     requireSuperAdmin(session.admin);json(res,200,await getAdminAudit(null,Number(url.searchParams.get('limit')||100)));return true
@@ -137,7 +136,6 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
 
     if(!isMethod(req,'GET')) requireCsrf(req,session.rawToken)
 
-    // Customer mutation routes always derive tenant from URL scope + authenticated session.
     if(resource==='clients'&&child&&grandchild==='bonus-adjustments'&&isMethod(req,'POST')){
       const body=await readJsonBody(req)
       json(res,200,await adjustPivnikBonusPilot(session.admin,scope,child,body));return true
@@ -154,7 +152,6 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       json(res,200,await manualGrantAchievement(session.admin,scope,child,body));return true
     }
 
-    // Whole-config manager routes.
     if(resource==='loyalty'&&child==='manage'){
       if(isMethod(req,'GET')){json(res,200,await getManagedLoyalty(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveLoyalty(session.admin,scope,await readJsonBody(req)));return true}
@@ -184,7 +181,6 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       if(isMethod(req,'PUT')){json(res,200,await saveFeatureSettings(session.admin,scope,await readJsonBody(req)));return true}
     }
 
-    // Read adapters.
     if(!isMethod(req,'GET')) throw new HttpError(405,'METHOD_NOT_ALLOWED','Эта операция не поддерживается.')
     if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
     if(resource==='clients'&&child){json(res,200,await getClientDetail(scope,child));return true}
