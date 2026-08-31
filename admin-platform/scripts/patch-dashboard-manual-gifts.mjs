@@ -18,6 +18,12 @@ replaceOnce(
 );
 
 replaceOnce(
+  "       (SELECT COALESCE(SUM(w.balance),0)::bigint\n        FROM members m JOIN wallets w ON w.user_id = m.user_id) AS outstanding_bonus_balance,",
+  `       (SELECT COALESCE(SUM(GREATEST(\n          w.balance - COALESCE((\n            SELECT SUM(gift_tx.bonus_earned)\n            FROM transactions gift_tx\n            WHERE gift_tx.client_id = m.user_id\n              AND gift_tx.status = 'completed'\n              AND gift_tx.mode = 'adjustment'\n              AND gift_tx.bonus_earned > 0\n              AND (\n                gift_tx.staff_id IS NOT NULL\n                OR COALESCE(gift_tx.reward_code, '') LIKE 'admin:bonus:%'\n                OR COALESCE(gift_tx.reason, '') ILIKE 'Персональный подарок%'\n              )\n          ),0),\n          0\n        )),0)::bigint\n        FROM members m JOIN wallets w ON w.user_id = m.user_id) AS outstanding_bonus_balance,`,
+  'outstanding bonus balance',
+);
+
+replaceOnce(
   "       COALESCE(SUM(t.bonus_earned),0)::bigint AS bonus_earned,",
   `       COALESCE(SUM(t.bonus_earned) FILTER (\n         WHERE NOT (\n           t.mode = 'adjustment'\n           AND (\n             t.staff_id IS NOT NULL\n             OR COALESCE(t.reward_code, '') LIKE 'admin:bonus:%'\n             OR COALESCE(t.reason, '') ILIKE 'Персональный подарок%'\n           )\n         )\n       ),0)::bigint AS bonus_earned,`,
   'trend bonus-earned',
@@ -30,10 +36,16 @@ replaceOnce(
 );
 
 replaceOnce(
+  "      outstandingBonusBalance: available(current.outstandingBonusBalance, 'wallets.balance'),",
+  "      outstandingBonusBalance: available(current.outstandingBonusBalance, 'баланс программы без ручных подарочных начислений'),",
+  'outstanding-balance source label',
+);
+
+replaceOnce(
   "          : available(current.redemptionRate, 'bonus_spent / bonus_earned'),",
   "          : available(current.redemptionRate, 'bonus_spent / автоматические bonus_earned; ручные подарки исключены'),",
   'redemption-rate source label',
 );
 
 await fs.writeFile(target, source);
-console.log('Patched dashboard bonus KPI: manual personal/admin gifts are excluded from analytics only.');
+console.log('Patched dashboard bonus KPIs: manual personal/admin gifts are excluded from analytics only.');
