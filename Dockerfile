@@ -9,6 +9,7 @@ COPY admin-platform/ ./
 
 RUN node scripts/patch-operations-role-visibility.mjs \
   && node scripts/patch-dashboard-manual-gifts.mjs \
+  && node scripts/patch-commercial-ui-polish.mjs \
   && npm run typecheck \
   && npm run lint \
   && npm test \
