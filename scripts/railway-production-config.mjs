@@ -9,7 +9,8 @@ export const RAILWAY_PRODUCTION = Object.freeze({
   urls: Object.freeze({
     telegram: 'https://pivnik-bonus-app-production-df60.up.railway.app',
     vk: 'https://pivnik-vk-test-production-3474.up.railway.app',
-    vkProxy: 'https://pivnik-vk-proxy.vercel.app'
+    vkProxy: 'https://pivnik-vk-proxy.vercel.app',
+    vkLaunch: 'https://pivnik-vk-proxy.vercel.app/vk'
   })
 });
 
