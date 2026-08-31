@@ -5,8 +5,10 @@
 Подтверждённые публичные сервисы:
 
 - Telegram: `https://pivnik-bonus-app-production-df60.up.railway.app`
+- VK public entrypoint: `https://pivnik-vk-proxy.vercel.app/vk`
+- VK Vercel proxy base: `https://pivnik-vk-proxy.vercel.app`
 - VK Railway origin: `https://pivnik-vk-test-production-3474.up.railway.app`
-- VK Mini App document: `https://pivnik-vk-test-production-3474.up.railway.app/vk`
+- VK Railway document (origin only): `https://pivnik-vk-test-production-3474.up.railway.app/vk`
 
 Активная Railway production-конфигурация:
 
@@ -16,9 +18,17 @@
 - VK service: `0573c420-0f9c-43bd-8e87-e1788ce3eefd`
 - Postgres service: `4f0c39c3-cd84-4f41-a97e-c95b342653c4`
 
-Старые адреса без суффиксов `-df60` / `-3474` не являются production-адресами и не должны использоваться в VK, GitHub Actions, Railway variables или проверочных скриптах.
+Старые адреса без суффиксов `-df60` / `-3474` не являются production-адресами и не должны использоваться в GitHub Actions, Railway variables или проверочных скриптах.
 
-Vercel `pivnik-vk-proxy.vercel.app` не является текущей точкой запуска VK Mini App. VK должен открывать Railway document `/vk` напрямую.
+### Важное правило маршрутизации VK
+
+VK Mini App **не должен открывать Railway origin напрямую**. Во всех URL-полях платформы VK используется только:
+
+`https://pivnik-vk-proxy.vercel.app/vk`
+
+Vercel принимает запрос пользователя и серверным rewrite проксирует его на активный VK Railway origin. Для браузера клиента HTML, JS, CSS, изображения и `/api/*` остаются same-origin относительно `pivnik-vk-proxy.vercel.app`; прямого обращения телефона к `*.up.railway.app` быть не должно.
+
+Причина: прямой Railway hostname может быть недоступен части пользователей в России, тогда как тот же production backend через Vercel работает. Railway остаётся backend/origin и не переносится.
 
 ## 2. Доступ Railway для автоматизации
 
@@ -50,11 +60,13 @@ Telegram:
 - `TELEGRAM_APP_URL=https://pivnik-bonus-app-production-df60.up.railway.app`
 - `PIVNIK_APP_URL=https://pivnik-bonus-app-production-df60.up.railway.app`
 
-VK:
+VK Railway origin:
 
 - `VK_APP_ID=54694987`
 - `VK_APP_SECRET`
 - `VK_APP_URL=https://pivnik-vk-test-production-3474.up.railway.app`
+
+`VK_APP_URL` внутри Railway/release tooling обозначает origin сервиса и не является URL, который нужно сохранять в настройках VK Mini App. Публичный launch URL платформы VK — `https://pivnik-vk-proxy.vercel.app/vk`.
 
 `IDENTITY_TOMBSTONE_SECRET` нельзя менять вместе с обычной ротацией `SESSION_SECRET`. Его потеря снимет защиту от повторных стартовых наград для ранее удалённых аккаунтов.
 
@@ -80,7 +92,7 @@ DATABASE_URL='postgresql://...' npm run verify:database
 
 ## 6. Деплой
 
-Один и тот же commit должен работать на Telegram и VK Railway-сервисах. Release gate сам получает актуальные публичные домены из Railway API, поэтому старые hostname нельзя хардкодить в workflow.
+Один и тот же commit должен работать на Telegram и VK Railway-сервисах. Release gate сам получает актуальные публичные домены origin-сервисов из Railway API, поэтому старые hostname нельзя хардкодить в workflow.
 
 После деплоя обязательны:
 
@@ -89,6 +101,8 @@ npm run probe:production
 npm run verify:production
 npm run verify:platform-separation
 ```
+
+`probe:production` обязан проверять три маршрута: Telegram Railway, VK Railway origin и VK public Vercel entrypoint. Публичный VK-маршрут считается сломанным, если Vercel `/vk` или `/api/*` не доходит до production Railway backend.
 
 Production release gate дополнительно выполняет подписанный auth smoke для Telegram и VK через реальные production credentials и проверяет повторную авторизацию, профиль, QR и достижения.
 
@@ -100,28 +114,33 @@ VK App ID: `54694987`.
 
 Во всех URL-полях платформы VK должен быть сохранён:
 
-`https://pivnik-vk-test-production-3474.up.railway.app/vk`
+`https://pivnik-vk-proxy.vercel.app/vk`
 
-При реальном запуске VK добавляет подписанные `vk_*` параметры и `sign`. Если Request URL указывает на `https://pivnik-vk-test-production.up.railway.app/...` без `-3474`, VK использует устаревшую настройку — такой запуск не достигает текущего Railway-сервиса.
+При реальном запуске VK добавляет подписанные `vk_*` параметры и `sign`. Эти query-параметры должны без изменений проходить через Vercel rewrite на Railway origin.
 
-Смена Railway hostname не требует новых `VK_APP_ID` или `VK_APP_SECRET`, пока используется тот же VK App ID `54694987`.
+Если Request URL указывает на любой `*.up.railway.app`, конфигурация VK считается устаревшей: пользователь снова зависит от прямой доступности Railway из своей сети.
+
+Смена Railway hostname не требует новых `VK_APP_ID` или `VK_APP_SECRET`, пока используется тот же VK App ID `54694987`. При смене Railway origin необходимо обновить destination в `vercel-vk-proxy/vercel.json`, проверить proxy probe и только потом выпускать релиз. Публичный VK launch URL при этом остаётся стабильным.
 
 ## 8. E2E после деплоя
 
 1. Открыть Telegram Mini App и проверить авторизацию, профиль, QR, баланс и достижения.
-2. Открыть `https://vk.ru/app54694987` и проверить, что Request URL ведёт на hostname с `-3474`.
-3. Проверить авторизацию VK, профиль, QR, баланс и достижения.
-4. Проверить одну безопасную тестовую операцию и повторный вход.
-5. Проверить, что Telegram и VK используют одну production-базу, но отдельные платформенные identity согласно текущей модели аккаунтов.
+2. Открыть `https://vk.ru/app54694987` **без VPN** и проверить, что Request URL ведёт на `https://pivnik-vk-proxy.vercel.app/vk`.
+3. Повторить запуск VK через VPN и убедиться, что поведение одинаковое.
+4. Проверить авторизацию VK, профиль, QR, баланс и достижения.
+5. Проверить одну безопасную тестовую операцию и повторный вход.
+6. Проверить, что Telegram и VK используют одну production-базу, но отдельные платформенные identity согласно текущей модели аккаунтов.
+7. Проверить `/api/platform-health` через `https://pivnik-vk-proxy.vercel.app` и убедиться, что `vk=true`, environment=`production` и release commit совпадает с VK Railway origin.
 
 ## 9. Rollback кода
 
 1. Не откатывать базу автоматически при дефекте интерфейса.
 2. Возвращать оба Railway-сервиса на один и тот же предыдущий commit.
 3. Не восстанавливать старые Railway project/service IDs и старые hostname вместе с rollback исходников.
-4. Повторить `npm run probe:production`, `npm run verify:production` и auth smoke.
+4. Не менять VK launch URL обратно на Railway. Vercel остаётся постоянной публичной точкой входа.
+5. Повторить `npm run probe:production`, `npm run verify:production` и auth smoke.
 
-Критически важно: rollback source tree не должен откатывать инфраструктурную маршрутизацию. Текущие Railway IDs и домены задаются в `scripts/railway-production-config.mjs` и защищены regression-тестами.
+Критически важно: rollback source tree не должен откатывать инфраструктурную маршрутизацию. Текущие Railway IDs и origin-домены задаются в `scripts/railway-production-config.mjs`, а публичный VK launch URL — `urls.vkLaunch`. Оба маршрута защищены regression-тестами.
 
 ## 10. Restore базы
 
@@ -146,7 +165,9 @@ DATABASE_URL='postgresql://target...' npm run verify:database
 
 - `verify:database`, `probe:production`, `verify:production` или signed auth smoke возвращает ошибку;
 - VK и Telegram имеют разные fingerprint или commit;
-- VK runtime Request URL указывает на старый hostname без `-3474`;
+- публичный VK entrypoint `https://pivnik-vk-proxy.vercel.app/vk` не открывает production VK document;
+- VK runtime Request URL указывает напрямую на `*.up.railway.app`;
+- Vercel proxy destination указывает не на активный VK Railway origin;
 - юридические значения не заполнены;
 - отсутствует проверенный backup;
 - есть BLOCKER или CRITICAL дефект.
