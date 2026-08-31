@@ -40,10 +40,10 @@ export function PivnikLegacyWheelManager({venue}:{venue:ApiVenue}){
       <section className="card editor-card">
         <CardTitle title="Механика"/>
         <div className="setting-row"><div><b>Колесо включено</b><span>{data.enabled===false?'Нет':'Да'}</span></div><ShieldCheck/></div>
-        <div className="kpi-grid compact">
-          <div className="kpi"><span>Бесплатный спин</span><strong>{Math.round((data.cooldownMinutes??1440)/60)} ч</strong><small>интервал</small></div>
-          <div className="kpi"><span>Первый платный повтор</span><strong>{firstPaid}</strong><small>бонусов</small></div>
-          <div className="kpi"><span>Следующие повторы</span><strong>{subsequentPaid}</strong><small>бонусов</small></div>
+        <div className="mini-stats">
+          <div><span>Бесплатный спин</span><b>{Math.round((data.cooldownMinutes??1440)/60)} ч</b><small>интервал</small></div>
+          <div><span>Первый платный повтор</span><b>{firstPaid}</b><small>бонусов</small></div>
+          <div><span>Следующие повторы</span><b>{subsequentPaid}</b><small>бонусов</small></div>
         </div>
         <SourceNote>{legacy
           ? `Показана фактическая конфигурация текущего runtime ПИВНИКА (${data.runtimeCommit?.slice(0,8)||'production'}). Редактирование намеренно отключено: эта страница пока только читает рабочую механику.`
@@ -53,7 +53,7 @@ export function PivnikLegacyWheelManager({venue}:{venue:ApiVenue}){
     <section className="card editor-card">
       <CardTitle title={`Призы · ${data.prizes.length}`}/>
       <div className="prize-list">
-        <div className="prize-head"><span>Приз</span><span>Тип</span><span>Награда</span><span>Вероятность</span><span/><span>Статус</span><span/></div>
+        <div className="prize-head"><span>Приз</span><span>Код</span><span>Награда</span><span>Вероятность</span><span/><span>Статус</span><span/></div>
         {[...data.prizes].sort((a,b)=>a.sortOrder-b.sortOrder).map(prize=><div className="prize-row" key={prize.code}>
           <div className="prize-name"><div className="prize-icon"><Gift/></div><b>{prize.title}</b></div>
           <span>{prize.code}</span><strong>{wheelReward(prize)}</strong><strong>{prize.probability}%</strong><span/>
@@ -108,16 +108,18 @@ export function PivnikLegacyAchievementManager({venue}:{venue:ApiVenue}){
       <SourceNote>{legacy
         ? `Показан текущий production-каталог ПИВНИКА (${data.runtimeCommit?.slice(0,8)||'production'}): автоматические достижения и специальные легендарные награды. Редактирование пока отключено.`
         : 'Показана сохранённая конфигурация Admin Platform. Редактирование на controlled pilot отключено.'}</SourceNote>
-      <div className="achievement-config-grid">
-        {data.items.map(item=><article className="achievement-config-card" key={item.code}>
-          <div className="achievement-config-head"><div className="achievement-icon"><Trophy/></div><div><b>{item.title}</b><span>{item.code}</span></div></div>
-          <p>{item.description}</p>
-          <div className="achievement-meta">
-            <span>{item.rarity||'achievement'}</span>
-            <span>{achievementCondition(item)}</span>
-            <strong>{achievementReward(item)}</strong>
-            {item.recurring&&<span>повторяется: {item.recurring}</span>}
-            {item.special&&<span>специальное</span>}
+      <div className="achievement-grid">
+        {data.items.map(item=><article className="card achievement-card" key={item.code}>
+          <div className="achievement-icon"><Trophy/></div>
+          <div className="grow">
+            <div className="achievement-title"><h3>{item.title}</h3><span className="status ok">{item.special?'СПЕЦ':'АКТИВНО'}</span></div>
+            <p>{item.description}</p>
+            <div className="achievement-meta">
+              <span>{item.rarity||'achievement'}</span>
+              <span>{achievementCondition(item)}</span>
+              <span>{achievementReward(item)}</span>
+              {item.recurring&&<span>повторяется: {item.recurring}</span>}
+            </div>
           </div>
         </article>)}
       </div>
