@@ -10,8 +10,9 @@ import {
   CompanyVenuesOverview,ProductionAnalytics,ProductionAudit,ProductionOperations,ProductionPlatform,
 } from './phaseC/ProductionReadPages'
 import {
-  AchievementManager,BrandingManager,FeatureFlagsManager,LoyaltyManager,PromotionManager,ShopManager,WheelManager,
+  BrandingManager,FeatureFlagsManager,LoyaltyManager,PromotionManager,ShopManager,
 } from './phaseC/ProductionManagers'
+import { PivnikLegacyAchievementManager,PivnikLegacyWheelManager } from './phaseC/PivnikLegacyManagers'
 import { DemoMode } from './phaseC/DemoMode'
 
 type AuthState='loading'|'guest'|'authenticated'|'error'
@@ -82,8 +83,8 @@ export default function App(){
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
           {selected&&page==='loyalty'&&<LoyaltyManager venue={selected} session={session}/>}
-          {selected&&page==='wheel'&&<WheelManager venue={selected} session={session}/>}
-          {selected&&page==='achievements'&&<AchievementManager venue={selected} session={session}/>}
+          {selected&&page==='wheel'&&<PivnikLegacyWheelManager venue={selected}/>}
+          {selected&&page==='achievements'&&<PivnikLegacyAchievementManager venue={selected}/>}
           {selected&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&<PromotionManager venue={selected} session={session}/>}
           {selected&&page==='brand'&&<BrandingManager venue={selected} session={session}/>}
