@@ -103,7 +103,7 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           PIVNIK_ANNA_CONSENT_REPAIR_CONFIRM: REPAIR_ANNA_FRAME_AND_CONSENT_20260806
-        run: node scripts/railway-repair-anna-consent.mjs
+        run: node scripts/railway-repair-anna-frame-and-consent.mjs
 
       - name: Deploy exact commit and verify both production services
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
