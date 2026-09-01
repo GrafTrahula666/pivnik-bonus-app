@@ -49,7 +49,7 @@ function normalizeOrigin(value) {
 }
 
 function isVkHostingOrigin(value) {
-  if (!value) return true;
+  if (!value) return false;
   let url;
   try { url = new URL(value); }
   catch { return false; }
@@ -63,7 +63,7 @@ function isVkHostingOrigin(value) {
 
 function setCors(req, res) {
   const origin = String(req.headers.origin || '').trim();
-  if (!origin || !isVkHostingOrigin(origin)) return;
+  if (!isVkHostingOrigin(origin)) return;
   res.setHeader('access-control-allow-origin', origin);
   res.setHeader('vary', 'Origin');
   res.setHeader('access-control-allow-methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -116,8 +116,8 @@ async function proxyApi(req, res, url) {
   if (!ALLOWED_METHODS.has(method)) return json(res, 405, { ok: false, error: 'Method not allowed.' });
 
   const origin = String(req.headers.origin || '').trim();
-  if (origin && !isVkHostingOrigin(origin)) {
-    return json(res, 403, { ok: false, error: 'Origin is not allowed.' });
+  if (!isVkHostingOrigin(origin)) {
+    return json(res, 403, { ok: false, error: 'VK Hosting Origin is required.' });
   }
   setCors(req, res);
 
