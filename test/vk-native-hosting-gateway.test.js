@@ -29,6 +29,8 @@ test('VK hosting builder injects a separate API base and refuses Railway/Vercel 
 test('VK gateway exposes only API routes and converts the second hop to trusted server-to-server origin', async () => {
   const source = await read('vk-api-gateway/server.mjs');
   assert.match(source, /Only \/api\/\* is exposed/);
+  assert.match(source, /if \(!value\) return false/);
+  assert.match(source, /VK Hosting Origin is required/);
   assert.match(source, /\.pages\.vk-apps\.com/);
   assert.match(source, /\.pages\.vk-apps\.ru/);
   assert.match(source, /headers\.set\('origin', RAILWAY_ORIGIN\.origin\)/);
@@ -36,6 +38,20 @@ test('VK gateway exposes only API routes and converts the second hop to trusted 
   assert.doesNotMatch(source, /FORWARDED_REQUEST_HEADERS[\s\S]{0,500}'sec-fetch-site'/);
   assert.match(source, /x-pivnik-platform/);
   assert.match(source, /\/readyz/);
+});
+
+test('Selectel bootstrap derives a nip.io HTTPS gateway from public IPv4', async () => {
+  const [bootstrap, cloudInit] = await Promise.all([
+    read('vk-api-gateway/bootstrap-nip.sh'),
+    read('vk-api-gateway/selectel-cloud-init.yaml')
+  ]);
+  assert.match(bootstrap, /api\.ipify\.org/);
+  assert.match(bootstrap, /\$\{PUBLIC_IP\}\.nip\.io/);
+  assert.match(bootstrap, /docker compose up -d --build/);
+  assert.match(bootstrap, /\/readyz/);
+  assert.match(cloudInit, /#cloud-config/);
+  assert.match(cloudInit, /fix\/vk-native-hosting-gateway/);
+  assert.match(cloudInit, /bootstrap-nip\.sh/);
 });
 
 test('root package checks both the static builder and gateway syntax', async () => {
