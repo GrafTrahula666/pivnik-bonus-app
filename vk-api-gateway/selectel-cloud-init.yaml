@@ -1,0 +1,24 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+packages:
+  - ca-certificates
+  - curl
+  - git
+
+write_files:
+  - path: /root/install-pivnik-vk-gateway.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export PIVNIK_REPO_REF=fix/vk-native-hosting-gateway
+      rm -rf /opt/pivnik-vk-gateway-bootstrap
+      git clone --depth=1 --branch "$PIVNIK_REPO_REF" https://github.com/GrafTrahula666/pivnik-bonus-app.git /opt/pivnik-vk-gateway-bootstrap
+      exec /opt/pivnik-vk-gateway-bootstrap/vk-api-gateway/bootstrap-nip.sh
+
+runcmd:
+  - [ bash, /root/install-pivnik-vk-gateway.sh ]
+
+final_message: "Pivnik VK gateway bootstrap finished. Check: journalctl -u cloud-final.service --no-pager"
