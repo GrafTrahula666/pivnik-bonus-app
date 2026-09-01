@@ -8,33 +8,55 @@
 
 На этом этапе Railway backend и production PostgreSQL не переносятся.
 
-## 1. Поднять gateway параллельно production
+## 1. Dev gateway в Selectel без покупки домена
 
-Разместить `vk-api-gateway/` на VPS/облаке с хорошей доступностью из РФ. Нужен отдельный HTTPS-домен, например `api.<domain>`.
+Рекомендуемая минимальная конфигурация для gateway:
 
-В `.env`:
+- регион: Санкт-Петербург;
+- Ubuntu 24.04 LTS;
+- 1 vCPU;
+- 2 GB RAM;
+- 25 GB SSD;
+- публичный IPv4;
+- открытые входящие TCP 22, 80, 443.
 
-- `GATEWAY_DOMAIN` — публичный домен gateway;
-- `RAILWAY_ORIGIN=https://pivnik-vk-test-production-3474.up.railway.app`.
+При создании сервера передать содержимое `vk-api-gateway/selectel-cloud-init.yaml` как cloud-init/user-data.
 
-Запуск:
+Cloud-init автоматически:
+
+1. устанавливает Git/Docker;
+2. забирает ветку `fix/vk-native-hosting-gateway`;
+3. определяет публичный IPv4;
+4. создаёт временный dev hostname `PUBLIC_IP.nip.io`;
+5. запускает gateway + Caddy;
+6. получает публичный HTTPS-сертификат;
+7. проверяет `/healthz` и `/readyz` до существующего Railway production backend.
+
+После завершения установки адрес gateway можно получить на сервере:
 
 ```bash
-cd vk-api-gateway
-cp .env.example .env
-docker compose up -d --build
+cat /opt/pivnik-vk-gateway/vk-api-gateway/.env
+docker compose -f /opt/pivnik-vk-gateway/vk-api-gateway/docker-compose.yml ps
 ```
 
-Проверки:
+Для диагностики cloud-init:
 
 ```bash
-curl https://GATEWAY_DOMAIN/healthz
-curl https://GATEWAY_DOMAIN/readyz
+journalctl -u cloud-final.service --no-pager
 ```
 
 `readyz` должен вернуть `ok:true`, `upstream.vk:true`, `environment:production`.
 
-Критически важно проверить оба URL с российского мобильного интернета без VPN до переключения VK.
+Критически важно открыть `https://PUBLIC_IP.nip.io/healthz` и `/readyz` с российского мобильного интернета без VPN до деплоя VK Hosting.
+
+### Альтернатива для уже созданного Ubuntu VPS
+
+```bash
+git clone --depth=1 --branch fix/vk-native-hosting-gateway https://github.com/GrafTrahula666/pivnik-bonus-app.git
+sudo ./pivnik-bonus-app/vk-api-gateway/bootstrap-nip.sh
+```
+
+Для production позже заменить `nip.io` на собственный стабильный домен; код gateway менять не требуется.
 
 ## 2. Собрать VK static bundle
 
@@ -50,7 +72,7 @@ PIVNIK_VK_API_BASE=https://GATEWAY_DOMAIN npm run build:vk-hosting
 
 `VK_MINI_APPS_ACCESS_TOKEN`
 
-Используется официальный `@vkontakte/vk-miniapps-deploy@1.0.2`. Согласно документации VK, CI принимает `MINI_APPS_ACCESS_TOKEN`; `MINI_APPS_ENVIRONMENT=dev` обновляет dev URL.
+Используется официальный `@vkontakte/vk-miniapps-deploy@1.0.2`. CI принимает `MINI_APPS_ACCESS_TOKEN`; `MINI_APPS_ENVIRONMENT=dev` обновляет dev URL.
 
 Запустить вручную workflow `VK native hosting deploy`:
 
