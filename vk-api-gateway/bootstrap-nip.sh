@@ -3,7 +3,10 @@ set -euo pipefail
 
 REPO_REF="${PIVNIK_REPO_REF:-fix/vk-native-hosting-gateway}"
 INSTALL_DIR="${PIVNIK_GATEWAY_DIR:-/opt/pivnik-vk-gateway}"
-RAILWAY_ORIGIN="${RAILWAY_ORIGIN:-https://pivnik-vk-test-production-3474.up.railway.app}"
+# Direct Selectel -> Railway TLS is not reliable from the RU segment. The
+# existing Vercel proxy is a server-to-server relay to the same VK production
+# backend/database and is already allow-listed by PIVNIK_ALLOWED_ORIGINS.
+RAILWAY_ORIGIN="${RAILWAY_ORIGIN:-https://pivnik-vk-proxy.vercel.app}"
 ARCHIVE_URL="${PIVNIK_ARCHIVE_URL:-https://codeload.github.com/GrafTrahula666/pivnik-bonus-app/tar.gz/refs/heads/${REPO_REF}}"
 FALLBACK_ARCHIVE_URL="${PIVNIK_FALLBACK_ARCHIVE_URL:-https://api.github.com/repos/GrafTrahula666/pivnik-bonus-app/tarball/${REPO_REF}}"
 
@@ -71,7 +74,7 @@ fi
 
 curl -fsS --max-time 15 "https://${GATEWAY_DOMAIN}/readyz" >/tmp/pivnik-gateway-ready.json || {
   cat /tmp/pivnik-gateway-ready.json 2>/dev/null || true
-  echo "Gateway is online but Railway readiness check failed." >&2
+  echo "Gateway is online but upstream readiness check failed." >&2
   exit 1
 }
 
