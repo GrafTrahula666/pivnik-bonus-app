@@ -4,7 +4,7 @@ package_upgrade: false
 packages:
   - ca-certificates
   - curl
-  - git
+  - tar
 
 write_files:
   - path: /root/install-pivnik-vk-gateway.sh
@@ -14,8 +14,16 @@ write_files:
       #!/usr/bin/env bash
       set -euo pipefail
       export PIVNIK_REPO_REF=fix/vk-native-hosting-gateway
+      archive="$(mktemp)"
+      trap 'rm -f "$archive"' EXIT
+      url="https://codeload.github.com/GrafTrahula666/pivnik-bonus-app/tar.gz/refs/heads/${PIVNIK_REPO_REF}"
+      fallback="https://api.github.com/repos/GrafTrahula666/pivnik-bonus-app/tarball/${PIVNIK_REPO_REF}"
+      if ! curl -fL --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 "$url" -o "$archive"; then
+        curl -fL --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 "$fallback" -o "$archive"
+      fi
       rm -rf /opt/pivnik-vk-gateway-bootstrap
-      git clone --depth=1 --branch "$PIVNIK_REPO_REF" https://github.com/GrafTrahula666/pivnik-bonus-app.git /opt/pivnik-vk-gateway-bootstrap
+      mkdir -p /opt/pivnik-vk-gateway-bootstrap
+      tar -xzf "$archive" -C /opt/pivnik-vk-gateway-bootstrap --strip-components=1
       exec /opt/pivnik-vk-gateway-bootstrap/vk-api-gateway/bootstrap-nip.sh
 
 runcmd:
