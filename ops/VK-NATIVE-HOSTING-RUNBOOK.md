@@ -4,33 +4,41 @@
 
 ## Целевая схема
 
-`VK -> VK Mini Apps Hosting -> Russian HTTPS API Gateway -> Railway VK backend -> existing PostgreSQL`
+`VK -> VK Mini Apps Hosting -> Selectel RU HTTPS Gateway -> Vercel server relay -> Railway VK backend -> existing PostgreSQL`
 
-На этом этапе Railway backend и production PostgreSQL не переносятся.
+Важно: Vercel в этой схеме не загружается браузером пользователя. Он используется только как server-to-server relay между Selectel и существующим Railway backend. На этом этапе Railway backend и production PostgreSQL не переносятся.
+
+Проверка 2026-09-02 из Selectel `ru-3b`:
+
+- прямой `Selectel -> Railway` устанавливает TCP/443, но зависает на TLS ClientHello;
+- `Selectel -> pivnik-vk-proxy.vercel.app -> Railway` успешно возвращает HTTP 200;
+- production metadata через relay: database fingerprint `7546c67ea9d5cfeb2792`, release commit `bd5ce4df161c724e3097ce70ebdde3bc458429b3`.
 
 ## 1. Dev gateway в Selectel без покупки домена
 
 Рекомендуемая минимальная конфигурация для gateway:
 
 - регион: Санкт-Петербург;
+- сегмент: `ru-3b`;
 - Ubuntu 24.04 LTS;
 - 1 vCPU;
 - 2 GB RAM;
 - 25 GB SSD;
-- публичный IPv4;
+- прямой публичный IPv4;
 - открытые входящие TCP 22, 80, 443.
 
 При создании сервера передать содержимое `vk-api-gateway/selectel-cloud-init.yaml` как cloud-init/user-data.
 
 Cloud-init автоматически:
 
-1. устанавливает Git/Docker;
-2. забирает ветку `fix/vk-native-hosting-gateway`;
+1. устанавливает curl/tar/Docker;
+2. забирает архив ветки `fix/vk-native-hosting-gateway` через GitHub archive endpoint с API fallback;
 3. определяет публичный IPv4;
 4. создаёт временный dev hostname `PUBLIC_IP.nip.io`;
 5. запускает gateway + Caddy;
 6. получает публичный HTTPS-сертификат;
-7. проверяет `/healthz` и `/readyz` до существующего Railway production backend.
+7. направляет upstream через `https://pivnik-vk-proxy.vercel.app`;
+8. проверяет `/healthz` и `/readyz` до существующего production backend.
 
 После завершения установки адрес gateway можно получить на сервере:
 
@@ -49,11 +57,15 @@ journalctl -u cloud-final.service --no-pager
 
 Критически важно открыть `https://PUBLIC_IP.nip.io/healthz` и `/readyz` с российского мобильного интернета без VPN до деплоя VK Hosting.
 
-### Альтернатива для уже созданного Ubuntu VPS
+### Уже созданный сервер
+
+Если `.env` был создан со старым прямым Railway upstream, переключить только upstream и пересоздать gateway container:
 
 ```bash
-git clone --depth=1 --branch fix/vk-native-hosting-gateway https://github.com/GrafTrahula666/pivnik-bonus-app.git
-sudo ./pivnik-bonus-app/vk-api-gateway/bootstrap-nip.sh
+cd /opt/pivnik-vk-gateway/vk-api-gateway
+sed -i 's#^RAILWAY_ORIGIN=.*#RAILWAY_ORIGIN=https://pivnik-vk-proxy.vercel.app#' .env
+docker compose up -d --force-recreate gateway
+curl -fsS https://$(grep '^GATEWAY_DOMAIN=' .env | cut -d= -f2)/readyz
 ```
 
 Для production позже заменить `nip.io` на собственный стабильный домен; код gateway менять не требуется.
@@ -95,7 +107,7 @@ PIVNIK_VK_API_BASE=https://GATEWAY_DOMAIN npm run build:vk-hosting
 9. повторный вход;
 10. одинаковое поведение Wi-Fi и мобильного интернета без VPN.
 
-Параллельно проверить `gateway/readyz` и Railway `/api/platform-health`: fingerprint БД и release commit должны соответствовать текущему production backend.
+Параллельно проверить `gateway/readyz` и `/api/platform-health`: fingerprint БД и release commit должны соответствовать текущему production backend.
 
 ## 5. Production switch
 
