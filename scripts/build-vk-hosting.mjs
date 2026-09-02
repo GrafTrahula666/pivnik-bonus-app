@@ -93,6 +93,21 @@ for (const match of renderedHtml.matchAll(/(?:src|href)="([^\"]+)"/g)) {
 }
 for (const file of references) await copyIfExists(file);
 
+// In the Railway runtime this browser bundle is served directly from
+// node_modules. VK Native Hosting is static, so materialize that dependency
+// into the output directory explicitly.
+const vkBridgeSource = path.join(
+  root,
+  'node_modules',
+  '@vkontakte',
+  'vk-bridge',
+  'dist',
+  'browser.min.js'
+);
+const vkBridgeTarget = path.join(outDir, 'vendor', 'vk-bridge.js');
+await fs.mkdir(path.dirname(vkBridgeTarget), { recursive: true });
+await fs.copyFile(vkBridgeSource, vkBridgeTarget);
+
 const vkRuntimePath = path.join(outDir, 'vk-platform.js');
 const vkRuntime = await fs.readFile(vkRuntimePath, 'utf8');
 await fs.writeFile(vkRuntimePath, patchVkRuntime(vkRuntime));
