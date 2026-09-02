@@ -23,6 +23,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../vk-hosting-build:/srv/pivnik-vk:ro
       - caddy_data:/data
       - caddy_config:/config
 
