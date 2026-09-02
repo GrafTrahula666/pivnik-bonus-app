@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${PIVNIK_REPO_URL:-https://github.com/GrafTrahula666/pivnik-bonus-app.git}"
 REPO_REF="${PIVNIK_REPO_REF:-fix/vk-native-hosting-gateway}"
 INSTALL_DIR="${PIVNIK_GATEWAY_DIR:-/opt/pivnik-vk-gateway}"
 RAILWAY_ORIGIN="${RAILWAY_ORIGIN:-https://pivnik-vk-test-production-3474.up.railway.app}"
+ARCHIVE_URL="${PIVNIK_ARCHIVE_URL:-https://codeload.github.com/GrafTrahula666/pivnik-bonus-app/tar.gz/refs/heads/${REPO_REF}}"
+FALLBACK_ARCHIVE_URL="${PIVNIK_FALLBACK_ARCHIVE_URL:-https://api.github.com/repos/GrafTrahula666/pivnik-bonus-app/tarball/${REPO_REF}}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root." >&2
@@ -13,7 +14,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl git docker.io
+apt-get install -y ca-certificates curl tar docker.io
 if ! docker compose version >/dev/null 2>&1; then
   apt-get install -y docker-compose-v2 || true
 fi
@@ -30,13 +31,18 @@ fi
 
 GATEWAY_DOMAIN="${GATEWAY_DOMAIN:-${PUBLIC_IP}.nip.io}"
 
-if [ -d "$INSTALL_DIR/.git" ]; then
-  git -C "$INSTALL_DIR" fetch --depth=1 origin "$REPO_REF"
-  git -C "$INSTALL_DIR" checkout -f FETCH_HEAD
-else
-  rm -rf "$INSTALL_DIR"
-  git clone --depth=1 --branch "$REPO_REF" "$REPO_URL" "$INSTALL_DIR"
+rm -rf "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR"
+archive="$(mktemp)"
+cleanup() { rm -f "$archive"; }
+trap cleanup EXIT
+
+if ! curl -fL --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 "$ARCHIVE_URL" -o "$archive"; then
+  echo "Primary GitHub archive endpoint failed; trying API fallback." >&2
+  curl -fL --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 "$FALLBACK_ARCHIVE_URL" -o "$archive"
 fi
+
+tar -xzf "$archive" -C "$INSTALL_DIR" --strip-components=1
 
 cd "$INSTALL_DIR/vk-api-gateway"
 cat > .env <<EOF
