@@ -15,14 +15,29 @@ test('VK native hosting config targets app 54694987 and a static build directory
   });
 });
 
-test('VK hosting builder injects a separate API base and refuses Railway/Vercel browser endpoints', async () => {
+test('VK hosting builder injects a separate API base and keeps Telegram client parity', async () => {
   const source = await read('scripts/build-vk-hosting.mjs');
   assert.match(source, /__PIVNIK_VK_API_BASE__/);
   assert.match(source, /resolveGatewayInput/);
   assert.match(source, /originalFetch\(resolveGatewayInput\(input\)/);
   assert.match(source, /VK Hosting gateway must not use vercel\.app/);
   assert.match(source, /VK Hosting gateway must not expose Railway directly/);
-  assert.match(source, /telegram-wheel:start/);
+  assert.match(source, /telegram-wheel-legacy:start/);
+  assert.doesNotMatch(source, /\.replace\(\/<!-- telegram-wheel:start -->/);
+  assert.match(source, /VK_TELEGRAM_PARITY_CSS/);
+  assert.match(source, /luxury-vip-space\.webp/);
+  assert.match(source, /vk-telegram-parity\.css/);
+  assert.match(source, /html\.platform-vk \.home-feature-grid/);
+  assert.match(source, /html\.platform-vk \.client-tip/);
+  assert.match(source, /assertVkClientParity/);
+  assert.match(source, /assertVkWheelRuntime/);
+  assert.match(source, /openWheelButton/);
+  assert.match(source, /wheelSpinButton/);
+  assert.match(source, /openProfileShop/);
+  assert.match(source, /function renderWheelArtwork/);
+  assert.match(source, /function spinWheel/);
+  assert.match(source, /loadSecondaryData/);
+  assert.match(source, /VK wheel runtime is still platform-disabled/);
   assert.match(source, /vendor\/vk-bridge\.js/);
 });
 
