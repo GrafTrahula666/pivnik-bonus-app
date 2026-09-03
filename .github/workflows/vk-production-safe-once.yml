@@ -1,0 +1,89 @@
+name: VK production safe one-shot
+
+on:
+  push:
+    branches:
+      - deploy/vk-production-safe-20260904
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run syntax checks
+        run: npm run check
+
+      - name: Run full automated tests
+        run: npm test
+
+      - name: Verify Selectel gateway health
+        shell: bash
+        run: |
+          curl -fsS --max-time 10 https://139.100.238.159.nip.io/healthz
+          echo
+          curl -fsS --max-time 15 https://139.100.238.159.nip.io/readyz
+          echo
+
+      - name: Build VK production bundle through Selectel gateway
+        env:
+          PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
+        run: npm run build:vk-hosting
+
+      - name: Verify VK parity bundle before production deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/vk-telegram-parity.css
+          test -f vk-hosting-build/assets/backgrounds/luxury-vip-space.webp
+          grep -q 'id="openWheelButton"' vk-hosting-build/index.html
+          grep -q 'id="wheelSpinButton"' vk-hosting-build/index.html
+          grep -q 'data-screen="wheel"' vk-hosting-build/index.html
+          grep -q 'id="openAchievementsButton"' vk-hosting-build/index.html
+          grep -q 'id="openProfileShop"' vk-hosting-build/index.html
+          grep -q 'data-screen="actions"' vk-hosting-build/index.html
+          grep -q 'data-screen="league"' vk-hosting-build/index.html
+          grep -q 'data-screen="profile"' vk-hosting-build/index.html
+          grep -q 'luxury-vip-space.webp' vk-hosting-build/vk-telegram-parity.css
+          grep -q '__PIVNIK_VK_API_BASE__' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
+          ! grep -q 'telegram-wheel-legacy:start' vk-hosting-build/index.html
+
+      - name: Deploy exact verified bundle to VK PRODUCTION
+        env:
+          MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_MINI_APPS_ACCESS_TOKEN }}
+          MINI_APPS_ENVIRONMENT: production
+          CI_URLS: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$MINI_APPS_ACCESS_TOKEN" ]; then
+            echo "VK_MINI_APPS_ACCESS_TOKEN is not configured"
+            exit 1
+          fi
+          npx -y @vkontakte/vk-miniapps-deploy@1.0.2
+
+      - name: Verify gateway remained healthy after deploy
+        shell: bash
+        run: |
+          curl -fsS --max-time 10 https://139.100.238.159.nip.io/healthz
+          echo
+          curl -fsS --max-time 15 https://139.100.238.159.nip.io/readyz
+          echo
