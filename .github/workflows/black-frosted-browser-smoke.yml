@@ -34,7 +34,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Run Telegram + VK black-frosted browser smoke
-        run: node test/black-frosted-browser-smoke.mjs
+        run: node scripts/black-frosted-browser-smoke.mjs
 
       - name: Upload visual evidence
         if: always()
