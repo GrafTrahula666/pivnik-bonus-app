@@ -7,6 +7,7 @@ const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const TELEGRAM_DEEP_SPACE_HREF = '/telegram-deep-space-background.css?v=20260904-1';
+const BLACK_FROSTED_GLASS_HREF = '/black-frosted-glass.css?v=20260904-1';
 
 let index = await fs.readFile(indexPath, 'utf8');
 if (!index.includes(INDEX_MARKER)) {
@@ -29,8 +30,18 @@ if (!index.includes(TELEGRAM_DEEP_SPACE_HREF)) {
   );
 }
 
+if (!index.includes(BLACK_FROSTED_GLASS_HREF)) {
+  const telegramLayer = `<link rel="stylesheet" href="${TELEGRAM_DEEP_SPACE_HREF}" />`;
+  index = index.replace(
+    telegramLayer,
+    `${telegramLayer}\n  <link rel="stylesheet" href="${BLACK_FROSTED_GLASS_HREF}" />`
+  );
+}
+
 if (!index.includes('/red-cosmos-v2.css?v=2.0.0') || !index.includes('/red-cosmos-v2.js?v=2.0.0')) throw new Error('RED COSMOS v2 shell assets not wired');
 if (!index.includes(TELEGRAM_DEEP_SPACE_HREF)) throw new Error('Telegram deep-space background layer not wired');
+if (!index.includes(BLACK_FROSTED_GLASS_HREF)) throw new Error('Black frosted glass layer not wired');
+if (index.indexOf(BLACK_FROSTED_GLASS_HREF) < index.indexOf(TELEGRAM_DEEP_SPACE_HREF)) throw new Error('Black frosted glass layer must load after Telegram deep-space');
 if (index.includes('/v22.css') || index.includes('/v22-ui.js')) throw new Error('RED COSMOS v2 shell still loads obsolete v22 UI layer');
 await fs.writeFile(indexPath, index, 'utf8');
 
@@ -62,4 +73,4 @@ if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
 function renderBeer`);
 }
 await fs.writeFile(appPath, app, 'utf8');
-console.log('RED COSMOS v2 shell wired; Telegram deep-space layer wired; server palette overrides disabled.');
+console.log('RED COSMOS v2 shell wired; Telegram deep-space and shared black-frosted-glass layers wired; server palette overrides disabled.');
