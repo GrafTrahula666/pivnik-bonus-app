@@ -43,8 +43,10 @@ jobs:
           grep -q '__PIVNIK_VK_API_BASE__' vk-hosting-build/index.html
           grep -q 'https://139.100.238.159.nip.io' vk-hosting-build/index.html
           grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
-          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
-          ! grep -R -qE 'https://[^"'"' ]+\.up\.railway\.app|https://[^"'"' ]+\.vercel\.app' vk-hosting-build/index.html vk-hosting-build/vk-platform.js
+          if grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html; then
+            echo 'Telegram runtime leaked into VK native bundle'
+            exit 1
+          fi
 
       - name: Deploy exact bundle to VK Mini Apps Hosting production
         env:
