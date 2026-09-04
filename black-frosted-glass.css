@@ -1,0 +1,10 @@
+/* Shared visual-only frosted glass layer for VK and Telegram. */
+html.platform-vk .icon-btn,
+html.platform-telegram .icon-btn {
+  background: rgba(4, 6, 9, .58) !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  color: #f4f6f8 !important;
+  backdrop-filter: blur(16px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(112%) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 9px 26px rgba(0,0,0,.30) !important;
+}
