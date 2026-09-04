@@ -1,0 +1,53 @@
+/* PIVNIK_TELEGRAM_DEEP_SPACE_PARITY_20260904
+   Telegram-only visual parity with the existing VK deep-space background.
+   No layout, interaction, auth, routing, QR or wheel logic changes. */
+html.platform-telegram,
+html.platform-telegram body {
+  background:#050305!important;
+  background-image:none!important;
+  background-attachment:initial!important;
+  background-size:auto!important;
+  animation:none!important;
+}
+
+html.platform-telegram body::before,
+html.platform-telegram body::after {
+  content:none!important;
+  display:none!important;
+  animation:none!important;
+}
+
+html.platform-telegram .app-shell,
+html.platform-telegram #appShell,
+html.platform-telegram #appShell>main,
+html.platform-telegram .screen {
+  background:transparent!important;
+  background-image:none!important;
+  animation:none!important;
+}
+
+html.platform-telegram #appShell {
+  position:relative!important;
+  isolation:isolate!important;
+}
+
+html.platform-telegram .app-shell::before {
+  content:""!important;
+  display:block!important;
+  position:fixed!important;
+  inset:0!important;
+  left:50%!important;
+  width:min(100%,480px)!important;
+  height:auto!important;
+  transform:translateX(-50%)!important;
+  background:url('/assets/backgrounds/luxury-vip-space.webp?v=17.1-telegram') center top / cover no-repeat!important;
+  filter:brightness(1.72) saturate(1.22) contrast(1.06)!important;
+  opacity:1!important;
+  pointer-events:none!important;
+  z-index:0!important;
+}
+
+html.platform-telegram .app-shell::after {
+  content:none!important;
+  display:none!important;
+}
