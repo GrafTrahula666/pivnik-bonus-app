@@ -9,6 +9,7 @@ const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const TELEGRAM_DEEP_SPACE_HREF = '/telegram-deep-space-background.css?v=20260904-1';
 const BLACK_FROSTED_GLASS_HREF = '/black-frosted-glass.css?v=20260904-1';
 const BLACK_FROSTED_SURFACES_HREF = '/black-frosted-surfaces.css?v=20260904-1';
+const BLACK_FROSTED_CONTROLS_HREF = '/black-frosted-controls.css?v=20260904-1';
 
 let index = await fs.readFile(indexPath, 'utf8');
 if (!index.includes(INDEX_MARKER)) {
@@ -47,12 +48,22 @@ if (!index.includes(BLACK_FROSTED_SURFACES_HREF)) {
   );
 }
 
+if (!index.includes(BLACK_FROSTED_CONTROLS_HREF)) {
+  const surfaceLayer = `<link rel="stylesheet" href="${BLACK_FROSTED_SURFACES_HREF}" />`;
+  index = index.replace(
+    surfaceLayer,
+    `${surfaceLayer}\n  <link rel="stylesheet" href="${BLACK_FROSTED_CONTROLS_HREF}" />`
+  );
+}
+
 if (!index.includes('/red-cosmos-v2.css?v=2.0.0') || !index.includes('/red-cosmos-v2.js?v=2.0.0')) throw new Error('RED COSMOS v2 shell assets not wired');
 if (!index.includes(TELEGRAM_DEEP_SPACE_HREF)) throw new Error('Telegram deep-space background layer not wired');
 if (!index.includes(BLACK_FROSTED_GLASS_HREF)) throw new Error('Black frosted glass layer not wired');
 if (!index.includes(BLACK_FROSTED_SURFACES_HREF)) throw new Error('Black frosted surfaces layer not wired');
+if (!index.includes(BLACK_FROSTED_CONTROLS_HREF)) throw new Error('Black frosted controls layer not wired');
 if (index.indexOf(BLACK_FROSTED_GLASS_HREF) < index.indexOf(TELEGRAM_DEEP_SPACE_HREF)) throw new Error('Black frosted glass layer must load after Telegram deep-space');
 if (index.indexOf(BLACK_FROSTED_SURFACES_HREF) < index.indexOf(BLACK_FROSTED_GLASS_HREF)) throw new Error('Black frosted surfaces layer must load after icon glass');
+if (index.indexOf(BLACK_FROSTED_CONTROLS_HREF) < index.indexOf(BLACK_FROSTED_SURFACES_HREF)) throw new Error('Black frosted controls layer must load after surfaces');
 if (index.includes('/v22.css') || index.includes('/v22-ui.js')) throw new Error('RED COSMOS v2 shell still loads obsolete v22 UI layer');
 await fs.writeFile(indexPath, index, 'utf8');
 
@@ -84,4 +95,4 @@ if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
 function renderBeer`);
 }
 await fs.writeFile(appPath, app, 'utf8');
-console.log('RED COSMOS v2 shell wired; Telegram deep-space, black-frosted-glass icons and black-frosted surfaces wired; server palette overrides disabled.');
+console.log('RED COSMOS v2 shell wired; Telegram deep-space, black-frosted glass icons, surfaces and neutral controls wired; server palette overrides disabled.');

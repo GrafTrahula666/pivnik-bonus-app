@@ -1,0 +1,29 @@
+/* PIVNIK BLACK FROSTED CONTROLS 2026-09-04
+   Visual-only control-chrome cleanup shared by VK and Telegram.
+   The glass lives on each icon span; outer navigation buttons stay neutral. */
+
+html.platform-vk .bottom-nav button,
+html.platform-telegram .bottom-nav button,
+html.platform-vk .bottom-nav button.active,
+html.platform-telegram .bottom-nav button.active,
+html.platform-vk .bottom-nav .qr-nav-button,
+html.platform-telegram .bottom-nav .qr-nav-button,
+html.platform-vk .bottom-nav .qr-nav-button.active,
+html.platform-telegram .bottom-nav .qr-nav-button.active {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Keep selection visible through the already-black glass icon, not a pink/red button plate. */
+html.platform-vk .bottom-nav button.active:not(.qr-nav-button) > span,
+html.platform-telegram .bottom-nav button.active:not(.qr-nav-button) > span {
+  border-color: rgba(255, 255, 255, .28) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 10px 26px rgba(0, 0, 0, .38) !important;
+}
+
+html.platform-vk .bottom-nav .qr-nav-button > span,
+html.platform-telegram .bottom-nav .qr-nav-button > span {
+  border-color: rgba(255, 255, 255, .22) !important;
+  box-shadow: 0 0 0 6px rgba(2, 3, 5, .70), 0 12px 32px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .13) !important;
+}
