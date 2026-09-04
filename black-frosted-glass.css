@@ -145,3 +145,83 @@ html.lite-mode .bottom-nav button > span {
     -webkit-backdrop-filter: none !important;
   }
 }
+
+/* VK MATTE ICON HARDENING 2026-09-04
+   Keep every neutral icon surface visibly black over the red-cosmos background.
+   This is deliberately VK-only and visual-only. */
+html.platform-vk {
+  --pivnik-vk-matte-icon-bg: linear-gradient(145deg, rgba(8, 9, 12, .97), rgba(0, 0, 0, .93));
+  --pivnik-vk-matte-icon-bg-active: linear-gradient(145deg, rgba(13, 15, 19, .98), rgba(1, 2, 3, .95));
+  --pivnik-vk-matte-icon-border: rgba(255, 255, 255, .16);
+  --pivnik-vk-matte-icon-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 9px 24px rgba(0, 0, 0, .44);
+}
+
+html.platform-vk .icon-btn,
+html.platform-vk .close,
+html.platform-vk .profile-edit-icon,
+html.platform-vk .wheel-entry-mark,
+html.platform-vk .achievement-tile-icon,
+html.platform-vk .promo-orbit,
+html.platform-vk .shop-arrow,
+html.platform-vk .leaderboard-podium-mini > span > i,
+html.platform-vk .profile-shortcuts button > span,
+html.platform-vk .profile-menu > button > span,
+html.platform-vk .bottom-nav button > span,
+html.platform-vk .home-promo-banner > i,
+html.platform-vk .home-stat-card > i,
+html.platform-vk .wheel-rules-link > i {
+  background: var(--pivnik-vk-matte-icon-bg) !important;
+  background-image: var(--pivnik-vk-matte-icon-bg) !important;
+  border-color: var(--pivnik-vk-matte-icon-border) !important;
+  color: #f4f6f8 !important;
+  box-shadow: var(--pivnik-vk-matte-icon-shadow) !important;
+  backdrop-filter: blur(14px) saturate(32%) brightness(62%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(32%) brightness(62%) !important;
+}
+
+html.platform-vk .bottom-nav button.active > span,
+html.platform-vk .icon-btn:active,
+html.platform-vk .profile-edit-icon:active,
+html.platform-vk .profile-shortcuts button:active > span,
+html.platform-vk .profile-menu > button:active > span {
+  background: var(--pivnik-vk-matte-icon-bg-active) !important;
+  background-image: var(--pivnik-vk-matte-icon-bg-active) !important;
+  border-color: rgba(255, 255, 255, .23) !important;
+  color: #ffffff !important;
+}
+
+html.platform-vk .bottom-nav .qr-nav-button > span {
+  background: linear-gradient(145deg, rgba(7, 8, 11, .99), rgba(0, 0, 0, .96)) !important;
+  background-image: linear-gradient(145deg, rgba(7, 8, 11, .99), rgba(0, 0, 0, .96)) !important;
+  border-color: rgba(255, 255, 255, .20) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 6px rgba(0, 0, 0, .78), 0 12px 30px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .10) !important;
+  backdrop-filter: blur(14px) saturate(28%) brightness(58%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(28%) brightness(58%) !important;
+}
+
+html.platform-vk.android-webview .icon-btn,
+html.platform-vk.android-webview .close,
+html.platform-vk.android-webview .profile-edit-icon,
+html.platform-vk.android-webview .wheel-entry-mark,
+html.platform-vk.android-webview .achievement-tile-icon,
+html.platform-vk.android-webview .promo-orbit,
+html.platform-vk.android-webview .shop-arrow,
+html.platform-vk.android-webview .profile-shortcuts button > span,
+html.platform-vk.android-webview .profile-menu > button > span,
+html.platform-vk.android-webview .bottom-nav button > span,
+html.platform-vk.lite-mode .icon-btn,
+html.platform-vk.lite-mode .close,
+html.platform-vk.lite-mode .profile-edit-icon,
+html.platform-vk.lite-mode .wheel-entry-mark,
+html.platform-vk.lite-mode .achievement-tile-icon,
+html.platform-vk.lite-mode .promo-orbit,
+html.platform-vk.lite-mode .shop-arrow,
+html.platform-vk.lite-mode .profile-shortcuts button > span,
+html.platform-vk.lite-mode .profile-menu > button > span,
+html.platform-vk.lite-mode .bottom-nav button > span {
+  background: rgba(3, 4, 6, .96) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

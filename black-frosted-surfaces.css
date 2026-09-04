@@ -1,0 +1,149 @@
+/* PIVNIK BLACK FROSTED SURFACES 2026-09-04
+   Visual-only surface layer shared by VK and Telegram. */
+html.platform-vk,
+html.platform-telegram {
+  --pivnik-surface-glass-bg: linear-gradient(145deg, rgba(9, 11, 15, .78), rgba(2, 3, 5, .62));
+  --pivnik-surface-glass-bg-strong: linear-gradient(145deg, rgba(8, 10, 13, .88), rgba(2, 3, 5, .74));
+  --pivnik-surface-glass-border: rgba(255, 255, 255, .13);
+  --pivnik-surface-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 18px 46px rgba(0, 0, 0, .30);
+}
+
+html.platform-vk .vip-glass-card,
+html.platform-telegram .vip-glass-card,
+html.platform-vk .hero-card,
+html.platform-telegram .hero-card,
+html.platform-vk .card,
+html.platform-telegram .card,
+html.platform-vk .modal-sheet,
+html.platform-telegram .modal-sheet,
+html.platform-vk .profile-identity-card,
+html.platform-telegram .profile-identity-card,
+html.platform-vk .profile-history-card,
+html.platform-telegram .profile-history-card,
+html.platform-vk .league-summary,
+html.platform-telegram .league-summary,
+html.platform-vk .wheel-control-card,
+html.platform-telegram .wheel-control-card,
+html.platform-vk .admin-card,
+html.platform-telegram .admin-card,
+html.platform-vk .admin-preview-card,
+html.platform-telegram .admin-preview-card,
+html.platform-vk .shift-admin-card,
+html.platform-telegram .shift-admin-card,
+html.platform-vk .shop-feature,
+html.platform-telegram .shop-feature,
+html.platform-vk .team-strip,
+html.platform-telegram .team-strip {
+  background: var(--pivnik-surface-glass-bg) !important;
+  border-color: var(--pivnik-surface-glass-border) !important;
+  box-shadow: var(--pivnik-surface-glass-shadow) !important;
+  backdrop-filter: blur(22px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(112%) !important;
+}
+
+html.platform-vk .topbar,
+html.platform-telegram .topbar,
+html.platform-vk .bottom-nav,
+html.platform-telegram .bottom-nav {
+  background: rgba(4, 5, 7, .68) !important;
+  border-color: rgba(255, 255, 255, .10) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045), 0 14px 34px rgba(0, 0, 0, .20) !important;
+  backdrop-filter: blur(24px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(110%) !important;
+}
+
+html.platform-vk .shop-list-card:not(.v2-premium),
+html.platform-telegram .shop-list-card:not(.v2-premium),
+html.platform-vk .red-cosmos-shop-card:not(.v2-premium),
+html.platform-telegram .red-cosmos-shop-card:not(.v2-premium) {
+  background: var(--pivnik-surface-glass-bg-strong) !important;
+  border-color: rgba(255, 255, 255, .12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .055), 0 14px 34px rgba(0, 0, 0, .26) !important;
+  backdrop-filter: blur(18px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(110%) !important;
+}
+
+html.platform-vk .red-cosmos-admin-tabs,
+html.platform-telegram .red-cosmos-admin-tabs {
+  background: linear-gradient(180deg, rgba(3, 4, 6, .90), rgba(3, 4, 6, .72), transparent) !important;
+}
+
+/* Preserve the existing reduced-effects policy in Android WebView and lite mode. */
+html.android-webview .vip-glass-card,
+html.android-webview .hero-card,
+html.android-webview .card,
+html.android-webview .modal-sheet,
+html.android-webview .profile-identity-card,
+html.android-webview .profile-history-card,
+html.android-webview .league-summary,
+html.android-webview .wheel-control-card,
+html.android-webview .admin-card,
+html.android-webview .admin-preview-card,
+html.android-webview .shift-admin-card,
+html.android-webview .shop-feature,
+html.android-webview .team-strip,
+html.android-webview .topbar,
+html.android-webview .bottom-nav,
+html.android-webview .shop-list-card:not(.v2-premium),
+html.android-webview .red-cosmos-shop-card:not(.v2-premium),
+html.lite-mode .vip-glass-card,
+html.lite-mode .hero-card,
+html.lite-mode .card,
+html.lite-mode .modal-sheet,
+html.lite-mode .profile-identity-card,
+html.lite-mode .profile-history-card,
+html.lite-mode .league-summary,
+html.lite-mode .wheel-control-card,
+html.lite-mode .admin-card,
+html.lite-mode .admin-preview-card,
+html.lite-mode .shift-admin-card,
+html.lite-mode .shop-feature,
+html.lite-mode .team-strip,
+html.lite-mode .topbar,
+html.lite-mode .bottom-nav,
+html.lite-mode .shop-list-card:not(.v2-premium),
+html.lite-mode .red-cosmos-shop-card:not(.v2-premium) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.platform-vk .vip-glass-card,
+  html.platform-telegram .vip-glass-card,
+  html.platform-vk .hero-card,
+  html.platform-telegram .hero-card,
+  html.platform-vk .card,
+  html.platform-telegram .card,
+  html.platform-vk .modal-sheet,
+  html.platform-telegram .modal-sheet,
+  html.platform-vk .profile-identity-card,
+  html.platform-telegram .profile-identity-card,
+  html.platform-vk .profile-history-card,
+  html.platform-telegram .profile-history-card,
+  html.platform-vk .league-summary,
+  html.platform-telegram .league-summary,
+  html.platform-vk .wheel-control-card,
+  html.platform-telegram .wheel-control-card,
+  html.platform-vk .admin-card,
+  html.platform-telegram .admin-card,
+  html.platform-vk .admin-preview-card,
+  html.platform-telegram .admin-preview-card,
+  html.platform-vk .shift-admin-card,
+  html.platform-telegram .shift-admin-card,
+  html.platform-vk .shop-feature,
+  html.platform-telegram .shop-feature,
+  html.platform-vk .team-strip,
+  html.platform-telegram .team-strip,
+  html.platform-vk .topbar,
+  html.platform-telegram .topbar,
+  html.platform-vk .bottom-nav,
+  html.platform-telegram .bottom-nav,
+  html.platform-vk .shop-list-card:not(.v2-premium),
+  html.platform-telegram .shop-list-card:not(.v2-premium),
+  html.platform-vk .red-cosmos-shop-card:not(.v2-premium),
+  html.platform-telegram .red-cosmos-shop-card:not(.v2-premium) {
+    background: rgba(5, 7, 10, .94) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
