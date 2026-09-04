@@ -42,8 +42,8 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run check
 
-      - name: Check backup and restore scripts
-        run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
+      - name: Check shell scripts
+        run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh vk-api-gateway/bootstrap-nip.sh
 
       - name: Run automated tests
         shell: bash

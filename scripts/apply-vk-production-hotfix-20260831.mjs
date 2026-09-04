@@ -42,28 +42,22 @@ app = replaceRequired(
 );
 await write('app.js', app);
 
+// Keep VK logic untouched and replace only the decorative page background with
+// the same deep-space asset already used by the shared/Telegram shell.
+await fs.access(path.join(root, 'assets/backgrounds/luxury-vip-space.webp'));
 let redCss = await read('red-cosmos-v2.css');
 const vkBackgroundFix = `
 /* PIVNIK_VK_COSMOS_BACKGROUND_20260831
-   One visible, low-cost VK background. Inner page containers stay transparent
-   so the actual RED COSMOS field is not hidden by their own opaque gradients. */
+   VK uses the same deep-space background asset as the shared/Telegram shell.
+   Inner page containers stay transparent; interaction layers are unchanged. */
 html.platform-vk,
 html.platform-vk body {
-  background:#050103!important;
+  background:#050305!important;
+  background-image:none!important;
+  animation:none!important;
 }
 html.platform-vk body {
   min-height:100dvh!important;
-  background:
-    radial-gradient(circle at 12% 13%,rgba(255,255,255,.34) 0 1px,transparent 1.45px),
-    radial-gradient(circle at 78% 9%,rgba(255,214,223,.28) 0 1px,transparent 1.4px),
-    radial-gradient(circle at 31% 63%,rgba(255,113,142,.22) 0 1px,transparent 1.55px),
-    radial-gradient(circle at 89% 76%,rgba(255,255,255,.19) 0 1px,transparent 1.35px),
-    radial-gradient(ellipse at 79% 22%,rgba(145,8,46,.34) 0%,rgba(84,4,35,.17) 33%,transparent 58%),
-    radial-gradient(ellipse at 18% 76%,rgba(83,8,78,.27) 0%,rgba(64,5,52,.14) 36%,transparent 61%),
-    linear-gradient(158deg,#040102 0%,#090205 30%,#16050d 60%,#0a0206 82%,#040102 100%)!important;
-  background-size:113px 113px,173px 173px,211px 211px,149px 149px,auto,auto,auto!important;
-  background-position:0 0,27px 18px,11px 53px,71px 31px,center,center,center!important;
-  animation:none!important;
 }
 html.platform-vk body::before,
 html.platform-vk body::after {
@@ -82,6 +76,25 @@ html.platform-vk #appShell {
   position:relative!important;
   isolation:isolate!important;
 }
+html.platform-vk .app-shell::before {
+  content:""!important;
+  display:block!important;
+  position:fixed!important;
+  inset:0!important;
+  left:50%!important;
+  width:min(100%,480px)!important;
+  height:auto!important;
+  transform:translateX(-50%)!important;
+  background:url('/assets/backgrounds/luxury-vip-space.webp?v=17.1-vk') center top / cover no-repeat!important;
+  filter:brightness(1.72) saturate(1.22) contrast(1.06)!important;
+  opacity:1!important;
+  pointer-events:none!important;
+  z-index:0!important;
+}
+html.platform-vk .app-shell::after {
+  content:none!important;
+  display:none!important;
+}
 `;
 if (!redCss.includes('PIVNIK_VK_COSMOS_BACKGROUND_20260831')) {
   redCss += vkBackgroundFix;
@@ -98,7 +111,8 @@ if (!finalApp.includes('button.disabled = !hasPlatformPhoto && !IS_VK')) failure
 if (!finalApp.includes('VK profile photo refresh failed:')) failures.push('on-demand photo selection');
 if (!finalCss.includes('PIVNIK_VK_COSMOS_BACKGROUND_20260831')) failures.push('VK cosmos background marker');
 if (!finalCss.includes('html.platform-vk #appShell>main')) failures.push('transparent VK page canvas');
-if (!finalCss.includes('radial-gradient(ellipse at 79% 22%')) failures.push('VK nebula layer');
+if (!finalCss.includes("luxury-vip-space.webp?v=17.1-vk")) failures.push('VK deep-space asset');
+if (!finalCss.includes('filter:brightness(1.72) saturate(1.22) contrast(1.06)')) failures.push('VK deep-space filter');
 if (failures.length) throw new Error(`VK production hotfix verification failed: ${failures.join(', ')}`);
 
-console.log('VK production avatar/background hotfix is applied and verified.');
+console.log('VK production avatar/deep-space hotfix is applied and verified.');
