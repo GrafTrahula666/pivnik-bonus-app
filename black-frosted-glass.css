@@ -1,10 +1,36 @@
-/* Shared visual-only frosted glass layer for VK and Telegram. */
+/* PIVNIK BLACK FROSTED GLASS v1.0
+   Shared visual-only icon treatment for VK and Telegram. */
+html.platform-vk,
+html.platform-telegram {
+  --glass-bg: rgba(4, 6, 9, .58);
+  --glass-border: rgba(255, 255, 255, .16);
+  --glass-shadow: 0 9px 26px rgba(0, 0, 0, .30);
+}
+
 html.platform-vk .icon-btn,
-html.platform-telegram .icon-btn {
-  background: rgba(4, 6, 9, .58) !important;
-  border: 1px solid rgba(255,255,255,.16) !important;
+html.platform-telegram .icon-btn,
+html.platform-vk .profile-edit-icon,
+html.platform-telegram .profile-edit-icon,
+html.platform-vk .wheel-entry-mark,
+html.platform-telegram .wheel-entry-mark,
+html.platform-vk .achievement-tile-icon,
+html.platform-telegram .achievement-tile-icon {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
   color: #f4f6f8 !important;
   backdrop-filter: blur(16px) saturate(112%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(112%) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 9px 26px rgba(0,0,0,.30) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), var(--glass-shadow) !important;
+}
+
+html.platform-vk .profile-shortcuts button > span,
+html.platform-telegram .profile-shortcuts button > span,
+html.platform-vk .profile-menu > button > span,
+html.platform-telegram .profile-menu > button > span {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: #f4f6f8 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), var(--glass-shadow) !important;
+  backdrop-filter: blur(16px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(112%) !important;
 }
