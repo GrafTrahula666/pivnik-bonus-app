@@ -6,6 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
+const TELEGRAM_DEEP_SPACE_HREF = '/telegram-deep-space-background.css?v=20260904-1';
 
 let index = await fs.readFile(indexPath, 'utf8');
 if (!index.includes(INDEX_MARKER)) {
@@ -20,7 +21,16 @@ if (!index.includes(INDEX_MARKER)) {
   }
   index += `\n${INDEX_MARKER}\n`;
 }
+
+if (!index.includes(TELEGRAM_DEEP_SPACE_HREF)) {
+  index = index.replace(
+    /(<link rel="stylesheet" href="\/red-cosmos-v2\.css\?v=2\.0\.0"\s*\/>)/,
+    `$1\n  <link rel="stylesheet" href="${TELEGRAM_DEEP_SPACE_HREF}" />`
+  );
+}
+
 if (!index.includes('/red-cosmos-v2.css?v=2.0.0') || !index.includes('/red-cosmos-v2.js?v=2.0.0')) throw new Error('RED COSMOS v2 shell assets not wired');
+if (!index.includes(TELEGRAM_DEEP_SPACE_HREF)) throw new Error('Telegram deep-space background layer not wired');
 if (index.includes('/v22.css') || index.includes('/v22-ui.js')) throw new Error('RED COSMOS v2 shell still loads obsolete v22 UI layer');
 await fs.writeFile(indexPath, index, 'utf8');
 
@@ -52,4 +62,4 @@ if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
 function renderBeer`);
 }
 await fs.writeFile(appPath, app, 'utf8');
-console.log('RED COSMOS v2 shell wired and server palette overrides disabled.');
+console.log('RED COSMOS v2 shell wired; Telegram deep-space layer wired; server palette overrides disabled.');
