@@ -63,7 +63,20 @@ jobs:
           fi
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "npm audit failed after 3 attempts"
+              exit 1
+            fi
+            echo "npm audit attempt $attempt failed; retrying after a short delay"
+            sleep $((attempt * 15))
+          done
 
       - name: Verify package contents
         run: npm pack --dry-run
