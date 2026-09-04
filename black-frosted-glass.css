@@ -1,0 +1,122 @@
+/* PIVNIK BLACK FROSTED GLASS 2026-09-04
+   Visual-only icon layer shared by VK and Telegram. */
+html.platform-vk,
+html.platform-telegram {
+  --pivnik-glass-bg: linear-gradient(145deg, rgba(10, 12, 16, .72), rgba(2, 3, 5, .54));
+  --pivnik-glass-bg-active: linear-gradient(145deg, rgba(18, 21, 27, .82), rgba(4, 5, 8, .68));
+  --pivnik-glass-border: rgba(255, 255, 255, .14);
+  --pivnik-glass-border-active: rgba(255, 255, 255, .26);
+  --pivnik-glass-inset: inset 0 1px 0 rgba(255, 255, 255, .09), inset 0 -1px 0 rgba(255, 255, 255, .025);
+  --pivnik-glass-shadow: 0 10px 26px rgba(0, 0, 0, .30);
+}
+
+html.platform-vk .icon-btn,
+html.platform-telegram .icon-btn,
+html.platform-vk .profile-edit-icon,
+html.platform-telegram .profile-edit-icon,
+html.platform-vk .wheel-entry-mark,
+html.platform-telegram .wheel-entry-mark,
+html.platform-vk .achievement-tile-icon,
+html.platform-telegram .achievement-tile-icon,
+html.platform-vk .promo-orbit,
+html.platform-telegram .promo-orbit,
+html.platform-vk .shop-arrow,
+html.platform-telegram .shop-arrow,
+html.platform-vk .leaderboard-podium-mini > span > i,
+html.platform-telegram .leaderboard-podium-mini > span > i {
+  background: var(--pivnik-glass-bg) !important;
+  border: 1px solid var(--pivnik-glass-border) !important;
+  box-shadow: var(--pivnik-glass-inset), var(--pivnik-glass-shadow) !important;
+  backdrop-filter: blur(18px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(112%) !important;
+}
+
+html.platform-vk .profile-shortcuts button > span,
+html.platform-telegram .profile-shortcuts button > span,
+html.platform-vk .profile-menu > button > span,
+html.platform-telegram .profile-menu > button > span,
+html.platform-vk .bottom-nav button:not(.qr-nav-button) > span,
+html.platform-telegram .bottom-nav button:not(.qr-nav-button) > span {
+  display: grid !important;
+  place-items: center !important;
+  background: var(--pivnik-glass-bg) !important;
+  border: 1px solid var(--pivnik-glass-border) !important;
+  box-shadow: var(--pivnik-glass-inset), var(--pivnik-glass-shadow) !important;
+  backdrop-filter: blur(16px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(110%) !important;
+}
+
+html.platform-vk .profile-shortcuts button > span,
+html.platform-telegram .profile-shortcuts button > span,
+html.platform-vk .profile-menu > button > span,
+html.platform-telegram .profile-menu > button > span {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  border-radius: 13px !important;
+}
+
+html.platform-vk .bottom-nav button:not(.qr-nav-button) > span,
+html.platform-telegram .bottom-nav button:not(.qr-nav-button) > span {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  border-radius: 12px !important;
+}
+
+html.platform-vk .bottom-nav button.active:not(.qr-nav-button) > span,
+html.platform-telegram .bottom-nav button.active:not(.qr-nav-button) > span {
+  background: var(--pivnik-glass-bg-active) !important;
+  border-color: var(--pivnik-glass-border-active) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .13), 0 11px 28px rgba(0, 0, 0, .34) !important;
+}
+
+html.platform-vk .bottom-nav .qr-nav-button > span,
+html.platform-telegram .bottom-nav .qr-nav-button > span {
+  background: linear-gradient(145deg, rgba(12, 14, 18, .86), rgba(2, 3, 5, .72)) !important;
+  border-color: rgba(255, 255, 255, .22) !important;
+  color: #f5f7fa !important;
+  box-shadow: 0 0 0 6px rgba(3, 4, 6, .62), 0 12px 32px rgba(0, 0, 0, .38), inset 0 1px 0 rgba(255, 255, 255, .13) !important;
+  backdrop-filter: blur(20px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(112%) !important;
+}
+
+html.platform-vk .wheel-entry-mark svg,
+html.platform-telegram .wheel-entry-mark svg {
+  opacity: .92 !important;
+}
+
+html.platform-vk .icon-btn:active,
+html.platform-telegram .icon-btn:active,
+html.platform-vk .profile-edit-icon:active,
+html.platform-telegram .profile-edit-icon:active,
+html.platform-vk .profile-shortcuts button:active > span,
+html.platform-telegram .profile-shortcuts button:active > span,
+html.platform-vk .profile-menu > button:active > span,
+html.platform-telegram .profile-menu > button:active > span {
+  background: rgba(2, 3, 5, .84) !important;
+  border-color: rgba(255, 255, 255, .20) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.platform-vk .icon-btn,
+  html.platform-telegram .icon-btn,
+  html.platform-vk .profile-edit-icon,
+  html.platform-telegram .profile-edit-icon,
+  html.platform-vk .wheel-entry-mark,
+  html.platform-telegram .wheel-entry-mark,
+  html.platform-vk .achievement-tile-icon,
+  html.platform-telegram .achievement-tile-icon,
+  html.platform-vk .profile-shortcuts button > span,
+  html.platform-telegram .profile-shortcuts button > span,
+  html.platform-vk .profile-menu > button > span,
+  html.platform-telegram .profile-menu > button > span,
+  html.platform-vk .bottom-nav button > span,
+  html.platform-telegram .bottom-nav button > span {
+    background: rgba(5, 7, 10, .92) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
