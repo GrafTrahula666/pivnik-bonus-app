@@ -100,6 +100,31 @@ html.platform-telegram .profile-menu > button:active > span {
   border-color: rgba(255, 255, 255, .20) !important;
 }
 
+/* Preserve the existing reduced-effects policy in Android WebView and lite mode. */
+html.android-webview .icon-btn,
+html.android-webview .profile-edit-icon,
+html.android-webview .wheel-entry-mark,
+html.android-webview .achievement-tile-icon,
+html.android-webview .promo-orbit,
+html.android-webview .shop-arrow,
+html.android-webview .leaderboard-podium-mini > span > i,
+html.android-webview .profile-shortcuts button > span,
+html.android-webview .profile-menu > button > span,
+html.android-webview .bottom-nav button > span,
+html.lite-mode .icon-btn,
+html.lite-mode .profile-edit-icon,
+html.lite-mode .wheel-entry-mark,
+html.lite-mode .achievement-tile-icon,
+html.lite-mode .promo-orbit,
+html.lite-mode .shop-arrow,
+html.lite-mode .leaderboard-podium-mini > span > i,
+html.lite-mode .profile-shortcuts button > span,
+html.lite-mode .profile-menu > button > span,
+html.lite-mode .bottom-nav button > span {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 @media (prefers-reduced-transparency: reduce) {
   html.platform-vk .icon-btn,
   html.platform-telegram .icon-btn,

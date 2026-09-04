@@ -23,6 +23,16 @@ test('shared black frosted glass styles only target visual icon containers on VK
   assert.doesNotMatch(css, /position:\s*fixed/);
 });
 
+test('glass respects Android WebView and lite-mode reduced effects', () => {
+  const css = read('black-frosted-glass.css');
+  assert.match(css, /html\.android-webview \.icon-btn/);
+  assert.match(css, /html\.android-webview \.bottom-nav button > span/);
+  assert.match(css, /html\.lite-mode \.icon-btn/);
+  assert.match(css, /html\.lite-mode \.bottom-nav button > span/);
+  assert.match(css, /backdrop-filter: none !important/);
+  assert.match(css, /-webkit-backdrop-filter: none !important/);
+});
+
 test('materialize wires glass after red cosmos and Telegram deep-space layers', () => {
   const shell = read('scripts/apply-red-cosmos-v2-shell-final.mjs');
   assert.match(shell, /BLACK_FROSTED_GLASS_HREF/);
