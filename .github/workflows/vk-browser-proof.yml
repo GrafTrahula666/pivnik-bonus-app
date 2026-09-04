@@ -1,0 +1,181 @@
+name: Temporary VK browser proof
+
+on:
+  push:
+    branches:
+      - ops/vk-testing-group-audit-20260823
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  BASE_URL: https://pivnik-vk-proxy.vercel.app
+  VK_APP_ID: '54694987'
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install browser
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run signed VK browser flow
+        env:
+          VK_APP_SECRET: ${{ secrets.VK_APP_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VK_APP_SECRET"
+          mkdir -p proof
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+
+          const base = process.env.BASE_URL;
+          const secret = process.env.VK_APP_SECRET;
+          const params = new URLSearchParams({
+            vk_app_id: process.env.VK_APP_ID,
+            vk_user_id: '99854694987',
+            vk_ts: String(Math.floor(Date.now() / 1000)),
+            vk_language: 'ru',
+            vk_platform: 'mobile_iphone',
+            vk_ref: 'browser_proof'
+          });
+          const signedPairs = [...params.entries()]
+            .filter(([key]) => key.startsWith('vk_'))
+            .sort(([a], [b]) => a.localeCompare(b));
+          const signedQuery = new URLSearchParams(signedPairs).toString();
+          const sign = crypto.createHmac('sha256', secret).update(signedQuery).digest('base64url');
+          params.set('sign', sign);
+          const launchUrl = `${base}/vk?${params.toString()}`;
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({
+              viewport: { width: 430, height: 932 },
+              deviceScaleFactor: 2,
+              isMobile: true,
+              hasTouch: true,
+              userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 VKBrowser/1.0'
+            });
+            await context.addInitScript(() => {
+              window.__PIVNIK_BOOT_TRACE__ = [];
+              const push = (label) => {
+                const boot = document.getElementById('bootScreen');
+                const shell = document.getElementById('appShell');
+                const text = document.getElementById('bootText');
+                window.__PIVNIK_BOOT_TRACE__.push({
+                  t: Math.round(performance.now()),
+                  label,
+                  bootClass: boot?.className || null,
+                  shellClass: shell?.className || null,
+                  bootText: text?.textContent || null,
+                  href: location.href
+                });
+              };
+              document.addEventListener('DOMContentLoaded', () => {
+                push('DOMContentLoaded');
+                const observer = new MutationObserver((mutations) => {
+                  for (const mutation of mutations) {
+                    if (mutation.type === 'attributes' && (mutation.target?.id === 'bootScreen' || mutation.target?.id === 'appShell')) {
+                      push(`mutation:${mutation.target.id}:${mutation.attributeName}`);
+                    }
+                  }
+                });
+                observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class'] });
+                window.setTimeout(() => push('t+500'), 500);
+                window.setTimeout(() => push('t+1500'), 1500);
+                window.setTimeout(() => push('t+3000'), 3000);
+                window.setTimeout(() => push('t+6000'), 6000);
+              }, { once: true });
+            });
+
+            const page = await context.newPage();
+            const events = [];
+            page.on('console', msg => events.push(`console:${msg.type()}:${msg.text()}`));
+            page.on('pageerror', err => events.push(`pageerror:${err.message}`));
+            page.on('framenavigated', frame => { if (frame === page.mainFrame()) events.push(`navigation:${frame.url()}`); });
+            page.on('response', res => {
+              const url = new URL(res.url());
+              if (url.pathname.startsWith('/api/')) events.push(`response:${res.status()}:${url.pathname}`);
+            });
+
+            await page.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await page.waitForSelector('#appShell:not(.hidden)', { timeout: 20000 });
+            events.push('checkpoint:shell-visible');
+            await page.screenshot({ path: 'proof/01-shell-visible.png', fullPage: true });
+            const beforeConsent = await page.evaluate(() => ({
+              bootClass: document.getElementById('bootScreen')?.className,
+              shellClass: document.getElementById('appShell')?.className,
+              bootText: document.getElementById('bootText')?.textContent,
+              consentClass: document.getElementById('consentModal')?.className,
+              profileSetupClass: document.getElementById('profileSetupModal')?.className,
+              bootCompleted: (() => { try { return eval('bootCompleted'); } catch (e) { return `ERR:${e.message}`; } })(),
+              hasProfile: (() => { try { return Boolean(eval('state.profile')); } catch { return null; } })()
+            }));
+            fs.writeFileSync('proof/before-consent.json', JSON.stringify(beforeConsent, null, 2));
+
+            const consent = page.locator('#consentModal.open');
+            if (await consent.count()) {
+              events.push('checkpoint:consent-open');
+              const accept = page.locator('#acceptTerms');
+              if (await accept.count()) {
+                await accept.click();
+                events.push('checkpoint:consent-clicked');
+                await page.waitForTimeout(1500);
+                await page.screenshot({ path: 'proof/02-after-consent.png', fullPage: true });
+              }
+            }
+            const setup = page.locator('#profileSetupModal.open');
+            if (await setup.count()) {
+              events.push('checkpoint:profile-setup-open');
+              const close = page.locator('#profileSetupClose');
+              if (await close.count()) {
+                await close.click();
+                events.push('checkpoint:profile-setup-closed');
+                await page.waitForTimeout(700);
+              }
+            }
+            await page.waitForTimeout(1200);
+
+            const finalState = await page.evaluate(() => ({
+              shellVisible: !document.getElementById('appShell')?.classList.contains('hidden'),
+              bootVisible: !document.getElementById('bootScreen')?.classList.contains('hidden'),
+              bootClass: document.getElementById('bootScreen')?.className,
+              shellClass: document.getElementById('appShell')?.className,
+              bootText: document.getElementById('bootText')?.textContent,
+              profileName: document.getElementById('profileName')?.textContent || '',
+              clientName: document.getElementById('clientName')?.textContent || '',
+              balance: document.getElementById('clientBalance')?.textContent || '',
+              bootCompleted: (() => { try { return eval('bootCompleted'); } catch (e) { return `ERR:${e.message}`; } })(),
+              hasProfile: (() => { try { return Boolean(eval('state.profile')); } catch { return null; } })(),
+              trace: window.__PIVNIK_BOOT_TRACE__ || []
+            }));
+
+            await page.screenshot({ path: 'proof/03-final.png', fullPage: true });
+            fs.writeFileSync('proof/browser-events.txt', events.join('\n') + '\n');
+            fs.writeFileSync('proof/final-state.json', JSON.stringify(finalState, null, 2));
+            console.log(JSON.stringify(finalState));
+            await browser.close();
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          NODE
+      - name: Upload browser proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-browser-proof
+          path: proof/
+          retention-days: 7
