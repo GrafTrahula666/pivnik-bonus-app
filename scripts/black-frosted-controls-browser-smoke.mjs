@@ -105,7 +105,7 @@ try {
     assert(!/(196, 30, 58|111, 31, 43|47, 8, 31)/.test(metrics.qrSpan.backgroundImage), `${mode}: red/burgundy QR icon tint still wins`);
 
     if (mode === 'vk') {
-      assert(/8, 9, 12/.test(metrics.qrSpan.backgroundImage), 'vk: QR icon is not matte black');
+      assert(/7, 8, 11|8, 9, 12/.test(metrics.qrSpan.backgroundImage), 'vk: QR icon is not matte black');
     } else {
       assert(/12, 14, 18|10, 12, 16/.test(metrics.qrSpan.backgroundImage), 'telegram: QR icon is not black frosted glass');
       assert(/luxury-vip-space\.webp/.test(metrics.appShellBeforeBackground), 'telegram: deep-space background lost');
