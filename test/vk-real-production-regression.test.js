@@ -28,11 +28,12 @@ test('VK owner access remains server-authorized through OWNER_VK_ID', () => {
   assert.match(app, /roleCanAdmin\(profile\.role\)/);
 });
 
-test('VK RED COSMOS background is visible instead of being covered by page canvases', () => {
+test('VK deep-space background is visible instead of being covered by page canvases', () => {
   const css = read('red-cosmos-v2.css');
   assert.match(css, /PIVNIK_VK_COSMOS_BACKGROUND_20260831/);
   assert.match(css, /html\.platform-vk body \{/);
-  assert.match(css, /radial-gradient\(ellipse at 79% 22%,rgba\(145,8,46,\.34\)/);
+  assert.match(css, /luxury-vip-space\.webp\?v=17\.1-vk/);
+  assert.match(css, /filter:brightness\(1\.72\) saturate\(1\.22\) contrast\(1\.06\)/);
   assert.match(css, /html\.platform-vk #appShell>main/);
   assert.match(css, /html\.platform-vk \.screen/);
   assert.match(css, /background:transparent!important/);
