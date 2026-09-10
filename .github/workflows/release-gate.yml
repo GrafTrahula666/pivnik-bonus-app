@@ -33,6 +33,9 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
+      - name: Audit canonical runtime retirement evidence
+        run: npm run audit:runtime-retirement
+
       - name: Materialize release sources
         run: npm run materialize
 
@@ -50,6 +53,9 @@ jobs:
             git diff --stat -- . ':(exclude).pivnik-materialized'
             exit 1
           fi
+
+      - name: Audit materialized runtime retirement evidence
+        run: npm run audit:runtime-retirement
 
       - name: Check JavaScript syntax
         run: npm run check
