@@ -39,6 +39,18 @@ jobs:
       - name: Verify materialized release state
         run: test -f .pivnik-materialized
 
+      - name: Verify release materialization is idempotent
+        shell: bash
+        run: |
+          before="$(git diff --binary -- . ':(exclude).pivnik-materialized' | sha256sum | cut -d' ' -f1)"
+          npm run materialize
+          after="$(git diff --binary -- . ':(exclude).pivnik-materialized' | sha256sum | cut -d' ' -f1)"
+          if [ "$before" != "$after" ]; then
+            echo "::error title=Non-idempotent release materialization::A second materialization changed the prepared release sources."
+            git diff --stat -- . ':(exclude).pivnik-materialized'
+            exit 1
+          fi
+
       - name: Check JavaScript syntax
         run: npm run check
 
