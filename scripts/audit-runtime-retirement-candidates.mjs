@@ -66,15 +66,37 @@ for (const command of prestart) {
   const marker = markerFromSource(source);
   const targets = collectStaticTargets(source);
   const presence = await markerPresence(marker, targets);
-  const markerPresent = Boolean(marker) && presence.some((entry) => entry.present);
+  const markerPresentAny = Boolean(marker) && presence.some((entry) => entry.present);
+  const markerPresentAll = Boolean(marker) && presence.length > 0 && presence.every((entry) => entry.present);
   const materializedExplicitly = materialize.has(command);
   const databaseRelated = /(?:db|database|migration|migrate)/i.test(command);
 
   let classification = 'needs-manual-proof';
-  if (databaseRelated) classification = 'keep-database-step';
-  else if (marker && !markerPresent) classification = 'still-mutates-clean-checkout';
-  else if (marker && markerPresent && !materializedExplicitly) classification = 'retirement-candidate';
-  else if (materializedExplicitly) classification = 'materialized-release-step';
+  let reason = 'static evidence is insufficient';
+
+  if (databaseRelated) {
+    classification = 'keep-database-step';
+    reason = 'database-related startup step';
+  } else if (materializedExplicitly) {
+    classification = 'materialized-release-step';
+    reason = 'explicitly included in release materialization';
+  } else if (!marker) {
+    reason = 'no static marker detected';
+  } else if (targets.length === 0) {
+    reason = 'marker exists but no static target was detected';
+  } else if (targets.length > 1) {
+    reason = markerPresentAll
+      ? 'marker is present in every detected target, but multi-target patches require semantic proof'
+      : markerPresentAny
+        ? 'marker is present in only some detected targets; multi-target patch requires semantic proof'
+        : 'marker is absent from detected targets; multi-target patch requires semantic proof';
+  } else if (!markerPresentAll) {
+    classification = 'still-mutates-clean-checkout';
+    reason = 'single detected target does not contain the patch marker';
+  } else {
+    classification = 'retirement-candidate';
+    reason = 'single detected target already contains the patch marker and the step is not in materialize';
+  }
 
   rows.push({
     script,
@@ -82,7 +104,8 @@ for (const command of prestart) {
     targets,
     presence,
     materializedExplicitly,
-    classification
+    classification,
+    reason
   });
 }
 
@@ -91,7 +114,7 @@ for (const row of rows) {
   const markerSummary = row.marker
     ? row.presence.map((entry) => `${entry.target}=${entry.present ? 'marker-present' : 'marker-absent'}`).join(', ') || 'no static target'
     : 'no static marker';
-  console.log(`- ${row.script}: ${row.classification}; materialize=${row.materializedExplicitly ? 'yes' : 'no'}; ${markerSummary}`);
+  console.log(`- ${row.script}: ${row.classification}; materialize=${row.materializedExplicitly ? 'yes' : 'no'}; ${markerSummary}; reason=${row.reason}`);
 }
 
 const candidates = rows.filter((row) => row.classification === 'retirement-candidate');
@@ -101,5 +124,5 @@ for (const row of candidates) console.log(`- ${row.script}`);
 const unsafeUnknowns = rows.filter((row) => row.classification === 'needs-manual-proof');
 if (unsafeUnknowns.length) {
   console.log(`\nManual proof still required: ${unsafeUnknowns.length}`);
-  for (const row of unsafeUnknowns) console.log(`- ${row.script}`);
+  for (const row of unsafeUnknowns) console.log(`- ${row.script}: ${row.reason}`);
 }
