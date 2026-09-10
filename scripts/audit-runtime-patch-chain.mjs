@@ -24,11 +24,24 @@ const APPROVED_PRESTART_COMMANDS = Object.freeze([
   'node scripts/apply-frame-shop-polish.mjs'
 ]);
 
+const MATERIALIZE_BOOTSTRAP_COMMAND = 'node scripts/materialize-runtime-patches.mjs';
+const PRESTART_ONLY_COMMANDS = new Set([
+  'node scripts/apply-release-polish.mjs',
+  'node scripts/apply-owner-unlimited-cancel.mjs',
+  'node scripts/repair-telegram-runtime.mjs',
+  'node scripts/red-cosmos-v2-db-prepare.mjs'
+]);
+
 function splitChain(command) {
   return String(command || '')
     .split('&&')
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function compareOrdered(actual, expected) {
+  return actual.length === expected.length
+    && actual.every((command, index) => command === expected[index]);
 }
 
 const pkg = JSON.parse(await fs.readFile(packagePath, 'utf8'));
@@ -55,4 +68,27 @@ if (!databaseCommands.includes('node scripts/red-cosmos-v2-db-prepare.mjs')) {
   throw new Error('Expected database preparation command is not explicitly identified in the audited prestart chain.');
 }
 
-console.log(`Runtime patch-chain audit passed: ${actual.length} approved prestart commands; ${databaseCommands.length} database-related command(s).`);
+const materializeActual = splitChain(pkg.scripts?.materialize);
+const materializeExpected = [
+  MATERIALIZE_BOOTSTRAP_COMMAND,
+  ...APPROVED_PRESTART_COMMANDS.filter((command) => !PRESTART_ONLY_COMMANDS.has(command))
+];
+
+if (!compareOrdered(materializeActual, materializeExpected)) {
+  throw new Error(
+    'Release materialization chain drifted from production prestart. '
+    + `Expected: ${materializeExpected.join(' && ')}. Actual: ${materializeActual.join(' && ')}.`
+  );
+}
+
+const materializedDatabaseCommands = materializeActual.filter((command) => /(?:db|database|migration|migrate)/i.test(command));
+if (materializedDatabaseCommands.length) {
+  throw new Error(
+    `Release materialization must stay source-only; database command(s) found: ${materializedDatabaseCommands.join(', ')}.`
+  );
+}
+
+console.log(
+  `Runtime patch-chain audit passed: ${actual.length} approved prestart commands; `
+  + `${materializeActual.length} source-materialization commands; ${databaseCommands.length} database-related prestart command(s).`
+);
