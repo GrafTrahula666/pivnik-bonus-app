@@ -34,8 +34,7 @@ export function createAdminAdjustmentPersistence({
       `INSERT INTO transactions (
          request_key, client_id, staff_id, mode, status,
          bonus_spent, bonus_earned, balance_after, reason, completed_at
-       ) VALUES ($1,$2,$3,'adjustment','completed',$4,$5,$6,$7,NOW())
-       RETURNING *`,
+       ) VALUES ($1,$2,$3,'adjustment','completed',$4,$5,$6,$7,NOW())`,
       [
         transaction.request_key,
         transaction.client_id,
@@ -46,13 +45,10 @@ export function createAdminAdjustmentPersistence({
         transaction.reason
       ]
     );
-    if (!result || !Array.isArray(result.rows)) {
-      throw new TypeError('legacy adjustment insert must resolve to an object with rows[]');
+    if (!result || typeof result !== 'object') {
+      throw new TypeError('legacy adjustment insert must resolve to a query result object');
     }
-    if (result.rows.length !== 1) {
-      throw new Error(`legacy adjustment insert must return exactly one row, received ${result.rows.length}`);
-    }
-    return Object.freeze({ ...result.rows[0] });
+    return Object.freeze({ rowCount: Number(result.rowCount || 0) });
   };
 
   const scopedInsert = scopedWritesEnabled
