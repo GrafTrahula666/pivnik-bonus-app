@@ -35,8 +35,11 @@ jobs:
           grep -Fq '// V21 · owner unlimited cancellation' server.js
           grep -Fq '/* V19.3 · release polish */' styles.css
 
-      - name: Verify patch diff integrity
-        run: git diff --check -- server.js styles.css
+      - name: Verify owner patch diff integrity
+        run: git diff --check -- server.js
+
+      - name: Verify release polish diff integrity
+        run: git diff --check -- styles.css
 
       - name: Verify patched server syntax
         run: node --check server.js
