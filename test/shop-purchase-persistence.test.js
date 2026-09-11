@@ -36,7 +36,7 @@ test('shop adapter preserves the exact legacy INSERT before migration 009 enable
   assert.equal(calls.length, 1);
   assert.match(calls[0].sql, /INSERT INTO transactions/);
   assert.match(calls[0].sql, /'shop','completed'/);
-  assert.match(calls[0].sql, /NOW\(\) RETURNING \*/);
+  assert.match(calls[0].sql, /NOW\(\)\) RETURNING \*/);
   assert.doesNotMatch(calls[0].sql, /tenant_id|location_id/);
   assert.deepEqual(calls[0].values, [
     '00000000-0000-4000-8000-000000000002',
