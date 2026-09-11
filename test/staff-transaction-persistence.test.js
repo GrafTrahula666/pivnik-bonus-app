@@ -157,6 +157,61 @@ test('staff adapter rejects wrong mode and status before SQL', async () => {
   assert.equal(queries, 0);
 });
 
+test('staff adapter rejects financial states the endpoint cannot produce before SQL', async () => {
+  let queries = 0;
+  const persist = createStaffTransactionPersistence({
+    query: async () => {
+      queries += 1;
+      return { rows: [{ id: 1 }] };
+    }
+  });
+
+  const invalidCases = [
+    [staffTransaction({ bonus_spent: 1 }), /accrue transaction cannot spend bonuses/],
+    [staffTransaction({ mode: 'redeem', bonus_spent: 10, discount_cents: 1 }), /redeem transaction cannot apply a status discount/],
+    [staffTransaction({ mode: 'redeem', bonus_spent: 0 }), /redeem transaction must spend at least one bonus/],
+    [staffTransaction({ cash_paid_cents: 250001 }), /cash_paid_cents cannot exceed check_amount_cents/],
+    [staffTransaction({ check_amount_cents: -1 }), /check_amount_cents must be a non-negative safe integer/],
+    [staffTransaction({ bonus_earned: 1.5 }), /bonus_earned must be a non-negative safe integer/],
+    [staffTransaction({ beer_ml: Number.MAX_SAFE_INTEGER + 1 }), /beer_ml must be a non-negative safe integer/]
+  ];
+
+  for (const [transaction, expected] of invalidCases) {
+    await assert.rejects(persist({ transaction }), expected);
+  }
+  assert.equal(queries, 0);
+});
+
+test('staff scoped mode enforces the same financial invariants before SQL', async () => {
+  let queries = 0;
+  const persist = createStaffTransactionPersistence({
+    scopedWritesEnabled: true,
+    query: async () => {
+      queries += 1;
+      return { rows: [{ id: 1 }] };
+    }
+  });
+  const scope = {
+    authorizationContext: createAuthorizationContext({
+      membershipRole: 'staff',
+      tenantId: 'tenant-a',
+      locationId: 'location-a'
+    }),
+    tenantId: 'tenant-a',
+    locationId: 'location-a'
+  };
+
+  await assert.rejects(
+    persist({ ...scope, transaction: staffTransaction({ bonus_spent: 1 }) }),
+    /accrue transaction cannot spend bonuses/
+  );
+  await assert.rejects(
+    persist({ ...scope, transaction: staffTransaction({ mode: 'redeem', bonus_spent: 0 }) }),
+    /redeem transaction must spend at least one bonus/
+  );
+  assert.equal(queries, 0);
+});
+
 test('staff persistence contract remains migration-gated and legacy-by-default', () => {
   assert.equal(staffTransactionPersistenceContract.route, '/api/staff/transactions');
   assert.deepEqual(staffTransactionPersistenceContract.modes, ['accrue', 'redeem']);
@@ -165,6 +220,7 @@ test('staff persistence contract remains migration-gated and legacy-by-default',
   assert.equal(staffTransactionPersistenceContract.preservesLegacySqlShape, true);
   assert.equal(staffTransactionPersistenceContract.preservesDatabaseNow, true);
   assert.equal(staffTransactionPersistenceContract.preservesReturningRow, true);
+  assert.equal(staffTransactionPersistenceContract.validatesEndpointFinancialInvariants, true);
   assert.equal(staffTransactionPersistenceContract.requiresMigration009BeforeScopedEnablement, true);
   assert.equal(staffTransactionPersistenceContract.scopedFallbackToLegacy, false);
 });
