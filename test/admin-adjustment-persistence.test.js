@@ -27,7 +27,7 @@ test('admin adjustment adapter preserves the legacy INSERT before migration 009 
   const persist = createAdminAdjustmentPersistence({
     query: async (sql, values) => {
       calls.push({ sql, values });
-      return { rows: [{ id: 99, ...adjustment() }] };
+      return { rowCount: 1, rows: [] };
     }
   });
 
@@ -37,6 +37,7 @@ test('admin adjustment adapter preserves the legacy INSERT before migration 009 
   assert.match(calls[0].sql, /INSERT INTO transactions/);
   assert.match(calls[0].sql, /'adjustment','completed'/);
   assert.match(calls[0].sql, /NOW\(\)/);
+  assert.doesNotMatch(calls[0].sql, /RETURNING/);
   assert.doesNotMatch(calls[0].sql, /tenant_id|location_id/);
   assert.deepEqual(calls[0].values, [
     '00000000-0000-4000-8000-000000000001',
@@ -47,7 +48,7 @@ test('admin adjustment adapter preserves the legacy INSERT before migration 009 
     125,
     'manual correction'
   ]);
-  assert.equal(result.id, 99);
+  assert.deepEqual(result, { rowCount: 1 });
 });
 
 test('admin adjustment adapter refuses scope before deliberate migration enablement', async () => {
@@ -55,7 +56,7 @@ test('admin adjustment adapter refuses scope before deliberate migration enablem
   const persist = createAdminAdjustmentPersistence({
     query: async () => {
       queries += 1;
-      return { rows: [] };
+      return { rowCount: 0, rows: [] };
     }
   });
 
@@ -99,7 +100,7 @@ test('admin adjustment adapter can use the scoped writer only after explicit ena
 
 test('admin adjustment adapter rejects the wrong transaction mode or status', async () => {
   const persist = createAdminAdjustmentPersistence({
-    query: async () => ({ rows: [{ id: 1 }] })
+    query: async () => ({ rowCount: 1, rows: [] })
   });
 
   await assert.rejects(
