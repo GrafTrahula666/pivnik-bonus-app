@@ -1308,6 +1308,18 @@ async function getCancellationQuota(staffId, db = pool) {
   return { active: true, limit: STAFF_CANCEL_LIMIT, used, remaining: Math.max(0, STAFF_CANCEL_LIMIT - used), shiftId: shift.id, countFrom };
 }
 
+function unlimitedCancellationQuota() {
+  return {
+    active: true,
+    unlimited: true,
+    limit: null,
+    used: 0,
+    remaining: null,
+    shiftId: null,
+    countFrom: null
+  };
+}
+
 async function cancelCompletedTransaction(db, transactionId, actorId, reason, requestKey, options = {}) {
   await lockRequestKey(db, requestKey);
   const repeated = await db.query(
@@ -2272,7 +2284,7 @@ app.get('/api/staff/recent', authRequired, requireRole('staff', 'admin'), async 
   try {
     const actingStaff = await resolveActingStaff(req);
     if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
-    const quota = await getCancellationQuota(actingStaff.id);
+    const quota = actingStaff.role === 'admin' ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id);
     const from = quota.active ? quota.countFrom : new Date(Date.now() - 16 * 60 * 60 * 1000);
     const result = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name
@@ -2294,6 +2306,8 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+  // V21 · owner unlimited cancellation
+  const ownerUnlimitedCancel = actingStaff.role === 'admin';
   const replay = await pool.query(
     'SELECT * FROM transactions WHERE cancel_request_key = $1',
     [requestKey]
@@ -2310,7 +2324,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       ok: true,
       transaction: transactionResponse(replay.rows[0]),
       client: await getProfile(replay.rows[0].client_id),
-      quota: await getCancellationQuota(actingStaff.id)
+      quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id)
     });
   }
   const client = await pool.connect();
@@ -2320,12 +2334,14 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       [`staff-cancel-quota:${actingStaff.id}`]
     );
-    const quota = await getCancellationQuota(actingStaff.id, client);
-    if (!quota.active) {
+    const quota = ownerUnlimitedCancel
+      ? unlimitedCancellationQuota()
+      : await getCancellationQuota(actingStaff.id, client);
+    if (!ownerUnlimitedCancel && !quota.active) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Отмена доступна только в активной смене.' });
     }
-    if (quota.remaining <= 0) {
+    if (!ownerUnlimitedCancel && quota.remaining <= 0) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Лимит отмен исчерпан. Следующую отмену проводит владелец.' });
     }
@@ -2335,14 +2351,14 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       actingStaff.id,
       reason,
       requestKey,
-      { staffId: actingStaff.id, notBefore: quota.countFrom }
+      ownerUnlimitedCancel ? {} : { staffId: actingStaff.id, notBefore: quota.countFrom }
     );
     await client.query('COMMIT');
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
 Причина: ${reason}
 Текущий баланс: ${profile.balance} бонусов.`);
-    res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: await getCancellationQuota(actingStaff.id) });
+    res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id) });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
