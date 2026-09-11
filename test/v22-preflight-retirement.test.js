@@ -1,20 +1,30 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 const telegramOnlyMessage = 'Колесо доступно только в Telegram.';
 const multilineDiamondFrame = `  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') {\n    frames.push({ code: 'diamond', title: 'Алмазная рамка' });\n  }\n  return frames;`;
 const normalizedDiamondFrame = `  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });\n  return frames;`;
+
+function canonicalGatewayFromHead() {
+  return execFileSync('git', ['show', 'HEAD:universal-server.js'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+}
 
 async function makeProofWorkspace(t) {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'pivnik-v22-preflight-proof-'));
   t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   await fs.mkdir(path.join(workspace, 'scripts'), { recursive: true });
   await Promise.all([
-    fs.copyFile(new URL('../universal-server.js', import.meta.url), path.join(workspace, 'universal-server.js')),
+    fs.writeFile(path.join(workspace, 'universal-server.js'), canonicalGatewayFromHead(), 'utf8'),
     fs.copyFile(
       new URL('../scripts/apply-v22-preflight-fixes.mjs', import.meta.url),
       path.join(workspace, 'scripts', 'apply-v22-preflight-fixes.mjs')
