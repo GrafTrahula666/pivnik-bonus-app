@@ -33,30 +33,23 @@ async function makeProofWorkspace(t) {
   return workspace;
 }
 
-test('v22 preflight has one deterministic canonicalization effect and then becomes a no-op', async (t) => {
+test('v22 preflight behavior is canonical and the legacy patcher is a byte-for-byte no-op', async (t) => {
   const workspace = await makeProofWorkspace(t);
   const gatewayPath = path.join(workspace, 'universal-server.js');
   const patchPath = path.join(workspace, 'scripts', 'apply-v22-preflight-fixes.mjs');
   const before = await fs.readFile(gatewayPath, 'utf8');
 
-  assert.equal(before.split(telegramOnlyMessage).length - 1, 2, 'raw canonical gateway must contain exactly two legacy Telegram-only wheel guards');
-  assert.equal(before.includes(multilineDiamondFrame), true, 'raw canonical gateway must contain the pre-normalized diamond-frame helper');
+  assert.equal(before.includes(telegramOnlyMessage), false, 'canonical gateway must expose the shared VK/TG wheel routes');
+  assert.equal(before.includes(multilineDiamondFrame), false, 'canonical gateway must not retain the pre-normalized diamond-frame helper');
+  assert.equal(before.includes(normalizedDiamondFrame), true, 'canonical gateway must contain the normalized diamond-frame helper');
 
   execFileSync(process.execPath, [patchPath], { cwd: workspace, stdio: 'pipe' });
-  const once = await fs.readFile(gatewayPath, 'utf8');
+  const after = await fs.readFile(gatewayPath, 'utf8');
 
-  assert.notEqual(once, before);
-  assert.equal(once.includes(telegramOnlyMessage), false, 'shared VK/TG wheel routes must not retain Telegram-only gateway guards');
-  assert.equal(once.includes(multilineDiamondFrame), false);
-  assert.equal(once.includes(normalizedDiamondFrame), true);
-
-  execFileSync(process.execPath, [patchPath], { cwd: workspace, stdio: 'pipe' });
-  const twice = await fs.readFile(gatewayPath, 'utf8');
-
-  assert.equal(twice, once, 'second v22-preflight execution must not change the already-normalized gateway');
+  assert.equal(after, before, 'retired v22-preflight patcher must not mutate canonical universal-server.js');
 });
 
-test('v22 preflight intent is explicitly limited to wheel parity and frame-helper normalization', async () => {
+test('legacy v22 preflight remains limited to wheel parity and frame-helper normalization', async () => {
   const patcher = await fs.readFile(new URL('../scripts/apply-v22-preflight-fixes.mjs', import.meta.url), 'utf8');
 
   assert.match(patcher, /removed !== 0 && removed !== 2/);
