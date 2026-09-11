@@ -1,6 +1,20 @@
 import { createMigrationGatedTransactionPersistence } from './transaction-persistence-compatibility.js';
 import { createScopedTransactionPersistence } from './transaction-persistence.js';
 
+function requirePositiveSafeInteger(value, field) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`beer gift transaction persistence requires positive safe integer ${field}`);
+  }
+  return value;
+}
+
+function requireNonNegativeSafeInteger(value, field) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`beer gift transaction persistence requires non-negative safe integer ${field}`);
+  }
+  return value;
+}
+
 function normalizeBeerGiftTransaction(transaction) {
   if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
     throw new TypeError('transaction must be an object');
@@ -17,10 +31,26 @@ function normalizeBeerGiftTransaction(transaction) {
   if (Number(transaction.cash_paid_cents || 0) !== 0) {
     throw new TypeError('beer gift transaction persistence requires zero cash_paid_cents');
   }
+
+  const requestKey = String(transaction.request_key || '').trim();
+  if (!requestKey) {
+    throw new TypeError('beer gift transaction persistence requires request_key');
+  }
+  const reason = String(transaction.reason || '').trim();
+  if (!reason) {
+    throw new TypeError('beer gift transaction persistence requires reason');
+  }
+
   return {
     ...transaction,
+    request_key: requestKey,
+    client_id: requirePositiveSafeInteger(transaction.client_id, 'client_id'),
+    staff_id: requirePositiveSafeInteger(transaction.staff_id, 'staff_id'),
     check_amount_cents: 0,
-    cash_paid_cents: 0
+    cash_paid_cents: 0,
+    balance_after: requireNonNegativeSafeInteger(transaction.balance_after, 'balance_after'),
+    beer_gift_spent_ml: requirePositiveSafeInteger(transaction.beer_gift_spent_ml, 'beer_gift_spent_ml'),
+    reason
   };
 }
 
@@ -91,6 +121,7 @@ export const beerGiftTransactionPersistenceContract = Object.freeze({
   preservesDatabaseNow: true,
   preservesReturningRow: true,
   preservesZeroCheckAndCashSemantics: true,
+  validatesGiftInvariantsBeforeSql: true,
   requiresMigration009BeforeScopedEnablement: true,
   scopedFallbackToLegacy: false
 });
