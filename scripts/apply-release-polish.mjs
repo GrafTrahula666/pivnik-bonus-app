@@ -205,6 +205,6 @@ const polishCss = String.raw`
 
 let styles = await fs.readFile(stylesPath, 'utf8');
 if (!styles.includes(marker)) {
-  styles = `${styles.trimEnd()}${polishCss}\n`;
+  styles = `${styles.trimEnd()}${polishCss.trimEnd()}\n`;
   await fs.writeFile(stylesPath, styles, 'utf8');
 }
