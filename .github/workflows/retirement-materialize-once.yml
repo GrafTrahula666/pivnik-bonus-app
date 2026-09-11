@@ -24,14 +24,22 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Apply proven canonical patches
+      - name: Apply owner cancellation patch to raw canonical source
+        run: node scripts/apply-owner-unlimited-cancel.mjs
+
+      - name: Apply release polish patch to raw canonical source
+        run: node scripts/apply-release-polish.mjs
+
+      - name: Verify canonical markers
         run: |
-          node scripts/apply-owner-unlimited-cancel.mjs
-          node scripts/apply-release-polish.mjs
           grep -Fq '// V21 · owner unlimited cancellation' server.js
           grep -Fq '/* V19.3 · release polish */' styles.css
-          git diff --check -- server.js styles.css
-          node --check server.js
+
+      - name: Verify patch diff integrity
+        run: git diff --check -- server.js styles.css
+
+      - name: Verify patched server syntax
+        run: node --check server.js
 
       - name: Commit canonicalized sources only
         run: |
