@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createAuthorizationContext } from '../authorization-context.js';
 import {
   adminAdjustmentPersistenceContract,
   createAdminAdjustmentPersistence
@@ -80,10 +81,10 @@ test('admin adjustment adapter can use the scoped writer only after explicit ena
   });
 
   const result = await persist({
-    authorizationContext: {
-      actor: { id: 'owner-1', role: 'owner' },
-      memberships: [{ tenantId: 'tenant-a', locationId: 'location-a', role: 'owner' }]
-    },
+    authorizationContext: createAuthorizationContext({
+      membershipRole: 'owner',
+      tenantId: 'tenant-a'
+    }),
     tenantId: 'tenant-a',
     locationId: 'location-a',
     transaction: adjustment()
