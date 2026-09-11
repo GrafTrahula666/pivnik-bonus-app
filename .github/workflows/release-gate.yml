@@ -34,6 +34,9 @@ jobs:
         run: npm ci
 
       - name: Audit canonical runtime retirement evidence
+        env:
+          RUNTIME_RETIREMENT_REPORT_DIR: artifacts/runtime-retirement
+          RUNTIME_RETIREMENT_PHASE: canonical
         run: npm run audit:runtime-retirement
 
       - name: Materialize release sources
@@ -45,17 +48,29 @@ jobs:
       - name: Verify release materialization is idempotent
         shell: bash
         run: |
-          before="$(git diff --binary -- . ':(exclude).pivnik-materialized' | sha256sum | cut -d' ' -f1)"
+          before="$(git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' | sha256sum | cut -d' ' -f1)"
           npm run materialize
-          after="$(git diff --binary -- . ':(exclude).pivnik-materialized' | sha256sum | cut -d' ' -f1)"
+          after="$(git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' | sha256sum | cut -d' ' -f1)"
           if [ "$before" != "$after" ]; then
             echo "::error title=Non-idempotent release materialization::A second materialization changed the prepared release sources."
-            git diff --stat -- . ':(exclude).pivnik-materialized'
+            git diff --stat -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
             exit 1
           fi
 
       - name: Audit materialized runtime retirement evidence
+        env:
+          RUNTIME_RETIREMENT_REPORT_DIR: artifacts/runtime-retirement
+          RUNTIME_RETIREMENT_PHASE: materialized
         run: npm run audit:runtime-retirement
+
+      - name: Upload runtime retirement audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-retirement-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/runtime-retirement/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Check JavaScript syntax
         run: npm run check
