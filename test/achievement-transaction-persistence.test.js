@@ -81,12 +81,15 @@ test('scoped mode fails closed on cross-tenant achievement attribution', async (
     persist({
       authorizationContext: {
         platformRole: null,
-        memberships: [{ role: 'owner', tenantId: 'tenant-a', locationId: null }]
+        membershipRole: 'owner',
+        tenantId: 'tenant-a',
+        locationId: null
       },
       tenantId: 'tenant-b',
       locationId: 'location-b',
       transaction: sampleTransaction()
-    })
+    }),
+    (error) => error?.code === 'TRANSACTION_SCOPE_FORBIDDEN'
   );
   assert.equal(queried, false);
 });
@@ -104,7 +107,9 @@ test('scoped mode writes tenant and location through the shared persistence boun
   const result = await persist({
     authorizationContext: {
       platformRole: null,
-      memberships: [{ role: 'owner', tenantId: 'tenant-a', locationId: null }]
+      membershipRole: 'owner',
+      tenantId: 'tenant-a',
+      locationId: null
     },
     tenantId: 'tenant-a',
     locationId: 'location-a',
