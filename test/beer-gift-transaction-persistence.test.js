@@ -151,6 +151,61 @@ test('beer gift scoped mode preserves legacy zero check and cash semantics', asy
   assert.equal(rejectedQueries, 0);
 });
 
+test('beer gift adapter enforces gift invariants before SQL in legacy mode', async () => {
+  let queries = 0;
+  const persist = createBeerGiftTransactionPersistence({
+    query: async () => {
+      queries += 1;
+      return { rows: [{ id: 93 }] };
+    }
+  });
+
+  const invalidCases = [
+    [beerGiftTransaction({ request_key: '   ' }), /requires request_key/],
+    [beerGiftTransaction({ client_id: 0 }), /positive safe integer client_id/],
+    [beerGiftTransaction({ staff_id: -1 }), /positive safe integer staff_id/],
+    [beerGiftTransaction({ balance_after: -1 }), /non-negative safe integer balance_after/],
+    [beerGiftTransaction({ beer_gift_spent_ml: 0 }), /positive safe integer beer_gift_spent_ml/],
+    [beerGiftTransaction({ beer_gift_spent_ml: Number.MAX_SAFE_INTEGER + 1 }), /positive safe integer beer_gift_spent_ml/],
+    [beerGiftTransaction({ reason: ' ' }), /requires reason/]
+  ];
+
+  for (const [transaction, pattern] of invalidCases) {
+    await assert.rejects(persist({ transaction }), pattern);
+  }
+  assert.equal(queries, 0);
+});
+
+test('beer gift scoped mode enforces the same gift invariants before SQL', async () => {
+  let queries = 0;
+  const persist = createBeerGiftTransactionPersistence({
+    scopedWritesEnabled: true,
+    query: async () => {
+      queries += 1;
+      return { rows: [{ id: 94 }] };
+    }
+  });
+  const scope = {
+    authorizationContext: createAuthorizationContext({
+      membershipRole: 'staff',
+      tenantId: 'tenant-a',
+      locationId: 'location-a'
+    }),
+    tenantId: 'tenant-a',
+    locationId: 'location-a'
+  };
+
+  await assert.rejects(
+    persist({ ...scope, transaction: beerGiftTransaction({ beer_gift_spent_ml: 0 }) }),
+    /positive safe integer beer_gift_spent_ml/
+  );
+  await assert.rejects(
+    persist({ ...scope, transaction: beerGiftTransaction({ balance_after: -1 }) }),
+    /non-negative safe integer balance_after/
+  );
+  assert.equal(queries, 0);
+});
+
 test('beer gift adapter rejects wrong mode and status before SQL', async () => {
   let queries = 0;
   const persist = createBeerGiftTransactionPersistence({
@@ -198,6 +253,7 @@ test('beer gift persistence contract remains migration-gated and legacy-by-defau
   assert.equal(beerGiftTransactionPersistenceContract.preservesDatabaseNow, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesReturningRow, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesZeroCheckAndCashSemantics, true);
+  assert.equal(beerGiftTransactionPersistenceContract.validatesGiftInvariantsBeforeSql, true);
   assert.equal(beerGiftTransactionPersistenceContract.requiresMigration009BeforeScopedEnablement, true);
   assert.equal(beerGiftTransactionPersistenceContract.scopedFallbackToLegacy, false);
 });
