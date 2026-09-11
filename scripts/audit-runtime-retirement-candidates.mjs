@@ -41,7 +41,9 @@ function collectStaticTargets(source) {
 }
 
 function detectStartupSideEffects(source) {
-  const databaseWrite = /\b(?:INSERT\s+INTO|UPDATE\s+\w+|DELETE\s+FROM|TRUNCATE\s+|ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b/i.test(source);
+  const databaseClient = /(?:\bimport\s+[^;\n]*\s+from\s+['"]pg['"]|\brequire\(\s*['"]pg['"]\s*\)|\bnew\s+(?:pg\.)?(?:Client|Pool)\s*\()/i.test(source);
+  const databaseMutationSql = /\b(?:INSERT\s+INTO|UPDATE\s+\w+|DELETE\s+FROM|TRUNCATE\s+|ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b/i.test(source);
+  const databaseWrite = databaseClient && databaseMutationSql;
   const externalNetwork = /\bfetch\s*\(\s*`?https?:\/\//i.test(source)
     || /api\.telegram\.org/i.test(source)
     || /\b(?:axios|got|undici|request)\b/i.test(source);
