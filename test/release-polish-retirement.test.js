@@ -36,6 +36,7 @@ test('release polish patch has a deterministic one-time CSS effect and then beco
   assert.match(once, /\.screen\[data-screen='admin'\] \.admin-quick-grid/);
   assert.match(once, /\.screen\[data-screen='admin'\] \.metric-grid/);
   assert.match(once, /@media \(max-width: 355px\)/);
+  assert.equal(once.endsWith('\n\n'), false, 'release-polish output must not add a blank line at EOF');
 
   execFileSync(process.execPath, [patchPath], { cwd: workspace, stdio: 'pipe' });
   const twice = await fs.readFile(stylesPath, 'utf8');
@@ -49,5 +50,5 @@ test('release polish proof uses the current canonical stylesheet', async () => {
 
   assert.equal(styles.includes('/* V19.3 · release polish */'), false);
   assert.match(patcher, /const marker = '\/\* V19\.3 · release polish \*\/';/);
-  assert.match(patcher, /styles = `\$\{styles\.trimEnd\(\)\}\$\{polishCss\}\\n`;/);
+  assert.match(patcher, /styles = `\$\{styles\.trimEnd\(\)\}\$\{polishCss\.trimEnd\(\)\}\\n`;/);
 });
