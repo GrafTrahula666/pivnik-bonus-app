@@ -6,7 +6,8 @@ const TRANSACTION_MODES = new Set([
   'adjustment',
   'beer_gift',
   'welcome',
-  'shop'
+  'shop',
+  'achievement'
 ]);
 
 const WRITABLE_COLUMNS = Object.freeze([
