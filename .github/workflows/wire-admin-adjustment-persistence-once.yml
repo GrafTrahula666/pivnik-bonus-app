@@ -19,9 +19,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Wire adapter into canonical server
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           path = Path('server.js')
@@ -78,6 +84,7 @@ jobs:
               raise SystemExit('admin-adjustment wiring: expected legacy INSERT block not found')
 
           path.write_text(source)
+          PY
 
       - name: Verify only canonical server changed
         run: |
