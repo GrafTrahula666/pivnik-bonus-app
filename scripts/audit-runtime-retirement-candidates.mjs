@@ -214,11 +214,23 @@ if (sideEffectReviews.length) {
   }
 }
 
+const unexpectedDatabaseWrites = sideEffectReviews.filter((row) => row.startupSideEffects.includes('database-write'));
+if (unexpectedDatabaseWrites.length) {
+  console.error(`\nUnexpected database writes in non-database startup steps: ${unexpectedDatabaseWrites.length}`);
+  for (const row of unexpectedDatabaseWrites) {
+    console.error(`- ${row.script}: move database mutation into an explicit database startup step or remove it`);
+  }
+  process.exitCode = 1;
+}
+
 const report = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   phase: process.env.RUNTIME_RETIREMENT_PHASE || 'unspecified',
   generatedAt: new Date().toISOString(),
   summary: countByClassification(rows),
+  policy: {
+    unexpectedDatabaseWrites: unexpectedDatabaseWrites.map((row) => row.script)
+  },
   rows
 };
 
