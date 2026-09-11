@@ -54,6 +54,61 @@ async function markerPresence(marker, targets) {
   return presence;
 }
 
+function countByClassification(rows) {
+  return rows.reduce((counts, row) => {
+    counts[row.classification] = (counts[row.classification] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function markdownReport(report) {
+  const lines = [
+    '# Runtime patch retirement audit',
+    '',
+    `Phase: \`${report.phase}\``,
+    '',
+    `Generated: ${report.generatedAt}`,
+    '',
+    '## Summary',
+    '',
+    '| Classification | Count |',
+    '| --- | ---: |'
+  ];
+
+  for (const [classification, count] of Object.entries(report.summary).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`| \`${classification}\` | ${count} |`);
+  }
+
+  lines.push('', '## Patchers', '');
+
+  for (const row of report.rows) {
+    lines.push(`### \`${row.script}\``, '');
+    lines.push(`- Classification: \`${row.classification}\``);
+    lines.push(`- Explicitly materialized: ${row.materializedExplicitly ? 'yes' : 'no'}`);
+    lines.push(`- Reason: ${row.reason}`);
+    lines.push(`- Marker: ${row.marker ? `\`${row.marker}\`` : 'none detected'}`);
+    lines.push(`- Targets: ${row.targets.length ? row.targets.map((target) => `\`${target}\``).join(', ') : 'none detected'}`);
+    if (row.presence.length) {
+      lines.push(`- Marker presence: ${row.presence.map((entry) => `\`${entry.target}\`=${entry.present ? 'present' : 'absent'}${entry.unreadable ? ' (unreadable)' : ''}`).join(', ')}`);
+    }
+    lines.push('');
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+async function persistReport(report) {
+  const outputDir = process.env.RUNTIME_RETIREMENT_REPORT_DIR;
+  if (!outputDir) return;
+
+  const safePhase = report.phase.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'unknown';
+  const absoluteDir = path.resolve(root, outputDir);
+  await fs.mkdir(absoluteDir, { recursive: true });
+  await fs.writeFile(path.join(absoluteDir, `runtime-retirement-${safePhase}.json`), `${JSON.stringify(report, null, 2)}\n`);
+  await fs.writeFile(path.join(absoluteDir, `runtime-retirement-${safePhase}.md`), markdownReport(report));
+  console.log(`\nStructured audit evidence written to ${path.relative(root, absoluteDir)}/ for phase ${safePhase}.`);
+}
+
 const prestart = splitChain(pkg.scripts?.prestart);
 const materialize = new Set(splitChain(pkg.scripts?.materialize));
 const rows = [];
@@ -126,3 +181,13 @@ if (unsafeUnknowns.length) {
   console.log(`\nManual proof still required: ${unsafeUnknowns.length}`);
   for (const row of unsafeUnknowns) console.log(`- ${row.script}: ${row.reason}`);
 }
+
+const report = {
+  schemaVersion: 1,
+  phase: process.env.RUNTIME_RETIREMENT_PHASE || 'unspecified',
+  generatedAt: new Date().toISOString(),
+  summary: countByClassification(rows),
+  rows
+};
+
+await persistReport(report);
