@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -23,26 +23,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Wire admin adjustment persistence once
-        if: >-
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/audit/spaceverse-architecture-20260910' &&
-          github.event.head_commit.message == 'Stage admin adjustment persistence wiring'
-        run: |
-          node scripts/wire-admin-adjustment-persistence-once.mjs
-          changed="$(git diff --name-only)"
-          test "$changed" = 'server.js'
-          grep -Fq "const persistAdjustment = createAdminAdjustmentPersistence" server.js
-          node --check server.js
-          git diff --check -- server.js
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- server.js
-          git commit -m 'Wire admin adjustment through persistence boundary'
-          git push origin HEAD:audit/spaceverse-architecture-20260910
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
