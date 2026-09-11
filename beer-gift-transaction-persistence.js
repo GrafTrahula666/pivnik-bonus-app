@@ -65,15 +65,19 @@ export function createBeerGiftTransactionPersistence({
     return Object.freeze({ ...result.rows[0] });
   };
 
-  const scopedInsert = scopedWritesEnabled
+  const scopedInsertBase = scopedWritesEnabled
     ? createScopedTransactionPersistence({ query })
+    : undefined;
+  const scopedInsert = scopedInsertBase
+    ? async (options = {}) => scopedInsertBase({
+        ...options,
+        transaction: normalizeBeerGiftTransaction(options.transaction)
+      })
     : undefined;
 
   return createMigrationGatedTransactionPersistence({
     legacyInsert,
-    scopedInsert: scopedInsert
-      ? async (rawTransaction, scope) => scopedInsert(normalizeBeerGiftTransaction(rawTransaction), scope)
-      : undefined,
+    scopedInsert,
     scopedWritesEnabled
   });
 }
