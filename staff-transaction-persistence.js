@@ -3,6 +3,12 @@ import { createScopedTransactionPersistence } from './transaction-persistence.js
 
 const STAFF_TRANSACTION_MODES = new Set(['accrue', 'redeem']);
 
+function requireNonNegativeInteger(value, field) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${field} must be a non-negative safe integer`);
+  }
+}
+
 function normalizeStaffTransaction(transaction) {
   if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
     throw new TypeError('transaction must be an object');
@@ -14,6 +20,29 @@ function normalizeStaffTransaction(transaction) {
   if (String(transaction.status || '') !== 'completed') {
     throw new TypeError('staff transaction persistence requires completed status');
   }
+
+  requireNonNegativeInteger(transaction.check_amount_cents, 'check_amount_cents');
+  requireNonNegativeInteger(transaction.discount_cents, 'discount_cents');
+  requireNonNegativeInteger(transaction.bonus_spent, 'bonus_spent');
+  requireNonNegativeInteger(transaction.bonus_earned, 'bonus_earned');
+  requireNonNegativeInteger(transaction.cash_paid_cents, 'cash_paid_cents');
+  requireNonNegativeInteger(transaction.balance_after, 'balance_after');
+  requireNonNegativeInteger(transaction.beer_ml, 'beer_ml');
+  requireNonNegativeInteger(transaction.beer_gift_earned_ml, 'beer_gift_earned_ml');
+
+  if (mode === 'accrue' && transaction.bonus_spent !== 0) {
+    throw new TypeError('accrue transaction cannot spend bonuses');
+  }
+  if (mode === 'redeem' && transaction.discount_cents !== 0) {
+    throw new TypeError('redeem transaction cannot apply a status discount');
+  }
+  if (mode === 'redeem' && transaction.bonus_spent <= 0) {
+    throw new TypeError('redeem transaction must spend at least one bonus');
+  }
+  if (transaction.cash_paid_cents > transaction.check_amount_cents) {
+    throw new TypeError('cash_paid_cents cannot exceed check_amount_cents');
+  }
+
   return transaction;
 }
 
@@ -85,6 +114,7 @@ export const staffTransactionPersistenceContract = Object.freeze({
   preservesLegacySqlShape: true,
   preservesDatabaseNow: true,
   preservesReturningRow: true,
+  validatesEndpointFinancialInvariants: true,
   requiresMigration009BeforeScopedEnablement: true,
   scopedFallbackToLegacy: false
 });
