@@ -11,7 +11,17 @@ function normalizeBeerGiftTransaction(transaction) {
   if (String(transaction.status || '') !== 'completed') {
     throw new TypeError('beer gift transaction persistence requires completed status');
   }
-  return transaction;
+  if (Number(transaction.check_amount_cents || 0) !== 0) {
+    throw new TypeError('beer gift transaction persistence requires zero check_amount_cents');
+  }
+  if (Number(transaction.cash_paid_cents || 0) !== 0) {
+    throw new TypeError('beer gift transaction persistence requires zero cash_paid_cents');
+  }
+  return {
+    ...transaction,
+    check_amount_cents: 0,
+    cash_paid_cents: 0
+  };
 }
 
 /**
@@ -61,7 +71,9 @@ export function createBeerGiftTransactionPersistence({
 
   return createMigrationGatedTransactionPersistence({
     legacyInsert,
-    scopedInsert,
+    scopedInsert: scopedInsert
+      ? async (rawTransaction, scope) => scopedInsert(normalizeBeerGiftTransaction(rawTransaction), scope)
+      : undefined,
     scopedWritesEnabled
   });
 }
@@ -74,6 +86,7 @@ export const beerGiftTransactionPersistenceContract = Object.freeze({
   preservesLegacySqlShape: true,
   preservesDatabaseNow: true,
   preservesReturningRow: true,
+  preservesZeroCheckAndCashSemantics: true,
   requiresMigration009BeforeScopedEnablement: true,
   scopedFallbackToLegacy: false
 });
