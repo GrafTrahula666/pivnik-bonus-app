@@ -5,8 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-const root = new URL('../', import.meta.url);
-
 async function makeProofWorkspace(t) {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'pivnik-owner-cancel-proof-'));
   t.after(() => fs.rm(workspace, { recursive: true, force: true }));
@@ -21,36 +19,32 @@ async function makeProofWorkspace(t) {
   return workspace;
 }
 
-test('owner unlimited cancellation patch has a deterministic one-time effect and then becomes a no-op', async (t) => {
+test('owner unlimited cancellation is canonical and the legacy patcher is a byte-for-byte no-op', async (t) => {
   const workspace = await makeProofWorkspace(t);
   const serverPath = path.join(workspace, 'server.js');
   const patchPath = path.join(workspace, 'scripts', 'apply-owner-unlimited-cancel.mjs');
   const before = await fs.readFile(serverPath, 'utf8');
 
-  assert.equal(before.includes('// V21 · owner unlimited cancellation'), false);
+  assert.match(before, /\/\/ V21 · owner unlimited cancellation/);
+  assert.match(before, /function unlimitedCancellationQuota\(\)/);
+  assert.match(before, /const ownerUnlimitedCancel = actingStaff\.role === 'admin';/);
+  assert.match(before, /ownerUnlimitedCancel \? unlimitedCancellationQuota\(\) : await getCancellationQuota\(actingStaff\.id\)/);
+  assert.match(before, /ownerUnlimitedCancel \? \{\} : \{ staffId: actingStaff\.id, notBefore: quota\.countFrom \}/);
+  assert.match(before, /actingStaff\.role === 'admin' \? unlimitedCancellationQuota\(\) : await getCancellationQuota\(actingStaff\.id\)/);
 
   execFileSync(process.execPath, [patchPath], { cwd: workspace, stdio: 'pipe' });
-  const once = await fs.readFile(serverPath, 'utf8');
+  const after = await fs.readFile(serverPath, 'utf8');
 
-  assert.notEqual(once, before);
-  assert.match(once, /\/\/ V21 · owner unlimited cancellation/);
-  assert.match(once, /function unlimitedCancellationQuota\(\)/);
-  assert.match(once, /const ownerUnlimitedCancel = actingStaff\.role === 'admin';/);
-  assert.match(once, /ownerUnlimitedCancel \? unlimitedCancellationQuota\(\) : await getCancellationQuota\(actingStaff\.id\)/);
-  assert.match(once, /ownerUnlimitedCancel \? \{\} : \{ staffId: actingStaff\.id, notBefore: quota\.countFrom \}/);
-  assert.match(once, /actingStaff\.role === 'admin' \? unlimitedCancellationQuota\(\) : await getCancellationQuota\(actingStaff\.id\)/);
-
-  execFileSync(process.execPath, [patchPath], { cwd: workspace, stdio: 'pipe' });
-  const twice = await fs.readFile(serverPath, 'utf8');
-
-  assert.equal(twice, once, 'second patch execution must not change the already-patched server');
+  assert.equal(after, before, 'retired owner-cancellation patcher must not mutate canonical server.js');
 });
 
-test('owner cancellation proof uses the current canonical server source', async () => {
+test('canonical owner cancellation behavior still keeps staff quota enforcement', async () => {
   const server = await fs.readFile(new URL('../server.js', import.meta.url), 'utf8');
   const patcher = await fs.readFile(new URL('../scripts/apply-owner-unlimited-cancel.mjs', import.meta.url), 'utf8');
 
   assert.match(server, /app\.post\('\/api\/staff\/transactions\/:id\/cancel'/);
   assert.match(server, /async function cancelCompletedTransaction\(/);
+  assert.match(server, /if \(!ownerUnlimitedCancel && !quota\.active\)/);
+  assert.match(server, /if \(!ownerUnlimitedCancel && quota\.remaining <= 0\)/);
   assert.match(patcher, /Applied unlimited cancellation for owner\/admin; staff limits remain unchanged\./);
 });
