@@ -40,6 +40,21 @@ function collectStaticTargets(source) {
   return [...targets].filter((target) => /\.(?:js|mjs|css|html|json|sql)$/i.test(target)).sort();
 }
 
+function detectStartupSideEffects(source) {
+  const databaseWrite = /\b(?:INSERT\s+INTO|UPDATE\s+\w+|DELETE\s+FROM|TRUNCATE\s+|ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b/i.test(source);
+  const externalNetwork = /\bfetch\s*\(\s*`?https?:\/\//i.test(source)
+    || /api\.telegram\.org/i.test(source)
+    || /\b(?:axios|got|undici|request)\b/i.test(source);
+  const processEnvironmentMutation = /\bprocess\.env\.[A-Z0-9_]+\s*=/.test(source);
+
+  const detected = [];
+  if (databaseWrite) detected.push('database-write');
+  if (externalNetwork) detected.push('external-network');
+  if (processEnvironmentMutation) detected.push('process-environment-mutation');
+
+  return detected;
+}
+
 async function markerPresence(marker, targets) {
   if (!marker || !targets.length) return [];
   const presence = [];
@@ -85,6 +100,7 @@ function markdownReport(report) {
     lines.push(`### \`${row.script}\``, '');
     lines.push(`- Classification: \`${row.classification}\``);
     lines.push(`- Explicitly materialized: ${row.materializedExplicitly ? 'yes' : 'no'}`);
+    lines.push(`- Startup side effects: ${row.startupSideEffects.length ? row.startupSideEffects.map((item) => `\`${item}\``).join(', ') : 'none detected'}`);
     lines.push(`- Reason: ${row.reason}`);
     lines.push(`- Marker: ${row.marker ? `\`${row.marker}\`` : 'none detected'}`);
     lines.push(`- Targets: ${row.targets.length ? row.targets.map((target) => `\`${target}\``).join(', ') : 'none detected'}`);
@@ -125,6 +141,7 @@ for (const command of prestart) {
   const markerPresentAll = Boolean(marker) && presence.length > 0 && presence.every((entry) => entry.present);
   const materializedExplicitly = materialize.has(command);
   const databaseRelated = /(?:db|database|migration|migrate)/i.test(command);
+  const startupSideEffects = detectStartupSideEffects(source);
 
   let classification = 'needs-manual-proof';
   let reason = 'static evidence is insufficient';
@@ -132,6 +149,9 @@ for (const command of prestart) {
   if (databaseRelated) {
     classification = 'keep-database-step';
     reason = 'database-related startup step';
+  } else if (startupSideEffects.length > 0) {
+    classification = 'startup-side-effect-review';
+    reason = `startup script has non-file side effects: ${startupSideEffects.join(', ')}`;
   } else if (materializedExplicitly) {
     classification = 'materialized-release-step';
     reason = 'explicitly included in release materialization';
@@ -159,6 +179,7 @@ for (const command of prestart) {
     targets,
     presence,
     materializedExplicitly,
+    startupSideEffects,
     classification,
     reason
   });
@@ -169,7 +190,10 @@ for (const row of rows) {
   const markerSummary = row.marker
     ? row.presence.map((entry) => `${entry.target}=${entry.present ? 'marker-present' : 'marker-absent'}`).join(', ') || 'no static target'
     : 'no static marker';
-  console.log(`- ${row.script}: ${row.classification}; materialize=${row.materializedExplicitly ? 'yes' : 'no'}; ${markerSummary}; reason=${row.reason}`);
+  const sideEffectSummary = row.startupSideEffects.length
+    ? `; side-effects=${row.startupSideEffects.join(',')}`
+    : '';
+  console.log(`- ${row.script}: ${row.classification}; materialize=${row.materializedExplicitly ? 'yes' : 'no'}; ${markerSummary}${sideEffectSummary}; reason=${row.reason}`);
 }
 
 const candidates = rows.filter((row) => row.classification === 'retirement-candidate');
@@ -182,8 +206,16 @@ if (unsafeUnknowns.length) {
   for (const row of unsafeUnknowns) console.log(`- ${row.script}: ${row.reason}`);
 }
 
+const sideEffectReviews = rows.filter((row) => row.classification === 'startup-side-effect-review');
+if (sideEffectReviews.length) {
+  console.log(`\nStartup side-effect review required: ${sideEffectReviews.length}`);
+  for (const row of sideEffectReviews) {
+    console.log(`- ${row.script}: ${row.startupSideEffects.join(', ')}`);
+  }
+}
+
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   phase: process.env.RUNTIME_RETIREMENT_PHASE || 'unspecified',
   generatedAt: new Date().toISOString(),
   summary: countByClassification(rows),
