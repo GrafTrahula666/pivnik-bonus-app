@@ -77,6 +77,11 @@ test('missing identity is deny-by-default', () => {
 });
 
 test('legacy role adapter documents current behavior without inventing SaaS scope', () => {
+  assert.deepEqual(getLegacyRoleCapabilities('client'), {
+    staff: false,
+    adminRead: false,
+    adminWrite: false
+  });
   assert.deepEqual(getLegacyRoleCapabilities('staff'), {
     staff: true,
     adminRead: false,
