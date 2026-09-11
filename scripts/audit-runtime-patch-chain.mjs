@@ -6,8 +6,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packagePath = path.join(root, 'package.json');
 
 const APPROVED_PRESTART_COMMANDS = Object.freeze([
-  'node scripts/apply-release-polish.mjs',
-  'node scripts/apply-owner-unlimited-cancel.mjs',
   'node scripts/repair-telegram-runtime.mjs',
   'node scripts/apply-v22-preflight-fixes.mjs',
   'node scripts/apply-v22-runtime.mjs',
@@ -26,8 +24,6 @@ const APPROVED_PRESTART_COMMANDS = Object.freeze([
 
 const MATERIALIZE_BOOTSTRAP_COMMAND = 'node scripts/materialize-runtime-patches.mjs';
 const PRESTART_ONLY_COMMANDS = new Set([
-  'node scripts/apply-release-polish.mjs',
-  'node scripts/apply-owner-unlimited-cancel.mjs',
   'node scripts/repair-telegram-runtime.mjs',
   'node scripts/red-cosmos-v2-db-prepare.mjs'
 ]);
