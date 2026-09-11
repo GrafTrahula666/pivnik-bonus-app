@@ -368,9 +368,7 @@ function availableFramesFromRow(row) {
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
   const frames = [{ code: 'none', title: 'Без рамки' }];
-  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') {
-    frames.push({ code: 'diamond', title: 'Алмазная рамка' });
-  }
+  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
   return frames;
 }
 
@@ -3116,9 +3114,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/wheel/status') {
       const user = await requireGatewayUser(req);
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      if (platform !== 'telegram') {
-        return sendJson(res, 404, { error: 'Колесо доступно только в Telegram.' });
-      }
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
@@ -3128,9 +3123,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/wheel/spin') {
       const user = await requireGatewayUser(req);
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      if (platform !== 'telegram') {
-        return sendJson(res, 404, { error: 'Колесо доступно только в Telegram.' });
-      }
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
