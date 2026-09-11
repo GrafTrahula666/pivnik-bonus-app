@@ -95,8 +95,14 @@ export function createStaffTransactionPersistence({
     return Object.freeze({ ...result.rows[0] });
   };
 
-  const scopedInsert = scopedWritesEnabled
+  const scopedWriter = scopedWritesEnabled
     ? createScopedTransactionPersistence({ query })
+    : undefined;
+  const scopedInsert = scopedWriter
+    ? async ({ transaction, ...scope }) => scopedWriter({
+        ...scope,
+        transaction: normalizeStaffTransaction(transaction)
+      })
     : undefined;
 
   return createMigrationGatedTransactionPersistence({
