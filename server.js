@@ -19,6 +19,7 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -2743,21 +2744,22 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
       return res.status(400).json({ error: 'Баланс не может стать отрицательным.' });
     }
     await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, req.params.id]);
-    await client.query(
-      `INSERT INTO transactions (
-         request_key, client_id, staff_id, mode, status,
-         bonus_spent, bonus_earned, balance_after, reason, completed_at
-       ) VALUES ($1,$2,$3,'adjustment','completed',$4,$5,$6,$7,NOW())`,
-      [
-        requestKey,
-        req.params.id,
-        req.user.id,
-        amount < 0 ? Math.abs(amount) : 0,
-        amount > 0 ? amount : 0,
-        newBalance,
+    const persistAdjustment = createAdminAdjustmentPersistence({
+      query: client.query.bind(client)
+    });
+    await persistAdjustment({
+      transaction: {
+        request_key: requestKey,
+        client_id: req.params.id,
+        staff_id: req.user.id,
+        mode: 'adjustment',
+        status: 'completed',
+        bonus_spent: amount < 0 ? Math.abs(amount) : 0,
+        bonus_earned: amount > 0 ? amount : 0,
+        balance_after: newBalance,
         reason
-      ]
-    );
+      }
+    });
     await client.query('COMMIT');
     res.json({ ok: true, balance: newBalance });
   } catch (error) {
