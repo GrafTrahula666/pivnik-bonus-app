@@ -20,6 +20,7 @@ import {
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
+import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -2249,11 +2250,21 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       return res.status(400).json({ error: `Недостаточно бонусов. Нужно ${item.bonusPrice} Б.` });
     }
     const balanceAfter = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : balance - item.bonusPrice;
-    const txResult = await client.query(
-      `INSERT INTO transactions (request_key, client_id, staff_id, mode, status, bonus_spent, balance_after, reason, completed_at)
-       VALUES ($1,$2,$3,'shop','completed',$4,$5,$6,NOW()) RETURNING *`,
-      [requestKey, target.id, actingStaff.id, item.bonusPrice, balanceAfter, item.title]
-    );
+    const persistShopPurchase = createShopPurchasePersistence({
+      query: client.query.bind(client)
+    });
+    const shopTransaction = await persistShopPurchase({
+      transaction: {
+        request_key: requestKey,
+        client_id: target.id,
+        staff_id: actingStaff.id,
+        mode: 'shop',
+        status: 'completed',
+        bonus_spent: item.bonusPrice,
+        balance_after: balanceAfter,
+        reason: item.title
+      }
+    });
     if (!unlimitedBonus) {
       await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
     }
@@ -2272,7 +2283,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
 ${item.title}
 Списано: ${item.bonusPrice} бонусов
 Баланс: ${balanceAfter} бонусов`);
-    res.json({ transaction: transactionResponse(txResult.rows[0]), client: await getProfile(target.id), item });
+    res.json({ transaction: transactionResponse(shopTransaction), client: await getProfile(target.id), item });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     next(error);
