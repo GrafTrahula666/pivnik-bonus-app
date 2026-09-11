@@ -1,0 +1,60 @@
+name: Materialize v22 preflight retirement once
+
+on:
+  push:
+    branches:
+      - audit/spaceverse-architecture-20260910
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-v22-preflight:
+    if: github.event.head_commit.message == 'Stage v22 preflight retirement'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Apply v22 preflight to raw canonical gateway
+        run: node scripts/apply-v22-preflight-fixes.mjs
+
+      - name: Verify shared wheel and normalized frame helper
+        run: |
+          if grep -Fq 'Колесо доступно только в Telegram.' universal-server.js; then
+            echo 'Telegram-only wheel guard still present.'
+            exit 1
+          fi
+          grep -Fq "frames.push({ code: 'diamond', title: 'Алмазная рамка' });" universal-server.js
+
+      - name: Verify diff integrity
+        run: git diff --check -- universal-server.js
+
+      - name: Verify gateway syntax
+        run: node --check universal-server.js
+
+      - name: Commit canonical gateway only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- universal-server.js
+          if git diff --cached --quiet; then
+            echo 'No canonical gateway changes to commit.'
+            exit 0
+          fi
+          changed="$(git diff --cached --name-only)"
+          test "$changed" = 'universal-server.js' || {
+            echo "Unexpected staged files:"
+            printf '%s\n' "$changed"
+            exit 1
+          }
+          git commit -m 'Canonicalize v22 preflight fixes'
+          git push origin HEAD:audit/spaceverse-architecture-20260910
