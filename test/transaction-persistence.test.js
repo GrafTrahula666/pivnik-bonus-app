@@ -66,13 +66,46 @@ test('every current business transaction mode uses the same scoped contract', as
 
   assert.deepEqual(
     transactionPersistenceContract.modes,
-    ['accrue', 'redeem', 'adjustment', 'beer_gift', 'welcome', 'shop']
+    ['accrue', 'redeem', 'adjustment', 'beer_gift', 'welcome', 'shop', 'achievement']
   );
   assert.equal(seen.length, transactionPersistenceContract.modes.length);
   for (const call of seen) {
     assert.match(call.sql, /tenant_id, location_id/);
     assert.deepEqual(call.values.slice(-2), ['tenant-a', 'location-1']);
   }
+});
+
+test('achievement reward journal shape is supported by scoped persistence', async () => {
+  const calls = [];
+  const insert = createScopedTransactionPersistence({
+    query: async (sql, values) => {
+      calls.push({ sql, values });
+      return { rows: [{ id: 77 }] };
+    }
+  });
+
+  await insert({
+    authorizationContext: ownerContext(),
+    tenantId: 'tenant-a',
+    locationId: 'location-1',
+    transaction: {
+      request_key: 'achievement:1:first-purchase',
+      client_id: 1,
+      mode: 'achievement',
+      status: 'completed',
+      bonus_earned: 10,
+      beer_gift_earned_ml: 0,
+      balance_after: 110,
+      reason: 'Achievement reward: First purchase',
+      reward_code: 'achievement:first-purchase'
+    }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /mode, status/);
+  assert.match(calls[0].sql, /reward_code/);
+  assert.match(calls[0].sql, /beer_gift_earned_ml/);
+  assert.deepEqual(calls[0].values.slice(-2), ['tenant-a', 'location-1']);
 });
 
 test('writer fails before SQL on cross-tenant or cross-location scope', async () => {
