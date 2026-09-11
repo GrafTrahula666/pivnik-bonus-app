@@ -99,6 +99,58 @@ test('beer gift adapter can use scoped persistence only after explicit enablemen
   assert.equal(calls[0].values.at(-1), 'location-a');
 });
 
+test('beer gift scoped mode preserves legacy zero check and cash semantics', async () => {
+  const calls = [];
+  const persist = createBeerGiftTransactionPersistence({
+    scopedWritesEnabled: true,
+    query: async (sql, values) => {
+      calls.push({ sql, values });
+      return { rows: [{ id: 91 }] };
+    }
+  });
+  const scope = {
+    authorizationContext: createAuthorizationContext({
+      membershipRole: 'staff',
+      tenantId: 'tenant-a',
+      locationId: 'location-a'
+    }),
+    tenantId: 'tenant-a',
+    locationId: 'location-a'
+  };
+
+  const withoutExplicitZeros = beerGiftTransaction();
+  delete withoutExplicitZeros.check_amount_cents;
+  delete withoutExplicitZeros.cash_paid_cents;
+  await persist({ ...scope, transaction: withoutExplicitZeros });
+
+  assert.equal(calls.length, 1);
+  const normalizedSql = calls[0].sql;
+  const normalizedValues = calls[0].values;
+  const columns = normalizedSql.match(/INSERT INTO transactions \(([^)]+)\)/)?.[1]
+    .split(',')
+    .map((column) => column.trim());
+  assert.equal(normalizedValues[columns.indexOf('check_amount_cents')], 0);
+  assert.equal(normalizedValues[columns.indexOf('cash_paid_cents')], 0);
+
+  let rejectedQueries = 0;
+  const rejectingPersist = createBeerGiftTransactionPersistence({
+    scopedWritesEnabled: true,
+    query: async () => {
+      rejectedQueries += 1;
+      return { rows: [{ id: 92 }] };
+    }
+  });
+  await assert.rejects(
+    rejectingPersist({ ...scope, transaction: beerGiftTransaction({ check_amount_cents: 100 }) }),
+    /requires zero check_amount_cents/
+  );
+  await assert.rejects(
+    rejectingPersist({ ...scope, transaction: beerGiftTransaction({ cash_paid_cents: 100 }) }),
+    /requires zero cash_paid_cents/
+  );
+  assert.equal(rejectedQueries, 0);
+});
+
 test('beer gift adapter rejects wrong mode and status before SQL', async () => {
   let queries = 0;
   const persist = createBeerGiftTransactionPersistence({
@@ -145,6 +197,7 @@ test('beer gift persistence contract remains migration-gated and legacy-by-defau
   assert.equal(beerGiftTransactionPersistenceContract.preservesLegacySqlShape, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesDatabaseNow, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesReturningRow, true);
+  assert.equal(beerGiftTransactionPersistenceContract.preservesZeroCheckAndCashSemantics, true);
   assert.equal(beerGiftTransactionPersistenceContract.requiresMigration009BeforeScopedEnablement, true);
   assert.equal(beerGiftTransactionPersistenceContract.scopedFallbackToLegacy, false);
 });
