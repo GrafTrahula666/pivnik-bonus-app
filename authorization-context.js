@@ -1,6 +1,6 @@
 const PLATFORM_ROLES = new Set(['platform_admin']);
 const MEMBERSHIP_ROLES = new Set(['owner', 'staff']);
-const LEGACY_ROLES = new Set(['viewer', 'admin', 'staff']);
+const LEGACY_ROLES = new Set(['client', 'viewer', 'admin', 'staff']);
 
 function normalizeScopeId(value, field) {
   if (value === null || value === undefined || value === '') return null;
