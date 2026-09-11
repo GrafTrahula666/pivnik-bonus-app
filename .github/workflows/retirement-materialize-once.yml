@@ -12,7 +12,7 @@ jobs:
   materialize-proven-candidates:
     if: github.event.head_commit.message == 'Stage proven runtime patch retirement'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - name: Checkout audit branch
         uses: actions/checkout@v4
