@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPath = path.join(root, 'migrations', '008_spaceverse_tenant_attribution.sql');
+const migrationPath = path.join(root, 'migrations', '009_spaceverse_tenant_attribution.sql');
 
 async function readMigration() {
   return fs.readFile(migrationPath, 'utf8');
@@ -38,5 +38,5 @@ test('production DB prepare does not auto-run SPACEVERSE attribution migration',
   const prepare = await fs.readFile(path.join(root, 'scripts', 'red-cosmos-v2-db-prepare.mjs'), 'utf8');
 
   assert.match(prepare, /007_red_cosmos_v2\.sql/);
-  assert.doesNotMatch(prepare, /008_spaceverse_tenant_attribution\.sql/);
+  assert.doesNotMatch(prepare, /009_spaceverse_tenant_attribution\.sql/);
 });
