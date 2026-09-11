@@ -32,24 +32,39 @@ test('admin adjustment route writes through the migration-gated persistence boun
   assert.doesNotMatch(route, /tenantId|locationId|scopedWritesEnabled/);
 });
 
-test('admin adjustment route keeps transaction, idempotency and wallet locking around the persistence boundary', () => {
+test('admin adjustment route keeps transaction, idempotency and row locking around the persistence boundary', () => {
   const route = adminAdjustmentRouteSource();
 
   const begin = route.indexOf("await client.query('BEGIN')");
-  const requestLock = route.indexOf('await lockMutationRequest(client, requestKey)');
-  const replay = route.indexOf('request_key = $1::uuid');
-  const walletLock = route.indexOf('FOR UPDATE');
+  const requestLock = route.indexOf('await lockRequestKey(client, requestKey)');
+  const userLock = route.indexOf('FROM users');
+  const firstForUpdate = route.indexOf('FOR UPDATE', userLock);
+  const walletLock = route.indexOf("SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE");
+  const replay = route.indexOf('SELECT * FROM transactions WHERE request_key = $1');
   const walletUpdate = route.indexOf("UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2");
   const persistence = route.indexOf('await persistAdjustment({');
   const commit = route.indexOf("await client.query('COMMIT')", persistence);
 
-  for (const [label, position] of Object.entries({ begin, requestLock, replay, walletLock, walletUpdate, persistence, commit })) {
+  for (const [label, position] of Object.entries({
+    begin,
+    requestLock,
+    userLock,
+    firstForUpdate,
+    walletLock,
+    replay,
+    walletUpdate,
+    persistence,
+    commit
+  })) {
     assert.notEqual(position, -1, `${label} must remain present`);
   }
+
   assert.ok(begin < requestLock, 'BEGIN must precede request-key locking');
-  assert.ok(requestLock < replay, 'request-key locking must precede replay lookup');
-  assert.ok(replay < walletLock, 'replay lookup must precede wallet FOR UPDATE');
-  assert.ok(walletLock < walletUpdate, 'wallet must be locked before balance update');
+  assert.ok(requestLock < userLock, 'request-key locking must precede target-user lookup');
+  assert.ok(userLock < firstForUpdate, 'target user lookup must retain FOR UPDATE');
+  assert.ok(firstForUpdate < walletLock, 'target user must be locked before wallet row');
+  assert.ok(walletLock < replay, 'wallet lock must precede idempotent replay lookup');
+  assert.ok(replay < walletUpdate, 'replay lookup must precede wallet mutation');
   assert.ok(walletUpdate < persistence, 'wallet update must precede transaction journal persistence');
   assert.ok(persistence < commit, 'transaction journal persistence must complete before COMMIT');
 });
