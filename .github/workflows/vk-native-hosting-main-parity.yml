@@ -8,6 +8,7 @@ on:
     paths:
       - scripts/build-vk-hosting.mjs
       - scripts/vk-native-hosting-browser-smoke.mjs
+      - scripts/vk-tg-black-frosted-parity-smoke.mjs
       - vk-hosting-config.json
       - test/vk-native-hosting-main-parity.test.js
       - .github/workflows/vk-native-hosting-main-parity.yml
@@ -16,6 +17,9 @@ on:
       - vk-platform.js
       - account-link.js
       - styles.css
+      - black-frosted-glass.css
+      - black-frosted-surfaces.css
+      - black-frosted-controls.css
       - scripts/materialize-runtime-patches.mjs
       - scripts/apply-v22-runtime.mjs
       - scripts/apply-v22-production-polish.mjs
@@ -75,11 +79,15 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run VK static bundle browser smoke
         run: node scripts/vk-native-hosting-browser-smoke.mjs
+      - name: Run VK Telegram materialized parity smoke
+        run: node scripts/vk-tg-black-frosted-parity-smoke.mjs
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: vk-native-hosting-browser-smoke
-          path: artifacts/vk-native-hosting-browser-smoke
+          path: |
+            artifacts/vk-native-hosting-browser-smoke
+            artifacts/vk-tg-black-frosted-parity-smoke
           if-no-files-found: error
           retention-days: 7
