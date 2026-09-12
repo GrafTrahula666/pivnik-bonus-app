@@ -1,0 +1,70 @@
+name: VK native hosting DEV deploy
+
+on:
+  push:
+    branches:
+      - fix/vk-native-hosting-main-parity-20260912
+    paths:
+      - .github/workflows/vk-native-hosting-dev.yml
+      - scripts/build-vk-hosting.mjs
+      - vk-hosting-config.json
+      - index.html
+      - app.js
+      - vk-platform.js
+      - account-link.js
+      - styles.css
+      - black-frosted-glass.css
+      - black-frosted-surfaces.css
+      - black-frosted-controls.css
+      - scripts/apply-red-cosmos-v2-shell-final.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-vk-dev:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run focused VK regression tests
+        run: node --test test/vk-native-hosting-main-parity.test.js
+      - name: Build VK native static bundle for existing HTTPS gateway
+        env:
+          PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
+        run: npm run build:vk-hosting
+      - name: Verify bundle boundaries before DEV deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/app.js
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/vendor/vk-bridge.js
+          grep -q '__PIVNIK_VK_API_BASE__' vk-hosting-build/index.html
+          grep -q 'https://139.100.238.159.nip.io' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
+          ! grep -q 'up.railway.app' vk-hosting-build/index.html
+      - name: Deploy DEV only to VK Mini Apps Hosting
+        env:
+          MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_MINI_APPS_ACCESS_TOKEN }}
+          MINI_APPS_ENVIRONMENT: dev
+          CI_URLS: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$MINI_APPS_ACCESS_TOKEN" ]; then
+            echo "VK_MINI_APPS_ACCESS_TOKEN is not configured"
+            exit 1
+          fi
+          npx -y @vkontakte/vk-miniapps-deploy@1.0.2
