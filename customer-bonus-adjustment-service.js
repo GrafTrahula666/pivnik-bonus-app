@@ -28,18 +28,33 @@ function requireConfirmation(value) {
   }
 }
 
+function createScopeDeniedError() {
+  return Object.assign(new Error('Customer is not visible in the authorized tenant/location scope'), {
+    code: 'customer_scope_denied'
+  });
+}
+
 /**
  * Customer 360 orchestration boundary for manual bonus adjustments.
  *
  * This service intentionally does not duplicate wallet arithmetic, row locking,
  * request-key replay handling or transaction persistence. After authorization it
- * delegates to the existing admin adjustment executor so the legacy financial
- * invariants remain the single source of truth until the scoped write path is
- * deliberately enabled.
+ * first proves that the target customer belongs to the authorized tenant/location
+ * scope, then delegates to the existing atomic admin adjustment executor.
+ *
+ * The explicit customer visibility proof is required because the historical users
+ * and wallets tables are global. Authorization of the actor alone must never make
+ * an arbitrary global customer id writable from a tenant-scoped CRM action.
  */
-export function createCustomerBonusAdjustmentService({ executeAdjustment } = {}) {
+export function createCustomerBonusAdjustmentService({
+  executeAdjustment,
+  assertCustomerVisible
+} = {}) {
   if (typeof executeAdjustment !== 'function') {
     throw new TypeError('executeAdjustment must be a function');
+  }
+  if (typeof assertCustomerVisible !== 'function') {
+    throw new TypeError('assertCustomerVisible must be a function');
   }
 
   return Object.freeze({
@@ -76,6 +91,14 @@ export function createCustomerBonusAdjustmentService({ executeAdjustment } = {})
 
       requireConfirmation(confirmed);
 
+      const visible = await assertCustomerVisible({
+        context,
+        tenantId: decision.tenantId,
+        locationId: decision.locationId,
+        customerId: normalizedCustomerId
+      });
+      if (visible !== true) throw createScopeDeniedError();
+
       const command = Object.freeze({
         customerId: normalizedCustomerId,
         amount: normalizedAmount,
@@ -90,6 +113,7 @@ export function createCustomerBonusAdjustmentService({ executeAdjustment } = {})
           reason: decision.reason,
           tenantId: decision.tenantId,
           locationId: decision.locationId,
+          customerId: normalizedCustomerId,
           requestKey: normalizedRequestKey
         })
       });
@@ -108,6 +132,8 @@ export const customerBonusAdjustmentServiceContract = Object.freeze({
   requiresReason: true,
   requiresConfirmation: true,
   requiresIdempotencyKey: true,
+  requiresCustomerScopeProof: true,
+  globalCustomerIdWritableWithoutScopeProof: false,
   auditMetadataIncluded: true,
   productionRouteWired: false
 });
