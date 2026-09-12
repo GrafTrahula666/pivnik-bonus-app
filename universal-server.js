@@ -1,3 +1,5 @@
+import { assertLegacyApiRequest, assertLegacyScopeBody } from './legacy-api-boundary.js';
+import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -2703,7 +2705,9 @@ async function readRequestBody(req) {
 
 function parseJsonBody(buffer) {
   try {
-    return JSON.parse(buffer.toString('utf8') || '{}');
+    const body = JSON.parse(buffer.toString('utf8') || '{}');
+    assertLegacyScopeBody(body);
+    return body;
   } catch {
     throw Object.assign(new Error('Некорректный JSON.'), { statusCode: 400 });
   }
@@ -2952,6 +2956,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+    assertLegacyApiRequest(req, SPACEVERSE_RUNTIME);
 
     const documentPlatform = platformForDocumentRequest(url, req.headers);
     if (req.method === 'GET' && documentPlatform) {
