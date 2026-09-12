@@ -19,16 +19,20 @@ async function telegramApi(method, payload = {}) {
 }
 
 if (!isVkService && botToken && /^https:\/\//i.test(appUrl)) {
-  await telegramApi('deleteWebhook', { drop_pending_updates: false });
-  await telegramApi('setChatMenuButton', {
-    menu_button: {
-      type: 'web_app',
-      text: 'Открыть ПРИЛОЖЕНИЕ',
-      web_app: { url: appUrl }
-    }
-  });
-  await telegramApi('deleteMyCommands', {});
-  console.log(`Telegram bot menu repaired: ${appUrl}`);
+  try {
+    await telegramApi('deleteWebhook', { drop_pending_updates: false });
+    await telegramApi('setChatMenuButton', {
+      menu_button: {
+        type: 'web_app',
+        text: 'Открыть ПРИЛОЖЕНИЕ',
+        web_app: { url: appUrl }
+      }
+    });
+    await telegramApi('deleteMyCommands', {});
+    console.log(`Telegram bot menu repaired: ${appUrl}`);
+  } catch (error) {
+    console.error(`Telegram bot menu repair failed; application startup will continue: ${error?.message || error}`);
+  }
 } else if (!isVkService && botToken) {
   console.log('Telegram menu repair skipped because TELEGRAM_APP_URL/PIVNIK_APP_URL is not explicitly configured.');
 } else {
