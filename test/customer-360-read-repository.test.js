@@ -89,6 +89,36 @@ test('scoped owner proves customer visibility through tenant transaction footpri
   assert.doesNotMatch(db.calls[1].sql, /JOIN wallets|JOIN beer_loyalty/);
 });
 
+test('reusable Customer 360 visibility check uses the exact owner tenant predicate and no global user read', async () => {
+  const db = queuedDb([[{ ok: 1 }]]);
+  const repository = createCustomer360ReadRepository({ scopedReadsEnabled: true });
+
+  const visible = await repository.isCustomerVisible(db, 42, {
+    authorizationContext: owner
+  });
+
+  assert.equal(visible, true);
+  assert.equal(db.calls.length, 1);
+  assert.match(db.calls[0].sql, /FROM transactions t/);
+  assert.match(db.calls[0].sql, /t\.tenant_id = \$2/);
+  assert.deepEqual(db.calls[0].params, [42, 'tenant-a']);
+  assert.doesNotMatch(db.calls[0].sql, /FROM users u|JOIN wallets/);
+});
+
+test('reusable visibility check returns false for a customer outside the authorized scope', async () => {
+  const db = queuedDb([[]]);
+  const repository = createCustomer360ReadRepository({ scopedReadsEnabled: true });
+
+  const visible = await repository.isCustomerVisible(db, 42, {
+    authorizationContext: staff
+  });
+
+  assert.equal(visible, false);
+  assert.equal(db.calls.length, 1);
+  assert.match(db.calls[0].sql, /t\.tenant_id = \$2 AND t\.location_id = \$3/);
+  assert.deepEqual(db.calls[0].params, [42, 'tenant-a', 'location-1']);
+});
+
 test('scoped staff is constrained to exact tenant and location', async () => {
   const db = queuedDb([[{ ok: 1 }], [identityRow], [financialRow]]);
   const repository = createCustomer360ReadRepository({ scopedReadsEnabled: true });
@@ -139,6 +169,12 @@ test('explicit Customer 360 scope remains migration-gated while scoped reads are
     }),
     (error) => error?.code === 'TRANSACTION_READ_SCOPE_MIGRATION_GATED'
   );
+  await assert.rejects(
+    repository.isCustomerVisible(db, 42, {
+      authorizationContext: owner
+    }),
+    (error) => error?.code === 'TRANSACTION_READ_SCOPE_MIGRATION_GATED'
+  );
   assert.equal(db.calls.length, 0);
 });
 
@@ -173,6 +209,7 @@ test('Customer 360 contract is read-only, migration-gated and exposes no synthet
   assert.equal(customer360ReadRepositoryContract.scopedReadsEnabledByDefault, false);
   assert.equal(customer360ReadRepositoryContract.migration, '009_spaceverse_tenant_attribution.sql');
   assert.equal(customer360ReadRepositoryContract.scopedCustomerVisibility, 'transaction-footprint-first');
+  assert.equal(customer360ReadRepositoryContract.exposesReusableVisibilityCheck, true);
   assert.equal(customer360ReadRepositoryContract.globalUserIdentityReadRequiresPriorScopedVisibility, true);
   assert.equal(customer360ReadRepositoryContract.scopedFallbackToGlobal, false);
   assert.equal(customer360ReadRepositoryContract.exposesSensitiveAuthFields, false);
