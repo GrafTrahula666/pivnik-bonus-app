@@ -29,6 +29,13 @@ test('Telegram startup repair cannot seed or mutate production application data'
   }
 });
 
+test('Telegram menu repair is best-effort and cannot block application startup on network failure', () => {
+  assert.match(telegramRepair, /try\s*\{/);
+  assert.match(telegramRepair, /catch \(error\)/);
+  assert.match(telegramRepair, /application startup will continue/);
+  assert.doesNotMatch(telegramRepair, /process\.exit\s*\(/);
+});
+
 test('Runtime side-effect audit requires a real pg client before classifying DB writes', () => {
   assert.match(retirementAudit, /const databaseClient =/);
   assert.match(retirementAudit, /const databaseMutationSql =/);
