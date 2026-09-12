@@ -9,10 +9,13 @@ function requireNonNegativeInteger(value, field) {
   }
 }
 
-function requirePositiveInteger(value, field) {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new TypeError(`${field} must be a positive safe integer`);
+function normalizePositiveDatabaseId(value, field) {
+  if (Number.isSafeInteger(value) && value > 0) return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (/^[1-9]\d*$/.test(normalized)) return normalized;
   }
+  throw new TypeError(`${field} must be a positive database identifier`);
 }
 
 function normalizeStaffTransaction(transaction) {
@@ -26,11 +29,12 @@ function normalizeStaffTransaction(transaction) {
   if (String(transaction.status || '') !== 'completed') {
     throw new TypeError('staff transaction persistence requires completed status');
   }
-  if (typeof transaction.request_key !== 'string' || !transaction.request_key.trim()) {
+  const requestKey = typeof transaction.request_key === 'string' ? transaction.request_key.trim() : '';
+  if (!requestKey) {
     throw new TypeError('request_key must be a non-empty string');
   }
-  requirePositiveInteger(transaction.client_id, 'client_id');
-  requirePositiveInteger(transaction.staff_id, 'staff_id');
+  const clientId = normalizePositiveDatabaseId(transaction.client_id, 'client_id');
+  const staffId = normalizePositiveDatabaseId(transaction.staff_id, 'staff_id');
   if (typeof transaction.is_suspicious !== 'boolean') {
     throw new TypeError('is_suspicious must be a boolean');
   }
@@ -60,7 +64,13 @@ function normalizeStaffTransaction(transaction) {
     throw new TypeError('cash_paid_cents cannot exceed check_amount_cents');
   }
 
-  return transaction;
+  return {
+    ...transaction,
+    request_key: requestKey,
+    client_id: clientId,
+    staff_id: staffId,
+    mode
+  };
 }
 
 /**
@@ -137,6 +147,7 @@ export const staffTransactionPersistenceContract = Object.freeze({
   preservesLegacySqlShape: true,
   preservesDatabaseNow: true,
   preservesReturningRow: true,
+  acceptsPostgresBigintStrings: true,
   validatesEndpointIdentityInvariants: true,
   validatesEndpointFinancialInvariants: true,
   requiresMigration009BeforeScopedEnablement: true,
