@@ -40,10 +40,13 @@ jobs:
       - name: Syntax check materialized runtime
         run: |
           node --check server.js
+          node --check universal-server.js
           node --check app.js
-      - name: Verify fail-closed markers
+      - name: Verify fail-closed and gateway markers
         run: |
           grep -q "PIVNIK_KIOSK_DEVICE_AUTH" server.js
           grep -q "registerDeviceAuthRoutes" server.js
+          grep -q "pathname.startsWith('/api/device/')" universal-server.js
           grep -q "authenticateKioskBootstrap" app.js
+          grep -q "ensureKioskDeviceAdminUi" app.js
           grep -q "CREATE TABLE IF NOT EXISTS bar_kiosk_devices" migrations/011_bar_kiosk_device_auth.sql
