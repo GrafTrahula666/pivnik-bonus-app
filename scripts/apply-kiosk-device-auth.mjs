@@ -66,7 +66,93 @@ if (!app.includes('await authenticateKioskBootstrap(kioskBootstrapCode)')) {
   );
 }
 
-const kioskAdminUi = `\n\nfunction ensureKioskDeviceAdminUi() {\n  if (!roleCanWrite(state.profile?.role)) return;\n  const quick = document.querySelector(\".screen[data-screen='admin'] .admin-quick-grid\");\n  if (!quick || document.getElementById('openKioskDevices')) return;\n  const button = document.createElement('button');\n  button.type = 'button';\n  button.id = 'openKioskDevices';\n  button.innerHTML = '<span>Барные устройства</span><small>привязка телефона и отзыв доступа</small>';\n  button.addEventListener('click', () => void openKioskDevicesAdmin());\n  quick.appendChild(button);\n}\n\nfunction ensureKioskDevicesModal() {\n  let modal = document.getElementById('kioskDevicesModal');\n  if (modal) return modal;\n  modal = document.createElement('div');\n  modal.className = 'modal';\n  modal.id = 'kioskDevicesModal';\n  modal.setAttribute('aria-hidden', 'true');\n  modal.innerHTML = \\`<div class=\"modal-sheet tall-sheet\">\n    <button class=\"close\" type=\"button\" id=\"closeKioskDevices\">×</button>\n    <span class=\"muted\">Админ-панель</span><h2>Барные устройства</h2>\n    <p class=\"muted\">Создай одноразовый код и введи его на Samsung. Код живёт 10 минут и используется один раз.</p>\n    <div class=\"admin-filter-row\"><input class=\"text-input\" id=\"kioskDeviceLabel\" value=\"Пивник • Бар\" placeholder=\"Имя устройства\"><button class=\"text-btn\" id=\"createKioskPairCode\" type=\"button\">Создать код</button></div>\n    <div id=\"kioskPairCodeResult\" class=\"empty-state\">Код ещё не создан</div>\n    <div id=\"kioskDeviceList\" class=\"operation-list empty-state\">Загрузка…</div>\n  </div>\\`;\n  document.body.appendChild(modal);\n  modal.querySelector('#closeKioskDevices')?.addEventListener('click', () => closeModal('kioskDevicesModal'));\n  modal.querySelector('#createKioskPairCode')?.addEventListener('click', async () => {\n    const label = modal.querySelector('#kioskDeviceLabel')?.value?.trim() || 'Пивник • Бар';\n    const result = modal.querySelector('#kioskPairCodeResult');\n    try {\n      const data = await api('/api/admin/devices/pairing-code', { method: 'POST', body: JSON.stringify({ label }) });\n      if (result) {\n        result.className = 'operation-list';\n        result.innerHTML = \\`<div class=\"op-row\"><div><b style=\"font-size:24px;letter-spacing:2px\">\${escapeHtml(data.code)}</b><small>Действует до \${new Date(data.expiresAt).toLocaleTimeString('ru-RU')}</small></div></div>\\`;\n      }\n      toast('Код привязки создан');\n    } catch (error) { toast(error.message); }\n  });\n  return modal;\n}\n\nasync function loadKioskDevicesAdmin() {\n  const modal = ensureKioskDevicesModal();\n  const root = modal.querySelector('#kioskDeviceList');\n  try {\n    const data = await api('/api/admin/devices');\n    const devices = data.devices || [];\n    root.className = \\`operation-list\${devices.length ? '' : ' empty-state'}\\`;\n    root.innerHTML = devices.length ? devices.map((device) => {\n      const revoked = Boolean(device.revokedAt);\n      const seen = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('ru-RU') : 'ещё не использовалось';\n      return \\`<div class=\"op-row \\${revoked ? 'cancelled' : ''}\"><div><b>\${escapeHtml(device.label || 'Барный терминал')}</b><small>\${revoked ? 'Доступ отозван' : 'Активно'} · последний доступ: \${escapeHtml(seen)}</small></div>\${revoked ? '' : \\`<button class=\"text-btn danger-text\" type=\"button\" data-kiosk-revoke=\"\${escapeHtml(device.id)}\">Отозвать</button>\\`}</div>\\`;\n    }).join('') : 'Привязанных устройств пока нет';\n    root.querySelectorAll('[data-kiosk-revoke]').forEach((button) => button.addEventListener('click', async () => {\n      if (!confirm('Отозвать доступ этого барного телефона? Уже выданные kiosk-сессии тоже будут отключены.')) return;\n      try {\n        await api(\\`/api/admin/devices/\${encodeURIComponent(button.dataset.kioskRevoke)}/revoke\\`, { method: 'POST', body: '{}' });\n        toast('Доступ устройства отозван');\n        await loadKioskDevicesAdmin();\n      } catch (error) { toast(error.message); }\n    }));\n  } catch (error) {\n    root.className = 'operation-list empty-state';\n    root.textContent = 'Device Auth пока не включён';\n    toast(error.message);\n  }\n}\n\nasync function openKioskDevicesAdmin() {\n  ensureKioskDevicesModal();\n  openModal('kioskDevicesModal');\n  await loadKioskDevicesAdmin();\n}`;
+const kioskAdminUi = String.raw`
+
+function ensureKioskDeviceAdminUi() {
+  if (!roleCanWrite(state.profile?.role)) return;
+  const quick = document.querySelector(".screen[data-screen='admin'] .admin-quick-grid");
+  if (!quick || document.getElementById('openKioskDevices')) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = 'openKioskDevices';
+  button.innerHTML = '<span>Барные устройства</span><small>привязка телефона и отзыв доступа</small>';
+  button.addEventListener('click', () => void openKioskDevicesAdmin());
+  quick.appendChild(button);
+}
+
+function ensureKioskDevicesModal() {
+  let modal = document.getElementById('kioskDevicesModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.id = 'kioskDevicesModal';
+  modal.setAttribute('aria-hidden', 'true');
+  modal.innerHTML = '<div class="modal-sheet tall-sheet">'
+    + '<button class="close" type="button" id="closeKioskDevices">×</button>'
+    + '<span class="muted">Админ-панель</span><h2>Барные устройства</h2>'
+    + '<p class="muted">Создай одноразовый код и введи его на Samsung. Код живёт 10 минут и используется один раз.</p>'
+    + '<div class="admin-filter-row"><input class="text-input" id="kioskDeviceLabel" value="Пивник • Бар" placeholder="Имя устройства"><button class="text-btn" id="createKioskPairCode" type="button">Создать код</button></div>'
+    + '<div id="kioskPairCodeResult" class="empty-state">Код ещё не создан</div>'
+    + '<div id="kioskDeviceList" class="operation-list empty-state">Загрузка…</div>'
+    + '</div>';
+  document.body.appendChild(modal);
+  modal.querySelector('#closeKioskDevices')?.addEventListener('click', () => closeModal('kioskDevicesModal'));
+  modal.querySelector('#createKioskPairCode')?.addEventListener('click', async () => {
+    const label = modal.querySelector('#kioskDeviceLabel')?.value?.trim() || 'Пивник • Бар';
+    const result = modal.querySelector('#kioskPairCodeResult');
+    try {
+      const data = await api('/api/admin/devices/pairing-code', { method: 'POST', body: JSON.stringify({ label }) });
+      if (result) {
+        result.className = 'operation-list';
+        result.innerHTML = '<div class="op-row"><div><b style="font-size:24px;letter-spacing:2px">'
+          + escapeHtml(data.code)
+          + '</b><small>Действует до '
+          + escapeHtml(new Date(data.expiresAt).toLocaleTimeString('ru-RU'))
+          + '</small></div></div>';
+      }
+      toast('Код привязки создан');
+    } catch (error) { toast(error.message); }
+  });
+  return modal;
+}
+
+async function loadKioskDevicesAdmin() {
+  const modal = ensureKioskDevicesModal();
+  const root = modal.querySelector('#kioskDeviceList');
+  try {
+    const data = await api('/api/admin/devices');
+    const devices = data.devices || [];
+    root.className = 'operation-list' + (devices.length ? '' : ' empty-state');
+    root.innerHTML = devices.length ? devices.map((device) => {
+      const revoked = Boolean(device.revokedAt);
+      const seen = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('ru-RU') : 'ещё не использовалось';
+      const revoke = revoked ? '' : '<button class="text-btn danger-text" type="button" data-kiosk-revoke="' + escapeHtml(device.id) + '">Отозвать</button>';
+      return '<div class="op-row ' + (revoked ? 'cancelled' : '') + '"><div><b>'
+        + escapeHtml(device.label || 'Барный терминал')
+        + '</b><small>' + (revoked ? 'Доступ отозван' : 'Активно')
+        + ' · последний доступ: ' + escapeHtml(seen) + '</small></div>' + revoke + '</div>';
+    }).join('') : 'Привязанных устройств пока нет';
+    root.querySelectorAll('[data-kiosk-revoke]').forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('Отозвать доступ этого барного телефона? Уже выданные kiosk-сессии тоже будут отключены.')) return;
+      try {
+        await api('/api/admin/devices/' + encodeURIComponent(button.dataset.kioskRevoke) + '/revoke', { method: 'POST', body: '{}' });
+        toast('Доступ устройства отозван');
+        await loadKioskDevicesAdmin();
+      } catch (error) { toast(error.message); }
+    }));
+  } catch (error) {
+    root.className = 'operation-list empty-state';
+    root.textContent = 'Device Auth пока не включён';
+    toast(error.message);
+  }
+}
+
+async function openKioskDevicesAdmin() {
+  ensureKioskDevicesModal();
+  openModal('kioskDevicesModal');
+  await loadKioskDevicesAdmin();
+}`;
+
 if (!app.includes('function ensureKioskDeviceAdminUi()')) {
   const adminAnchor = '\nasync function loadAdmin() {';
   if (!app.includes(adminAnchor)) throw new Error('kiosk device auth: missing admin UI anchor');
