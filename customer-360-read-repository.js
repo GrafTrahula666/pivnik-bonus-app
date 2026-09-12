@@ -92,8 +92,8 @@ export function createCustomer360ReadRepository({ scopedReadsEnabled = false } =
     const result = await db.query(
       `SELECT
          COALESCE(SUM(CASE WHEN t.status = 'completed' AND t.mode IN ('accrue','redeem') THEN t.cash_paid_cents ELSE 0 END), 0)::bigint AS cash_paid_cents,
-         COALESCE(SUM(CASE WHEN t.status = 'completed' AND t.bonus_delta > 0 THEN t.bonus_delta ELSE 0 END), 0)::bigint AS bonus_credited,
-         COALESCE(SUM(CASE WHEN t.status = 'completed' AND t.bonus_delta < 0 THEN -t.bonus_delta ELSE 0 END), 0)::bigint AS bonus_debited,
+         COALESCE(SUM(CASE WHEN t.status = 'completed' THEN t.bonus_earned ELSE 0 END), 0)::bigint AS bonus_credited,
+         COALESCE(SUM(CASE WHEN t.status = 'completed' THEN t.bonus_spent ELSE 0 END), 0)::bigint AS bonus_debited,
          COUNT(*) FILTER (WHERE t.status = 'completed')::bigint AS completed_operations,
          MAX(t.created_at) FILTER (WHERE t.status = 'completed') AS last_activity_at
        FROM transactions t
