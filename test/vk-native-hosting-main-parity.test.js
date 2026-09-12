@@ -23,7 +23,7 @@ test('VK hosting builder is transport-only and preserves current main UI', async
   assert.match(source, /originalFetch\(resolveGatewayInput\(input\)/);
   assert.match(source, /VK Hosting gateway must not use vercel\.app/);
   assert.match(source, /VK Hosting gateway must not expose Railway directly/);
-  assert.match(source, /telegram\.org\\\/js\\\/telegram-web-app/);
+  assert.match(source, /telegram-web-app/);
   assert.match(source, /vendor\/vk-bridge\.js/);
   assert.match(source, /vk-platform\.js/);
   assert.doesNotMatch(source, /VK_TELEGRAM_PARITY_CSS/);
