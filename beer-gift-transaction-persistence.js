@@ -1,6 +1,15 @@
 import { createMigrationGatedTransactionPersistence } from './transaction-persistence-compatibility.js';
 import { createScopedTransactionPersistence } from './transaction-persistence.js';
 
+function normalizePositiveDatabaseId(value, field) {
+  if (Number.isSafeInteger(value) && value > 0) return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (/^[1-9]\d*$/.test(normalized)) return normalized;
+  }
+  throw new TypeError(`beer gift transaction persistence requires positive database identifier ${field}`);
+}
+
 function requirePositiveSafeInteger(value, field) {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new TypeError(`beer gift transaction persistence requires positive safe integer ${field}`);
@@ -44,8 +53,8 @@ function normalizeBeerGiftTransaction(transaction) {
   return {
     ...transaction,
     request_key: requestKey,
-    client_id: requirePositiveSafeInteger(transaction.client_id, 'client_id'),
-    staff_id: requirePositiveSafeInteger(transaction.staff_id, 'staff_id'),
+    client_id: normalizePositiveDatabaseId(transaction.client_id, 'client_id'),
+    staff_id: normalizePositiveDatabaseId(transaction.staff_id, 'staff_id'),
     check_amount_cents: 0,
     cash_paid_cents: 0,
     balance_after: requireNonNegativeSafeInteger(transaction.balance_after, 'balance_after'),
@@ -120,6 +129,7 @@ export const beerGiftTransactionPersistenceContract = Object.freeze({
   preservesLegacySqlShape: true,
   preservesDatabaseNow: true,
   preservesReturningRow: true,
+  acceptsPostgresBigintStrings: true,
   preservesZeroCheckAndCashSemantics: true,
   validatesGiftInvariantsBeforeSql: true,
   requiresMigration009BeforeScopedEnablement: true,
