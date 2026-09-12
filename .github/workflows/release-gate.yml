@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -23,37 +23,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Materialize critical transaction persistence wiring once
-        if: >-
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/audit/spaceverse-architecture-20260910' &&
-          github.event.head_commit.message == 'Wire critical transaction persistence'
-        shell: bash
-        run: |
-          node --check scripts/wire-critical-transaction-persistence-once.mjs
-          node scripts/wire-critical-transaction-persistence-once.mjs
-          node --check server.js
-          git diff --check
-          changed="$(git diff --name-only | sort)"
-          expected="$(printf '%s\n' \
-            server.js \
-            test/beer-gift-transaction-persistence.test.js \
-            test/beer-gift-transaction-wiring-safety.test.js \
-            test/staff-transaction-persistence.test.js \
-            test/staff-transaction-wiring-safety.test.js | sort)"
-          if [ "$changed" != "$expected" ]; then
-            echo "Unexpected files changed by critical wiring:"
-            printf '%s\n' "$changed"
-            exit 1
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add server.js test/beer-gift-transaction-persistence.test.js test/beer-gift-transaction-wiring-safety.test.js test/staff-transaction-persistence.test.js test/staff-transaction-wiring-safety.test.js
-          git commit -m "Wire staff and beer gift persistence"
-          git push origin HEAD:audit/spaceverse-architecture-20260910
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
