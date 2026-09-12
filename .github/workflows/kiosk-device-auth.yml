@@ -1,0 +1,52 @@
+name: Kiosk Device Auth Gate
+on:
+  push:
+    branches: [feature/android-bar-kiosk]
+    paths:
+      - 'device-auth-*.js'
+      - 'test/device-auth-*.test.js'
+      - 'scripts/apply-kiosk-device-auth.mjs'
+      - 'migrations/011_bar_kiosk_device_auth.sql'
+      - '.github/workflows/kiosk-device-auth.yml'
+  pull_request:
+    paths:
+      - 'device-auth-*.js'
+      - 'test/device-auth-*.test.js'
+      - 'scripts/apply-kiosk-device-auth.mjs'
+      - 'migrations/011_bar_kiosk_device_auth.sql'
+      - '.github/workflows/kiosk-device-auth.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Unit tests
+        run: node --test test/device-auth-core.test.js test/device-auth-routes.test.js
+      - name: Syntax check isolated modules
+        run: |
+          node --check device-auth-core.js
+          node --check device-auth-persistence.js
+          node --check device-auth-routes.js
+          node --check scripts/apply-kiosk-device-auth.mjs
+      - name: Materialize into temporary checkout
+        run: node scripts/apply-kiosk-device-auth.mjs
+      - name: Syntax check materialized runtime
+        run: |
+          node --check server.js
+          node --check universal-server.js
+          node --check app.js
+      - name: Verify fail-closed and gateway markers
+        run: |
+          grep -q "PIVNIK_KIOSK_DEVICE_AUTH" server.js
+          grep -q "registerDeviceAuthRoutes" server.js
+          grep -q "pathname.startsWith('/api/device/')" universal-server.js
+          grep -q "authenticateKioskBootstrap" app.js
+          grep -q "ensureKioskDeviceAdminUi" app.js
+          grep -q "CREATE TABLE IF NOT EXISTS bar_kiosk_devices" migrations/011_bar_kiosk_device_auth.sql
