@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - scripts/build-vk-hosting.mjs
+      - scripts/vk-native-hosting-browser-smoke.mjs
       - vk-hosting-config.json
       - test/vk-native-hosting-main-parity.test.js
       - .github/workflows/vk-native-hosting-main-parity.yml
@@ -30,7 +31,7 @@ permissions:
 jobs:
   build-current-main-vk-bundle:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,3 +69,17 @@ jobs:
             echo 'Railway browser origin leaked into VK static bundle'
             exit 1
           fi
+      - name: Install isolated Playwright runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run VK static bundle browser smoke
+        run: node scripts/vk-native-hosting-browser-smoke.mjs
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-native-hosting-browser-smoke
+          path: artifacts/vk-native-hosting-browser-smoke
+          if-no-files-found: error
+          retention-days: 7
