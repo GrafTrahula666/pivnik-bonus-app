@@ -1,3 +1,5 @@
+import { createAchievementTransactionPersistence } from './achievement-transaction-persistence.js';
+
 const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 
 const catalog = [
@@ -420,24 +422,23 @@ async function awardAchievement(db, userId, definition, periodKey = '') {
   const rewardDescription = definition.rewardBeerMl
     ? '1 бесплатная пинта пива (0,5 л)'
     : `${definition.rewardBonus} бонусов`;
-  await db.query(
-    `INSERT INTO transactions (
-       request_key, client_id, mode, status, bonus_earned,
-       beer_gift_earned_ml, balance_after, reason, reward_code, completed_at
-     ) VALUES (
-       $1, $2::bigint, 'achievement', 'completed', $3::bigint,
-       $4::bigint, $5::bigint, $6, $7, NOW()
-     )`,
-    [
-      requestKey,
-      userId,
-      number(definition.rewardBonus),
-      number(definition.rewardBeerMl),
-      number(wallet.rows[0].balance),
-      `Достижение «${definition.title}» — ${rewardDescription}`,
-      code
-    ]
-  );
+  const persistAchievementTransaction = createAchievementTransactionPersistence({
+    query: (...args) => db.query(...args),
+    scopedWritesEnabled: false
+  });
+  await persistAchievementTransaction({
+    transaction: {
+      request_key: requestKey,
+      client_id: userId,
+      mode: 'achievement',
+      status: 'completed',
+      bonus_earned: number(definition.rewardBonus),
+      beer_gift_earned_ml: number(definition.rewardBeerMl),
+      balance_after: number(wallet.rows[0].balance),
+      reason: `Достижение «${definition.title}» — ${rewardDescription}`,
+      reward_code: code
+    }
+  });
   return true;
 }
 

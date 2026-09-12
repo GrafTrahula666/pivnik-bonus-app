@@ -107,7 +107,14 @@ test('Все изменяющие бонусы маршруты использу
   assert.match(server, /financial-request:\$\{requestKey\}/);
   assert.match(server, /pg_advisory_xact_lock\(hashtext\(\$1\)\)/);
   assert.match(server, /cancel_request_key = \$3/);
-  assert.match(server, /request_key, client_id, staff_id, mode/);
+  assert.match(server, /createStaffTransactionPersistence/);
+  assert.match(server, /createBeerGiftTransactionPersistence/);
+  assert.match(server, /request_key: requestKey/);
+  const criticalRoutes = server.slice(
+    server.indexOf("app.post('/api/staff/transactions'"),
+    server.indexOf("app.post('/api/staff/shop/purchase'")
+  );
+  assert.doesNotMatch(criticalRoutes, /INSERT INTO transactions/);
   assert.match(app, /data-staff-cancel[\s\S]*?requestKey: requestId\(\)/);
   assert.match(app, /data-admin-cancel[\s\S]*?requestKey: requestId\(\)/);
   assert.match(app, /data-adjust-user[\s\S]*?requestKey: requestId\(\)/);

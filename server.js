@@ -19,6 +19,10 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
+import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
+import { createStaffTransactionPersistence } from './staff-transaction-persistence.js';
+import { createBeerGiftTransactionPersistence } from './beer-gift-transaction-persistence.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -1308,6 +1312,18 @@ async function getCancellationQuota(staffId, db = pool) {
   return { active: true, limit: STAFF_CANCEL_LIMIT, used, remaining: Math.max(0, STAFF_CANCEL_LIMIT - used), shiftId: shift.id, countFrom };
 }
 
+function unlimitedCancellationQuota() {
+  return {
+    active: true,
+    unlimited: true,
+    limit: null,
+    used: 0,
+    remaining: null,
+    shiftId: null,
+    countFrom: null
+  };
+}
+
 async function cancelCompletedTransaction(db, transactionId, actorId, reason, requestKey, options = {}) {
   await lockRequestKey(db, requestKey);
   const repeated = await db.query(
@@ -2023,16 +2039,27 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     const balanceAfter = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : balance - bonusSpent + bonusEarned;
     const isSuspicious = amountCents > SUSPICIOUS_THRESHOLD_CENTS;
 
-    const txResult = await client.query(
-      `INSERT INTO transactions (
-         request_key, client_id, staff_id, mode, status,
-         check_amount_cents, discount_cents, bonus_spent, bonus_earned,
-         cash_paid_cents, balance_after, is_suspicious,
-         beer_ml, beer_gift_earned_ml, completed_at
-       ) VALUES ($1,$2,$3,$4,'completed',$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
-       RETURNING *`,
-      [requestKey, targetUser.id, actingStaff.id, mode, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, isSuspicious, beerMl, beerGiftEarnedMl]
-    );
+    const persistStaffTransaction = createStaffTransactionPersistence({
+      query: client.query.bind(client)
+    });
+    const persistedTransaction = await persistStaffTransaction({
+      transaction: {
+        request_key: requestKey,
+        client_id: targetUser.id,
+        staff_id: actingStaff.id,
+        mode,
+        status: 'completed',
+        check_amount_cents: amountCents,
+        discount_cents: discountCents,
+        bonus_spent: bonusSpent,
+        bonus_earned: bonusEarned,
+        cash_paid_cents: cashPaidCents,
+        balance_after: balanceAfter,
+        is_suspicious: isSuspicious,
+        beer_ml: beerMl,
+        beer_gift_earned_ml: beerGiftEarnedMl
+      }
+    });
     if (!unlimitedBonus) {
       await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, targetUser.id]);
     }
@@ -2043,7 +2070,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     await client.query('COMMIT');
     await syncUserAchievements(pool, targetUser.id);
 
-    const tx = txResult.rows[0];
+    const tx = persistedTransaction;
     const beerText = beerMl > 0
       ? `
 Разливное: ${litersFromMl(beerMl).toFixed(2).replace(/\.00$/, '')} л${beerGiftEarnedMl ? `
@@ -2141,15 +2168,23 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
     }
     const newGiftBalance = Number(beerResult.rows[0].gift_ml_balance) - giftMl;
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1', [targetUser.id]);
-    const txResult = await client.query(
-      `INSERT INTO transactions (
-         request_key, client_id, staff_id, mode, status,
-         check_amount_cents, cash_paid_cents, balance_after,
-         beer_gift_spent_ml, reason, completed_at
-       ) VALUES ($1,$2,$3,'beer_gift','completed',0,0,$4,$5,$6,NOW())
-       RETURNING *`,
-      [requestKey, targetUser.id, actingStaff.id, Number(walletResult.rows[0]?.balance || 0), giftMl, `Выдан подарочный объём ${litersFromMl(giftMl)} л`]
-    );
+    const persistBeerGiftTransaction = createBeerGiftTransactionPersistence({
+      query: client.query.bind(client)
+    });
+    const beerGiftTransaction = await persistBeerGiftTransaction({
+      transaction: {
+        request_key: requestKey,
+        client_id: targetUser.id,
+        staff_id: actingStaff.id,
+        mode: 'beer_gift',
+        status: 'completed',
+        check_amount_cents: 0,
+        cash_paid_cents: 0,
+        balance_after: Number(walletResult.rows[0]?.balance || 0),
+        beer_gift_spent_ml: giftMl,
+        reason: `Выдан подарочный объём ${litersFromMl(giftMl)} л`
+      }
+    });
     await client.query('UPDATE beer_loyalty SET gift_ml_balance = $1, updated_at = NOW() WHERE user_id = $2', [newGiftBalance, targetUser.id]);
     await client.query('COMMIT');
     await syncUserAchievements(pool, targetUser.id);
@@ -2161,7 +2196,7 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
 Выдано бесплатно: ${litersFromMl(giftMl)} л разливного пива.
 Осталось подарочного объёма: ${litersFromMl(newGiftBalance)} л.`
     );
-    res.json({ transaction: transactionResponse(txResult.rows[0]), client: await getProfile(targetUser.id) });
+    res.json({ transaction: transactionResponse(beerGiftTransaction), client: await getProfile(targetUser.id) });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     next(error);
@@ -2236,11 +2271,21 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
       return res.status(400).json({ error: `Недостаточно бонусов. Нужно ${item.bonusPrice} Б.` });
     }
     const balanceAfter = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : balance - item.bonusPrice;
-    const txResult = await client.query(
-      `INSERT INTO transactions (request_key, client_id, staff_id, mode, status, bonus_spent, balance_after, reason, completed_at)
-       VALUES ($1,$2,$3,'shop','completed',$4,$5,$6,NOW()) RETURNING *`,
-      [requestKey, target.id, actingStaff.id, item.bonusPrice, balanceAfter, item.title]
-    );
+    const persistShopPurchase = createShopPurchasePersistence({
+      query: client.query.bind(client)
+    });
+    const shopTransaction = await persistShopPurchase({
+      transaction: {
+        request_key: requestKey,
+        client_id: target.id,
+        staff_id: actingStaff.id,
+        mode: 'shop',
+        status: 'completed',
+        bonus_spent: item.bonusPrice,
+        balance_after: balanceAfter,
+        reason: item.title
+      }
+    });
     if (!unlimitedBonus) {
       await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, target.id]);
     }
@@ -2259,7 +2304,7 @@ app.post('/api/staff/shop/purchase', authRequired, requireRole('staff', 'admin')
 ${item.title}
 Списано: ${item.bonusPrice} бонусов
 Баланс: ${balanceAfter} бонусов`);
-    res.json({ transaction: transactionResponse(txResult.rows[0]), client: await getProfile(target.id), item });
+    res.json({ transaction: transactionResponse(shopTransaction), client: await getProfile(target.id), item });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     next(error);
@@ -2272,7 +2317,7 @@ app.get('/api/staff/recent', authRequired, requireRole('staff', 'admin'), async 
   try {
     const actingStaff = await resolveActingStaff(req);
     if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
-    const quota = await getCancellationQuota(actingStaff.id);
+    const quota = actingStaff.role === 'admin' ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id);
     const from = quota.active ? quota.countFrom : new Date(Date.now() - 16 * 60 * 60 * 1000);
     const result = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name
@@ -2294,6 +2339,8 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
   const actingStaff = await resolveActingStaff(req);
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+  // V21 · owner unlimited cancellation
+  const ownerUnlimitedCancel = actingStaff.role === 'admin';
   const replay = await pool.query(
     'SELECT * FROM transactions WHERE cancel_request_key = $1',
     [requestKey]
@@ -2310,7 +2357,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       ok: true,
       transaction: transactionResponse(replay.rows[0]),
       client: await getProfile(replay.rows[0].client_id),
-      quota: await getCancellationQuota(actingStaff.id)
+      quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id)
     });
   }
   const client = await pool.connect();
@@ -2320,12 +2367,14 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       [`staff-cancel-quota:${actingStaff.id}`]
     );
-    const quota = await getCancellationQuota(actingStaff.id, client);
-    if (!quota.active) {
+    const quota = ownerUnlimitedCancel
+      ? unlimitedCancellationQuota()
+      : await getCancellationQuota(actingStaff.id, client);
+    if (!ownerUnlimitedCancel && !quota.active) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Отмена доступна только в активной смене.' });
     }
-    if (quota.remaining <= 0) {
+    if (!ownerUnlimitedCancel && quota.remaining <= 0) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Лимит отмен исчерпан. Следующую отмену проводит владелец.' });
     }
@@ -2335,14 +2384,14 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       actingStaff.id,
       reason,
       requestKey,
-      { staffId: actingStaff.id, notBefore: quota.countFrom }
+      ownerUnlimitedCancel ? {} : { staffId: actingStaff.id, notBefore: quota.countFrom }
     );
     await client.query('COMMIT');
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
 Причина: ${reason}
 Текущий баланс: ${profile.balance} бонусов.`);
-    res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: await getCancellationQuota(actingStaff.id) });
+    res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id) });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
@@ -2727,21 +2776,22 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
       return res.status(400).json({ error: 'Баланс не может стать отрицательным.' });
     }
     await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [newBalance, req.params.id]);
-    await client.query(
-      `INSERT INTO transactions (
-         request_key, client_id, staff_id, mode, status,
-         bonus_spent, bonus_earned, balance_after, reason, completed_at
-       ) VALUES ($1,$2,$3,'adjustment','completed',$4,$5,$6,$7,NOW())`,
-      [
-        requestKey,
-        req.params.id,
-        req.user.id,
-        amount < 0 ? Math.abs(amount) : 0,
-        amount > 0 ? amount : 0,
-        newBalance,
+    const persistAdjustment = createAdminAdjustmentPersistence({
+      query: client.query.bind(client)
+    });
+    await persistAdjustment({
+      transaction: {
+        request_key: requestKey,
+        client_id: req.params.id,
+        staff_id: req.user.id,
+        mode: 'adjustment',
+        status: 'completed',
+        bonus_spent: amount < 0 ? Math.abs(amount) : 0,
+        bonus_earned: amount > 0 ? amount : 0,
+        balance_after: newBalance,
         reason
-      ]
-    );
+      }
+    });
     await client.query('COMMIT');
     res.json({ ok: true, balance: newBalance });
   } catch (error) {
