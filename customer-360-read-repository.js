@@ -55,18 +55,20 @@ export function createCustomer360ReadRepository({ scopedReadsEnabled = false } =
     return Boolean(result.rows?.[0]);
   }
 
-  async function getIdentityAndBalances(db, customerId) {
+  async function getIdentityAndBalances(db, customerId, scope) {
+    // A transaction footprint proves customer visibility, NOT wallet ownership.
+    // Until an authoritative wallet binding exists, scoped money is unknown.
+    const global = scope.level === 'legacy' || scope.level === 'platform';
     const result = await db.query(
       `SELECT u.id, u.username, u.first_name, u.last_name, u.created_at,
               u.photo_url, u.profile_frame,
-              COALESCE(w.balance, 0)::bigint AS bonus_balance,
-              COALESCE(bl.paid_ml_total, 0)::bigint AS paid_ml_total,
-              COALESCE(bl.gift_ml_balance, 0)::bigint AS gift_ml_balance
+              ${global ? 'w.balance' : 'NULL'}::bigint AS bonus_balance,
+              ${global ? 'bl.paid_ml_total' : 'NULL'}::bigint AS paid_ml_total,
+              ${global ? 'bl.gift_ml_balance' : 'NULL'}::bigint AS gift_ml_balance
        FROM users u
-       LEFT JOIN wallets w ON w.user_id = u.id
-       LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
+       ${global ? 'LEFT JOIN wallets w ON w.user_id = u.id LEFT JOIN beer_loyalty bl ON bl.user_id = u.id' : ''}
        WHERE u.id = $1
-         AND u.deleted_at IS NULL
+         AND u.deleted_at IS NULL AND u.merged_into_user_id IS NULL
        LIMIT 1`,
       [customerId]
     );
@@ -80,9 +82,9 @@ export function createCustomer360ReadRepository({ scopedReadsEnabled = false } =
       createdAt: nullableIso(row.created_at),
       photoUrl: row.photo_url ?? null,
       profileFrame: row.profile_frame ?? null,
-      bonusBalance: toSafeInteger(row.bonus_balance, 'bonus_balance'),
-      paidMlTotal: toSafeInteger(row.paid_ml_total, 'paid_ml_total'),
-      giftMlBalance: toSafeInteger(row.gift_ml_balance, 'gift_ml_balance')
+      bonusBalance: !global || row.bonus_balance == null ? null : toSafeInteger(row.bonus_balance, 'bonus_balance'),
+      paidMlTotal: !global || row.paid_ml_total == null ? null : toSafeInteger(row.paid_ml_total, 'paid_ml_total'),
+      giftMlBalance: !global || row.gift_ml_balance == null ? null : toSafeInteger(row.gift_ml_balance, 'gift_ml_balance')
     });
   }
 
@@ -119,7 +121,7 @@ export function createCustomer360ReadRepository({ scopedReadsEnabled = false } =
       const visible = await assertScopedCustomerVisible(db, normalizedCustomerId, scope);
       if (!visible) return null;
 
-      const identity = await getIdentityAndBalances(db, normalizedCustomerId);
+      const identity = await getIdentityAndBalances(db, normalizedCustomerId, scope);
       if (!identity) return null;
 
       const financial = await getFinancialSummary(db, normalizedCustomerId, scope);

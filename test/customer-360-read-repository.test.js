@@ -84,6 +84,9 @@ test('scoped owner proves customer visibility through tenant transaction footpri
   assert.match(db.calls[2].sql, /t\.tenant_id = \$2/);
   assert.deepEqual(db.calls[2].params, [42, 'tenant-a']);
   assert.equal(result.identity.id, 42);
+  assert.equal(result.identity.bonusBalance, null);
+  assert.equal(result.identity.giftMlBalance, null);
+  assert.doesNotMatch(db.calls[1].sql, /JOIN wallets|JOIN beer_loyalty/);
 });
 
 test('scoped staff is constrained to exact tenant and location', async () => {

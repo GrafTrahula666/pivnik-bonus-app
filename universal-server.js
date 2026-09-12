@@ -1,3 +1,4 @@
+import { isStartupMigration } from './startup-migrations.js';
 import { assertLegacyApiRequest, assertLegacyScopeBody } from './legacy-api-boundary.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 import crypto from 'node:crypto';
@@ -470,7 +471,7 @@ async function runSqlMigrations(client) {
   try {
     const migrationDirectory = path.join(__dirname, 'migrations');
     const migrationFiles = (await fs.readdir(migrationDirectory))
-      .filter((file) => /^\d+_.+\.sql$/i.test(file))
+      .filter(isStartupMigration)
       .sort();
 
     for (const file of migrationFiles) {
