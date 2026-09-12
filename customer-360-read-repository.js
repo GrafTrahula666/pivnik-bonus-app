@@ -113,6 +113,13 @@ export function createCustomer360ReadRepository({ scopedReadsEnabled = false } =
   }
 
   return Object.freeze({
+    async isCustomerVisible(db, customerId, options = {}) {
+      requireDb(db);
+      const normalizedCustomerId = normalizeCustomerId(customerId);
+      const scope = resolveScope(options);
+      return assertScopedCustomerVisible(db, normalizedCustomerId, scope);
+    },
+
     async getCustomerSummary(db, customerId, options = {}) {
       requireDb(db);
       const normalizedCustomerId = normalizeCustomerId(customerId);
@@ -136,6 +143,7 @@ export const customer360ReadRepositoryContract = Object.freeze({
   scopedReadsEnabledByDefault: false,
   migration: '009_spaceverse_tenant_attribution.sql',
   scopedCustomerVisibility: 'transaction-footprint-first',
+  exposesReusableVisibilityCheck: true,
   globalUserIdentityReadRequiresPriorScopedVisibility: true,
   scopedFallbackToGlobal: false,
   exposesSensitiveAuthFields: false,
