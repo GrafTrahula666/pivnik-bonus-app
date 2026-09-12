@@ -9,6 +9,12 @@ function requireNonNegativeInteger(value, field) {
   }
 }
 
+function requirePositiveInteger(value, field) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`${field} must be a positive safe integer`);
+  }
+}
+
 function normalizeStaffTransaction(transaction) {
   if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)) {
     throw new TypeError('transaction must be an object');
@@ -20,6 +26,14 @@ function normalizeStaffTransaction(transaction) {
   if (String(transaction.status || '') !== 'completed') {
     throw new TypeError('staff transaction persistence requires completed status');
   }
+  if (typeof transaction.request_key !== 'string' || !transaction.request_key.trim()) {
+    throw new TypeError('request_key must be a non-empty string');
+  }
+  requirePositiveInteger(transaction.client_id, 'client_id');
+  requirePositiveInteger(transaction.staff_id, 'staff_id');
+  if (typeof transaction.is_suspicious !== 'boolean') {
+    throw new TypeError('is_suspicious must be a boolean');
+  }
 
   requireNonNegativeInteger(transaction.check_amount_cents, 'check_amount_cents');
   requireNonNegativeInteger(transaction.discount_cents, 'discount_cents');
@@ -30,6 +44,9 @@ function normalizeStaffTransaction(transaction) {
   requireNonNegativeInteger(transaction.beer_ml, 'beer_ml');
   requireNonNegativeInteger(transaction.beer_gift_earned_ml, 'beer_gift_earned_ml');
 
+  if (transaction.discount_cents > transaction.check_amount_cents) {
+    throw new TypeError('discount_cents cannot exceed check_amount_cents');
+  }
   if (mode === 'accrue' && transaction.bonus_spent !== 0) {
     throw new TypeError('accrue transaction cannot spend bonuses');
   }
@@ -120,6 +137,7 @@ export const staffTransactionPersistenceContract = Object.freeze({
   preservesLegacySqlShape: true,
   preservesDatabaseNow: true,
   preservesReturningRow: true,
+  validatesEndpointIdentityInvariants: true,
   validatesEndpointFinancialInvariants: true,
   requiresMigration009BeforeScopedEnablement: true,
   scopedFallbackToLegacy: false
