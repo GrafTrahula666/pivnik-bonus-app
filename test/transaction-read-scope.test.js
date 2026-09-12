@@ -119,3 +119,12 @@ test('read scope contract documents fail-closed SaaS semantics', () => {
   assert.equal(transactionReadScopeContract.legacyRoleInference, false);
   assert.equal(transactionReadScopeContract.scopedFallbackToGlobal, false);
 });
+
+test('unknown gate values and incomplete scoped predicates fail closed', () => {
+  for (const value of ['false', 'true', 1, null]) {
+    assert.throws(() => createMigrationGatedTransactionReadScope({ scopedReadsEnabled: value }), /boolean/);
+  }
+  for (const scope of [{ level: 'tenant' }, { level: 'location', tenantId: 'a' }]) {
+    assert.throws(() => buildTransactionReadPredicate(scope), /required/);
+  }
+});

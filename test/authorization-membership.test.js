@@ -48,7 +48,7 @@ test('owner membership is selected only for the requested tenant', async () => {
   assert.equal(canAccessTenant(ownTenant.context, 200), false);
 
   const foreignTenant = await resolveAuthorization({ userId: 7, tenantId: 300, legacyRole: 'admin' });
-  assert.equal(foreignTenant.mode, 'legacy');
+  assert.equal(foreignTenant.mode, 'scoped');
   assert.equal(canAccessTenant(foreignTenant.context, 300), false);
   assert.equal(foreignTenant.legacyCapabilities.adminWrite, true);
 });
@@ -69,7 +69,7 @@ test('staff membership requires an exact tenant and location match', async () =>
     locationId: 102,
     legacyRole: 'staff'
   });
-  assert.equal(otherLocation.mode, 'legacy');
+  assert.equal(otherLocation.mode, 'scoped');
   assert.equal(canAccessLocation(otherLocation.context, 100, 102), false);
   assert.equal(otherLocation.legacyCapabilities.staff, true);
 });
@@ -83,7 +83,7 @@ test('legacy fallback never invents tenant scope', async () => {
     legacyRole: 'admin'
   });
 
-  assert.equal(result.mode, 'legacy');
+  assert.equal(result.mode, 'scoped');
   assert.equal(result.legacyCapabilities.adminWrite, true);
   assert.equal(canAccessTenant(result.context, 100), false);
   assert.equal(canAccessLocation(result.context, 100, 101), false);

@@ -94,6 +94,7 @@ function hasExplicitScopedRead(options = {}) {
  * enabled. Once scoped reads are enabled, there is no fallback to a global read.
  */
 export function createMigrationGatedTransactionReadScope({ scopedReadsEnabled = false } = {}) {
+  if (typeof scopedReadsEnabled !== 'boolean') throw new TypeError('scopedReadsEnabled must be boolean');
   return function resolve(options = {}) {
     if (!scopedReadsEnabled) {
       if (hasExplicitScopedRead(options)) {
@@ -120,12 +121,16 @@ export function buildTransactionReadPredicate(scope, { alias = 't', firstParamet
     return Object.freeze({ sql: '', params: Object.freeze([]) });
   }
   if (scope.level === 'tenant') {
+    if (!normalizeOptionalId(scope.tenantId, 'tenantId')) throw new TypeError('tenantId is required');
+    if (scope.locationId) throw new TypeError('tenant scope cannot contain locationId');
     return Object.freeze({
       sql: `${safeAlias}.tenant_id = $${firstParameter}`,
       params: Object.freeze([scope.tenantId])
     });
   }
   if (scope.level === 'location') {
+    if (!normalizeOptionalId(scope.tenantId, 'tenantId')) throw new TypeError('tenantId is required');
+    if (!normalizeOptionalId(scope.locationId, 'locationId')) throw new TypeError('locationId is required');
     return Object.freeze({
       sql: `${safeAlias}.tenant_id = $${firstParameter} AND ${safeAlias}.location_id = $${firstParameter + 1}`,
       params: Object.freeze([scope.tenantId, scope.locationId])
