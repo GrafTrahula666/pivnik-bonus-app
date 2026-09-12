@@ -25,7 +25,7 @@ function queuedDb(rowsByQuery) {
   };
 }
 
-test('runtime uses Customer 360 tenant visibility before executing adjustment', async () => {
+test('runtime uses Customer 360 location visibility before executing adjustment', async () => {
   const db = queuedDb([[{ ok: 1 }]]);
   const executions = [];
   const runtime = createCustomerBonusAdjustmentRuntime({
@@ -40,6 +40,7 @@ test('runtime uses Customer 360 tenant visibility before executing adjustment', 
   const result = await runtime.adjust({
     context: owner,
     tenantId: 'tenant-a',
+    locationId: 'location-1',
     actorId: '7',
     customerId: '42',
     amount: 100,
@@ -51,11 +52,12 @@ test('runtime uses Customer 360 tenant visibility before executing adjustment', 
   assert.deepEqual(result, { ok: true });
   assert.equal(db.calls.length, 1);
   assert.match(db.calls[0].sql, /FROM transactions t/);
-  assert.match(db.calls[0].sql, /t\.tenant_id = \$2/);
-  assert.deepEqual(db.calls[0].params, [42, 'tenant-a']);
+  assert.match(db.calls[0].sql, /t\.tenant_id = \$2 AND t\.location_id = \$3/);
+  assert.deepEqual(db.calls[0].params, [42, 'tenant-a', 'location-1']);
   assert.equal(executions.length, 1);
   assert.equal(executions[0].customerId, '42');
   assert.equal(executions[0].tenantId, 'tenant-a');
+  assert.equal(executions[0].locationId, 'location-1');
   assert.equal(executions[0].audit.customerId, '42');
 });
 
@@ -74,6 +76,7 @@ test('runtime fails closed when Customer 360 visibility proof is absent', async 
     runtime.adjust({
       context: owner,
       tenantId: 'tenant-a',
+      locationId: 'location-1',
       actorId: '7',
       customerId: '42',
       amount: -50,
@@ -102,6 +105,7 @@ test('runtime keeps scoped bonus writes migration-gated until migration 009 is d
     runtime.adjust({
       context: owner,
       tenantId: 'tenant-a',
+      locationId: 'location-1',
       actorId: '7',
       customerId: '42',
       amount: 50,
