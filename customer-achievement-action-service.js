@@ -21,6 +21,12 @@ function requireConfirmation(value) {
   }
 }
 
+function createScopeDeniedError() {
+  return Object.assign(new Error('Customer is not visible in the authorized tenant/location scope'), {
+    code: 'customer_scope_denied'
+  });
+}
+
 function createCommand({ action, decision, customerId, achievementCode, requestKey }) {
   return Object.freeze({
     action,
@@ -37,6 +43,7 @@ function createCommand({ action, decision, customerId, achievementCode, requestK
       reason: decision.reason,
       tenantId: decision.tenantId,
       locationId: decision.locationId,
+      customerId,
       requestKey,
       achievementCode
     })
@@ -46,21 +53,25 @@ function createCommand({ action, decision, customerId, achievementCode, requestK
 /**
  * Customer 360 orchestration boundary for manual achievement actions.
  *
- * Granting is delegated to the existing reward/achievement implementation so
- * reward_grants idempotency and wallet/journal atomicity remain the source of
- * truth. Revocation is intentionally unavailable unless an explicit audited
- * executor is supplied: deleting a grant alone would not safely claw back a
- * previously issued bonus/beer reward.
+ * Actor authorization is evaluated before customer visibility is queried. After
+ * policy + confirmation pass, the target customer must be proven visible through
+ * the canonical tenant/location boundary before any achievement executor runs.
+ * Granting still delegates to the existing reward/achievement implementation.
+ * Revocation stays fail-closed unless an explicit audited executor is supplied.
  */
 export function createCustomerAchievementActionService({
   grantAchievement,
-  revokeAchievement = null
+  revokeAchievement = null,
+  assertCustomerVisible
 } = {}) {
   if (typeof grantAchievement !== 'function') {
     throw new TypeError('grantAchievement must be a function');
   }
   if (revokeAchievement !== null && typeof revokeAchievement !== 'function') {
     throw new TypeError('revokeAchievement must be a function when provided');
+  }
+  if (typeof assertCustomerVisible !== 'function') {
+    throw new TypeError('assertCustomerVisible must be a function');
   }
 
   async function execute({
@@ -96,6 +107,14 @@ export function createCustomerAchievementActionService({
     }
 
     requireConfirmation(confirmed);
+
+    const visible = await assertCustomerVisible({
+      context,
+      tenantId: decision.tenantId,
+      locationId: decision.locationId,
+      customerId: normalizedCustomerId
+    });
+    if (visible !== true) throw createScopeDeniedError();
 
     const command = createCommand({
       action,
@@ -137,6 +156,9 @@ export const customerAchievementActionServiceContract = Object.freeze({
   requiresReason: true,
   requiresConfirmation: true,
   requiresIdempotencyKey: true,
+  requiresCustomerScopeProof: true,
+  authorizationPrecedesScopeProof: true,
+  globalCustomerIdWritableWithoutScopeProof: false,
   auditMetadataIncluded: true,
   revokeDisabledWithoutAuditedExecutor: true,
   productionRouteWired: false
