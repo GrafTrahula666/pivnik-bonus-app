@@ -1,5 +1,28 @@
 import { parseDeviceAuthorization } from './device-auth-core.js';
 
+const deviceAuthRateBuckets = new Map();
+
+function requestAddress(req) {
+  return String(req?.headers?.['x-forwarded-for'] || '').split(',')[0].trim()
+    || String(req?.socket?.remoteAddress || 'unknown');
+}
+
+function enforceDeviceRateLimit(req, namespace, limit, windowMs) {
+  const now = Date.now();
+  const key = `${namespace}:${requestAddress(req)}`;
+  const recent = (deviceAuthRateBuckets.get(key) || []).filter((timestamp) => now - timestamp < windowMs);
+  if (recent.length >= limit) {
+    throw Object.assign(new Error('Слишком много запросов. Повторите позже.'), { statusCode: 429 });
+  }
+  recent.push(now);
+  deviceAuthRateBuckets.set(key, recent);
+  if (deviceAuthRateBuckets.size > 3000) {
+    for (const [bucketKey, timestamps] of deviceAuthRateBuckets) {
+      if (!timestamps.some((timestamp) => now - timestamp < windowMs)) deviceAuthRateBuckets.delete(bucketKey);
+    }
+  }
+}
+
 export function registerDeviceAuthRoutes({
   app,
   enabled,
@@ -19,6 +42,7 @@ export function registerDeviceAuthRoutes({
 
   app.post('/api/device/pair', async (req, res, next) => {
     try {
+      enforceDeviceRateLimit(req, 'pair', 10, 10 * 60 * 1000);
       const result = await persistence.pairDevice({ code: req.body?.code, label: req.body?.label });
       res.status(201).json({
         deviceToken: result.token,
@@ -29,6 +53,7 @@ export function registerDeviceAuthRoutes({
 
   app.post('/api/device/bootstrap', async (req, res, next) => {
     try {
+      enforceDeviceRateLimit(req, 'bootstrap', 60, 60 * 1000);
       const deviceToken = parseDeviceAuthorization(req.headers.authorization);
       if (!deviceToken) return res.status(401).json({ error: 'Требуется ключ барного устройства.' });
       const result = await persistence.createBootstrap({ deviceToken });
@@ -42,6 +67,7 @@ export function registerDeviceAuthRoutes({
 
   app.post('/api/device/session', async (req, res, next) => {
     try {
+      enforceDeviceRateLimit(req, 'session', 30, 60 * 1000);
       const result = await persistence.exchangeBootstrap(req.body?.bootstrapCode);
       const token = signSession({
         uid: result.userId,
