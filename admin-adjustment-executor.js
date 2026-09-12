@@ -30,7 +30,7 @@ function createHttpLikeError(message, statusCode, code) {
  *
  * It deliberately preserves the current lock order and persistence boundary:
  * BEGIN -> request-key lock -> user lock -> wallet lock -> replay check ->
- * wallet mutation -> transaction journal -> COMMIT.
+ * unlimited-bonus guard -> wallet mutation -> transaction journal -> COMMIT.
  *
  * HTTP concerns stay outside this module. Customer 360 and the legacy admin
  * route can therefore share exactly one financial mutation implementation.
@@ -39,6 +39,7 @@ export function createAdminAdjustmentExecutor({
   pool,
   lockRequestKey,
   assertMatchingTransaction,
+  hasUnlimitedBonus,
   createPersistence = createAdminAdjustmentPersistence
 } = {}) {
   if (!pool || typeof pool.connect !== 'function') throw new TypeError('pool.connect is required');
@@ -46,6 +47,7 @@ export function createAdminAdjustmentExecutor({
   if (typeof assertMatchingTransaction !== 'function') {
     throw new TypeError('assertMatchingTransaction must be a function');
   }
+  if (typeof hasUnlimitedBonus !== 'function') throw new TypeError('hasUnlimitedBonus must be a function');
   if (typeof createPersistence !== 'function') throw new TypeError('createPersistence must be a function');
 
   return async function executeAdminAdjustment({
@@ -109,6 +111,14 @@ export function createAdminAdjustmentExecutor({
           customerId: String(targetUser.id),
           balanceAfter: Number(replay.balance_after ?? walletResult.rows[0].balance ?? 0)
         });
+      }
+
+      if (hasUnlimitedBonus(targetUser)) {
+        throw createHttpLikeError(
+          'У этого профиля включён постоянный безлимит бонусов.',
+          400,
+          'unlimited_bonus'
+        );
       }
 
       const oldBalance = Number(walletResult.rows[0].balance || 0);
@@ -175,11 +185,13 @@ export const adminAdjustmentExecutorContract = Object.freeze({
     'user',
     'wallet',
     'replay',
+    'unlimited_bonus_guard',
     'wallet_mutation',
     'journal'
   ]),
   reusesAdminAdjustmentPersistence: true,
   preservesIdempotentReplayValidation: true,
+  preservesUnlimitedBonusGuard: true,
   rejectsNegativeResult: true,
   rejectsUnsafeIntegerBalances: true,
   ownsHttpResponse: false,
