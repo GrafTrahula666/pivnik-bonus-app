@@ -1,0 +1,93 @@
+name: VK native hosting main parity
+
+on:
+  push:
+    branches:
+      - fix/vk-native-hosting-main-parity-20260912
+  pull_request:
+    paths:
+      - scripts/build-vk-hosting.mjs
+      - scripts/vk-native-hosting-browser-smoke.mjs
+      - scripts/vk-tg-black-frosted-parity-smoke.mjs
+      - vk-hosting-config.json
+      - test/vk-native-hosting-main-parity.test.js
+      - .github/workflows/vk-native-hosting-main-parity.yml
+      - index.html
+      - app.js
+      - vk-platform.js
+      - account-link.js
+      - styles.css
+      - black-frosted-glass.css
+      - black-frosted-surfaces.css
+      - black-frosted-controls.css
+      - scripts/materialize-runtime-patches.mjs
+      - scripts/apply-v22-runtime.mjs
+      - scripts/apply-v22-production-polish.mjs
+      - scripts/apply-red-cosmos-v2-shell-final.mjs
+      - scripts/apply-red-cosmos-v2-client-final.mjs
+      - scripts/apply-release-candidate-fixes.mjs
+      - scripts/apply-working-updates.mjs
+      - scripts/apply-vk-production-hotfix-20260831.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  build-current-main-vk-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run focused regression tests
+        run: node --test test/vk-native-hosting-main-parity.test.js
+      - name: Materialize current product sources
+        run: npm run materialize
+      - name: Build static VK bundle without deployment
+        env:
+          PIVNIK_VK_API_BASE: https://vk-gateway.invalid
+        run: node scripts/build-vk-hosting.mjs
+      - name: Verify static bundle boundaries
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/app.js
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/account-link.js
+          test -f vk-hosting-build/vendor/vk-bridge.js
+          grep -q '__PIVNIK_VK_API_BASE__' vk-hosting-build/index.html
+          grep -q 'https://vk-gateway.invalid' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          if grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html; then
+            echo 'Telegram runtime leaked into VK static bundle'
+            exit 1
+          fi
+          if grep -q 'up.railway.app' vk-hosting-build/index.html; then
+            echo 'Railway browser origin leaked into VK static bundle'
+            exit 1
+          fi
+      - name: Install isolated Playwright runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run VK static bundle browser smoke
+        run: node scripts/vk-native-hosting-browser-smoke.mjs
+      - name: Run VK Telegram materialized parity smoke
+        run: node scripts/vk-tg-black-frosted-parity-smoke.mjs
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-native-hosting-browser-smoke
+          path: |
+            artifacts/vk-native-hosting-browser-smoke
+            artifacts/vk-tg-black-frosted-parity-smoke
+          if-no-files-found: error
+          retention-days: 7
