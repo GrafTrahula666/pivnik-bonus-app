@@ -17,57 +17,43 @@ function staffTransactionRouteSource() {
   return server.slice(start, end);
 }
 
-test('staff transaction route retains the exact direct journal insert before adapter wiring', () => {
+test('staff transaction route writes through the migration-gated persistence boundary', () => {
   const route = staffTransactionRouteSource();
-
-  assert.match(route, /INSERT INTO transactions \(\s*request_key, client_id, staff_id, mode, status,/s);
-  assert.match(route, /VALUES \(\$1,\$2,\$3,\$4,'completed',\$5,\$6,\$7,\$8,\$9,\$10,\$11,\$12,\$13,NOW\(\)\)/s);
-  assert.match(route, /RETURNING \*/);
-  assert.doesNotMatch(route, /createStaffTransactionPersistence/);
+  assert.match(server, /import \{ createStaffTransactionPersistence \} from '\.\/staff-transaction-persistence\.js';/);
+  assert.match(route, /createStaffTransactionPersistence\(\{/);
+  assert.match(route, /await persistStaffTransaction\(\{/);
+  assert.match(route, /const tx = persistedTransaction;/);
+  assert.doesNotMatch(route, /INSERT INTO transactions/);
   assert.doesNotMatch(route, /tenantId|locationId|scopedWritesEnabled/);
 });
 
-test('staff transaction mutation order remains protected before persistence wiring', () => {
+test('staff transaction mutation order remains protected around persistence wiring', () => {
   const route = staffTransactionRouteSource();
-
   const begin = route.indexOf("await client.query('BEGIN')");
   const requestLock = route.indexOf('await lockRequestKey(client, requestKey)');
   const targetLock = route.indexOf('FOR UPDATE');
   const replay = route.indexOf('SELECT * FROM transactions WHERE request_key = $1');
   const walletLock = route.indexOf('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE');
   const beerLock = route.indexOf('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE');
-  const insert = route.indexOf('INSERT INTO transactions (');
+  const persistence = route.indexOf('await persistStaffTransaction({');
   const walletUpdate = route.indexOf("UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2");
   const beerUpdate = route.indexOf('UPDATE beer_loyalty SET paid_ml_total = $1, gift_ml_balance = $2, updated_at = NOW() WHERE user_id = $3');
-  const commit = route.indexOf("await client.query('COMMIT')", insert);
+  const commit = route.indexOf("await client.query('COMMIT')", persistence);
   const rollback = route.lastIndexOf("await client.query('ROLLBACK')");
 
-  for (const [label, position] of Object.entries({
-    begin,
-    requestLock,
-    targetLock,
-    replay,
-    walletLock,
-    beerLock,
-    insert,
-    walletUpdate,
-    beerUpdate,
-    commit,
-    rollback
-  })) {
+  for (const [label, position] of Object.entries({ begin, requestLock, targetLock, replay, walletLock, beerLock, persistence, walletUpdate, beerUpdate, commit, rollback })) {
     assert.notEqual(position, -1, `${label} must remain present`);
   }
-
-  assert.ok(begin < requestLock, 'BEGIN must precede request-key locking');
-  assert.ok(requestLock < targetLock, 'request-key lock must precede target-user lock');
-  assert.ok(targetLock < replay, 'target-user lock must precede replay lookup');
-  assert.ok(replay < walletLock, 'replay lookup must precede wallet lock');
-  assert.ok(walletLock < beerLock, 'wallet lock must precede beer-loyalty lock');
-  assert.ok(beerLock < insert, 'all balance inputs must be locked before journal persistence');
-  assert.ok(insert < walletUpdate, 'journal insertion must keep its current position before wallet mutation');
-  assert.ok(walletUpdate < beerUpdate, 'wallet mutation must precede beer-loyalty mutation');
-  assert.ok(beerUpdate < commit, 'all state mutation must complete before COMMIT');
-  assert.ok(commit < rollback, 'error rollback path must remain after the success path');
+  assert.ok(begin < requestLock);
+  assert.ok(requestLock < targetLock);
+  assert.ok(targetLock < replay);
+  assert.ok(replay < walletLock);
+  assert.ok(walletLock < beerLock);
+  assert.ok(beerLock < persistence);
+  assert.ok(persistence < walletUpdate);
+  assert.ok(walletUpdate < beerUpdate);
+  assert.ok(beerUpdate < commit);
+  assert.ok(commit < rollback);
 });
 
 test('staff transaction adapter is legacy-by-default and migration-gated', () => {
@@ -77,4 +63,5 @@ test('staff transaction adapter is legacy-by-default and migration-gated', () =>
   assert.match(adapter, /preservesLegacySqlShape: true/);
   assert.match(adapter, /preservesDatabaseNow: true/);
   assert.match(adapter, /preservesReturningRow: true/);
+  assert.match(adapter, /acceptsPostgresBigintStrings: true/);
 });

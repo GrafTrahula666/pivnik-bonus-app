@@ -17,51 +17,39 @@ function beerGiftRouteSource() {
   return server.slice(start, end);
 }
 
-test('beer gift route retains the exact direct journal insert before adapter wiring', () => {
+test('beer gift route writes through the migration-gated persistence boundary', () => {
   const route = beerGiftRouteSource();
-
-  assert.match(route, /INSERT INTO transactions \(\s*request_key, client_id, staff_id, mode, status,/s);
-  assert.match(route, /VALUES \(\$1,\$2,\$3,'beer_gift','completed',0,0,\$4,\$5,\$6,NOW\(\)\)/s);
-  assert.match(route, /RETURNING \*/);
-  assert.doesNotMatch(route, /createBeerGiftTransactionPersistence/);
+  assert.match(server, /import \{ createBeerGiftTransactionPersistence \} from '\.\/beer-gift-transaction-persistence\.js';/);
+  assert.match(route, /createBeerGiftTransactionPersistence\(\{/);
+  assert.match(route, /await persistBeerGiftTransaction\(\{/);
+  assert.match(route, /transactionResponse\(beerGiftTransaction\)/);
+  assert.doesNotMatch(route, /INSERT INTO transactions/);
   assert.doesNotMatch(route, /tenantId|locationId|scopedWritesEnabled/);
 });
 
-test('beer gift mutation order remains protected before persistence wiring', () => {
+test('beer gift mutation order remains protected around persistence wiring', () => {
   const route = beerGiftRouteSource();
-
   const begin = route.indexOf("await client.query('BEGIN')");
   const requestLock = route.indexOf('await lockRequestKey(client, requestKey)');
   const targetLock = route.indexOf('FOR UPDATE');
   const replay = route.indexOf('SELECT * FROM transactions WHERE request_key = $1');
   const beerLock = route.indexOf('SELECT paid_ml_total, gift_ml_balance FROM beer_loyalty WHERE user_id = $1 FOR UPDATE');
-  const insert = route.indexOf('INSERT INTO transactions (');
+  const persistence = route.indexOf('await persistBeerGiftTransaction({');
   const beerUpdate = route.indexOf('UPDATE beer_loyalty SET gift_ml_balance = $1, updated_at = NOW() WHERE user_id = $2');
-  const commit = route.indexOf("await client.query('COMMIT')", insert);
+  const commit = route.indexOf("await client.query('COMMIT')", persistence);
   const rollback = route.lastIndexOf("await client.query('ROLLBACK')");
 
-  for (const [label, position] of Object.entries({
-    begin,
-    requestLock,
-    targetLock,
-    replay,
-    beerLock,
-    insert,
-    beerUpdate,
-    commit,
-    rollback
-  })) {
+  for (const [label, position] of Object.entries({ begin, requestLock, targetLock, replay, beerLock, persistence, beerUpdate, commit, rollback })) {
     assert.notEqual(position, -1, `${label} must remain present`);
   }
-
-  assert.ok(begin < requestLock, 'BEGIN must precede request-key locking');
-  assert.ok(requestLock < targetLock, 'request-key lock must precede target-user lock');
-  assert.ok(targetLock < replay, 'target-user lock must precede replay lookup');
-  assert.ok(replay < beerLock, 'replay lookup must precede beer-loyalty lock');
-  assert.ok(beerLock < insert, 'gift balance must be locked before journal persistence');
-  assert.ok(insert < beerUpdate, 'journal insertion must keep its current position before gift-balance mutation');
-  assert.ok(beerUpdate < commit, 'gift-balance mutation must complete before COMMIT');
-  assert.ok(commit < rollback, 'error rollback path must remain after the success path');
+  assert.ok(begin < requestLock);
+  assert.ok(requestLock < targetLock);
+  assert.ok(targetLock < replay);
+  assert.ok(replay < beerLock);
+  assert.ok(beerLock < persistence);
+  assert.ok(persistence < beerUpdate);
+  assert.ok(beerUpdate < commit);
+  assert.ok(commit < rollback);
 });
 
 test('beer gift adapter is legacy-by-default and migration-gated', () => {
@@ -71,4 +59,5 @@ test('beer gift adapter is legacy-by-default and migration-gated', () => {
   assert.match(adapter, /preservesLegacySqlShape: true/);
   assert.match(adapter, /preservesDatabaseNow: true/);
   assert.match(adapter, /preservesReturningRow: true/);
+  assert.match(adapter, /acceptsPostgresBigintStrings: true/);
 });

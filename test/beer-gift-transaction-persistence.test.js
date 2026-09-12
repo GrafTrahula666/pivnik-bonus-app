@@ -151,6 +151,20 @@ test('beer gift scoped mode preserves legacy zero check and cash semantics', asy
   assert.equal(rejectedQueries, 0);
 });
 
+test('beer gift adapter accepts PostgreSQL bigint IDs as decimal strings', async () => {
+  const calls = [];
+  const persist = createBeerGiftTransactionPersistence({
+    query: async (sql, values) => {
+      calls.push({ sql, values });
+      return { rows: [{ id: 96 }] };
+    }
+  });
+
+  await persist({ transaction: beerGiftTransaction({ client_id: '9223372036854775806', staff_id: '21' }) });
+  assert.equal(calls[0].values[1], '9223372036854775806');
+  assert.equal(calls[0].values[2], '21');
+});
+
 test('beer gift adapter enforces gift invariants before SQL in legacy mode', async () => {
   let queries = 0;
   const persist = createBeerGiftTransactionPersistence({
@@ -162,8 +176,8 @@ test('beer gift adapter enforces gift invariants before SQL in legacy mode', asy
 
   const invalidCases = [
     [beerGiftTransaction({ request_key: '   ' }), /requires request_key/],
-    [beerGiftTransaction({ client_id: 0 }), /positive safe integer client_id/],
-    [beerGiftTransaction({ staff_id: -1 }), /positive safe integer staff_id/],
+    [beerGiftTransaction({ client_id: 0 }), /positive database identifier client_id/],
+    [beerGiftTransaction({ staff_id: -1 }), /positive database identifier staff_id/],
     [beerGiftTransaction({ balance_after: -1 }), /non-negative safe integer balance_after/],
     [beerGiftTransaction({ beer_gift_spent_ml: 0 }), /positive safe integer beer_gift_spent_ml/],
     [beerGiftTransaction({ beer_gift_spent_ml: Number.MAX_SAFE_INTEGER + 1 }), /positive safe integer beer_gift_spent_ml/],
@@ -252,6 +266,7 @@ test('beer gift persistence contract remains migration-gated and legacy-by-defau
   assert.equal(beerGiftTransactionPersistenceContract.preservesLegacySqlShape, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesDatabaseNow, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesReturningRow, true);
+  assert.equal(beerGiftTransactionPersistenceContract.acceptsPostgresBigintStrings, true);
   assert.equal(beerGiftTransactionPersistenceContract.preservesZeroCheckAndCashSemantics, true);
   assert.equal(beerGiftTransactionPersistenceContract.validatesGiftInvariantsBeforeSql, true);
   assert.equal(beerGiftTransactionPersistenceContract.requiresMigration009BeforeScopedEnablement, true);

@@ -157,6 +157,20 @@ test('staff adapter rejects wrong mode and status before SQL', async () => {
   assert.equal(queries, 0);
 });
 
+test('staff adapter accepts PostgreSQL bigint IDs as decimal strings', async () => {
+  const calls = [];
+  const persist = createStaffTransactionPersistence({
+    query: async (sql, values) => {
+      calls.push({ sql, values });
+      return { rows: [{ id: 95 }] };
+    }
+  });
+
+  await persist({ transaction: staffTransaction({ client_id: '9223372036854775806', staff_id: '21' }) });
+  assert.equal(calls[0].values[1], '9223372036854775806');
+  assert.equal(calls[0].values[2], '21');
+});
+
 test('staff adapter rejects identity states the endpoint cannot produce before SQL', async () => {
   let queries = 0;
   const persist = createStaffTransactionPersistence({
@@ -169,10 +183,10 @@ test('staff adapter rejects identity states the endpoint cannot produce before S
   const invalidCases = [
     [staffTransaction({ request_key: '' }), /request_key must be a non-empty string/],
     [staffTransaction({ request_key: '   ' }), /request_key must be a non-empty string/],
-    [staffTransaction({ client_id: 0 }), /client_id must be a positive safe integer/],
-    [staffTransaction({ client_id: 1.5 }), /client_id must be a positive safe integer/],
-    [staffTransaction({ staff_id: -1 }), /staff_id must be a positive safe integer/],
-    [staffTransaction({ staff_id: Number.MAX_SAFE_INTEGER + 1 }), /staff_id must be a positive safe integer/],
+    [staffTransaction({ client_id: 0 }), /client_id must be a positive database identifier/],
+    [staffTransaction({ client_id: 1.5 }), /client_id must be a positive database identifier/],
+    [staffTransaction({ staff_id: -1 }), /staff_id must be a positive database identifier/],
+    [staffTransaction({ staff_id: Number.MAX_SAFE_INTEGER + 1 }), /staff_id must be a positive database identifier/],
     [staffTransaction({ is_suspicious: 0 }), /is_suspicious must be a boolean/],
     [staffTransaction({ is_suspicious: 'false' }), /is_suspicious must be a boolean/]
   ];
@@ -234,7 +248,7 @@ test('staff scoped mode enforces the same identity and financial invariants befo
   );
   await assert.rejects(
     persist({ ...scope, transaction: staffTransaction({ staff_id: 0 }) }),
-    /staff_id must be a positive safe integer/
+    /staff_id must be a positive database identifier/
   );
   await assert.rejects(
     persist({ ...scope, transaction: staffTransaction({ is_suspicious: null }) }),
@@ -259,6 +273,7 @@ test('staff persistence contract remains migration-gated and legacy-by-default',
   assert.equal(staffTransactionPersistenceContract.preservesLegacySqlShape, true);
   assert.equal(staffTransactionPersistenceContract.preservesDatabaseNow, true);
   assert.equal(staffTransactionPersistenceContract.preservesReturningRow, true);
+  assert.equal(staffTransactionPersistenceContract.acceptsPostgresBigintStrings, true);
   assert.equal(staffTransactionPersistenceContract.validatesEndpointIdentityInvariants, true);
   assert.equal(staffTransactionPersistenceContract.validatesEndpointFinancialInvariants, true);
   assert.equal(staffTransactionPersistenceContract.requiresMigration009BeforeScopedEnablement, true);

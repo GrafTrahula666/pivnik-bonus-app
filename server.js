@@ -21,6 +21,8 @@ import {
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
 import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
+import { createStaffTransactionPersistence } from './staff-transaction-persistence.js';
+import { createBeerGiftTransactionPersistence } from './beer-gift-transaction-persistence.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -2037,16 +2039,27 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     const balanceAfter = unlimitedBonus ? UNLIMITED_BONUS_BALANCE : balance - bonusSpent + bonusEarned;
     const isSuspicious = amountCents > SUSPICIOUS_THRESHOLD_CENTS;
 
-    const txResult = await client.query(
-      `INSERT INTO transactions (
-         request_key, client_id, staff_id, mode, status,
-         check_amount_cents, discount_cents, bonus_spent, bonus_earned,
-         cash_paid_cents, balance_after, is_suspicious,
-         beer_ml, beer_gift_earned_ml, completed_at
-       ) VALUES ($1,$2,$3,$4,'completed',$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
-       RETURNING *`,
-      [requestKey, targetUser.id, actingStaff.id, mode, amountCents, discountCents, bonusSpent, bonusEarned, cashPaidCents, balanceAfter, isSuspicious, beerMl, beerGiftEarnedMl]
-    );
+    const persistStaffTransaction = createStaffTransactionPersistence({
+      query: client.query.bind(client)
+    });
+    const persistedTransaction = await persistStaffTransaction({
+      transaction: {
+        request_key: requestKey,
+        client_id: targetUser.id,
+        staff_id: actingStaff.id,
+        mode,
+        status: 'completed',
+        check_amount_cents: amountCents,
+        discount_cents: discountCents,
+        bonus_spent: bonusSpent,
+        bonus_earned: bonusEarned,
+        cash_paid_cents: cashPaidCents,
+        balance_after: balanceAfter,
+        is_suspicious: isSuspicious,
+        beer_ml: beerMl,
+        beer_gift_earned_ml: beerGiftEarnedMl
+      }
+    });
     if (!unlimitedBonus) {
       await client.query('UPDATE wallets SET balance = $1, updated_at = NOW() WHERE user_id = $2', [balanceAfter, targetUser.id]);
     }
@@ -2057,7 +2070,7 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
     await client.query('COMMIT');
     await syncUserAchievements(pool, targetUser.id);
 
-    const tx = txResult.rows[0];
+    const tx = persistedTransaction;
     const beerText = beerMl > 0
       ? `
 Разливное: ${litersFromMl(beerMl).toFixed(2).replace(/\.00$/, '')} л${beerGiftEarnedMl ? `
@@ -2155,15 +2168,23 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
     }
     const newGiftBalance = Number(beerResult.rows[0].gift_ml_balance) - giftMl;
     const walletResult = await client.query('SELECT balance FROM wallets WHERE user_id = $1', [targetUser.id]);
-    const txResult = await client.query(
-      `INSERT INTO transactions (
-         request_key, client_id, staff_id, mode, status,
-         check_amount_cents, cash_paid_cents, balance_after,
-         beer_gift_spent_ml, reason, completed_at
-       ) VALUES ($1,$2,$3,'beer_gift','completed',0,0,$4,$5,$6,NOW())
-       RETURNING *`,
-      [requestKey, targetUser.id, actingStaff.id, Number(walletResult.rows[0]?.balance || 0), giftMl, `Выдан подарочный объём ${litersFromMl(giftMl)} л`]
-    );
+    const persistBeerGiftTransaction = createBeerGiftTransactionPersistence({
+      query: client.query.bind(client)
+    });
+    const beerGiftTransaction = await persistBeerGiftTransaction({
+      transaction: {
+        request_key: requestKey,
+        client_id: targetUser.id,
+        staff_id: actingStaff.id,
+        mode: 'beer_gift',
+        status: 'completed',
+        check_amount_cents: 0,
+        cash_paid_cents: 0,
+        balance_after: Number(walletResult.rows[0]?.balance || 0),
+        beer_gift_spent_ml: giftMl,
+        reason: `Выдан подарочный объём ${litersFromMl(giftMl)} л`
+      }
+    });
     await client.query('UPDATE beer_loyalty SET gift_ml_balance = $1, updated_at = NOW() WHERE user_id = $2', [newGiftBalance, targetUser.id]);
     await client.query('COMMIT');
     await syncUserAchievements(pool, targetUser.id);
@@ -2175,7 +2196,7 @@ app.post('/api/staff/beer-gift', authRequired, requireRole('staff', 'admin'), as
 Выдано бесплатно: ${litersFromMl(giftMl)} л разливного пива.
 Осталось подарочного объёма: ${litersFromMl(newGiftBalance)} л.`
     );
-    res.json({ transaction: transactionResponse(txResult.rows[0]), client: await getProfile(targetUser.id) });
+    res.json({ transaction: transactionResponse(beerGiftTransaction), client: await getProfile(targetUser.id) });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     next(error);
