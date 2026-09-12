@@ -38,10 +38,12 @@ jobs:
         run: npm ci
       - name: Run focused VK regression tests
         run: node --test test/vk-native-hosting-main-parity.test.js
+      - name: Materialize current product sources
+        run: npm run materialize
       - name: Build VK native static bundle for existing HTTPS gateway
         env:
           PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
-        run: npm run build:vk-hosting
+        run: node scripts/build-vk-hosting.mjs
       - name: Verify bundle boundaries before DEV deploy
         shell: bash
         run: |
