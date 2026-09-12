@@ -157,6 +157,32 @@ test('staff adapter rejects wrong mode and status before SQL', async () => {
   assert.equal(queries, 0);
 });
 
+test('staff adapter rejects identity states the endpoint cannot produce before SQL', async () => {
+  let queries = 0;
+  const persist = createStaffTransactionPersistence({
+    query: async () => {
+      queries += 1;
+      return { rows: [{ id: 1 }] };
+    }
+  });
+
+  const invalidCases = [
+    [staffTransaction({ request_key: '' }), /request_key must be a non-empty string/],
+    [staffTransaction({ request_key: '   ' }), /request_key must be a non-empty string/],
+    [staffTransaction({ client_id: 0 }), /client_id must be a positive safe integer/],
+    [staffTransaction({ client_id: 1.5 }), /client_id must be a positive safe integer/],
+    [staffTransaction({ staff_id: -1 }), /staff_id must be a positive safe integer/],
+    [staffTransaction({ staff_id: Number.MAX_SAFE_INTEGER + 1 }), /staff_id must be a positive safe integer/],
+    [staffTransaction({ is_suspicious: 0 }), /is_suspicious must be a boolean/],
+    [staffTransaction({ is_suspicious: 'false' }), /is_suspicious must be a boolean/]
+  ];
+
+  for (const [transaction, expected] of invalidCases) {
+    await assert.rejects(persist({ transaction }), expected);
+  }
+  assert.equal(queries, 0);
+});
+
 test('staff adapter rejects financial states the endpoint cannot produce before SQL', async () => {
   let queries = 0;
   const persist = createStaffTransactionPersistence({
@@ -170,6 +196,7 @@ test('staff adapter rejects financial states the endpoint cannot produce before 
     [staffTransaction({ bonus_spent: 1 }), /accrue transaction cannot spend bonuses/],
     [staffTransaction({ mode: 'redeem', bonus_spent: 10, discount_cents: 1 }), /redeem transaction cannot apply a status discount/],
     [staffTransaction({ mode: 'redeem', bonus_spent: 0 }), /redeem transaction must spend at least one bonus/],
+    [staffTransaction({ discount_cents: 250001, cash_paid_cents: 0 }), /discount_cents cannot exceed check_amount_cents/],
     [staffTransaction({ cash_paid_cents: 250001 }), /cash_paid_cents cannot exceed check_amount_cents/],
     [staffTransaction({ check_amount_cents: -1 }), /check_amount_cents must be a non-negative safe integer/],
     [staffTransaction({ bonus_earned: 1.5 }), /bonus_earned must be a non-negative safe integer/],
@@ -182,7 +209,7 @@ test('staff adapter rejects financial states the endpoint cannot produce before 
   assert.equal(queries, 0);
 });
 
-test('staff scoped mode enforces the same financial invariants before SQL', async () => {
+test('staff scoped mode enforces the same identity and financial invariants before SQL', async () => {
   let queries = 0;
   const persist = createStaffTransactionPersistence({
     scopedWritesEnabled: true,
@@ -202,6 +229,18 @@ test('staff scoped mode enforces the same financial invariants before SQL', asyn
   };
 
   await assert.rejects(
+    persist({ ...scope, transaction: staffTransaction({ request_key: '' }) }),
+    /request_key must be a non-empty string/
+  );
+  await assert.rejects(
+    persist({ ...scope, transaction: staffTransaction({ staff_id: 0 }) }),
+    /staff_id must be a positive safe integer/
+  );
+  await assert.rejects(
+    persist({ ...scope, transaction: staffTransaction({ is_suspicious: null }) }),
+    /is_suspicious must be a boolean/
+  );
+  await assert.rejects(
     persist({ ...scope, transaction: staffTransaction({ bonus_spent: 1 }) }),
     /accrue transaction cannot spend bonuses/
   );
@@ -220,6 +259,7 @@ test('staff persistence contract remains migration-gated and legacy-by-default',
   assert.equal(staffTransactionPersistenceContract.preservesLegacySqlShape, true);
   assert.equal(staffTransactionPersistenceContract.preservesDatabaseNow, true);
   assert.equal(staffTransactionPersistenceContract.preservesReturningRow, true);
+  assert.equal(staffTransactionPersistenceContract.validatesEndpointIdentityInvariants, true);
   assert.equal(staffTransactionPersistenceContract.validatesEndpointFinancialInvariants, true);
   assert.equal(staffTransactionPersistenceContract.requiresMigration009BeforeScopedEnablement, true);
   assert.equal(staffTransactionPersistenceContract.scopedFallbackToLegacy, false);
