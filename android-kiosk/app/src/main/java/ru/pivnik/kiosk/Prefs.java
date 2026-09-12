@@ -32,8 +32,14 @@ public final class Prefs {
     public static String getVkUri(Context c) { return p(c).getString("vk_uri", ""); }
     public static String getTgUri(Context c) { return p(c).getString("tg_uri", ""); }
     public static String getVpnPackage(Context c) { return p(c).getString("vpn_package", ""); }
+    public static String getApiBaseUrl(Context c) { return p(c).getString("api_base_url", ""); }
+    public static String getDeviceLabel(Context c) { return p(c).getString("device_label", "Пивник • Бар"); }
     public static void saveLinks(Context c, String vkUri, String tgUri, String vpnPackage) {
         p(c).edit().putString("vk_uri", clean(vkUri)).putString("tg_uri", clean(tgUri)).putString("vpn_package", clean(vpnPackage)).apply();
+    }
+    public static void saveServer(Context c, String apiBaseUrl, String deviceLabel) {
+        String base = clean(apiBaseUrl).replaceAll("/+$", "");
+        p(c).edit().putString("api_base_url", base).putString("device_label", clean(deviceLabel)).apply();
     }
     private static String clean(String v) { return v == null ? "" : v.trim(); }
 }
