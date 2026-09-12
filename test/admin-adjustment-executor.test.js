@@ -53,6 +53,7 @@ function createHarness({
       replayChecks.push({ transaction, expected });
       events.push({ type: 'replay-assert' });
     },
+    hasUnlimitedBonus: (row) => Boolean(row?.unlimited_bonus) || row?.role === 'viewer',
     createPersistence: ({ query }) => {
       assert.equal(typeof query, 'function');
       return async ({ transaction }) => {
@@ -161,6 +162,42 @@ test('idempotent replay validates semantic identity and performs no wallet mutat
   assert.equal(harness.wasReleased(), true);
 });
 
+test('unlimited bonus profile rolls back before wallet mutation or journal persistence', async () => {
+  const harness = createHarness({
+    balance: 100,
+    target: { id: '42', telegram_id: 'tg-42', role: 'client', unlimited_bonus: true }
+  });
+
+  await assert.rejects(harness.executor({
+    customerId: '42', actorId: '7', amount: 25,
+    reason: 'Correction', requestKey: 'adjust-unlimited'
+  }), (error) => (
+    error?.code === 'unlimited_bonus'
+    && error?.statusCode === 400
+    && error?.message === 'У этого профиля включён постоянный безлимит бонусов.'
+  ));
+
+  assert.equal(queryIndex(harness.events, (sql) => sql.startsWith('UPDATE wallets')), -1);
+  assert.equal(harness.persisted.length, 0);
+  assert.notEqual(queryIndex(harness.events, (sql) => sql === 'ROLLBACK'), -1);
+  assert.equal(harness.wasReleased(), true);
+});
+
+test('viewer profile remains protected by the injected legacy unlimited-bonus predicate', async () => {
+  const harness = createHarness({
+    balance: 100,
+    target: { id: '42', telegram_id: 'tg-42', role: 'viewer', unlimited_bonus: false }
+  });
+
+  await assert.rejects(harness.executor({
+    customerId: '42', actorId: '7', amount: -10,
+    reason: 'Correction', requestKey: 'adjust-viewer'
+  }), (error) => error?.code === 'unlimited_bonus' && error?.statusCode === 400);
+
+  assert.equal(queryIndex(harness.events, (sql) => sql.startsWith('UPDATE wallets')), -1);
+  assert.equal(harness.persisted.length, 0);
+});
+
 test('negative resulting balance rolls back before mutation or journal persistence', async () => {
   const harness = createHarness({ balance: 10 });
   await assert.rejects(harness.executor({
@@ -197,9 +234,18 @@ test('invalid command fails before acquiring a database connection', async () =>
   assert.equal(harness.events.length, 0);
 });
 
+test('factory requires the legacy unlimited-bonus predicate before any production wiring', () => {
+  assert.throws(() => createAdminAdjustmentExecutor({
+    pool: { connect() {} },
+    lockRequestKey() {},
+    assertMatchingTransaction() {}
+  }), /hasUnlimitedBonus must be a function/);
+});
+
 test('executor contract documents the reusable financial invariants', () => {
   assert.equal(adminAdjustmentExecutorContract.atomic, true);
   assert.equal(adminAdjustmentExecutorContract.reusesAdminAdjustmentPersistence, true);
   assert.equal(adminAdjustmentExecutorContract.preservesIdempotentReplayValidation, true);
+  assert.equal(adminAdjustmentExecutorContract.preservesUnlimitedBonusGuard, true);
   assert.equal(adminAdjustmentExecutorContract.productionRouteWired, false);
 });
