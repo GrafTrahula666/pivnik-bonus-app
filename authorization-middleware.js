@@ -1,4 +1,4 @@
-import { canAccessLocation, canAccessTenant } from './authorization-context.js';
+import { canAccessLocation, canManageTenant } from './authorization-context.js';
 
 const LEGACY_CAPABILITIES = new Set(['staff', 'adminRead', 'adminWrite']);
 const SCOPE_MODES = new Set(['none', 'tenant', 'location']);
@@ -73,14 +73,22 @@ export function createScopedAuthorizationMiddleware({
       let scopedAllowed = false;
 
       if (scopeMode === 'tenant') {
-        scopedAllowed = canAccessTenant(authorization?.context, tenantId);
+        // A staff membership never grants a tenant-wide route, even if a
+        // location happened to be supplied while resolving the membership.
+        scopedAllowed = canManageTenant(authorization?.context, tenantId);
       } else if (scopeMode === 'location') {
         scopedAllowed = canAccessLocation(authorization?.context, tenantId, locationId);
+        if (legacyCapability === 'adminWrite') {
+          scopedAllowed &&= canManageTenant(authorization?.context, tenantId);
+        }
       }
 
-      // During migration legacy rights remain compatible, while scoped rights
-      // cannot grant access to a global/unscoped endpoint.
-      if (!legacyAllowed && !scopedAllowed) {
+      // Compatibility applies ONLY to an explicitly legacy, unscoped route.
+      // A failed membership lookup must never revive historical global rights.
+      const allowed = scopeMode === 'none'
+        ? !tenantId && !locationId && authorization?.mode === 'legacy' && legacyAllowed
+        : scopedAllowed;
+      if (!allowed) {
         return res.status(403).json({ error: 'Недостаточно прав.' });
       }
 

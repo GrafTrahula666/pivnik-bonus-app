@@ -154,3 +154,52 @@ test('resolver errors are delegated to the application error handler', async () 
   assert.equal(result.nextCalled, true);
   assert.equal(result.nextError, expected);
 });
+
+for (const role of ['admin', 'viewer', 'staff']) {
+  test(`legacy ${role} cannot bypass an explicit foreign tenant/location`, async () => {
+    for (const scopeMode of ['tenant', 'location']) {
+      const middleware = createScopedAuthorizationMiddleware({
+        resolveAuthorization: makeResolver({ '21': [{ role: 'owner', tenant_id: 'a' }] }),
+        legacyCapability: role === 'staff' ? 'staff' : 'adminRead', scopeMode
+      });
+      const result = await runMiddleware(middleware, {
+        user: { id: '21', role }, query: { tenantId: 'b', locationId: 'x' }
+      });
+      assert.equal(result.statusCode, 403);
+      assert.equal(result.nextCalled, false);
+    }
+  });
+}
+
+test('staff cannot widen a tenant route or use adminWrite at its own location', async () => {
+  for (const [scopeMode, legacyCapability] of [['tenant', 'adminRead'], ['location', 'adminWrite']]) {
+    const middleware = createScopedAuthorizationMiddleware({
+      resolveAuthorization: makeResolver({ '22': [{ role: 'staff', tenant_id: 'a', location_id: 'x' }] }),
+      legacyCapability, scopeMode
+    });
+    const result = await runMiddleware(middleware, {
+      user: { id: '22', role: 'admin' }, query: { tenantId: 'a', locationId: 'x' }
+    });
+    assert.equal(result.statusCode, 403);
+  }
+});
+
+test('a scoped owner with legacy admin rights cannot fall back to a global route', async () => {
+  const middleware = createScopedAuthorizationMiddleware({
+    resolveAuthorization: makeResolver({ '23': [{ role: 'owner', tenant_id: 'a' }] }),
+    legacyCapability: 'adminRead'
+  });
+  assert.equal((await runMiddleware(middleware, {
+    user: { id: '23', role: 'admin' }, query: { tenantId: 'a' }
+  })).statusCode, 403);
+});
+
+test('omitting scope cannot restore a member legacy admin global access', async () => {
+  const middleware = createScopedAuthorizationMiddleware({
+    resolveAuthorization: makeResolver({ '24': [{ role: 'owner', tenant_id: 'a' }] }),
+    legacyCapability: 'adminRead'
+  });
+  assert.equal((await runMiddleware(middleware, {
+    user: { id: '24', role: 'admin' }, query: {}
+  })).statusCode, 403);
+});
