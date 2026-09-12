@@ -25,6 +25,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function isTransparent(value) {
+  return value === 'rgba(0, 0, 0, 0)' || value === 'transparent';
+}
+
+function rgbMax(value) {
+  const match = String(value || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  return match ? Math.max(Number(match[1]), Number(match[2]), Number(match[3])) : 255;
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
@@ -90,6 +99,8 @@ try {
       return {
         backgroundImage: style.backgroundImage,
         backgroundColor: style.backgroundColor,
+        borderColor: style.borderColor,
+        boxShadow: style.boxShadow,
         pointerEvents: style.pointerEvents,
         display: style.display,
         visibility: style.visibility
@@ -101,6 +112,7 @@ try {
       navButtons: document.querySelectorAll('.bottom-nav button').length,
       hero: read('.hero-card'),
       activeNav: read('.bottom-nav button.active'),
+      activeNavIcon: read('.bottom-nav button.active:not(.qr-nav-button) > span'),
       qrButton: read('.bottom-nav .qr-nav-button'),
       qrIcon: read('.bottom-nav .qr-nav-button > span'),
       profileLink: read('[data-screen="profile"], [data-target="profile"]')
@@ -111,10 +123,16 @@ try {
   assert(evidence.navButtons >= 4, `expected bottom navigation controls, got ${evidence.navButtons}`);
   assert(evidence.hero, 'home hero surface missing');
   assert(evidence.activeNav, 'active bottom navigation control missing');
+  assert(evidence.activeNavIcon, 'active bottom navigation icon missing');
   assert(evidence.qrButton, 'central QR navigation control missing');
   assert(evidence.qrIcon, 'central QR icon surface missing');
   assert(evidence.activeNav.pointerEvents !== 'none', 'active navigation blocks pointer events');
   assert(evidence.qrButton.pointerEvents !== 'none', 'QR navigation blocks pointer events');
+  assert(isTransparent(evidence.activeNav.backgroundColor) && evidence.activeNav.backgroundImage === 'none', `active navigation outer plate is not transparent: ${JSON.stringify(evidence.activeNav)}`);
+  assert(isTransparent(evidence.qrButton.backgroundColor) && evidence.qrButton.backgroundImage === 'none', `QR outer plate is not transparent: ${JSON.stringify(evidence.qrButton)}`);
+  assert(evidence.activeNavIcon.backgroundImage !== 'none' || rgbMax(evidence.activeNavIcon.backgroundColor) < 40, `active navigation icon is not black-frosted: ${JSON.stringify(evidence.activeNavIcon)}`);
+  assert(evidence.qrIcon.backgroundImage !== 'none' || rgbMax(evidence.qrIcon.backgroundColor) < 40, `QR icon is not black-frosted: ${JSON.stringify(evidence.qrIcon)}`);
+  assert(evidence.hero.backgroundImage !== 'none' || rgbMax(evidence.hero.backgroundColor) < 50, `hero surface is not black-frosted: ${JSON.stringify(evidence.hero)}`);
   assert(!/telegram\.org\/js\/telegram-web-app\.js/i.test(await page.content()), 'Telegram runtime leaked into VK bundle');
   assert(pageErrors.length === 0, `page errors detected: ${pageErrors.join(' | ')}`);
   assert(failedRequests.length === 0, `failed local requests detected: ${JSON.stringify(failedRequests)}`);
