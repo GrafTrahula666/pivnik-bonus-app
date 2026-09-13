@@ -32,7 +32,7 @@ test('prepared HTTP adapter preserves the legacy adjustment request and response
   }
 
   assert.match(handlerSource, /balance: Number\(result\.balanceAfter \|\| 0\)/);
-  assert.match(legacy, /balance: Number\(existing\.rows\[0\]\.balance_after \|\| walletResult\.rows\[0\]\.balance \|\| 0\)/);
+  assert.match(legacy, /balance: Number\(existing\.rows\[0\]\.balance_after \|\| 0\)/);
   assert.match(legacy, /balance: newBalance/);
 });
 
