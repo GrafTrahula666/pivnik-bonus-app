@@ -16,6 +16,7 @@ on:
       - scripts/vk-native-hosting-bridge-refresh-failure-smoke.mjs
       - scripts/vk-native-hosting-manual-retry-success-smoke.mjs
       - scripts/vk-native-hosting-background-retry-smoke.mjs
+      - scripts/vk-native-hosting-foreground-session-smoke.mjs
       - scripts/vk-tg-black-frosted-parity-smoke.mjs
       - vk-hosting-config.json
       - test/vk-native-hosting-main-parity.test.js
@@ -103,6 +104,8 @@ jobs:
         run: node scripts/vk-native-hosting-manual-retry-success-smoke.mjs
       - name: Run VK background foreground recovery smoke
         run: node scripts/vk-native-hosting-background-retry-smoke.mjs
+      - name: Run VK foreground session stability smoke
+        run: node scripts/vk-native-hosting-foreground-session-smoke.mjs
       - name: Run VK Telegram materialized parity smoke
         run: node scripts/vk-tg-black-frosted-parity-smoke.mjs
       - name: Upload browser evidence
@@ -120,6 +123,7 @@ jobs:
             artifacts/vk-native-hosting-bridge-refresh-failure-smoke
             artifacts/vk-native-hosting-manual-retry-success-smoke
             artifacts/vk-native-hosting-background-retry-smoke
+            artifacts/vk-native-hosting-foreground-session-smoke
             artifacts/vk-tg-black-frosted-parity-smoke
           if-no-files-found: error
           retention-days: 7
