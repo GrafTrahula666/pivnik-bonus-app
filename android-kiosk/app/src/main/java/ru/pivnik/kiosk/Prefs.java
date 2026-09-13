@@ -9,7 +9,7 @@ import java.security.SecureRandom;
 
 public final class Prefs {
     public static final String VK_PACKAGE = "com.vkontakte.android";
-    public static final String TG_PACKAGE = "org.telegram.messenger";
+    public static final String TG_PACKAGE = "org.telegram.messenger.web";
     private static final String FILE = "pivnik_kiosk";
     private Prefs() {}
     private static SharedPreferences p(Context c) { return c.getSharedPreferences(FILE, Context.MODE_PRIVATE); }
