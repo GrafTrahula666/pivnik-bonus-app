@@ -142,14 +142,14 @@ function patchVkAppRuntime(source) {
   if (!patched.includes(apiStateMarker)) throw new Error('app.js API attempt marker not found.');
   patched = patched.replace(
     apiStateMarker,
-    `  let lastError;\n  let vkSessionRecoveryUsed = false;\n  for (let attempt = 0; attempt < attempts; attempt += 1) {`
+    `  let lastError;\n  let vkSessionRecoveryUsed = false;\n  for (let attempt = 0; attempt < attempts; attempt += 1) {\n    const vkRequestToken = state.token;`
   );
 
   const catchMarker = `    } catch (error) {\n      lastError = error;\n      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';`;
   if (!patched.includes(catchMarker)) throw new Error('app.js API catch marker not found.');
   patched = patched.replace(
     catchMarker,
-    `    } catch (error) {\n      lastError = error;\n      const canRecoverVkSession = IS_VK\n        && method === 'GET'\n        && String(path) !== '/api/auth'\n        && String(path) !== '/api/bootstrap'\n        && error?.status === 401\n        && !vkSessionRecoveryUsed;\n      if (canRecoverVkSession) {\n        vkSessionRecoveryUsed = true;\n        if (!vkSessionRecoveryPromise) {\n          vkSessionRecoveryPromise = (async () => {\n            state.token = '';\n            safeStorage.remove('pivnik_session');\n            await authenticate();\n          })().finally(() => {\n            vkSessionRecoveryPromise = null;\n          });\n        }\n        await vkSessionRecoveryPromise;\n        attempt -= 1;\n        continue;\n      }\n      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';`
+    `    } catch (error) {\n      lastError = error;\n      const canRecoverVkSession = IS_VK\n        && method === 'GET'\n        && String(path) !== '/api/auth'\n        && String(path) !== '/api/bootstrap'\n        && error?.status === 401\n        && !vkSessionRecoveryUsed;\n      if (canRecoverVkSession) {\n        vkSessionRecoveryUsed = true;\n        if (vkRequestToken && state.token && state.token !== vkRequestToken) {\n          attempt -= 1;\n          continue;\n        }\n        if (!vkSessionRecoveryPromise) {\n          vkSessionRecoveryPromise = (async () => {\n            state.token = '';\n            safeStorage.remove('pivnik_session');\n            await authenticate();\n          })().finally(() => {\n            vkSessionRecoveryPromise = null;\n          });\n        }\n        await vkSessionRecoveryPromise;\n        attempt -= 1;\n        continue;\n      }\n      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';`
   );
 
   return patched;
