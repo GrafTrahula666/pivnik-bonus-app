@@ -24,6 +24,14 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
     mountSessionScopeEndpoint() {
       calls += 1;
       return { mounted: true };
+    },
+    createScopeSelectionResolver() {
+      calls += 1;
+      return async () => ({});
+    },
+    mountScopeSelectionEndpoint() {
+      calls += 1;
+      return { mounted: true };
     }
   });
 
@@ -31,12 +39,13 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
     mounted: false,
     actions: null,
     dashboard: null,
-    dashboardSessionScope: null
+    dashboardSessionScope: null,
+    dashboardScopeSelection: null
   });
   assert.equal(calls, 0);
 });
 
-test('explicit enabled runtime delegates actions, Dashboard reads and canonical session scope', () => {
+test('explicit enabled runtime delegates actions, Dashboard reads, session scope and validated selection', () => {
   const app = { get() {}, post() {} };
   const db = { query: async () => ({ rowCount: 0, rows: [] }) };
   const resolveAuthorization = async () => ({});
@@ -44,10 +53,13 @@ test('explicit enabled runtime delegates actions, Dashboard reads and canonical 
   const executeAdjustment = async () => ({});
   const grantAchievement = async () => ({});
   const resolveSessionScope = async () => ({ tenantId: 'tenant-1', locationId: null });
+  const selectDashboardScope = async () => ({ tenantId: 'tenant-2', locationId: null });
   let receivedActions;
   let receivedDashboard;
   let receivedResolver;
   let receivedSessionScopeEndpoint;
+  let receivedSelectionResolver;
+  let receivedSelectionEndpoint;
   const actions = {
     mounted: true,
     core: { mounted: true },
@@ -61,6 +73,10 @@ test('explicit enabled runtime delegates actions, Dashboard reads and canonical 
   const dashboardSessionScope = {
     mounted: true,
     route: '/api/spaceverse/session/dashboard-scope'
+  };
+  const dashboardScopeSelection = {
+    mounted: true,
+    route: '/api/spaceverse/session/dashboard-scope/select'
   };
 
   const result = mountSpaceverseServerComposition({
@@ -86,6 +102,14 @@ test('explicit enabled runtime delegates actions, Dashboard reads and canonical 
     mountSessionScopeEndpoint(options) {
       receivedSessionScopeEndpoint = options;
       return dashboardSessionScope;
+    },
+    createScopeSelectionResolver(options) {
+      receivedSelectionResolver = options;
+      return selectDashboardScope;
+    },
+    mountScopeSelectionEndpoint(options) {
+      receivedSelectionEndpoint = options;
+      return dashboardScopeSelection;
     }
   });
 
@@ -109,7 +133,19 @@ test('explicit enabled runtime delegates actions, Dashboard reads and canonical 
     scopedModeEnabled: true,
     resolveSessionScope
   });
-  assert.deepEqual(result, { mounted: true, actions, dashboard, dashboardSessionScope });
+  assert.deepEqual(receivedSelectionResolver, { loadMemberships, resolveAuthorization });
+  assert.deepEqual(receivedSelectionEndpoint, {
+    app,
+    scopedModeEnabled: true,
+    selectDashboardScope
+  });
+  assert.deepEqual(result, {
+    mounted: true,
+    actions,
+    dashboard,
+    dashboardSessionScope,
+    dashboardScopeSelection
+  });
 });
 
 test('fails closed for malformed runtime before delegating', () => {
@@ -144,7 +180,9 @@ test('enabled composition refuses delegated non-mount results', () => {
     loadMemberships: async () => [],
     resolveAuthorization: async () => ({}),
     createSessionScopeResolver: () => async () => ({}),
-    mountSessionScopeEndpoint: () => ({ mounted: true })
+    mountSessionScopeEndpoint: () => ({ mounted: true }),
+    createScopeSelectionResolver: () => async () => ({}),
+    mountScopeSelectionEndpoint: () => ({ mounted: true })
   };
 
   assert.throws(
@@ -174,6 +212,16 @@ test('enabled composition refuses delegated non-mount results', () => {
     }),
     /Dashboard session scope endpoint failed to mount/i
   );
+
+  assert.throws(
+    () => mountSpaceverseServerComposition({
+      ...common,
+      mountActionEndpoints: () => ({ mounted: true }),
+      mountDashboardEndpoints: () => ({ mounted: true }),
+      mountScopeSelectionEndpoint: () => ({ mounted: false })
+    }),
+    /Dashboard scope selection endpoint failed to mount/i
+  );
 });
 
 test('server composition contract preserves fail-closed rollout boundaries', () => {
@@ -183,7 +231,11 @@ test('server composition contract preserves fail-closed rollout boundaries', () 
   assert.equal(spaceverseServerCompositionContract.includesDashboardPeriodSummary, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardKpiDrilldown, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardSessionScope, true);
+  assert.equal(spaceverseServerCompositionContract.includesDashboardValidatedTenantSelection, true);
   assert.equal(spaceverseServerCompositionContract.dashboardScopeComesFromServerMemberships, true);
+  assert.equal(spaceverseServerCompositionContract.dashboardBrowserTenantSelectionGrantsNoAuthority, true);
+  assert.equal(spaceverseServerCompositionContract.platformAdminSelectionRequiresAuthoritativeDirectory, true);
+  assert.equal(spaceverseServerCompositionContract.locationSelectionRequiresAuthoritativeDirectory, true);
   assert.equal(spaceverseServerCompositionContract.ownsBusinessLogic, false);
   assert.equal(spaceverseServerCompositionContract.ownsPersistence, false);
   assert.equal(spaceverseServerCompositionContract.ownsAuthorizationRules, false);
