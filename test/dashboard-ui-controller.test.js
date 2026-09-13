@@ -45,6 +45,10 @@ async function settle() {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
+function collectText(node) {
+  return [node.textContent, ...node.children.flatMap((child) => collectText(child))].join(' ');
+}
+
 test('controller is explicit-mount only and renders verified summary cards', async () => {
   const root = new FakeNode('main');
   let loads = 0;
@@ -52,7 +56,7 @@ test('controller is explicit-mount only and renders verified summary cards', asy
     root,
     documentRef,
     loadSummary: async () => { loads += 1; return summary(); },
-    loadDrilldown: async () => ({ items: [] })
+    loadDrilldown: async () => ({ drilldown: { rowKind: 'transaction', rows: [], limit: 50, offset: 0 } })
   });
 
   assert.equal(controller.mounted, false);
@@ -71,13 +75,68 @@ test('controller is explicit-mount only and renders verified summary cards', asy
   assert.equal(grid.children.filter((node) => node.children.some((child) => child.dataset?.drilldownMetric)).length, 5);
 });
 
+test('controller renders backend drilldown rows through whitelist presentation model', async () => {
+  const root = new FakeNode('main');
+  const controller = createDashboardUiController({
+    root,
+    documentRef,
+    loadSummary: async () => summary(),
+    loadDrilldown: async () => ({
+      ok: true,
+      drilldown: {
+        rowKind: 'transaction',
+        rows: [{
+          id: 'tx-1',
+          client_id: 'client-1',
+          location_id: 'location-1',
+          mode: 'purchase',
+          check_amount_cents: 25000,
+          cash_paid_cents: 20000,
+          bonus_earned: 25,
+          bonus_spent: 5,
+          reason: 'Покупка',
+          reward_code: null,
+          created_at: '2026-09-13T12:00:00Z',
+          completed_at: '2026-09-13T12:01:00Z',
+          private_database_column: 'secret-value'
+        }],
+        hasMore: true,
+        limit: 50,
+        offset: 0
+      }
+    })
+  });
+
+  controller.mount();
+  await settle();
+
+  const dashboard = root.children[0];
+  const grid = dashboard.children.find((node) => node.className === 'sv-dashboard__grid');
+  const button = grid.children[0].children.find((child) => child.dataset?.drilldownMetric);
+  assert.ok(button);
+  button.listeners.get('click')();
+  await settle();
+
+  const drilldown = dashboard.children.find((node) => node.className === 'sv-dashboard-drilldown');
+  assert.equal(drilldown.hidden, false);
+  const text = collectText(drilldown);
+  assert.match(text, /client-1/u);
+  assert.match(text, /Покупка/u);
+  assert.match(text, /Есть ещё данные/u);
+  assert.equal(text.includes('secret-value'), false);
+  assert.equal(text.includes('private_database_column'), false);
+  const list = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__list');
+  assert.equal(list.children[0].tagName, 'dl');
+  assert.equal(list.children[0].dataset.rowKind, 'transaction');
+});
+
 test('controller renders honest error state instead of synthetic values', async () => {
   const root = new FakeNode('main');
   const controller = createDashboardUiController({
     root,
     documentRef,
     loadSummary: async () => { throw new Error('backend unavailable'); },
-    loadDrilldown: async () => ({ items: [] })
+    loadDrilldown: async () => ({ drilldown: { rowKind: 'transaction', rows: [], limit: 50, offset: 0 } })
   });
 
   controller.mount();
@@ -94,7 +153,7 @@ test('unmount invalidates in-flight summary and clears DOM', async () => {
     root,
     documentRef,
     loadSummary: () => new Promise((resolve) => { resolveSummary = resolve; }),
-    loadDrilldown: async () => ({ items: [] })
+    loadDrilldown: async () => ({ drilldown: { rowKind: 'transaction', rows: [], limit: 50, offset: 0 } })
   });
 
   controller.mount();
@@ -105,9 +164,11 @@ test('unmount invalidates in-flight summary and clears DOM', async () => {
   assert.equal(root.children.length, 0);
 });
 
-test('controller contract keeps production wiring and network implementation disabled', () => {
+test('controller contract keeps production wiring, network and raw JSON disabled', () => {
   assert.equal(dashboardUiControllerContract.autoMount, false);
   assert.equal(dashboardUiControllerContract.productionNavigationWiring, false);
   assert.equal(dashboardUiControllerContract.networkImplementationIncluded, false);
   assert.equal(dashboardUiControllerContract.dependenciesAdded, false);
+  assert.equal(dashboardUiControllerContract.rawJsonRendering, false);
+  assert.equal(dashboardUiControllerContract.paginationStateVisible, true);
 });
