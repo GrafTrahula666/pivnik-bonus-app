@@ -77,7 +77,7 @@ test('VK session restore stays scoped to signed vk_user_id and does not reuse Te
 
 test('VK profile data is rejected when Bridge user differs from signed launch user', async () => {
   const runtime = await read('vk-platform.js');
-  assert.match(runtime, /vkUser\?\.id && launchVkUserId && String\(vkUser\.id\) !== launchVkUserId/);
+  assert.match(runtime, /profile\?\.id && launchVkUserId && String\(profile\.id\) !== launchVkUserId/);
   assert.match(runtime, /VK profile does not match signed launch parameters; profile data ignored/);
-  assert.match(runtime, /vkUser = null/);
+  assert.match(runtime, /return null/);
 });
