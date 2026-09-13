@@ -1,5 +1,7 @@
 import { mountCustomer360FullActionEndpoints } from './customer-360-full-action-endpoints.js';
 import { mountDashboardReadEndpoints } from './dashboard-read-endpoints.js';
+import { mountDashboardSessionScopeEndpoint } from './dashboard-session-scope-endpoint.js';
+import { createDashboardSessionScopeResolver } from './dashboard-session-scope-resolver.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 
 /**
@@ -17,11 +19,14 @@ export function mountSpaceverseServerComposition({
   app,
   runtime = SPACEVERSE_RUNTIME,
   resolveAuthorization,
+  loadMemberships,
   db,
   executeAdjustment,
   grantAchievement,
   mountActionEndpoints = mountCustomer360FullActionEndpoints,
-  mountDashboardEndpoints = mountDashboardReadEndpoints
+  mountDashboardEndpoints = mountDashboardReadEndpoints,
+  createSessionScopeResolver = createDashboardSessionScopeResolver,
+  mountSessionScopeEndpoint = mountDashboardSessionScopeEndpoint
 } = {}) {
   if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') {
     throw new TypeError('runtime.scopedModeEnabled must be boolean');
@@ -32,12 +37,19 @@ export function mountSpaceverseServerComposition({
   if (typeof mountDashboardEndpoints !== 'function') {
     throw new TypeError('mountDashboardEndpoints must be a function');
   }
+  if (typeof createSessionScopeResolver !== 'function') {
+    throw new TypeError('createSessionScopeResolver must be a function');
+  }
+  if (typeof mountSessionScopeEndpoint !== 'function') {
+    throw new TypeError('mountSessionScopeEndpoint must be a function');
+  }
 
   if (!runtime.scopedModeEnabled) {
     return Object.freeze({
       mounted: false,
       actions: null,
-      dashboard: null
+      dashboard: null,
+      dashboardSessionScope: null
     });
   }
 
@@ -63,10 +75,24 @@ export function mountSpaceverseServerComposition({
     throw new Error('SPACEVERSE Dashboard endpoints failed to mount');
   }
 
+  const resolveSessionScope = createSessionScopeResolver({
+    loadMemberships,
+    resolveAuthorization
+  });
+  const dashboardSessionScope = mountSessionScopeEndpoint({
+    app,
+    scopedModeEnabled: true,
+    resolveSessionScope
+  });
+  if (!dashboardSessionScope?.mounted) {
+    throw new Error('SPACEVERSE Dashboard session scope endpoint failed to mount');
+  }
+
   return Object.freeze({
     mounted: true,
     actions,
-    dashboard
+    dashboard,
+    dashboardSessionScope
   });
 }
 
@@ -76,6 +102,8 @@ export const spaceverseServerCompositionContract = Object.freeze({
   includesCustomerMetadataActions: true,
   includesDashboardPeriodSummary: true,
   includesDashboardKpiDrilldown: true,
+  includesDashboardSessionScope: true,
+  dashboardScopeComesFromServerMemberships: true,
   ownsBusinessLogic: false,
   ownsPersistence: false,
   ownsAuthorizationRules: false,
