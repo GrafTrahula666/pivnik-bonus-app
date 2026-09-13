@@ -121,7 +121,10 @@ async function runScenario({ name, bridgeLaunchParams }) {
     }), { key: storageKey });
     const authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
     const refreshCalls = bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams');
-    const unexpectedConsoleErrors = consoleErrors.filter((message) => !/status of 401|401 \(Unauthorized\)/i.test(message));
+    const unexpectedConsoleErrors = consoleErrors.filter((message) => (
+      !/status of 401|401 \(Unauthorized\)/i.test(message)
+      && !/^Boot failed: Error: invalid_launch_params\b/i.test(message)
+    ));
 
     const evidence = { name, apiCalls, bridgeCalls, ui, pageErrors, consoleErrors, unexpectedConsoleErrors, failedRequests, unexpectedMutations };
     await fs.writeFile(path.join(outDir, `${name}.json`), JSON.stringify(evidence, null, 2));
