@@ -27,10 +27,11 @@ const payloadBase64 = (await Promise.all(payloadParts.map((name) => fs.readFile(
 const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base64')).toString('utf8'));
 // Applied SQL migrations are immutable. Updates to RED COSMOS recipients live in migration 008.
 delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
+// VK runtime is canonical source. Never restore an archived startup implementation.
+delete runtimeFiles['vk-platform.js'];
 const runtimeAnchors = {
   'red-cosmos-v2.css': '--primary-red: #c41e3a',
   'red-cosmos-v2.js': "const EXPECTED_PRIMARY = '#c41e3a';",
-  'vk-platform.js': "window.__PIVNIK_PLATFORM__ = 'vk';",
   'scripts/red-cosmos-v2-db-prepare.mjs': "const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';",
   'scripts/v22-data-audit-and-repair.mjs': "const ACHIEVEMENT_CODE = 'raise-shields';"
 };
@@ -44,23 +45,6 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   }
   await writeText(relativePath, targetContent);
 }
-
-// VK profile photo sync hardening 2026-08-31. Signed auth remains fast, while
-// background VK profile hydration gets bounded retries for slow WebViews/devices.
-let vkPlatform = await readText('vk-platform.js');
-vkPlatform = replaceRequired(
-  vkPlatform,
-  `  const BRIDGE_PROFILE_TIMEOUT_MS = 2200;`,
-  `  const BRIDGE_PROFILE_TIMEOUT_MS = 2200;\n  const VK_PROFILE_SYNC_RETRY_DELAYS_MS = [0, 1400, 3600];`,
-  'VK profile sync retry delays'
-);
-vkPlatform = replaceRequired(
-  vkPlatform,
-  `  const profileReady = (async () => {\n    await bridgeReady;\n    if (!bridge?.send) return null;\n    try {\n      vkUser = await withTimeout(\n        bridge.send('VKWebAppGetUserInfo'),\n        BRIDGE_PROFILE_TIMEOUT_MS,\n        'VK не передал данные профиля вовремя.'\n      );\n    } catch (error) {\n      console.warn('VK user info unavailable:', error);\n      vkUser = null;\n    }\n    if (vkUser?.id && launchVkUserId && String(vkUser.id) !== launchVkUserId) {\n      console.warn('VK profile does not match signed launch parameters; profile data ignored.');\n      vkUser = null;\n    }\n    return vkUser;\n  })();`,
-  `  async function requestVkUserInfo() {\n    await bridgeReady;\n    if (!bridge?.send) return null;\n    let lastError = null;\n    for (const retryDelay of VK_PROFILE_SYNC_RETRY_DELAYS_MS) {\n      if (retryDelay) await new Promise((resolve) => window.setTimeout(resolve, retryDelay));\n      try {\n        const profile = await withTimeout(\n          bridge.send('VKWebAppGetUserInfo'),\n          BRIDGE_PROFILE_TIMEOUT_MS,\n          'VK не передал данные профиля вовремя.'\n        );\n        if (profile?.id && launchVkUserId && String(profile.id) !== launchVkUserId) {\n          console.warn('VK profile does not match signed launch parameters; profile data ignored.');\n          return null;\n        }\n        if (profile?.id) return profile;\n      } catch (error) {\n        lastError = error;\n      }\n    }\n    if (lastError) console.warn('VK user info unavailable after retries:', lastError);\n    return null;\n  }\n\n  const profileReady = (async () => {\n    vkUser = await requestVkUserInfo();\n    return vkUser;\n  })();`,
-  'VK profile sync retries'
-);
-await writeText('vk-platform.js', vkPlatform);
 
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
 // the authenticated provider identity, and must not depend on whether legacy
