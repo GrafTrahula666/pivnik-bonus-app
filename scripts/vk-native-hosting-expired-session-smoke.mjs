@@ -195,6 +195,7 @@ try {
 
   const bootstrapCalls = apiCalls.filter((call) => call.pathname === '/api/bootstrap');
   const authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
+  const unexpectedConsoleErrors = consoleErrors.filter((message) => !/status of 401|401 \(Unauthorized\)/i.test(message));
 
   assert(bootstrapCalls.length === 1, `expected exactly one expired bootstrap attempt, got ${bootstrapCalls.length}`);
   assert(bootstrapCalls[0].authorization === `Bearer ${expiredToken}`, 'expired bootstrap did not use old scoped token');
@@ -212,10 +213,10 @@ try {
   assert(bridgeCalls.includes('VKWebAppInit'), 'VKWebAppInit was not sent');
   assert(unexpectedMutations.length === 0, `unexpected mutations: ${JSON.stringify(unexpectedMutations)}`);
   assert(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
-  assert(consoleErrors.length === 0, `console errors: ${consoleErrors.join(' | ')}`);
+  assert(unexpectedConsoleErrors.length === 0, `unexpected console errors: ${unexpectedConsoleErrors.join(' | ')}`);
   assert(failedRequests.length === 0, `failed requests: ${JSON.stringify(failedRequests)}`);
 
-  const evidence = { ok: true, apiCalls, bridgeCalls, ui, pageErrors, consoleErrors, failedRequests, unexpectedMutations };
+  const evidence = { ok: true, apiCalls, bridgeCalls, ui, pageErrors, consoleErrors, unexpectedConsoleErrors, failedRequests, unexpectedMutations };
   await fs.writeFile(path.join(outDir, 'summary.json'), JSON.stringify(evidence, null, 2));
   await page.screenshot({ path: path.join(outDir, 'recovered.png'), fullPage: true });
   console.log(JSON.stringify({
