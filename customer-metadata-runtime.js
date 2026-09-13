@@ -10,19 +10,13 @@ function requireFactory(factory, name) {
   if (typeof factory !== 'function') throw new TypeError(`${name} must be a function`);
 }
 
-function scopeDenied() {
-  return Object.assign(new Error('Customer is not visible in the requested tenant/location scope'), {
-    code: 'customer_scope_denied'
-  });
-}
-
 /**
  * Composition root for Customer 360 notes, tags and segments.
  *
- * Metadata writes must prove customer visibility through the same canonical
- * Customer 360 read boundary before the append-only metadata repository is
- * touched. This prevents a caller with a valid tenant/location membership from
- * mutating an arbitrary global customer id that is not visible in that scope.
+ * Metadata writes reuse the same canonical Customer 360 visibility proof as
+ * reads. The service owns ordering so RBAC is evaluated before visibility and
+ * append-only persistence, preventing unauthorized callers from probing global
+ * customer ids through the visibility lookup.
  *
  * No HTTP route, migration or production rollout is enabled here.
  */
@@ -50,7 +44,17 @@ export function createCustomerMetadataRuntime({
     throw new TypeError('Customer metadata repository must expose appendEvent');
   }
 
-  const service = createMetadataService({ repository: metadataRepository });
+  const service = createMetadataService({
+    repository: metadataRepository,
+    assertCustomerVisible: ({ context, tenantId, locationId, customerId }) => (
+      readRepository.isCustomerVisible(db, customerId, {
+        authorizationContext: context,
+        tenantId,
+        locationId
+      })
+    )
+  });
+
   const mutationNames = ['addNote', 'addTag', 'removeTag', 'addSegment', 'removeSegment'];
   for (const name of mutationNames) {
     if (typeof service?.[name] !== 'function') {
@@ -58,32 +62,12 @@ export function createCustomerMetadataRuntime({
     }
   }
 
-  async function execute(name, input = {}) {
-    const visible = await readRepository.isCustomerVisible(db, input.customerId, {
-      authorizationContext: input.context,
-      tenantId: input.tenantId,
-      locationId: input.locationId
-    });
-    if (!visible) throw scopeDenied();
-    return service[name](input);
-  }
-
   return Object.freeze({
-    addNote(input) {
-      return execute('addNote', input);
-    },
-    addTag(input) {
-      return execute('addTag', input);
-    },
-    removeTag(input) {
-      return execute('removeTag', input);
-    },
-    addSegment(input) {
-      return execute('addSegment', input);
-    },
-    removeSegment(input) {
-      return execute('removeSegment', input);
-    },
+    addNote: service.addNote,
+    addTag: service.addTag,
+    removeTag: service.removeTag,
+    addSegment: service.addSegment,
+    removeSegment: service.removeSegment,
     readRepository,
     metadataRepository
   });
@@ -93,6 +77,7 @@ export const customerMetadataRuntimeContract = Object.freeze({
   visibilityBoundary: 'customer-360-read-repository',
   persistenceBoundary: 'customer-metadata-repository',
   appendOnly: true,
+  authorizationBeforeVisibilityProof: true,
   scopedFallbackToGlobal: false,
   arbitraryGlobalCustomerMutationAllowed: false,
   duplicatesTenantOwnershipLogic: false,
