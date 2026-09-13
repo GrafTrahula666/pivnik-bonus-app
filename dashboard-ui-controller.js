@@ -1,6 +1,8 @@
 import { createDashboardUiViewModel } from './dashboard-ui-view-model.js';
 import { createDashboardDrilldownViewModel } from './dashboard-drilldown-view-model.js';
 
+const DEFAULT_DRILLDOWN_LIMIT = 50;
+
 function assertFunction(value, name) {
   if (typeof value !== 'function') throw new TypeError(`${name} must be a function`);
   return value;
@@ -60,7 +62,7 @@ function renderCard(documentRef, card, onDrilldown) {
     button.className = 'sv-dashboard-card__drilldown';
     button.textContent = 'Показать операции';
     button.dataset.drilldownMetric = card.drilldownMetric;
-    button.addEventListener('click', () => onDrilldown(card));
+    button.addEventListener('click', () => onDrilldown(card, 0, DEFAULT_DRILLDOWN_LIMIT));
     article.append(button);
   } else {
     const note = appendTextElement(documentRef, article, 'div', 'sv-dashboard-card__note', 'Детализация пока недоступна');
@@ -104,7 +106,53 @@ function renderDrilldownField(documentRef, field) {
   return wrapper;
 }
 
-function renderDrilldownRows(documentRef, container, card, result) {
+function renderPagination(documentRef, container, viewModel, onPage) {
+  const hasPrevious = viewModel.offset > 0;
+  if (!hasPrevious && !viewModel.hasMore) return;
+
+  const pagination = documentRef.createElement('nav');
+  pagination.className = 'sv-dashboard-drilldown__pagination';
+  pagination.setAttribute('aria-label', 'Пагинация детализации');
+
+  const previous = documentRef.createElement('button');
+  previous.type = 'button';
+  previous.className = 'sv-dashboard-drilldown__page-button';
+  previous.textContent = 'Назад';
+  previous.disabled = !hasPrevious;
+  previous.dataset.pageDirection = 'previous';
+  previous.addEventListener('click', () => {
+    if (!hasPrevious) return;
+    onPage(Math.max(0, viewModel.offset - viewModel.limit), viewModel.limit);
+  });
+  pagination.append(previous);
+
+  const status = appendTextElement(
+    documentRef,
+    pagination,
+    'span',
+    'sv-dashboard-drilldown__page-status',
+    viewModel.empty
+      ? `Смещение: ${viewModel.offset}`
+      : `Записи ${viewModel.offset + 1}–${viewModel.offset + viewModel.rows.length}`
+  );
+  status.setAttribute('aria-live', 'polite');
+
+  const next = documentRef.createElement('button');
+  next.type = 'button';
+  next.className = 'sv-dashboard-drilldown__page-button';
+  next.textContent = 'Далее';
+  next.disabled = !viewModel.hasMore;
+  next.dataset.pageDirection = 'next';
+  next.addEventListener('click', () => {
+    if (!viewModel.hasMore || viewModel.nextOffset === null) return;
+    onPage(viewModel.nextOffset, viewModel.limit);
+  });
+  pagination.append(next);
+
+  container.append(pagination);
+}
+
+function renderDrilldownRows(documentRef, container, card, result, onPage) {
   const viewModel = createDashboardDrilldownViewModel(result);
   container.replaceChildren();
   container.hidden = false;
@@ -112,6 +160,7 @@ function renderDrilldownRows(documentRef, container, card, result) {
   appendTextElement(documentRef, container, 'h2', 'sv-dashboard-drilldown__title', card.label);
   if (viewModel.empty) {
     appendTextElement(documentRef, container, 'p', 'sv-dashboard-drilldown__empty', 'За выбранный период данных нет.');
+    renderPagination(documentRef, container, viewModel, onPage);
     return;
   }
 
@@ -130,15 +179,16 @@ function renderDrilldownRows(documentRef, container, card, result) {
   }
   container.append(list);
 
-  if (viewModel.hasMore) {
-    appendTextElement(
-      documentRef,
-      container,
-      'p',
-      'sv-dashboard-drilldown__pagination-note',
-      `Показаны записи ${viewModel.offset + 1}–${viewModel.offset + viewModel.rows.length}. Есть ещё данные.`
-    );
-  }
+  appendTextElement(
+    documentRef,
+    container,
+    'p',
+    'sv-dashboard-drilldown__pagination-note',
+    viewModel.hasMore
+      ? `Показаны записи ${viewModel.offset + 1}–${viewModel.offset + viewModel.rows.length}. Есть ещё данные.`
+      : `Показаны записи ${viewModel.offset + 1}–${viewModel.offset + viewModel.rows.length}.`
+  );
+  renderPagination(documentRef, container, viewModel, onPage);
 }
 
 export function createDashboardUiController({ root, documentRef = globalThis.document, loadSummary, loadDrilldown }) {
@@ -151,15 +201,21 @@ export function createDashboardUiController({ root, documentRef = globalThis.doc
   let requestVersion = 0;
   let activeDrilldown = null;
 
-  async function openDrilldown(card) {
+  async function openDrilldown(card, offset = 0, limit = DEFAULT_DRILLDOWN_LIMIT) {
     if (!mounted || !activeDrilldown || !card.interactive) return;
     const version = ++requestVersion;
     activeDrilldown.hidden = false;
     activeDrilldown.replaceChildren(buildState(documentRef, card.label, 'Загрузка детализации…', 'loading'));
     try {
-      const result = await loadDrilldown(card.drilldownMetric);
+      const result = await loadDrilldown(card.drilldownMetric, { offset, limit });
       if (!mounted || version !== requestVersion) return;
-      renderDrilldownRows(documentRef, activeDrilldown, card, result);
+      renderDrilldownRows(
+        documentRef,
+        activeDrilldown,
+        card,
+        result,
+        (nextOffset, nextLimit) => void openDrilldown(card, nextOffset, nextLimit)
+      );
     } catch {
       if (!mounted || version !== requestVersion) return;
       activeDrilldown.replaceChildren(buildState(documentRef, 'Не удалось загрузить детализацию', 'Данные не изменены. Повторите попытку позже.', 'error'));
@@ -218,5 +274,8 @@ export const dashboardUiControllerContract = Object.freeze({
   drilldownRendering: 'whitelisted semantic fields only',
   rawJsonRendering: false,
   paginationStateVisible: true,
+  paginationControls: true,
+  defaultDrilldownLimit: DEFAULT_DRILLDOWN_LIMIT,
+  staleRequestProtection: true,
   mobileTouchTargetCssRequired: true
 });
