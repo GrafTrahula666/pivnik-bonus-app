@@ -80,6 +80,11 @@ const basePayload = {
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+    if (url.pathname === '/favicon.ico') {
+      res.writeHead(204, { 'cache-control': 'no-store' });
+      res.end();
+      return;
+    }
     const clean = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';
     if (clean.includes('..')) throw new Error('invalid path');
     const filePath = path.join(buildRoot, clean);
@@ -122,6 +127,7 @@ async function runScenario(browser, { name, restoreSession }) {
   const consoleErrors = [];
   const unexpectedMutations = [];
   const failedRequests = [];
+  const badResponses = [];
 
   if (restoreSession) {
     await page.addInitScript(({ key, value }) => {
@@ -134,6 +140,9 @@ async function runScenario(browser, { name, restoreSession }) {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('requestfailed', (request) => failedRequests.push({ url: request.url(), error: request.failure()?.errorText || 'failed' }));
+  page.on('response', (response) => {
+    if (response.status() >= 400) badResponses.push({ url: response.url(), status: response.status() });
+  });
 
   await page.exposeFunction('__recordVkBridgeCall', (method) => bridgeCalls.push(method));
 
@@ -206,6 +215,7 @@ async function runScenario(browser, { name, restoreSession }) {
   assert(bridgeCalls.includes('VKWebAppInit'), `${name}: VKWebAppInit was not sent`);
   assert(unexpectedMutations.length === 0, `${name}: unexpected mutations: ${JSON.stringify(unexpectedMutations)}`);
   assert(pageErrors.length === 0, `${name}: page errors: ${pageErrors.join(' | ')}`);
+  assert(badResponses.length === 0, `${name}: HTTP errors: ${JSON.stringify(badResponses)}`);
   assert(consoleErrors.length === 0, `${name}: console errors: ${consoleErrors.join(' | ')}`);
   assert(failedRequests.length === 0, `${name}: failed requests: ${JSON.stringify(failedRequests)}`);
 
@@ -221,7 +231,7 @@ async function runScenario(browser, { name, restoreSession }) {
     assert(String(auth.body?.launchParams || '').includes('sign=mock-sign'), `${name}: signature missing from auth payload`);
   }
 
-  const evidence = { name, restoreSession, bridgeCalls, apiCalls, ui, pageErrors, consoleErrors, failedRequests, unexpectedMutations };
+  const evidence = { name, restoreSession, bridgeCalls, apiCalls, ui, pageErrors, consoleErrors, failedRequests, badResponses, unexpectedMutations };
   await fs.writeFile(path.join(outDir, `${name}.json`), JSON.stringify(evidence, null, 2));
   await page.screenshot({ path: path.join(outDir, `${name}.png`), fullPage: true });
   await context.close();
