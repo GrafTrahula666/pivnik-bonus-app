@@ -37,16 +37,27 @@ function denied(decision) {
   });
 }
 
+function scopeDenied() {
+  return Object.assign(new Error('Customer is not visible in the requested tenant/location scope'), {
+    code: 'customer_scope_denied'
+  });
+}
+
 /**
  * Authorized Customer 360 orchestration for notes, tags and segments.
  *
  * The repository remains persistence-only. This service is the boundary that
  * applies SPACEVERSE tenant/location RBAC before any append-only metadata event
- * can be written. Every command carries actor, reason and request key so manual
- * CRM mutations are attributable and idempotent.
+ * can be written. When a canonical visibility proof is supplied, authorization
+ * is evaluated first and customer visibility is then proven before persistence.
+ * Every command carries actor, reason and request key so manual CRM mutations
+ * are attributable and idempotent.
  */
-export function createCustomerMetadataService({ repository } = {}) {
+export function createCustomerMetadataService({ repository, assertCustomerVisible = null } = {}) {
   requireRepository(repository);
+  if (assertCustomerVisible !== null && typeof assertCustomerVisible !== 'function') {
+    throw new TypeError('assertCustomerVisible must be a function when provided');
+  }
 
   async function execute(kind, input = {}) {
     const config = MUTATIONS[kind];
@@ -67,6 +78,16 @@ export function createCustomerMetadataService({ repository } = {}) {
     });
 
     if (!decision.allowed) throw denied(decision);
+
+    if (assertCustomerVisible) {
+      const visible = await assertCustomerVisible({
+        context: input.context,
+        tenantId: decision.tenantId,
+        locationId: decision.locationId,
+        customerId
+      });
+      if (!visible) throw scopeDenied();
+    }
 
     return repository.appendEvent({
       tenantId: decision.tenantId,
@@ -102,6 +123,8 @@ export function createCustomerMetadataService({ repository } = {}) {
 export const customerMetadataServiceContract = Object.freeze({
   appendOnly: true,
   requiresAuthorizedTenantLocation: true,
+  authorizationBeforeVisibilityProof: true,
+  canonicalVisibilityProofSupported: true,
   requiresActor: true,
   requiresReason: true,
   requiresIdempotencyKey: true,
