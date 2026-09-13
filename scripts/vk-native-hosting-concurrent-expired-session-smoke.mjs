@@ -132,6 +132,7 @@ try {
 
   assert(authCount === 2, `initial auth count unexpected: ${authCount}`);
   assert(await page.evaluate((key) => localStorage.getItem(key), storageKey) === initialToken, 'initial scoped session missing');
+  const recoveryStartIndex = apiCalls.length;
   expired = true;
 
   const results = await page.evaluate(async () => {
@@ -156,17 +157,18 @@ try {
   await page.waitForFunction((key) => localStorage.getItem(key) === 'concurrent-renewed-session', storageKey, { timeout: 8000 });
   await page.waitForTimeout(300);
 
-  const authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
-  const transactionCalls = apiCalls.filter((call) => call.pathname === '/api/me/transactions');
-  const achievementCalls = apiCalls.filter((call) => call.pathname === '/api/achievements');
-  const mutationCalls = apiCalls.filter((call) => call.pathname === '/api/test-mutation');
+  const recoveryCalls = apiCalls.slice(recoveryStartIndex);
+  const authCalls = recoveryCalls.filter((call) => call.pathname === '/api/auth');
+  const transactionCalls = recoveryCalls.filter((call) => call.pathname === '/api/me/transactions');
+  const achievementCalls = recoveryCalls.filter((call) => call.pathname === '/api/achievements');
+  const mutationCalls = recoveryCalls.filter((call) => call.pathname === '/api/test-mutation');
   const ui = await page.evaluate((key) => ({
     session: localStorage.getItem(key),
     appShellHidden: document.querySelector('#appShell')?.classList.contains('hidden') ?? true,
     clientName: document.querySelector('#clientName')?.textContent || ''
   }), storageKey);
 
-  assert(authCalls.length === 3, `expected one shared recovery auth after two-step initial auth, got ${authCalls.length}`);
+  assert(authCalls.length === 1, `expected one shared recovery auth, got ${authCalls.length}`);
   assert(transactionCalls.length === 2, `transactions should retry exactly once, got ${transactionCalls.length}`);
   assert(achievementCalls.length === 2, `achievements should retry exactly once, got ${achievementCalls.length}`);
   assert(transactionCalls[0].authorization === `Bearer ${initialToken}` && transactionCalls[1].authorization === `Bearer ${renewedToken}`, `transactions token sequence unexpected: ${JSON.stringify(transactionCalls)}`);
@@ -184,7 +186,7 @@ try {
   assert(consoleErrors.length === 0, `console errors: ${consoleErrors.join(' | ')}`);
   assert(failedRequests.length === 0, `failed requests: ${JSON.stringify(failedRequests)}`);
 
-  const evidence = { ok: true, results, authCalls, transactionCalls, achievementCalls, mutationCalls, bridgeCalls, ui, pageErrors, consoleErrors, failedRequests };
+  const evidence = { ok: true, results, recoveryCalls, authCalls, transactionCalls, achievementCalls, mutationCalls, bridgeCalls, ui, pageErrors, consoleErrors, failedRequests };
   await fs.writeFile(path.join(outDir, 'summary.json'), JSON.stringify(evidence, null, 2));
   await page.screenshot({ path: path.join(outDir, 'concurrent-expired-session-recovered.png'), fullPage: true });
   console.log(JSON.stringify({ ok: true, authCount: authCalls.length, transactionCalls: transactionCalls.length, achievementCalls: achievementCalls.length, mutationCalls: mutationCalls.length }, null, 2));
