@@ -89,12 +89,26 @@ function patchVkRuntime(source) {
   const helper = `${marker}\n  const configuredApiBase = String(window.__PIVNIK_VK_API_BASE__ || '').trim().replace(/\\/+$/, '');\n\n  function resolveGatewayInput(input) {\n    if (!configuredApiBase) return input;\n    try {\n      const requestUrl = typeof input === 'string' ? input : input?.url || '';\n      const parsed = new URL(requestUrl, window.location.href);\n      const isApi = parsed.pathname === '/api' || parsed.pathname.startsWith('/api/');\n      const isRelativeApi = typeof input === 'string' && /^\\/api(?:\\/|$)/.test(requestUrl);\n      const isSameOriginApi = parsed.origin === window.location.origin && isApi;\n      if (!isRelativeApi && !isSameOriginApi) return input;\n      const target = configuredApiBase + parsed.pathname + parsed.search;\n      if (typeof Request !== 'undefined' && input instanceof Request) return new Request(target, input);\n      return target;\n    } catch (_) {\n      return input;\n    }\n  }`;
 
   let patched = source.replace(marker, helper);
-  const matches = patched.match(/originalFetch\(input/g) || [];
-  if (matches.length !== 2) {
-    throw new Error(`Expected exactly 2 originalFetch(input calls, found ${matches.length}.`);
+  const inputCalls = patched.match(/originalFetch\(input/g) || [];
+  if (inputCalls.length !== 2) {
+    throw new Error(`Expected exactly 2 originalFetch(input calls, found ${inputCalls.length}.`);
   }
   patched = patched.replace(/originalFetch\(input/g, 'originalFetch(resolveGatewayInput(input)');
-  if (/originalFetch\(input/.test(patched)) throw new Error('VK runtime still contains un-routed API fetch.');
+
+  // Materialized VK profile hydration intentionally bypasses window.fetch to avoid
+  // recursion, but static VK Hosting still must route any literal /api/* target
+  // through the configured HTTPS gateway.
+  patched = patched.replace(
+    /originalFetch\((['"])(\/api[^'"]*)\1/g,
+    (_match, quote, apiPath) => `originalFetch(resolveGatewayInput(${quote}${apiPath}${quote})`
+  );
+
+  if (/originalFetch\(input/.test(patched)) {
+    throw new Error('VK runtime still contains an un-routed dynamic API fetch.');
+  }
+  if (/originalFetch\((['"])\/api(?:\/|\1)/.test(patched)) {
+    throw new Error('VK runtime still contains an un-routed literal API fetch.');
+  }
   return patched;
 }
 
