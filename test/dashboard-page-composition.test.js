@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDashboardPageComposition, dashboardPageCompositionContract } from '../dashboard-page-composition.js';
+import {
+  createAuthorizedDashboardPageComposition,
+  createDashboardPageComposition,
+  authorizedDashboardPageCompositionContract,
+  dashboardPageCompositionContract
+} from '../dashboard-page-composition.js';
 
 class FakeRoot {
   constructor() { this.children = []; }
@@ -62,6 +67,39 @@ test('page composition derives tenant/location only from session resolver', asyn
   assert.equal(adapters[0].end, '2026-09-13T12:00:00.000Z');
   assert.equal(controllers.length, 1);
   assert.equal(controllers[0].mounted, true);
+});
+
+test('authorized browser composition obtains scope only through fixed adapter factory', async () => {
+  const root = new FakeRoot();
+  const adapters = [];
+  const scopeFactoryCalls = [];
+  const fetchImpl = async () => { throw new Error('raw fetch not expected in stubbed adapters'); };
+
+  const composition = createAuthorizedDashboardPageComposition({
+    root,
+    documentRef: {},
+    fetchImpl,
+    clock: () => Date.parse('2026-09-13T12:00:00.000Z'),
+    sessionScopeAdapterFactory(options) {
+      scopeFactoryCalls.push(options);
+      return async () => ({ tenantId: 'tenant-authorized', locationId: null });
+    },
+    networkAdapterFactory(options) {
+      adapters.push(options);
+      return { loadSummary: async () => ({}), loadDrilldown: async () => ({}) };
+    },
+    uiControllerFactory() {
+      return { mounted: false, mount() { this.mounted = true; }, unmount() { this.mounted = false; } };
+    }
+  });
+
+  assert.equal(await composition.mount(), true);
+  assert.deepEqual(scopeFactoryCalls, [{ fetchImpl }]);
+  assert.equal(adapters.length, 1);
+  assert.equal(adapters[0].tenantId, 'tenant-authorized');
+  assert.equal(adapters[0].locationId, null);
+  assert.equal(adapters[0].fetchImpl, fetchImpl);
+  assert.equal(Object.hasOwn(adapters[0], 'resolveSessionScope'), false);
 });
 
 test('period selection is whitelisted and cannot mutate session scope', async () => {
@@ -133,7 +171,7 @@ test('unmount clears scoped controller state and a remount resolves session agai
   assert.equal(adapters[1].locationId, null);
 });
 
-test('composition contract forbids caller-controlled scope and production auto-wiring', () => {
+test('composition contracts forbid caller-controlled scope and production auto-wiring', () => {
   assert.equal(dashboardPageCompositionContract.scopeSource, 'authorized-session-resolver-only');
   assert.equal(dashboardPageCompositionContract.acceptsTenantFromDom, false);
   assert.equal(dashboardPageCompositionContract.acceptsTenantFromUrl, false);
@@ -143,4 +181,13 @@ test('composition contract forbids caller-controlled scope and production auto-w
   assert.equal(dashboardPageCompositionContract.productionNavigationWiring, false);
   assert.equal(dashboardPageCompositionContract.dependenciesAdded, false);
   assert.equal(dashboardPageCompositionContract.environmentVariablesAdded, false);
+
+  assert.equal(authorizedDashboardPageCompositionContract.scopeSource, 'fixed-same-origin-session-scope-endpoint');
+  assert.equal(authorizedDashboardPageCompositionContract.acceptsCustomScopeResolver, false);
+  assert.equal(authorizedDashboardPageCompositionContract.acceptsTenantInput, false);
+  assert.equal(authorizedDashboardPageCompositionContract.acceptsLocationInput, false);
+  assert.deepEqual(authorizedDashboardPageCompositionContract.supportedPeriods, ['7d', '30d', '90d']);
+  assert.equal(authorizedDashboardPageCompositionContract.productionNavigationWiring, false);
+  assert.equal(authorizedDashboardPageCompositionContract.dependenciesAdded, false);
+  assert.equal(authorizedDashboardPageCompositionContract.environmentVariablesAdded, false);
 });
