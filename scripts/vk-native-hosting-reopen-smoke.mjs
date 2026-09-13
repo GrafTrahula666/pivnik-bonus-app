@@ -169,7 +169,9 @@ await context.route('**/*', async (route) => {
     const method = request.method().toUpperCase();
     const pathname = requestUrl.pathname;
     const headers = request.headers();
-    apiCalls.push({ pathname, method, authorization: headers.authorization || '' });
+    let body = null;
+    try { body = request.postData() ? JSON.parse(request.postData()) : null; } catch (_) {}
+    apiCalls.push({ pathname, method, authorization: headers.authorization || '', body });
 
     if (method !== 'GET' && !(method === 'POST' && pathname === '/api/auth')) {
       unexpectedMutations.push({ pathname, method });
@@ -200,8 +202,12 @@ try {
   await firstNavigation;
   await firstPage.screenshot({ path: path.join(outDir, 'fresh.png'), fullPage: true });
 
-  const firstAuthCount = apiCalls.filter((call) => call.pathname === '/api/auth').length;
-  assert(firstAuthCount === 1, `fresh launch: expected one /api/auth, got ${firstAuthCount}`);
+  const firstAuthCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
+  assert(firstAuthCalls.length === 2, `fresh launch: expected signed auth plus VK profile hydration auth, got ${firstAuthCalls.length}`);
+  assert(firstAuthCalls[0].body?.platform === 'vk', 'fresh launch: initial auth platform is not VK');
+  assert(String(firstAuthCalls[0].body?.launchParams || '').includes(`vk_user_id=${vkUserId}`), 'fresh launch: initial auth lost signed VK user id');
+  assert(firstAuthCalls[0].body?.user == null, 'fresh launch: initial auth unexpectedly depended on Bridge profile');
+  assert(String(firstAuthCalls[1].body?.user?.id || '') === vkUserId, 'fresh launch: profile hydration auth did not use matching VK profile');
 
   const beforeReloadCount = apiCalls.length;
   const reloadNavigation = firstPage.reload({ waitUntil: 'domcontentloaded' });
