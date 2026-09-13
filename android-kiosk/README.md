@@ -4,7 +4,7 @@
 
 Функции: отдельный HOME/launcher экран, VK/Telegram, локальный admin PIN, Device Owner + Lock Task, возврат в kiosk после перезагрузки, локальные deep links и Always-on VPN hook.
 
-VPN: безопаснее держать туннель always-on, а в самом VPN-клиенте через split tunneling направить только `org.telegram.messenger`. Тогда Telegram не успеет выйти в сеть до подъёма туннеля, а VK можно оставить напрямую.
+VPN: на тестовом S23 Ultra фактический Telegram package — `org.telegram.messenger.web`, Happ — `su.happ.proxyutility`, VK — `com.vkontakte.android`. Для split tunneling направлять через VPN только Telegram, оставляя VK напрямую.
 
 Для полного kiosk Android требует Device Owner/корпоративное provisioning. На подготовленном dedicated device:
 
