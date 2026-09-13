@@ -1,4 +1,5 @@
 import { createDashboardNetworkAdapter } from './dashboard-network-adapter.js';
+import { createDashboardSessionScopeAdapter } from './dashboard-session-scope-adapter.js';
 import { createDashboardUiController } from './dashboard-ui-controller.js';
 
 const PERIOD_PRESETS = Object.freeze({
@@ -167,6 +168,42 @@ export function createDashboardPageComposition({
   });
 }
 
+/**
+ * Browser-facing composition for the real Dashboard page.
+ *
+ * Unlike the lower-level factory above, callers cannot provide tenant/location
+ * or an arbitrary session-scope resolver. Scope always comes from the fixed,
+ * same-origin Dashboard session-scope endpoint.
+ */
+export function createAuthorizedDashboardPageComposition({
+  root,
+  documentRef = globalThis.document,
+  fetchImpl = globalThis.fetch,
+  clock = () => Date.now(),
+  initialPeriod = '7d',
+  sessionScopeAdapterFactory = createDashboardSessionScopeAdapter,
+  networkAdapterFactory = createDashboardNetworkAdapter,
+  uiControllerFactory = createDashboardUiController
+} = {}) {
+  const request = requireFunction(fetchImpl, 'fetchImpl');
+  const createSessionScopeAdapter = requireFunction(
+    sessionScopeAdapterFactory,
+    'sessionScopeAdapterFactory'
+  );
+  const resolveSessionScope = createSessionScopeAdapter({ fetchImpl: request });
+
+  return createDashboardPageComposition({
+    root,
+    documentRef,
+    resolveSessionScope,
+    fetchImpl: request,
+    clock,
+    initialPeriod,
+    networkAdapterFactory,
+    uiControllerFactory
+  });
+}
+
 export const dashboardPageCompositionContract = Object.freeze({
   autoMount: false,
   productionNavigationWiring: false,
@@ -177,6 +214,19 @@ export const dashboardPageCompositionContract = Object.freeze({
   acceptsLocationFromUrl: false,
   supportedPeriods: Object.freeze(Object.keys(PERIOD_PRESETS)),
   periodScopeMutation: false,
+  readOnly: true,
+  dependenciesAdded: false,
+  environmentVariablesAdded: false
+});
+
+export const authorizedDashboardPageCompositionContract = Object.freeze({
+  autoMount: false,
+  productionNavigationWiring: false,
+  scopeSource: 'fixed-same-origin-session-scope-endpoint',
+  acceptsCustomScopeResolver: false,
+  acceptsTenantInput: false,
+  acceptsLocationInput: false,
+  supportedPeriods: Object.freeze(Object.keys(PERIOD_PRESETS)),
   readOnly: true,
   dependenciesAdded: false,
   environmentVariablesAdded: false
