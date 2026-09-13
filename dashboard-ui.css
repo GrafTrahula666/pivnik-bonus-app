@@ -1,3 +1,4 @@
+.sv-dashboard-page,
 .sv-dashboard,
 .sv-dashboard-state {
   box-sizing: border-box;
@@ -5,6 +6,93 @@
   color: #f5f7fb;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+
+.sv-dashboard-page {
+  display: grid;
+  gap: 22px;
+}
+
+.sv-dashboard-page__header {
+  display: grid;
+  gap: 7px;
+}
+
+.sv-dashboard-page__eyebrow,
+.sv-dashboard-page__title,
+.sv-dashboard-page__description {
+  margin: 0;
+}
+
+.sv-dashboard-page__eyebrow {
+  color: rgba(245, 247, 251, 0.48);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.sv-dashboard-page__title {
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 680;
+  letter-spacing: -0.035em;
+}
+
+.sv-dashboard-page__description {
+  max-width: 720px;
+  color: rgba(245, 247, 251, 0.62);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.sv-dashboard-page__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sv-dashboard-page__periods {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(88px, auto);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.sv-dashboard-page__period-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(245, 247, 251, 0.62);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.sv-dashboard-page__period-button:hover {
+  color: rgba(245, 247, 251, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sv-dashboard-page__period-button[data-selected="true"] {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f5f7fb;
+}
+
+.sv-dashboard-page__period-button:focus-visible {
+  outline: 2px solid rgba(171, 196, 255, 0.9);
+  outline-offset: 3px;
+}
+
+.sv-dashboard-page__period-button:active { transform: translateY(1px); }
+.sv-dashboard-page__content { min-width: 0; }
 
 .sv-dashboard {
   display: grid;
@@ -155,6 +243,9 @@
 }
 
 @media (max-width: 640px) {
+  .sv-dashboard-page { gap: 18px; }
+  .sv-dashboard-page__periods { width: 100%; grid-auto-columns: 1fr; }
+  .sv-dashboard-page__period-button { min-height: 48px; padding: 0 10px; }
   .sv-dashboard { gap: 18px; }
   .sv-dashboard__grid { grid-template-columns: 1fr; gap: 10px; }
   .sv-dashboard-card { padding: 18px; border-radius: 18px; }
@@ -168,6 +259,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sv-dashboard-page__period-button,
   .sv-dashboard-card__drilldown,
   .sv-dashboard-drilldown__page-button { transition: none; }
 }
