@@ -51,7 +51,7 @@ await fs.mkdir(outDir, { recursive: true });
 await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true });
 
-async function runScenario({ name, bridgeLaunchParams }) {
+async function runScenario({ name, bridgeLaunchParams, expectedAuthAttempts = 1, expectedFreshAttempts = 0 }) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const apiCalls = [];
@@ -120,6 +120,8 @@ async function runScenario({ name, bridgeLaunchParams }) {
       bootText: document.querySelector('#bootText')?.textContent || ''
     }), { key: storageKey });
     const authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
+    const staleAuthCalls = authCalls.filter((call) => String(call.body?.launchParams || '').includes('sign=stale-sign'));
+    const freshAuthCalls = authCalls.filter((call) => String(call.body?.launchParams || '').includes('sign=fresh-sign'));
     const refreshCalls = bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams');
     const unexpectedConsoleErrors = consoleErrors.filter((message) => (
       !/status of 401|401 \(Unauthorized\)/i.test(message)
@@ -130,8 +132,14 @@ async function runScenario({ name, bridgeLaunchParams }) {
     await fs.writeFile(path.join(outDir, `${name}.json`), JSON.stringify(evidence, null, 2));
     await page.screenshot({ path: path.join(outDir, `${name}.png`), fullPage: true });
 
-    assert(authCalls.length === 1, `${name}: auth should be attempted exactly once, got ${authCalls.length}`);
-    assert(String(authCalls[0].body?.launchParams || '').includes('sign=stale-sign'), `${name}: initial auth did not use original signed launch params`);
+    assert(authCalls.length === expectedAuthAttempts, `${name}: expected ${expectedAuthAttempts} auth attempt(s), got ${authCalls.length}`);
+    assert(staleAuthCalls.length === 1, `${name}: stale signed launch params should be submitted exactly once, got ${staleAuthCalls.length}`);
+    assert(String(staleAuthCalls[0].body?.launchParams || '').includes('vk_ts=111111'), `${name}: initial auth did not use original signed launch params`);
+    assert(freshAuthCalls.length === expectedFreshAttempts, `${name}: expected ${expectedFreshAttempts} fresh auth attempt(s), got ${freshAuthCalls.length}`);
+    if (expectedFreshAttempts > 0) {
+      assert(freshAuthCalls.every((call) => String(call.body?.launchParams || '').includes('vk_ts=222222')), `${name}: refreshed auth did not use the fresh signed timestamp`);
+      assert(authCalls.indexOf(freshAuthCalls[0]) > authCalls.indexOf(staleAuthCalls[0]), `${name}: refreshed auth did not follow the stale auth attempt`);
+    }
     assert(refreshCalls.length === 1, `${name}: VKWebAppGetLaunchParams should run exactly once, got ${refreshCalls.length}`);
     assert(ui.platform === 'vk', `${name}: platform adapter is not VK`);
     assert(ui.storagePrefix === `pivnik_vk_${vkUserId}_`, `${name}: wrong storage prefix ${ui.storagePrefix}`);
@@ -159,6 +167,12 @@ try {
     await runScenario({
       name: 'unchanged-refresh',
       bridgeLaunchParams: { vk_app_id: 54694987, vk_user_id: vkUserId, vk_ts: 111111, vk_platform: 'mobile_iphone', sign: 'stale-sign' }
+    }),
+    await runScenario({
+      name: 'fresh-refresh-second-auth-401',
+      bridgeLaunchParams: { vk_app_id: 54694987, vk_user_id: vkUserId, vk_ts: 222222, vk_platform: 'mobile_iphone', sign: 'fresh-sign' },
+      expectedAuthAttempts: 2,
+      expectedFreshAttempts: 1
     })
   ];
   await fs.writeFile(path.join(outDir, 'summary.json'), JSON.stringify({ ok: true, results }, null, 2));
