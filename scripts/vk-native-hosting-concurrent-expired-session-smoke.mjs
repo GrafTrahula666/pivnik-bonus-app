@@ -140,11 +140,17 @@ try {
       window.api('/api/me/transactions'),
       window.api('/api/achievements'),
       window.api('/api/test-mutation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) })
+        .then(
+          (value) => ({ rejected: false, value }),
+          (error) => ({ rejected: true, status: Number(error?.status || 0), message: String(error?.message || '') })
+        )
     ]);
     return {
-      transactionsStatus: transactions.status,
-      achievementsStatus: achievements.status,
-      mutationStatus: mutation.status
+      transactionsOk: Array.isArray(transactions?.transactions),
+      achievementsOk: Array.isArray(achievements?.achievements),
+      mutationRejected: mutation.rejected,
+      mutationStatus: mutation.status || 0,
+      mutationMessage: mutation.message || ''
     };
   });
   await page.waitForFunction((key) => localStorage.getItem(key) === 'concurrent-renewed-session', storageKey, { timeout: 8000 });
@@ -167,9 +173,9 @@ try {
   assert(achievementCalls[0].authorization === `Bearer ${initialToken}` && achievementCalls[1].authorization === `Bearer ${renewedToken}`, `achievements token sequence unexpected: ${JSON.stringify(achievementCalls)}`);
   assert(mutationCalls.length === 1, `mutation must never be replayed, got ${mutationCalls.length}`);
   assert(mutationCalls[0].authorization === `Bearer ${initialToken}`, `mutation did not use original expired token: ${mutationCalls[0].authorization}`);
-  assert(results.transactionsStatus === 200, `transactions recovery status unexpected: ${results.transactionsStatus}`);
-  assert(results.achievementsStatus === 200, `achievements recovery status unexpected: ${results.achievementsStatus}`);
-  assert(results.mutationStatus === 401, `mutation 401 must be returned without replay, got ${results.mutationStatus}`);
+  assert(results.transactionsOk, `transactions recovery payload unexpected: ${JSON.stringify(results)}`);
+  assert(results.achievementsOk, `achievements recovery payload unexpected: ${JSON.stringify(results)}`);
+  assert(results.mutationRejected && results.mutationStatus === 401, `mutation 401 must reject without replay, got ${JSON.stringify(results)}`);
   assert(ui.session === renewedToken, `renewed scoped session missing: ${ui.session}`);
   assert(!ui.appShellHidden, 'concurrent recovery closed the app shell');
   assert(ui.clientName.includes('VK Concurrent'), `profile lost after concurrent recovery: ${ui.clientName}`);
