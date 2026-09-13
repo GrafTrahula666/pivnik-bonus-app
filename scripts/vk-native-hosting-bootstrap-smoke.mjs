@@ -123,6 +123,12 @@ async function runScenario(browser, { name, restoreSession }) {
   const unexpectedMutations = [];
   const failedRequests = [];
 
+  if (restoreSession) {
+    await page.addInitScript(({ key, value }) => {
+      try { localStorage.setItem(key, value); } catch (_) {}
+    }, { key: `pivnik_vk_${vkUserId}_session`, value: sessionToken });
+  }
+
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -170,14 +176,6 @@ async function runScenario(browser, { name, restoreSession }) {
   });
 
   const url = `http://127.0.0.1:${port}/index.html?${signedLaunchQuery}`;
-  if (restoreSession) {
-    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
-    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
-      key: `pivnik_vk_${vkUserId}_session`,
-      value: sessionToken
-    });
-  }
-
   const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
   assert(response?.status() === 200, `${name}: index returned ${response?.status()}`);
 
