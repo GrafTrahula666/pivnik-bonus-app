@@ -1,4 +1,5 @@
 import { createDashboardUiViewModel } from './dashboard-ui-view-model.js';
+import { createDashboardDrilldownViewModel } from './dashboard-drilldown-view-model.js';
 
 function assertFunction(value, name) {
   if (typeof value !== 'function') throw new TypeError(`${name} must be a function`);
@@ -94,26 +95,50 @@ function renderReady(documentRef, viewModel, onDrilldown) {
   return { section, drilldown };
 }
 
+function renderDrilldownField(documentRef, field) {
+  const wrapper = documentRef.createElement('div');
+  wrapper.className = 'sv-dashboard-drilldown__field';
+  wrapper.dataset.field = field.key;
+  appendTextElement(documentRef, wrapper, 'dt', 'sv-dashboard-drilldown__term', field.label);
+  appendTextElement(documentRef, wrapper, 'dd', 'sv-dashboard-drilldown__value', field.text);
+  return wrapper;
+}
+
 function renderDrilldownRows(documentRef, container, card, result) {
+  const viewModel = createDashboardDrilldownViewModel(result);
   container.replaceChildren();
   container.hidden = false;
 
   appendTextElement(documentRef, container, 'h2', 'sv-dashboard-drilldown__title', card.label);
-  const items = Array.isArray(result?.items) ? result.items : [];
-  if (items.length === 0) {
+  if (viewModel.empty) {
     appendTextElement(documentRef, container, 'p', 'sv-dashboard-drilldown__empty', 'За выбранный период данных нет.');
     return;
   }
 
   const list = documentRef.createElement('div');
   list.className = 'sv-dashboard-drilldown__list';
-  for (const item of items) {
-    const row = documentRef.createElement('pre');
+  list.setAttribute('role', 'list');
+
+  for (const item of viewModel.rows) {
+    const row = documentRef.createElement('dl');
     row.className = 'sv-dashboard-drilldown__row';
-    row.textContent = JSON.stringify(item, null, 2);
+    row.dataset.rowKind = item.kind;
+    row.dataset.rowKey = item.key;
+    row.setAttribute('role', 'listitem');
+    for (const field of item.fields) row.append(renderDrilldownField(documentRef, field));
     list.append(row);
   }
   container.append(list);
+
+  if (viewModel.hasMore) {
+    appendTextElement(
+      documentRef,
+      container,
+      'p',
+      'sv-dashboard-drilldown__pagination-note',
+      `Показаны записи ${viewModel.offset + 1}–${viewModel.offset + viewModel.rows.length}. Есть ещё данные.`
+    );
+  }
 }
 
 export function createDashboardUiController({ root, documentRef = globalThis.document, loadSummary, loadDrilldown }) {
@@ -190,5 +215,8 @@ export const dashboardUiControllerContract = Object.freeze({
   networkImplementationIncluded: false,
   dependenciesAdded: false,
   states: Object.freeze(['loading', 'ready', 'empty', 'error']),
+  drilldownRendering: 'whitelisted semantic fields only',
+  rawJsonRendering: false,
+  paginationStateVisible: true,
   mobileTouchTargetCssRequired: true
 });
