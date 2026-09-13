@@ -2,6 +2,8 @@ import { mountCustomer360FullActionEndpoints } from './customer-360-full-action-
 import { mountDashboardReadEndpoints } from './dashboard-read-endpoints.js';
 import { mountDashboardSessionScopeEndpoint } from './dashboard-session-scope-endpoint.js';
 import { createDashboardSessionScopeResolver } from './dashboard-session-scope-resolver.js';
+import { mountDashboardScopeSelectionEndpoint } from './dashboard-scope-selection-endpoint.js';
+import { createDashboardScopeSelectionResolver } from './dashboard-scope-selection-resolver.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 
 /**
@@ -26,7 +28,9 @@ export function mountSpaceverseServerComposition({
   mountActionEndpoints = mountCustomer360FullActionEndpoints,
   mountDashboardEndpoints = mountDashboardReadEndpoints,
   createSessionScopeResolver = createDashboardSessionScopeResolver,
-  mountSessionScopeEndpoint = mountDashboardSessionScopeEndpoint
+  mountSessionScopeEndpoint = mountDashboardSessionScopeEndpoint,
+  createScopeSelectionResolver = createDashboardScopeSelectionResolver,
+  mountScopeSelectionEndpoint = mountDashboardScopeSelectionEndpoint
 } = {}) {
   if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') {
     throw new TypeError('runtime.scopedModeEnabled must be boolean');
@@ -43,13 +47,20 @@ export function mountSpaceverseServerComposition({
   if (typeof mountSessionScopeEndpoint !== 'function') {
     throw new TypeError('mountSessionScopeEndpoint must be a function');
   }
+  if (typeof createScopeSelectionResolver !== 'function') {
+    throw new TypeError('createScopeSelectionResolver must be a function');
+  }
+  if (typeof mountScopeSelectionEndpoint !== 'function') {
+    throw new TypeError('mountScopeSelectionEndpoint must be a function');
+  }
 
   if (!runtime.scopedModeEnabled) {
     return Object.freeze({
       mounted: false,
       actions: null,
       dashboard: null,
-      dashboardSessionScope: null
+      dashboardSessionScope: null,
+      dashboardScopeSelection: null
     });
   }
 
@@ -88,11 +99,25 @@ export function mountSpaceverseServerComposition({
     throw new Error('SPACEVERSE Dashboard session scope endpoint failed to mount');
   }
 
+  const selectDashboardScope = createScopeSelectionResolver({
+    loadMemberships,
+    resolveAuthorization
+  });
+  const dashboardScopeSelection = mountScopeSelectionEndpoint({
+    app,
+    scopedModeEnabled: true,
+    selectDashboardScope
+  });
+  if (!dashboardScopeSelection?.mounted) {
+    throw new Error('SPACEVERSE Dashboard scope selection endpoint failed to mount');
+  }
+
   return Object.freeze({
     mounted: true,
     actions,
     dashboard,
-    dashboardSessionScope
+    dashboardSessionScope,
+    dashboardScopeSelection
   });
 }
 
@@ -103,7 +128,11 @@ export const spaceverseServerCompositionContract = Object.freeze({
   includesDashboardPeriodSummary: true,
   includesDashboardKpiDrilldown: true,
   includesDashboardSessionScope: true,
+  includesDashboardValidatedTenantSelection: true,
   dashboardScopeComesFromServerMemberships: true,
+  dashboardBrowserTenantSelectionGrantsNoAuthority: true,
+  platformAdminSelectionRequiresAuthoritativeDirectory: true,
+  locationSelectionRequiresAuthoritativeDirectory: true,
   ownsBusinessLogic: false,
   ownsPersistence: false,
   ownsAuthorizationRules: false,
