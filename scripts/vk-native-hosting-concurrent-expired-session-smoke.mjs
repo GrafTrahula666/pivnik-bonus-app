@@ -188,6 +188,29 @@ try {
   await fs.writeFile(path.join(outDir, 'summary.json'), JSON.stringify(evidence, null, 2));
   await page.screenshot({ path: path.join(outDir, 'concurrent-expired-session-recovered.png'), fullPage: true });
   console.log(JSON.stringify({ ok: true, authCount: authCalls.length, transactionCalls: transactionCalls.length, achievementCalls: achievementCalls.length, mutationCalls: mutationCalls.length }, null, 2));
+} catch (error) {
+  let ui = null;
+  try {
+    ui = await page.evaluate((key) => ({
+      session: localStorage.getItem(key),
+      appShellHidden: document.querySelector('#appShell')?.classList.contains('hidden') ?? true,
+      clientName: document.querySelector('#clientName')?.textContent || ''
+    }), storageKey);
+  } catch (_) {}
+  const evidence = {
+    ok: false,
+    error: String(error?.stack || error?.message || error),
+    authCount,
+    apiCalls,
+    bridgeCalls,
+    ui,
+    pageErrors,
+    consoleErrors,
+    failedRequests
+  };
+  await fs.writeFile(path.join(outDir, 'failure.json'), JSON.stringify(evidence, null, 2));
+  try { await page.screenshot({ path: path.join(outDir, 'concurrent-expired-session-failure.png'), fullPage: true }); } catch (_) {}
+  throw error;
 } finally {
   await context.close();
   await browser.close();
