@@ -1,4 +1,4 @@
-import { mountCustomer360ActionEndpoints } from './customer-360-action-endpoints.js';
+import { mountCustomer360FullActionEndpoints } from './customer-360-full-action-endpoints.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 
 /**
@@ -19,7 +19,7 @@ export function mountSpaceverseServerComposition({
   db,
   executeAdjustment,
   grantAchievement,
-  mountActionEndpoints = mountCustomer360ActionEndpoints
+  mountActionEndpoints = mountCustomer360FullActionEndpoints
 } = {}) {
   if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') {
     throw new TypeError('runtime.scopedModeEnabled must be boolean');
@@ -57,6 +57,7 @@ export function mountSpaceverseServerComposition({
 export const spaceverseServerCompositionContract = Object.freeze({
   productionEnabledByDefault: SPACEVERSE_RUNTIME.scopedModeEnabled,
   disabledModeRequiresNoRuntimeDependencies: true,
+  includesCustomerMetadataActions: true,
   ownsBusinessLogic: false,
   ownsPersistence: false,
   ownsAuthorizationRules: false,
