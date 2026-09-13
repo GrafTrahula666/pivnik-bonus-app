@@ -235,11 +235,13 @@ test('newer drilldown request wins over stale in-flight pagination response', as
   const secondCardButton = grid.children[1].children.find((child) => child.dataset?.drilldownMetric);
   secondCardButton.listeners.get('click')();
   await settle();
-  assert.match(collectText(drilldown), /tx-first/u);
+  let list = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__list');
+  assert.equal(list.children[0].dataset.rowKey, 'tx-first');
 
   pending.get(50)(transactionDrilldown({ offset: 50, limit: 50, hasMore: false, id: 'tx-stale' }));
   await settle();
-  assert.equal(collectText(drilldown).includes('tx-stale'), false);
+  list = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__list');
+  assert.equal(list.children[0].dataset.rowKey, 'tx-first');
 });
 
 test('controller renders honest error state instead of synthetic values', async () => {
