@@ -114,10 +114,6 @@ public class MainActivity extends Activity {
             return;
         }
         if (!DeviceCredentialStore.hasToken(this)) {
-            if (Prefs.isKioskEnabled(this)) {
-                Toast.makeText(this, "Барный телефон ещё не привязан администратором", Toast.LENGTH_LONG).show();
-                return;
-            }
             launch(pkg, baseUri);
             return;
         }
