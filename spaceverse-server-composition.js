@@ -1,4 +1,5 @@
 import { mountCustomer360FullActionEndpoints } from './customer-360-full-action-endpoints.js';
+import { mountDashboardReadEndpoints } from './dashboard-read-endpoints.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 
 /**
@@ -19,7 +20,8 @@ export function mountSpaceverseServerComposition({
   db,
   executeAdjustment,
   grantAchievement,
-  mountActionEndpoints = mountCustomer360FullActionEndpoints
+  mountActionEndpoints = mountCustomer360FullActionEndpoints,
+  mountDashboardEndpoints = mountDashboardReadEndpoints
 } = {}) {
   if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') {
     throw new TypeError('runtime.scopedModeEnabled must be boolean');
@@ -27,19 +29,27 @@ export function mountSpaceverseServerComposition({
   if (typeof mountActionEndpoints !== 'function') {
     throw new TypeError('mountActionEndpoints must be a function');
   }
+  if (typeof mountDashboardEndpoints !== 'function') {
+    throw new TypeError('mountDashboardEndpoints must be a function');
+  }
 
   if (!runtime.scopedModeEnabled) {
     return Object.freeze({
       mounted: false,
-      actions: null
+      actions: null,
+      dashboard: null
     });
   }
 
-  const actions = mountActionEndpoints({
+  const shared = {
     app,
     scopedModeEnabled: true,
     resolveAuthorization,
-    db,
+    db
+  };
+
+  const actions = mountActionEndpoints({
+    ...shared,
     executeAdjustment,
     grantAchievement
   });
@@ -48,9 +58,15 @@ export function mountSpaceverseServerComposition({
     throw new Error('SPACEVERSE action endpoints failed to mount');
   }
 
+  const dashboard = mountDashboardEndpoints(shared);
+  if (!dashboard?.mounted) {
+    throw new Error('SPACEVERSE Dashboard endpoints failed to mount');
+  }
+
   return Object.freeze({
     mounted: true,
-    actions
+    actions,
+    dashboard
   });
 }
 
@@ -58,6 +74,8 @@ export const spaceverseServerCompositionContract = Object.freeze({
   productionEnabledByDefault: SPACEVERSE_RUNTIME.scopedModeEnabled,
   disabledModeRequiresNoRuntimeDependencies: true,
   includesCustomerMetadataActions: true,
+  includesDashboardPeriodSummary: true,
+  includesDashboardKpiDrilldown: true,
   ownsBusinessLogic: false,
   ownsPersistence: false,
   ownsAuthorizationRules: false,
