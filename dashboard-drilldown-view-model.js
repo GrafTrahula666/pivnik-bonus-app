@@ -143,7 +143,8 @@ export function createDashboardDrilldownViewModel(result) {
       : null;
   if (!sourceRows) throw new TypeError('drilldown rows must be an array');
 
-  const limit = safeInteger(drilldown.limit ?? sourceRows.length || 1, 'drilldown.limit');
+  const defaultLimit = sourceRows.length > 0 ? sourceRows.length : 1;
+  const limit = safeInteger(drilldown.limit ?? defaultLimit, 'drilldown.limit');
   const offset = safeInteger(drilldown.offset ?? 0, 'drilldown.offset');
   if (limit < 1 || limit > 100) throw new RangeError('drilldown.limit must be between 1 and 100');
   if (offset < 0) throw new RangeError('drilldown.offset must not be negative');
