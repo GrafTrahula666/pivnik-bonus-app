@@ -98,7 +98,8 @@ function buildTransactionQuery({ metric, scope, limit, offset }) {
     LIMIT $${scope.params.length + 1} OFFSET $${scope.params.length + 2}`,
     params,
     rowKind: 'transaction',
-    metric
+    metric,
+    period: scope.period
   });
 }
 
@@ -114,12 +115,14 @@ function buildActiveClientsQuery({ metric, scope, limit, offset }) {
       MAX(t.created_at) AS last_activity_at
     FROM transactions t
     WHERE ${scope.predicate}
+      AND t.client_id IS NOT NULL
     GROUP BY t.client_id
     ORDER BY MAX(t.created_at) DESC, t.client_id DESC
     LIMIT $${scope.params.length + 1} OFFSET $${scope.params.length + 2}`,
     params,
     rowKind: 'client',
-    metric
+    metric,
+    period: scope.period
   });
 }
 
@@ -137,7 +140,7 @@ function buildDrilldownQuery(options = {}) {
  *
  * For transaction-derived totals it returns the concrete completed transactions
  * inside the selected scope/period. For active_clients it returns one grouped
- * row per distinct client, matching the Dashboard definition exactly.
+ * row per distinct non-null client, matching COUNT(DISTINCT client_id) exactly.
  */
 export function createSqlDashboardKpiDrilldownRepository({ query }) {
   if (typeof query !== 'function') throw new TypeError('query must be a function');
@@ -149,16 +152,15 @@ export function createSqlDashboardKpiDrilldownRepository({ query }) {
       throw new TypeError('dashboard drilldown query must resolve to an object with rows[]');
     }
 
-    const limit = Number(options.limit ?? 50);
-    const offset = Number(options.offset ?? 0);
+    const page = boundedPage(options);
     return Object.freeze({
       metric: plan.metric,
       rowKind: plan.rowKind,
-      period: buildScope(options).period,
-      rows: Object.freeze(result.rows.slice(0, limit).map((row) => Object.freeze({ ...row }))),
-      hasMore: result.rows.length > limit,
-      limit,
-      offset
+      period: plan.period,
+      rows: Object.freeze(result.rows.slice(0, page.limit).map((row) => Object.freeze({ ...row }))),
+      hasMore: result.rows.length > page.limit,
+      limit: page.limit,
+      offset: page.offset
     });
   };
 }
@@ -169,7 +171,7 @@ export const dashboardKpiDrilldownRepositoryContract = Object.freeze({
   requiredScopeColumns: Object.freeze(['tenant_id', 'location_id']),
   periodSemantics: '[start,end)',
   completedTransactionsOnly: true,
-  activeClientsDefinition: 'one row per distinct client_id with completed transaction in period',
+  activeClientsDefinition: 'one row per distinct non-null client_id with completed transaction in period',
   maxPageSize: 100,
   readOnly: true,
   productionWiringEnabled: false,
