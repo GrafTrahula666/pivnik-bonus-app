@@ -4,6 +4,10 @@ on:
     branches: [feature/android-bar-kiosk]
     paths: ['android-kiosk/**', '.github/workflows/android-kiosk.yml']
   workflow_dispatch:
+
+env:
+  KIOSK_DEBUG_HOME: ${{ github.workspace }}/.ci-kiosk-home
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,19 +18,51 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+
+      - name: Prepare stable debug signing home
+        run: mkdir -p "$KIOSK_DEBUG_HOME/.android"
+
       - name: Restore stable debug signing key
+        id: kiosk-signing-cache
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: pivnik-kiosk-debug-keystore-v1
+          path: ${{ env.KIOSK_DEBUG_HOME }}/.android
+          key: pivnik-kiosk-debug-keystore-v2
+
+      - name: Ensure stable debug signing key
+        run: |
+          KEYSTORE="$KIOSK_DEBUG_HOME/.android/debug.keystore"
+          if [ ! -f "$KEYSTORE" ]; then
+            keytool -genkeypair -noprompt \
+              -keystore "$KEYSTORE" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Pivnik Kiosk Debug,O=Pivnik,C=RU" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000
+          fi
+          keytool -list -v \
+            -keystore "$KEYSTORE" \
+            -storepass android \
+            -alias androiddebugkey | grep 'SHA256:'
+
       - name: Install SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
       - name: Build debug APK
         working-directory: android-kiosk
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle -Duser.home="$KIOSK_DEBUG_HOME" :app:assembleDebug --stacktrace
+
+      - name: Verify APK signing certificate
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            android-kiosk/app/build/outputs/apk/debug/app-debug.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: pivnik-kiosk-debug-apk
