@@ -31,6 +31,15 @@ test('VK hosting builder is transport-only and preserves current main UI', async
   assert.doesNotMatch(source, /filter:brightness/);
 });
 
+test('VK hosting builder resets failed Bridge launch refreshes and single-flights concurrent auth', async () => {
+  const source = await read('scripts/build-vk-hosting.mjs');
+  assert.match(source, /async function getBridgeLaunchParams\(\)/);
+  assert.match(source, /if \(!resolvedLaunchParams\) bridgeLaunchParamsPromise = null/);
+  assert.match(source, /let authInFlight = null/);
+  assert.match(source, /if \(!authInFlight\)/);
+  assert.match(source, /return authInFlight\.then\(\(response\) => response\.clone\(\)\)/);
+});
+
 test('current VK runtime still has exactly the fetch boundary required by static gateway routing', async () => {
   const runtime = await read('vk-platform.js');
   assert.match(runtime, /const originalFetch = window\.fetch\.bind\(window\)/);
