@@ -89,6 +89,22 @@ function patchVkRuntime(source) {
   const helper = `${marker}\n  const configuredApiBase = String(window.__PIVNIK_VK_API_BASE__ || '').trim().replace(/\\/+$/, '');\n\n  function resolveGatewayInput(input) {\n    if (!configuredApiBase) return input;\n    try {\n      const requestUrl = typeof input === 'string' ? input : input?.url || '';\n      const parsed = new URL(requestUrl, window.location.href);\n      const isApi = parsed.pathname === '/api' || parsed.pathname.startsWith('/api/');\n      const isRelativeApi = typeof input === 'string' && /^\\/api(?:\\/|$)/.test(requestUrl);\n      const isSameOriginApi = parsed.origin === window.location.origin && isApi;\n      if (!isRelativeApi && !isSameOriginApi) return input;\n      const target = configuredApiBase + parsed.pathname + parsed.search;\n      if (typeof Request !== 'undefined' && input instanceof Request) return new Request(target, input);\n      return target;\n    } catch (_) {\n      return input;\n    }\n  }`;
 
   let patched = source.replace(marker, helper);
+
+  const bridgeLaunchFunction = `  function getBridgeLaunchParams() {`;
+  if (!patched.includes(bridgeLaunchFunction)) {
+    throw new Error('VK runtime launch params refresh function not found.');
+  }
+  patched = patched.replace(bridgeLaunchFunction, `  async function getBridgeLaunchParams() {`);
+
+  const bridgeLaunchReturn = `    return bridgeLaunchParamsPromise;\n  }\n\n  async function resolveLaunchParams(preferBridge = false) {`;
+  if (!patched.includes(bridgeLaunchReturn)) {
+    throw new Error('VK runtime launch params promise return not found.');
+  }
+  patched = patched.replace(
+    bridgeLaunchReturn,
+    `    const resolvedLaunchParams = await bridgeLaunchParamsPromise;\n    if (!resolvedLaunchParams) bridgeLaunchParamsPromise = null;\n    return resolvedLaunchParams;\n  }\n\n  async function resolveLaunchParams(preferBridge = false) {`
+  );
+
   const inputCalls = patched.match(/originalFetch\(input/g) || [];
   if (inputCalls.length !== 2) {
     throw new Error(`Expected exactly 2 originalFetch(input calls, found ${inputCalls.length}.`);
@@ -108,6 +124,11 @@ function patchVkRuntime(source) {
   }
   if (/originalFetch\((['"])\/api(?:\/|\1)/.test(patched)) {
     throw new Error('VK runtime still contains an un-routed literal API fetch.');
+  }
+
+  const authSingleFlight = `\n\n;(() => {\n  const vkPlatformFetch = window.fetch.bind(window);\n  let authInFlight = null;\n\n  window.fetch = (input, init = {}) => {\n    const requestUrl = typeof input === 'string' ? input : input?.url || '';\n    let pathname = requestUrl;\n    try { pathname = new URL(requestUrl, window.location.href).pathname; } catch (_) {}\n    if (pathname !== '/api/auth') return vkPlatformFetch(input, init);\n\n    if (!authInFlight) {\n      authInFlight = Promise.resolve(vkPlatformFetch(input, init))\n        .finally(() => {\n          queueMicrotask(() => { authInFlight = null; });\n        });\n    }\n    return authInFlight.then((response) => response.clone());\n  };\n})();\n`;
+  if (!patched.includes('const vkPlatformFetch = window.fetch.bind(window);')) {
+    patched += authSingleFlight;
   }
   return patched;
 }
