@@ -111,9 +111,6 @@ function patchVkRuntime(source) {
   }
   patched = patched.replace(/originalFetch\(input/g, 'originalFetch(resolveGatewayInput(input)');
 
-  // Materialized VK profile hydration intentionally bypasses window.fetch to avoid
-  // recursion, but static VK Hosting still must route any literal /api/* target
-  // through the configured HTTPS gateway.
   patched = patched.replace(
     /originalFetch\((['"])(\/api[^'"]*)\1/g,
     (_match, quote, apiPath) => `originalFetch(resolveGatewayInput(${quote}${apiPath}${quote})`
@@ -130,6 +127,31 @@ function patchVkRuntime(source) {
   if (!patched.includes('const vkPlatformFetch = window.fetch.bind(window);')) {
     patched += authSingleFlight;
   }
+  return patched;
+}
+
+function patchVkAppRuntime(source) {
+  const recoveryStateMarker = `let bootCompleted = false;`;
+  if (!source.includes(recoveryStateMarker)) throw new Error('app.js boot state marker not found.');
+  let patched = source.replace(
+    recoveryStateMarker,
+    `${recoveryStateMarker}\nlet vkSessionRecoveryPromise = null;`
+  );
+
+  const apiStateMarker = `  let lastError;\n  for (let attempt = 0; attempt < attempts; attempt += 1) {`;
+  if (!patched.includes(apiStateMarker)) throw new Error('app.js API attempt marker not found.');
+  patched = patched.replace(
+    apiStateMarker,
+    `  let lastError;\n  let vkSessionRecoveryUsed = false;\n  for (let attempt = 0; attempt < attempts; attempt += 1) {`
+  );
+
+  const catchMarker = `    } catch (error) {\n      lastError = error;\n      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';`;
+  if (!patched.includes(catchMarker)) throw new Error('app.js API catch marker not found.');
+  patched = patched.replace(
+    catchMarker,
+    `    } catch (error) {\n      lastError = error;\n      const canRecoverVkSession = IS_VK\n        && method === 'GET'\n        && String(path) !== '/api/auth'\n        && error?.status === 401\n        && !vkSessionRecoveryUsed;\n      if (canRecoverVkSession) {\n        vkSessionRecoveryUsed = true;\n        if (!vkSessionRecoveryPromise) {\n          vkSessionRecoveryPromise = (async () => {\n            state.token = '';\n            safeStorage.remove('pivnik_session');\n            await authenticate();\n          })().finally(() => {\n            vkSessionRecoveryPromise = null;\n          });\n        }\n        await vkSessionRecoveryPromise;\n        attempt -= 1;\n        continue;\n      }\n      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';`
+  );
+
   return patched;
 }
 
@@ -165,6 +187,10 @@ await fs.copyFile(vkBridgeSource, vkBridgeTarget);
 const vkRuntimePath = path.join(outDir, 'vk-platform.js');
 const vkRuntime = await fs.readFile(vkRuntimePath, 'utf8');
 await fs.writeFile(vkRuntimePath, patchVkRuntime(vkRuntime));
+
+const vkAppPath = path.join(outDir, 'app.js');
+const vkAppRuntime = await fs.readFile(vkAppPath, 'utf8');
+await fs.writeFile(vkAppPath, patchVkAppRuntime(vkAppRuntime));
 
 const requiredFiles = [
   'index.html',
