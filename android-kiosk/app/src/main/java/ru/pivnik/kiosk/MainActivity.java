@@ -23,18 +23,29 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private TextView status;
 
-    @Override protected void onCreate(Bundle b) { super.onCreate(b); hideSystemUi(); render(); }
-    @Override protected void onResume() { super.onResume(); hideSystemUi(); if (Prefs.isKioskEnabled(this)) KioskController.apply(this); refreshStatus(); }
+    @Override protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        render();
+        getWindow().getDecorView().post(this::hideSystemUi);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        getWindow().getDecorView().post(this::hideSystemUi);
+        if (Prefs.isKioskEnabled(this)) KioskController.apply(this);
+        refreshStatus();
+    }
 
     private void hideSystemUi() {
+        View decor = getWindow().getDecorView();
         if (android.os.Build.VERSION.SDK_INT >= 30) {
-            WindowInsetsController c = getWindow().getInsetsController();
+            WindowInsetsController c = decor.getWindowInsetsController();
             if (c != null) {
                 c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                 c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             }
         } else {
-            getWindow().getDecorView().setSystemUiVisibility(
+            decor.setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         }
     }
