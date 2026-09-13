@@ -9,6 +9,7 @@ class FakeNode {
     this.dataset = {};
     this.attributes = new Map();
     this.hidden = false;
+    this.disabled = false;
     this.className = '';
     this.textContent = '';
     this.listeners = new Map();
@@ -41,12 +42,45 @@ function summary() {
   };
 }
 
+function transactionDrilldown({ offset = 0, limit = 50, hasMore = false, id = `tx-${offset}` } = {}) {
+  return {
+    ok: true,
+    drilldown: {
+      rowKind: 'transaction',
+      rows: [{
+        id,
+        client_id: 'client-1',
+        location_id: 'location-1',
+        mode: 'purchase',
+        check_amount_cents: 25000,
+        cash_paid_cents: 20000,
+        bonus_earned: 25,
+        bonus_spent: 5,
+        reason: 'Покупка',
+        reward_code: null,
+        created_at: '2026-09-13T12:00:00Z',
+        completed_at: '2026-09-13T12:01:00Z'
+      }],
+      hasMore,
+      limit,
+      offset
+    }
+  };
+}
+
 async function settle() {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
 function collectText(node) {
   return [node.textContent, ...node.children.flatMap((child) => collectText(child))].join(' ');
+}
+
+function dashboardParts(root) {
+  const dashboard = root.children[0];
+  const grid = dashboard.children.find((node) => node.className === 'sv-dashboard__grid');
+  const drilldown = dashboard.children.find((node) => node.className === 'sv-dashboard-drilldown');
+  return { dashboard, grid, drilldown };
 }
 
 test('controller is explicit-mount only and renders verified summary cards', async () => {
@@ -110,14 +144,12 @@ test('controller renders backend drilldown rows through whitelist presentation m
   controller.mount();
   await settle();
 
-  const dashboard = root.children[0];
-  const grid = dashboard.children.find((node) => node.className === 'sv-dashboard__grid');
+  const { grid, drilldown } = dashboardParts(root);
   const button = grid.children[0].children.find((child) => child.dataset?.drilldownMetric);
   assert.ok(button);
   button.listeners.get('click')();
   await settle();
 
-  const drilldown = dashboard.children.find((node) => node.className === 'sv-dashboard-drilldown');
   assert.equal(drilldown.hidden, false);
   const text = collectText(drilldown);
   assert.match(text, /client-1/u);
@@ -128,6 +160,86 @@ test('controller renders backend drilldown rows through whitelist presentation m
   const list = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__list');
   assert.equal(list.children[0].tagName, 'dl');
   assert.equal(list.children[0].dataset.rowKind, 'transaction');
+});
+
+test('controller paginates drilldown with bounded previous and server-driven next', async () => {
+  const root = new FakeNode('main');
+  const calls = [];
+  const controller = createDashboardUiController({
+    root,
+    documentRef,
+    loadSummary: async () => summary(),
+    loadDrilldown: async (metric, pagination) => {
+      calls.push({ metric, pagination });
+      return transactionDrilldown({
+        offset: pagination.offset,
+        limit: pagination.limit,
+        hasMore: pagination.offset === 0
+      });
+    }
+  });
+
+  controller.mount();
+  await settle();
+  const { grid, drilldown } = dashboardParts(root);
+  const button = grid.children[0].children.find((child) => child.dataset?.drilldownMetric);
+  button.listeners.get('click')();
+  await settle();
+
+  assert.deepEqual(calls[0], { metric: 'completed_ops', pagination: { offset: 0, limit: 50 } });
+  let pagination = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__pagination');
+  let previous = pagination.children.find((node) => node.dataset?.pageDirection === 'previous');
+  let next = pagination.children.find((node) => node.dataset?.pageDirection === 'next');
+  assert.equal(previous.disabled, true);
+  assert.equal(next.disabled, false);
+
+  next.listeners.get('click')();
+  await settle();
+  assert.deepEqual(calls[1], { metric: 'completed_ops', pagination: { offset: 50, limit: 50 } });
+  assert.match(collectText(drilldown), /Записи 51–51/u);
+
+  pagination = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__pagination');
+  previous = pagination.children.find((node) => node.dataset?.pageDirection === 'previous');
+  next = pagination.children.find((node) => node.dataset?.pageDirection === 'next');
+  assert.equal(previous.disabled, false);
+  assert.equal(next.disabled, true);
+
+  previous.listeners.get('click')();
+  await settle();
+  assert.deepEqual(calls[2], { metric: 'completed_ops', pagination: { offset: 0, limit: 50 } });
+});
+
+test('newer drilldown request wins over stale in-flight pagination response', async () => {
+  const root = new FakeNode('main');
+  const pending = new Map();
+  const controller = createDashboardUiController({
+    root,
+    documentRef,
+    loadSummary: async () => summary(),
+    loadDrilldown: (metric, { offset, limit }) => {
+      if (offset === 0) return Promise.resolve(transactionDrilldown({ offset, limit, hasMore: true, id: 'tx-first' }));
+      return new Promise((resolve) => pending.set(offset, resolve));
+    }
+  });
+
+  controller.mount();
+  await settle();
+  const { grid, drilldown } = dashboardParts(root);
+  const firstCardButton = grid.children[0].children.find((child) => child.dataset?.drilldownMetric);
+  firstCardButton.listeners.get('click')();
+  await settle();
+  const pagination = drilldown.children.find((node) => node.className === 'sv-dashboard-drilldown__pagination');
+  const next = pagination.children.find((node) => node.dataset?.pageDirection === 'next');
+  next.listeners.get('click')();
+
+  const secondCardButton = grid.children[1].children.find((child) => child.dataset?.drilldownMetric);
+  secondCardButton.listeners.get('click')();
+  await settle();
+  assert.match(collectText(drilldown), /tx-first/u);
+
+  pending.get(50)(transactionDrilldown({ offset: 50, limit: 50, hasMore: false, id: 'tx-stale' }));
+  await settle();
+  assert.equal(collectText(drilldown).includes('tx-stale'), false);
 });
 
 test('controller renders honest error state instead of synthetic values', async () => {
@@ -164,11 +276,14 @@ test('unmount invalidates in-flight summary and clears DOM', async () => {
   assert.equal(root.children.length, 0);
 });
 
-test('controller contract keeps production wiring, network and raw JSON disabled', () => {
+test('controller contract keeps production wiring and raw JSON disabled while exposing safe pagination', () => {
   assert.equal(dashboardUiControllerContract.autoMount, false);
   assert.equal(dashboardUiControllerContract.productionNavigationWiring, false);
   assert.equal(dashboardUiControllerContract.networkImplementationIncluded, false);
   assert.equal(dashboardUiControllerContract.dependenciesAdded, false);
   assert.equal(dashboardUiControllerContract.rawJsonRendering, false);
   assert.equal(dashboardUiControllerContract.paginationStateVisible, true);
+  assert.equal(dashboardUiControllerContract.paginationControls, true);
+  assert.equal(dashboardUiControllerContract.defaultDrilldownLimit, 50);
+  assert.equal(dashboardUiControllerContract.staleRequestProtection, true);
 });
