@@ -19,14 +19,18 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
   assert.equal(calls, 0);
 });
 
-test('explicit enabled runtime delegates one composition with unchanged dependencies', () => {
+test('explicit enabled runtime delegates one full Customer 360 composition with unchanged dependencies', () => {
   const app = { post() {} };
   const db = { query: async () => ({ rowCount: 0, rows: [] }) };
   const resolveAuthorization = async () => ({});
   const executeAdjustment = async () => ({});
   const grantAchievement = async () => ({});
   let received;
-  const actions = { mounted: true, bonusAdjustment: {}, achievementGrant: {} };
+  const actions = {
+    mounted: true,
+    core: { mounted: true },
+    metadata: { mounted: true }
+  };
 
   const result = mountSpaceverseServerComposition({
     app,
@@ -83,6 +87,7 @@ test('enabled composition refuses a delegated non-mount result', () => {
 test('server composition contract preserves fail-closed rollout boundaries', () => {
   assert.equal(spaceverseServerCompositionContract.productionEnabledByDefault, false);
   assert.equal(spaceverseServerCompositionContract.disabledModeRequiresNoRuntimeDependencies, true);
+  assert.equal(spaceverseServerCompositionContract.includesCustomerMetadataActions, true);
   assert.equal(spaceverseServerCompositionContract.ownsBusinessLogic, false);
   assert.equal(spaceverseServerCompositionContract.ownsPersistence, false);
   assert.equal(spaceverseServerCompositionContract.ownsAuthorizationRules, false);
