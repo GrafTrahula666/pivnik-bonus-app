@@ -27,6 +27,15 @@ function json(body, status = 200) {
   return { status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(body) };
 }
 
+async function waitUntil(predicate, timeoutMs, message) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(message);
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
@@ -114,7 +123,7 @@ async function runScenario({ name, refreshMode }) {
     }, null, { timeout: 15000 });
     await page.waitForTimeout(200);
 
-    const ui = await page.evaluate(({ key }) => ({
+    const initialUi = await page.evaluate(({ key }) => ({
       platform: window.__PIVNIK_PLATFORM__,
       storagePrefix: window.__PIVNIK_STORAGE_PREFIX__,
       session: localStorage.getItem(key),
@@ -124,25 +133,77 @@ async function runScenario({ name, refreshMode }) {
       bootText: document.querySelector('#bootText')?.textContent || ''
     }), { key: storageKey });
 
-    const authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
-    const refreshCalls = bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams');
+    let authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
+    let refreshCalls = bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams');
+    assert(authCalls.length === 1, `${name}: initial bridge refresh failure must not trigger a second auth attempt, got ${authCalls.length}`);
+    assert(String(authCalls[0].body?.launchParams || '').includes('sign=stale-sign'), `${name}: initial auth did not use original signed launch params`);
+    assert(refreshCalls.length === 1, `${name}: initial VKWebAppGetLaunchParams should run exactly once, got ${refreshCalls.length}`);
+    assert(initialUi.platform === 'vk', `${name}: platform adapter is not VK`);
+    assert(initialUi.storagePrefix === `pivnik_vk_${vkUserId}_`, `${name}: wrong storage prefix ${initialUi.storagePrefix}`);
+    assert(initialUi.session === null, `${name}: bridge refresh failure created a false session: ${initialUi.session}`);
+    assert(initialUi.appShellHidden, `${name}: app shell opened despite failed authentication`);
+    assert(!initialUi.bootActionsHidden && initialUi.retryVisible, `${name}: recoverable retry controls were not shown`);
+    assert(/войти|повтор|подключ|ошиб|запуск|параметр|invalid_launch_params/i.test(initialUi.bootText), `${name}: error state was not user-visible: ${initialUi.bootText}`);
+
+    await page.evaluate(() => {
+      const retry = document.querySelector('#bootRetry');
+      retry?.click();
+      retry?.click();
+      retry?.click();
+    });
+
+    await waitUntil(
+      () => apiCalls.filter((call) => call.pathname === '/api/auth').length >= 2,
+      4000,
+      `${name}: manual retry did not start a new auth cycle`
+    );
+    await waitUntil(
+      () => bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams').length >= 2,
+      refreshMode === 'timeout' ? 6000 : 4000,
+      `${name}: manual retry did not request fresh VK launch params`
+    );
+    await page.waitForFunction(() => {
+      const actions = document.querySelector('#bootActions');
+      return actions && !actions.classList.contains('hidden');
+    }, null, { timeout: 8000 });
+    await page.waitForTimeout(refreshMode === 'timeout' ? 2400 : 300);
+
+    authCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
+    refreshCalls = bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams');
+    const retryUi = await page.evaluate(({ key }) => ({
+      session: localStorage.getItem(key),
+      appShellHidden: document.querySelector('#appShell')?.classList.contains('hidden') ?? false,
+      bootActionsHidden: document.querySelector('#bootActions')?.classList.contains('hidden') ?? true,
+      retryVisible: Boolean(document.querySelector('#bootRetry')),
+      bootText: document.querySelector('#bootText')?.textContent || ''
+    }), { key: storageKey });
+
     const unexpectedConsoleErrors = consoleErrors.filter((message) => (
       !/status of 401|401 \(Unauthorized\)/i.test(message)
       && !/^Boot failed: Error: invalid_launch_params\b/i.test(message)
     ));
-    const evidence = { name, refreshMode, apiCalls, bridgeCalls, ui, pageErrors, consoleErrors, unexpectedConsoleErrors, failedRequests, unexpectedMutations };
+    const evidence = {
+      name,
+      refreshMode,
+      apiCalls,
+      bridgeCalls,
+      initialUi,
+      retryUi,
+      pageErrors,
+      consoleErrors,
+      unexpectedConsoleErrors,
+      failedRequests,
+      unexpectedMutations
+    };
     await fs.writeFile(path.join(outDir, `${name}.json`), JSON.stringify(evidence, null, 2));
     await page.screenshot({ path: path.join(outDir, `${name}.png`), fullPage: true });
 
-    assert(authCalls.length === 1, `${name}: bridge refresh failure must not trigger a second auth attempt, got ${authCalls.length}`);
-    assert(String(authCalls[0].body?.launchParams || '').includes('sign=stale-sign'), `${name}: initial auth did not use original signed launch params`);
-    assert(refreshCalls.length === 1, `${name}: VKWebAppGetLaunchParams should run exactly once, got ${refreshCalls.length}`);
-    assert(ui.platform === 'vk', `${name}: platform adapter is not VK`);
-    assert(ui.storagePrefix === `pivnik_vk_${vkUserId}_`, `${name}: wrong storage prefix ${ui.storagePrefix}`);
-    assert(ui.session === null, `${name}: bridge refresh failure created a false session: ${ui.session}`);
-    assert(ui.appShellHidden, `${name}: app shell opened despite failed authentication`);
-    assert(!ui.bootActionsHidden && ui.retryVisible, `${name}: recoverable retry controls were not shown`);
-    assert(/войти|повтор|подключ|ошиб|запуск|параметр|invalid_launch_params/i.test(ui.bootText), `${name}: error state was not user-visible: ${ui.bootText}`);
+    assert(authCalls.length === 2, `${name}: three rapid retry clicks must create exactly one new auth cycle, got ${authCalls.length} total auth calls`);
+    assert(authCalls.every((call) => String(call.body?.launchParams || '').includes('sign=stale-sign')), `${name}: retry unexpectedly changed stale params after Bridge failure`);
+    assert(refreshCalls.length === 2, `${name}: failed Bridge launch refresh must be retried exactly once after manual retry, got ${refreshCalls.length}`);
+    assert(retryUi.session === null, `${name}: rapid retry created a false session: ${retryUi.session}`);
+    assert(retryUi.appShellHidden, `${name}: app shell opened despite repeated failed authentication`);
+    assert(!retryUi.bootActionsHidden && retryUi.retryVisible, `${name}: retry controls disappeared after failed manual retry`);
     assert(bridgeCalls.includes('VKWebAppInit'), `${name}: VKWebAppInit was not sent`);
     assert(unexpectedMutations.length === 0, `${name}: unexpected mutations: ${JSON.stringify(unexpectedMutations)}`);
     assert(pageErrors.length === 0, `${name}: page errors: ${pageErrors.join(' | ')}`);
@@ -167,8 +228,8 @@ try {
       name: result.name,
       authCalls: result.apiCalls.filter((call) => call.pathname === '/api/auth').length,
       launchRefreshCalls: result.bridgeCalls.filter((method) => method === 'VKWebAppGetLaunchParams').length,
-      falseSessionCreated: result.ui.session !== null,
-      retryVisible: result.ui.retryVisible
+      falseSessionCreated: result.retryUi.session !== null,
+      retryVisible: result.retryUi.retryVisible
     }))
   }, null, 2));
 } finally {
