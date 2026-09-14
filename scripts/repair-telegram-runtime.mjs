@@ -3,6 +3,7 @@ const serviceName = String(process.env.RAILWAY_SERVICE_NAME || '').toLowerCase()
 const documentPlatform = String(process.env.PIVNIK_DOCUMENT_PLATFORM || '').toLowerCase();
 const isVkService = documentPlatform === 'vk' || serviceName.includes('vk');
 const appUrl = String(process.env.TELEGRAM_APP_URL || process.env.PIVNIK_APP_URL || '').trim().replace(/\/+$/, '');
+const skipRepair = String(process.env.PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR || '').trim().toLowerCase() === 'true';
 
 async function telegramApi(method, payload = {}) {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
@@ -18,7 +19,9 @@ async function telegramApi(method, payload = {}) {
   return body.result;
 }
 
-if (!isVkService && botToken && /^https:\/\//i.test(appUrl)) {
+if (skipRepair) {
+  console.log('Telegram menu repair skipped because PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR=true.');
+} else if (!isVkService && botToken && /^https:\/\//i.test(appUrl)) {
   try {
     await telegramApi('deleteWebhook', { drop_pending_updates: false });
     await telegramApi('setChatMenuButton', {

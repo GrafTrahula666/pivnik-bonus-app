@@ -1,0 +1,159 @@
+name: VK native hosting DEV deploy
+
+on:
+  push:
+    branches:
+      - fix/vk-native-hosting-main-parity-20260912
+    paths:
+      - .github/workflows/vk-native-hosting-dev.yml
+      - scripts/build-vk-hosting.mjs
+      - vk-hosting-config.json
+      - index.html
+      - app.js
+      - vk-platform.js
+      - account-link.js
+      - styles.css
+      - black-frosted-glass.css
+      - black-frosted-surfaces.css
+      - black-frosted-controls.css
+      - scripts/apply-red-cosmos-v2-shell-final.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-vk-dev:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run focused VK regression tests
+        run: node --test test/vk-native-hosting-main-parity.test.js
+      - name: Materialize current product sources
+        run: npm run materialize
+      - name: Build VK native static bundle for existing HTTPS gateway
+        env:
+          PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
+        run: node scripts/build-vk-hosting.mjs
+      - name: Verify bundle boundaries before DEV deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/app.js
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/vendor/vk-bridge.js
+          grep -q '__PIVNIK_VK_API_BASE__' vk-hosting-build/index.html
+          grep -q 'https://139.100.238.159.nip.io' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
+          ! grep -q 'up.railway.app' vk-hosting-build/index.html
+      - name: Verify HTTPS gateway before DEV deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in healthz readyz; do
+            curl --fail --silent --show-error --location \
+              --retry 4 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 10 --max-time 20 \
+              "https://139.100.238.159.nip.io/$path" >/dev/null
+          done
+      - name: Deploy DEV only to VK Mini Apps Hosting
+        id: deploy
+        env:
+          MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_MINI_APPS_ACCESS_TOKEN }}
+          MINI_APPS_ENVIRONMENT: dev
+          CI_URLS: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$MINI_APPS_ACCESS_TOKEN" ]; then
+            echo "VK_MINI_APPS_ACCESS_TOKEN is not configured"
+            exit 1
+          fi
+          log="$RUNNER_TEMP/vk-miniapps-dev-deploy.log"
+          npx -y @vkontakte/vk-miniapps-deploy@1.0.2 2>&1 | tee "$log"
+          dev_url="$(sed -n 's/^vk_app_dev_url:[[:space:]]*//p' "$log" | tail -n 1 | tr -d '\r')"
+          if [ -z "$dev_url" ]; then
+            echo "VK deploy succeeded but DEV URL was not found in deploy output"
+            exit 1
+          fi
+          case "$dev_url" in
+            https://stage-app54694987-*.pages.vk-apps.ru/index.html) ;;
+            *)
+              echo "Unexpected DEV URL: $dev_url"
+              exit 1
+              ;;
+          esac
+          echo "dev_url=$dev_url" >> "$GITHUB_OUTPUT"
+      - name: Post-deploy read-only smoke
+        env:
+          DEV_URL: ${{ steps.deploy.outputs.dev_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${DEV_URL%/index.html}"
+          smoke_dir="$RUNNER_TEMP/vk-dev-smoke"
+          mkdir -p "$smoke_dir"
+
+          fetch() {
+            local url="$1"
+            local body="$2"
+            local headers="$3"
+            curl --fail --silent --show-error --location \
+              --retry 6 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 10 --max-time 30 \
+              --dump-header "$headers" --output "$body" "$url"
+          }
+
+          fetch "$DEV_URL" "$smoke_dir/index.html" "$smoke_dir/index.headers"
+          grep -Eiq '^content-type:[[:space:]]*text/html([;[:space:]]|$)' "$smoke_dir/index.headers"
+          grep -q '__PIVNIK_VK_API_BASE__' "$smoke_dir/index.html"
+          grep -q 'https://139.100.238.159.nip.io' "$smoke_dir/index.html"
+          ! grep -q 'telegram.org/js/telegram-web-app.js' "$smoke_dir/index.html"
+          ! grep -q 'up.railway.app' "$smoke_dir/index.html"
+
+          for asset in app.js vk-platform.js vendor/vk-bridge.js styles.css black-frosted-glass.css black-frosted-surfaces.css black-frosted-controls.css; do
+            safe_name="${asset//\//_}"
+            fetch "$base/$asset" "$smoke_dir/$safe_name" "$smoke_dir/$safe_name.headers"
+            case "$asset" in
+              *.js)
+                grep -Eiq '^content-type:[[:space:]]*(application|text)/(javascript|x-javascript)([;[:space:]]|$)' "$smoke_dir/$safe_name.headers"
+                ;;
+              *.css)
+                grep -Eiq '^content-type:[[:space:]]*text/css([;[:space:]]|$)' "$smoke_dir/$safe_name.headers"
+                ;;
+            esac
+            ! grep -Eiq '<!doctype[[:space:]]+html|<html([[:space:]>])' "$smoke_dir/$safe_name"
+            test -s "$smoke_dir/$safe_name"
+          done
+
+          grep -q 'resolveGatewayInput' "$smoke_dir/vk-platform.js"
+
+          cors_headers="$smoke_dir/gateway-cors.headers"
+          curl --fail --silent --show-error \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 10 --max-time 20 \
+            --request OPTIONS \
+            --header "Origin: $base" \
+            --header 'Access-Control-Request-Method: GET' \
+            --header 'Access-Control-Request-Headers: authorization,content-type' \
+            --dump-header "$cors_headers" --output /dev/null \
+            'https://139.100.238.159.nip.io/api/me'
+
+          cors_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$cors_headers")"
+          test "$cors_origin" = "$base"
+          grep -Eiq '^access-control-allow-methods:.*(^|[,[:space:]])GET([,[:space:]]|$)' "$cors_headers"
+          grep -Eiq '^access-control-allow-headers:.*(^|[,[:space:]])authorization([,[:space:]]|$)' "$cors_headers"
+          grep -Eiq '^access-control-allow-headers:.*(^|[,[:space:]])content-type([,[:space:]]|$)' "$cors_headers"
+
+          echo "VK DEV post-deploy smoke passed: $DEV_URL"
