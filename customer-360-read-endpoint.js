@@ -12,6 +12,7 @@ function requireFunction(value, name) {
 export function mountCustomer360ReadEndpoint({
   app,
   scopedModeEnabled = false,
+  metadataReadsEnabled = false,
   resolveAuthorization,
   db,
   createRuntime = createCustomer360ReadRuntime,
@@ -19,6 +20,7 @@ export function mountCustomer360ReadEndpoint({
   createAuthorizationMiddleware = createScopedAuthorizationMiddleware
 } = {}) {
   if (typeof scopedModeEnabled !== 'boolean') throw new TypeError('scopedModeEnabled must be boolean');
+  if (typeof metadataReadsEnabled !== 'boolean') throw new TypeError('metadataReadsEnabled must be boolean');
   if (!scopedModeEnabled) return Object.freeze({ mounted: false, route: CUSTOMER_360_READ_ROUTE });
 
   if (!app || typeof app.get !== 'function') throw new TypeError('app.get is required');
@@ -32,7 +34,7 @@ export function mountCustomer360ReadEndpoint({
     legacyCapability: 'adminRead',
     scopeMode: 'tenant'
   });
-  const runtime = createRuntime({ db, scopedReadsEnabled: true });
+  const runtime = createRuntime({ db, scopedReadsEnabled: true, metadataReadsEnabled });
   if (!runtime || typeof runtime.getCustomerCard !== 'function') {
     throw new TypeError('Customer 360 runtime must expose getCustomerCard');
   }
@@ -49,6 +51,8 @@ export const customer360ReadEndpointContract = Object.freeze({
   legacyCapability: 'adminRead',
   staffTenantWideAccess: false,
   optionalLocationFilter: true,
+  metadataReadsFailClosedByDefault: true,
+  metadataMigration: '010_spaceverse_customer_metadata.sql',
   readOnly: true,
   productionEnabledByDefault: false,
   externalDependenciesAdded: false
