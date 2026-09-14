@@ -112,6 +112,7 @@ function timelineRow(documentRef, row) {
   text(documentRef, header, 'strong', 'sv-customer-timeline__mode', row.mode || 'Операция');
   text(documentRef, header, 'span', 'sv-customer-timeline__date', formatDate(row.completedAt || row.createdAt));
   item.append(header);
+  if (row.id) text(documentRef, item, 'small', 'sv-customer-timeline__reference', `Операция ${row.id}`);
 
   const values = documentRef.createElement('dl');
   values.className = 'sv-customer-timeline__values';
