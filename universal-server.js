@@ -5,6 +5,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { isAutomaticStartupMigration } from './migration-startup-policy.js';
+import {
+  createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
+  withVkStartupTrace, traceVkStage
+} from './vk-startup-diagnostics.js';
 import {
   getUserEarnedAchievementState
 } from './achievements.js';
@@ -162,12 +167,18 @@ let platformReady = false;
 let childReady = false;
 let shuttingDown = false;
 let databaseFingerprint = null;
+const startupRuntimeHashes = Object.fromEntries(await Promise.all(
+  ['vk-platform.js', 'app.js', 'account-link.js'].map(async (file) => [
+    file, crypto.createHash('sha256').update(await fs.readFile(path.join(__dirname, file))).digest('hex')
+  ])
+));
 const rateLimitBuckets = new Map();
 
 function publicReleaseMetadata() {
   return {
     databaseFingerprint,
     releaseCommit,
+    startupRuntimeHashes,
     termsVersion: TERMS_VERSION,
     environment: process.env.NODE_ENV || 'development'
   };
@@ -468,7 +479,7 @@ async function runSqlMigrations(client) {
   try {
     const migrationDirectory = path.join(__dirname, 'migrations');
     const migrationFiles = (await fs.readdir(migrationDirectory))
-      .filter((file) => /^\d+_.+\.sql$/i.test(file))
+      .filter(isAutomaticStartupMigration)
       .sort();
 
     for (const file of migrationFiles) {
@@ -1393,7 +1404,9 @@ async function ensureSupplementalRecords(userId) {
 }
 
 async function resolveProviderUser(provider, externalUser) {
+  traceVkStage('VK_DB_CONNECT_START');
   const client = await pool.connect();
+  traceVkStage('VK_DB_CONNECT_OK');
   let userId;
   try {
     await client.query('BEGIN');
@@ -1404,6 +1417,7 @@ async function resolveProviderUser(provider, externalUser) {
       [`identity:${provider}:${externalUser.id}`]
     );
 
+    traceVkStage('VK_ACCOUNT_LOOKUP_START');
     const identity = await client.query(
       `SELECT ui.user_id
        FROM user_identities ui
@@ -1416,6 +1430,8 @@ async function resolveProviderUser(provider, externalUser) {
     if (identity.rowCount) {
       userId = await canonicalUserId(client, identity.rows[0].user_id);
     }
+    traceVkStage('VK_ACCOUNT_LOOKUP_OK');
+    traceVkStage('VK_ACCOUNT_WRITE_START');
 
     if (!userId && provider === 'telegram') {
       const legacy = await client.query(
@@ -1512,6 +1528,7 @@ async function resolveProviderUser(provider, externalUser) {
 
     await ensureAuthRecords(client, userId);
     await client.query('COMMIT');
+    traceVkStage('VK_ACCOUNT_WRITE_OK');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1519,6 +1536,7 @@ async function resolveProviderUser(provider, externalUser) {
     client.release();
   }
 
+  traceVkStage('VK_SESSION_CREATE_START');
   const sessionResult = await pool.query(
     'SELECT session_version FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
     [userId]
@@ -1534,16 +1552,20 @@ async function resolveProviderUser(provider, externalUser) {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
     });
   });
+  traceVkStage('VK_SESSION_CREATED');
+  traceVkStage('VK_PROFILE_ASSEMBLY_START');
   return { token, ...(await getAppPayload(userId, provider, { startup: true })) };
 }
 
 async function authenticateVk(body) {
+  traceVkStage('VK_SIGNATURE_START');
   let vkAuth;
   if (allowDemo && body?.demoVkId) {
     vkAuth = { userId: String(body.demoVkId), languageCode: 'ru', platform: 'demo' };
   } else {
     vkAuth = validateVkLaunchParams(body?.launchParams);
   }
+  traceVkStage('VK_SIGNATURE_OK');
 
   const rawUser = body?.user && typeof body.user === 'object' ? body.user : {};
   if (String(rawUser.id || '') && String(rawUser.id) !== vkAuth.userId) {
@@ -2688,12 +2710,12 @@ async function consumeAccountLinkCode(currentUserId, requestedProvider, rawCode)
   };
 }
 
-async function readRequestBody(req) {
+async function readRequestBody(req, maxBytes = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) {
+    if (size > maxBytes) {
       throw Object.assign(new Error('Слишком большой запрос.'), { statusCode: 413 });
     }
     chunks.push(chunk);
@@ -2948,10 +2970,40 @@ child?.on('exit', (code, signal) => {
   }
 });
 
-const server = http.createServer(async (req, res) => {
+async function serveStartupProfile(req, res, startup) {
+  const bootId = req.headers['x-pivnik-platform'] === 'vk' ? validBootId(req.headers['x-pivnik-boot-id']) : null;
+  const trace = createVkStartupTrace(bootId, releaseCommit);
+  if (bootId) res.setHeader('x-pivnik-boot-id', bootId);
+  trace('VK_PROFILE_REQUEST_START');
+  try {
+    const user = await requireGatewayUser(req);
+    const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+    const payload = await getAppPayload(user.id, platform, { startup });
+    trace('VK_PROFILE_SUCCESS', { status: 200 });
+    return sendJson(res, 200, payload);
+  } catch (error) {
+    trace('VK_PROFILE_FAIL', { status: Number(error?.statusCode || 500), code: safeStartupCode(error) });
+    throw error;
+  }
+}
+
+export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+
+    // Available even during DB startup; no session, identity or database access.
+    if (req.method === 'POST' && url.pathname === '/api/diagnostics/vk-startup') {
+      enforceRateLimit('vk-startup-diagnostics:global', 600, 60_000);
+      enforceRateLimit(`vk-startup-diagnostics:${requestAddress(req)}`, 60, 60_000);
+      const payload = parseJsonBody(await readRequestBody(req, 16_384));
+      const records = sanitizeStartupBatch(payload);
+      if (!records.length) return sendJson(res, 400, { error: 'Invalid startup diagnostics.' });
+      for (const record of records) console.info(JSON.stringify({
+        ...record, receivedAt: new Date().toISOString(), releaseCommit
+      }));
+      return sendJson(res, 202, { ok: true });
+    }
 
     const documentPlatform = platformForDocumentRequest(url, req.headers);
     if (req.method === 'GET' && documentPlatform) {
@@ -2984,6 +3036,15 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/account-link.js') {
       return serveFile(res, path.join(__dirname, 'account-link.js'), 'text/javascript; charset=utf-8', 'no-cache');
+    }
+
+    // These files are referenced by the materialized document. The child server
+    // has no route for them and otherwise returns its HTML fallback with 200.
+    if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.js') {
+      return serveFile(res, path.join(__dirname, 'red-cosmos-v2.js'), 'text/javascript; charset=utf-8', 'no-cache');
+    }
+    if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.css') {
+      return serveFile(res, path.join(__dirname, 'red-cosmos-v2.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
@@ -3069,15 +3130,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/auth') {
+      const bootId = validBootId(req.headers['x-pivnik-boot-id']);
       if (!platformReady) {
+        createVkStartupTrace(bootId, releaseCommit)('VK_AUTH_FAIL', { status: 503, code: 'NOT_READY' });
         return sendJson(res, 503, { error: 'Система аккаунтов ещё запускается.' });
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = body.platform === 'vk' ? 'vk' : 'telegram';
+      const trace = createVkStartupTrace(platform === 'vk' ? bootId : null, releaseCommit);
+      if (platform === 'vk' && bootId) res.setHeader('x-pivnik-boot-id', bootId);
+      trace('VK_AUTH_START');
       try {
         const data = platform === 'vk'
-          ? await authenticateVk(body)
+          ? await withVkStartupTrace(trace, () => authenticateVk(body))
           : await authenticateTelegram(body);
+        trace('VK_PROFILE_ASSEMBLY_OK');
+        trace('VK_AUTH_SUCCESS', { status: 200 });
         return sendJson(res, 200, data);
       } catch (error) {
         let responseError = error;
@@ -3092,23 +3160,21 @@ const server = http.createServer(async (req, res) => {
             responseError = limitError;
           }
         }
-        console.error(`${platform} auth failed:`, error.message);
+        console.error(`${platform} auth failed:`, platform === 'vk' ? safeStartupCode(error) : error.message);
+        trace('VK_AUTH_FAIL', { status: Number(responseError.statusCode || 500), code: safeStartupCode(error) });
         return sendJson(res, Number(responseError.statusCode || 500), {
+          ...(platform === 'vk' ? { code: safeStartupCode(error), bootId } : {}),
           error: responseError.statusCode ? responseError.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
         });
       }
     }
 
     if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
-      const user = await requireGatewayUser(req);
-      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await getAppPayload(user.id, platform, { startup: true }));
+      return await serveStartupProfile(req, res, true);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/me') {
-      const user = await requireGatewayUser(req);
-      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await getAppPayload(user.id, platform));
+      return await serveStartupProfile(req, res, false);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/wheel/status') {

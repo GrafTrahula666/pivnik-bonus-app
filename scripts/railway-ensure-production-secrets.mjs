@@ -5,6 +5,7 @@ const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 const TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
 const PROJECT_ID = RAILWAY_PRODUCTION.projectId;
 const ENVIRONMENT_ID = RAILWAY_PRODUCTION.environmentId;
+const checkOnly = process.argv.includes('--check');
 const SERVICES = Object.freeze({
   telegram: RAILWAY_PRODUCTION.services.telegram,
   vk: RAILWAY_PRODUCTION.services.vk
@@ -46,7 +47,7 @@ async function variables(serviceId) {
         projectId: $projectId
         environmentId: $environmentId
         serviceId: $serviceId
-        unrendered: true
+        unrendered: ${checkOnly ? 'false' : 'true'}
       )
     }
   `, { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId });
@@ -80,39 +81,60 @@ const before = {
   vk: await variables(SERVICES.vk)
 };
 
-const sessionSecret = String(before.telegram.SESSION_SECRET || before.vk.SESSION_SECRET || '').trim() || strongSecret();
-const tombstoneSecret = String(before.telegram.IDENTITY_TOMBSTONE_SECRET || before.vk.IDENTITY_TOMBSTONE_SECRET || '').trim() || strongSecret();
-if (sessionSecret.length < 32 || tombstoneSecret.length < 32 || sessionSecret === tombstoneSecret) {
-  throw new Error('Resolved production secrets are weak or identical.');
-}
-
-const common = {
-  SESSION_SECRET: sessionSecret,
-  IDENTITY_TOMBSTONE_SECRET: tombstoneSecret,
-  NODE_ENV: 'production',
-  ALLOW_DEMO: 'false'
-};
-
-await upsert(SERVICES.telegram, common);
-await upsert(SERVICES.vk, common);
-
-const after = {
-  telegram: await variables(SERVICES.telegram),
-  vk: await variables(SERVICES.vk)
-};
-for (const [key, value] of Object.entries(common)) {
-  if (String(after.telegram[key] ?? '') !== String(value)
-      || String(after.vk[key] ?? '') !== String(value)) {
-    throw new Error(`Railway secret synchronization failed for ${key}.`);
+if (checkOnly) {
+  // Normal releases verify the existing configuration and must never rotate a
+  // session/tombstone secret. Provisioning remains a separate operator action.
+  for (const [name, values] of Object.entries(before)) {
+    const session = String(values.SESSION_SECRET || '');
+    const tombstone = String(values.IDENTITY_TOMBSTONE_SECRET || '');
+    if (session.trim().length < 32 || tombstone.trim().length < 32 || session === tombstone) {
+      throw new Error(`${name}: existing production secrets are missing, weak or identical; operator review required.`);
+    }
+    if (values.NODE_ENV !== 'production' || String(values.ALLOW_DEMO).toLowerCase() !== 'false') {
+      throw new Error(`${name}: production environment/demo settings require operator review.`);
+    }
   }
-}
+  for (const key of ['SESSION_SECRET', 'IDENTITY_TOMBSTONE_SECRET']) {
+    if (before.telegram[key] !== before.vk[key]) {
+      throw new Error(`Existing ${key} differs between services; operator review required.`);
+    }
+  }
+  console.log(JSON.stringify({ ok: true, mode: 'check', checkedServices: ['telegram', 'vk'], mutations: 0 }));
+} else {
+  const sessionSecret = String(before.telegram.SESSION_SECRET || before.vk.SESSION_SECRET || '').trim() || strongSecret();
+  const tombstoneSecret = String(before.telegram.IDENTITY_TOMBSTONE_SECRET || before.vk.IDENTITY_TOMBSTONE_SECRET || '').trim() || strongSecret();
+  if (sessionSecret.length < 32 || tombstoneSecret.length < 32 || sessionSecret === tombstoneSecret) {
+    throw new Error('Resolved production secrets are weak or identical.');
+  }
 
-console.log(JSON.stringify({
-  ok: true,
-  generatedSessionSecret: !String(before.telegram.SESSION_SECRET || before.vk.SESSION_SECRET || '').trim(),
-  generatedIdentityTombstoneSecret: !String(before.telegram.IDENTITY_TOMBSTONE_SECRET || before.vk.IDENTITY_TOMBSTONE_SECRET || '').trim(),
-  sessionSecretFingerprint: digest(sessionSecret),
-  identityTombstoneSecretFingerprint: digest(tombstoneSecret),
-  synchronizedServices: ['telegram', 'vk'],
-  deployTriggered: false
-}, null, 2));
+  const common = {
+    SESSION_SECRET: sessionSecret,
+    IDENTITY_TOMBSTONE_SECRET: tombstoneSecret,
+    NODE_ENV: 'production',
+    ALLOW_DEMO: 'false'
+  };
+
+  await upsert(SERVICES.telegram, common);
+  await upsert(SERVICES.vk, common);
+
+  const after = {
+    telegram: await variables(SERVICES.telegram),
+    vk: await variables(SERVICES.vk)
+  };
+  for (const [key, value] of Object.entries(common)) {
+    if (String(after.telegram[key] ?? '') !== String(value)
+        || String(after.vk[key] ?? '') !== String(value)) {
+      throw new Error(`Railway secret synchronization failed for ${key}.`);
+    }
+  }
+
+  console.log(JSON.stringify({
+    ok: true,
+    generatedSessionSecret: !String(before.telegram.SESSION_SECRET || before.vk.SESSION_SECRET || '').trim(),
+    generatedIdentityTombstoneSecret: !String(before.telegram.IDENTITY_TOMBSTONE_SECRET || before.vk.IDENTITY_TOMBSTONE_SECRET || '').trim(),
+    sessionSecretFingerprint: digest(sessionSecret),
+    identityTombstoneSecretFingerprint: digest(tombstoneSecret),
+    synchronizedServices: ['telegram', 'vk'],
+    deployTriggered: false
+  }, null, 2));
+}

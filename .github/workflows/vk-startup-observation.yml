@@ -1,0 +1,36 @@
+name: Observe public VK and Telegram startup
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'vk-platform.js'
+      - 'vk-startup-diagnostics.js'
+      - 'universal-server.js'
+      - 'app.js'
+      - 'scripts/probe-vk-startup-network.mjs'
+      - '.github/workflows/vk-startup-observation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    name: Observe deployed public endpoints (no deploy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Probe DNS, TLS, documents, assets and readiness
+        run: node scripts/probe-vk-startup-network.mjs
+      - name: Save public observation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-startup-network-${{ github.run_id }}
+          path: artifacts/vk-startup-network.json
+          if-no-files-found: error
+          retention-days: 14

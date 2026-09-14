@@ -1,0 +1,3647 @@
+{
+  "schemaVersion": 1,
+  "scope": "all named source patchers plus legacy bootstrap files; production operator scripts are not automatically executed runtime patchers",
+  "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+  "scriptCount": 36,
+  "rows": [
+    {
+      "script": "bootstrap-vlad.js",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "69c78532a6f9838579a1e03c2cbb2bac5626d542964b0925a9a23ec4bfe14d7f",
+      "invocation": "legacy materializer input; not invoked on inspected prepared base",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "bootstrap.js",
+        "index.html",
+        "styles.css",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 13,
+          "statement": "if (content.includes(to)) return;",
+          "truncated": false
+        },
+        {
+          "line": 14,
+          "statement": "if (!content.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "content = content.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "\"  }\\n]);\\n\\nawait patchFile('universal-server.js', [\",",
+          "truncated": false
+        },
+        {
+          "line": 56,
+          "statement": "await patchFile('universal-server.js', [`,",
+          "truncated": false
+        },
+        {
+          "line": 61,
+          "statement": "\"  }\\n]);\\n\\nawait patchFile('app.js', [\",",
+          "truncated": false
+        },
+        {
+          "line": 80,
+          "statement": "await patchFile('app.js', [`,",
+          "truncated": false
+        },
+        {
+          "line": 85,
+          "statement": "\"  }\\n]);\\n\\nawait patchFile('styles.css', [\",",
+          "truncated": false
+        },
+        {
+          "line": 109,
+          "statement": "await patchFile('styles.css', [`,",
+          "truncated": false
+        },
+        {
+          "line": 114,
+          "statement": "\"  }\\n]);\\n\\nawait patchFile('index.html', [\",",
+          "truncated": false
+        },
+        {
+          "line": 123,
+          "statement": "await patchFile('index.html', [`,",
+          "truncated": false
+        },
+        {
+          "line": 146,
+          "statement": "if (changed) await fs.writeFile(bootstrapPath, content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 149,
+          "statement": "if (preparedBootstrapSource.includes(serverImport)) {",
+          "truncated": false
+        },
+        {
+          "line": 150,
+          "statement": "await fs.writeFile(",
+          "truncated": false
+        },
+        {
+          "line": 152,
+          "statement": "preparedBootstrapSource.replace(",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "bootstrap.js",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "09f0a57a81a01c3209d14408f8950c21c84995578ff437e37a2b1cf497b1ccb2",
+      "invocation": "legacy materializer input; not invoked on inspected prepared base",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "index.html",
+        "server.js",
+        "styles.css",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 8,
+          "statement": "async function patchFile(fileName, replacements) {",
+          "truncated": false
+        },
+        {
+          "line": 14,
+          "statement": "if (content.includes(to)) continue;",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "if (!content.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "content = content.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "if (changed) await fs.writeFile(filePath, content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 25,
+          "statement": "await patchFile('server.js', [",
+          "truncated": false
+        },
+        {
+          "line": 39,
+          "statement": "return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';",
+          "truncated": false
+        },
+        {
+          "line": 194,
+          "statement": "await patchFile('universal-server.js', [",
+          "truncated": false
+        },
+        {
+          "line": 208,
+          "statement": "return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';",
+          "truncated": false
+        },
+        {
+          "line": 217,
+          "statement": "return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';",
+          "truncated": false
+        },
+        {
+          "line": 249,
+          "statement": "await patchFile('app.js', [",
+          "truncated": false
+        },
+        {
+          "line": 341,
+          "statement": "await patchFile('styles.css', [",
+          "truncated": false
+        },
+        {
+          "line": 452,
+          "statement": "await patchFile('index.html', [",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-anna-consent-persistence-fix.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "69efc35a1d3e7b7bff3c0562cccbae8df24ea7628c4314ef523af7571cfc096f",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "server.js",
+        "universal-server.js",
+        "vk-platform.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 9,
+          "statement": "const marker = 'Anna frame entitlement and consent persistence hotfix 2026-08-06';",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "if (source.includes(marker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "source = source.replaceAll(identityOnly, persistedEntitlement);",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 29,
+          "statement": "if (!source.includes(functionMarker)) {",
+          "truncated": false
+        },
+        {
+          "line": 32,
+          "statement": "return source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 42,
+          "statement": "if (next !== source) await fs.writeFile(filePath, next, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "if (!source.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 52,
+          "statement": "if (!contentType.includes('application/json')) return;",
+          "truncated": false
+        },
+        {
+          "line": 60,
+          "statement": "if (!contentType.includes('application/json')) return;",
+          "truncated": false
+        },
+        {
+          "line": 74,
+          "statement": "if (!source.includes(originalInspector)) {",
+          "truncated": false
+        },
+        {
+          "line": 77,
+          "statement": "source = source.replace(originalInspector, fixedInspector);",
+          "truncated": false
+        },
+        {
+          "line": 80,
+          "statement": "if (!source.includes(authInspection)) {",
+          "truncated": false
+        },
+        {
+          "line": 83,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 103,
+          "statement": "if (!source.includes(originalProfileBlock)) {",
+          "truncated": false
+        },
+        {
+          "line": 106,
+          "statement": "source = source.replace(originalProfileBlock, fixedProfileBlock);",
+          "truncated": false
+        },
+        {
+          "line": 109,
+          "statement": "await fs.writeFile(vkPlatformPath, source, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 114,
+          "statement": "const next = source.replace(/vk-platform\\.js\\?v=[^\"\\\\]+/g, `vk-platform.js?v=${cacheVersion}`);",
+          "truncated": false
+        },
+        {
+          "line": 115,
+          "statement": "if (next === source && !source.includes(`vk-platform.js?v=${cacheVersion}`)) {",
+          "truncated": false
+        },
+        {
+          "line": 118,
+          "statement": "if (next !== source) await fs.writeFile(gatewayPath, next, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-frame-shop-polish.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "03bff8a1456aed570fd14d9685f114a26899c32dc9c85b709eb37ee4cc0151d2",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "red-cosmos-v2.css",
+        "server.js",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "red-cosmos-v2.css",
+        "server.js",
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 6,
+          "statement": "const MARKER = 'PIVNIK_FRAME_SHOP_ROTATION_OWNER_ALL_20260909';",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "return fs.writeFile(path.join(root, relativePath), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (!source.includes(from)) throw new Error(`Frame shop polish: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "return source.replace(from, () => to);",
+          "truncated": false
+        },
+        {
+          "line": 25,
+          "statement": "if (source.includes(MARKER)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 29,
+          "statement": "source = replaceRequired(source, profileAnchor, profileReplacement, `${label} owner selected frame`);",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 39,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 46,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 58,
+          "statement": "if (source.includes(MARKER)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 84,
+          "statement": "if (!patchedServer.includes(`code: '${frameCode}'`) || !patchedGateway.includes(`code: '${frameCode}'`)) {",
+          "truncated": false
+        },
+        {
+          "line": 88,
+          "statement": "if (!patchedCss.includes('@keyframes shopFrameShelfSpin')) throw new Error('Frame shop polish verification failed: shelf animation');",
+          "truncated": false
+        },
+        {
+          "line": 89,
+          "statement": "if (!patchedCss.includes('.shop-frame-live-preview[data-frame-preview]::before')) throw new Error('Frame shop polish verification failed: shelf selector');",
+          "truncated": false
+        },
+        {
+          "line": 90,
+          "statement": "if (!shopFragment.includes(\"api('/api/shop/buy'\")) throw new Error('Frame shop polish verification failed: purchase endpoint');",
+          "truncated": false
+        },
+        {
+          "line": 91,
+          "statement": "if (!shopFragment.includes('if (data.profile) state.profile = data.profile;')) throw new Error('Frame shop polish verification failed: purchased profile refresh');",
+          "truncated": false
+        },
+        {
+          "line": 92,
+          "statement": "if (!shopFragment.includes('renderProfile();')) throw new Error('Frame shop polish verification failed: profile rerender');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-icecream69a-frame.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "20d7a519f5a809539ae36a71dbe00357f2511b7fa70071730b9713f4d16e0c9a",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "server.js",
+        "styles.css",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "app.js",
+        "server.js",
+        "styles.css",
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 6,
+          "statement": "const MARKER = 'PIVNIK_ICECREAM69A_FRAME_20260909';",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "return fs.writeFile(path.join(root, relativePath), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (!source.includes(from)) throw new Error(`IceCream69A frame: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "return source.replace(from, () => to);",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "if (source.includes(MARKER)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 26,
+          "statement": "const profileReplacement = `// ${MARKER}\\nfunction isIceCream69ARow(row) {\\n  return String(row?.username || '')\\n    .trim()\\n    .replace(/^@+/, '')\\n    .toLowerCase() === 'icecream69a';\\n}\\n\\nfunction profileFrameFromRow(row) {\\n  if (isIceCream69ARow(row)) return 'icecream69a';\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 27,
+          "statement": "source = replaceRequired(source, profileAnchor, profileReplacement, `${label} profile frame helper`);",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "source = replaceRequired(source, availableAnchor, availableReplacement, `${label} available frame helper`);",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "if (source.includes(MARKER)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 39,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "source = replaceRequired(source, orbitAnchor, orbitReplacement, 'app orbit rendering');",
+          "truncated": false
+        },
+        {
+          "line": 50,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 58,
+          "statement": "if (!source.includes(functionMarker)) throw new Error('IceCream69A frame: app marker verification failed');",
+          "truncated": false
+        },
+        {
+          "line": 59,
+          "statement": "return source.replace(functionMarker, `// ${MARKER}\\n${functionMarker}`);",
+          "truncated": false
+        },
+        {
+          "line": 63,
+          "statement": "if (source.includes(MARKER)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 97,
+          "statement": "if (!source.includes(needle)) throw new Error(`IceCream69A frame verification failed: ${label}`);",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-legal-operator-config.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "6d2ac786b593adc117c1f861c397c5fb96bbc5ce8b34a039e64c376202e02e65",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 49,
+          "statement": "for (const marker of uniqueMarkers) {",
+          "truncated": false
+        },
+        {
+          "line": 56,
+          "statement": "for (const marker of [",
+          "truncated": false
+        },
+        {
+          "line": 65,
+          "statement": "if (!gateway.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 70,
+          "statement": "await fs.writeFile(gatewayPath, gateway, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-luxury-space-background.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "4e354baa4135ae06398c0d2f230e7078a0c02353813d15dea5062ffc8f19856e",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "index.html",
+        "styles.css"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 67,
+          "statement": "const runtimeBlock = new RegExp(`${START.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}[\\\\s\\\\S]*?${END.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\\\n?`, 'g');",
+          "truncated": false
+        },
+        {
+          "line": 68,
+          "statement": "css = css.replace(runtimeBlock, '').trimEnd() + '\\n' + override;",
+          "truncated": false
+        },
+        {
+          "line": 69,
+          "statement": "await fs.writeFile(stylesPath, css, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 72,
+          "statement": "html = html.replace(/styles\\.css\\?v=[^\"']+/g, `styles.css?v=${VERSION}`);",
+          "truncated": false
+        },
+        {
+          "line": 73,
+          "statement": "await fs.writeFile(indexPath, html, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-owner-unlimited-cancel.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "8c2c668f71d4b7bc36d9ded7a62824db493c58593a589314d55a43c5580c6e2f",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const marker = '// V21 · owner unlimited cancellation';",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (source.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (!source.includes(helperAnchor)) throw new Error('Cancellation helper anchor not found.');",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 30,
+          "statement": "if (!route.includes(actingAnchor)) throw new Error('Acting staff anchor not found in cancellation route.');",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "route = route.replace(",
+          "truncated": false
+        },
+        {
+          "line": 36,
+          "statement": "route = route.replaceAll(",
+          "truncated": false
+        },
+        {
+          "line": 43,
+          "statement": "if (!route.includes(quotaBlock)) throw new Error('Cancellation quota block not found.');",
+          "truncated": false
+        },
+        {
+          "line": 44,
+          "statement": "route = route.replace(quotaBlock, quotaReplacement);",
+          "truncated": false
+        },
+        {
+          "line": 47,
+          "statement": "if (!route.includes(optionsBlock)) throw new Error('Cancellation options block not found.');",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "route = route.replace(optionsBlock, \"ownerUnlimitedCancel ? {} : { staffId: actingStaff.id, notBefore: quota.countFrom }\");",
+          "truncated": false
+        },
+        {
+          "line": 58,
+          "statement": "recent = recent.replace(",
+          "truncated": false
+        },
+        {
+          "line": 65,
+          "statement": "await fs.writeFile(serverPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-platform-profile-refresh.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "548591be953307199dfb749a1c0b8486b600f24c03afa04645c1fa42c30eeb29",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const marker = 'Separate platform profile refresh 2026-08-07';",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (!source.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (!source.includes(original)) {",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "source = source.replace(original, replacement);",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "if (!source.includes(marker) || !source.includes('const shouldUpdateMainProfile = identityCountValue <= 1;')) {",
+          "truncated": false
+        },
+        {
+          "line": 26,
+          "statement": "await fs.writeFile(gatewayPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-platform-separation-safety.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "5bf1c7063b64a04ea4610da26ab39f8b48e2d7637c1ddb32fbf6f7610be871b1",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const marker = 'Platform separation release safety 2026-08-07';",
+          "truncated": false
+        },
+        {
+          "line": 9,
+          "statement": "function replaceRequired(source, from, to, appliedMarker, label) {",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (source.includes(appliedMarker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 11,
+          "statement": "if (!source.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 14,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (source.includes(appliedMarker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 218,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 233,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 257,
+          "statement": "if (!gateway.includes(required)) {",
+          "truncated": false
+        },
+        {
+          "line": 261,
+          "statement": "if (gateway.includes('await deleteUnifiedAccount(user.id, body.confirmation)')) {",
+          "truncated": false
+        },
+        {
+          "line": 265,
+          "statement": "await fs.writeFile(gatewayPath, gateway, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-platform-separation.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "c607135e70dad155604457d0e37baf79317bbcac4259ece1198a7b51348efd96",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "account-link.js",
+        "app.js",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 12,
+          "statement": "await fs.writeFile(path.join(root, relativePath), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "function replaceRequired(source, from, to, marker, label) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (source.includes(marker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (!source.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 20,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 25,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 33,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 41,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 43,
+          "statement": "`        linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],\\n        accountLinked: false\\n      }`,",
+          "truncated": false
+        },
+        {
+          "line": 44,
+          "statement": "`        linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],\\n        accountLinked: false,\\n        legacyLinked: false\\n      }`,",
+          "truncated": false
+        },
+        {
+          "line": 49,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 57,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 65,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 73,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 81,
+          "statement": "gateway = gateway.replace(",
+          "truncated": false
+        },
+        {
+          "line": 89,
+          "statement": "accountLink = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 96,
+          "statement": "accountLink = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 103,
+          "statement": "accountLink = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 113,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 116,
+          "statement": "`  root.className = \\`operation-list\\${users.length ? '' : ' empty-state'}\\`;\\n  const normalizeAdminIdentity = (value) => String(value || '')\\n    .toLowerCase()\\n    .replace(/^@/, '')\\n    .replace(/[^a-zа-яё0-9]/gi, '');\\n  const identityForMatch = (user) => ({\\n    username: normalizeAdminIdentity(user.username),\\n    name: normalizeAdminIdentity(user.name)\\n  });\\n  const sameApproximateIdentity = (left, right) => {\\n    const a = identityForMatch(left);\\n    const b = identityForMatch(rig",
+          "truncated": true
+        },
+        {
+          "line": 120,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 135,
+          "statement": "if (!verification[0].includes(`const PLATFORM_ACCOUNT_MODE = 'separate';`)) failures.push('server mode marker');",
+          "truncated": false
+        },
+        {
+          "line": 136,
+          "statement": "if (verification[0].includes(`if (!userId && isOwner && provider === 'vk' && ownerTelegramId)`)) failures.push('owner auto-link');",
+          "truncated": false
+        },
+        {
+          "line": 137,
+          "statement": "if (!verification[0].includes(`linkCodes: false`)) failures.push('link API health');",
+          "truncated": false
+        },
+        {
+          "line": 138,
+          "statement": "if (!verification[1].includes('Account linking is intentionally unavailable')) failures.push('link UI');",
+          "truncated": false
+        },
+        {
+          "line": 139,
+          "statement": "if (!verification[2].includes('Возможное совпадение:')) failures.push('admin possible matches');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-production-final-fixes.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "64e7a43a4dbcd12140ddf36fb365810bc60b72f97460dd775428a03df72b7065",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 8,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 9,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (!source.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 39,
+          "statement": "const guardBlock = normalized.slice(firstIndex, consentIndex).replace(",
+          "truncated": false
+        },
+        {
+          "line": 71,
+          "statement": ".replaceAll('&', '&amp;')",
+          "truncated": false
+        },
+        {
+          "line": 72,
+          "statement": ".replaceAll('<', '&lt;')",
+          "truncated": false
+        },
+        {
+          "line": 73,
+          "statement": ".replaceAll('>', '&gt;')",
+          "truncated": false
+        },
+        {
+          "line": 74,
+          "statement": ".replaceAll('\"', '&quot;')",
+          "truncated": false
+        },
+        {
+          "line": 75,
+          "statement": ".replaceAll(\"'\", '&#039;');",
+          "truncated": false
+        },
+        {
+          "line": 89,
+          "statement": "(result, [token, value]) => result.replaceAll(",
+          "truncated": false
+        },
+        {
+          "line": 123,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 130,
+          "statement": "for (const marker of [",
+          "truncated": false
+        },
+        {
+          "line": 137,
+          "statement": "if (!gateway.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 142,
+          "statement": "await fs.writeFile(gatewayPath, gateway, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-production-hardening.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "7dc92595c94dc5dda014ecb10384f8d8f62e20352b59b9c3696f06ff45b7059c",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 8,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 9,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (!source.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 67,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 88,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 97,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 136,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 178,
+          "statement": "(result, [token, value]) => result.replaceAll(token, safeText(value, 1000, 'не настроено')),",
+          "truncated": false
+        },
+        {
+          "line": 196,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 206,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 225,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 279,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 334,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 344,
+          "statement": "for (const marker of [",
+          "truncated": false
+        },
+        {
+          "line": 352,
+          "statement": "if (!gateway.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 357,
+          "statement": "await fs.writeFile(gatewayPath, gateway, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-public-release-copy.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "396626396b9da452e65eb9c95be87471de0c70f3d82707bf0877ba681b07243b",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "index.html"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 12,
+          "statement": "await fs.writeFile(path.join(root, relativePath), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "return source.includes(from) ? source.split(from).join(to) : source;",
+          "truncated": false
+        },
+        {
+          "line": 79,
+          "statement": "if (!app.includes('const publicReleaseLabel = (value) =>')) {",
+          "truncated": false
+        },
+        {
+          "line": 80,
+          "statement": "const marker = \"const roleCanWrite = (role) => role === 'admin';\\n\";",
+          "truncated": false
+        },
+        {
+          "line": 81,
+          "statement": "const helper = `${marker}const publicReleaseLabel = (value) => String(value ?? '')\\n  .replaceAll('Легендарное достижение «Тестировщик»', 'Легендарное достижение «Пионер Пивника»')\\n  .replaceAll('закрытого бета-теста', 'первых участников')\\n  .replaceAll('закрытой беты', 'программы лояльности');\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 82,
+          "statement": "if (!app.includes(marker)) throw new Error('Не найдено место для publicReleaseLabel.');",
+          "truncated": false
+        },
+        {
+          "line": 83,
+          "statement": "app = app.replace(marker, helper);",
+          "truncated": false
+        },
+        {
+          "line": 85,
+          "statement": "app = app.replaceAll('transaction.reason ||', 'publicReleaseLabel(transaction.reason) ||');",
+          "truncated": false
+        },
+        {
+          "line": 132,
+          "statement": "for (const phrase of forbiddenIndex) if (index.includes(phrase)) failures.push(`index.html: ${phrase}`);",
+          "truncated": false
+        },
+        {
+          "line": 133,
+          "statement": "for (const phrase of forbiddenApp) if (app.includes(phrase)) failures.push(`app.js: ${phrase}`);",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-readable-typography.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "6cbba914d8d35af8796a6c8cbbccb60d37430e8466416973ba648047e6e7fd5c",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "index.html",
+        "styles.css"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 8,
+          "statement": "const marker = '/* V18 · readable premium typography */';",
+          "truncated": false
+        },
+        {
+          "line": 492,
+          "statement": "if (!styles.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 494,
+          "statement": "await fs.writeFile(stylesPath, styles, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 498,
+          "statement": "const nextIndex = index.replace(/styles\\.css\\?v=[^\"']+/g, `styles.css?v=${assetVersion}`);",
+          "truncated": false
+        },
+        {
+          "line": 501,
+          "statement": "await fs.writeFile(indexPath, index, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-red-cosmos-v2-backend-final.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "70b90a945d3fb95c65c21d25c984e30b35f3c764ee011b56fb0e88806433c25a",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "server.js",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "server.js",
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 8,
+          "statement": "const MARKER_SERVER = '// RED_COSMOS_V2_FINAL_SERVER_RUNTIME';",
+          "truncated": false
+        },
+        {
+          "line": 9,
+          "statement": "const MARKER_GATEWAY = '// RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME';",
+          "truncated": false
+        },
+        {
+          "line": 12,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "if (!source.includes(from)) throw new Error(`RED COSMOS v2 backend: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 14,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (!source.includes(\"'premium-smiling-fuck'\")) {",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 28,
+          "statement": "if (!source.includes('owns_premium_smiling_fuck_frame')) {",
+          "truncated": false
+        },
+        {
+          "line": 29,
+          "statement": "source = source.replaceAll(",
+          "truncated": false
+        },
+        {
+          "line": 34,
+          "statement": "if (!source.includes(\"'premium-smiling-fuck'\")) throw new Error(`RED COSMOS v2 backend: ${label} premium frame support failed`);",
+          "truncated": false
+        },
+        {
+          "line": 39,
+          "statement": "if (!server.includes(MARKER_SERVER)) {",
+          "truncated": false
+        },
+        {
+          "line": 42,
+          "statement": "server = server.replace(catalogPattern, `const DEFAULT_SHOP_ITEMS = [",
+          "truncated": false
+        },
+        {
+          "line": 76,
+          "statement": "server = server.replace(",
+          "truncated": false
+        },
+        {
+          "line": 88,
+          "statement": "if (!server.includes(\"app.post('/api/shop/buy'\")) {",
+          "truncated": false
+        },
+        {
+          "line": 90,
+          "statement": "if (!server.includes(anchor)) throw new Error('RED COSMOS v2 backend: shop contact anchor missing');",
+          "truncated": false
+        },
+        {
+          "line": 176,
+          "statement": "server = server.replace(anchor, routes);",
+          "truncated": false
+        },
+        {
+          "line": 183,
+          "statement": "if (!gateway.includes(MARKER_GATEWAY)) {",
+          "truncated": false
+        },
+        {
+          "line": 193,
+          "statement": "for (const token of requiredServer) if (!server.includes(token)) throw new Error(`RED COSMOS v2 backend verification missing ${token}`);",
+          "truncated": false
+        },
+        {
+          "line": 194,
+          "statement": "if (server.includes(\"code: 'custom-mug-design'\")) throw new Error('RED COSMOS v2 backend: custom mug leaked into visible defaults');",
+          "truncated": false
+        },
+        {
+          "line": 195,
+          "statement": "if (!gateway.includes(\"'premium-smiling-fuck'\")) throw new Error('RED COSMOS v2 backend: gateway premium frame missing');",
+          "truncated": false
+        },
+        {
+          "line": 197,
+          "statement": "await fs.writeFile(serverPath, server, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 198,
+          "statement": "await fs.writeFile(gatewayPath, gateway, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-red-cosmos-v2-client-final.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "2cd02506c9df1b4765feeb2b8ce2f9c1ccf9f8653dee648dc2435079143b44f5",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js"
+      ],
+      "firstRunObservedChanges": [
+        "app.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 9,
+          "statement": "const MARKER = '// RED_COSMOS_V2_FINAL_CLIENT_RUNTIME';",
+          "truncated": false
+        },
+        {
+          "line": 12,
+          "statement": "if (source.includes(from)) source = source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "function replaceRequired(from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (source.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "source = source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 20,
+          "statement": "if (!source.includes(to)) throw new Error(`RED COSMOS v2 client: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "if (!source.includes(MARKER)) {",
+          "truncated": false
+        },
+        {
+          "line": 24,
+          "statement": "source = source.replace(/const APP_VERSION = '[^']+';/, \"const APP_VERSION = '2.0-red-cosmos';\");",
+          "truncated": false
+        },
+        {
+          "line": 35,
+          "statement": "if (!source.includes(\"profileFrame === 'premium-smiling-fuck'\")) {",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "if (source.includes(frameAnchor)) {",
+          "truncated": false
+        },
+        {
+          "line": 38,
+          "statement": "source = source.replace(frameAnchor, `${frameAnchor}\\n  if (entity.profileFrame === 'premium-smiling-fuck') return 'avatar-frame avatar-frame-premium-smiling-fuck';`);",
+          "truncated": false
+        },
+        {
+          "line": 41,
+          "statement": "if (!source.includes(legacyAnchor)) throw new Error('RED COSMOS v2 client: missing avatar frame anchor');",
+          "truncated": false
+        },
+        {
+          "line": 42,
+          "statement": "source = source.replace(legacyAnchor, `${legacyAnchor}\\n  if (entity.profileFrame === 'beer-mugs') return 'avatar-frame avatar-frame-beer-mugs';\\n  if (entity.profileFrame === 'beer-bottles') return 'avatar-frame avatar-frame-beer-bottles';\\n  if (entity.profileFrame === 'lights') return 'avatar-frame avatar-frame-lights';\\n  if (entity.profileFrame === 'premium-smiling-fuck') return 'avatar-frame avatar-frame-premium-smiling-fuck';`);",
+          "truncated": false
+        },
+        {
+          "line": 46,
+          "statement": "if (!source.includes(\"'premium-smiling-fuck': '🖕'\")) {",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "if (source.includes(mapAnchor)) source = source.replace(mapAnchor, `${mapAnchor},\\n    'premium-smiling-fuck': '🖕'`);",
+          "truncated": false
+        },
+        {
+          "line": 54,
+          "statement": "if (!source.includes('RED_COSMOS_SHOP_FRAMES')) {",
+          "truncated": false
+        },
+        {
+          "line": 57,
+          "statement": "if (!replacement.includes('RED_COSMOS_SHOP_FRAMES') || !replacement.endsWith('async function loadCatalog')) {",
+          "truncated": false
+        },
+        {
+          "line": 60,
+          "statement": "source = source.replace(shopPattern, replacement);",
+          "truncated": false
+        },
+        {
+          "line": 63,
+          "statement": "source = source.replaceAll('Код постоянный и принадлежит только вам.', 'Покажите QR сотруднику перед оплатой.');",
+          "truncated": false
+        },
+        {
+          "line": 64,
+          "statement": "source = source.replaceAll('QR постоянный. Не отправляйте его посторонним.', 'Не отправляйте QR посторонним.');",
+          "truncated": false
+        },
+        {
+          "line": 76,
+          "statement": "if (source.includes(token.replaceAll('\\\\n', '\\n'))) throw new Error(`RED COSMOS v2 client: VK wheel guard remains: ${token}`);",
+          "truncated": false
+        },
+        {
+          "line": 78,
+          "statement": "if (!source.includes('RED_COSMOS_SHOP_FRAMES')) throw new Error('RED COSMOS v2 client: direct shop missing');",
+          "truncated": false
+        },
+        {
+          "line": 79,
+          "statement": "await fs.writeFile(appPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-red-cosmos-v2-shell-final.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "7d08ccdfe2bd43adc5b46d841d25728d7c18599dd3120d8405953b53283f3455",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "index.html"
+      ],
+      "firstRunObservedChanges": [
+        "app.js",
+        "index.html"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 11,
+          "statement": "if (!index.includes(INDEX_MARKER)) {",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": ".replace(/\\s*<link rel=\"stylesheet\" href=\"\\/v22\\.css[^\"]*\"\\s*\\/>/g, '')",
+          "truncated": false
+        },
+        {
+          "line": 14,
+          "statement": ".replace(/\\s*<script defer src=\"\\/v22-ui\\.js[^\"]*\"><\\/script>/g, '');",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "if (!index.includes('/red-cosmos-v2.css?v=2.0.0')) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "index = index.replace(/(<link rel=\"stylesheet\" href=\"styles\\.css[^\"]*\"\\s*\\/>)/, '$1\\n  <link rel=\"stylesheet\" href=\"/red-cosmos-v2.css?v=2.0.0\" />');",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (!index.includes('/red-cosmos-v2.js?v=2.0.0')) {",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "index = index.replace(/(<script defer src=\"app\\.js[^\"]*\"><\\/script>)/, '$1\\n  <script defer src=\"/red-cosmos-v2.js?v=2.0.0\"></script>');",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "if (!index.includes('/red-cosmos-v2.css?v=2.0.0') || !index.includes('/red-cosmos-v2.js?v=2.0.0')) throw new Error('RED COSMOS v2 shell assets not wired');",
+          "truncated": false
+        },
+        {
+          "line": 24,
+          "statement": "if (index.includes('/v22.css') || index.includes('/v22-ui.js')) throw new Error('RED COSMOS v2 shell still loads obsolete v22 UI layer');",
+          "truncated": false
+        },
+        {
+          "line": 25,
+          "statement": "await fs.writeFile(indexPath, index, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 28,
+          "statement": "if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "app = app.replace(pattern, `function applyDesign(design) {",
+          "truncated": false
+        },
+        {
+          "line": 54,
+          "statement": "await fs.writeFile(appPath, app, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-red-cosmos-v2-tester-claims.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "c9b39768515583493b90d6e983034d12bddc7f9fa9a065c217840bbfcf3e2972",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const MARKER = '// RED_COSMOS_V2_PENDING_TESTER_CLAIMS';",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (!source.includes(MARKER)) {",
+          "truncated": false
+        },
+        {
+          "line": 12,
+          "statement": "if (!source.includes(authAnchor)) throw new Error('RED COSMOS tester claims: auth anchor missing');",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "source = source.replace(authAnchor, helper + authAnchor);",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "if (!source.includes(tokenAnchor)) throw new Error('RED COSMOS tester claims: resolveProviderUser token anchor missing');",
+          "truncated": false
+        },
+        {
+          "line": 49,
+          "statement": "source = source.replace(tokenAnchor, tokenReplacement);",
+          "truncated": false
+        },
+        {
+          "line": 58,
+          "statement": "if (!source.includes(token)) throw new Error(`RED COSMOS tester claims verification missing: ${token}`);",
+          "truncated": false
+        },
+        {
+          "line": 61,
+          "statement": "await fs.writeFile(gatewayPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-release-candidate-fixes.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "aa0815464d0171f43422d89f836863c5da660ec4a88924f118be30ecc529902e",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "index.html",
+        "red-cosmos-v2.css",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "app.js",
+        "index.html",
+        "red-cosmos-v2.css",
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 14,
+          "statement": "async function write(key, value) { await fs.writeFile(paths[key], value, 'utf8'); }",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (!source.includes(from)) throw new Error(`release candidate fix: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "return source.replace(from, () => to);",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 43,
+          "statement": "index = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 55,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 63,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 71,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 74,
+          "statement": "return withLinking.replace(",
+          "truncated": false
+        },
+        {
+          "line": 81,
+          "statement": "const withPlatformClass = withLinking.replace(",
+          "truncated": false
+        },
+        {
+          "line": 94,
+          "statement": "if (!redCss.includes('.platform-vk #qrToken,.platform-vk #copyQrCode')) {",
+          "truncated": false
+        },
+        {
+          "line": 95,
+          "statement": "redCss = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 105,
+          "statement": "if (!app.includes(\"$$('.screen').forEach\") || app.includes(\"\\n  $('.screen').forEach\")) failures.push('navigation');",
+          "truncated": false
+        },
+        {
+          "line": 106,
+          "statement": "if (!app.includes(\"$('#openProfileShop')?.addEventListener('click'\")) failures.push('profile shop handler');",
+          "truncated": false
+        },
+        {
+          "line": 107,
+          "statement": "if (!index.includes('id=\"openProfileShop\"')) failures.push('profile shop entry');",
+          "truncated": false
+        },
+        {
+          "line": 108,
+          "statement": "if (!gateway.includes('href=\"/styles.css$1\"') || !gateway.includes('src=\"/app.js$1\"')) failures.push('root assets');",
+          "truncated": false
+        },
+        {
+          "line": 109,
+          "statement": "if (gateway.includes(\"if (platform !== 'vk') {\\n    return withLinking.replace(\\n      /<!-- telegram-wheel-legacy:start\")) failures.push('Telegram primary actions');",
+          "truncated": false
+        },
+        {
+          "line": 110,
+          "statement": "if (!gateway.includes(\"platform === 'vk' ? 'platform-vk' : 'platform-telegram'\")) failures.push('platform class');",
+          "truncated": false
+        },
+        {
+          "line": 111,
+          "statement": "if (!redCss.includes('.platform-vk #qrToken,.platform-vk #copyQrCode{display:none!important}')) failures.push('VK QR cleanup');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-release-polish.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "b65588559f9d89f0f155214567a83a33474de199ef0c2fa7225094c577572f14",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "styles.css"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const marker = '/* V19.3 · release polish */';",
+          "truncated": false
+        },
+        {
+          "line": 207,
+          "statement": "if (!styles.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 209,
+          "statement": "await fs.writeFile(stylesPath, styles, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-typography-cache-version.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "37d6117792076b9ccb4b7be8d8d07ffcaaa08af8379aa2f3e6440be4d5acb531",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "index.html"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 10,
+          "statement": "const nextIndex = index.replace(/styles\\.css\\?v=[^\"']+/g, compatibleStylesUrl);",
+          "truncated": false
+        },
+        {
+          "line": 14,
+          "statement": "await fs.writeFile(indexPath, index, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (!index.includes(compatibleStylesUrl)) {",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-unifier-active-shift-fix.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "c4e0bacb5c490a06dc9c94ecb2920f7168af0c2748a4fb929c4c242bde300737",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "scripts/railway-unify-production-databases.mjs"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 8,
+          "statement": "if (!source.includes(activeShiftMarker)) {",
+          "truncated": false
+        },
+        {
+          "line": 58,
+          "statement": "if (!source.includes(needle)) {",
+          "truncated": false
+        },
+        {
+          "line": 64,
+          "statement": ".replace(oldDeclaration, newDeclaration)",
+          "truncated": false
+        },
+        {
+          "line": 65,
+          "statement": ".replace(oldLoop, newLoop)",
+          "truncated": false
+        },
+        {
+          "line": 66,
+          "statement": ".replace(oldDetails, newDetails);",
+          "truncated": false
+        },
+        {
+          "line": 68,
+          "statement": "} else if (!source.includes('Архивировано при объединении VK → Telegram 2026-08-04')) {",
+          "truncated": false
+        },
+        {
+          "line": 73,
+          "statement": "if (!source.includes(maintenanceMarker)) {",
+          "truncated": false
+        },
+        {
+          "line": 104,
+          "statement": "const databaseName = new URL(connectionString).pathname.replace(/^\\\\//, '');",
+          "truncated": false
+        },
+        {
+          "line": 130,
+          "statement": "if (!source.includes(oldReadOnlyControl)) {",
+          "truncated": false
+        },
+        {
+          "line": 133,
+          "statement": "source = source.replace(oldReadOnlyControl, newReadOnlyControl);",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-v22-inline-backup.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "663706b9c3d0f3d92848db6f81d01ad425d7a599012d999a6d397c5aa8d23017",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "server.js",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const MARKER = 'PIVNIK_V22_INLINE_BACKUP_20260827';",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (source.includes(`// ${MARKER}`)) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (!source.includes(anchor)) throw new Error('v22 inline backup: child-server anchor not found');",
+          "truncated": false
+        },
+        {
+          "line": 21,
+          "statement": "return '\"' + String(value).replaceAll('\"', '\"\"') + '\"';",
+          "truncated": false
+        },
+        {
+          "line": 119,
+          "statement": "source = source.replace(anchor, `${backupCode}${anchor}`);",
+          "truncated": false
+        },
+        {
+          "line": 121,
+          "statement": "await fs.writeFile(gatewayPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-v22-preflight-fixes.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "9be5689347a6531af4b97a2a3a148e136988f1695e01be572ffa07c024f11156",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 15,
+          "statement": "while (source.includes(telegramOnlyGuard)) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "source = source.replace(telegramOnlyGuard, '');",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "if (source.includes('Колесо доступно только в Telegram.')) {",
+          "truncated": false
+        },
+        {
+          "line": 33,
+          "statement": "if (source.includes(multilineDiamondFrame)) {",
+          "truncated": false
+        },
+        {
+          "line": 34,
+          "statement": "source = source.replace(multilineDiamondFrame, normalizedDiamondFrame);",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "await fs.writeFile(gatewayPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-v22-product-rebuild.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "3a04bea8dda697c9fa0edd4c7d6b8bb8640b75303ea2f0a3f6dbccbb9f10ba20",
+      "invocation": "conditional child of apply-v22-runtime.mjs; executed in baseline trace",
+      "staticReadOrWriteTargets": [
+        "achievements.js",
+        "app.js",
+        "index.html",
+        "server.js",
+        "universal-server.js",
+        "v22-ui.js",
+        "v22.css"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 6,
+          "statement": "const MARKER = 'PIVNIK_V22_PRODUCT_REBUILD_20260827';",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "await fs.writeFile(path.join(root, file), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "if (!source.includes(from)) throw new Error(`v22: не найден фрагмент «${label}»`);",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "function replacePatternRequired(source, pattern, replacement, marker, label) {",
+          "truncated": false
+        },
+        {
+          "line": 23,
+          "statement": "if (marker && source.includes(marker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 26,
+          "statement": "return source.replace(pattern, replacement);",
+          "truncated": false
+        },
+        {
+          "line": 30,
+          "statement": "if (marker && source.includes(marker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 33,
+          "statement": "return source.replace(pattern, replacement);",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 39,
+          "statement": "\"  return ['money', 'fire', 'diamond'].includes(storedFrame) ? storedFrame : 'none';\",",
+          "truncated": false
+        },
+        {
+          "line": 40,
+          "statement": "\"  return ['money', 'fire', 'diamond', 'beer-mugs', 'beer-bottles', 'lights', 'middle-finger'].includes(storedFrame) ? storedFrame : 'none';\",",
+          "truncated": false
+        },
+        {
+          "line": 43,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 71,
+          "statement": "source = replacePatternRequired(",
+          "truncated": false
+        },
+        {
+          "line": 78,
+          "statement": "source = replacePatternRequired(",
+          "truncated": false
+        },
+        {
+          "line": 85,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 91,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 95,
+          "statement": "source += source.includes(`<!-- ${MARKER}:index -->`) ? '' : `\\n<!-- ${MARKER}:index -->\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 101,
+          "statement": "source = replacePatternRequired(",
+          "truncated": false
+        },
+        {
+          "line": 109,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 154,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 165,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 190,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 196,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 202,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 208,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 214,
+          "statement": "source += source.includes(`// ${MARKER}:app`) ? '' : `\\n// ${MARKER}:app\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 220,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 257,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 266,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 275,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 312,
+          "statement": "source += source.includes(`// ${MARKER}:achievements`) ? '' : `\\n// ${MARKER}:achievements\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 321,
+          "statement": "source = replacePatternRequired(",
+          "truncated": false
+        },
+        {
+          "line": 342,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 361,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 379,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 403,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 410,
+          "statement": "source += source.includes(`// ${MARKER}:server`) ? '' : `\\n// ${MARKER}:server\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 419,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 422,
+          "statement": ".replace(",
+          "truncated": false
+        },
+        {
+          "line": 426,
+          "statement": ".replace(/<script defer src=\"https:\\\\/\\\\/telegram\\\\.org\\\\/js\\\\/telegram-web-app\\\\.js[^>]*><\\\\/script>\\\\s*/i, '')`,",
+          "truncated": false
+        },
+        {
+          "line": 428,
+          "statement": ".replace(/<script defer src=\"https:\\\\/\\\\/telegram\\\\.org\\\\/js\\\\/telegram-web-app\\\\.js[^>]*><\\\\/script>\\\\s*/i, '')`,",
+          "truncated": false
+        },
+        {
+          "line": 432,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 438,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 444,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 450,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 456,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 470,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 481,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 488,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 497,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 504,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 513,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 520,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 541,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 551,
+          "statement": "if (platforms.includes('vk') && platforms.includes('telegram')) return 'VK · Telegram';",
+          "truncated": false
+        },
+        {
+          "line": 552,
+          "statement": "if (platforms.includes('vk')) return 'VK';",
+          "truncated": false
+        },
+        {
+          "line": 553,
+          "statement": "if (platforms.includes('telegram')) return 'Telegram';",
+          "truncated": false
+        },
+        {
+          "line": 560,
+          "statement": "source = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 580,
+          "statement": "source += source.includes(`// ${MARKER}:gateway`) ? '' : `\\n// ${MARKER}:gateway\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 595,
+          "statement": "if (!index.includes('/v22.css?v=22.0.0') || !index.includes('/v22-ui.js?v=22.0.0')) failures.push('v22 assets');",
+          "truncated": false
+        },
+        {
+          "line": 596,
+          "statement": "if (!app.includes(\"APP_VERSION = '22.0-pivnik-rebuild'\")) failures.push('client version');",
+          "truncated": false
+        },
+        {
+          "line": 597,
+          "statement": "if (!app.includes('window.__PIVNIK_GO_BACK__')) failures.push('back history');",
+          "truncated": false
+        },
+        {
+          "line": 598,
+          "statement": "if (!app.includes(\"profileFrame === 'middle-finger'\")) failures.push('new frame render');",
+          "truncated": false
+        },
+        {
+          "line": 599,
+          "statement": "if (!app.includes(\"leader.platformLabel || 'Платформа не определена'\")) failures.push('league platform UI');",
+          "truncated": false
+        },
+        {
+          "line": 600,
+          "statement": "if (!achievements.includes(\"code: 'raise-shields'\")) failures.push('special achievement');",
+          "truncated": false
+        },
+        {
+          "line": 601,
+          "statement": "if (!server.includes(\"'frame-middle-finger': { frame: 'middle-finger'\")) failures.push('shop frame map');",
+          "truncated": false
+        },
+        {
+          "line": 602,
+          "statement": "if (!server.includes('v22-shop-catalog-reset-20260827')) failures.push('shop reset migration');",
+          "truncated": false
+        },
+        {
+          "line": 603,
+          "statement": "if (!gateway.includes(\"spinTelegramWheel(user.id, body.requestKey, platform)\")) failures.push('VK wheel backend');",
+          "truncated": false
+        },
+        {
+          "line": 604,
+          "statement": "if (gateway.includes('Колесо доступно только в Telegram.')) failures.push('Telegram-only wheel guard');",
+          "truncated": false
+        },
+        {
+          "line": 605,
+          "statement": "if (!gateway.includes(\"return 'VK · Telegram'\")) failures.push('league platform labels');",
+          "truncated": false
+        },
+        {
+          "line": 606,
+          "statement": "if (!css.includes('PIVNIK v22 — red cosmos')) failures.push('red cosmos css');",
+          "truncated": false
+        },
+        {
+          "line": 607,
+          "statement": "if (!ui.includes('v22-admin-tabs')) failures.push('admin tabs ui');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-v22-production-polish.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "121f7e66810f3250eb41657d850987a863b2d00b3022a61b0eb5c94f0209a6c1",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 7,
+          "statement": "const MARKER = 'PIVNIK_V22_PRODUCTION_POLISH_20260827';",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "if (source.includes(`// ${MARKER}`)) {",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "function replaceRequired(from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (source.includes(to)) return;",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (!source.includes(from)) throw new Error(`v22 polish: fragment not found: ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "source = source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 21,
+          "statement": "replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 29,
+          "statement": "replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 43,
+          "statement": "await fs.writeFile(gatewayPath, source, 'utf8');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-v22-runtime.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "0bdad58d0733c98525ef9f3e68bd5440bf2d1521289220e3d2e4cf3ad96b12b6",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "server.js",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [
+        "achievements.js",
+        "app.js",
+        "index.html",
+        "server.js",
+        "universal-server.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 28,
+          "statement": "const redCosmosAlreadyApplied = app.includes('RED_COSMOS_V2_THEME_LOCK')",
+          "truncated": false
+        },
+        {
+          "line": 29,
+          "statement": "|| server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')",
+          "truncated": false
+        },
+        {
+          "line": 30,
+          "statement": "|| gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME');",
+          "truncated": false
+        },
+        {
+          "line": 34,
+          "statement": "if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) failures.push('theme lock');",
+          "truncated": false
+        },
+        {
+          "line": 35,
+          "statement": "if (!server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')) failures.push('server runtime');",
+          "truncated": false
+        },
+        {
+          "line": 36,
+          "statement": "if (!gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME')) failures.push('gateway runtime');",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "if (gateway.includes('Колесо доступно только в Telegram.')) failures.push('VK wheel guard');",
+          "truncated": false
+        },
+        {
+          "line": 38,
+          "statement": "if (!gateway.includes('platformLabel')) failures.push('leaderboard platform');",
+          "truncated": false
+        },
+        {
+          "line": 44,
+          "statement": "const productApplied = app.includes(`// ${PRODUCT_MARKER}:app`)",
+          "truncated": false
+        },
+        {
+          "line": 45,
+          "statement": "&& server.includes(`// ${PRODUCT_MARKER}:server`)",
+          "truncated": false
+        },
+        {
+          "line": 46,
+          "statement": "&& gateway.includes(`// ${PRODUCT_MARKER}:gateway`);",
+          "truncated": false
+        },
+        {
+          "line": 57,
+          "statement": "const specialApplied = serverAfterProduct.includes(`// ${SPECIAL_MARKER}:server`)",
+          "truncated": false
+        },
+        {
+          "line": 58,
+          "statement": "&& gatewayAfterProduct.includes(`// ${SPECIAL_MARKER}:gateway`);",
+          "truncated": false
+        },
+        {
+          "line": 70,
+          "statement": "if (!finalApp.includes(\"APP_VERSION = '22.0-pivnik-rebuild'\")) failures.push('client version');",
+          "truncated": false
+        },
+        {
+          "line": 71,
+          "statement": "if (!finalApp.includes('window.__PIVNIK_GO_BACK__')) failures.push('screen history');",
+          "truncated": false
+        },
+        {
+          "line": 72,
+          "statement": "if (!finalServer.includes(\"'frame-middle-finger': { frame: 'middle-finger'\")) failures.push('shop frames');",
+          "truncated": false
+        },
+        {
+          "line": 73,
+          "statement": "if (!finalGateway.includes('platformLabel')) failures.push('leaderboard platform');",
+          "truncated": false
+        },
+        {
+          "line": 74,
+          "statement": "if (finalGateway.includes('Колесо доступно только в Telegram.')) failures.push('VK wheel guard');",
+          "truncated": false
+        },
+        {
+          "line": 75,
+          "statement": "if (!finalServer.includes(\"code: 'raise-shields'\")) failures.push('special tester achievement');",
+          "truncated": false
+        },
+        {
+          "line": 76,
+          "statement": "if (!finalGateway.includes(\"achievement_code = 'raise-shields'\")) failures.push('special tester lookup');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-v22-special-achievement.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "932691bc8b57fbd9ffcaefab001e526f4c40b816c966becaa0588bdc337a07dc",
+      "invocation": "conditional child of apply-v22-runtime.mjs; executed in baseline trace",
+      "staticReadOrWriteTargets": [
+        "achievements.js",
+        "server.js",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 6,
+          "statement": "const MARKER = 'PIVNIK_V22_SPECIAL_ACHIEVEMENT_20260827';",
+          "truncated": false
+        },
+        {
+          "line": 13,
+          "statement": "await fs.writeFile(path.join(root, file), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (source.includes(`// ${MARKER}:${label}`)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "if (match[0].includes(\"code: 'raise-shields'\")) return `${source}\\n// ${MARKER}:${label}\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 24,
+          "statement": "const patchedFn = match[0].replace(",
+          "truncated": false
+        },
+        {
+          "line": 40,
+          "statement": "return `${source.replace(match[0], patchedFn)}\\n// ${MARKER}:${label}\\n`;",
+          "truncated": false
+        },
+        {
+          "line": 46,
+          "statement": "source = source.replace(",
+          "truncated": false
+        },
+        {
+          "line": 50,
+          "statement": "source = source.replace(/\\n\\s*raiseShieldsGranted: 0,?/, '');",
+          "truncated": false
+        },
+        {
+          "line": 51,
+          "statement": "source = source.replace(/\\n\\s*if \\(definition\\.manualOnly\\) continue;/, '');",
+          "truncated": false
+        },
+        {
+          "line": 53,
+          "statement": "if (source.includes(\"code: 'raise-shields'\")) {",
+          "truncated": false
+        },
+        {
+          "line": 63,
+          "statement": "if (!source.includes('has_raise_shields = Boolean(raiseShieldsResult')) {",
+          "truncated": false
+        },
+        {
+          "line": 86,
+          "statement": "if (!source.includes(from)) throw new Error('v22 special: server getProfile block not found');",
+          "truncated": false
+        },
+        {
+          "line": 87,
+          "statement": "source = source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 96,
+          "statement": "if (!source.includes('row.has_raise_shields = Boolean(raiseShieldsResult')) {",
+          "truncated": false
+        },
+        {
+          "line": 104,
+          "statement": "linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],",
+          "truncated": false
+        },
+        {
+          "line": 121,
+          "statement": "linkedPlatforms: ['telegram', 'vk'].includes(platform) ? [platform] : [],",
+          "truncated": false
+        },
+        {
+          "line": 144,
+          "statement": "if (!source.includes(from)) throw new Error('v22 special: gateway getProfile block not found');",
+          "truncated": false
+        },
+        {
+          "line": 145,
+          "statement": "source = source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 154,
+          "statement": "if (achievements.includes(\"code: 'raise-shields'\")) throw new Error('raise-shields leaked into countable catalog');",
+          "truncated": false
+        },
+        {
+          "line": 156,
+          "statement": "if (!source.includes(\"code: 'raise-shields'\")) throw new Error(`${name}: special achievement missing`);",
+          "truncated": false
+        },
+        {
+          "line": 157,
+          "statement": "if (!source.includes(\"achievement_code = 'raise-shields'\")) throw new Error(`${name}: special grant lookup missing`);",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-vk-consent-boot-fix.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "35f88c7ac4c933036cd818df244f3672efff9bbc1ed5b4bfb29015ac6034745a",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "loader-fix.css",
+        "universal-server.js",
+        "vk-platform.js"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 10,
+          "statement": "const marker = 'VK consent gate idempotency hotfix';",
+          "truncated": false
+        },
+        {
+          "line": 51,
+          "statement": "if (!source.includes(marker)) {",
+          "truncated": false
+        },
+        {
+          "line": 52,
+          "statement": "if (!source.includes(originalGate)) {",
+          "truncated": false
+        },
+        {
+          "line": 55,
+          "statement": "source = source.replace(originalGate, fixedGate);",
+          "truncated": false
+        },
+        {
+          "line": 56,
+          "statement": "await fs.writeFile(vkPlatformPath, source);",
+          "truncated": false
+        },
+        {
+          "line": 63,
+          "statement": "const next = source.replace(versionPattern, `vk-platform.js?v=${cacheVersion}`);",
+          "truncated": false
+        },
+        {
+          "line": 64,
+          "statement": "if (next === source && !source.includes(`vk-platform.js?v=${cacheVersion}`)) {",
+          "truncated": false
+        },
+        {
+          "line": 67,
+          "statement": "if (next !== source) await fs.writeFile(universalServerPath, next);",
+          "truncated": false
+        },
+        {
+          "line": 83,
+          "statement": "if (!source.includes('display: none !important;')) {",
+          "truncated": false
+        },
+        {
+          "line": 84,
+          "statement": "if (!source.includes(block)) {",
+          "truncated": false
+        },
+        {
+          "line": 87,
+          "statement": "source = source.replace(block, replacement);",
+          "truncated": false
+        },
+        {
+          "line": 88,
+          "statement": "await fs.writeFile(loaderCssPath, source);",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-vk-production-hotfix-20260831.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "cfa906e496b4634441fc162a01b42e5763642efc3b9d5738d792994d02a45e6c",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "red-cosmos-v2.css",
+        "vk-platform.js"
+      ],
+      "firstRunObservedChanges": [
+        "app.js",
+        "red-cosmos-v2.css",
+        "vk-platform.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "modifies VK after archive restore; not proven to cause observed startup failure",
+      "disposition": "retire only VK writing portion after making current hook canonical; retain app/CSS and verification",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 12,
+          "statement": "await fs.writeFile(path.join(root, relativePath), value, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 17,
+          "statement": "if (!source.includes(from)) throw new Error(`VK production hotfix: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "return source.replace(from, () => to);",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "vk = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 31,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 86,
+          "statement": "if (!redCss.includes('PIVNIK_VK_COSMOS_BACKGROUND_20260831')) {",
+          "truncated": false
+        },
+        {
+          "line": 95,
+          "statement": "if (!finalVk.includes('__PIVNIK_VK_REFRESH_PROFILE__')) failures.push('refresh hook');",
+          "truncated": false
+        },
+        {
+          "line": 96,
+          "statement": "if (!finalVk.includes(\"window.dispatchEvent(new CustomEvent('pivnik:vk-profile-hydrated'\")) failures.push('hydration event');",
+          "truncated": false
+        },
+        {
+          "line": 97,
+          "statement": "if (!finalApp.includes('button.disabled = !hasPlatformPhoto && !IS_VK')) failures.push('actionable VK photo button');",
+          "truncated": false
+        },
+        {
+          "line": 98,
+          "statement": "if (!finalApp.includes('VK profile photo refresh failed:')) failures.push('on-demand photo selection');",
+          "truncated": false
+        },
+        {
+          "line": 99,
+          "statement": "if (!finalCss.includes('PIVNIK_VK_COSMOS_BACKGROUND_20260831')) failures.push('VK cosmos background marker');",
+          "truncated": false
+        },
+        {
+          "line": 100,
+          "statement": "if (!finalCss.includes('html.platform-vk #appShell>main')) failures.push('transparent VK page canvas');",
+          "truncated": false
+        },
+        {
+          "line": 101,
+          "statement": "if (!finalCss.includes('radial-gradient(ellipse at 79% 22%')) failures.push('VK nebula layer');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/apply-working-updates.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "caf291f59a453ac970bee29855a0747cbf8e9f5deb7b3ee4dba33e87a182cc7a",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "index.html",
+        "platform-core.js",
+        "red-cosmos-v2.css",
+        "red-cosmos-v2.js",
+        "scripts/red-cosmos-v2-db-prepare.mjs",
+        "scripts/v22-data-audit-and-repair.mjs",
+        "universal-server.js",
+        "vk-platform.js"
+      ],
+      "firstRunObservedChanges": [
+        "app.js",
+        "index.html",
+        "platform-core.js",
+        "red-cosmos-v2.css",
+        "red-cosmos-v2.js",
+        "scripts/red-cosmos-v2-db-prepare.mjs",
+        "scripts/v22-data-audit-and-repair.mjs",
+        "universal-server.js",
+        "vk-platform.js"
+      ],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "whole-file archive overwrite provably discards VK source changes that retain its weak anchor",
+      "disposition": "retire only vk-platform.js archive write and VK retry injection; preserve other behavior",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 13,
+          "statement": "async function writeText(relativePath, value) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "await fs.writeFile(target, value, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 19,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 20,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 21,
+          "statement": "if (!source.includes(from)) throw new Error(`working updates: missing ${label}`);",
+          "truncated": false
+        },
+        {
+          "line": 22,
+          "statement": "return source.replace(from, () => to);",
+          "truncated": false
+        },
+        {
+          "line": 30,
+          "statement": "const runtimeAnchors = {",
+          "truncated": false
+        },
+        {
+          "line": 41,
+          "statement": "const anchor = runtimeAnchors[relativePath];",
+          "truncated": false
+        },
+        {
+          "line": 42,
+          "statement": "if (!anchor || !existing.includes(anchor)) {",
+          "truncated": false
+        },
+        {
+          "line": 45,
+          "statement": "await writeText(relativePath, targetContent);",
+          "truncated": false
+        },
+        {
+          "line": 51,
+          "statement": "vkPlatform = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 57,
+          "statement": "vkPlatform = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 63,
+          "statement": "await writeText('vk-platform.js', vkPlatform);",
+          "truncated": false
+        },
+        {
+          "line": 69,
+          "statement": "if (!platformCore.includes('export function isConfiguredOwnerIdentity(')) {",
+          "truncated": false
+        },
+        {
+          "line": 71,
+          "statement": "if (!platformCore.includes(ownerHelperAnchor)) throw new Error('working updates: missing platform owner helper anchor');",
+          "truncated": false
+        },
+        {
+          "line": 81,
+          "statement": "platformCore = platformCore.replace(ownerHelperAnchor, () => ownerHelper + ownerHelperAnchor);",
+          "truncated": false
+        },
+        {
+          "line": 82,
+          "statement": "await writeText('platform-core.js', platformCore);",
+          "truncated": false
+        },
+        {
+          "line": 86,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 92,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 98,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 104,
+          "statement": "await writeText('universal-server.js', gateway);",
+          "truncated": false
+        },
+        {
+          "line": 110,
+          "statement": "if (!redCss.includes(releaseQrGuard)) {",
+          "truncated": false
+        },
+        {
+          "line": 112,
+          "statement": "await writeText('red-cosmos-v2.css', redCss);",
+          "truncated": false
+        },
+        {
+          "line": 140,
+          "statement": "if (!redCss.includes('PIVNIK_VK_BOTTOM_NAV_SAFE_AREA_20260831')) {",
+          "truncated": false
+        },
+        {
+          "line": 142,
+          "statement": "await writeText('red-cosmos-v2.css', redCss);",
+          "truncated": false
+        },
+        {
+          "line": 148,
+          "statement": "if (app.includes(vkClientTipStart)) {",
+          "truncated": false
+        },
+        {
+          "line": 154,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 160,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 166,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 172,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 178,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 186,
+          "statement": "if (!app.includes(hydrationBlock)) {",
+          "truncated": false
+        },
+        {
+          "line": 187,
+          "statement": "const marker = `async function loadSecondaryData() {`;",
+          "truncated": false
+        },
+        {
+          "line": 188,
+          "statement": "if (!app.includes(marker)) throw new Error('working updates: missing VK hydration insertion point');",
+          "truncated": false
+        },
+        {
+          "line": 189,
+          "statement": "app = app.replace(marker, () => hydrationBlock + marker);",
+          "truncated": false
+        },
+        {
+          "line": 192,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 198,
+          "statement": "await writeText('app.js', app);",
+          "truncated": false
+        },
+        {
+          "line": 201,
+          "statement": "index = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 207,
+          "statement": "if (index.includes('        <div class=\"boot-badge\">Пивник | Бонусы</div>\\n')) {",
+          "truncated": false
+        },
+        {
+          "line": 208,
+          "statement": "index = index.replace('        <div class=\"boot-badge\">Пивник | Бонусы</div>\\n', '');",
+          "truncated": false
+        },
+        {
+          "line": 210,
+          "statement": "await writeText('index.html', index);",
+          "truncated": false
+        },
+        {
+          "line": 213,
+          "statement": "if (!app.includes(\"(source === 'telegram' || source === 'vk') && entity.photoUrl\")) failures.push('VK avatar source');",
+          "truncated": false
+        },
+        {
+          "line": 214,
+          "statement": "if (!app.includes(\"avatarInlineHtml(previewEntity, 'frame-choice-avatar')\")) failures.push('frame previews');",
+          "truncated": false
+        },
+        {
+          "line": 215,
+          "statement": "if (app.includes('if (IS_VK || state.wheel.artworkReady) return;')) failures.push('VK wheel artwork');",
+          "truncated": false
+        },
+        {
+          "line": 216,
+          "statement": "if (!app.includes(\"$('.profile-shortcuts')?.insertAdjacentElement('afterend', serviceAccess)\")) failures.push('service access placement');",
+          "truncated": false
+        },
+        {
+          "line": 217,
+          "statement": "if (!app.includes('pivnik:vk-profile-hydrated')) failures.push('VK profile hydration');",
+          "truncated": false
+        },
+        {
+          "line": 218,
+          "statement": "if (!app.includes('Achievement hub refresh skipped:')) failures.push('achievement refresh');",
+          "truncated": false
+        },
+        {
+          "line": 219,
+          "statement": "if (!platformCore.includes('export function isConfiguredOwnerIdentity(')) failures.push('configured owner identity helper');",
+          "truncated": false
+        },
+        {
+          "line": 220,
+          "statement": "if (!gateway.includes('isConfiguredOwnerIdentity(provider, externalUser.id')) failures.push('provider owner identity mapping');",
+          "truncated": false
+        },
+        {
+          "line": 221,
+          "statement": "if (!gateway.includes('Authorization is independent from profile-metadata ownership')) failures.push('owner role reconciliation');",
+          "truncated": false
+        },
+        {
+          "line": 222,
+          "statement": "if (!index.includes('<meta name=\"theme-color\" content=\"#c41e3a\" />')) failures.push('theme color');",
+          "truncated": false
+        },
+        {
+          "line": 223,
+          "statement": "if (index.includes('<div class=\"boot-badge\">Пивник | Бонусы</div>')) failures.push('boot badge');",
+          "truncated": false
+        },
+        {
+          "line": 225,
+          "statement": "if (!finalCss.includes(releaseQrGuard)) failures.push('release QR guard');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/force-public-release-ui.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "7e71c98f5e245811705271b2111faa273d661981895643513d968f309cfd14d3",
+      "invocation": "not invoked by inspected prestart/materialize chain",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "index.html"
+      ],
+      "firstRunObservedChanges": null,
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 9,
+          "statement": "const write = (file, content) => fs.writeFile(path.join(root, file), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 10,
+          "statement": "const replaceAll = (source, from, to) => source.includes(from) ? source.split(from).join(to) : source;",
+          "truncated": false
+        },
+        {
+          "line": 33,
+          "statement": "out = out.replace(/закрытая\\s+бета/gi, '');",
+          "truncated": false
+        },
+        {
+          "line": 34,
+          "statement": "out = out.replace(/правила\\s+бета-тестирования/gi, 'Работа приложения');",
+          "truncated": false
+        },
+        {
+          "line": 35,
+          "statement": "out = out.replace(/версия документа:\\s*бета(?:\\s*\\d+(?:\\.\\d+)*)?/gi, 'Редакция правил: 08.08.2026');",
+          "truncated": false
+        },
+        {
+          "line": 36,
+          "statement": "out = out.replace(/после\\s+бета-теста/gi, 'после запуска');",
+          "truncated": false
+        },
+        {
+          "line": 41,
+          "statement": "index = index.replace(/<span\\s+class=[\"']beta-badge[\"'][^>]*>[\\s\\S]*?<\\/span>/gi, '');",
+          "truncated": false
+        },
+        {
+          "line": 42,
+          "statement": "index = index.replace(/styles\\.css\\?v=[^\"']+/g, `styles.css?v=${RELEASE_VERSION}`);",
+          "truncated": false
+        },
+        {
+          "line": 43,
+          "statement": "index = index.replace(/app\\.js\\?v=[^\"']+/g, `app.js?v=${RELEASE_VERSION}`);",
+          "truncated": false
+        },
+        {
+          "line": 44,
+          "statement": "index = index.replace(",
+          "truncated": false
+        },
+        {
+          "line": 48,
+          "statement": "index = index.replace(",
+          "truncated": false
+        },
+        {
+          "line": 52,
+          "statement": "index = index.replace(",
+          "truncated": false
+        },
+        {
+          "line": 59,
+          "statement": "app = app.replace(/line\\.insertAdjacentHTML\\(\\s*['\"]beforeend['\"]\\s*,\\s*['\"]<span class=\\\\?[\"']beta-badge\\\\?[\"'][\\s\\S]*?<\\\\?\\/span>['\"]\\s*\\);?/g, '// Public release: legacy stage badge removed.');",
+          "truncated": false
+        },
+        {
+          "line": 60,
+          "statement": "app = app.replace(/const APP_VERSION = '[^']+';/, `const APP_VERSION = '${RELEASE_VERSION}';`);",
+          "truncated": false
+        },
+        {
+          "line": 61,
+          "statement": "app = app.replace(",
+          "truncated": false
+        },
+        {
+          "line": 65,
+          "statement": "if (!app.includes('FINAL_PUBLIC_RELEASE_UI_GUARD_20260808')) {",
+          "truncated": false
+        },
+        {
+          "line": 72,
+          "statement": "source = source.replace(/const TERMS_VERSION = 'beta-0\\.4';/, \"const TERMS_VERSION = '2026-08-08';\");",
+          "truncated": false
+        },
+        {
+          "line": 80,
+          "statement": "const finalAppForScan = finalApp.replace(/\\/\\/ FINAL_PUBLIC_RELEASE_UI_GUARD_20260808[\\s\\S]*$/m, '');",
+          "truncated": false
+        },
+        {
+          "line": 95,
+          "statement": "if (!finalIndex.includes(`app.js?v=${RELEASE_VERSION}`)) failures.push('index.html: app cache version not updated');",
+          "truncated": false
+        },
+        {
+          "line": 96,
+          "statement": "if (!finalIndex.includes(`styles.css?v=${RELEASE_VERSION}`)) failures.push('index.html: styles cache version not updated');",
+          "truncated": false
+        },
+        {
+          "line": 97,
+          "statement": "if (!finalApp.includes(`const APP_VERSION = '${RELEASE_VERSION}';`)) failures.push('app.js: release version not updated');",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/materialize-runtime-patches.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "e8d93c0d13d0072cd5034411f4bcf64a61c41f93fd833260ac54a5d7d383e433",
+      "invocation": "materialize only; no delta on inspected base",
+      "staticReadOrWriteTargets": [
+        "app.js",
+        "bootstrap-vlad.js",
+        "bootstrap.js",
+        "index.html",
+        "migrations/004_deleted_identity_tombstones.sql",
+        "migrations/006_telegram_wheel.sql",
+        "styles.css",
+        "universal-server.js"
+      ],
+      "firstRunObservedChanges": [],
+      "idempotency": "not re-executed during this audit; no general semantic claim",
+      "restartRisk": "cannot run through the inspected restart chain; manual invocation can alter files",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain file; unnecessary for current production command chain; do not execute speculatively",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 9,
+          "statement": "const markerPath = path.join(root, '.pivnik-materialized');",
+          "truncated": false
+        },
+        {
+          "line": 15,
+          "statement": "if (preparedBootstrapSource.includes(serverImport)) {",
+          "truncated": false
+        },
+        {
+          "line": 16,
+          "statement": "await fs.writeFile(",
+          "truncated": false
+        },
+        {
+          "line": 18,
+          "statement": "preparedBootstrapSource.replace(",
+          "truncated": false
+        },
+        {
+          "line": 33,
+          "statement": "await fs.writeFile(path.join(root, relativePath), content, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 36,
+          "statement": "function replaceRequired(source, from, to, label) {",
+          "truncated": false
+        },
+        {
+          "line": 37,
+          "statement": "if (source.includes(to)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 38,
+          "statement": "if (!source.includes(from)) {",
+          "truncated": false
+        },
+        {
+          "line": 41,
+          "statement": "return source.replace(from, to);",
+          "truncated": false
+        },
+        {
+          "line": 44,
+          "statement": "function replacePatternRequired(source, pattern, replacement, marker, label) {",
+          "truncated": false
+        },
+        {
+          "line": 45,
+          "statement": "if (source.includes(marker)) return source;",
+          "truncated": false
+        },
+        {
+          "line": 49,
+          "statement": "return source.replace(pattern, replacement);",
+          "truncated": false
+        },
+        {
+          "line": 54,
+          "statement": "index = replacePatternRequired(",
+          "truncated": false
+        },
+        {
+          "line": 64,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 92,
+          "statement": "app = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 102,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 130,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 143,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 167,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 175,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 193,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 223,
+          "statement": "gateway = replaceRequired(",
+          "truncated": false
+        },
+        {
+          "line": 252,
+          "statement": "const supportedAppVersion = app.includes(\"const APP_VERSION = '19.1-telegram-wheel-v2';\")",
+          "truncated": false
+        },
+        {
+          "line": 253,
+          "statement": "|| app.includes(\"const APP_VERSION = '2.0-red-cosmos';\");",
+          "truncated": false
+        },
+        {
+          "line": 255,
+          "statement": "if (!app.includes(\"profileFrame === 'vladislav'\")) failures.push('app.js Vladislav frame');",
+          "truncated": false
+        },
+        {
+          "line": 256,
+          "statement": "if (!app.includes('consentSafeTarget')) failures.push('consent-safe deletion');",
+          "truncated": false
+        },
+        {
+          "line": 257,
+          "statement": "if (!gateway.includes('vladislavTelegramId')) failures.push('universal-server.js Vladislav identity');",
+          "truncated": false
+        },
+        {
+          "line": 258,
+          "statement": "if (!gateway.includes(\"storedFrame === 'olesya'\")) failures.push('universal-server.js Olesya frame');",
+          "truncated": false
+        },
+        {
+          "line": 259,
+          "statement": "if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');",
+          "truncated": false
+        },
+        {
+          "line": 260,
+          "statement": "if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');",
+          "truncated": false
+        },
+        {
+          "line": 261,
+          "statement": "if (!index.includes('styles.css?v=19.1-telegram-wheel-v2')) failures.push('index.html asset version');",
+          "truncated": false
+        },
+        {
+          "line": 262,
+          "statement": "if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');",
+          "truncated": false
+        },
+        {
+          "line": 263,
+          "statement": "if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');",
+          "truncated": false
+        },
+        {
+          "line": 264,
+          "statement": "if (!app.includes('WHEEL_VISUAL_SECTORS')) failures.push('app.js wheel artwork');",
+          "truncated": false
+        },
+        {
+          "line": 265,
+          "statement": "if (!gateway.includes(\"url.pathname === '/api/wheel/status'\")) failures.push('wheel status endpoint');",
+          "truncated": false
+        },
+        {
+          "line": 266,
+          "statement": "if (!gateway.includes(\"url.pathname === '/api/wheel/spin'\")) failures.push('wheel spin endpoint');",
+          "truncated": false
+        },
+        {
+          "line": 267,
+          "statement": "if (!gateway.includes(\"const PLATFORM_ACCOUNT_MODE = 'separate';\")) failures.push('separate platform accounts');",
+          "truncated": false
+        },
+        {
+          "line": 268,
+          "statement": "if (!gateway.includes('linkCodes: false')) failures.push('disabled account linking');",
+          "truncated": false
+        },
+        {
+          "line": 269,
+          "statement": "if (!gateway.includes('/vk-platform.js?v=3.2.2-anna-consent-persistence')) failures.push('VK client cache version');",
+          "truncated": false
+        },
+        {
+          "line": 270,
+          "statement": "if (!index.includes('id=\"openWheelButton\"')) failures.push('Telegram wheel entry');",
+          "truncated": false
+        },
+        {
+          "line": 271,
+          "statement": "if (!index.includes('id=\"wheelSpinButton\"')) failures.push('Telegram wheel screen');",
+          "truncated": false
+        },
+        {
+          "line": 272,
+          "statement": "if (!wheelMigration.includes('CREATE TABLE IF NOT EXISTS wheel_spins')) failures.push('wheel migration');",
+          "truncated": false
+        },
+        {
+          "line": 289,
+          "statement": "if (!bootstrapVlad.includes(MATERIALIZED_BOOTSTRAP_IMPORT)) {",
+          "truncated": false
+        },
+        {
+          "line": 295,
+          "statement": "await fs.writeFile(bootstrapVladPath, bootstrapVlad, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 303,
+          "statement": "await fs.writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\\n`, 'utf8');",
+          "truncated": false
+        },
+        {
+          "line": 308,
+          "statement": "await fs.writeFile(",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/red-cosmos-v2-db-prepare.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "4988f8f186d189110f6bfa2e2e257626a641d85cc1061050fa06bfc0d12e74ff",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [],
+      "firstRunObservedChanges": null,
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 37,
+          "statement": "ssl: databaseUrl.includes('railway.internal') ? false : { rejectUnauthorized: false },",
+          "truncated": false
+        },
+        {
+          "line": 42,
+          "statement": "function qi(value) { return '\"' + String(value).replaceAll('\"', '\"\"') + '\"'; }",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "script": "scripts/repair-telegram-runtime.mjs",
+      "sourceCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+      "sourceSha256": "f227bd1f5494578c363e8ef65aba0f82864b8e8ddc7e784324f4e21c76d513bb",
+      "invocation": "prestart direct",
+      "staticReadOrWriteTargets": [],
+      "firstRunObservedChanges": [],
+      "idempotency": "final startup regions pass repeated chain parity on candidate; individual script semantic idempotency is not inferred",
+      "restartRisk": "can affect files or external state on normal startup",
+      "conflictAssessment": "shared file surface; no specific conflict proven for this incident",
+      "disposition": "retain existing behavior; no retirement proof for unrelated features",
+      "conditionsAndReplacementLocations": [
+        {
+          "line": 4,
+          "statement": "const isVkService = documentPlatform === 'vk' || serviceName.includes('vk');",
+          "truncated": false
+        },
+        {
+          "line": 5,
+          "statement": "const appUrl = String(process.env.TELEGRAM_APP_URL || process.env.PIVNIK_APP_URL || '').trim().replace(/\\/+$/, '');",
+          "truncated": false
+        }
+      ]
+    }
+  ]
+}
