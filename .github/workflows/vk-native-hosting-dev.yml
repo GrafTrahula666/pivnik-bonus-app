@@ -57,6 +57,16 @@ jobs:
           grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
           ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
           ! grep -q 'up.railway.app' vk-hosting-build/index.html
+      - name: Verify HTTPS gateway before DEV deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in healthz readyz; do
+            curl --fail --silent --show-error --location \
+              --retry 4 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 10 --max-time 20 \
+              "https://139.100.238.159.nip.io/$path" >/dev/null
+          done
       - name: Deploy DEV only to VK Mini Apps Hosting
         id: deploy
         env:
