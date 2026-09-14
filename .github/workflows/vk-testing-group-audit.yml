@@ -1,0 +1,67 @@
+name: Temporary VK testing group audit
+
+on:
+  push:
+    branches:
+      - ops/vk-testing-group-audit-20260823
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect VK testing group routing safely
+        env:
+          T1: ${{ secrets.VK_SERVICE_TOKEN }}
+          T2: ${{ secrets.VK_SERVICE_ACCESS_TOKEN }}
+          T3: ${{ secrets.VK_ACCESS_TOKEN }}
+          T4: ${{ secrets.VK_APP_SERVICE_TOKEN }}
+          APP_SECRET: ${{ secrets.VK_APP_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN=""
+          TOKEN_NAME=""
+          for pair in "VK_SERVICE_TOKEN:$T1" "VK_SERVICE_ACCESS_TOKEN:$T2" "VK_ACCESS_TOKEN:$T3" "VK_APP_SERVICE_TOKEN:$T4"; do
+            name="${pair%%:*}"
+            value="${pair#*:}"
+            if [ -n "$value" ]; then TOKEN="$value"; TOKEN_NAME="$name"; break; fi
+          done
+
+          if [ -z "$TOKEN" ] && [ -n "$APP_SECRET" ]; then
+            oauth=$(curl -sS --get 'https://oauth.vk.com/access_token' \
+              --data-urlencode 'client_id=54694987' \
+              --data-urlencode "client_secret=$APP_SECRET" \
+              --data-urlencode 'grant_type=client_credentials' \
+              --data-urlencode 'v=5.199')
+            TOKEN=$(echo "$oauth" | jq -r '.access_token // empty')
+            if [ -n "$TOKEN" ]; then
+              echo "::add-mask::$TOKEN"
+              TOKEN_NAME="oauth_client_credentials"
+            else
+              echo "VK_OAUTH_CLIENT_CREDENTIALS=false"
+              echo "$oauth" | jq '{error:(.error // null), error_description:(.error_description // null)}'
+            fi
+          fi
+
+          if [ -z "$TOKEN" ]; then
+            echo "VK_SERVICE_TOKEN_PRESENT=false"
+            exit 0
+          fi
+          echo "VK_SERVICE_TOKEN_PRESENT=true"
+          echo "VK_SERVICE_TOKEN_SOURCE=$TOKEN_NAME"
+
+          response=$(curl -sS --get 'https://api.vk.com/method/apps.getTestingGroups' \
+            --data-urlencode "access_token=$TOKEN" \
+            --data-urlencode 'v=5.199')
+          if echo "$response" | jq -e '.error' >/dev/null; then
+            echo "$response" | jq '{error:{error_code:.error.error_code,error_msg:.error.error_msg}}'
+            exit 0
+          fi
+          echo "$response" | jq '{groups: [(.response.items // .response // [])[] | {id:(.id // .group_id), name:(.name // ""), webview:(.webview // .webview_url // .url // ""), platforms:(.platforms // []), users_count:((.user_ids // .users // [])|length)}]}'

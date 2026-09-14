@@ -1,0 +1,44 @@
+name: Temporary Vercel VK proxy check
+
+on:
+  push:
+    branches:
+      - ops/vk-testing-group-audit-20260823
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check canonical proxy end to end
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://pivnik-vk-proxy.vercel.app'
+          check_get() {
+            path="$1" expected="$2"
+            code=$(curl -L -sS --connect-timeout 10 --max-time 20 -o /tmp/body -w '%{http_code}' "$BASE$path" || true)
+            echo "GET $path HTTP=$code"
+            if [ "$code" = '200' ] && grep -q "$expected" /tmp/body; then echo "GET_${path//\//_}=OK"; else echo "GET_${path//\//_}=FAIL"; fi
+          }
+          check_get '/vk' 'Пивник | Бонусы'
+          check_get '/vendor/vk-bridge.js' 'VKWebAppInit'
+          check_get '/vk-platform.js' 'VKWebAppGetLaunchParams'
+          check_get '/api/platform-health' '"ok":true'
+
+          code=$(curl -L -sS --connect-timeout 10 --max-time 20 \
+            -o /tmp/auth -w '%{http_code}' \
+            -X POST "$BASE/api/auth" \
+            -H 'Origin: https://pivnik-vk-proxy.vercel.app' \
+            -H 'Sec-Fetch-Site: same-origin' \
+            -H 'Content-Type: application/json' \
+            --data '{"platform":"vk","launchParams":"vk_app_id=54694987&vk_user_id=1&vk_ts=1&sign=invalid"}' || true)
+          echo "POST /api/auth HTTP=$code"
+          sed -n '1,5p' /tmp/auth
+          if [ "$code" = '401' ]; then echo 'AUTH_PROXY_ORIGIN=OK'; else echo 'AUTH_PROXY_ORIGIN=FAIL'; fi
