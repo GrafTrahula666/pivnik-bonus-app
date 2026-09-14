@@ -30,6 +30,8 @@ async function snapshot(base) {
     finish: region(app, 'async function finishBoot()', 'function updateNetworkBadge()'),
     retry: region(app, "$('#bootRetry')?.addEventListener", "$('#bootLite')?.addEventListener"),
     serverProfile: region(gateway, 'async function serveStartupProfile(', 'export const server ='),
+    serverAssets: region(gateway, "if (req.method === 'GET' && url.pathname === '/vk-platform.js')",
+      "if (req.method === 'GET' && url.pathname === '/legal/privacy')"),
     serverRoutes: region(gateway, "if (req.method === 'POST' && url.pathname === '/api/auth')",
       "if (req.method === 'GET' && url.pathname === '/api/wheel/status')")
   };

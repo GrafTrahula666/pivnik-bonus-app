@@ -25,8 +25,13 @@ async function get(url) {
       headers: { 'user-agent': 'pivnik-vk-startup-readonly-probe/1.0' }
     });
     const bytes = new Uint8Array(await response.arrayBuffer());
+    const pathname = new URL(url).pathname;
+    const contentType = response.headers.get('content-type') || '';
+    const validAssetType = pathname.endsWith('.js') ? /(?:java|ecma)script/i.test(contentType)
+      : pathname.endsWith('.css') ? /^text\/css\b/i.test(contentType) : true;
     return { record: {
       url, finalUrl: response.url, status: response.status, elapsedMs: Math.round(performance.now() - started),
+      validAssetType,
       sha256: crypto.createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length,
       headers: Object.fromEntries(responseHeaders.map((name) => [name, response.headers.get(name)]))
     }, body: new TextDecoder().decode(bytes) };
@@ -91,5 +96,5 @@ await fs.mkdir(path.dirname(path.resolve(output)), { recursive: true });
 await fs.writeFile(output, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
 const failures = services.flatMap((service) => service.requests.filter((request) =>
-  new URL(request.url).pathname === '/api/bootstrap' ? request.status !== 401 : request.status !== 200));
+  new URL(request.url).pathname === '/api/bootstrap' ? request.status !== 401 : request.status !== 200 || !request.validAssetType));
 if (failures.length || services.find((service) => service.platform === 'vk')?.externalAssets.length) process.exitCode = 1;

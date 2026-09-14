@@ -76,6 +76,17 @@ test('Real universal HTTP path accepts safe telemetry before DB readiness and ke
     assert.equal(invalid.status, 400);
     const oversized = await fetch(`${base}/api/diagnostics/vk-startup`, { method: 'POST', body: ' '.repeat(16_385) });
     assert.equal(oversized.status, 413);
+    for (const [asset, type, marker] of [
+      ['red-cosmos-v2.js', /javascript/, 'const EXPECTED_PRIMARY'],
+      ['red-cosmos-v2.css', /text\/css/, '--primary-red']
+    ]) {
+      const file = await fetch(`${base}/${asset}?v=startup-test`);
+      assert.equal(file.status, 200);
+      assert.match(file.headers.get('content-type'), type);
+      const body = await file.text();
+      assert.ok(body.includes(marker));
+      assert.doesNotMatch(body, /<!doctype html|<html/i);
+    }
   } finally {
     console.info = original;
     await new Promise((resolve) => server.close(resolve));

@@ -3038,6 +3038,15 @@ export const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(__dirname, 'account-link.js'), 'text/javascript; charset=utf-8', 'no-cache');
     }
 
+    // These files are referenced by the materialized document. The child server
+    // has no route for them and otherwise returns its HTML fallback with 200.
+    if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.js') {
+      return serveFile(res, path.join(__dirname, 'red-cosmos-v2.js'), 'text/javascript; charset=utf-8', 'no-cache');
+    }
+    if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.css') {
+      return serveFile(res, path.join(__dirname, 'red-cosmos-v2.css'), 'text/css; charset=utf-8', 'no-cache');
+    }
+
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
       return serveLegalDocument(res, path.join(__dirname, 'legal', 'privacy.html'));
     }

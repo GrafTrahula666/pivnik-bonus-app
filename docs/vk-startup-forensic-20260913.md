@@ -21,6 +21,10 @@ Railway deployment configuration and startup logs agree about the commit and com
 
 The available VK HTTP log slice on 13 September contains bootstrap 401, auth 401 with an expired-launch message, then auth 200 and profile 200. Those requests lack a shared boot ID and cannot be attributed to the user's incident. They demonstrate that an expired launch is rejected and some auth requests succeed, not which stage failed for this user.
 
+Public observation from GitHub CI at 23:38:46 UTC ([run 34790296020](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/34790296020), [captured evidence](vk-startup-production-observation-20260913.json)) confirmed both deployed SHAs, IPv4 reachability, verified TLS 1.3, no redirects and the absence of AAAA records. The served VK runtime hash exactly matched the local baseline materialized hash. No external startup assets were listed in the VK document.
+
+It also proved a production routing defect: **both `/red-cosmos-v2.js` and `/red-cosmos-v2.css` returned the same HTML document with HTTP 200 and `text/html`**, on both platforms. The child server exposes only app/styles and then falls back to index.html; the gateway had no routes for these two referenced assets. The candidate serves their actual files with explicit JS/CSS MIME types and `no-cache`. The real gateway HTTP regression checks type and body before DB readiness. The network observer now fails incorrect MIME even when status is 200. This establishes missing assets in the live release, but not that they were the sole cause of the user's missing profile. No CSS or design logic was changed.
+
 ## Reproduced failures and evidence
 
 The first ten new recovery cases were run against a materialized copy of the inspected main commit: **8 failed, 2 passed**. The same cases pass after the changes.
@@ -86,7 +90,7 @@ The error screen displays the boot ID. `/api/release-readiness` gains hashes of 
 
 ## Verification and limitations
 
-- Full materialized suite: 306/306 passed before adding the read-only secret-check and migration-gate tests; both extra tests also passed. Final CI is the authoritative combined result.
+- Full materialized suite: 308/308 passed locally and in clean-install [CI run 34790295940](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/34790295940). The subsequent asset-route change is verified by the gateway HTTP test and rerun CI on the updated PR head.
 - Existing URL/query/hash and hanging Bridge fallback tests pass.
 - New cases cover Bridge unavailability/rejection/deadline/delayed params, delayed auth, 401 refresh with changed/unchanged params, mismatched optional profile, account namespace selection, stale unknown storage, transient bootstrap failures, cold gateway, retry, concurrent boot, ten sequential simulated returning-session boots, and Telegram storage/returning-session regression.
 - A real localhost HTTP listener uses the actual universal-server routing: safe diagnostics returns 202 before DB readiness, auth stays 503, unauthorized profile routes stay 401, malformed diagnostics is 400, oversized diagnostics is 413.
