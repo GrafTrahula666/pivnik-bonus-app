@@ -18,14 +18,7 @@ function replaceRequired(source, from, to, label) {
   return source.replace(from, () => to);
 }
 
-let vk = await read('vk-platform.js');
-vk = replaceRequired(
-  vk,
-  `  function sendBridge(method, params) {\n    if (!bridge?.send) return Promise.reject(new Error('VK Bridge unavailable'));\n    return bridgeReady.then(() => bridge.send(method, params));\n  }`,
-  `  async function refreshVkProfileOnDemand() {\n    const signedLaunchParams = await resolveLaunchParams();\n    if (!hasSignedLaunchParams(signedLaunchParams)) {\n      throw new Error('VK не передал подписанные параметры запуска.');\n    }\n    const profile = await requestVkUserInfo();\n    if (!profile?.id) {\n      throw new Error('VK не передал фотографию профиля.');\n    }\n    vkUser = profile;\n    const syncResponse = await originalFetch('/api/auth', {\n      method: 'POST',\n      headers: { 'content-type': 'application/json' },\n      body: JSON.stringify({\n        platform: 'vk',\n        launchParams: signedLaunchParams,\n        user: profile\n      })\n    });\n    if (!syncResponse.ok) {\n      throw new Error(\`Не удалось обновить профиль VK (\${syncResponse.status}).\`);\n    }\n    const data = await syncResponse.clone().json().catch(() => null);\n    if (!data?.profile) throw new Error('VK вернул пустой профиль.');\n    const hydration = {\n      profile: data.profile,\n      statuses: data.statuses || [],\n      design: data.design || null\n    };\n    window.__PIVNIK_VK_PROFILE_HYDRATION__ = hydration;\n    window.dispatchEvent(new CustomEvent('pivnik:vk-profile-hydrated', { detail: hydration }));\n    return hydration;\n  }\n\n  window.__PIVNIK_VK_REFRESH_PROFILE__ = refreshVkProfileOnDemand;\n\n  function sendBridge(method, params) {\n    if (!bridge?.send) return Promise.reject(new Error('VK Bridge unavailable'));\n    return bridgeReady.then(() => bridge.send(method, params));\n  }`,
-  'on-demand VK profile refresh hook'
-);
-await write('vk-platform.js', vk);
+// VK profile hooks now live in canonical vk-platform.js; only verify them below.
 
 let app = await read('app.js');
 app = replaceRequired(

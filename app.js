@@ -59,6 +59,7 @@ const BOOT_FAILSAFE_MS = 10000;
 const API_TIMEOUT_MS = 9000;
 const bootStartedAt = performance.now();
 let bootCompleted = false;
+let bootInFlight = null;
 
 const state = {
   token: safeStorage.get('pivnik_session'),
@@ -813,9 +814,12 @@ async function finishBoot() {
   try {
     window.dispatchEvent(new CustomEvent('pivnik:boot-complete'));
   } catch (_) {}
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_BOOT_COMPLETE');
 }
 
 function showBootActions(message, { canOpenApp = Boolean(state.profile) } = {}) {
+  const diagnostics = IS_VK ? window.__PIVNIK_VK_DIAGNOSTICS__ : null;
+  if (diagnostics) message = `${message || 'Не удалось загрузить приложение.'} Код запуска: ${diagnostics.id}`;
   const text = $('#bootText');
   if (text && message) text.textContent = message;
   $('#bootScreen')?.classList.add('error');
@@ -855,6 +859,7 @@ setTimeout(() => {
     finishBoot();
     toast('Часть данных продолжает загружаться');
   } else {
+    if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_BOOT_STALLED');
     showBootActions(`Не удалось завершить подключение. Можно повторить без перезапуска ${PLATFORM_NAME}.`);
   }
 }, BOOT_FAILSAFE_MS);
@@ -1857,8 +1862,12 @@ async function authenticate() {
     retries: 0,
     timeoutMs: 7000
   });
+  if (IS_VK && (typeof data.token !== 'string' || !data.token || !data.profile)) {
+    throw Object.assign(new Error('Сервер не передал сессию и профиль.'), { code: 'INVALID_RESPONSE' });
+  }
   state.token = data.token;
   safeStorage.set('pivnik_session', state.token);
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_SESSION_RECEIVED');
   applyProfilePayload(data);
 }
 
@@ -1937,39 +1946,52 @@ function blockUnacceptedAction(event) {
 }
 
 async function boot() {
-  clearBootError();
-  try {
-    refreshTelegramBridge();
-    $('#bootText').textContent = 'Подключаем бонусный счёт…';
-    if (state.token) {
-      try {
-        const bootstrap = await api('/api/bootstrap', { retries: 0, timeoutMs: 6000 });
-        applyProfilePayload(bootstrap);
-      } catch (error) {
-        console.warn('Stored session rejected:', error);
-        state.token = '';
-        safeStorage.remove('pivnik_session');
+  if (bootInFlight) return bootInFlight;
+  bootInFlight = (async () => {
+    clearBootError();
+    bootCompleted = false;
+    if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.begin();
+    try {
+      refreshTelegramBridge();
+      $('#bootText').textContent = 'Подключаем бонусный счёт…';
+      if (state.token) {
+        try {
+          const bootstrap = await api('/api/bootstrap', { retries: 0, timeoutMs: 6000 });
+          applyProfilePayload(bootstrap);
+        } catch (error) {
+          // A transport failure does not invalidate a signed session. In VK an
+          // unnecessary re-auth can strand a warm WebView with expired launch params.
+          if (IS_VK && error?.status !== 401) throw error;
+          if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_SESSION_REJECTED', { status: error.status });
+          console.warn('Stored session rejected:', error);
+          state.token = '';
+          safeStorage.remove('pivnik_session');
+        }
       }
+      if (!state.token) {
+        $('#bootText').textContent = `Проверяем доступ в ${PLATFORM_NAME}…`;
+        await authenticate();
+      }
+      $('#bootText').textContent = 'Открываем профиль…';
+      renderCoreProfile();
+      await finishBoot();
+      closeModal('consentModal');
+      closeModal('profileSetupModal');
+      schedulePostBootHydration();
+    } catch (error) {
+      const diagnostics = IS_VK ? window.__PIVNIK_VK_DIAGNOSTICS__ : null;
+      diagnostics?.emit('VK_BOOT_FAIL', { status: error?.status, code: diagnostics.errorCode(error) });
+      console.error('Boot failed:', error);
+      const message = error?.status === 401
+        ? (IS_VK
+            ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
+            : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
+        : (error?.message || 'Не удалось загрузить приложение.');
+      showBootActions(message);
     }
-    if (!state.token) {
-      $('#bootText').textContent = `Проверяем доступ в ${PLATFORM_NAME}…`;
-      await authenticate();
-    }
-    $('#bootText').textContent = 'Открываем профиль…';
-    renderCoreProfile();
-    await finishBoot();
-    closeModal('consentModal');
-    closeModal('profileSetupModal');
-    schedulePostBootHydration();
-  } catch (error) {
-    console.error('Boot failed:', error);
-    const message = error?.status === 401
-      ? (IS_VK
-          ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
-          : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
-      : (error?.message || 'Не удалось загрузить приложение.');
-    showBootActions(message);
-  }
+  })();
+  try { await bootInFlight; }
+  finally { bootInFlight = null; }
 }
 
 async function acceptTerms() {
@@ -2920,9 +2942,9 @@ $('#ackAchievementButton')?.addEventListener('click', async () => {
   finally { button.disabled = false; }
 });
 $('#bootRetry')?.addEventListener('click', () => {
+  if (bootInFlight) return;
   state.bootSecondaryStarted = false;
-  bootCompleted = false;
-  boot();
+  void boot();
 });
 $('#bootLite')?.addEventListener('click', enableLiteMode);
 
@@ -3068,11 +3090,13 @@ $$('[data-design-color], [data-design-text], [data-design-section], [data-design
   if (state.adminSettings) applyDesign(readDesignForm());
 }));
 window.addEventListener('error', (event) => {
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_CLIENT_ERROR');
   console.error('Client error:', event.error || event.message);
   const bootScreen = $('#bootScreen');
   if (bootScreen && !bootScreen.classList.contains('hidden')) showBootActions('Ошибка запуска. Нажмите «Повторить» или откройте облегчённый режим.');
 });
 window.addEventListener('unhandledrejection', (event) => {
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_CLIENT_ERROR');
   console.error('Unhandled promise rejection:', event.reason);
 });
 document.addEventListener('visibilitychange', () => {
