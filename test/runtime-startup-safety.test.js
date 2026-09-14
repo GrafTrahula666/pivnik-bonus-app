@@ -36,6 +36,14 @@ test('Telegram menu repair is best-effort and cannot block application startup o
   assert.doesNotMatch(telegramRepair, /process\.exit\s*\(/);
 });
 
+test('Telegram menu repair has an explicit opt-in bypass for isolated DEV diagnostics', () => {
+  assert.match(telegramRepair, /PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR/);
+  assert.match(telegramRepair, /skipRepair/);
+  assert.match(telegramRepair, /skipRepair\)\s*\{/);
+  assert.match(telegramRepair, /PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR=true/);
+  assert.doesNotMatch(telegramRepair, /skipRepair\s*=\s*true\s*;/);
+});
+
 test('Runtime side-effect audit requires a real pg client before classifying DB writes', () => {
   assert.match(retirementAudit, /const databaseClient =/);
   assert.match(retirementAudit, /const databaseMutationSql =/);
