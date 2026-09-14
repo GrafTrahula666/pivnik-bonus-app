@@ -15,7 +15,9 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
     mountSessionScopeEndpoint() { calls += 1; return { mounted: true }; },
     createScopeSelectionResolver() { calls += 1; return async () => ({}); },
     createScopeDirectory() { calls += 1; return {}; },
-    mountScopeSelectionEndpoint() { calls += 1; return { mounted: true }; }
+    mountScopeSelectionEndpoint() { calls += 1; return { mounted: true }; },
+    createScopeDirectoryResolver() { calls += 1; return async () => ({}); },
+    mountScopeDirectoryEndpoint() { calls += 1; return { mounted: true }; }
   });
 
   assert.deepEqual(result, {
@@ -23,7 +25,8 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
     actions: null,
     dashboard: null,
     dashboardSessionScope: null,
-    dashboardScopeSelection: null
+    dashboardScopeSelection: null,
+    dashboardScopeDirectory: null
   });
   assert.equal(calls, 0);
 });
@@ -37,7 +40,13 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
   const grantAchievement = async () => ({});
   const resolveSessionScope = async () => ({ tenantId: 'tenant-1', locationId: null });
   const selectDashboardScope = async () => ({ tenantId: 'tenant-2', locationId: null });
-  const scopeDirectory = { findTenant: async () => ({}), findLocation: async () => ({}) };
+  const resolveDashboardScopeDirectory = async () => ({ tenants: [] });
+  const scopeDirectory = {
+    findTenant: async () => ({}),
+    findLocation: async () => ({}),
+    listTenants: async () => [],
+    listLocations: async () => []
+  };
   let receivedActions;
   let receivedDashboard;
   let receivedResolver;
@@ -45,10 +54,13 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
   let receivedDirectoryOptions;
   let receivedSelectionResolver;
   let receivedSelectionEndpoint;
+  let receivedScopeDirectoryResolver;
+  let receivedScopeDirectoryEndpoint;
   const actions = { mounted: true, core: { mounted: true }, metadata: { mounted: true } };
   const dashboard = { mounted: true, periodSummary: { mounted: true }, kpiDrilldown: { mounted: true } };
   const dashboardSessionScope = { mounted: true, route: '/api/spaceverse/session/dashboard-scope' };
   const dashboardScopeSelection = { mounted: true, route: '/api/spaceverse/session/dashboard-scope/select' };
+  const dashboardScopeDirectory = { mounted: true, route: '/api/spaceverse/session/dashboard-scopes' };
 
   const result = mountSpaceverseServerComposition({
     app,
@@ -64,7 +76,9 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
     mountSessionScopeEndpoint(options) { receivedSessionScopeEndpoint = options; return dashboardSessionScope; },
     createScopeDirectory(options) { receivedDirectoryOptions = options; return scopeDirectory; },
     createScopeSelectionResolver(options) { receivedSelectionResolver = options; return selectDashboardScope; },
-    mountScopeSelectionEndpoint(options) { receivedSelectionEndpoint = options; return dashboardScopeSelection; }
+    mountScopeSelectionEndpoint(options) { receivedSelectionEndpoint = options; return dashboardScopeSelection; },
+    createScopeDirectoryResolver(options) { receivedScopeDirectoryResolver = options; return resolveDashboardScopeDirectory; },
+    mountScopeDirectoryEndpoint(options) { receivedScopeDirectoryEndpoint = options; return dashboardScopeDirectory; }
   });
 
   assert.deepEqual(receivedActions, { app, scopedModeEnabled: true, resolveAuthorization, db, executeAdjustment, grantAchievement });
@@ -74,7 +88,16 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
   assert.equal(typeof receivedDirectoryOptions.query, 'function');
   assert.deepEqual(receivedSelectionResolver, { loadMemberships, resolveAuthorization, scopeDirectory });
   assert.deepEqual(receivedSelectionEndpoint, { app, scopedModeEnabled: true, selectDashboardScope });
-  assert.deepEqual(result, { mounted: true, actions, dashboard, dashboardSessionScope, dashboardScopeSelection });
+  assert.deepEqual(receivedScopeDirectoryResolver, { loadMemberships, resolveAuthorization, scopeDirectory });
+  assert.deepEqual(receivedScopeDirectoryEndpoint, { app, scopedModeEnabled: true, resolveDashboardScopeDirectory });
+  assert.deepEqual(result, {
+    mounted: true,
+    actions,
+    dashboard,
+    dashboardSessionScope,
+    dashboardScopeSelection,
+    dashboardScopeDirectory
+  });
 });
 
 test('fails closed for malformed runtime before delegating', () => {
@@ -94,15 +117,23 @@ test('enabled composition refuses delegated non-mount results', () => {
     resolveAuthorization: async () => ({}),
     createSessionScopeResolver: () => async () => ({}),
     mountSessionScopeEndpoint: () => ({ mounted: true }),
-    createScopeDirectory: () => ({ findTenant: async () => null, findLocation: async () => null }),
+    createScopeDirectory: () => ({
+      findTenant: async () => null,
+      findLocation: async () => null,
+      listTenants: async () => [],
+      listLocations: async () => []
+    }),
     createScopeSelectionResolver: () => async () => ({}),
-    mountScopeSelectionEndpoint: () => ({ mounted: true })
+    mountScopeSelectionEndpoint: () => ({ mounted: true }),
+    createScopeDirectoryResolver: () => async () => ({}),
+    mountScopeDirectoryEndpoint: () => ({ mounted: true })
   };
 
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: false }), mountDashboardEndpoints: () => ({ mounted: true }) }), /action endpoints failed to mount/i);
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: false }) }), /Dashboard endpoints failed to mount/i);
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: true }), mountSessionScopeEndpoint: () => ({ mounted: false }) }), /Dashboard session scope endpoint failed to mount/i);
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: true }), mountScopeSelectionEndpoint: () => ({ mounted: false }) }), /Dashboard scope selection endpoint failed to mount/i);
+  assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: true }), mountScopeDirectoryEndpoint: () => ({ mounted: false }) }), /Dashboard scope directory endpoint failed to mount/i);
 });
 
 test('server composition contract preserves fail-closed rollout boundaries', () => {
@@ -113,11 +144,13 @@ test('server composition contract preserves fail-closed rollout boundaries', () 
   assert.equal(spaceverseServerCompositionContract.includesDashboardKpiDrilldown, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardSessionScope, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardValidatedTenantSelection, true);
+  assert.equal(spaceverseServerCompositionContract.includesDashboardRbacFilteredScopeDirectory, true);
   assert.equal(spaceverseServerCompositionContract.dashboardScopeComesFromServerMemberships, true);
   assert.equal(spaceverseServerCompositionContract.dashboardBrowserTenantSelectionGrantsNoAuthority, true);
   assert.equal(spaceverseServerCompositionContract.scopeSelectionUsesAuthoritativeDirectory, true);
   assert.equal(spaceverseServerCompositionContract.platformAdminSelectionRequiresAuthoritativeDirectory, true);
   assert.equal(spaceverseServerCompositionContract.locationSelectionRequiresAuthoritativeDirectory, true);
+  assert.equal(spaceverseServerCompositionContract.scopeDirectoryOwnerReadsRestrictedToMemberships, true);
   assert.equal(spaceverseServerCompositionContract.ownsBusinessLogic, false);
   assert.equal(spaceverseServerCompositionContract.ownsPersistence, false);
   assert.equal(spaceverseServerCompositionContract.ownsAuthorizationRules, false);
