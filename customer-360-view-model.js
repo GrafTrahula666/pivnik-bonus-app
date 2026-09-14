@@ -30,8 +30,9 @@ function nullableIso(value, name) {
   return date.toISOString();
 }
 
-function moneyFromCents(cents) {
-  const value = safeInteger(cents, 'cashPaidCents');
+function moneyFromCents(cents, name, { nullable = false } = {}) {
+  const value = safeInteger(cents, name, { nullable });
+  if (value === null) return null;
   return Object.freeze({ cents: value, rubles: value / 100 });
 }
 
@@ -60,7 +61,7 @@ function normalizeIdentity(identity) {
 function normalizeFinancial(financial) {
   const source = asObject(financial, 'financial');
   return Object.freeze({
-    cashPaid: moneyFromCents(source.cashPaidCents),
+    cashPaid: moneyFromCents(source.cashPaidCents, 'financial.cashPaidCents'),
     bonusCredited: safeInteger(source.bonusCredited, 'financial.bonusCredited'),
     bonusDebited: safeInteger(source.bonusDebited, 'financial.bonusDebited'),
     completedOperations: safeInteger(source.completedOperations, 'financial.completedOperations'),
@@ -74,9 +75,10 @@ function normalizeTimelineRow(row) {
     id: source.id === null || source.id === undefined ? null : String(source.id),
     mode: nullableText(source.mode, 40),
     status: nullableText(source.status, 40),
-    cashPaid: moneyFromCents(source.cashPaidCents ?? 0),
-    bonusEarned: safeInteger(source.bonusEarned ?? 0, 'timeline.bonusEarned'),
-    bonusSpent: safeInteger(source.bonusSpent ?? 0, 'timeline.bonusSpent'),
+    checkAmount: moneyFromCents(source.checkAmountCents, 'timeline.checkAmountCents', { nullable: true }),
+    cashPaid: moneyFromCents(source.cashPaidCents, 'timeline.cashPaidCents', { nullable: true }),
+    bonusEarned: safeInteger(source.bonusEarned, 'timeline.bonusEarned', { nullable: true }),
+    bonusSpent: safeInteger(source.bonusSpent, 'timeline.bonusSpent', { nullable: true }),
     reason: nullableText(source.reason, 500),
     rewardCode: nullableText(source.rewardCode, 160),
     createdAt: nullableIso(source.createdAt, 'timeline.createdAt'),
@@ -89,7 +91,12 @@ function normalizeTimelineRow(row) {
 function normalizeTimeline(timeline) {
   const source = asObject(timeline, 'timeline');
   const rows = Array.isArray(source.rows) ? source.rows.map(normalizeTimelineRow) : [];
-  return Object.freeze({ rows: Object.freeze(rows) });
+  return Object.freeze({
+    rows: Object.freeze(rows),
+    hasMore: source.hasMore === true,
+    limit: safeInteger(source.limit, 'timeline.limit'),
+    offset: safeInteger(source.offset, 'timeline.offset')
+  });
 }
 
 function normalizeLabel(row, kind) {
@@ -147,6 +154,7 @@ export const customer360ViewModelContract = Object.freeze({
   rawBackendObjectExposed: false,
   unknownFieldsIgnored: true,
   unsafeIntegersFailClosed: true,
+  unknownFinancialValuesRemainNull: true,
   scopedUnknownWalletDisplayedAsZero: false,
   metadataUnavailableIsExplicit: true,
   dependenciesAdded: false,
