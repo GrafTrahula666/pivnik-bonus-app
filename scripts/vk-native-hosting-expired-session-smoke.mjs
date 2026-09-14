@@ -152,7 +152,10 @@ await page.route('**/*', async (route) => {
     try { body = request.postData() ? JSON.parse(request.postData()) : null; } catch (_) {}
     apiCalls.push({ pathname, method, authorization: headers.authorization || '', body });
 
-    if (method !== 'GET' && !(method === 'POST' && pathname === '/api/auth')) {
+    const allowedPost = method === 'POST' && (
+      pathname === '/api/auth' || pathname === '/api/diagnostics/vk-startup'
+    );
+    if (method !== 'GET' && !allowedPost) {
       unexpectedMutations.push({ pathname, method });
       await route.fulfill(json({ error: 'mutation blocked by expired-session smoke' }, 409));
       return;
