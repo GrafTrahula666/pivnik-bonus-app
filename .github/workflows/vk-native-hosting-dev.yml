@@ -138,4 +138,22 @@ jobs:
           done
 
           grep -q 'resolveGatewayInput' "$smoke_dir/vk-platform.js"
+
+          cors_headers="$smoke_dir/gateway-cors.headers"
+          curl --fail --silent --show-error \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 10 --max-time 20 \
+            --request OPTIONS \
+            --header "Origin: $base" \
+            --header 'Access-Control-Request-Method: GET' \
+            --header 'Access-Control-Request-Headers: authorization,content-type' \
+            --dump-header "$cors_headers" --output /dev/null \
+            'https://139.100.238.159.nip.io/api/me'
+
+          cors_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$cors_headers")"
+          test "$cors_origin" = "$base"
+          grep -Eiq '^access-control-allow-methods:.*(^|[,[:space:]])GET([,[:space:]]|$)' "$cors_headers"
+          grep -Eiq '^access-control-allow-headers:.*(^|[,[:space:]])authorization([,[:space:]]|$)' "$cors_headers"
+          grep -Eiq '^access-control-allow-headers:.*(^|[,[:space:]])content-type([,[:space:]]|$)' "$cors_headers"
+
           echo "VK DEV post-deploy smoke passed: $DEV_URL"
