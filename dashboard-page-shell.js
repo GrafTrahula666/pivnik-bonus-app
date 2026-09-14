@@ -153,21 +153,24 @@ export function createDashboardPageShell({
 
   async function mountValidatedScope(scope, version) {
     if (!mounted || version !== scopeVersion) return false;
-    selectedScope = Object.freeze({ tenantId: scope.tenantId, locationId: scope.locationId ?? null });
-    composition = createComposition({
+    const candidateScope = Object.freeze({ tenantId: scope.tenantId, locationId: scope.locationId ?? null });
+    selectedScope = candidateScope;
+    const candidateComposition = createComposition({
       root: contentRoot,
       documentRef: documentApi,
-      resolveSessionScope: async () => selectedScope,
+      resolveSessionScope: async () => candidateScope,
       fetchImpl: request,
       clock,
       initialPeriod: selectedPeriod
     });
-    const didMount = await composition.mount();
-    if (!mounted || version !== scopeVersion) {
-      if (composition?.mounted) composition.unmount();
+    composition = candidateComposition;
+    const didMount = await candidateComposition.mount();
+    if (!mounted || version !== scopeVersion || composition !== candidateComposition) {
+      if (candidateComposition.mounted) candidateComposition.unmount();
+      if (composition === candidateComposition) composition = null;
       return false;
     }
-    selectedPeriod = composition.periodKey;
+    selectedPeriod = candidateComposition.periodKey;
     syncPeriodButtons();
     syncScopeSelections();
     return didMount;
