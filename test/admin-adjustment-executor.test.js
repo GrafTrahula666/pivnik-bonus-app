@@ -162,6 +162,30 @@ test('idempotent replay validates semantic identity and performs no wallet mutat
   assert.equal(harness.wasReleased(), true);
 });
 
+test('idempotent replay preserves the legacy null balance_after fallback instead of leaking current wallet state', async () => {
+  const replay = {
+    id: 100,
+    request_key: 'adjust-replay-null-balance',
+    client_id: '42',
+    staff_id: '7',
+    mode: 'adjustment',
+    bonus_earned: 20,
+    bonus_spent: 0,
+    balance_after: null,
+    reason: 'Correction'
+  };
+  const harness = createHarness({ balance: 987, existing: replay });
+  const result = await harness.executor({
+    customerId: '42', actorId: '7', amount: 20,
+    reason: 'Correction', requestKey: 'adjust-replay-null-balance'
+  });
+
+  assert.equal(result.replayed, true);
+  assert.equal(result.balanceAfter, 0);
+  assert.equal(queryIndex(harness.events, (sql) => sql.startsWith('UPDATE wallets')), -1);
+  assert.equal(harness.persisted.length, 0);
+});
+
 test('unlimited bonus profile rolls back before wallet mutation or journal persistence', async () => {
   const harness = createHarness({
     balance: 100,
@@ -246,6 +270,7 @@ test('executor contract documents the reusable financial invariants', () => {
   assert.equal(adminAdjustmentExecutorContract.atomic, true);
   assert.equal(adminAdjustmentExecutorContract.reusesAdminAdjustmentPersistence, true);
   assert.equal(adminAdjustmentExecutorContract.preservesIdempotentReplayValidation, true);
+  assert.equal(adminAdjustmentExecutorContract.preservesLegacyReplayBalanceFallback, true);
   assert.equal(adminAdjustmentExecutorContract.preservesUnlimitedBonusGuard, true);
   assert.equal(adminAdjustmentExecutorContract.productionRouteWired, false);
 });
