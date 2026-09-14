@@ -22,6 +22,7 @@ on:
       - scripts/vk-native-hosting-concurrent-reauth-failure-smoke.mjs
       - scripts/vk-native-hosting-reauth-newer-session-race-smoke.mjs
       - scripts/vk-native-hosting-reauth-failure-then-success-smoke.mjs
+      - scripts/vk-native-hosting-post-reauth-timeout-smoke.mjs
       - scripts/vk-tg-black-frosted-parity-smoke.mjs
       - vk-hosting-config.json
       - test/vk-native-hosting-main-parity.test.js
@@ -121,6 +122,8 @@ jobs:
         run: node scripts/vk-native-hosting-reauth-newer-session-race-smoke.mjs
       - name: Run VK failed-then-success reauth smoke
         run: node scripts/vk-native-hosting-reauth-failure-then-success-smoke.mjs
+      - name: Run VK post-reauth timeout smoke
+        run: node scripts/vk-native-hosting-post-reauth-timeout-smoke.mjs
       - name: Run VK Telegram materialized parity smoke
         run: node scripts/vk-tg-black-frosted-parity-smoke.mjs
       - name: Upload browser evidence
@@ -144,6 +147,7 @@ jobs:
             artifacts/vk-native-hosting-concurrent-reauth-failure-smoke
             artifacts/vk-native-hosting-reauth-newer-session-race-smoke
             artifacts/vk-native-hosting-reauth-failure-then-success-smoke
+            artifacts/vk-native-hosting-post-reauth-timeout-smoke
             artifacts/vk-tg-black-frosted-parity-smoke
           if-no-files-found: error
           retention-days: 7
