@@ -21,6 +21,7 @@ export function createMigrationGatedTransactionPersistence({
   scopedInsert,
   scopedWritesEnabled = false
 } = {}) {
+  if (typeof scopedWritesEnabled !== 'boolean') throw new TypeError('scopedWritesEnabled must be boolean');
   if (typeof legacyInsert !== 'function') {
     throw new TypeError('legacyInsert must be a function');
   }

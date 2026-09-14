@@ -1,3 +1,5 @@
+import { assertLegacyApiRequest, assertLegacyScopeBody } from './legacy-api-boundary.js';
+import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -62,6 +64,9 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
+app.use((req, res, next) => {
+  try { assertLegacyApiRequest(req, SPACEVERSE_RUNTIME); next(); } catch (error) { next(error); }
+});
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
 const STATUS_LEVELS = [
