@@ -4,6 +4,8 @@ import { mountDashboardSessionScopeEndpoint } from './dashboard-session-scope-en
 import { createDashboardSessionScopeResolver } from './dashboard-session-scope-resolver.js';
 import { mountDashboardScopeSelectionEndpoint } from './dashboard-scope-selection-endpoint.js';
 import { createDashboardScopeSelectionResolver } from './dashboard-scope-selection-resolver.js';
+import { mountDashboardScopeDirectoryEndpoint } from './dashboard-scope-directory-endpoint.js';
+import { createDashboardScopeDirectoryResolver } from './dashboard-scope-directory-resolver.js';
 import { createScopeDirectoryRepository } from './scope-directory-repository.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 
@@ -21,7 +23,9 @@ export function mountSpaceverseServerComposition({
   mountSessionScopeEndpoint = mountDashboardSessionScopeEndpoint,
   createScopeSelectionResolver = createDashboardScopeSelectionResolver,
   createScopeDirectory = createScopeDirectoryRepository,
-  mountScopeSelectionEndpoint = mountDashboardScopeSelectionEndpoint
+  mountScopeSelectionEndpoint = mountDashboardScopeSelectionEndpoint,
+  createScopeDirectoryResolver = createDashboardScopeDirectoryResolver,
+  mountScopeDirectoryEndpoint = mountDashboardScopeDirectoryEndpoint
 } = {}) {
   if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') throw new TypeError('runtime.scopedModeEnabled must be boolean');
   if (typeof mountActionEndpoints !== 'function') throw new TypeError('mountActionEndpoints must be a function');
@@ -31,9 +35,18 @@ export function mountSpaceverseServerComposition({
   if (typeof createScopeSelectionResolver !== 'function') throw new TypeError('createScopeSelectionResolver must be a function');
   if (typeof createScopeDirectory !== 'function') throw new TypeError('createScopeDirectory must be a function');
   if (typeof mountScopeSelectionEndpoint !== 'function') throw new TypeError('mountScopeSelectionEndpoint must be a function');
+  if (typeof createScopeDirectoryResolver !== 'function') throw new TypeError('createScopeDirectoryResolver must be a function');
+  if (typeof mountScopeDirectoryEndpoint !== 'function') throw new TypeError('mountScopeDirectoryEndpoint must be a function');
 
   if (!runtime.scopedModeEnabled) {
-    return Object.freeze({ mounted: false, actions: null, dashboard: null, dashboardSessionScope: null, dashboardScopeSelection: null });
+    return Object.freeze({
+      mounted: false,
+      actions: null,
+      dashboard: null,
+      dashboardSessionScope: null,
+      dashboardScopeSelection: null,
+      dashboardScopeDirectory: null
+    });
   }
 
   if (!db || typeof db.query !== 'function') throw new TypeError('db.query must be a function');
@@ -53,7 +66,26 @@ export function mountSpaceverseServerComposition({
   const dashboardScopeSelection = mountScopeSelectionEndpoint({ app, scopedModeEnabled: true, selectDashboardScope });
   if (!dashboardScopeSelection?.mounted) throw new Error('SPACEVERSE Dashboard scope selection endpoint failed to mount');
 
-  return Object.freeze({ mounted: true, actions, dashboard, dashboardSessionScope, dashboardScopeSelection });
+  const resolveDashboardScopeDirectory = createScopeDirectoryResolver({
+    loadMemberships,
+    resolveAuthorization,
+    scopeDirectory
+  });
+  const dashboardScopeDirectory = mountScopeDirectoryEndpoint({
+    app,
+    scopedModeEnabled: true,
+    resolveDashboardScopeDirectory
+  });
+  if (!dashboardScopeDirectory?.mounted) throw new Error('SPACEVERSE Dashboard scope directory endpoint failed to mount');
+
+  return Object.freeze({
+    mounted: true,
+    actions,
+    dashboard,
+    dashboardSessionScope,
+    dashboardScopeSelection,
+    dashboardScopeDirectory
+  });
 }
 
 export const spaceverseServerCompositionContract = Object.freeze({
@@ -64,11 +96,13 @@ export const spaceverseServerCompositionContract = Object.freeze({
   includesDashboardKpiDrilldown: true,
   includesDashboardSessionScope: true,
   includesDashboardValidatedTenantSelection: true,
+  includesDashboardRbacFilteredScopeDirectory: true,
   dashboardScopeComesFromServerMemberships: true,
   dashboardBrowserTenantSelectionGrantsNoAuthority: true,
   scopeSelectionUsesAuthoritativeDirectory: true,
   platformAdminSelectionRequiresAuthoritativeDirectory: true,
   locationSelectionRequiresAuthoritativeDirectory: true,
+  scopeDirectoryOwnerReadsRestrictedToMemberships: true,
   ownsBusinessLogic: false,
   ownsPersistence: false,
   ownsAuthorizationRules: false,
