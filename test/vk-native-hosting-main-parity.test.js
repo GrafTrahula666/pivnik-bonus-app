@@ -68,11 +68,16 @@ test('VK session restore stays scoped to signed vk_user_id and does not reuse Te
   const runtime = await read('vk-platform.js');
   const app = await read('app.js');
 
-  assert.match(runtime, /const launchVkUserId = String\(launchSearch\.get\('vk_user_id'\) \|\| ''\)\.trim\(\)/);
-  assert.match(runtime, /const storagePrefix = `pivnik_vk_\$\{launchVkUserId \|\| 'unknown'\}_`/);
+  assert.match(runtime, /let launchVkUserId = String\(launchSearch\.get\('vk_user_id'\) \|\| ''\)\.trim\(\)/);
+  assert.match(runtime, /let storagePrefix = `pivnik_vk_\$\{launchVkUserId \|\| 'unknown'\}_`/);
   assert.match(runtime, /window\.__PIVNIK_STORAGE_PREFIX__ = storagePrefix/);
   assert.match(runtime, /localStorage\.removeItem\('pivnik_session'\)/);
   assert.match(runtime, /localStorage\.removeItem\('pivnik_staff_session'\)/);
+
+  // Canonical startup may replace an unknown/stale launch identity only after signed auth succeeds.
+  assert.match(runtime, /function acceptAuthenticatedIdentity\(signedLaunchParams\)/);
+  assert.match(runtime, /launchVkUserId = userId/);
+  assert.match(runtime, /storagePrefix = `pivnik_vk_\$\{userId\}_`/);
 
   // Valid account-scoped keys must survive startup so returning VK users can restore sessions.
   assert.doesNotMatch(runtime, /localStorage\.removeItem\(`\$\{storagePrefix\}session`\)/);
