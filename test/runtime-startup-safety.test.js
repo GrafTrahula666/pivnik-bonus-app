@@ -42,6 +42,11 @@ test('Telegram menu repair has an explicit opt-in bypass for isolated DEV diagno
   assert.match(telegramRepair, /skipRepair\)\s*\{/);
   assert.match(telegramRepair, /PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR=true/);
   assert.doesNotMatch(telegramRepair, /skipRepair\s*=\s*true\s*;/);
+
+  const bypassIndex = telegramRepair.indexOf("if (skipRepair)");
+  const apiCallIndex = telegramRepair.indexOf("await telegramApi('deleteWebhook'");
+  assert.ok(bypassIndex >= 0, 'explicit bypass branch must exist');
+  assert.ok(apiCallIndex > bypassIndex, 'Telegram API calls must remain after the bypass branch');
 });
 
 test('Runtime side-effect audit requires a real pg client before classifying DB writes', () => {
