@@ -29,7 +29,9 @@ export function createCustomer360ReadRouteHandler({ getCustomerCard } = {}) {
         tenantId,
         locationId,
         timelineLimit: req.query?.limit,
-        timelineOffset: req.query?.offset
+        timelineOffset: req.query?.offset,
+        metadataLimit: req.query?.metadataLimit,
+        metadataOffset: req.query?.metadataOffset
       });
 
       if (!card) {
@@ -64,6 +66,8 @@ export const customer360ReadRouteHandlerContract = Object.freeze({
   requiresAuthorizationContext: true,
   tenantWideManagerRead: true,
   optionalLocationFilter: true,
+  timelinePagination: true,
+  metadataPagination: true,
   invisibleCustomerReturns404: true,
   readOnly: true,
   ownsQueries: false,
