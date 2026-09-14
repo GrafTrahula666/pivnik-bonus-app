@@ -342,12 +342,12 @@ try {
   const historicalAudit = await inspectHistoricalSchemas(client);
   console.log(JSON.stringify({
     redCosmosDbPrepared: true,
-    backupSchema: isProduction ? BACKUP_SCHEMA : null,
     frameEntitlementsRestored,
-    ownerFramesRestored,
-    shopFrameImagesRepaired,
-    testerClaims,
-    historicalAudit,
+    ownerFramesRestored: ownerFramesRestored.length,
+    shopFrameImagesRepaired: shopFrameImagesRepaired.length,
+    testerClaims: testerClaims.length,
+    historicalSchemasInspected: historicalAudit.summaries.length,
+    historicalRicherSchemasDetected: historicalAudit.richerSchemas.length,
     ...audit.rows[0]
   }));
 } catch (error) {
