@@ -27,7 +27,13 @@ test('Customer 360 route uses middleware authorization scope and never trusts a 
   });
   const req = {
     params: { tenantId: 'tenant-a', customerId: '42' },
-    query: { locationId: 'location-1', limit: '20', offset: '0' },
+    query: {
+      locationId: 'location-1',
+      limit: '20',
+      offset: '0',
+      metadataLimit: '30',
+      metadataOffset: '5'
+    },
     body: { tenantId: 'tenant-b' },
     spaceverseAuthorization: authorization
   };
@@ -40,6 +46,10 @@ test('Customer 360 route uses middleware authorization scope and never trusts a 
   assert.equal(received.locationId, 'location-1');
   assert.equal(received.customerId, '42');
   assert.equal(received.authorizationContext, authorization.context);
+  assert.equal(received.timelineLimit, '20');
+  assert.equal(received.timelineOffset, '0');
+  assert.equal(received.metadataLimit, '30');
+  assert.equal(received.metadataOffset, '5');
 });
 
 test('Customer 360 route returns 404 without leaking global identity when customer is invisible', async () => {
@@ -62,6 +72,8 @@ test('Customer 360 route fails closed without scoped authorization context', asy
 test('Customer 360 route contract is read-only and manager scoped', () => {
   assert.equal(customer360ReadRouteHandlerContract.requiresScopedAuthorizationMiddleware, true);
   assert.equal(customer360ReadRouteHandlerContract.tenantWideManagerRead, true);
+  assert.equal(customer360ReadRouteHandlerContract.timelinePagination, true);
+  assert.equal(customer360ReadRouteHandlerContract.metadataPagination, true);
   assert.equal(customer360ReadRouteHandlerContract.invisibleCustomerReturns404, true);
   assert.equal(customer360ReadRouteHandlerContract.readOnly, true);
 });
