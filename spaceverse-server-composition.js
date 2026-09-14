@@ -1,4 +1,5 @@
 import { mountCustomer360FullActionEndpoints } from './customer-360-full-action-endpoints.js';
+import { mountCustomer360ReadEndpoint } from './customer-360-read-endpoint.js';
 import { mountDashboardReadEndpoints } from './dashboard-read-endpoints.js';
 import { mountDashboardSessionScopeEndpoint } from './dashboard-session-scope-endpoint.js';
 import { createDashboardSessionScopeResolver } from './dashboard-session-scope-resolver.js';
@@ -18,6 +19,7 @@ export function mountSpaceverseServerComposition({
   executeAdjustment,
   grantAchievement,
   mountActionEndpoints = mountCustomer360FullActionEndpoints,
+  mountCustomerReadEndpoint = mountCustomer360ReadEndpoint,
   mountDashboardEndpoints = mountDashboardReadEndpoints,
   createSessionScopeResolver = createDashboardSessionScopeResolver,
   mountSessionScopeEndpoint = mountDashboardSessionScopeEndpoint,
@@ -29,6 +31,7 @@ export function mountSpaceverseServerComposition({
 } = {}) {
   if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') throw new TypeError('runtime.scopedModeEnabled must be boolean');
   if (typeof mountActionEndpoints !== 'function') throw new TypeError('mountActionEndpoints must be a function');
+  if (typeof mountCustomerReadEndpoint !== 'function') throw new TypeError('mountCustomerReadEndpoint must be a function');
   if (typeof mountDashboardEndpoints !== 'function') throw new TypeError('mountDashboardEndpoints must be a function');
   if (typeof createSessionScopeResolver !== 'function') throw new TypeError('createSessionScopeResolver must be a function');
   if (typeof mountSessionScopeEndpoint !== 'function') throw new TypeError('mountSessionScopeEndpoint must be a function');
@@ -42,6 +45,7 @@ export function mountSpaceverseServerComposition({
     return Object.freeze({
       mounted: false,
       actions: null,
+      customer360Read: null,
       dashboard: null,
       dashboardSessionScope: null,
       dashboardScopeSelection: null,
@@ -53,6 +57,9 @@ export function mountSpaceverseServerComposition({
   const shared = { app, scopedModeEnabled: true, resolveAuthorization, db };
   const actions = mountActionEndpoints({ ...shared, executeAdjustment, grantAchievement });
   if (!actions?.mounted) throw new Error('SPACEVERSE action endpoints failed to mount');
+
+  const customer360Read = mountCustomerReadEndpoint(shared);
+  if (!customer360Read?.mounted) throw new Error('SPACEVERSE Customer 360 read endpoint failed to mount');
 
   const dashboard = mountDashboardEndpoints(shared);
   if (!dashboard?.mounted) throw new Error('SPACEVERSE Dashboard endpoints failed to mount');
@@ -81,6 +88,7 @@ export function mountSpaceverseServerComposition({
   return Object.freeze({
     mounted: true,
     actions,
+    customer360Read,
     dashboard,
     dashboardSessionScope,
     dashboardScopeSelection,
@@ -92,6 +100,7 @@ export const spaceverseServerCompositionContract = Object.freeze({
   productionEnabledByDefault: SPACEVERSE_RUNTIME.scopedModeEnabled,
   disabledModeRequiresNoRuntimeDependencies: true,
   includesCustomerMetadataActions: true,
+  includesCustomer360ReadCard: true,
   includesDashboardPeriodSummary: true,
   includesDashboardKpiDrilldown: true,
   includesDashboardSessionScope: true,
