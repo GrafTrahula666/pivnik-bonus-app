@@ -109,7 +109,10 @@ export function createAdminAdjustmentExecutor({
           replayed: true,
           transaction: replay,
           customerId: String(targetUser.id),
-          balanceAfter: Number(replay.balance_after ?? walletResult.rows[0].balance ?? 0)
+          // Preserve the legacy HTTP contract exactly. The old route returned
+          // Number(existing.balance_after || 0) on replay; falling back to the
+          // current wallet balance would silently change an idempotent response.
+          balanceAfter: Number(replay.balance_after || 0)
         });
       }
 
@@ -191,6 +194,7 @@ export const adminAdjustmentExecutorContract = Object.freeze({
   ]),
   reusesAdminAdjustmentPersistence: true,
   preservesIdempotentReplayValidation: true,
+  preservesLegacyReplayBalanceFallback: true,
   preservesUnlimitedBonusGuard: true,
   rejectsNegativeResult: true,
   rejectsUnsafeIntegerBalances: true,
