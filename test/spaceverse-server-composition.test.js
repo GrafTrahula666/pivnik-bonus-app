@@ -10,6 +10,7 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
   let calls = 0;
   const result = mountSpaceverseServerComposition({
     mountActionEndpoints() { calls += 1; return { mounted: true }; },
+    mountCustomerReadEndpoint() { calls += 1; return { mounted: true }; },
     mountDashboardEndpoints() { calls += 1; return { mounted: true }; },
     createSessionScopeResolver() { calls += 1; return async () => ({}); },
     mountSessionScopeEndpoint() { calls += 1; return { mounted: true }; },
@@ -23,6 +24,7 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
   assert.deepEqual(result, {
     mounted: false,
     actions: null,
+    customer360Read: null,
     dashboard: null,
     dashboardSessionScope: null,
     dashboardScopeSelection: null,
@@ -31,7 +33,7 @@ test('default production runtime keeps SPACEVERSE HTTP composition disabled with
   assert.equal(calls, 0);
 });
 
-test('explicit enabled runtime delegates actions, Dashboard reads, directory, session scope and validated selection', () => {
+test('explicit enabled runtime delegates actions, Customer 360 read, Dashboard reads, directory, session scope and validated selection', () => {
   const app = { get() {}, post() {} };
   const db = { query: async () => ({ rowCount: 0, rows: [] }) };
   const resolveAuthorization = async () => ({});
@@ -48,6 +50,7 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
     listLocations: async () => []
   };
   let receivedActions;
+  let receivedCustomerRead;
   let receivedDashboard;
   let receivedResolver;
   let receivedSessionScopeEndpoint;
@@ -57,6 +60,7 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
   let receivedScopeDirectoryResolver;
   let receivedScopeDirectoryEndpoint;
   const actions = { mounted: true, core: { mounted: true }, metadata: { mounted: true } };
+  const customer360Read = { mounted: true, route: '/api/spaceverse/tenants/:tenantId/customers/:customerId' };
   const dashboard = { mounted: true, periodSummary: { mounted: true }, kpiDrilldown: { mounted: true } };
   const dashboardSessionScope = { mounted: true, route: '/api/spaceverse/session/dashboard-scope' };
   const dashboardScopeSelection = { mounted: true, route: '/api/spaceverse/session/dashboard-scope/select' };
@@ -71,6 +75,7 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
     executeAdjustment,
     grantAchievement,
     mountActionEndpoints(options) { receivedActions = options; return actions; },
+    mountCustomerReadEndpoint(options) { receivedCustomerRead = options; return customer360Read; },
     mountDashboardEndpoints(options) { receivedDashboard = options; return dashboard; },
     createSessionScopeResolver(options) { receivedResolver = options; return resolveSessionScope; },
     mountSessionScopeEndpoint(options) { receivedSessionScopeEndpoint = options; return dashboardSessionScope; },
@@ -82,6 +87,7 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
   });
 
   assert.deepEqual(receivedActions, { app, scopedModeEnabled: true, resolveAuthorization, db, executeAdjustment, grantAchievement });
+  assert.deepEqual(receivedCustomerRead, { app, scopedModeEnabled: true, resolveAuthorization, db });
   assert.deepEqual(receivedDashboard, { app, scopedModeEnabled: true, resolveAuthorization, db });
   assert.deepEqual(receivedResolver, { loadMemberships, resolveAuthorization });
   assert.deepEqual(receivedSessionScopeEndpoint, { app, scopedModeEnabled: true, resolveSessionScope });
@@ -93,6 +99,7 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
   assert.deepEqual(result, {
     mounted: true,
     actions,
+    customer360Read,
     dashboard,
     dashboardSessionScope,
     dashboardScopeSelection,
@@ -103,9 +110,10 @@ test('explicit enabled runtime delegates actions, Dashboard reads, directory, se
 test('fails closed for malformed runtime before delegating', () => {
   let calls = 0;
   const mountActionEndpoints = () => { calls += 1; return { mounted: true }; };
+  const mountCustomerReadEndpoint = () => { calls += 1; return { mounted: true }; };
   const mountDashboardEndpoints = () => { calls += 1; return { mounted: true }; };
-  assert.throws(() => mountSpaceverseServerComposition({ runtime: {}, mountActionEndpoints, mountDashboardEndpoints }), /runtime\.scopedModeEnabled must be boolean/);
-  assert.throws(() => mountSpaceverseServerComposition({ runtime: { scopedModeEnabled: 'true' }, mountActionEndpoints, mountDashboardEndpoints }), /runtime\.scopedModeEnabled must be boolean/);
+  assert.throws(() => mountSpaceverseServerComposition({ runtime: {}, mountActionEndpoints, mountCustomerReadEndpoint, mountDashboardEndpoints }), /runtime\.scopedModeEnabled must be boolean/);
+  assert.throws(() => mountSpaceverseServerComposition({ runtime: { scopedModeEnabled: 'true' }, mountActionEndpoints, mountCustomerReadEndpoint, mountDashboardEndpoints }), /runtime\.scopedModeEnabled must be boolean/);
   assert.equal(calls, 0);
 });
 
@@ -115,6 +123,7 @@ test('enabled composition refuses delegated non-mount results', () => {
     db: { query: async () => ({ rows: [] }) },
     loadMemberships: async () => [],
     resolveAuthorization: async () => ({}),
+    mountCustomerReadEndpoint: () => ({ mounted: true }),
     createSessionScopeResolver: () => async () => ({}),
     mountSessionScopeEndpoint: () => ({ mounted: true }),
     createScopeDirectory: () => ({
@@ -130,6 +139,7 @@ test('enabled composition refuses delegated non-mount results', () => {
   };
 
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: false }), mountDashboardEndpoints: () => ({ mounted: true }) }), /action endpoints failed to mount/i);
+  assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountCustomerReadEndpoint: () => ({ mounted: false }), mountDashboardEndpoints: () => ({ mounted: true }) }), /Customer 360 read endpoint failed to mount/i);
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: false }) }), /Dashboard endpoints failed to mount/i);
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: true }), mountSessionScopeEndpoint: () => ({ mounted: false }) }), /Dashboard session scope endpoint failed to mount/i);
   assert.throws(() => mountSpaceverseServerComposition({ ...common, mountActionEndpoints: () => ({ mounted: true }), mountDashboardEndpoints: () => ({ mounted: true }), mountScopeSelectionEndpoint: () => ({ mounted: false }) }), /Dashboard scope selection endpoint failed to mount/i);
@@ -140,6 +150,7 @@ test('server composition contract preserves fail-closed rollout boundaries', () 
   assert.equal(spaceverseServerCompositionContract.productionEnabledByDefault, false);
   assert.equal(spaceverseServerCompositionContract.disabledModeRequiresNoRuntimeDependencies, true);
   assert.equal(spaceverseServerCompositionContract.includesCustomerMetadataActions, true);
+  assert.equal(spaceverseServerCompositionContract.includesCustomer360ReadCard, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardPeriodSummary, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardKpiDrilldown, true);
   assert.equal(spaceverseServerCompositionContract.includesDashboardSessionScope, true);
