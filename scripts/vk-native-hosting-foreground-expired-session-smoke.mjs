@@ -112,6 +112,10 @@ await page.route('**/*', async (route) => {
       await route.fulfill(json(payload(authCount <= 2 ? initialToken : renewedToken)));
       return;
     }
+    if (method === 'POST' && pathname === '/api/diagnostics/vk-startup') {
+      await route.fulfill(json({}));
+      return;
+    }
     if (method !== 'GET') {
       unexpectedMutations.push({ pathname, method });
       await route.fulfill(json({ error: 'mutation blocked by foreground expired-session smoke' }, 409));
