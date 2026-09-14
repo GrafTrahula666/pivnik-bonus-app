@@ -171,7 +171,10 @@ async function runScenario(browser, { name, restoreSession }) {
       const headers = request.headers();
       apiCalls.push({ pathname, method, body: parsedBody, authorization: headers.authorization || '' });
 
-      if (method !== 'GET' && !(method === 'POST' && pathname === '/api/auth')) {
+      const allowedPost = method === 'POST' && (
+        pathname === '/api/auth' || pathname === '/api/diagnostics/vk-startup'
+      );
+      if (method !== 'GET' && !allowedPost) {
         unexpectedMutations.push({ pathname, method });
         await route.fulfill(json({ error: 'mutation blocked by bootstrap smoke' }, 409));
         return;
