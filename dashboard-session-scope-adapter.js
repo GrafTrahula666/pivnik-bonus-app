@@ -32,9 +32,10 @@ async function parseJsonResponse(response) {
     const code = typeof payload?.error === 'string' && payload.error.trim()
       ? payload.error.trim()
       : 'session_scope_request_failed';
-    const error = new Error(`Dashboard session scope unavailable: ${code}`);
+    const error = new Error(code);
     error.code = code;
     error.status = Number(response.status) || 0;
+    error.detail = `Dashboard session scope unavailable: ${code}`;
     throw error;
   }
   if (!payload || payload.ok !== true || !payload.scope || typeof payload.scope !== 'object') {
