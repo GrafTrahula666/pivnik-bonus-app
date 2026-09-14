@@ -124,7 +124,7 @@ export function createDashboardPageShell({
   }
 
   function setScopeBusy(busy, message = '') {
-    if (tenantSelect) tenantSelect.disabled = busy;
+    if (tenantSelect) tenantSelect.disabled = busy || directoryTenants.length === 0;
     if (locationSelect) locationSelect.disabled = busy || !selectedScope;
     if (scopeStatus) {
       scopeStatus.textContent = message;
@@ -210,8 +210,10 @@ export function createDashboardPageShell({
     const version = ++scopeVersion;
     teardownComposition();
     selectedScope = null;
-    directoryLocations = [];
-    renderLocationDirectory([]);
+    if (loadTenantLocations) {
+      directoryLocations = [];
+      renderLocationDirectory([]);
+    }
     showContentLoading('Проверяем доступ и загружаем выбранные данные…');
     setScopeBusy(true, 'Проверяем права доступа…');
 
