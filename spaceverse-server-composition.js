@@ -4,19 +4,9 @@ import { mountDashboardSessionScopeEndpoint } from './dashboard-session-scope-en
 import { createDashboardSessionScopeResolver } from './dashboard-session-scope-resolver.js';
 import { mountDashboardScopeSelectionEndpoint } from './dashboard-scope-selection-endpoint.js';
 import { createDashboardScopeSelectionResolver } from './dashboard-scope-selection-resolver.js';
+import { createScopeDirectoryRepository } from './scope-directory-repository.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 
-/**
- * Single server-composition boundary for SPACEVERSE scoped HTTP capabilities.
- *
- * This module intentionally owns no auth, persistence, reward or financial
- * behavior. It only forwards the immutable rollout decision and runtime
- * dependencies to already-tested endpoint composition.
- *
- * Disabled mode must remain dependency-free so importing/wiring this boundary
- * into a server cannot accidentally make production require scoped migrations,
- * tenant attribution or new runtime configuration.
- */
 export function mountSpaceverseServerComposition({
   app,
   runtime = SPACEVERSE_RUNTIME,
@@ -30,95 +20,40 @@ export function mountSpaceverseServerComposition({
   createSessionScopeResolver = createDashboardSessionScopeResolver,
   mountSessionScopeEndpoint = mountDashboardSessionScopeEndpoint,
   createScopeSelectionResolver = createDashboardScopeSelectionResolver,
+  createScopeDirectory = createScopeDirectoryRepository,
   mountScopeSelectionEndpoint = mountDashboardScopeSelectionEndpoint
 } = {}) {
-  if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') {
-    throw new TypeError('runtime.scopedModeEnabled must be boolean');
-  }
-  if (typeof mountActionEndpoints !== 'function') {
-    throw new TypeError('mountActionEndpoints must be a function');
-  }
-  if (typeof mountDashboardEndpoints !== 'function') {
-    throw new TypeError('mountDashboardEndpoints must be a function');
-  }
-  if (typeof createSessionScopeResolver !== 'function') {
-    throw new TypeError('createSessionScopeResolver must be a function');
-  }
-  if (typeof mountSessionScopeEndpoint !== 'function') {
-    throw new TypeError('mountSessionScopeEndpoint must be a function');
-  }
-  if (typeof createScopeSelectionResolver !== 'function') {
-    throw new TypeError('createScopeSelectionResolver must be a function');
-  }
-  if (typeof mountScopeSelectionEndpoint !== 'function') {
-    throw new TypeError('mountScopeSelectionEndpoint must be a function');
-  }
+  if (!runtime || typeof runtime.scopedModeEnabled !== 'boolean') throw new TypeError('runtime.scopedModeEnabled must be boolean');
+  if (typeof mountActionEndpoints !== 'function') throw new TypeError('mountActionEndpoints must be a function');
+  if (typeof mountDashboardEndpoints !== 'function') throw new TypeError('mountDashboardEndpoints must be a function');
+  if (typeof createSessionScopeResolver !== 'function') throw new TypeError('createSessionScopeResolver must be a function');
+  if (typeof mountSessionScopeEndpoint !== 'function') throw new TypeError('mountSessionScopeEndpoint must be a function');
+  if (typeof createScopeSelectionResolver !== 'function') throw new TypeError('createScopeSelectionResolver must be a function');
+  if (typeof createScopeDirectory !== 'function') throw new TypeError('createScopeDirectory must be a function');
+  if (typeof mountScopeSelectionEndpoint !== 'function') throw new TypeError('mountScopeSelectionEndpoint must be a function');
 
   if (!runtime.scopedModeEnabled) {
-    return Object.freeze({
-      mounted: false,
-      actions: null,
-      dashboard: null,
-      dashboardSessionScope: null,
-      dashboardScopeSelection: null
-    });
+    return Object.freeze({ mounted: false, actions: null, dashboard: null, dashboardSessionScope: null, dashboardScopeSelection: null });
   }
 
-  const shared = {
-    app,
-    scopedModeEnabled: true,
-    resolveAuthorization,
-    db
-  };
-
-  const actions = mountActionEndpoints({
-    ...shared,
-    executeAdjustment,
-    grantAchievement
-  });
-
-  if (!actions?.mounted) {
-    throw new Error('SPACEVERSE action endpoints failed to mount');
-  }
+  if (!db || typeof db.query !== 'function') throw new TypeError('db.query must be a function');
+  const shared = { app, scopedModeEnabled: true, resolveAuthorization, db };
+  const actions = mountActionEndpoints({ ...shared, executeAdjustment, grantAchievement });
+  if (!actions?.mounted) throw new Error('SPACEVERSE action endpoints failed to mount');
 
   const dashboard = mountDashboardEndpoints(shared);
-  if (!dashboard?.mounted) {
-    throw new Error('SPACEVERSE Dashboard endpoints failed to mount');
-  }
+  if (!dashboard?.mounted) throw new Error('SPACEVERSE Dashboard endpoints failed to mount');
 
-  const resolveSessionScope = createSessionScopeResolver({
-    loadMemberships,
-    resolveAuthorization
-  });
-  const dashboardSessionScope = mountSessionScopeEndpoint({
-    app,
-    scopedModeEnabled: true,
-    resolveSessionScope
-  });
-  if (!dashboardSessionScope?.mounted) {
-    throw new Error('SPACEVERSE Dashboard session scope endpoint failed to mount');
-  }
+  const resolveSessionScope = createSessionScopeResolver({ loadMemberships, resolveAuthorization });
+  const dashboardSessionScope = mountSessionScopeEndpoint({ app, scopedModeEnabled: true, resolveSessionScope });
+  if (!dashboardSessionScope?.mounted) throw new Error('SPACEVERSE Dashboard session scope endpoint failed to mount');
 
-  const selectDashboardScope = createScopeSelectionResolver({
-    loadMemberships,
-    resolveAuthorization
-  });
-  const dashboardScopeSelection = mountScopeSelectionEndpoint({
-    app,
-    scopedModeEnabled: true,
-    selectDashboardScope
-  });
-  if (!dashboardScopeSelection?.mounted) {
-    throw new Error('SPACEVERSE Dashboard scope selection endpoint failed to mount');
-  }
+  const scopeDirectory = createScopeDirectory({ query: (...args) => db.query(...args) });
+  const selectDashboardScope = createScopeSelectionResolver({ loadMemberships, resolveAuthorization, scopeDirectory });
+  const dashboardScopeSelection = mountScopeSelectionEndpoint({ app, scopedModeEnabled: true, selectDashboardScope });
+  if (!dashboardScopeSelection?.mounted) throw new Error('SPACEVERSE Dashboard scope selection endpoint failed to mount');
 
-  return Object.freeze({
-    mounted: true,
-    actions,
-    dashboard,
-    dashboardSessionScope,
-    dashboardScopeSelection
-  });
+  return Object.freeze({ mounted: true, actions, dashboard, dashboardSessionScope, dashboardScopeSelection });
 }
 
 export const spaceverseServerCompositionContract = Object.freeze({
@@ -131,6 +66,7 @@ export const spaceverseServerCompositionContract = Object.freeze({
   includesDashboardValidatedTenantSelection: true,
   dashboardScopeComesFromServerMemberships: true,
   dashboardBrowserTenantSelectionGrantsNoAuthority: true,
+  scopeSelectionUsesAuthoritativeDirectory: true,
   platformAdminSelectionRequiresAuthoritativeDirectory: true,
   locationSelectionRequiresAuthoritativeDirectory: true,
   ownsBusinessLogic: false,
