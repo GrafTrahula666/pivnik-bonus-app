@@ -10,7 +10,7 @@ const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'produ
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';
-const TESTER_HANDLES = Object.freeze(['drolted', 'distraktor', 'ksemar']);
+const TESTER_HANDLES = Object.freeze(['drolted', 'distraktor', 'olesyaolese', 'drollted', 'ksemar']);
 const FRAME_GRANTS = Object.freeze({
   'beer-mugs': 'profile-frame-beer-mugs',
   'beer-bottles': 'profile-frame-beer-bottles',
