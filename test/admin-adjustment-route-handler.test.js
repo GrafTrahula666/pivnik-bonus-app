@@ -110,6 +110,32 @@ test('executor business errors keep legacy status/message contract', async () =>
   assert.deepEqual(res.payload, { error: 'Баланс не может стать отрицательным.' });
 });
 
+test('executor typed client failures preserve exact status and message', async () => {
+  const cases = [
+    [404, 'Пользователь не найден.'],
+    [400, 'У этого профиля включён постоянный безлимит бонусов.'],
+    [409, 'Конфликт идемпотентности.'],
+    [409, 'Некорректный бонусный баланс клиента.']
+  ];
+
+  for (const [statusCode, message] of cases) {
+    const handler = createAdminAdjustmentRouteHandler({
+      normalizeRequestKey: (value) => value,
+      executeAdjustment: async () => {
+        throw Object.assign(new Error(message), { statusCode });
+      }
+    });
+    const res = createResponse();
+    let delegated = null;
+
+    await handler(createRequest(), res, (error) => { delegated = error; });
+
+    assert.equal(delegated, null);
+    assert.equal(res.statusCode, statusCode);
+    assert.deepEqual(res.payload, { error: message });
+  }
+});
+
 test('stricter executor input failures become 400 and never leak as server errors', async () => {
   const handler = createAdminAdjustmentRouteHandler({
     normalizeRequestKey: (value) => value,
