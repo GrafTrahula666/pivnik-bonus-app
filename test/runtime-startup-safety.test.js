@@ -97,6 +97,41 @@ test('Telegram repair fails open when Telegram API is unavailable', async () => 
   assert.match(output, /telegram-repair-probe-complete fetchCalls=1/);
 });
 
+test('Telegram repair timeout aborts a hanging API request and fails open', async () => {
+  const scriptPath = new URL('../scripts/repair-telegram-runtime.mjs', import.meta.url);
+  const probe = [
+    "let fetchCalls = 0;",
+    "const originalTimeout = AbortSignal.timeout.bind(AbortSignal);",
+    "AbortSignal.timeout = () => originalTimeout(30);",
+    "globalThis.fetch = async (_url, options = {}) => {",
+    "  fetchCalls += 1;",
+    "  await new Promise((resolve, reject) => {",
+    "    const signal = options.signal;",
+    "    if (signal?.aborted) return reject(signal.reason);",
+    "    signal?.addEventListener('abort', () => reject(signal.reason), { once: true });",
+    "  });",
+    "};",
+    `await import(${JSON.stringify(scriptPath.href)});`,
+    "console.log(`telegram-repair-timeout-probe-complete fetchCalls=${fetchCalls}`);"
+  ].join('\n');
+
+  const { stdout, stderr } = await execFile(process.execPath, ['--input-type=module', '-e', probe], {
+    env: {
+      ...process.env,
+      PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR: 'false',
+      PIVNIK_DOCUMENT_PLATFORM: 'telegram',
+      RAILWAY_SERVICE_NAME: 'pivnik-bonus-app',
+      TELEGRAM_BOT_TOKEN: 'test-token',
+      TELEGRAM_APP_URL: 'https://example.invalid'
+    },
+    timeout: 5000
+  });
+
+  const output = `${stdout}${stderr}`;
+  assert.match(output, /Telegram bot menu repair failed; application startup will continue:/);
+  assert.match(output, /telegram-repair-timeout-probe-complete fetchCalls=1/);
+});
+
 test('Runtime side-effect audit requires a real pg client before classifying DB writes', () => {
   assert.match(retirementAudit, /const databaseClient =/);
   assert.match(retirementAudit, /const databaseMutationSql =/);
