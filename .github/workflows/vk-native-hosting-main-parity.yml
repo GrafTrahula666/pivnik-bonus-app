@@ -9,6 +9,7 @@ on:
       - scripts/build-vk-hosting.mjs
       - scripts/vk-native-hosting-browser-smoke.mjs
       - scripts/vk-native-hosting-bootstrap-smoke.mjs
+      - scripts/vk-native-hosting-gateway-smoke.mjs
       - scripts/vk-native-hosting-reopen-smoke.mjs
       - scripts/vk-native-hosting-expired-session-smoke.mjs
       - scripts/vk-native-hosting-stale-launch-smoke.mjs
@@ -96,6 +97,8 @@ jobs:
         run: node scripts/vk-native-hosting-browser-smoke.mjs
       - name: Run VK bootstrap auth/session smoke
         run: node scripts/vk-native-hosting-bootstrap-smoke.mjs
+      - name: Run VK real CORS and service-role restore smoke
+        run: node scripts/vk-native-hosting-gateway-smoke.mjs
       - name: Run VK reload/reopen session smoke
         run: node scripts/vk-native-hosting-reopen-smoke.mjs
       - name: Run VK expired session recovery smoke
@@ -134,6 +137,7 @@ jobs:
           path: |
             artifacts/vk-native-hosting-browser-smoke
             artifacts/vk-native-hosting-bootstrap-smoke
+            artifacts/vk-native-hosting-gateway-smoke
             artifacts/vk-native-hosting-reopen-smoke
             artifacts/vk-native-hosting-expired-session-smoke
             artifacts/vk-native-hosting-stale-launch-smoke

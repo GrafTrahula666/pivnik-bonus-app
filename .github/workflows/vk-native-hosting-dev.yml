@@ -146,7 +146,7 @@ jobs:
             --request OPTIONS \
             --header "Origin: $base" \
             --header 'Access-Control-Request-Method: GET' \
-            --header 'Access-Control-Request-Headers: authorization,content-type' \
+            --header 'Access-Control-Request-Headers: authorization,content-type,x-pivnik-version,x-pivnik-platform,x-pivnik-explicit-consent,x-staff-session' \
             --dump-header "$cors_headers" --output /dev/null \
             'https://139.100.238.159.nip.io/api/me'
 
@@ -155,5 +155,9 @@ jobs:
           grep -Eiq '^access-control-allow-methods:.*(^|[,[:space:]])GET([,[:space:]]|$)' "$cors_headers"
           grep -Eiq '^access-control-allow-headers:.*(^|[,[:space:]])authorization([,[:space:]]|$)' "$cors_headers"
           grep -Eiq '^access-control-allow-headers:.*(^|[,[:space:]])content-type([,[:space:]]|$)' "$cors_headers"
+          for header in x-pivnik-version x-pivnik-platform x-pivnik-explicit-consent x-staff-session; do
+            grep -Eiq "^access-control-allow-headers:.*(^|[,[:space:]])$header([,[:space:]]|$)" "$cors_headers"
+          done
+          grep -Eiq '^access-control-allow-methods:.*(^|[,[:space:]])POST([,[:space:]]|$)' "$cors_headers"
 
           echo "VK DEV post-deploy smoke passed: $DEV_URL"
