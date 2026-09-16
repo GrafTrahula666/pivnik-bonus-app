@@ -71,6 +71,32 @@ test('Telegram repair bypass exits without invoking fetch in an isolated startup
   assert.match(`${stdout}${stderr}`, /Telegram menu repair skipped because PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR=true/);
 });
 
+test('Telegram repair fails open when Telegram API is unavailable', async () => {
+  const scriptPath = new URL('../scripts/repair-telegram-runtime.mjs', import.meta.url);
+  const probe = [
+    "let fetchCalls = 0;",
+    "globalThis.fetch = async () => { fetchCalls += 1; throw new Error('simulated Telegram outage'); };",
+    `await import(${JSON.stringify(scriptPath.href)});`,
+    "console.log(`telegram-repair-probe-complete fetchCalls=${fetchCalls}`);"
+  ].join('\n');
+
+  const { stdout, stderr } = await execFile(process.execPath, ['--input-type=module', '-e', probe], {
+    env: {
+      ...process.env,
+      PIVNIK_SKIP_TELEGRAM_RUNTIME_REPAIR: 'false',
+      PIVNIK_DOCUMENT_PLATFORM: 'telegram',
+      RAILWAY_SERVICE_NAME: 'pivnik-bonus-app',
+      TELEGRAM_BOT_TOKEN: 'test-token',
+      TELEGRAM_APP_URL: 'https://example.invalid'
+    },
+    timeout: 5000
+  });
+
+  const output = `${stdout}${stderr}`;
+  assert.match(output, /Telegram bot menu repair failed; application startup will continue: simulated Telegram outage/);
+  assert.match(output, /telegram-repair-probe-complete fetchCalls=1/);
+});
+
 test('Runtime side-effect audit requires a real pg client before classifying DB writes', () => {
   assert.match(retirementAudit, /const databaseClient =/);
   assert.match(retirementAudit, /const databaseMutationSql =/);
