@@ -155,6 +155,14 @@ function patchVkAppRuntime(source) {
   return patched;
 }
 
+function patchVkAccountLinkRuntime(source) {
+  const legacyConsentReload = "      if (accepted) {\n        window.setTimeout(() => window.location.reload(), 650);\n      }";
+  const safeConsentReload = "      if (accepted && platform !== 'vk') {\n        window.setTimeout(() => window.location.reload(), 650);\n      }";
+  if (source.includes(legacyConsentReload)) return source.replace(legacyConsentReload, safeConsentReload);
+  if (source.includes(safeConsentReload)) return source;
+  throw new Error('account-link.js VK consent reload marker not found.');
+}
+
 await fs.rm(outDir, { recursive: true, force: true });
 await fs.mkdir(outDir, { recursive: true });
 
@@ -191,6 +199,10 @@ await fs.writeFile(vkRuntimePath, patchVkRuntime(vkRuntime));
 const vkAppPath = path.join(outDir, 'app.js');
 const vkAppRuntime = await fs.readFile(vkAppPath, 'utf8');
 await fs.writeFile(vkAppPath, patchVkAppRuntime(vkAppRuntime));
+
+const vkAccountLinkPath = path.join(outDir, 'account-link.js');
+const vkAccountLinkRuntime = await fs.readFile(vkAccountLinkPath, 'utf8');
+await fs.writeFile(vkAccountLinkPath, patchVkAccountLinkRuntime(vkAccountLinkRuntime));
 
 const requiredFiles = [
   'index.html',
