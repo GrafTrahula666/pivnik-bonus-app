@@ -152,6 +152,9 @@ function patchVkAppRuntime(source) {
     `    } catch (error) {\n      lastError = error;\n      const canRecoverVkSession = IS_VK\n        && method === 'GET'\n        && String(path) !== '/api/auth'\n        && String(path) !== '/api/bootstrap'\n        && error?.status === 401\n        && !vkSessionRecoveryUsed;\n      if (canRecoverVkSession) {\n        vkSessionRecoveryUsed = true;\n        if (vkRequestToken && state.token && state.token !== vkRequestToken) {\n          attempt -= 1;\n          continue;\n        }\n        if (!vkSessionRecoveryPromise) {\n          vkSessionRecoveryPromise = (async () => {\n            state.token = '';\n            safeStorage.remove('pivnik_session');\n            await authenticate();\n          })().finally(() => {\n            vkSessionRecoveryPromise = null;\n          });\n        }\n        await vkSessionRecoveryPromise;\n        attempt -= 1;\n        continue;\n      }\n      const retryable = !error.status || error.status >= 500 || error.code === 'TIMEOUT';`
   );
 
+  const modalCloseFallback = `\n\n;(() => {\n  document.addEventListener('click', (event) => {\n    const target = event.target?.closest?.('[data-close]');\n    const modalId = target?.dataset?.close;\n    if (!modalId) return;\n    queueMicrotask(() => {\n      const modal = document.getElementById(modalId);\n      if (!modal?.classList.contains('open')) return;\n      modal.classList.remove('open');\n      modal.setAttribute('aria-hidden', 'true');\n      if (!document.querySelector('.modal.open')) document.body.classList.remove('modal-open');\n    });\n  }, true);\n})();\n`;
+  if (!patched.includes("target?.closest?.('[data-close]')")) patched += modalCloseFallback;
+
   return patched;
 }
 
