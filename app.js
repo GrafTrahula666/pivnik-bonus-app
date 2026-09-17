@@ -654,6 +654,16 @@ function renderWheelStatus() {
   const homeStatus = $('#homeWheelStatus');
   if (!button || !availability || !nextFreeHint || !balanceHint) return;
 
+  if (pendingWheelRequest()) {
+    button.textContent = state.wheel.busy ? 'Проверяем результат…' : 'Проверить результат';
+    button.disabled = state.wheel.busy;
+    availability.textContent = 'Результат предыдущего вращения ещё не подтверждён.';
+    nextFreeHint.textContent = 'Повторная проверка использует то же вращение.';
+    balanceHint.textContent = 'Новое вращение станет доступно после проверки.';
+    if (homeStatus) homeStatus.textContent = 'Проверьте результат вращения';
+    return;
+  }
+
   if (!current) {
     button.textContent = 'Проверяем доступность…';
     button.disabled = true;
@@ -738,31 +748,60 @@ function waitForWheelStop(disk) {
   });
 }
 
+function pendingWheelRequest() {
+  let pending = state.wheel.pendingRequest;
+  if (!pending) {
+    try { pending = JSON.parse(safeStorage.get('pivnik_wheel_pending_request') || 'null'); }
+    catch (_) { return null; }
+  }
+  if (!state.profile?.id || pending?.userId !== String(state.profile.id)
+    || !/^[A-Za-z0-9-]{8,100}$/.test(pending?.requestKey || '')) return null;
+  state.wheel.pendingRequest = pending;
+  return pending;
+}
+
+function clearPendingWheelRequest(requestKey) {
+  if (pendingWheelRequest()?.requestKey !== requestKey) return;
+  state.wheel.pendingRequest = null;
+  safeStorage.remove('pivnik_wheel_pending_request');
+}
+
 async function spinWheel() {
   if (IS_VK || state.wheel.busy) return;
-  if (!state.wheel.status) await loadWheelStatus();
-  const current = effectiveWheelStatus();
-  if (!current?.freeAvailable && !current?.canAffordPaid) {
-    return toast(`Для вращения нужно ${current?.nextPaidCost || 50} бонусов.`);
-  }
-
   const disk = $('#wheelDisk');
   if (!disk) return;
+  // Lock before the first await so status loading cannot admit a second click.
   state.wheel.busy = true;
   renderWheelStatus();
-  const result = $('#wheelResult');
-  result?.classList.add('is-visible');
-  result?.setAttribute('aria-hidden', 'false');
-  $('#wheelResultKicker').textContent = 'Определяем результат на сервере';
-  $('#wheelResultTitle').textContent = 'Колесо набирает ход…';
-
+  let requestKey;
   try {
+    const pending = pendingWheelRequest();
+    if (!pending && !state.wheel.status) await loadWheelStatus();
+    const current = effectiveWheelStatus();
+    if (!pending && !current?.freeAvailable && !current?.canAffordPaid) {
+      return toast(`Для вращения нужно ${current?.nextPaidCost || 50} бонусов.`);
+    }
+    requestKey = pending?.requestKey || requestId();
+    state.wheel.pendingRequest = { userId: String(state.profile.id), requestKey };
+    // Keep the command across manual retry/reload until its outcome is known.
+    // The server checks replay before cooldown/balance, so recovery stays possible
+    // even if the original spin spent the user's remaining bonuses.
+    safeStorage.set('pivnik_wheel_pending_request', JSON.stringify(state.wheel.pendingRequest));
+    const result = $('#wheelResult');
+    result?.classList.add('is-visible');
+    result?.setAttribute('aria-hidden', 'false');
+    $('#wheelResultKicker').textContent = 'Определяем результат на сервере';
+    $('#wheelResultTitle').textContent = pending ? 'Проверяем предыдущее вращение…' : 'Колесо набирает ход…';
     const data = await api('/api/wheel/spin', {
       method: 'POST',
-      body: JSON.stringify({ requestKey: requestId() }),
+      body: JSON.stringify({ requestKey }),
       retries: 1,
       timeoutMs: 9000
     });
+    if (!data?.spin?.prize || !data?.status || !data?.account) {
+      throw new Error('Не удалось подтвердить результат вращения. Повторите проверку.');
+    }
+    clearPendingWheelRequest(requestKey);
     const sector = visualSectorForPrize(data.spin?.prize?.code);
     const currentAngle = ((state.wheel.rotation % 360) + 360) % 360;
     const alignment = ((360 - sector.center - currentAngle) % 360 + 360) % 360;
@@ -785,7 +824,10 @@ async function spinWheel() {
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
   } catch (error) {
-    $('#wheelResultKicker').textContent = 'Вращение не выполнено';
+    // These responses are returned before a successful mutation. Auth, transport
+    // and 5xx errors can also occur after a prior commit and must keep the key.
+    if ([400, 404, 409].includes(error?.status)) clearPendingWheelRequest(requestKey);
+    $('#wheelResultKicker').textContent = pendingWheelRequest() ? 'Результат уточняется' : 'Вращение не выполнено';
     $('#wheelResultTitle').textContent = error.message;
     await loadWheelStatus().catch(() => {});
     toast(error.message);

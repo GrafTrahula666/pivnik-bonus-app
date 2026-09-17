@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import QRCode from 'qrcode';
 
 // Real HTTP origins, not route.fulfill: Chromium must enforce CORS itself.
 // Match vk-api-gateway/server.mjs at 12a1fa0b, including its write guard.
@@ -14,6 +15,13 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 let scenario;
 let staticOrigin;
 let gatewayOrigin;
+const qrImage = await QRCode.toDataURL('pivnik-test-only:4242');
+
+function wheelStatus() {
+  return scenario.spinKey
+    ? { freeAvailable: false, canAffordPaid: false, nextPaidCost: 50, balance: 5 }
+    : { freeAvailable: true, nextFreeAt: null, balance: 321 };
+}
 
 function json(res, body, status = 200) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -25,7 +33,7 @@ function payload() {
     token: 'fixture-session',
     profile: {
       id: '4242', firstName: 'Gateway Fixture', lastName: 'VK', provider: 'vk', role: scenario.role,
-      termsAccepted: scenario.accepted, onboardingComplete: true, balance: 321,
+      termsAccepted: scenario.accepted, onboardingComplete: true, balance: scenario.spinKey ? 5 : 321,
       avatarSource: 'preset_male', photoUrl: '', profileFrame: 'none',
       status: { code: 'traveler', name: 'Путник', bonusPercent: 5 }, privacy: {}
     },
@@ -60,7 +68,21 @@ const gateway = createServer(async (req, res) => {
   if (pathname === '/api/wallet/config') return json(res, { appleAvailable: false, googleAvailable: false, fallbackAvailable: true });
   if (pathname === '/api/shift/current') return json(res, { shift: null });
   if (pathname === '/api/promotions') return json(res, { promotions: [] });
-  if (pathname === '/api/wheel/status') return json(res, { freeAvailable: true, nextFreeAt: null, balance: 321 });
+  if (pathname === '/api/wheel/status') return json(res, wheelStatus());
+  if (pathname === '/api/wheel/spin') {
+    scenario.spinRequests.push(body.requestKey);
+    if (!scenario.spinKey) scenario.spinKey = body.requestKey;
+    assert.equal(body.requestKey, scenario.spinKey, 'a lost result must not create a second operation');
+    // Commit once, then lose both automatic response attempts. The user must
+    // recover the same operation after reload, despite insufficient funds.
+    if (scenario.spinRequests.length <= 2) { res.destroy(); return; }
+    return json(res, {
+      spin: { prize: { code: 'bonus-5', title: '5 бонусов' } },
+      status: wheelStatus(), idempotent: true,
+      account: { balance: 5, unlimitedBonus: false, giftBeerLiters: 0 }
+    });
+  }
+  if (pathname === '/api/me/qr') return json(res, { image: qrImage, shortCode: 'TEST4242' });
   if (pathname === '/api/staff/session') return json(res, { available: [], activeStaff: null });
   if (pathname === '/api/staff/recent') return json(res, { transactions: [] });
   if (pathname === '/api/diagnostics/vk-startup') return json(res, { ok: true });
@@ -101,12 +123,16 @@ staticOrigin = `http://127.0.0.1:${staticServer.address().port}`;
 const browser = await chromium.launch({ headless: true });
 try {
   for (const role of ['client', 'admin', 'staff']) {
-    scenario = { role, accepted: role !== 'client', calls: [], preflights: [], unexpected: [] };
+    scenario = { role, accepted: role !== 'client', calls: [], preflights: [], unexpected: [], spinRequests: [] };
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    page.on('console', (message) => {
+      const expectedDrop = message.location().url === `${gatewayOrigin}/api/wheel/spin`
+        && message.text().includes('ERR_EMPTY_RESPONSE');
+      if (message.type() === 'error' && !expectedDrop) errors.push(message.text());
+    });
     await page.goto(`${staticOrigin}/index.html?${signed}`, { waitUntil: 'domcontentloaded' });
     await page.locator('#appShell').waitFor({ state: 'visible', timeout: 12000 });
     if (!scenario.accepted) {
@@ -122,12 +148,32 @@ try {
     await page.locator('.bottom-nav [data-target="league"]').click();
     await page.locator('[data-screen="league"]').waitFor({ state: 'visible' });
     await page.locator('.bottom-nav [data-target="client"]').click();
+    await page.locator('#navQrButton').click();
+    await page.waitForFunction(() => document.querySelector('#qrImage')?.naturalWidth > 0);
+    assert.equal(await page.locator('#qrToken').textContent(), 'TEST4242');
+    await page.locator('[data-close="qrModal"]').click();
+    await page.locator('#openShopButton').click();
+    await page.locator('#shopModal').waitFor({ state: 'visible' });
+    await page.locator('[data-close="shopModal"]').click();
     await page.locator('#openWheelButton').click();
     await page.locator('[data-screen="wheel"]').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
+    if (role === 'client') {
+      await page.locator('#wheelSpinButton').click();
+      await page.getByRole('button', { name: 'Проверить результат', exact: true }).waitFor({ state: 'visible' });
+      assert.equal(scenario.spinRequests.length, 2);
+    }
     // Reload must use the stored session and preserve permissions.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#appShell').waitFor({ state: 'visible' });
+    if (role === 'client') {
+      await page.locator('#openWheelButton').click();
+      await page.getByRole('button', { name: 'Проверить результат', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
+      assert.equal(scenario.spinRequests.length, 3);
+      assert.equal(new Set(scenario.spinRequests).size, 1);
+      await page.locator('#wheelBackButton').click();
+    }
     await page.locator('.bottom-nav [data-target="profile"]').click();
     assert.equal(await page.locator('#profileAdminNav').isVisible(), role === 'admin');
     assert.equal(await page.locator('#profileStaffNav').isVisible(), role !== 'client');
