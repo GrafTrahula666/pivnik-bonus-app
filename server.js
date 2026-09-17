@@ -639,6 +639,10 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_opt_in_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_opt_out_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_consent_version TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_salt TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_updated_at TIMESTAMPTZ');
@@ -1313,6 +1317,7 @@ const BROADCAST_CHANNELS = new Set(['telegram', 'vk', 'all']);
 const BROADCAST_AUDIENCES = new Set(['clients', 'all']);
 const BROADCAST_MAX_RECIPIENTS = 500;
 const BROADCAST_MAX_TEXT = 3000;
+const MARKETING_CONSENT_VERSION = 'promotions-2026-09-18';
 
 function normalizeBroadcastChannel(value) {
   const channel = String(value || 'telegram').trim().toLowerCase();
@@ -1341,6 +1346,7 @@ async function getBroadcastRecipients(audience) {
      FROM users u
      WHERE u.merged_into_user_id IS NULL
        AND u.deleted_at IS NULL
+       AND u.marketing_opt_in = TRUE
        AND ($1::text = 'all' OR u.role = 'client')
      ORDER BY u.created_at ASC
      LIMIT $2`,
@@ -2677,10 +2683,60 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
   }
 });
 
-app.get('/api/me/messaging-config', authRequired, (_req, res) => {
-  res.json({
-    vkCommunityId: /^\d+$/.test(vkCommunityId) ? vkCommunityId : null
-  });
+app.get('/api/me/messaging-config', authRequired, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT marketing_opt_in, marketing_opt_in_at, marketing_opt_out_at, marketing_consent_version
+       FROM users
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL`,
+      [req.user.id]
+    );
+    const row = result.rows[0] || {};
+    res.json({
+      vkCommunityId: /^\d+$/.test(vkCommunityId) ? vkCommunityId : null,
+      marketingOptIn: row.marketing_opt_in === true,
+      marketingOptInAt: row.marketing_opt_in_at || null,
+      marketingOptOutAt: row.marketing_opt_out_at || null,
+      marketingConsentVersion: row.marketing_consent_version || null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/me/marketing-consent', authRequired, async (req, res, next) => {
+  try {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Некорректное значение согласия на акции.' });
+    }
+    const enabled = req.body.enabled;
+    const result = await pool.query(
+      `UPDATE users
+       SET marketing_opt_in = $1,
+           marketing_opt_in_at = CASE WHEN $1 THEN NOW() ELSE marketing_opt_in_at END,
+           marketing_opt_out_at = CASE WHEN $1 THEN NULL ELSE NOW() END,
+           marketing_consent_version = CASE WHEN $1 THEN $2 ELSE marketing_consent_version END,
+           updated_at = NOW()
+       WHERE id = $3::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL
+       RETURNING marketing_opt_in, marketing_opt_in_at, marketing_opt_out_at, marketing_consent_version`,
+      [enabled, MARKETING_CONSENT_VERSION, req.user.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
+    const row = result.rows[0];
+    res.json({
+      ok: true,
+      marketingOptIn: row.marketing_opt_in === true,
+      marketingOptInAt: row.marketing_opt_in_at || null,
+      marketingOptOutAt: row.marketing_opt_out_at || null,
+      marketingConsentVersion: row.marketing_consent_version || null
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), async (req, res, next) => {
