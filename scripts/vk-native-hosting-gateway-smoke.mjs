@@ -73,8 +73,9 @@ const gateway = createServer(async (req, res) => {
     scenario.spinRequests.push(body.requestKey);
     if (!scenario.spinKey) scenario.spinKey = body.requestKey;
     assert.equal(body.requestKey, scenario.spinKey, 'a lost result must not create a second operation');
-    // Commit once, then lose both automatic response attempts. The user must
-    // recover the same operation after reload, despite insufficient funds.
+    // Commit once and lose the first two responses. The client may retry the
+    // same idempotency key automatically; the third request returns the stored
+    // result and must never create a second financial operation.
     if (scenario.spinRequests.length <= 2) { res.destroy(); return; }
     return json(res, {
       spin: { prize: { code: 'bonus-5', title: '5 бонусов' } },
@@ -162,28 +163,18 @@ try {
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
     if (role === 'client') {
       await page.locator('#wheelSpinButton').click();
-      await page.getByRole('button', { name: 'Проверить результат', exact: true }).waitFor({ state: 'visible' }).catch(async (error) => {
-        const failure = {
-          spinRequests: scenario.spinRequests,
-          errors,
-          calls: scenario.calls.map(({ method, pathname }) => `${method} ${pathname}`),
-          button: await page.locator('#wheelSpinButton').textContent(),
-          result: await page.locator('#wheelResult').textContent()
-        };
-        await fs.writeFile(path.join(outDir, `${role}-wheel-retry-failure.json`), JSON.stringify(failure, null, 2));
-        console.error(JSON.stringify(failure));
-        throw error;
-      });
-      assert.equal(scenario.spinRequests.length, 2);
+      await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
+      assert.equal(scenario.spinRequests.length, 3);
+      assert.equal(new Set(scenario.spinRequests).size, 1, 'automatic retries must reuse one idempotency key');
     }
-    // Reload must use the stored session and preserve permissions.
+    // Reload must use the stored session, preserve permissions and never replay
+    // a financial mutation that already returned its idempotent stored result.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#appShell').waitFor({ state: 'visible' });
     if (role === 'client') {
       await page.locator('#openWheelButton').click();
-      await page.getByRole('button', { name: 'Проверить результат', exact: true }).click();
-      await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
-      assert.equal(scenario.spinRequests.length, 3);
+      await page.locator('[data-screen="wheel"]').waitFor({ state: 'visible' });
+      assert.equal(scenario.spinRequests.length, 3, 'reload must not repeat a completed wheel mutation');
       assert.equal(new Set(scenario.spinRequests).size, 1);
       await page.locator('#wheelBackButton').click();
     }
