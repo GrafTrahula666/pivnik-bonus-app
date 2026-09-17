@@ -160,7 +160,13 @@ try {
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
     if (role === 'client') {
       await page.locator('#wheelSpinButton').click();
-      await page.getByRole('button', { name: 'Проверить результат', exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: 'Проверить результат', exact: true }).waitFor({ state: 'visible' }).catch(async (error) => {
+        console.error(JSON.stringify({ spinRequests: scenario.spinRequests, errors,
+          calls: scenario.calls.map(({ method, pathname }) => `${method} ${pathname}`),
+          button: await page.locator('#wheelSpinButton').textContent(),
+          result: await page.locator('#wheelResult').textContent() }));
+        throw error;
+      });
       assert.equal(scenario.spinRequests.length, 2);
     }
     // Reload must use the stored session and preserve permissions.
