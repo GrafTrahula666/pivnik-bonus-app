@@ -103,6 +103,7 @@ test('Telegram repair timeout aborts a hanging API request and fails open', asyn
     "let fetchCalls = 0;",
     "const originalTimeout = AbortSignal.timeout.bind(AbortSignal);",
     "AbortSignal.timeout = () => originalTimeout(30);",
+    "const keepAlive = setTimeout(() => {}, 1000);",
     "globalThis.fetch = async (_url, options = {}) => {",
     "  fetchCalls += 1;",
     "  await new Promise((resolve, reject) => {",
@@ -112,6 +113,7 @@ test('Telegram repair timeout aborts a hanging API request and fails open', asyn
     "  });",
     "};",
     `await import(${JSON.stringify(scriptPath.href)});`,
+    "clearTimeout(keepAlive);",
     "console.log(`telegram-repair-timeout-probe-complete fetchCalls=${fetchCalls}`);"
   ].join('\n');
 
