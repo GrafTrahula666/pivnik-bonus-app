@@ -2073,19 +2073,22 @@ async function showHistory() {
 
 function notificationPreferences() {
   const raw = safeStorage.get('pivnik_notification_preferences');
-  if (!raw) return { achievements: true, bonuses: true, promotions: true };
+  if (!raw) return { achievements: true, bonuses: true, promotions: false };
   try {
-    return { achievements: true, bonuses: true, promotions: true, ...JSON.parse(raw) };
+    return { achievements: true, bonuses: true, promotions: false, ...JSON.parse(raw) };
   } catch (_) {
-    return { achievements: true, bonuses: true, promotions: true };
+    return { achievements: true, bonuses: true, promotions: false };
   }
 }
 
-function renderNotificationPreferences() {
+async function renderNotificationPreferences() {
   const preferences = notificationPreferences();
   if ($('#notifyAchievements')) $('#notifyAchievements').checked = preferences.achievements !== false;
   if ($('#notifyBonuses')) $('#notifyBonuses').checked = preferences.bonuses !== false;
-  if ($('#notifyPromotions')) $('#notifyPromotions').checked = preferences.promotions !== false;
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = false;
+
+  const config = await api('/api/me/messaging-config', { retries: 0, timeoutMs: 6000 });
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = config?.marketingOptIn === true;
 }
 
 async function saveNotificationPreferences() {
@@ -2094,6 +2097,13 @@ async function saveNotificationPreferences() {
     bonuses: Boolean($('#notifyBonuses')?.checked),
     promotions: Boolean($('#notifyPromotions')?.checked)
   };
+
+  await api('/api/me/marketing-consent', {
+    method: 'POST',
+    body: JSON.stringify({ enabled: preferences.promotions }),
+    retries: 0,
+    timeoutMs: 7000
+  });
   safeStorage.set('pivnik_notification_preferences', JSON.stringify(preferences));
 
   let vkPermissionWarning = '';
@@ -2105,12 +2115,14 @@ async function saveNotificationPreferences() {
       }
     } catch (error) {
       console.warn('VK community messages permission was not granted:', error?.message || error);
-      vkPermissionWarning = ' Настройки сохранены, но VK не разрешил сообщения сообщества.';
+      vkPermissionWarning = 'Согласие сохранено, но VK не разрешил сообщения сообщества.';
     }
   }
 
   closeModal('notificationsModal');
-  toast(vkPermissionWarning ? vkPermissionWarning.trim() : 'Настройки уведомлений сохранены');
+  toast(vkPermissionWarning || (preferences.promotions
+    ? 'Сообщения об акциях включены'
+    : 'Сообщения об акциях отключены'));
 }
 
 function openConnectedServices() {
@@ -3081,7 +3093,7 @@ $('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
 $('#openProfileAchievements')?.addEventListener('click', openAchievementHub);
 $('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
 $('#openConnectedServices')?.addEventListener('click', openConnectedServices);
-$('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
+$('#openNotifications')?.addEventListener('click', () => { openModal('notificationsModal'); renderNotificationPreferences().catch((error) => toast(error.message)); });
 $('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
 $('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
 $('#deleteAccountFromConsent')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; closeModal('consentModal'); openModal('deleteAccountModal'); });
