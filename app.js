@@ -2546,7 +2546,8 @@ function selectedBroadcastRecipientCount(preview, channel) {
   if (!preview) return 0;
   if (channel === 'telegram') return Number(preview.telegramRecipients || 0);
   if (channel === 'vk') return Number(preview.vkRecipients || 0);
-  return Number(preview.telegramRecipients || 0) + Number(preview.vkRecipients || 0);
+  return (preview.telegramConfigured ? Number(preview.telegramRecipients || 0) : 0)
+    + (preview.vkConfigured ? Number(preview.vkRecipients || 0) : 0);
 }
 
 async function loadBroadcastPreview() {
