@@ -2088,14 +2088,29 @@ function renderNotificationPreferences() {
   if ($('#notifyPromotions')) $('#notifyPromotions').checked = preferences.promotions !== false;
 }
 
-function saveNotificationPreferences() {
-  safeStorage.set('pivnik_notification_preferences', JSON.stringify({
+async function saveNotificationPreferences() {
+  const preferences = {
     achievements: Boolean($('#notifyAchievements')?.checked),
     bonuses: Boolean($('#notifyBonuses')?.checked),
     promotions: Boolean($('#notifyPromotions')?.checked)
-  }));
+  };
+  safeStorage.set('pivnik_notification_preferences', JSON.stringify(preferences));
+
+  let vkPermissionWarning = '';
+  if (IS_VK && preferences.promotions) {
+    try {
+      const config = await api('/api/me/messaging-config', { retries: 0, timeoutMs: 6000 });
+      if (config?.vkCommunityId && typeof window.__PIVNIK_VK_REQUEST_COMMUNITY_MESSAGES__ === 'function') {
+        await window.__PIVNIK_VK_REQUEST_COMMUNITY_MESSAGES__(config.vkCommunityId);
+      }
+    } catch (error) {
+      console.warn('VK community messages permission was not granted:', error?.message || error);
+      vkPermissionWarning = ' Настройки сохранены, но VK не разрешил сообщения сообщества.';
+    }
+  }
+
   closeModal('notificationsModal');
-  toast('Настройки уведомлений сохранены');
+  toast(vkPermissionWarning ? vkPermissionWarning.trim() : 'Настройки уведомлений сохранены');
 }
 
 function openConnectedServices() {
@@ -2525,6 +2540,105 @@ function renderInquiries(items, target = '#adminInquiries', compact = false) {
       if ($('#adminInquiriesModal')?.classList.contains('open')) await openAllInquiries();
     } catch (error) { toast(error.message); }
   }));
+}
+
+function selectedBroadcastRecipientCount(preview, channel) {
+  if (!preview) return 0;
+  if (channel === 'telegram') return Number(preview.telegramRecipients || 0);
+  if (channel === 'vk') return Number(preview.vkRecipients || 0);
+  return Number(preview.telegramRecipients || 0) + Number(preview.vkRecipients || 0);
+}
+
+async function loadBroadcastPreview() {
+  const channel = $('#broadcastChannel')?.value || 'telegram';
+  const audience = $('#broadcastAudience')?.value || 'clients';
+  const info = $('#broadcastAudienceInfo');
+  const sendButton = $('#sendBroadcast');
+  if (info) info.textContent = 'Считаем получателей…';
+  if (sendButton) sendButton.disabled = true;
+
+  const preview = await api(`/api/admin/broadcast/preview?audience=${encodeURIComponent(audience)}`, {
+    retries: 0,
+    timeoutMs: 8000
+  });
+  const telegramState = preview.telegramConfigured
+    ? `Telegram: ${fmt(preview.telegramRecipients)}`
+    : 'Telegram: бот не настроен';
+  const vkState = preview.vkConfigured
+    ? `VK: ${fmt(preview.vkRecipients)}`
+    : 'VK: токен сообщества не настроен';
+  const truncated = preview.truncated ? ` · показан лимит ${fmt(preview.maxRecipients)}` : '';
+  if (info) info.textContent = `${telegramState} · ${vkState} · аккаунтов в выборке: ${fmt(preview.totalUsers)}${truncated}`;
+
+  const count = selectedBroadcastRecipientCount(preview, channel);
+  const channelConfigured = channel === 'telegram'
+    ? preview.telegramConfigured
+    : channel === 'vk'
+      ? preview.vkConfigured
+      : (preview.telegramConfigured || preview.vkConfigured);
+  if (sendButton) sendButton.disabled = !channelConfigured || count < 1;
+  return preview;
+}
+
+async function openBroadcastAdmin() {
+  const result = $('#broadcastResult');
+  if (result) {
+    result.textContent = '';
+    result.classList.add('hidden');
+  }
+  openModal('broadcastModal');
+  await loadBroadcastPreview();
+}
+
+async function sendAdminBroadcast() {
+  const channel = $('#broadcastChannel')?.value || 'telegram';
+  const audience = $('#broadcastAudience')?.value || 'clients';
+  const message = String($('#broadcastMessage')?.value || '').trim();
+  if (!message) throw new Error('Введите текст сообщения.');
+
+  const preview = await loadBroadcastPreview();
+  const count = selectedBroadcastRecipientCount(preview, channel);
+  if (count < 1) throw new Error('В выбранном канале пока нет доступных получателей.');
+  if (!window.confirm(`Отправить сообщение? Получателей по выбранным каналам: ${fmt(count)}.`)) return;
+
+  const button = $('#sendBroadcast');
+  const result = $('#broadcastResult');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Отправляем…';
+  }
+  if (result) {
+    result.classList.remove('hidden');
+    result.textContent = 'Рассылка выполняется…';
+  }
+
+  try {
+    const data = await api('/api/admin/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ channel, audience, message }),
+      retries: 0,
+      timeoutMs: 60_000
+    });
+    const parts = [];
+    if (channel === 'telegram' || channel === 'all') {
+      parts.push(data.telegram?.skipped === 'not_configured'
+        ? 'Telegram не настроен'
+        : `Telegram: доставлено ${fmt(data.telegram?.delivered || 0)}, ошибок ${fmt(data.telegram?.failed || 0)}`);
+    }
+    if (channel === 'vk' || channel === 'all') {
+      parts.push(data.vk?.skipped === 'not_configured'
+        ? 'VK не настроен'
+        : `VK: доставлено ${fmt(data.vk?.delivered || 0)}, ошибок ${fmt(data.vk?.failed || 0)}`);
+    }
+    if (data.truncated) parts.push('сработал защитный лимит получателей');
+    if (result) result.textContent = parts.join(' · ');
+    toast('Рассылка завершена');
+  } finally {
+    if (button) {
+      button.textContent = 'Отправить';
+      await loadBroadcastPreview().catch(() => { button.disabled = false; });
+    }
+  }
 }
 
 async function loadAdmin() {
@@ -2974,7 +3088,7 @@ $$('.history-tabs [data-history-tab]').forEach((button) => button.addEventListen
   state.historyTab = button.dataset.historyTab || 'purchases';
   renderHistoryTab();
 }));
-$('#saveNotifications')?.addEventListener('click', saveNotificationPreferences);
+$('#saveNotifications')?.addEventListener('click', () => saveNotificationPreferences().catch((error) => toast(error.message)));
 $('#deleteAccountConfirm')?.addEventListener('input', (event) => {
   $('#deleteAccountButton').disabled = String(event.target.value || '').trim().toUpperCase() !== 'УДАЛИТЬ';
 });
@@ -3036,6 +3150,10 @@ $('#openAllTransactionsFromCard')?.addEventListener('click', () => openAllTransa
 $('#openAllInquiries')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
 $('#openAllInquiriesFromCard')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
 $('#openContentAdminQuick')?.addEventListener('click', openContentAdmin);
+$('#openBroadcastAdmin')?.addEventListener('click', () => openBroadcastAdmin().catch((error) => toast(error.message)));
+$('#broadcastChannel')?.addEventListener('change', () => loadBroadcastPreview().catch((error) => toast(error.message)));
+$('#broadcastAudience')?.addEventListener('change', () => loadBroadcastPreview().catch((error) => toast(error.message)));
+$('#sendBroadcast')?.addEventListener('click', () => sendAdminBroadcast().catch((error) => toast(error.message)));
 $('#userSearch')?.addEventListener('input', filterAdminUsers);
 $('#userRoleFilter')?.addEventListener('change', filterAdminUsers);
 $('#transactionSearch')?.addEventListener('input', filterAdminTransactions);
