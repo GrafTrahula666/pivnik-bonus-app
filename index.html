@@ -338,6 +338,7 @@
           <button type="button" id="openAllTransactions"><span>Транзакции</span><small>полный журнал и фильтры</small></button>
           <button type="button" id="openAllInquiries"><span>Вопросы и заказы</span><small>обращения по товарам и кружкам</small></button>
           <button type="button" id="openContentAdminQuick"><span>Магазин</span><small>карточки, цены и фотографии</small></button>
+          <button type="button" class="admin-write-only" id="openBroadcastAdmin"><span>Рассылка</span><small>сообщение клиентам Telegram и VK</small></button>
         </div>
 
         <div class="metric-grid">
@@ -696,11 +697,11 @@
       <button class="close" data-close="notificationsModal">×</button>
       <span class="muted">Настройки профиля</span>
       <h2>Уведомления</h2>
-      <p class="help-intro">Выберите, какие события показывать на этом устройстве.</p>
+      <p class="help-intro">Служебные уведомления остаются настройками устройства. Сообщения об акциях включаются отдельно и сохраняются как ваше согласие на рекламную рассылку.</p>
       <div class="privacy-switches notification-switches">
         <label><span><b>Новые достижения</b><small>Сообщать, когда награда готова к получению</small></span><input id="notifyAchievements" type="checkbox" checked></label>
         <label><span><b>Начисления и списания</b><small>Показывать результат бонусной операции</small></span><input id="notifyBonuses" type="checkbox" checked></label>
-        <label><span><b>Акции Пивника</b><small>Редкие важные предложения без спама</small></span><input id="notifyPromotions" type="checkbox" checked></label>
+        <label><span><b>Акции Пивника</b><small>Получать сообщения об акциях и специальных предложениях. Можно отключить в любой момент.</small></span><input id="notifyPromotions" type="checkbox"></label>
       </div>
       <button class="primary full" id="saveNotifications" type="button">Сохранить</button>
     </div>
@@ -805,6 +806,38 @@
       <p>Сообщение сохранится в админ-панели и придёт Кириллу через бота.</p>
       <textarea class="text-input content-textarea" id="shopInquiryMessage" maxlength="1200" placeholder="Напишите вопрос"></textarea>
       <button class="primary full" id="sendShopInquiry" type="button">Отправить Кириллу</button>
+    </div>
+  </div>
+
+  <div class="modal" id="broadcastModal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet premium-sheet">
+      <button class="close" data-close="broadcastModal">×</button>
+      <span class="muted">Панель владельца</span>
+      <h2>Рассылка клиентам</h2>
+      <p class="help-intro">Напишите сообщение, проверьте количество получателей и отправьте его через бота. Перед массовой отправкой приложение попросит подтверждение.</p>
+      <label>Канал
+        <select class="text-input" id="broadcastChannel">
+          <option value="telegram">Telegram</option>
+          <option value="vk">VK</option>
+          <option value="all">Telegram + VK</option>
+        </select>
+      </label>
+      <label>Кому
+        <select class="text-input" id="broadcastAudience">
+          <option value="clients">Только клиентам</option>
+          <option value="all">Всем активным аккаунтам</option>
+        </select>
+      </label>
+      <label>Сообщение
+        <textarea class="text-input content-textarea" id="broadcastMessage" maxlength="3000" placeholder="Например: 🍺 Только сегодня: берёшь 2 — третий в подарок. До закрытия."></textarea>
+      </label>
+      <div class="help-intro" id="broadcastAudienceInfo">Считаем получателей…</div>
+      <div class="help-intro hidden" id="broadcastResult"></div>
+      <div class="two-buttons">
+        <button class="secondary" data-close="broadcastModal" type="button">Отмена</button>
+        <button class="primary" id="sendBroadcast" type="button">Отправить</button>
+      </div>
+      <small class="admin-hint">Telegram отправляется текущим ботом. Для VK используется токен сообщества; пользователь должен заранее разрешить сообщения от сообщества.</small>
     </div>
   </div>
 
