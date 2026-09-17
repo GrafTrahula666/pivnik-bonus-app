@@ -96,10 +96,11 @@ test('VK profile data is rejected when Bridge user differs from signed launch us
   assert.match(runtime, /(?:return null|vkUser = null)/);
 });
 
-test('VK consent continuation patch suppresses only the redundant VK reload', async () => {
-  const patcher = await read('scripts/apply-red-cosmos-v2-client-final.mjs');
-  assert.match(patcher, /accepted && platform !== 'vk'/);
-  assert.match(patcher, /window\.setTimeout\(\(\) => window\.location\.reload\(\), 650\)/);
-  assert.match(patcher, /legacyConsentReload/);
-  assert.match(patcher, /safeConsentReload/);
+test('VK hosting bundle suppresses only the redundant delayed consent reload', async () => {
+  const builder = await read('scripts/build-vk-hosting.mjs');
+  assert.match(builder, /function patchVkAccountLinkRuntime\(source\)/);
+  assert.match(builder, /accepted && platform !== 'vk'/);
+  assert.match(builder, /window\.setTimeout\(\(\) => window\.location\.reload\(\), 650\)/);
+  assert.match(builder, /legacyConsentReload/);
+  assert.match(builder, /safeConsentReload/);
 });
