@@ -523,6 +523,21 @@
     consentObserver = null;
   }
 
+  window.__PIVNIK_VK_REQUEST_COMMUNITY_MESSAGES__ = async (communityId) => {
+    const groupId = Number(communityId);
+    if (!Number.isSafeInteger(groupId) || groupId <= 0) {
+      throw new Error('VK-сообщество для рассылок не настроено.');
+    }
+    await bridgeReady;
+    if (!bridge?.send) throw new Error('VK Bridge недоступен.');
+    await withTimeout(
+      bridge.send('VKWebAppAllowMessagesFromGroup', { group_id: groupId }),
+      6000,
+      'VK не подтвердил разрешение на сообщения вовремя.'
+    );
+    return true;
+  };
+
   function applyVkLabels() {
     const eyebrow = document.getElementById('eyebrow');
     if (eyebrow) eyebrow.textContent = 'VK Mini App';
