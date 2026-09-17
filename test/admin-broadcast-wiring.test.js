@@ -49,3 +49,18 @@ test('VK broadcast secrets are environment-only', () => {
   assert.match(env, /^VK_API_VERSION=5\.199$/m);
   assert.doesNotMatch(server, /VK_COMMUNITY_TOKEN\s*=\s*['"][^'"]+['"]/);
 });
+
+test('promotional broadcasts require explicit server-side consent', () => {
+  const server = read('server.js');
+  const html = read('index.html');
+  const app = read('app.js');
+  assert.match(server, /marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(server, /app\.post\('\/api\/me\/marketing-consent'/);
+  assert.match(server, /AND u\.marketing_opt_in = TRUE/);
+  assert.match(server, /MARKETING_CONSENT_VERSION/);
+  assert.match(app, /promotions: false/);
+  assert.match(app, /\/api\/me\/marketing-consent/);
+  assert.match(app, /config\?\.marketingOptIn === true/);
+  assert.match(html, /согласие на рекламную рассылку/);
+  assert.doesNotMatch(html, /id="notifyPromotions"[^>]*checked/);
+});
