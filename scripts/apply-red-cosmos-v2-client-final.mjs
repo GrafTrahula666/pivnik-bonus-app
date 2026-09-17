@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appPath = path.join(root, 'app.js');
-const accountLinkPath = path.join(root, 'account-link.js');
 const shopFragmentPath = path.join(root, 'scripts', 'fragments', 'red-cosmos-shop-client.fragment.txt');
 let source = await fs.readFile(appPath, 'utf8');
 const MARKER = '// RED_COSMOS_V2_FINAL_CLIENT_RUNTIME';
@@ -78,19 +77,4 @@ for (const token of forbiddenWheel) {
 }
 if (!source.includes('RED_COSMOS_SHOP_FRAMES')) throw new Error('RED COSMOS v2 client: direct shop missing');
 await fs.writeFile(appPath, source, 'utf8');
-
-// account-link.js historically scheduled a delayed full-page reload after consent.
-// app.js already hydrates the accepted profile and closes the consent modal itself.
-// In VK that delayed reload can interrupt the next user action (QR/shop/navigation).
-// Preserve Telegram behavior unchanged and suppress only the redundant VK reload.
-let accountLink = await fs.readFile(accountLinkPath, 'utf8');
-const legacyConsentReload = "      if (accepted) {\n        window.setTimeout(() => window.location.reload(), 650);\n      }";
-const safeConsentReload = "      if (accepted && platform !== 'vk') {\n        window.setTimeout(() => window.location.reload(), 650);\n      }";
-if (accountLink.includes(legacyConsentReload)) {
-  accountLink = accountLink.replace(legacyConsentReload, safeConsentReload);
-} else if (!accountLink.includes(safeConsentReload)) {
-  throw new Error('RED COSMOS v2 client: missing consent reload anchor');
-}
-await fs.writeFile(accountLinkPath, accountLink, 'utf8');
-
-console.log('RED COSMOS v2 client finalized: VK wheel, direct shop, frames, achievement copy and stable VK consent continuation.');
+console.log('RED COSMOS v2 client finalized: VK wheel, direct shop, frames and achievement copy.');
