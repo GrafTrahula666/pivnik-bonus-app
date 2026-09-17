@@ -152,9 +152,11 @@ try {
     await page.waitForFunction(() => document.querySelector('#qrImage')?.naturalWidth > 0);
     assert.equal(await page.locator('#qrToken').textContent(), 'TEST4242');
     await page.locator('[data-close="qrModal"]').click();
+    await page.locator('#qrModal').waitFor({ state: 'hidden' });
     await page.locator('#openShopButton').click();
     await page.locator('#shopModal').waitFor({ state: 'visible' });
     await page.locator('[data-close="shopModal"]').click();
+    await page.locator('#shopModal').waitFor({ state: 'hidden' });
     await page.locator('#openWheelButton').click();
     await page.locator('[data-screen="wheel"]').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
