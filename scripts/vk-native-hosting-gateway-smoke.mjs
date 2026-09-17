@@ -161,10 +161,15 @@ try {
     if (role === 'client') {
       await page.locator('#wheelSpinButton').click();
       await page.getByRole('button', { name: 'Проверить результат', exact: true }).waitFor({ state: 'visible' }).catch(async (error) => {
-        console.error(JSON.stringify({ spinRequests: scenario.spinRequests, errors,
+        const failure = {
+          spinRequests: scenario.spinRequests,
+          errors,
           calls: scenario.calls.map(({ method, pathname }) => `${method} ${pathname}`),
           button: await page.locator('#wheelSpinButton').textContent(),
-          result: await page.locator('#wheelResult').textContent() }));
+          result: await page.locator('#wheelResult').textContent()
+        };
+        await fs.writeFile(path.join(outDir, `${role}-wheel-retry-failure.json`), JSON.stringify(failure, null, 2));
+        console.error(JSON.stringify(failure));
         throw error;
       });
       assert.equal(scenario.spinRequests.length, 2);
