@@ -96,6 +96,13 @@ test('VK profile data is rejected when Bridge user differs from signed launch us
   assert.match(runtime, /(?:return null|vkUser = null)/);
 });
 
+test('VK interaction fallbacks do not arm delayed modal reopen after the normal handler succeeds', async () => {
+  const v22 = await read('v22-ui.js');
+  const red = await read('red-cosmos-v2.js');
+  assert.match(v22, /queueMicrotask\(\(\) => \{[\s\S]*?if \(check\(\)\) return;[\s\S]*?window\.setTimeout/);
+  assert.match(red, /queueMicrotask\(\(\) => \{[\s\S]*?if \(check\(\)\) return;[\s\S]*?setTimeout/);
+});
+
 test('VK hosting bundle suppresses only the redundant delayed consent reload', async () => {
   const builder = await read('scripts/build-vk-hosting.mjs');
   assert.match(builder, /function patchVkAccountLinkRuntime\(source\)/);

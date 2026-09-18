@@ -225,10 +225,19 @@
   }
 
   function scheduleFallback(check, action, delay = 60) {
-    setTimeout(() => {
-      try { if (!check()) action(); }
-      catch (error) { console.warn('RED COSMOS interaction fallback failed:', error); }
-    }, delay);
+    queueMicrotask(() => {
+      try {
+        // Avoid re-arming a modal after its normal click handler already opened
+        // it and the user closed it before the delayed fallback fired.
+        if (check()) return;
+      } catch (error) {
+        console.warn('RED COSMOS interaction fallback precheck failed:', error);
+      }
+      setTimeout(() => {
+        try { if (!check()) action(); }
+        catch (error) { console.warn('RED COSMOS interaction fallback failed:', error); }
+      }, delay);
+    });
   }
 
   function installVkInteractionFallback() {
