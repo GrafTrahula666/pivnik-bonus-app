@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
-const TELEGRAM_DEEP_SPACE_HREF = '/telegram-deep-space-background.css?v=20260904-1';
+const TELEGRAM_DEEP_SPACE_HREF = '/telegram-deep-space-background.css?v=20260918-2';
 const BLACK_FROSTED_GLASS_HREF = '/black-frosted-glass.css?v=20260904-1';
 const BLACK_FROSTED_SURFACES_HREF = '/black-frosted-surfaces.css?v=20260904-1';
 
