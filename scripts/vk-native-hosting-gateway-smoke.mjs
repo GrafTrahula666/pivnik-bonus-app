@@ -177,6 +177,8 @@ try {
       assert.equal(scenario.spinRequests.length, 3, 'reload must not repeat a completed wheel mutation');
       assert.equal(new Set(scenario.spinRequests).size, 1);
       await page.locator('#wheelBackButton').click();
+      await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
+      await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
     }
     await page.locator('.bottom-nav [data-target="profile"]').click();
     assert.equal(await page.locator('#profileAdminNav').isVisible(), role === 'admin');
