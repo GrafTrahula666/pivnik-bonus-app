@@ -29,6 +29,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const port = Number(process.env.PORT || 3000);
 const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+const vkCommunityId = String(process.env.VK_COMMUNITY_ID || '').trim();
+const vkCommunityToken = String(process.env.VK_COMMUNITY_TOKEN || '').trim();
+const vkApiVersion = String(process.env.VK_API_VERSION || '5.199').trim() || '5.199';
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
 const ownerTelegramUsername = String(process.env.OWNER_TELEGRAM_USERNAME || '').replace(/^@/, '').trim();
 const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
@@ -636,6 +639,10 @@ async function initDatabase() {
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_opt_in_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_opt_out_at TIMESTAMPTZ');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_consent_version TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_salt TEXT');
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_pin_updated_at TIMESTAMPTZ');
@@ -1239,19 +1246,141 @@ async function resolveActingStaff(req) {
 }
 
 async function sendTelegramMessage(telegramId, text) {
-  if (!botToken || !telegramId) return;
+  if (!botToken || !telegramId) {
+    return { ok: false, status: 0, error: 'telegram_not_configured' };
+  }
   try {
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: telegramId, text })
     });
-    if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) {
       console.error('Telegram sendMessage failed with status:', response.status);
+      return {
+        ok: false,
+        status: response.status,
+        error: String(payload?.description || 'telegram_send_failed').slice(0, 180)
+      };
     }
+    return {
+      ok: true,
+      status: response.status,
+      messageId: payload?.result?.message_id ?? null
+    };
   } catch (error) {
     console.error('Telegram sendMessage error:', error.message);
+    return { ok: false, status: 0, error: 'telegram_network_error' };
   }
+}
+
+async function sendVkCommunityMessage(vkId, text) {
+  if (!vkCommunityToken || !vkCommunityId || !vkId) {
+    return { ok: false, status: 0, error: 'vk_not_configured' };
+  }
+  try {
+    const form = new URLSearchParams({
+      user_id: String(vkId),
+      random_id: String(crypto.randomInt(1, 2_147_483_647)),
+      message: text,
+      access_token: vkCommunityToken,
+      v: vkApiVersion
+    });
+    const response = await fetch('https://api.vk.com/method/messages.send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: form
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.error) {
+      const code = payload?.error?.error_code ? `vk_${payload.error.error_code}` : 'vk_send_failed';
+      console.error('VK messages.send failed:', code);
+      return {
+        ok: false,
+        status: response.status,
+        error: String(payload?.error?.error_msg || code).slice(0, 180)
+      };
+    }
+    return {
+      ok: true,
+      status: response.status,
+      messageId: payload?.response ?? null
+    };
+  } catch (error) {
+    console.error('VK messages.send error:', error.message);
+    return { ok: false, status: 0, error: 'vk_network_error' };
+  }
+}
+
+const BROADCAST_CHANNELS = new Set(['telegram', 'vk', 'all']);
+const BROADCAST_AUDIENCES = new Set(['clients', 'all']);
+const BROADCAST_MAX_RECIPIENTS = 500;
+const BROADCAST_MAX_TEXT = 3000;
+const MARKETING_CONSENT_VERSION = 'promotions-2026-09-18';
+
+function normalizeBroadcastChannel(value) {
+  const channel = String(value || 'telegram').trim().toLowerCase();
+  return BROADCAST_CHANNELS.has(channel) ? channel : '';
+}
+
+function normalizeBroadcastAudience(value) {
+  const audience = String(value || 'clients').trim().toLowerCase();
+  return BROADCAST_AUDIENCES.has(audience) ? audience : '';
+}
+
+async function getBroadcastRecipients(audience) {
+  const result = await pool.query(
+    `SELECT u.id, u.role,
+            COALESCE(
+              u.telegram_id::text,
+              (SELECT ui.provider_user_id
+               FROM user_identities ui
+               WHERE ui.user_id = u.id AND ui.provider = 'telegram'
+               LIMIT 1)
+            ) AS telegram_id,
+            (SELECT ui.provider_user_id
+             FROM user_identities ui
+             WHERE ui.user_id = u.id AND ui.provider = 'vk'
+             LIMIT 1) AS vk_id
+     FROM users u
+     WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+       AND u.marketing_opt_in = TRUE
+       AND ($1::text = 'all' OR u.role = 'client')
+     ORDER BY u.created_at ASC
+     LIMIT $2`,
+    [audience, BROADCAST_MAX_RECIPIENTS + 1]
+  );
+  const truncated = result.rows.length > BROADCAST_MAX_RECIPIENTS;
+  const rows = truncated ? result.rows.slice(0, BROADCAST_MAX_RECIPIENTS) : result.rows;
+  return { rows, truncated };
+}
+
+function uniqueRecipientIds(rows, key) {
+  return [...new Set(rows.map((row) => String(row[key] || '').trim()).filter(Boolean))];
+}
+
+async function deliverBroadcast(ids, sender, delayMs) {
+  let delivered = 0;
+  let failed = 0;
+  const errors = new Map();
+  for (const id of ids) {
+    const result = await sender(id);
+    if (result?.ok) delivered += 1;
+    else {
+      failed += 1;
+      const code = String(result?.error || 'send_failed').slice(0, 180);
+      errors.set(code, Number(errors.get(code) || 0) + 1);
+    }
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return {
+    attempted: ids.length,
+    delivered,
+    failed,
+    errors: [...errors.entries()].slice(0, 8).map(([error, count]) => ({ error, count }))
+  };
 }
 
 function transactionResponse(row) {
@@ -2548,6 +2677,148 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
       },
       operations: opsResult.rows.map(transactionResponse),
       settings: settingsResult.rows[0]
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/me/messaging-config', authRequired, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT marketing_opt_in, marketing_opt_in_at, marketing_opt_out_at, marketing_consent_version
+       FROM users
+       WHERE id = $1::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL`,
+      [req.user.id]
+    );
+    const row = result.rows[0] || {};
+    res.json({
+      vkCommunityId: /^\d+$/.test(vkCommunityId) ? vkCommunityId : null,
+      marketingOptIn: row.marketing_opt_in === true,
+      marketingOptInAt: row.marketing_opt_in_at || null,
+      marketingOptOutAt: row.marketing_opt_out_at || null,
+      marketingConsentVersion: row.marketing_consent_version || null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/me/marketing-consent', authRequired, async (req, res, next) => {
+  try {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Некорректное значение согласия на акции.' });
+    }
+    const enabled = req.body.enabled;
+    const result = await pool.query(
+      `UPDATE users
+       SET marketing_opt_in = $1,
+           marketing_opt_in_at = CASE WHEN $1 THEN NOW() ELSE marketing_opt_in_at END,
+           marketing_opt_out_at = CASE WHEN $1 THEN NULL ELSE NOW() END,
+           marketing_consent_version = CASE WHEN $1 THEN $2 ELSE marketing_consent_version END,
+           updated_at = NOW()
+       WHERE id = $3::bigint
+         AND merged_into_user_id IS NULL
+         AND deleted_at IS NULL
+       RETURNING marketing_opt_in, marketing_opt_in_at, marketing_opt_out_at, marketing_consent_version`,
+      [enabled, MARKETING_CONSENT_VERSION, req.user.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
+    const row = result.rows[0];
+    res.json({
+      ok: true,
+      marketingOptIn: row.marketing_opt_in === true,
+      marketingOptInAt: row.marketing_opt_in_at || null,
+      marketingOptOutAt: row.marketing_opt_out_at || null,
+      marketingConsentVersion: row.marketing_consent_version || null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const audience = normalizeBroadcastAudience(req.query?.audience);
+    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
+    const recipients = await getBroadcastRecipients(audience);
+    const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
+    const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
+    res.json({
+      audience,
+      totalUsers: recipients.rows.length,
+      truncated: recipients.truncated,
+      telegramRecipients: telegramIds.length,
+      vkRecipients: vkIds.length,
+      telegramConfigured: Boolean(botToken),
+      vkConfigured: Boolean(vkCommunityId && vkCommunityToken),
+      maxRecipients: BROADCAST_MAX_RECIPIENTS
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const channel = normalizeBroadcastChannel(req.body?.channel);
+    const audience = normalizeBroadcastAudience(req.body?.audience);
+    const message = String(req.body?.message || '').trim();
+    if (!channel) return res.status(400).json({ error: 'Выберите канал рассылки.' });
+    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
+    if (!message) return res.status(400).json({ error: 'Введите текст рассылки.' });
+    if (message.length > BROADCAST_MAX_TEXT) {
+      return res.status(400).json({ error: `Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.` });
+    }
+
+    const recipients = await getBroadcastRecipients(audience);
+    const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
+    const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
+    const wantsTelegram = channel === 'telegram' || channel === 'all';
+    const wantsVk = channel === 'vk' || channel === 'all';
+
+    if (channel === 'telegram' && !botToken) {
+      return res.status(503).json({ error: 'TELEGRAM_BOT_TOKEN не настроен.' });
+    }
+    if (channel === 'vk' && (!vkCommunityId || !vkCommunityToken)) {
+      return res.status(503).json({ error: 'Для VK нужны VK_COMMUNITY_ID и VK_COMMUNITY_TOKEN.' });
+    }
+
+    const telegram = wantsTelegram && botToken
+      ? await deliverBroadcast(
+          telegramIds,
+          (id) => sendTelegramMessage(id, message),
+          40
+        )
+      : { attempted: 0, delivered: 0, failed: 0, skipped: wantsTelegram ? 'not_configured' : 'not_selected', errors: [] };
+
+    const vk = wantsVk && vkCommunityId && vkCommunityToken
+      ? await deliverBroadcast(
+          vkIds,
+          (id) => sendVkCommunityMessage(id, message),
+          70
+        )
+      : { attempted: 0, delivered: 0, failed: 0, skipped: wantsVk ? 'not_configured' : 'not_selected', errors: [] };
+
+    console.info('Admin broadcast completed', {
+      actor: String(req.user.id),
+      channel,
+      audience,
+      telegram: { attempted: telegram.attempted, delivered: telegram.delivered, failed: telegram.failed },
+      vk: { attempted: vk.attempted, delivered: vk.delivered, failed: vk.failed },
+      truncated: recipients.truncated
+    });
+
+    res.json({
+      ok: true,
+      channel,
+      audience,
+      totalUsers: recipients.rows.length,
+      truncated: recipients.truncated,
+      telegram,
+      vk
     });
   } catch (error) {
     next(error);
