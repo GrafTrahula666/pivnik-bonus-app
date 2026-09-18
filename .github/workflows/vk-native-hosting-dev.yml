@@ -19,6 +19,7 @@ on:
       - black-frosted-surfaces.css
       - black-frosted-controls.css
       - scripts/apply-red-cosmos-v2-shell-final.mjs
+      - scripts/apply-working-updates.mjs
   workflow_dispatch:
 
 permissions:
