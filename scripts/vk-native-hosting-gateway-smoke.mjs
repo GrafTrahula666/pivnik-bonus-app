@@ -180,9 +180,10 @@ try {
       await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
       await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
     }
-    // Bottom-nav clickability is already exercised before reload. Here we are
-    // validating role restoration, not a transient nav animation after screen recovery.
-    await page.evaluate(() => window.switchScreen?.('profile'));
+    // Validate role restoration through the same public navigation path a real
+    // VK user exercises. Calling window.switchScreen was a brittle test-only
+    // shortcut because the application function is not a guaranteed global.
+    await page.locator('.bottom-nav [data-target="profile"]').click();
     await page.locator('[data-screen="profile"]').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#profileAdminNav').isVisible(), role === 'admin');
     assert.equal(await page.locator('#profileStaffNav').isVisible(), role !== 'client');
