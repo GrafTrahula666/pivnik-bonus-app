@@ -3,7 +3,7 @@
    No layout, interaction, auth, routing, QR or wheel logic changes. */
 html.platform-telegram,
 html.platform-telegram body {
-  background:#050305!important;
+  background:#02060b!important;
   background-image:none!important;
   background-attachment:initial!important;
   background-size:auto!important;
@@ -41,13 +41,23 @@ html.platform-telegram .app-shell::before {
   height:auto!important;
   transform:translateX(-50%)!important;
   background:url('/assets/backgrounds/luxury-vip-space.webp?v=17.1-telegram') center top / cover no-repeat!important;
-  filter:brightness(1.72) saturate(1.22) contrast(1.06)!important;
+  filter:brightness(.72) saturate(.52) contrast(1.16)!important;
   opacity:1!important;
   pointer-events:none!important;
   z-index:0!important;
 }
 
 html.platform-telegram .app-shell::after {
-  content:none!important;
-  display:none!important;
+  content:""!important;
+  display:block!important;
+  position:fixed!important;
+  inset:0!important;
+  left:50%!important;
+  width:min(100%,480px)!important;
+  transform:translateX(-50%)!important;
+  background:
+    linear-gradient(180deg, rgba(1,7,15,.20), rgba(1,5,11,.36) 48%, rgba(0,2,6,.60)),
+    radial-gradient(circle at 50% 18%, rgba(26,55,78,.10), transparent 46%)!important;
+  pointer-events:none!important;
+  z-index:0!important;
 }
