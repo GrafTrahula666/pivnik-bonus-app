@@ -96,6 +96,11 @@ test('VK profile data is rejected when Bridge user differs from signed launch us
   assert.match(runtime, /(?:return null|vkUser = null)/);
 });
 
+test('working updates never restore the archived RED COSMOS interaction runtime', async () => {
+  const materializer = await read('scripts/apply-working-updates.mjs');
+  assert.match(materializer, /delete runtimeFiles\['red-cosmos-v2\.js'\]/);
+});
+
 test('VK interaction fallbacks do not arm delayed modal reopen after the normal handler succeeds', async () => {
   const v22 = await read('v22-ui.js');
   const red = await read('red-cosmos-v2.js');

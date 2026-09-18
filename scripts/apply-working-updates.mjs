@@ -29,6 +29,9 @@ const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base
 delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
 // VK runtime is canonical source. Never restore an archived startup implementation.
 delete runtimeFiles['vk-platform.js'];
+// RED COSMOS interaction runtime is canonical too. Restoring the archived
+// payload here can resurrect already-fixed delayed VK interaction fallbacks.
+delete runtimeFiles['red-cosmos-v2.js'];
 // DB prepare is canonical source too. Its startup safety/logging fixes must survive materialization.
 delete runtimeFiles['scripts/red-cosmos-v2-db-prepare.mjs'];
 const runtimeAnchors = {
