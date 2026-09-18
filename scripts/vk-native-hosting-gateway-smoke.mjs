@@ -171,6 +171,10 @@ try {
     // a financial mutation that already returned its idempotent stored result.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#appShell').waitFor({ state: 'visible' });
+    // appShell becomes visible before the asynchronous stored-session restore
+    // has necessarily settled. Wait for the same hydration boundary used on
+    // first launch so a late restore cannot hide navigation between wait/click.
+    await page.waitForFunction(() => window.__PIVNIK_VK_PROFILE_HYDRATION__?.profile?.id === '4242');
     if (role === 'client') {
       await page.locator('#openWheelButton').click();
       await page.locator('[data-screen="wheel"]').waitFor({ state: 'visible' });
