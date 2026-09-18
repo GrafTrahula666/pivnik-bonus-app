@@ -73,9 +73,6 @@ const gateway = createServer(async (req, res) => {
     scenario.spinRequests.push(body.requestKey);
     if (!scenario.spinKey) scenario.spinKey = body.requestKey;
     assert.equal(body.requestKey, scenario.spinKey, 'a lost result must not create a second operation');
-    // Commit once and lose the first two responses. The client may retry the
-    // same idempotency key automatically; the third request returns the stored
-    // result and must never create a second financial operation.
     if (scenario.spinRequests.length <= 2) { res.destroy(); return; }
     return json(res, {
       spin: { prize: { code: 'bonus-5', title: '5 бонусов' } },
@@ -169,30 +166,28 @@ try {
     }
     // Reload must use the stored session, preserve permissions and never replay
     // a financial mutation that already returned its idempotent stored result.
+    const bootstrapCallsBeforeReload = scenario.calls.filter(({ pathname }) => pathname === '/api/bootstrap').length;
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#appShell').waitFor({ state: 'visible' });
-    // appShell becomes visible before the asynchronous stored-session restore
-    // has necessarily settled. Wait for the same hydration boundary used on
-    // first launch so a late restore cannot hide navigation between wait/click.
-    await page.waitForFunction(() => window.__PIVNIK_VK_PROFILE_HYDRATION__?.profile?.id === '4242');
+    // Existing-session reload is complete when a new bootstrap response has
+    // crossed the real gateway. Profile hydration belongs to first auth and is
+    // intentionally not required on the stored-session restore path.
+    await page.waitForFunction(
+      ({ gatewayOrigin, before }) => performance.getEntriesByType('resource')
+        .filter((entry) => entry.name === `${gatewayOrigin}/api/bootstrap`).length > before,
+      { gatewayOrigin, before: bootstrapCallsBeforeReload }
+    );
     if (role === 'client') {
       await page.locator('#openWheelButton').click();
       await page.locator('[data-screen="wheel"]').waitFor({ state: 'visible' });
       assert.equal(scenario.spinRequests.length, 3, 'reload must not repeat a completed wheel mutation');
       assert.equal(new Set(scenario.spinRequests).size, 1);
     }
-    // Every role entered Wheel before reload. Restore the normal client screen
-    // through the public back control before exercising bottom navigation.
-    // This keeps the smoke aligned with the real VK user path instead of
-    // depending on hidden navigation while Wheel owns the screen.
     if (await page.locator('[data-screen="wheel"]').isVisible()) {
       await page.locator('#wheelBackButton').click();
       await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
     }
     await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
-    // Validate role restoration through the same public navigation path a real
-    // VK user exercises. Calling window.switchScreen was a brittle test-only
-    // shortcut because the application function is not a guaranteed global.
     await page.locator('.bottom-nav [data-target="profile"]').click();
     await page.locator('[data-screen="profile"]').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#profileAdminNav').isVisible(), role === 'admin');
