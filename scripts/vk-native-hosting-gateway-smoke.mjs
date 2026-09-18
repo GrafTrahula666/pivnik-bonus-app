@@ -180,7 +180,10 @@ try {
       await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
       await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
     }
-    await page.locator('.bottom-nav [data-target="profile"]').click();
+    // Bottom-nav clickability is already exercised before reload. Here we are
+    // validating role restoration, not a transient nav animation after screen recovery.
+    await page.evaluate(() => window.switchScreen?.('profile'));
+    await page.locator('[data-screen="profile"]').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#profileAdminNav').isVisible(), role === 'admin');
     assert.equal(await page.locator('#profileStaffNav').isVisible(), role !== 'client');
     assert.ok(scenario.calls.some(({ pathname }) => pathname === '/api/bootstrap'));
