@@ -176,10 +176,16 @@ try {
       await page.locator('[data-screen="wheel"]').waitFor({ state: 'visible' });
       assert.equal(scenario.spinRequests.length, 3, 'reload must not repeat a completed wheel mutation');
       assert.equal(new Set(scenario.spinRequests).size, 1);
+    }
+    // Every role entered Wheel before reload. Restore the normal client screen
+    // through the public back control before exercising bottom navigation.
+    // This keeps the smoke aligned with the real VK user path instead of
+    // depending on hidden navigation while Wheel owns the screen.
+    if (await page.locator('[data-screen="wheel"]').isVisible()) {
       await page.locator('#wheelBackButton').click();
       await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
-      await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
     }
+    await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
     // Validate role restoration through the same public navigation path a real
     // VK user exercises. Calling window.switchScreen was a brittle test-only
     // shortcut because the application function is not a guaranteed global.
