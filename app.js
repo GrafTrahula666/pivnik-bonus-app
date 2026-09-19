@@ -1051,7 +1051,8 @@ function applyDesign(design) {
   root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
   root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
 
-  $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
+  $('#brandTitle').textContent = 'SPACEVERSE';
+  if ($('#venueTitle')) $('#venueTitle').textContent = `${design.texts?.brand || 'Пивник'} · программа лояльности`;
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
   const legacyQrButton = $('#showQrButton');
   if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
@@ -3234,6 +3235,8 @@ $$('[data-close]').forEach((button) => button.addEventListener('click', () => cl
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
+$('#openBusinessHub')?.addEventListener('click', () => switchScreen('business'));
+$('#businessBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
