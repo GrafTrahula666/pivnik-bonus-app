@@ -1,0 +1,38 @@
+name: Probe VK production host
+
+on:
+  push:
+    branches:
+      - diagnostics/vk-production-url-20260919
+    paths:
+      - .github/workflows/probe-vk-production-host.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Probe current VK production host
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://prod-app54694987-989ea78abfeb.pages-ac.vk-apps.ru/index.html'
+          for mode in plain browser referer; do
+            headers=()
+            if [ "$mode" = browser ]; then
+              headers+=(--header 'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 VKApp/8.0')
+            fi
+            if [ "$mode" = referer ]; then
+              headers+=(--header 'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 VKApp/8.0')
+              headers+=(--header 'Referer: https://vk.ru/')
+            fi
+            code="$(curl --silent --show-error --location --output /tmp/body --dump-header /tmp/headers --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "${headers[@]}" "$url" || true)"
+            ctype="$(awk 'BEGIN{IGNORECASE=1}/^content-type:/{sub(/\r$/,"");print;exit}' /tmp/headers || true)"
+            server="$(awk 'BEGIN{IGNORECASE=1}/^server:/{sub(/\r$/,"");print;exit}' /tmp/headers || true)"
+            echo "$mode status=$code $ctype $server bytes=$(wc -c </tmp/body 2>/dev/null || echo 0)"
+            head -c 200 /tmp/body 2>/dev/null | tr '\n' ' ' || true
+            echo
+          done
