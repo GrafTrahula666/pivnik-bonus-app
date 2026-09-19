@@ -1371,14 +1371,19 @@ function renderLeaderboard() {
       ? `${fmt(data.me.spend)} ₽ за месяц`
       : 'по сумме покупок';
   }
-  const preview = $('#leaderboardPreview');
-  if (preview) {
-    preview.innerHTML = [1, 2, 3].map((rank) => {
-      const leader = data.leaders?.find((item) => item.rank === rank);
-      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i><b>${escapeHtml(leader?.name || 'Пока свободно')}</b></span>`;
-    }).join('');
-  }
-  if ($('#leaderboardMe')) $('#leaderboardMe').textContent = data.me?.spend > 0 ? `Ваше место: №${data.me.rank} · ${fmt(data.me.spend)} ₽` : 'Ваше место появится после первой покупки';
+  const podiumMarkup = [1, 2, 3].map((rank) => {
+    const leader = data.leaders?.find((item) => item.rank === rank);
+    return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i><b>${escapeHtml(leader?.name || 'Пока свободно')}</b></span>`;
+  }).join('');
+  ['leaderboardPreview', 'homeLeaderboardPreview'].forEach((id) => {
+    const preview = $('#' + id);
+    if (preview) preview.innerHTML = podiumMarkup;
+  });
+  const myLeagueLine = data.me?.spend > 0
+    ? `Ваше место: №${data.me.rank} · ${fmt(data.me.spend)} ₽`
+    : 'Ваше место появится после первой покупки';
+  if ($('#leaderboardMe')) $('#leaderboardMe').textContent = myLeagueLine;
+  if ($('#homeLeagueMe')) $('#homeLeagueMe').textContent = myLeagueLine;
   if ($('#leaderboardModalTitle')) $('#leaderboardModalTitle').textContent = `Лига Пивника · ${data.month}`;
   if ($('#leaderboardPrizeNote')) $('#leaderboardPrizeNote').textContent = data.prizeNote || 'Награды за 1–3 место будут объявлены позже.';
   const list = $('#leaderboardList');
@@ -3243,6 +3248,7 @@ $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
+$('#openLeaderboardHomeFull')?.addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
 $('#openProfileAvatar')?.addEventListener('click', () => openProfileSetup(1));
