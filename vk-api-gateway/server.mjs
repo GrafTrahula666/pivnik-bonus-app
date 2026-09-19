@@ -58,7 +58,10 @@ function isVkHostingOrigin(value) {
 
   const host = url.hostname.toLowerCase();
   if (host === 'vk.com' || host === 'vk.ru' || host === 'm.vk.com' || host === 'm.vk.ru') return true;
-  return host.endsWith('.pages.vk-apps.com') || host.endsWith('.pages.vk-apps.ru');
+  return host.endsWith('.pages.vk-apps.com')
+    || host.endsWith('.pages.vk-apps.ru')
+    || host.endsWith('.pages-ac.vk-apps.com')
+    || host.endsWith('.pages-ac.vk-apps.ru');
 }
 
 function setCors(req, res) {
