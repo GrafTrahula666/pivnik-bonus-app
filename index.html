@@ -845,8 +845,30 @@
     <div class="modal-sheet tall-sheet admin-directory-sheet">
       <button class="close" data-close="adminUsersModal">×</button>
       <span class="muted">Админ-панель</span><h2>Все пользователи</h2>
-      <div class="admin-filter-row"><input class="text-input" id="userSearch" placeholder="Имя, username или Telegram ID"><select class="text-input" id="userRoleFilter"><option value="">Все роли</option><option value="client">Клиенты</option><option value="staff">Бармены</option><option value="viewer">Партнёр</option><option value="admin">Владелец</option></select></div>
+      <div class="admin-filter-row admin-user-filter-row">
+        <input class="text-input" id="userSearch" placeholder="Имя, username, Telegram или VK ID">
+        <select class="text-input" id="userRoleFilter">
+          <option value="">Все роли</option>
+          <option value="client">Клиенты</option>
+          <option value="staff">Бармены</option>
+          <option value="viewer">Партнёр</option>
+          <option value="admin">Владелец</option>
+        </select>
+        <select class="text-input" id="userStatusFilter">
+          <option value="">Все статусы</option>
+          <option value="new">Новые · до 7 дней</option>
+          <option value="active">Активные · были за 30 дней</option>
+          <option value="inactive">Давно не были · 30+ дней</option>
+          <option value="no_ops">Без операций</option>
+        </select>
+      </div>
+      <div class="admin-directory-meta" id="adminUsersMeta">Загрузка пользователей…</div>
       <div id="allUsersList" class="operation-list empty-state">Загрузка…</div>
+      <div class="admin-pagination" aria-label="Страницы пользователей">
+        <button class="secondary" id="adminUsersPrev" type="button">← Предыдущая</button>
+        <span id="adminUsersPageLabel">Страница 1 из 1</span>
+        <button class="secondary" id="adminUsersNext" type="button">Следующая →</button>
+      </div>
     </div>
   </div>
 

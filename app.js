@@ -91,6 +91,8 @@ const state = {
   homeShopCarouselIndex: 0,
   homeShopCarouselTimer: null,
   adminUsers: [],
+  adminUsersDirectory: { page: 1, limit: 25, total: 0, pages: 1, busy: false },
+  adminUsersFilterTimer: 0,
   adminTransactions: [],
   adminInquiries: [],
   shopContact: null,
@@ -2699,7 +2701,7 @@ async function sendAdminBroadcast() {
 async function loadAdmin() {
   if (!roleCanAdmin(state.profile?.role)) return;
   const [summaryData, usersData, shiftData, contentData, inquiriesData] = await Promise.all([
-    api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift'), api('/api/admin/content'), api('/api/admin/inquiries?limit=5')
+    api('/api/admin/summary'), api('/api/admin/users?limit=5&page=1'), api('/api/admin/shift'), api('/api/admin/content'), api('/api/admin/inquiries?limit=5')
   ]);
   state.adminSettings = summaryData.settings;
   state.adminUsers = usersData.users || [];
@@ -2736,25 +2738,76 @@ function filterAdminTransactions() {
   renderAdminTransactions(filtered, '#allTransactionsList');
 }
 
-async function openAllUsers() {
-  if (!state.adminUsers.length) {
-    const data = await api('/api/admin/users');
-    state.adminUsers = data.users || [];
+function adminUsersDirectoryParams(page = 1) {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(state.adminUsersDirectory.limit || 25)
+  });
+  const q = ($('#userSearch')?.value || '').trim();
+  const role = $('#userRoleFilter')?.value || '';
+  const status = $('#userStatusFilter')?.value || '';
+  if (q) params.set('q', q);
+  if (role) params.set('role', role);
+  if (status) params.set('status', status);
+  return params;
+}
+
+function renderAdminUsersDirectoryMeta() {
+  const directory = state.adminUsersDirectory;
+  const meta = $('#adminUsersMeta');
+  const pageLabel = $('#adminUsersPageLabel');
+  const prev = $('#adminUsersPrev');
+  const next = $('#adminUsersNext');
+  if (meta) meta.textContent = `${fmt(directory.total)} пользователей · по ${directory.limit} на странице`;
+  if (pageLabel) pageLabel.textContent = `Страница ${directory.page} из ${directory.pages}`;
+  if (prev) prev.disabled = directory.busy || directory.page <= 1;
+  if (next) next.disabled = directory.busy || directory.page >= directory.pages;
+}
+
+async function loadAdminUsersDirectory(page = 1) {
+  const root = $('#allUsersList');
+  state.adminUsersDirectory.busy = true;
+  renderAdminUsersDirectoryMeta();
+  if (root) {
+    root.className = 'operation-list empty-state';
+    root.textContent = 'Загрузка пользователей…';
   }
-  filterAdminUsers();
+  try {
+    const data = await api(`/api/admin/users?${adminUsersDirectoryParams(page)}`);
+    state.adminUsers = data.users || [];
+    state.adminUsersDirectory = {
+      page: Number(data.pagination?.page || page || 1),
+      limit: Number(data.pagination?.limit || state.adminUsersDirectory.limit || 25),
+      total: Number(data.pagination?.total || 0),
+      pages: Number(data.pagination?.pages || 1),
+      busy: false
+    };
+    renderUsers(state.adminUsers, '#allUsersList', false);
+    renderAdminUsersDirectoryMeta();
+  } catch (error) {
+    state.adminUsersDirectory.busy = false;
+    renderAdminUsersDirectoryMeta();
+    throw error;
+  }
+}
+
+async function openAllUsers() {
   openModal('adminUsersModal');
+  await loadAdminUsersDirectory(1);
 }
 
 function filterAdminUsers() {
-  const query = ($('#userSearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
-  const role = $('#userRoleFilter')?.value || '';
-  const filtered = state.adminUsers.filter((user) => {
-    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.vkId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
-    return (!query || haystack.includes(query)) && (!role || user.role === role);
-  });
-  renderUsers(filtered, '#allUsersList', false);
+  window.clearTimeout(state.adminUsersFilterTimer);
+  state.adminUsersFilterTimer = window.setTimeout(() => {
+    loadAdminUsersDirectory(1).catch((error) => toast(error.message));
+  }, 250);
 }
 
+async function refreshAdminUsersDirectory() {
+  const page = state.adminUsersDirectory.page || 1;
+  await loadAdmin();
+  await loadAdminUsersDirectory(page);
+}
 async function openAllInquiries() {
   const data = await api('/api/admin/inquiries?limit=200');
   state.adminInquiries = data.inquiries || [];
@@ -2955,6 +3008,26 @@ function openContentAdmin() {
   setTimeout(() => $('#contentAdminCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 }
 
+const ADMIN_CRM_STATUS_LABELS = {
+  new: 'Новый',
+  active: 'Активный',
+  inactive: 'Давно не был',
+  no_ops: 'Без операций'
+};
+
+function adminCrmActivityMarkup(user) {
+  if (!user?.crmStatus) return '';
+  const status = ADMIN_CRM_STATUS_LABELS[user.crmStatus] || user.crmStatus;
+  const operations = Number(user.operationsCount || 0);
+  let activity = 'операций нет';
+  if (user.lastActivityAt) {
+    const date = new Date(user.lastActivityAt);
+    if (!Number.isNaN(date.getTime())) {
+      activity = `операций ${fmt(operations)} · последняя ${date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}`;
+    }
+  }
+  return `<br><span class="crm-user-status status-${escapeHtml(user.crmStatus)}">${escapeHtml(status)}</span><span class="crm-user-activity">${escapeHtml(activity)}</span>`;
+}
 function renderUsers(users, target = '#usersList', compact = false) {
   const root = $(target);
   if (!root) return;
@@ -2993,6 +3066,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     const possibleMatchNote = possibleMatch
       ? `<br><span class="user-pin-state">Возможное совпадение: ${escapeHtml(possibleMatch.name || possibleMatch.username || possibleMatch.id)} · только подсказка, без объединения</span>`
       : '';
+    const crmActivity = adminCrmActivityMarkup(user);
     const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
       ? `<div class="user-actions">
           <select data-role-user="${user.id}">
@@ -3006,7 +3080,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${crmActivity}${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
@@ -3015,7 +3089,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
   root.querySelectorAll('[data-role-user]').forEach((select) => select.addEventListener('change', async () => {
     try {
       await api(`/api/admin/users/${select.dataset.roleUser}/role`, { method: 'POST', body: JSON.stringify({ role: select.value }) });
-      toast('Роль обновлена'); await loadAdmin(); await openAllUsers();
+      toast('Роль обновлена'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
@@ -3032,7 +3106,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
           requestKey: requestId()
         })
       });
-      toast('Баланс изменён'); await loadAdmin(); await openAllUsers();
+      toast('Баланс изменён'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-pin-user]').forEach((button) => button.addEventListener('click', async () => {
@@ -3043,7 +3117,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     if (confirmPin !== pin) return toast('PIN-коды не совпадают');
     try {
       await api(`/api/admin/users/${button.dataset.pinUser}/pin`, { method: 'POST', body: JSON.stringify({ pin }) });
-      toast('PIN сотрудника сохранён'); await loadAdmin(); await openAllUsers();
+      toast('PIN сотрудника сохранён'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-reset-cancel-user]').forEach((button) => button.addEventListener('click', async () => {
@@ -3053,7 +3127,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
   }));
   root.querySelectorAll('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
     if (!confirm('Перевыпустить личный QR? Старый код останется рабочим как защищённый alias.')) return;
-    try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await loadAdmin(); await openAllUsers(); }
+    try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await refreshAdminUsersDirectory(); }
     catch (error) { toast(error.message); }
   }));
 }
@@ -3211,6 +3285,9 @@ $('#broadcastAudience')?.addEventListener('change', () => loadBroadcastPreview()
 $('#sendBroadcast')?.addEventListener('click', () => sendAdminBroadcast().catch((error) => toast(error.message)));
 $('#userSearch')?.addEventListener('input', filterAdminUsers);
 $('#userRoleFilter')?.addEventListener('change', filterAdminUsers);
+$('#userStatusFilter')?.addEventListener('change', filterAdminUsers);
+$('#adminUsersPrev')?.addEventListener('click', () => loadAdminUsersDirectory(state.adminUsersDirectory.page - 1).catch((error) => toast(error.message)));
+$('#adminUsersNext')?.addEventListener('click', () => loadAdminUsersDirectory(state.adminUsersDirectory.page + 1).catch((error) => toast(error.message)));
 $('#transactionSearch')?.addEventListener('input', filterAdminTransactions);
 $('#transactionModeFilter')?.addEventListener('change', filterAdminTransactions);
 $('#inquirySearch')?.addEventListener('input', filterAdminInquiries);
