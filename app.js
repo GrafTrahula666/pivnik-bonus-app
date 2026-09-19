@@ -3008,6 +3008,26 @@ function openContentAdmin() {
   setTimeout(() => $('#contentAdminCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 }
 
+const ADMIN_CRM_STATUS_LABELS = {
+  new: 'Новый',
+  active: 'Активный',
+  inactive: 'Давно не был',
+  no_ops: 'Без операций'
+};
+
+function adminCrmActivityMarkup(user) {
+  if (!user?.crmStatus) return '';
+  const status = ADMIN_CRM_STATUS_LABELS[user.crmStatus] || user.crmStatus;
+  const operations = Number(user.operationsCount || 0);
+  let activity = 'операций нет';
+  if (user.lastActivityAt) {
+    const date = new Date(user.lastActivityAt);
+    if (!Number.isNaN(date.getTime())) {
+      activity = `операций ${fmt(operations)} · последняя ${date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}`;
+    }
+  }
+  return `<br><span class="crm-user-status status-${escapeHtml(user.crmStatus)}">${escapeHtml(status)}</span><span class="crm-user-activity">${escapeHtml(activity)}</span>`;
+}
 function renderUsers(users, target = '#usersList', compact = false) {
   const root = $(target);
   if (!root) return;
@@ -3046,6 +3066,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     const possibleMatchNote = possibleMatch
       ? `<br><span class="user-pin-state">Возможное совпадение: ${escapeHtml(possibleMatch.name || possibleMatch.username || possibleMatch.id)} · только подсказка, без объединения</span>`
       : '';
+    const crmActivity = adminCrmActivityMarkup(user);
     const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
       ? `<div class="user-actions">
           <select data-role-user="${user.id}">
@@ -3059,7 +3080,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${crmActivity}${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
