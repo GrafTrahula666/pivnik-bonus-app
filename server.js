@@ -2649,29 +2649,52 @@ app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res,
 app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const summaryResult = await pool.query(`
-      SELECT
-        (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL) AS clients,
-        (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL AND created_at >= NOW() - INTERVAL '7 days') AS new_clients_7d,
-        (SELECT COUNT(DISTINCT client_id)::int FROM transactions WHERE status='completed' AND created_at >= NOW() - INTERVAL '30 days') AS active_clients_30d,
-        (SELECT COUNT(*)::int
-         FROM users u
-         WHERE u.merged_into_user_id IS NULL
-           AND u.deleted_at IS NULL
-           AND EXISTS (SELECT 1 FROM transactions t WHERE t.client_id = u.id AND t.status='completed')
-           AND NOT EXISTS (
-             SELECT 1 FROM transactions t
-             WHERE t.client_id = u.id
-               AND t.status='completed'
-               AND t.created_at >= NOW() - INTERVAL '30 days'
-           )) AS inactive_clients_30d,
-        (SELECT COALESCE(SUM(bonus_earned),0)::bigint FROM transactions WHERE status='completed') AS issued,
-        (SELECT COALESCE(SUM(bonus_spent),0)::bigint FROM transactions WHERE status='completed') AS redeemed,
-        (SELECT COUNT(*)::int FROM transactions WHERE created_at::date = CURRENT_DATE) AS today_ops,
-        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE) AS today_check_cents,
-        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE - 1) AS yesterday_check_cents,
-        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed') AS lifetime_check_cents,
-        (SELECT COUNT(*)::int FROM transactions WHERE is_suspicious = TRUE AND status = 'completed') AS suspicious_ops,
-        (SELECT COUNT(*)::int FROM transactions WHERE status = 'cancelled' AND cancelled_at::date = CURRENT_DATE) AS cancelled_today
+      WITH tx_metrics AS (
+        SELECT
+          COALESCE(SUM(bonus_earned) FILTER (WHERE status='completed'), 0)::bigint AS issued,
+          COALESCE(SUM(bonus_spent) FILTER (WHERE status='completed'), 0)::bigint AS redeemed,
+          (COUNT(*) FILTER (WHERE created_at::date = CURRENT_DATE))::int AS today_ops,
+          COALESCE(SUM(check_amount_cents) FILTER (
+            WHERE status='completed' AND created_at::date = CURRENT_DATE
+          ), 0)::bigint AS today_check_cents,
+          COALESCE(SUM(check_amount_cents) FILTER (
+            WHERE status='completed' AND created_at::date = CURRENT_DATE - 1
+          ), 0)::bigint AS yesterday_check_cents,
+          COALESCE(SUM(check_amount_cents) FILTER (WHERE status='completed'), 0)::bigint AS lifetime_check_cents,
+          (COUNT(*) FILTER (
+            WHERE is_suspicious = TRUE AND status='completed'
+          ))::int AS suspicious_ops,
+          (COUNT(*) FILTER (
+            WHERE status='cancelled' AND cancelled_at::date = CURRENT_DATE
+          ))::int AS cancelled_today
+        FROM transactions
+      ),
+      completed_activity AS (
+        SELECT client_id, MAX(created_at) AS last_completed_at
+        FROM transactions
+        WHERE status='completed'
+        GROUP BY client_id
+      ),
+      user_metrics AS (
+        SELECT
+          COUNT(*)::int AS clients,
+          (COUNT(*) FILTER (
+            WHERE u.created_at >= NOW() - INTERVAL '7 days'
+          ))::int AS new_clients_7d,
+          (COUNT(*) FILTER (
+            WHERE activity.last_completed_at >= NOW() - INTERVAL '30 days'
+          ))::int AS active_clients_30d,
+          (COUNT(*) FILTER (
+            WHERE activity.last_completed_at < NOW() - INTERVAL '30 days'
+          ))::int AS inactive_clients_30d
+        FROM users u
+        LEFT JOIN completed_activity activity ON activity.client_id = u.id
+        WHERE u.merged_into_user_id IS NULL
+          AND u.deleted_at IS NULL
+      )
+      SELECT user_metrics.*, tx_metrics.*
+      FROM user_metrics
+      CROSS JOIN tx_metrics
     `);
     const opsResult = await pool.query(
       `SELECT t.*, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name,
