@@ -341,12 +341,42 @@
           <button type="button" class="admin-write-only" id="openBroadcastAdmin"><span>Рассылка</span><small>сообщение клиентам Telegram и VK</small></button>
         </div>
 
-        <div class="metric-grid">
-          <div class="metric"><span>Клиентов</span><strong id="metricClients">0</strong><small>зарегистрировано</small></div>
-          <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>
+        <div class="metric-grid admin-dashboard-metrics">
+          <div class="metric"><span>Клиентов</span><strong id="metricClients">0</strong><small>активных профилей</small></div>
+          <div class="metric"><span>Новые</span><strong id="metricNewClients">0</strong><small>за последние 7 дней</small></div>
+          <div class="metric"><span>Активные</span><strong id="metricActiveClients">0</strong><small>были за последние 30 дней</small></div>
+          <div class="metric"><span>Давно не были</span><strong id="metricInactiveClients">0</strong><small>нет операций 30+ дней</small></div>
           <div class="metric"><span>Сегодня</span><strong id="metricToday">0 ₽</strong><small id="metricTodayOps">0 операций</small></div>
-          <div class="metric metric-alert"><span>Требуют внимания</span><strong id="metricSuspicious">0</strong><small>операций свыше 3000 ₽</small></div>
+          <div class="metric"><span>К вчера</span><strong id="metricTodayDelta">0%</strong><small id="metricYesterdayCheck">вчера 0 ₽</small></div>
+          <div class="metric"><span>Оборот</span><strong id="metricLifetimeCheck">0 ₽</strong><small>по завершённым операциям</small></div>
+          <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>
+          <div class="metric"><span>Бонусов списано</span><strong id="metricRedeemed">0</strong><small>за всё время</small></div>
+          <div class="metric metric-alert"><span>Требуют внимания</span><strong id="metricSuspicious">0</strong><small>подозрительных операций</small></div>
           <div class="metric"><span>Отменено сегодня</span><strong id="metricCancelled">0</strong><small>с указанием причины</small></div>
+        </div>
+
+        <div class="card admin-channel-card admin-write-only" id="adminBroadcastCard">
+          <div class="card-head">
+            <div><span class="muted">Коммуникации</span><h3>Рассылки</h3><p>Telegram и VK: аудитория → сообщение → предпросмотр → подтверждение → результат.</p></div>
+            <span class="pill">CONSENT</span>
+          </div>
+          <div class="admin-channel-grid">
+            <div><strong>Telegram + VK</strong><small>Используются только пользователи с подходящим согласием на сообщения.</small></div>
+            <button class="primary" id="openBroadcastFromTab" type="button">Создать рассылку</button>
+          </div>
+        </div>
+
+        <div class="card admin-ai-card" id="adminAiCard">
+          <div class="card-head">
+            <div><span class="muted">SPACEVERSE AI</span><h3>AI-анализ</h3><p>Интерфейс подготовлен, но анализ данных внешней моделью пока не подключён.</p></div>
+            <span class="pill" id="adminAiStatus">НЕ ПОДКЛЮЧЁН</span>
+          </div>
+          <div class="admin-ai-grid">
+            <div><b>Отток клиентов</b><small>Будет искать клиентов с падением активности только после подключения безопасного аналитического backend.</small></div>
+            <div><b>Аномалии</b><small>Подозрительные операции уже считаются обычной логикой; AI-объяснение пока не генерируется.</small></div>
+            <div><b>Рекомендации</b><small>Никаких выдуманных советов: до подключения модели здесь только реальные KPI Dashboard.</small></div>
+          </div>
+          <small class="admin-hint">Сейчас данные клиентов не отправляются во внешнюю AI-модель.</small>
         </div>
 
         <div class="card shift-admin-card">
