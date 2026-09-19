@@ -68,6 +68,68 @@ html.platform-telegram .red-cosmos-admin-tabs {
   background: linear-gradient(180deg, rgba(3, 4, 6, .90), rgba(3, 4, 6, .72), transparent) !important;
 }
 
+html.platform-vk .red-cosmos-admin-tab,
+html.platform-telegram .red-cosmos-admin-tab {
+  border-color: rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.035) !important;
+  color: rgba(232,236,245,.72) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035) !important;
+}
+html.platform-vk .red-cosmos-admin-tab.active,
+html.platform-telegram .red-cosmos-admin-tab.active {
+  border-color: rgba(142,128,255,.40) !important;
+  background: linear-gradient(135deg, rgba(92,74,210,.25), rgba(40,84,160,.16)) !important;
+  color: #f7f8ff !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 24px rgba(26,20,74,.20) !important;
+}
+html.platform-vk .admin-dashboard-metrics .metric,
+html.platform-telegram .admin-dashboard-metrics .metric,
+html.platform-vk .admin-channel-card,
+html.platform-telegram .admin-channel-card,
+html.platform-vk .admin-ai-card,
+html.platform-telegram .admin-ai-card {
+  background: linear-gradient(145deg, rgba(8,10,15,.76), rgba(4,5,8,.68)) !important;
+  border-color: rgba(255,255,255,.09) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 16px 42px rgba(0,0,0,.24) !important;
+  backdrop-filter: blur(20px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(108%) !important;
+}
+html.platform-vk .admin-ai-card,
+html.platform-telegram .admin-ai-card {
+  border-color: rgba(127,113,255,.20) !important;
+}
+.admin-channel-grid,
+.admin-ai-grid {
+  display:grid;
+  gap:10px;
+}
+.admin-channel-grid {
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+}
+.admin-channel-grid>div,
+.admin-ai-grid>div {
+  padding:12px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;
+  background:rgba(255,255,255,.025);
+}
+.admin-channel-grid small,
+.admin-ai-grid small {
+  display:block;
+  margin-top:5px;
+  color:rgba(220,225,236,.58);
+  line-height:1.45;
+}
+.admin-ai-grid {
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+@media(max-width:720px){
+  .admin-ai-grid{grid-template-columns:1fr}
+  .admin-channel-grid{grid-template-columns:1fr}
+  .admin-channel-grid .primary{width:100%}
+}
+
 html.android-webview .vip-glass-card,
 html.android-webview .hero-card,
 html.android-webview .card,
