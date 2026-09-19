@@ -1,0 +1,45 @@
+name: Diagnose VK production URLs
+
+on:
+  push:
+    branches:
+      - diagnostics/vk-production-url-20260919
+    paths:
+      - .github/workflows/diagnose-vk-production-url.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Read VK app production URLs
+        env:
+          MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_MINI_APPS_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$MINI_APPS_ACCESS_TOKEN" ]; then
+            echo "VK_MINI_APPS_ACCESS_TOKEN is not configured"
+            exit 1
+          fi
+          response="$(curl --fail --silent --show-error             --request POST 'https://api.vk.ru/method/apps.get'             --data-urlencode 'app_ids=54694987'             --data-urlencode 'extended=1'             --data-urlencode 'v=5.199'             --data-urlencode "access_token=$MINI_APPS_ACCESS_TOKEN")"
+          node -e '
+            const raw = process.env.VK_RESPONSE;
+            const data = JSON.parse(raw);
+            if (data.error) {
+              console.error(JSON.stringify({error_code:data.error.error_code,error_msg:data.error.error_msg}));
+              process.exit(2);
+            }
+            const app = data.response?.items?.[0] || data.response?.[0] || null;
+            if (!app) {
+              console.error("VK apps.get returned no app");
+              process.exit(3);
+            }
+            const keys = ["id","title","iframe_secure_url","m_iframe_secure_url","vk_mini_app_mvk_url","mobile_iframe_url","mobile_iframe_secure_url","screen_name"];
+            const out = {};
+            for (const k of keys) if (app[k] !== undefined) out[k]=app[k];
+            console.log(JSON.stringify(out,null,2));
+          ' VK_RESPONSE="$response"
