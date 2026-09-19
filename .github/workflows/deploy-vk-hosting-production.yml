@@ -1,11 +1,7 @@
 name: Deploy VK Hosting production
 
 on:
-  push:
-    branches:
-      - diagnostics/vk-production-url-20260919
-    paths:
-      - .github/workflows/deploy-vk-hosting-production.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -107,7 +103,23 @@ jobs:
             curl --fail --silent --show-error --location               --retry 6 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 30               --dump-header "$3" --output "$2" "$1"
           }
 
-          fetch "$target" "$smoke_dir/index.html" "$smoke_dir/index.headers"
+          # VK returns production URLs before the new pages-ac object is guaranteed
+          # to be readable from every edge. A transient 403 here means propagation,
+          # not a failed hosting upload. Poll the exact URL with a hard 15-minute bound.
+          ready=0
+          for attempt in $(seq 1 180); do
+            code="$(curl --silent --show-error --location               --connect-timeout 10 --max-time 30               --dump-header "$smoke_dir/index.headers"               --output "$smoke_dir/index.html"               --write-out '%{http_code}' "$target" || true)"
+            if [ "$code" = "200" ]; then
+              ready=1
+              break
+            fi
+            echo "VK production host not ready yet: HTTP $code (attempt $attempt/180)"
+            sleep 5
+          done
+          if [ "$ready" != "1" ]; then
+            echo "VK production host did not become readable within 15 minutes: $target"
+            exit 1
+          fi
           grep -Eiq '^content-type:[[:space:]]*text/html([;[:space:]]|$)' "$smoke_dir/index.headers"
           grep -q 'https://139.100.238.159.nip.io' "$smoke_dir/index.html"
           ! grep -q 'up.railway.app' "$smoke_dir/index.html"
