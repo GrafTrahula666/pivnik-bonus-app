@@ -22,7 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Gateway syntax
-        run: node --check vk-api-gateway/server.mjs
+        run: |
+          node --check vk-api-gateway/server.mjs
+          bash -n vk-api-gateway/apply-pages-ac-hotfix.sh
       - name: Gateway native-hosting regressions
         run: node --test test/vk-native-hosting-gateway.test.js
       - name: Verify production VK origin suffixes are present
