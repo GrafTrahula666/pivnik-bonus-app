@@ -24,11 +24,19 @@ jobs:
           dir="$RUNNER_TEMP/vk-prod-probe"
           mkdir -p "$dir"
 
-          fetch() {
-            curl --fail --silent --show-error --location               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 30               --dump-header "$3" --output "$2" "$1"
+          fetch_status() {
+            local label="$1"
+            local url="$2"
+            local body="$3"
+            local headers="$4"
+            local code
+            code="$(curl --silent --show-error --location               --connect-timeout 10 --max-time 30               --dump-header "$headers" --output "$body"               --write-out '%{http_code}' "$url" || true)"
+            echo "$label status=$code url=$url bytes=$(wc -c <"$body" 2>/dev/null || echo 0)"
+            printf '%s' "$code"
           }
 
-          fetch "$target" "$dir/index.html" "$dir/index.headers"
+          code="$(fetch_status index "$target" "$dir/index.html" "$dir/index.headers" | tail -n1)"
+          test "$code" = "200"
           grep -Eiq '^content-type:[[:space:]]*text/html([;[:space:]]|$)' "$dir/index.headers"
           grep -q 'https://139.100.238.159.nip.io' "$dir/index.html"
           ! grep -q 'up.railway.app' "$dir/index.html"
@@ -36,18 +44,23 @@ jobs:
 
           for asset in app.js vk-platform.js vendor/vk-bridge.js styles.css; do
             safe="${asset//\//_}"
-            fetch "$base/$asset" "$dir/$safe" "$dir/$safe.headers"
+            code="$(fetch_status "asset:$asset" "$base/$asset" "$dir/$safe" "$dir/$safe.headers" | tail -n1)"
+            test "$code" = "200"
             test -s "$dir/$safe"
             ! grep -Eiq '<!doctype[[:space:]]+html|<html([[:space:]>])' "$dir/$safe"
           done
 
           for path in healthz readyz; do
-            fetch "https://139.100.238.159.nip.io/$path" "$dir/$path.json" "$dir/$path.headers"
+            code="$(fetch_status "selectel:$path" "https://139.100.238.159.nip.io/$path" "$dir/$path.json" "$dir/$path.headers" | tail -n1)"
+            test "$code" = "200"
           done
 
           cors="$dir/cors.headers"
-          curl --fail --silent --show-error             --request OPTIONS             --header "Origin: $base"             --header 'Access-Control-Request-Method: GET'             --header 'Access-Control-Request-Headers: authorization,content-type,x-pivnik-version,x-pivnik-platform,x-pivnik-explicit-consent,x-staff-session'             --dump-header "$cors" --output /dev/null             'https://139.100.238.159.nip.io/api/me'
+          cors_code="$(curl --silent --show-error             --request OPTIONS             --header "Origin: $base"             --header 'Access-Control-Request-Method: GET'             --header 'Access-Control-Request-Headers: authorization,content-type,x-pivnik-version,x-pivnik-platform,x-pivnik-explicit-consent,x-staff-session'             --dump-header "$cors" --output "$dir/cors.body"             --write-out '%{http_code}'             'https://139.100.238.159.nip.io/api/me' || true)"
+          echo "selectel:cors status=$cors_code"
+          test "$cors_code" = "204"
           origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$cors")"
+          echo "selectel:cors allow-origin=$origin expected=$base"
           test "$origin" = "$base"
 
           echo "VK production bundle is readable: $target"
