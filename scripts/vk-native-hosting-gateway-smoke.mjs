@@ -183,13 +183,25 @@ try {
       assert.equal(scenario.spinRequests.length, 3, 'reload must not repeat a completed wheel mutation');
       assert.equal(new Set(scenario.spinRequests).size, 1);
     }
-    if (await page.locator('[data-screen="wheel"]').isVisible()) {
-      await page.locator('#wheelBackButton').click();
-      await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
+    // A delayed VKWebAppGetUserInfo can legitimately finish after bootstrap
+    // and return the UI to Wheel while this smoke is navigating to Profile.
+    // Recover only through the same visible controls a user has, with a hard
+    // attempt bound: no sleeps and no weakening of the role assertions below.
+    let profileReached = false;
+    for (let attempt = 0; attempt < 3 && !profileReached; attempt += 1) {
+      if (await page.locator('[data-screen="wheel"]').isVisible()) {
+        await page.locator('#wheelBackButton').click({ timeout: 2000 });
+        await page.locator('[data-screen="client"]').waitFor({ state: 'visible', timeout: 2000 });
+      }
+      try {
+        await page.locator('.bottom-nav [data-target="profile"]').click({ timeout: 2000 });
+        await page.locator('[data-screen="profile"]').waitFor({ state: 'visible', timeout: 2000 });
+        profileReached = true;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
     }
-    await page.locator('.bottom-nav [data-target="profile"]').waitFor({ state: 'visible' });
-    await page.locator('.bottom-nav [data-target="profile"]').click();
-    await page.locator('[data-screen="profile"]').waitFor({ state: 'visible' });
+    assert.equal(profileReached, true, 'reload navigation must reach Profile after bounded late-Wheel recovery');
     assert.equal(await page.locator('#profileAdminNav').isVisible(), role === 'admin');
     assert.equal(await page.locator('#profileStaffNav').isVisible(), role !== 'client');
     assert.ok(scenario.calls.some(({ pathname }) => pathname === '/api/bootstrap'));
