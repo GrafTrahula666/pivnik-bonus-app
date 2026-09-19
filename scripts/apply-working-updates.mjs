@@ -83,6 +83,45 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   }
 }
 
+// SPACEVERSE_ADMIN_V1_20260919
+// The archived working-updates payload restores the historical RED COSMOS
+// overlay. Patch only stable anchors after that restore, so materialize and
+// prestart preserve the current admin IA without depending on one huge string.
+{
+  const path = 'red-cosmos-v2.js';
+  let overlay = await readText(path);
+  if (!overlay.includes("adminPanelForNode($('#adminBroadcastCard'), 'broadcast');")) {
+    const contentAnchor = "    adminPanelForNode($('#contentAdminCard'), 'shop');";
+    if (!overlay.includes(contentAnchor)) {
+      throw new Error('working updates: admin V1 content anchor missing');
+    }
+    overlay = overlay.replace(
+      contentAnchor,
+      [
+        "    adminPanelForNode($('#contentAdminCard'), 'content');",
+        "    adminPanelForNode($('#adminBroadcastCard'), 'broadcast');",
+        "    adminPanelForNode($('#adminAiCard'), 'ai');"
+      ].join('\n')
+    );
+  }
+
+  if (!overlay.includes("['dashboard', 'Обзор']")) {
+    const definitionsPattern = /    const definitions = \[\n      \['dashboard', 'Главная'\][\s\S]*?\n    \];/;
+    if (!definitionsPattern.test(overlay)) {
+      throw new Error('working updates: admin V1 definitions anchor missing');
+    }
+    const definitions = [
+      "    const definitions = [",
+      "      ['dashboard', 'Обзор'], ['users', 'CRM'], ['operations', 'Операции'], ['shift', 'Смена'],",
+      "      ['content', 'Контент'], ['broadcast', 'Рассылки'], ['achievements', 'Достижения'],",
+      "      ['frames', 'Рамки'], ['ai', 'AI'], ['settings', 'Настройки']",
+      "    ];"
+    ].join('\n');
+    overlay = overlay.replace(definitionsPattern, definitions);
+  }
+
+  await writeText(path, overlay);
+}
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
 // the authenticated provider identity, and must not depend on whether legacy
 // multi-identity profile metadata is eligible for refresh.

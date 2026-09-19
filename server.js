@@ -2650,10 +2650,26 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
   try {
     const summaryResult = await pool.query(`
       SELECT
-        (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL) AS clients,
+        (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL) AS clients,
+        (SELECT COUNT(*)::int FROM users WHERE merged_into_user_id IS NULL AND deleted_at IS NULL AND created_at >= NOW() - INTERVAL '7 days') AS new_clients_7d,
+        (SELECT COUNT(DISTINCT client_id)::int FROM transactions WHERE status='completed' AND created_at >= NOW() - INTERVAL '30 days') AS active_clients_30d,
+        (SELECT COUNT(*)::int
+         FROM users u
+         WHERE u.merged_into_user_id IS NULL
+           AND u.deleted_at IS NULL
+           AND EXISTS (SELECT 1 FROM transactions t WHERE t.client_id = u.id AND t.status='completed')
+           AND NOT EXISTS (
+             SELECT 1 FROM transactions t
+             WHERE t.client_id = u.id
+               AND t.status='completed'
+               AND t.created_at >= NOW() - INTERVAL '30 days'
+           )) AS inactive_clients_30d,
         (SELECT COALESCE(SUM(bonus_earned),0)::bigint FROM transactions WHERE status='completed') AS issued,
+        (SELECT COALESCE(SUM(bonus_spent),0)::bigint FROM transactions WHERE status='completed') AS redeemed,
         (SELECT COUNT(*)::int FROM transactions WHERE created_at::date = CURRENT_DATE) AS today_ops,
         (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE) AS today_check_cents,
+        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed' AND created_at::date = CURRENT_DATE - 1) AS yesterday_check_cents,
+        (SELECT COALESCE(SUM(check_amount_cents),0)::bigint FROM transactions WHERE status='completed') AS lifetime_check_cents,
         (SELECT COUNT(*)::int FROM transactions WHERE is_suspicious = TRUE AND status = 'completed') AS suspicious_ops,
         (SELECT COUNT(*)::int FROM transactions WHERE status = 'cancelled' AND cancelled_at::date = CURRENT_DATE) AS cancelled_today
     `);
@@ -2670,9 +2686,15 @@ app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), asyn
     res.json({
       summary: {
         clients: summaryResult.rows[0].clients,
+        newClients7d: summaryResult.rows[0].new_clients_7d,
+        activeClients30d: summaryResult.rows[0].active_clients_30d,
+        inactiveClients30d: summaryResult.rows[0].inactive_clients_30d,
         issued: Number(summaryResult.rows[0].issued || 0),
+        redeemed: Number(summaryResult.rows[0].redeemed || 0),
         todayOperations: summaryResult.rows[0].today_ops,
         todayCheck: rubles(summaryResult.rows[0].today_check_cents),
+        yesterdayCheck: rubles(summaryResult.rows[0].yesterday_check_cents),
+        lifetimeCheck: rubles(summaryResult.rows[0].lifetime_check_cents),
         suspiciousOperations: summaryResult.rows[0].suspicious_ops,
         cancelledToday: summaryResult.rows[0].cancelled_today
       },

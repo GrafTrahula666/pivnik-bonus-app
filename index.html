@@ -42,7 +42,13 @@
     <header class="topbar">
       <div class="brand-lockup">
         <div class="eyebrow" id="eyebrow">Telegram Mini App</div>
-        <div class="brand-line"><h1 id="brandTitle">Пивник</h1></div>
+        <div class="brand-line spaceverse-brand-line">
+          <div>
+            <h1 id="brandTitle">SPACEVERSE</h1>
+            <small class="spaceverse-venue" id="venueTitle">Пивник · программа лояльности</small>
+          </div>
+          <span class="spaceverse-mark" aria-hidden="true">△</span>
+        </div>
       </div>
       <div class="topbar-actions">
         <span class="network-badge" id="networkBadge"><i></i>онлайн</span>
@@ -76,6 +82,16 @@
           <div class="progress"><i id="statusProgress" style="width:0%"></i></div>
           <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
+
+        <button class="spaceverse-business-banner vip-glass-card" id="openBusinessHub" type="button">
+          <span class="spaceverse-business-orbit" aria-hidden="true"><i></i><b>SV</b></span>
+          <span class="spaceverse-business-copy">
+            <small>SPACEVERSE FOR BUSINESS</small>
+            <strong>Подключите приложение к своему бизнесу</strong>
+            <em>Лояльность, CRM, аналитика и рассылки · подключение бесплатно</em>
+          </span>
+          <span class="spaceverse-business-arrow" aria-hidden="true">›</span>
+        </button>
 
         <!-- telegram-wheel:start -->
         <button class="home-promo-banner vip-glass-card" id="openWheelButton" type="button">
@@ -135,15 +151,57 @@
           <!-- telegram-wheel-legacy:end -->
         </div>
 
-        <!-- telegram-wheel-legacy:start -->
-        <button class="home-promo-banner vip-glass-card" id="openPromosButton" type="button" data-config-section="promos">
-          <span class="promo-orbit">✦</span>
-          <span><small>Активная акция</small><strong id="homePromoTitle">Orange Blanche 1+1=3</strong><em>Все предложения в разделе «Акции»</em></span>
-          <i>›</i>
-        </button>
-        <!-- telegram-wheel-legacy:end -->
+        <section class="home-league-card vip-glass-card" id="homeLeagueCard">
+          <div class="compact-card-head">
+            <div><span class="home-card-kicker">Лига SPACEVERSE</span><h2>Топ месяца</h2></div>
+            <button class="section-link" id="openLeaderboardHomeFull" type="button">Вся лига</button>
+          </div>
+          <div class="leaderboard-podium-mini home-leaderboard-preview" id="homeLeaderboardPreview">
+            <span><i>1</i><b>Пока свободно</b></span>
+            <span><i>2</i><b>Пока свободно</b></span>
+            <span><i>3</i><b>Пока свободно</b></span>
+          </div>
+          <div class="home-league-foot">
+            <span id="homeLeagueMe">Ваше место появится после первой покупки</span>
+            <button class="text-btn" id="openPromosButton" type="button">Акции →</button>
+          </div>
+        </section>
 
         <div class="byline" id="byline">by Kirill Gamilton △</div>
+      </section>
+
+      <section class="screen client-screen spaceverse-business-screen" data-screen="business">
+        <div class="client-page-title spaceverse-business-head">
+          <button class="service-back" id="businessBackButton" type="button">← Главная</button>
+          <span class="muted">SPACEVERSE FOR BUSINESS</span>
+          <h2>Приложение лояльности для вашего бизнеса</h2>
+          <p>Бары, кафе, кофейни, рестораны, магазины, салоны и локальные сервисы могут подключить свою программу без отдельного приложения из App Store.</p>
+        </div>
+
+        <div class="spaceverse-business-hero vip-glass-card">
+          <div>
+            <span class="home-card-kicker">Быстрый запуск</span>
+            <strong>Начать можно бесплатно</strong>
+            <p>Клиентская программа, бонусы, QR, CRM, аналитика и рассылки работают внутри VK и Telegram.</p>
+          </div>
+          <span class="spaceverse-business-cube" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+
+        <div class="spaceverse-business-feature-grid">
+          <article class="vip-glass-card"><span>01</span><b>Лояльность</b><small>Бонусы, статусы, достижения, магазин и персональный QR.</small></article>
+          <article class="vip-glass-card"><span>02</span><b>CRM</b><small>Клиенты, активность, история операций и сегменты без таблиц вручную.</small></article>
+          <article class="vip-glass-card"><span>03</span><b>Аналитика</b><small>Реальные KPI по журналу операций и активности клиентов.</small></article>
+          <article class="vip-glass-card"><span>04</span><b>Рассылки</b><small>Telegram и VK с явным согласием пользователя и предпросмотром аудитории.</small></article>
+        </div>
+
+        <div class="spaceverse-business-cta vip-glass-card">
+          <span class="home-card-kicker">Подключение</span>
+          <h3>От идеи до рабочего Mini App без установки</h3>
+          <p>SPACEVERSE уже работает на реальном баре. Подключение нового бизнеса строится на той же платформе, а не на отдельной копии приложения.</p>
+          <small>Форма самостоятельного подключения будет добавлена отдельно. Сейчас подключение выполняется владельцем платформы.</small>
+        </div>
+
+        <div class="byline">by Kirill Gamilton △</div>
       </section>
 
       <!-- telegram-wheel:start -->
@@ -341,12 +399,42 @@
           <button type="button" class="admin-write-only" id="openBroadcastAdmin"><span>Рассылка</span><small>сообщение клиентам Telegram и VK</small></button>
         </div>
 
-        <div class="metric-grid">
-          <div class="metric"><span>Клиентов</span><strong id="metricClients">0</strong><small>зарегистрировано</small></div>
-          <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>
+        <div class="metric-grid admin-dashboard-metrics">
+          <div class="metric"><span>Клиентов</span><strong id="metricClients">0</strong><small>активных профилей</small></div>
+          <div class="metric"><span>Новые</span><strong id="metricNewClients">0</strong><small>за последние 7 дней</small></div>
+          <div class="metric"><span>Активные</span><strong id="metricActiveClients">0</strong><small>были за последние 30 дней</small></div>
+          <div class="metric"><span>Давно не были</span><strong id="metricInactiveClients">0</strong><small>нет операций 30+ дней</small></div>
           <div class="metric"><span>Сегодня</span><strong id="metricToday">0 ₽</strong><small id="metricTodayOps">0 операций</small></div>
-          <div class="metric metric-alert"><span>Требуют внимания</span><strong id="metricSuspicious">0</strong><small>операций свыше 3000 ₽</small></div>
+          <div class="metric"><span>К вчера</span><strong id="metricTodayDelta">0%</strong><small id="metricYesterdayCheck">вчера 0 ₽</small></div>
+          <div class="metric"><span>Оборот</span><strong id="metricLifetimeCheck">0 ₽</strong><small>по завершённым операциям</small></div>
+          <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>
+          <div class="metric"><span>Бонусов списано</span><strong id="metricRedeemed">0</strong><small>за всё время</small></div>
+          <div class="metric metric-alert"><span>Требуют внимания</span><strong id="metricSuspicious">0</strong><small>подозрительных операций</small></div>
           <div class="metric"><span>Отменено сегодня</span><strong id="metricCancelled">0</strong><small>с указанием причины</small></div>
+        </div>
+
+        <div class="card admin-channel-card admin-write-only" id="adminBroadcastCard">
+          <div class="card-head">
+            <div><span class="muted">Коммуникации</span><h3>Рассылки</h3><p>Telegram и VK: аудитория → сообщение → предпросмотр → подтверждение → результат.</p></div>
+            <span class="pill">CONSENT</span>
+          </div>
+          <div class="admin-channel-grid">
+            <div><strong>Telegram + VK</strong><small>Используются только пользователи с подходящим согласием на сообщения.</small></div>
+            <button class="primary" id="openBroadcastFromTab" type="button">Создать рассылку</button>
+          </div>
+        </div>
+
+        <div class="card admin-ai-card" id="adminAiCard">
+          <div class="card-head">
+            <div><span class="muted">SPACEVERSE AI</span><h3>AI-анализ</h3><p>Интерфейс подготовлен, но анализ данных внешней моделью пока не подключён.</p></div>
+            <span class="pill" id="adminAiStatus">НЕ ПОДКЛЮЧЁН</span>
+          </div>
+          <div class="admin-ai-grid">
+            <div><b>Отток клиентов</b><small>Будет искать клиентов с падением активности только после подключения безопасного аналитического backend.</small></div>
+            <div><b>Аномалии</b><small>Подозрительные операции уже считаются обычной логикой; AI-объяснение пока не генерируется.</small></div>
+            <div><b>Рекомендации</b><small>Никаких выдуманных советов: до подключения модели здесь только реальные KPI Dashboard.</small></div>
+          </div>
+          <small class="admin-hint">Сейчас данные клиентов не отправляются во внешнюю AI-модель.</small>
         </div>
 
         <div class="card shift-admin-card">
