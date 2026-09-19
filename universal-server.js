@@ -1303,7 +1303,7 @@ async function deletePlatformAccount(userId, platform, providerUserId, confirmat
   }
 }
 
-async function getUnifiedAdminUsers(input = {}) {
+async function getUnifiedAdminUserDirectory(input = {}) {
   const directory = await queryAdminUserDirectory(pool, input);
   return {
     users: directory.rows.map((row) => ({
@@ -1329,6 +1329,10 @@ async function getUnifiedAdminUsers(input = {}) {
     pagination: directory.pagination,
     filters: directory.filters
   };
+}
+
+async function getUnifiedAdminUsers() {
+  return getUnifiedAdminUserDirectory({});
 }
 
 async function getAppPayload(userId, platform = 'unknown', options = {}) {
@@ -3222,7 +3226,7 @@ export const server = http.createServer(async (req, res) => {
       if (!profile || !['viewer', 'admin'].includes(profile.role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
-      return sendJson(res, 200, await getUnifiedAdminUsers(url.searchParams));
+      return sendJson(res, 200, await getUnifiedAdminUserDirectory(url.searchParams));
     }
 
     if (req.method === 'POST' && url.pathname === '/api/me/consent') {
