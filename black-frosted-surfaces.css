@@ -169,6 +169,79 @@ html.lite-mode .red-cosmos-shop-card:not(.v2-premium) {
 }
 
 
+
+/* SPACEVERSE V3: monthly league replaces the oversized home promotion banner. */
+.home-league-card {
+  margin-top:10px;
+  padding:16px !important;
+  border-color:rgba(255,255,255,.09) !important;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(91,75,204,.11), transparent 34%),
+    linear-gradient(145deg, rgba(8,10,15,.78), rgba(4,5,8,.72)) !important;
+}
+.home-leaderboard-preview {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin-top:12px;
+}
+.home-leaderboard-preview > span {
+  min-width:0;
+  display:grid;
+  gap:6px;
+  padding:11px 9px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:13px;
+  background:rgba(255,255,255,.025);
+}
+.home-leaderboard-preview > span:nth-child(1) {
+  border-color:rgba(201,191,120,.22);
+  background:linear-gradient(145deg,rgba(173,150,82,.08),rgba(255,255,255,.02));
+}
+.home-leaderboard-preview i {
+  display:grid;
+  place-items:center;
+  width:24px;
+  height:24px;
+  border-radius:8px;
+  background:rgba(255,255,255,.05);
+  color:rgba(237,239,248,.74);
+  font-size:10px;
+  font-style:normal;
+  font-weight:900;
+}
+.home-leaderboard-preview b {
+  overflow:hidden;
+  color:#f3f5fb;
+  font-size:10px;
+  line-height:1.2;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.home-leaderboard-preview .is-me {
+  border-color:rgba(133,119,255,.30);
+  background:rgba(95,80,212,.08);
+}
+.home-league-foot {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:12px;
+  padding-top:11px;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+.home-league-foot > span {
+  min-width:0;
+  color:rgba(220,225,236,.55);
+  font-size:9px;
+  line-height:1.35;
+}
+.home-league-foot .text-btn {
+  flex:0 0 auto;
+  min-height:32px;
+}
+
 /* SPACEVERSE V2: ecosystem identity + business hub, kept in the final surface layer. */
 .spaceverse-brand-line {
   display:flex;
