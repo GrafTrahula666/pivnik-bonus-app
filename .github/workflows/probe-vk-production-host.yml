@@ -71,3 +71,5 @@ jobs:
           echo "VK production bundle is readable: $target"
           echo "VK production bundle contains Selectel gateway and no Railway browser origin"
           echo "Selectel health/readiness and production-origin CORS passed"
+
+# external recheck after Selectel hotfix 2026-09-19T10:02Z
