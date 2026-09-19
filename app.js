@@ -2708,12 +2708,29 @@ async function loadAdmin() {
   state.adminUsers = usersData.users || [];
   state.adminTransactions = summaryData.operations || [];
   state.adminInquiries = inquiriesData.inquiries || [];
-  $('#metricClients').textContent = fmt(summaryData.summary.clients);
-  $('#metricIssued').textContent = fmt(summaryData.summary.issued);
-  $('#metricToday').textContent = `${fmt(summaryData.summary.todayCheck)} ₽`;
-  $('#metricTodayOps').textContent = `${summaryData.summary.todayOperations} операций`;
-  $('#metricSuspicious').textContent = fmt(summaryData.summary.suspiciousOperations);
-  if ($('#metricCancelled')) $('#metricCancelled').textContent = fmt(summaryData.summary.cancelledToday);
+  const summary = summaryData.summary || {};
+  const todayCheck = Number(summary.todayCheck || 0);
+  const yesterdayCheck = Number(summary.yesterdayCheck || 0);
+  let deltaLabel = '0%';
+  if (yesterdayCheck > 0) {
+    const delta = Math.round(((todayCheck - yesterdayCheck) / yesterdayCheck) * 100);
+    deltaLabel = `${delta > 0 ? '+' : ''}${delta}%`;
+  } else if (todayCheck > 0) {
+    deltaLabel = 'новый';
+  }
+  $('#metricClients').textContent = fmt(summary.clients || 0);
+  $('#metricNewClients').textContent = fmt(summary.newClients7d || 0);
+  $('#metricActiveClients').textContent = fmt(summary.activeClients30d || 0);
+  $('#metricInactiveClients').textContent = fmt(summary.inactiveClients30d || 0);
+  $('#metricIssued').textContent = fmt(summary.issued || 0);
+  $('#metricRedeemed').textContent = fmt(summary.redeemed || 0);
+  $('#metricToday').textContent = `${fmt(todayCheck)} ₽`;
+  $('#metricTodayOps').textContent = `${summary.todayOperations || 0} операций`;
+  $('#metricTodayDelta').textContent = deltaLabel;
+  $('#metricYesterdayCheck').textContent = `вчера ${fmt(yesterdayCheck)} ₽`;
+  $('#metricLifetimeCheck').textContent = `${fmt(summary.lifetimeCheck || 0)} ₽`;
+  $('#metricSuspicious').textContent = fmt(summary.suspiciousOperations || 0);
+  if ($('#metricCancelled')) $('#metricCancelled').textContent = fmt(summary.cancelledToday || 0);
   renderAdminTransactions(state.adminTransactions.slice(0, 5));
   renderUsers(state.adminUsers.slice(0, 5), '#usersList', true);
   renderInquiries(state.adminInquiries.slice(0, 5), '#adminInquiries', true);
@@ -3301,6 +3318,7 @@ $('#openAllInquiries')?.addEventListener('click', () => openAllInquiries().catch
 $('#openAllInquiriesFromCard')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
 $('#openContentAdminQuick')?.addEventListener('click', openContentAdmin);
 $('#openBroadcastAdmin')?.addEventListener('click', () => openBroadcastAdmin().catch((error) => toast(error.message)));
+$('#openBroadcastFromTab')?.addEventListener('click', () => openBroadcastAdmin().catch((error) => toast(error.message)));
 $('#broadcastChannel')?.addEventListener('change', () => loadBroadcastPreview().catch((error) => toast(error.message)));
 $('#broadcastAudience')?.addEventListener('change', () => loadBroadcastPreview().catch((error) => toast(error.message)));
 $('#sendBroadcast')?.addEventListener('click', () => sendAdminBroadcast().catch((error) => toast(error.message)));
