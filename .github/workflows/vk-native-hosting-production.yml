@@ -1,0 +1,151 @@
+name: VK native hosting PRODUCTION deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY_VK_PRODUCTION"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Guard production deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirm }}" = "DEPLOY_VK_PRODUCTION"
+
+      - name: Checkout exact selected ref
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run focused VK regressions
+        run: |
+          node --test test/vk-native-hosting-main-parity.test.js
+          node --test test/vk-native-hosting-gateway.test.js
+          node --check vk-api-gateway/server.mjs
+
+      - name: Materialize current product sources
+        run: npm run materialize
+
+      - name: Verify Selectel before production deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in healthz readyz; do
+            curl --fail --silent --show-error --location               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 20               "https://139.100.238.159.nip.io/$path" >/dev/null
+          done
+
+      - name: Build VK production bundle
+        env:
+          PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
+        run: node scripts/build-vk-hosting.mjs
+
+      - name: Verify bundle boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/app.js
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/vendor/vk-bridge.js
+          grep -q 'https://139.100.238.159.nip.io' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          ! grep -q 'up.railway.app' vk-hosting-build/index.html
+          ! grep -q 'vercel.app' vk-hosting-build/index.html
+          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
+
+      - name: Deploy to VK Mini Apps production Hosting
+        id: deploy
+        env:
+          MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_MINI_APPS_ACCESS_TOKEN }}
+          MINI_APPS_ENVIRONMENT: production
+          CI_URLS: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MINI_APPS_ACCESS_TOKEN"
+          log="$RUNNER_TEMP/vk-miniapps-production-deploy.log"
+          npx -y @vkontakte/vk-miniapps-deploy@1.0.2 2>&1 | tee "$log"
+          web_url="$(sed -n 's/^iframe_secure_url:[[:space:]]*//p' "$log" | tail -n 1 | tr -d '\r')"
+          mobile_url="$(sed -n 's/^m_iframe_secure_url:[[:space:]]*//p' "$log" | tail -n 1 | tr -d '\r')"
+          mvk_url="$(sed -n 's/^vk_mini_app_mvk_url:[[:space:]]*//p' "$log" | tail -n 1 | tr -d '\r')"
+          printf 'web_url=%s\nmobile_url=%s\nmvk_url=%s\n' "$web_url" "$mobile_url" "$mvk_url" >> "$GITHUB_OUTPUT"
+          if [ -z "$web_url$mobile_url$mvk_url" ]; then
+            echo "VK production deploy returned no production URLs"
+            exit 1
+          fi
+
+      - name: Wait for VK Hosting propagation and verify production
+        env:
+          WEB_URL: ${{ steps.deploy.outputs.web_url }}
+          MOBILE_URL: ${{ steps.deploy.outputs.mobile_url }}
+          MVK_URL: ${{ steps.deploy.outputs.mvk_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$MOBILE_URL"
+          [ -n "$target" ] || target="$WEB_URL"
+          [ -n "$target" ] || target="$MVK_URL"
+          test -n "$target"
+          case "$target" in
+            https://prod-app54694987-*.pages-ac.vk-apps.ru/index.html|https://prod-app54694987-*.pages-ac.vk-apps.com/index.html) ;;
+            *) echo "Unexpected VK production URL: $target"; exit 1 ;;
+          esac
+
+          base="${target%/index.html}"
+          dir="$RUNNER_TEMP/vk-production-smoke"
+          mkdir -p "$dir"
+
+          ready=0
+          for attempt in $(seq 1 180); do
+            code="$(curl --silent --show-error --location               --connect-timeout 10 --max-time 30               --dump-header "$dir/index.headers"               --output "$dir/index.html"               --write-out '%{http_code}' "$target" || true)"
+            if [ "$code" = "200" ]; then
+              ready=1
+              break
+            fi
+            echo "VK production host not ready: HTTP $code (attempt $attempt/180)"
+            sleep 5
+          done
+          test "$ready" = "1"
+
+          grep -Eiq '^content-type:[[:space:]]*text/html([;[:space:]]|$)' "$dir/index.headers"
+          grep -q 'https://139.100.238.159.nip.io' "$dir/index.html"
+          ! grep -q 'up.railway.app' "$dir/index.html"
+          ! grep -q 'telegram.org/js/telegram-web-app.js' "$dir/index.html"
+
+          fetch() {
+            curl --fail --silent --show-error --location               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 30               --dump-header "$3" --output "$2" "$1"
+          }
+
+          for asset in app.js vk-platform.js vendor/vk-bridge.js styles.css; do
+            safe="${asset//\//_}"
+            fetch "$base/$asset" "$dir/$safe" "$dir/$safe.headers"
+            test -s "$dir/$safe"
+            ! grep -Eiq '<!doctype[[:space:]]+html|<html([[:space:]>])' "$dir/$safe"
+          done
+
+          cors="$dir/cors.headers"
+          cors_code="$(curl --silent --show-error             --request OPTIONS             --header "Origin: $base"             --header 'Access-Control-Request-Method: GET'             --header 'Access-Control-Request-Headers: authorization,content-type,x-pivnik-version,x-pivnik-platform,x-pivnik-explicit-consent,x-staff-session'             --dump-header "$cors" --output "$dir/cors.body"             --write-out '%{http_code}'             'https://139.100.238.159.nip.io/api/me' || true)"
+          echo "Selectel production CORS status=$cors_code"
+          test "$cors_code" = "204"
+
+          origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$cors")"
+          test "$origin" = "$base"
+
+          echo "VK production deployment verified: $target"

@@ -29,6 +29,8 @@ const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base
 delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
 // VK runtime is canonical source. Never restore an archived startup implementation.
 delete runtimeFiles['vk-platform.js'];
+// DB prepare is canonical source too. Its startup safety/logging fixes must survive materialization.
+delete runtimeFiles['scripts/red-cosmos-v2-db-prepare.mjs'];
 const runtimeAnchors = {
   'red-cosmos-v2.css': '--primary-red: #c41e3a',
   'red-cosmos-v2.js': "const EXPECTED_PRIMARY = '#c41e3a';",
@@ -44,6 +46,41 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
     throw new Error(`working updates: unexpected source drift in ${relativePath}`);
   }
   await writeText(relativePath, targetContent);
+}
+
+// The archived working-updates payload intentionally carries several later VK
+// repairs (service-role fallbacks and QR help cleanup). Preserve those, but do
+// not restore the old delayed interaction fallback that could reopen a modal
+// after the user had already closed it.
+{
+  const path = 'red-cosmos-v2.js';
+  const legacyFallback = `  function scheduleFallback(check, action, delay = 60) {
+    setTimeout(() => {
+      try { if (!check()) action(); }
+      catch (error) { console.warn('RED COSMOS interaction fallback failed:', error); }
+    }, delay);
+  }`;
+  const safeFallback = `  function scheduleFallback(check, action, delay = 60) {
+    queueMicrotask(() => {
+      try {
+        if (check()) return;
+      } catch (error) {
+        console.warn('RED COSMOS interaction fallback precheck failed:', error);
+      }
+      setTimeout(() => {
+        try { if (!check()) action(); }
+        catch (error) { console.warn('RED COSMOS interaction fallback failed:', error); }
+      }, delay);
+    });
+  }`;
+  let overlay = await readText(path);
+  if (!overlay.includes(safeFallback)) {
+    if (!overlay.includes(legacyFallback)) {
+      throw new Error('working updates: RED COSMOS fallback marker missing');
+    }
+    overlay = overlay.replace(legacyFallback, safeFallback);
+    await writeText(path, overlay);
+  }
 }
 
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from

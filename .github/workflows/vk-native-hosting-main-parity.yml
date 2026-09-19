@@ -1,0 +1,163 @@
+name: VK native hosting main parity
+
+on:
+  push:
+    branches:
+      - fix/vk-native-hosting-main-parity-20260912
+  pull_request:
+    paths:
+      - scripts/build-vk-hosting.mjs
+      - scripts/vk-native-hosting-browser-smoke.mjs
+      - scripts/vk-native-hosting-bootstrap-smoke.mjs
+      - scripts/vk-native-hosting-gateway-smoke.mjs
+      - scripts/vk-native-hosting-reopen-smoke.mjs
+      - scripts/vk-native-hosting-expired-session-smoke.mjs
+      - scripts/vk-native-hosting-stale-launch-smoke.mjs
+      - scripts/vk-native-hosting-launch-failclosed-smoke.mjs
+      - scripts/vk-native-hosting-bridge-refresh-failure-smoke.mjs
+      - scripts/vk-native-hosting-manual-retry-success-smoke.mjs
+      - scripts/vk-native-hosting-background-retry-smoke.mjs
+      - scripts/vk-native-hosting-foreground-session-smoke.mjs
+      - scripts/vk-native-hosting-foreground-expired-session-smoke.mjs
+      - scripts/vk-native-hosting-concurrent-expired-session-smoke.mjs
+      - scripts/vk-native-hosting-concurrent-reauth-failure-smoke.mjs
+      - scripts/vk-native-hosting-reauth-newer-session-race-smoke.mjs
+      - scripts/vk-native-hosting-reauth-failure-then-success-smoke.mjs
+      - scripts/vk-native-hosting-post-reauth-timeout-smoke.mjs
+      - scripts/vk-tg-black-frosted-parity-smoke.mjs
+      - vk-hosting-config.json
+      - test/vk-native-hosting-main-parity.test.js
+      - .github/workflows/vk-native-hosting-main-parity.yml
+      - index.html
+      - app.js
+      - vk-platform.js
+      - account-link.js
+      - v22-ui.js
+      - red-cosmos-v2.js
+      - styles.css
+      - black-frosted-glass.css
+      - black-frosted-surfaces.css
+      - black-frosted-controls.css
+      - scripts/materialize-runtime-patches.mjs
+      - scripts/apply-v22-runtime.mjs
+      - scripts/apply-v22-production-polish.mjs
+      - scripts/apply-red-cosmos-v2-shell-final.mjs
+      - scripts/apply-red-cosmos-v2-client-final.mjs
+      - scripts/apply-release-candidate-fixes.mjs
+      - scripts/apply-working-updates.mjs
+      - scripts/apply-vk-production-hotfix-20260831.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  build-current-main-vk-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run focused regression tests
+        run: node --test test/vk-native-hosting-main-parity.test.js
+      - name: Materialize current product sources
+        run: npm run materialize
+      - name: Build static VK bundle without deployment
+        env:
+          PIVNIK_VK_API_BASE: https://vk-gateway.invalid
+        run: node scripts/build-vk-hosting.mjs
+      - name: Verify static bundle boundaries
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/app.js
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/account-link.js
+          test -f vk-hosting-build/vendor/vk-bridge.js
+          grep -q '__PIVNIK_VK_API_BASE__' vk-hosting-build/index.html
+          grep -q 'https://vk-gateway.invalid' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          if grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html; then
+            echo 'Telegram runtime leaked into VK static bundle'
+            exit 1
+          fi
+          if grep -q 'up.railway.app' vk-hosting-build/index.html; then
+            echo 'Railway browser origin leaked into VK static bundle'
+            exit 1
+          fi
+      - name: Install isolated Playwright runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run VK static bundle browser smoke
+        run: node scripts/vk-native-hosting-browser-smoke.mjs
+      - name: Run VK bootstrap auth/session smoke
+        run: node scripts/vk-native-hosting-bootstrap-smoke.mjs
+      - name: Run VK real CORS and service-role restore smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/vk-native-hosting-gateway-smoke
+          node scripts/vk-native-hosting-gateway-smoke.mjs 2>&1 | tee artifacts/vk-native-hosting-gateway-smoke/output.log
+      - name: Run VK reload/reopen session smoke
+        run: node scripts/vk-native-hosting-reopen-smoke.mjs
+      - name: Run VK expired session recovery smoke
+        run: node scripts/vk-native-hosting-expired-session-smoke.mjs
+      - name: Run VK stale launch recovery smoke
+        run: node scripts/vk-native-hosting-stale-launch-smoke.mjs
+      - name: Run VK launch refresh fail-closed smoke
+        run: node scripts/vk-native-hosting-launch-failclosed-smoke.mjs
+      - name: Run VK bridge refresh failure smoke
+        run: node scripts/vk-native-hosting-bridge-refresh-failure-smoke.mjs
+      - name: Run VK successful manual retry smoke
+        run: node scripts/vk-native-hosting-manual-retry-success-smoke.mjs
+      - name: Run VK background foreground recovery smoke
+        run: node scripts/vk-native-hosting-background-retry-smoke.mjs
+      - name: Run VK foreground session stability smoke
+        run: node scripts/vk-native-hosting-foreground-session-smoke.mjs
+      - name: Run VK foreground expired session recovery smoke
+        run: node scripts/vk-native-hosting-foreground-expired-session-smoke.mjs
+      - name: Run VK concurrent expired session recovery smoke
+        run: node scripts/vk-native-hosting-concurrent-expired-session-smoke.mjs
+      - name: Run VK concurrent reauth failure smoke
+        run: node scripts/vk-native-hosting-concurrent-reauth-failure-smoke.mjs
+      - name: Run VK newer-session reauth race smoke
+        run: node scripts/vk-native-hosting-reauth-newer-session-race-smoke.mjs
+      - name: Run VK failed-then-success reauth smoke
+        run: node scripts/vk-native-hosting-reauth-failure-then-success-smoke.mjs
+      - name: Run VK post-reauth timeout smoke
+        run: node scripts/vk-native-hosting-post-reauth-timeout-smoke.mjs
+      - name: Run VK Telegram materialized parity smoke
+        run: node scripts/vk-tg-black-frosted-parity-smoke.mjs
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-native-hosting-browser-smoke
+          path: |
+            artifacts/vk-native-hosting-browser-smoke
+            artifacts/vk-native-hosting-bootstrap-smoke
+            artifacts/vk-native-hosting-gateway-smoke
+            artifacts/vk-native-hosting-reopen-smoke
+            artifacts/vk-native-hosting-expired-session-smoke
+            artifacts/vk-native-hosting-stale-launch-smoke
+            artifacts/vk-native-hosting-launch-failclosed-smoke
+            artifacts/vk-native-hosting-bridge-refresh-failure-smoke
+            artifacts/vk-native-hosting-manual-retry-success-smoke
+            artifacts/vk-native-hosting-background-retry-smoke
+            artifacts/vk-native-hosting-foreground-session-smoke
+            artifacts/vk-native-hosting-foreground-expired-session-smoke
+            artifacts/vk-native-hosting-concurrent-expired-session-smoke
+            artifacts/vk-native-hosting-concurrent-reauth-failure-smoke
+            artifacts/vk-native-hosting-reauth-newer-session-race-smoke
+            artifacts/vk-native-hosting-reauth-failure-then-success-smoke
+            artifacts/vk-native-hosting-post-reauth-timeout-smoke
+            artifacts/vk-tg-black-frosted-parity-smoke
+          if-no-files-found: error
+          retention-days: 7

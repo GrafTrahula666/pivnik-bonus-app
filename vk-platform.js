@@ -3,6 +3,9 @@
 
   const bridge = window.vkBridge;
   const originalFetch = window.fetch.bind(window);
+  // The existing native-hosting gateway does not allow the optional boot-id
+  // header. Keep same-origin tracing; cross-origin diagnostics carry it in JSON.
+  const usesNativeGateway = Boolean(String(window.__PIVNIK_VK_API_BASE__ || '').trim());
   const diagnostics = (() => {
     const bytes = new Uint8Array(12);
     if (window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
@@ -40,7 +43,7 @@
       const deadline = window.setTimeout(() => controller?.abort(), 2000);
       void Promise.resolve().then(() => originalFetch('/api/diagnostics/vk-startup', {
         method: 'POST', credentials: 'omit', keepalive: true,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-pivnik-platform': 'vk' },
         body: JSON.stringify({ bootId: id, events }),
         ...(controller ? { signal: controller.signal } : {})
       })).catch(() => {}).finally(() => window.clearTimeout(deadline));
@@ -247,7 +250,7 @@
       try {
         const syncResponse = await originalFetch('/api/auth', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-pivnik-platform': 'vk' },
           body: JSON.stringify({
             platform: 'vk',
             launchParams: signedLaunchParams,
@@ -287,7 +290,7 @@
     vkUser = profile;
     const syncResponse = await originalFetch('/api/auth', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-pivnik-platform': 'vk' },
       body: JSON.stringify({
         platform: 'vk',
         launchParams: signedLaunchParams,
@@ -419,7 +422,7 @@
     if (pathname === '/api/auth') {
       const headers = new Headers(init.headers || {});
       headers.set('content-type', 'application/json');
-      headers.set('x-pivnik-boot-id', diagnostics.id);
+      if (!usesNativeGateway) headers.set('x-pivnik-boot-id', diagnostics.id);
       const sendAuth = (signedLaunchParams) => originalFetch(input, {
         ...init,
         headers,
@@ -462,7 +465,7 @@
     const isProfileRequest = pathname === '/api/me' || pathname === '/api/bootstrap';
     if (isProfileRequest) {
       const headers = new Headers(init.headers || {});
-      headers.set('x-pivnik-boot-id', diagnostics.id);
+      if (!usesNativeGateway) headers.set('x-pivnik-boot-id', diagnostics.id);
       init = { ...init, headers };
       diagnostics.emit('VK_PROFILE_REQUEST_START');
     }
