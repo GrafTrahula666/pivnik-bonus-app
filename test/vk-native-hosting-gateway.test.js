@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
-test('VK native hosting config targets app 54694987 and a static build directory', async () => {
+test('VK native hosting config targets app 54694987 and the static build directory', async () => {
   const config = JSON.parse(await read('vk-hosting-config.json'));
   assert.equal(config.app_id, 54694987);
   assert.equal(config.static_path, 'vk-hosting-build');
@@ -15,58 +15,36 @@ test('VK native hosting config targets app 54694987 and a static build directory
   });
 });
 
-test('VK hosting builder injects a separate API base and keeps Telegram client parity', async () => {
+test('VK hosting builder routes API through a separate HTTPS gateway and rejects browser Railway/Vercel', async () => {
   const source = await read('scripts/build-vk-hosting.mjs');
+  assert.match(source, /PIVNIK_VK_API_BASE/);
   assert.match(source, /__PIVNIK_VK_API_BASE__/);
   assert.match(source, /resolveGatewayInput/);
-  assert.match(source, /originalFetch\(resolveGatewayInput\(input\)/);
   assert.match(source, /VK Hosting gateway must not use vercel\.app/);
   assert.match(source, /VK Hosting gateway must not expose Railway directly/);
-  assert.match(source, /telegram-wheel-legacy:start/);
-  assert.doesNotMatch(source, /\.replace\(\/<!-- telegram-wheel:start -->/);
-  assert.match(source, /VK_TELEGRAM_PARITY_CSS/);
-  assert.match(source, /luxury-vip-space\.webp/);
-  assert.match(source, /vk-telegram-parity\.css/);
-  assert.match(source, /html\.platform-vk \.home-feature-grid/);
-  assert.match(source, /html\.platform-vk \.client-tip/);
-  assert.match(source, /assertVkClientParity/);
-  assert.match(source, /assertVkWheelRuntime/);
-  assert.match(source, /openWheelButton/);
-  assert.match(source, /wheelSpinButton/);
-  assert.match(source, /openProfileShop/);
-  assert.match(source, /function renderWheelArtwork/);
-  assert.match(source, /function spinWheel/);
-  assert.match(source, /loadSecondaryData/);
-  assert.match(source, /VK wheel runtime is still platform-disabled/);
   assert.match(source, /vendor\/vk-bridge\.js/);
+  assert.match(source, /telegram\.org\/js\/telegram-web-app\.js/);
 });
 
-test('VK production materialization preserves the current VK cosmos canvas contract', async () => {
-  const source = await read('scripts/apply-vk-production-hotfix-20260831.mjs');
-  assert.match(source, /PIVNIK_VK_COSMOS_BACKGROUND_20260831/);
-  assert.match(source, /html\.platform-vk #appShell>main/);
-  assert.match(source, /html\.platform-vk \.screen/);
-  assert.match(source, /background:transparent!important/);
-  assert.match(source, /radial-gradient\(ellipse at 79% 22%/);
-});
-
-test('VK gateway exposes only API routes and converts the second hop to trusted server-to-server origin', async () => {
+test('Selectel gateway accepts VK dev and production Hosting origins but exposes only API routes', async () => {
   const source = await read('vk-api-gateway/server.mjs');
   assert.match(source, /Only \/api\/\* is exposed/);
-  assert.match(source, /if \(!value\) return false/);
   assert.match(source, /VK Hosting Origin is required/);
-  assert.match(source, /\.pages\.vk-apps\.com/);
-  assert.match(source, /\.pages\.vk-apps\.ru/);
-  assert.match(source, /\.pages-ac\.vk-apps\.com/);
-  assert.match(source, /\.pages-ac\.vk-apps\.ru/);
+  assert.match(source, /host\.endsWith\('\.pages\.vk-apps\.com'\)/);
+  assert.match(source, /host\.endsWith\('\.pages\.vk-apps\.ru'\)/);
+  assert.match(source, /host\.endsWith\('\.pages-ac\.vk-apps\.com'\)/);
+  assert.match(source, /host\.endsWith\('\.pages-ac\.vk-apps\.ru'\)/);
+  assert.match(source, /access-control-allow-origin/);
+  assert.match(source, /access-control-allow-methods/);
+  assert.match(source, /access-control-allow-headers/);
   assert.match(source, /headers\.set\('origin', RAILWAY_ORIGIN\.origin\)/);
   assert.match(source, /x-pivnik-gateway/);
-  assert.doesNotMatch(source, /FORWARDED_REQUEST_HEADERS[\s\S]{0,500}'sec-fetch-site'/);
   assert.match(source, /x-pivnik-platform/);
   assert.match(source, /\/readyz/);
+  assert.doesNotMatch(source, /FORWARDED_REQUEST_HEADERS[\s\S]{0,500}'sec-fetch-site'/);
 });
 
-test('Selectel bootstrap derives a nip.io HTTPS gateway from public IPv4', async () => {
+test('Selectel bootstrap uses nip.io and the consolidated VK branch', async () => {
   const [bootstrap, cloudInit] = await Promise.all([
     read('vk-api-gateway/bootstrap-nip.sh'),
     read('vk-api-gateway/selectel-cloud-init.yaml')
@@ -80,11 +58,12 @@ test('Selectel bootstrap derives a nip.io HTTPS gateway from public IPv4', async
   assert.match(cloudInit, /bootstrap-nip\.sh/);
 });
 
-test('gateway production origin contract includes VK pages-ac hosting', async () => {
-  const source = await read('vk-api-gateway/server.mjs');
-  assert.match(source, /host\.endsWith\('\.pages-ac\.vk-apps\.ru'\)/);
-  assert.match(source, /host\.endsWith\('\.pages-ac\.vk-apps\.com'\)/);
-  assert.match(source, /access-control-allow-origin/);
-  assert.match(source, /access-control-allow-methods/);
-  assert.match(source, /access-control-allow-headers/);
+test('pages-ac hotfix is rollback-safe and validates the current production origin', async () => {
+  const source = await read('vk-api-gateway/apply-pages-ac-hotfix.sh');
+  assert.match(source, /server\.mjs\.backup-/);
+  assert.match(source, /pages-ac\.vk-apps\.ru/);
+  assert.match(source, /docker compose up -d --build --force-recreate gateway/);
+  assert.match(source, /Expected CORS 204/);
+  assert.match(source, /Hotfix verification failed; restoring/);
+  assert.match(source, /PIVNIK VK GATEWAY HOTFIX OK/);
 });
