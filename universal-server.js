@@ -3047,6 +3047,16 @@ export const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(__dirname, 'red-cosmos-v2.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
+    if (req.method === 'GET' && url.pathname === '/black-frosted-glass.css') {
+      return serveFile(res, path.join(__dirname, 'black-frosted-glass.css'), 'text/css; charset=utf-8', 'no-cache');
+    }
+    if (req.method === 'GET' && url.pathname === '/black-frosted-surfaces.css') {
+      return serveFile(res, path.join(__dirname, 'black-frosted-surfaces.css'), 'text/css; charset=utf-8', 'no-cache');
+    }
+    if (req.method === 'GET' && url.pathname === '/black-frosted-controls.css') {
+      return serveFile(res, path.join(__dirname, 'black-frosted-controls.css'), 'text/css; charset=utf-8', 'no-cache');
+    }
+
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
       return serveLegalDocument(res, path.join(__dirname, 'legal', 'privacy.html'));
     }
