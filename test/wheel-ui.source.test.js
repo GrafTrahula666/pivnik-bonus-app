@@ -18,7 +18,9 @@ test('Telegram wheel UI keeps the approved home-page order', async () => {
   assert.ok(beer < stats);
   assert.ok(stats < achievements);
   assert.match(index, /telegram-wheel-legacy:start[\s\S]*id="openShopButton"/);
-  assert.match(index, /telegram-wheel-legacy:start[\s\S]*id="openPromosButton"/);
+  assert.match(index, /id="homeLeagueCard"/);
+  assert.match(index, /id="homeLeaderboardPreview"/);
+  assert.match(index, /id="openPromosButton"[^>]*>Акции →<\/button>/);
 });
 
 test('Second wheel design contains one large prize and twenty narrow sectors', async () => {
@@ -53,3 +55,17 @@ test('Wheel screen uses the approved controls and Eye of Providence emblem', asy
   assert.match(styles, /\.app-shell\.wheel-mode \.bottom-nav\s*\{\s*display:\s*none;/);
   assert.match(styles, /\.wheel-sector-jackpot\s*\{/);
 });
+
+test('Wheel countdown remains user-specific and derives from server nextFreeAt', async () => {
+  const [app, patcher] = await Promise.all([
+    readFile(new URL('app.js', root), 'utf8'),
+    readFile(new URL('scripts/apply-red-cosmos-v2-client-final.mjs', root), 'utf8')
+  ]);
+  assert.match(app, /current\.nextFreeAt/);
+  assert.match(app, /new Date\(current\.nextFreeAt\)\.getTime\(\) - Date\.now\(\)/);
+  assert.match(app, /homeStatus\.textContent = free[\s\S]*Бесплатно через/);
+  assert.match(app, /window\.setInterval\([\s\S]*renderWheelStatus\(\)/);
+  assert.match(patcher, /function startWheelCountdown\(\)[\s\S]*if \(state\.wheel\.countdownTimer\) return/);
+  assert.match(patcher, /async function loadWheelStatus\(\)[\s\S]*if \(!state\.token/);
+});
+
