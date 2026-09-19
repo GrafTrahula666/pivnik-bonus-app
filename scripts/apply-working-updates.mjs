@@ -83,6 +83,49 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   }
 }
 
+// SPACEVERSE_ADMIN_V1_20260919
+// working-updates restores the historical RED COSMOS overlay from an archived
+// payload on every materialization. Apply the current admin navigation contract
+// after that restore so deploy/restart cannot silently resurrect the old tabs.
+{
+  const path = 'red-cosmos-v2.js';
+  let overlay = await readText(path);
+  const oldAdminTabs = `    adminPanelForNode($('#contentAdminCard'), 'shop');
+    $('.owner-only', admin).forEach((node) => adminPanelForNode(node, 'settings'));
+    createAdminDataPanel(admin, 'achievements', 'Достижения');
+    createAdminDataPanel(admin, 'frames', 'Рамки пользователей');
+
+    const tabs = document.createElement('nav');
+    tabs.className = 'red-cosmos-admin-tabs';
+    tabs.setAttribute('aria-label', 'Разделы админ-панели');
+    const definitions = [
+      ['dashboard', 'Главная'], ['users', 'Пользователи'], ['operations', 'Операции'], ['shift', 'Смена'],
+      ['achievements', 'Достижения'], ['shop', 'Магазин'], ['frames', 'Рамки'], ['settings', 'Настройки']
+    ];`;
+  const newAdminTabs = `    adminPanelForNode($('#contentAdminCard'), 'content');
+    adminPanelForNode($('#adminBroadcastCard'), 'broadcast');
+    adminPanelForNode($('#adminAiCard'), 'ai');
+    $('.owner-only', admin).forEach((node) => adminPanelForNode(node, 'settings'));
+    createAdminDataPanel(admin, 'achievements', 'Достижения');
+    createAdminDataPanel(admin, 'frames', 'Рамки пользователей');
+
+    const tabs = document.createElement('nav');
+    tabs.className = 'red-cosmos-admin-tabs';
+    tabs.setAttribute('aria-label', 'Разделы админ-панели');
+    const definitions = [
+      ['dashboard', 'Обзор'], ['users', 'CRM'], ['operations', 'Операции'], ['shift', 'Смена'],
+      ['content', 'Контент'], ['broadcast', 'Рассылки'], ['achievements', 'Достижения'],
+      ['frames', 'Рамки'], ['ai', 'AI'], ['settings', 'Настройки']
+    ];`;
+  if (!overlay.includes(newAdminTabs)) {
+    if (!overlay.includes(oldAdminTabs)) {
+      throw new Error('working updates: admin V1 tabs marker missing');
+    }
+    overlay = overlay.replace(oldAdminTabs, newAdminTabs);
+    await writeText(path, overlay);
+  }
+}
+
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
 // the authenticated provider identity, and must not depend on whether legacy
 // multi-identity profile metadata is eligible for refresh.
