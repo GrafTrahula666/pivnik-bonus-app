@@ -1,0 +1,46 @@
+name: Black frosted browser visual smoke
+
+on:
+  push:
+    branches:
+      - ui/black-frosted-visual-smoke-stage4
+
+permissions:
+  contents: read
+
+jobs:
+  visual-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Stage 4
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install exact project dependencies
+        run: npm ci
+
+      - name: Materialize exact UI layers
+        run: npm run materialize
+
+      - name: Install isolated Playwright runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Run Telegram + VK black-frosted browser smoke
+        run: node scripts/black-frosted-browser-smoke.mjs
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-black-frosted-browser-smoke
+          path: artifacts/black-frosted-browser-smoke
+          if-no-files-found: error
+          retention-days: 7
