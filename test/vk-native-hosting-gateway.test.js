@@ -41,14 +41,13 @@ test('VK hosting builder injects a separate API base and keeps Telegram client p
   assert.match(source, /vendor\/vk-bridge\.js/);
 });
 
-test('VK production materialization uses the shared deep-space background without changing interaction logic', async () => {
+test('VK production materialization preserves the current VK cosmos canvas contract', async () => {
   const source = await read('scripts/apply-vk-production-hotfix-20260831.mjs');
-  assert.match(source, /assets\/backgrounds\/luxury-vip-space\.webp/);
-  assert.match(source, /luxury-vip-space\.webp\?v=17\.1-vk/);
-  assert.match(source, /filter:brightness\(1\.72\) saturate\(1\.22\) contrast\(1\.06\)/);
+  assert.match(source, /PIVNIK_VK_COSMOS_BACKGROUND_20260831/);
   assert.match(source, /html\.platform-vk #appShell>main/);
-  assert.match(source, /html\.platform-vk \.app-shell::before/);
-  assert.doesNotMatch(source, /radial-gradient\(ellipse at 79% 22%/);
+  assert.match(source, /html\.platform-vk \.screen/);
+  assert.match(source, /background:transparent!important/);
+  assert.match(source, /radial-gradient\(ellipse at 79% 22%/);
 });
 
 test('VK gateway exposes only API routes and converts the second hop to trusted server-to-server origin', async () => {
@@ -77,7 +76,7 @@ test('Selectel bootstrap derives a nip.io HTTPS gateway from public IPv4', async
   assert.match(bootstrap, /docker compose up -d --build/);
   assert.match(bootstrap, /\/readyz/);
   assert.match(cloudInit, /#cloud-config/);
-  assert.match(cloudInit, /fix\/vk-native-hosting-gateway/);
+  assert.match(cloudInit, /fix\/vk-native-hosting-main-parity-20260912/);
   assert.match(cloudInit, /bootstrap-nip\.sh/);
 });
 
