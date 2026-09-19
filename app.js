@@ -93,6 +93,7 @@ const state = {
   adminUsers: [],
   adminUsersDirectory: { page: 1, limit: 25, total: 0, pages: 1, busy: false },
   adminUsersFilterTimer: 0,
+  adminUsersRequestSeq: 0,
   adminTransactions: [],
   adminInquiries: [],
   shopContact: null,
@@ -2765,7 +2766,13 @@ function renderAdminUsersDirectoryMeta() {
 }
 
 async function loadAdminUsersDirectory(page = 1) {
+  window.clearTimeout(state.adminUsersFilterTimer);
+  const requestSeq = ++state.adminUsersRequestSeq;
+  const profileId = state.profile?.id;
+  const isCurrent = () => requestSeq === state.adminUsersRequestSeq && profileId === state.profile?.id;
   const root = $('#allUsersList');
+  const retry = $('#adminUsersRetry');
+  if (retry) retry.hidden = true;
   state.adminUsersDirectory.busy = true;
   renderAdminUsersDirectoryMeta();
   if (root) {
@@ -2774,6 +2781,7 @@ async function loadAdminUsersDirectory(page = 1) {
   }
   try {
     const data = await api(`/api/admin/users?${adminUsersDirectoryParams(page)}`);
+    if (!isCurrent()) return;
     state.adminUsers = data.users || [];
     state.adminUsersDirectory = {
       page: Number(data.pagination?.page || page || 1),
@@ -2785,8 +2793,17 @@ async function loadAdminUsersDirectory(page = 1) {
     renderUsers(state.adminUsers, '#allUsersList', false);
     renderAdminUsersDirectoryMeta();
   } catch (error) {
+    if (!isCurrent()) return;
     state.adminUsersDirectory.busy = false;
     renderAdminUsersDirectoryMeta();
+    if (root) {
+      root.className = 'operation-list empty-state';
+      root.textContent = 'Не удалось загрузить пользователей. Повторите попытку.';
+    }
+    if (retry) {
+      retry.hidden = false;
+      retry.onclick = () => loadAdminUsersDirectory(page).catch((err) => toast(err.message));
+    }
     throw error;
   }
 }
@@ -2798,6 +2815,10 @@ async function openAllUsers() {
 
 function filterAdminUsers() {
   window.clearTimeout(state.adminUsersFilterTimer);
+  // Invalidate the previous request immediately, including the debounce window.
+  state.adminUsersRequestSeq += 1;
+  state.adminUsersDirectory.busy = true;
+  renderAdminUsersDirectoryMeta();
   state.adminUsersFilterTimer = window.setTimeout(() => {
     loadAdminUsersDirectory(1).catch((error) => toast(error.message));
   }, 250);

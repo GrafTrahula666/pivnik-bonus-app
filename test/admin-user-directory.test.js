@@ -133,6 +133,18 @@ test('admin CRM directory filters real PostgreSQL rows by activity, role and VK 
 
     const viewer = await queryAdminUserDirectory(db, { role: 'viewer', limit: '25' });
     assert.deepEqual(viewer.rows.map((row) => String(row.id)), ['4']);
+
+    await db.exec(`
+      INSERT INTO users (id, role, created_at)
+      SELECT n, 'staff', '2026-01-01T00:00:00Z'::timestamptz FROM generate_series(10, 21) n;
+      INSERT INTO wallets (user_id) SELECT n FROM generate_series(10, 21) n;
+    `);
+    const firstPage = await queryAdminUserDirectory(db, { role: 'staff', limit: '5', page: '1' });
+    const secondPage = await queryAdminUserDirectory(db, { role: 'staff', limit: '5', page: '2' });
+    assert.deepEqual(firstPage.rows.map(row => String(row.id)), ['21', '20', '19', '18', '17']);
+    assert.deepEqual(secondPage.rows.map(row => String(row.id)), ['16', '15', '14', '13', '12']);
+    const legacy = await queryAdminUserDirectory(db);
+    assert.equal(String(legacy.rows[0].id), '1', 'legacy directory keeps creation-date order');
   } finally {
     await db.close();
   }

@@ -117,6 +117,9 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   const dataParams = [...params, filters.limit, offset];
   const limitParam = `$${dataParams.length - 1}`;
   const offsetParam = `$${dataParams.length}`;
+  const orderSql = filters.limit === 200
+    ? 'u.created_at DESC, u.id DESC'
+    : 'COALESCE(activity.last_activity_at, u.created_at) DESC, u.created_at DESC, u.id DESC';
 
   const result = await pool.query(
     `SELECT
@@ -147,7 +150,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
           ORDER BY ui.provider
         ) AS linked_platforms
      ${fromSql}
-     ORDER BY COALESCE(activity.last_activity_at, u.created_at) DESC, u.created_at DESC
+     ORDER BY ${orderSql}
      LIMIT ${limitParam}
      OFFSET ${offsetParam}`,
     dataParams
