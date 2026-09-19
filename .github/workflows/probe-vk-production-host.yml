@@ -15,24 +15,41 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Probe current VK production host
+      - name: Verify current VK production hosting bundle
         shell: bash
         run: |
           set -euo pipefail
-          url='https://prod-app54694987-989ea78abfeb.pages-ac.vk-apps.ru/index.html'
-          for mode in plain browser referer; do
-            headers=()
-            if [ "$mode" = browser ]; then
-              headers+=(--header 'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 VKApp/8.0')
-            fi
-            if [ "$mode" = referer ]; then
-              headers+=(--header 'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 VKApp/8.0')
-              headers+=(--header 'Referer: https://vk.ru/')
-            fi
-            code="$(curl --silent --show-error --location --output /tmp/body --dump-header /tmp/headers --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "${headers[@]}" "$url" || true)"
-            ctype="$(awk 'BEGIN{IGNORECASE=1}/^content-type:/{sub(/\r$/,"");print;exit}' /tmp/headers || true)"
-            server="$(awk 'BEGIN{IGNORECASE=1}/^server:/{sub(/\r$/,"");print;exit}' /tmp/headers || true)"
-            echo "$mode status=$code $ctype $server bytes=$(wc -c </tmp/body 2>/dev/null || echo 0)"
-            head -c 200 /tmp/body 2>/dev/null | tr '\n' ' ' || true
-            echo
+          target='https://prod-app54694987-989ea78abfeb.pages-ac.vk-apps.ru/index.html'
+          base="${target%/index.html}"
+          dir="$RUNNER_TEMP/vk-prod-probe"
+          mkdir -p "$dir"
+
+          fetch() {
+            curl --fail --silent --show-error --location               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 30               --dump-header "$3" --output "$2" "$1"
+          }
+
+          fetch "$target" "$dir/index.html" "$dir/index.headers"
+          grep -Eiq '^content-type:[[:space:]]*text/html([;[:space:]]|$)' "$dir/index.headers"
+          grep -q 'https://139.100.238.159.nip.io' "$dir/index.html"
+          ! grep -q 'up.railway.app' "$dir/index.html"
+          ! grep -q 'telegram.org/js/telegram-web-app.js' "$dir/index.html"
+
+          for asset in app.js vk-platform.js vendor/vk-bridge.js styles.css; do
+            safe="${asset//\//_}"
+            fetch "$base/$asset" "$dir/$safe" "$dir/$safe.headers"
+            test -s "$dir/$safe"
+            ! grep -Eiq '<!doctype[[:space:]]+html|<html([[:space:]>])' "$dir/$safe"
           done
+
+          for path in healthz readyz; do
+            fetch "https://139.100.238.159.nip.io/$path" "$dir/$path.json" "$dir/$path.headers"
+          done
+
+          cors="$dir/cors.headers"
+          curl --fail --silent --show-error             --request OPTIONS             --header "Origin: $base"             --header 'Access-Control-Request-Method: GET'             --header 'Access-Control-Request-Headers: authorization,content-type,x-pivnik-version,x-pivnik-platform,x-pivnik-explicit-consent,x-staff-session'             --dump-header "$cors" --output /dev/null             'https://139.100.238.159.nip.io/api/me'
+          origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$cors")"
+          test "$origin" = "$base"
+
+          echo "VK production bundle is readable: $target"
+          echo "VK production bundle contains Selectel gateway and no Railway browser origin"
+          echo "Selectel health/readiness and production-origin CORS passed"
