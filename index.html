@@ -42,7 +42,13 @@
     <header class="topbar">
       <div class="brand-lockup">
         <div class="eyebrow" id="eyebrow">Telegram Mini App</div>
-        <div class="brand-line"><h1 id="brandTitle">Пивник</h1></div>
+        <div class="brand-line spaceverse-brand-line">
+          <div>
+            <h1 id="brandTitle">SPACEVERSE</h1>
+            <small class="spaceverse-venue" id="venueTitle">Пивник · программа лояльности</small>
+          </div>
+          <span class="spaceverse-mark" aria-hidden="true">△</span>
+        </div>
       </div>
       <div class="topbar-actions">
         <span class="network-badge" id="networkBadge"><i></i>онлайн</span>
@@ -76,6 +82,16 @@
           <div class="progress"><i id="statusProgress" style="width:0%"></i></div>
           <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
+
+        <button class="spaceverse-business-banner vip-glass-card" id="openBusinessHub" type="button">
+          <span class="spaceverse-business-orbit" aria-hidden="true"><i></i><b>SV</b></span>
+          <span class="spaceverse-business-copy">
+            <small>SPACEVERSE FOR BUSINESS</small>
+            <strong>Подключите приложение к своему бизнесу</strong>
+            <em>Лояльность, CRM, аналитика и рассылки · подключение бесплатно</em>
+          </span>
+          <span class="spaceverse-business-arrow" aria-hidden="true">›</span>
+        </button>
 
         <!-- telegram-wheel:start -->
         <button class="home-promo-banner vip-glass-card" id="openWheelButton" type="button">
@@ -144,6 +160,40 @@
         <!-- telegram-wheel-legacy:end -->
 
         <div class="byline" id="byline">by Kirill Gamilton △</div>
+      </section>
+
+      <section class="screen client-screen spaceverse-business-screen" data-screen="business">
+        <div class="client-page-title spaceverse-business-head">
+          <button class="service-back" id="businessBackButton" type="button">← Главная</button>
+          <span class="muted">SPACEVERSE FOR BUSINESS</span>
+          <h2>Приложение лояльности для вашего бизнеса</h2>
+          <p>Бары, кафе, кофейни, рестораны, магазины, салоны и локальные сервисы могут подключить свою программу без отдельного приложения из App Store.</p>
+        </div>
+
+        <div class="spaceverse-business-hero vip-glass-card">
+          <div>
+            <span class="home-card-kicker">Быстрый запуск</span>
+            <strong>Начать можно бесплатно</strong>
+            <p>Клиентская программа, бонусы, QR, CRM, аналитика и рассылки работают внутри VK и Telegram.</p>
+          </div>
+          <span class="spaceverse-business-cube" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+
+        <div class="spaceverse-business-feature-grid">
+          <article class="vip-glass-card"><span>01</span><b>Лояльность</b><small>Бонусы, статусы, достижения, магазин и персональный QR.</small></article>
+          <article class="vip-glass-card"><span>02</span><b>CRM</b><small>Клиенты, активность, история операций и сегменты без таблиц вручную.</small></article>
+          <article class="vip-glass-card"><span>03</span><b>Аналитика</b><small>Реальные KPI по журналу операций и активности клиентов.</small></article>
+          <article class="vip-glass-card"><span>04</span><b>Рассылки</b><small>Telegram и VK с явным согласием пользователя и предпросмотром аудитории.</small></article>
+        </div>
+
+        <div class="spaceverse-business-cta vip-glass-card">
+          <span class="home-card-kicker">Подключение</span>
+          <h3>От идеи до рабочего Mini App без установки</h3>
+          <p>SPACEVERSE уже работает на реальном баре. Подключение нового бизнеса строится на той же платформе, а не на отдельной копии приложения.</p>
+          <small>Форма самостоятельного подключения будет добавлена отдельно. Сейчас подключение выполняется владельцем платформы.</small>
+        </div>
+
+        <div class="byline">by Kirill Gamilton △</div>
       </section>
 
       <!-- telegram-wheel:start -->
