@@ -171,8 +171,10 @@
     adminPanelForNode($('#usersList')?.closest('.admin-preview-card, .card, section'), 'users');
     adminPanelForNode($('#adminOperations')?.closest('.admin-preview-card, .card, section'), 'operations');
     adminPanelForNode($('.shift-admin-card', admin), 'shift');
-    adminPanelForNode($('#contentAdminCard'), 'shop');
-    $$('.owner-only', admin).forEach((node) => adminPanelForNode(node, 'settings'));
+    adminPanelForNode($('#contentAdminCard'), 'content');
+    adminPanelForNode($('#adminBroadcastCard'), 'broadcast');
+    adminPanelForNode($('#adminAiCard'), 'ai');
+    $('.owner-only', admin).forEach((node) => adminPanelForNode(node, 'settings'));
     createAdminDataPanel(admin, 'achievements', 'Достижения');
     createAdminDataPanel(admin, 'frames', 'Рамки пользователей');
 
@@ -180,8 +182,9 @@
     tabs.className = 'red-cosmos-admin-tabs';
     tabs.setAttribute('aria-label', 'Разделы админ-панели');
     const definitions = [
-      ['dashboard', 'Главная'], ['users', 'Пользователи'], ['operations', 'Операции'], ['shift', 'Смена'],
-      ['achievements', 'Достижения'], ['shop', 'Магазин'], ['frames', 'Рамки'], ['settings', 'Настройки']
+      ['dashboard', 'Обзор'], ['users', 'CRM'], ['operations', 'Операции'], ['shift', 'Смена'],
+      ['content', 'Контент'], ['broadcast', 'Рассылки'], ['achievements', 'Достижения'],
+      ['frames', 'Рамки'], ['ai', 'AI'], ['settings', 'Настройки']
     ];
     tabs.innerHTML = definitions.map(([key, label], index) => `<button type="button" class="red-cosmos-admin-tab${index === 0 ? ' active' : ''}" data-red-cosmos-admin-tab="${key}">${label}</button>`).join('');
     head.insertAdjacentElement('afterend', tabs);
