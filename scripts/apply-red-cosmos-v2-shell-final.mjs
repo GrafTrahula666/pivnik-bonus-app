@@ -56,7 +56,7 @@ if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
   // RED_COSMOS_V2_THEME_LOCK: server content settings may change copy/radius, never product colors.
   document.documentElement.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
   $('#brandTitle').textContent = 'SPACEVERSE';
-  if ($('#venueTitle')) $('#venueTitle').textContent = `${design.texts?.brand || 'Пивник'} · программа лояльности`;
+  if ($('#venueTitle')) $('#venueTitle').textContent = (design.texts?.brand || 'Пивник') + ' · программа лояльности';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
   const legacyQrButton = $('#showQrButton');
   if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
