@@ -23,7 +23,7 @@ test('VK hosting builder routes API through a separate HTTPS gateway and rejects
   assert.match(source, /VK Hosting gateway must not use vercel\.app/);
   assert.match(source, /VK Hosting gateway must not expose Railway directly/);
   assert.match(source, /vendor\/vk-bridge\.js/);
-  assert.match(source, /telegram\.org\/js\/telegram-web-app\.js/);
+  assert.match(source, /VK Hosting build still contains Telegram WebApp runtime/);
 });
 
 test('Selectel gateway accepts VK dev and production Hosting origins but exposes only API routes', async () => {
