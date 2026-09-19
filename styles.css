@@ -3350,6 +3350,41 @@ body {
   padding: 4px 0 10px;
   background: linear-gradient(180deg, rgba(12,15,20,.98) 72%, transparent);
 }
+.admin-user-filter-row { grid-template-columns: minmax(0, 1fr) minmax(120px, .34fr) minmax(150px, .46fr); }
+.admin-directory-meta {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.admin-pagination {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+.admin-pagination button { min-height: 42px; }
+.admin-pagination span { color: var(--muted); font-size: 10px; text-align: center; white-space: nowrap; }
+.crm-user-status {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 5px;
+  margin-right: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.05);
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.crm-user-status.status-new { color: #ffd56b; border-color: rgba(255,213,107,.28); background: rgba(255,213,107,.06); }
+.crm-user-status.status-active { color: #8de0ae; border-color: rgba(93,207,139,.28); background: rgba(93,207,139,.06); }
+.crm-user-status.status-inactive { color: #ff9b9b; border-color: rgba(255,113,113,.25); background: rgba(255,113,113,.055); }
+.crm-user-status.status-no_ops { color: #aeb5c0; }
+.crm-user-activity { color: var(--muted); font-size: 8px; }
+
 .inquiry-list { display: grid; gap: 9px; }
 .inquiry-row {
   display: grid;
@@ -3410,6 +3445,10 @@ body {
   .shop-list-price { align-items: flex-start; flex-direction: column; }
   .shop-card-actions { width: 100%; justify-content: space-between; }
   .admin-filter-row { grid-template-columns: 1fr; }
+  .admin-user-filter-row { grid-template-columns: 1fr; }
+  .admin-pagination { grid-template-columns: 1fr 1fr; }
+  .admin-pagination span { grid-column: 1 / -1; grid-row: 1; }
+  .admin-pagination button { grid-row: 2; }
   .inquiry-row { grid-template-columns: 1fr; }
   .inquiry-actions { align-items: stretch; }
   .inquiry-actions select { max-width: none; }
