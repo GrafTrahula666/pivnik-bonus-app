@@ -1,0 +1,31 @@
+name: Verify Selectel gateway pages-ac support
+
+on:
+  push:
+    branches:
+      - fix/vk-native-hosting-gateway
+    paths:
+      - .github/workflows/verify-selectel-gateway-pages-ac.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Gateway syntax
+        run: node --check vk-api-gateway/server.mjs
+      - name: Gateway native-hosting regressions
+        run: node --test test/vk-native-hosting-gateway.test.js
+      - name: Verify production VK origin suffixes are present
+        run: |
+          grep -q "pages-ac.vk-apps.ru" vk-api-gateway/server.mjs
+          grep -q "pages-ac.vk-apps.com" vk-api-gateway/server.mjs
