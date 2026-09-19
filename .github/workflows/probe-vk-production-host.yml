@@ -58,6 +58,11 @@ jobs:
           cors="$dir/cors.headers"
           cors_code="$(curl --silent --show-error             --request OPTIONS             --header "Origin: $base"             --header 'Access-Control-Request-Method: GET'             --header 'Access-Control-Request-Headers: authorization,content-type,x-pivnik-version,x-pivnik-platform,x-pivnik-explicit-consent,x-staff-session'             --dump-header "$cors" --output "$dir/cors.body"             --write-out '%{http_code}'             'https://139.100.238.159.nip.io/api/me' || true)"
           echo "selectel:cors status=$cors_code"
+          echo "selectel:cors headers:"
+          sed -n '1,40p' "$cors" || true
+          echo "selectel:cors body:"
+          head -c 1000 "$dir/cors.body" 2>/dev/null || true
+          echo
           test "$cors_code" = "204"
           origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$cors")"
           echo "selectel:cors allow-origin=$origin expected=$base"
