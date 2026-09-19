@@ -21,7 +21,7 @@ test('admin CRM users endpoint uses one shared directory query in both server pa
   assert.match(directory, /OFFSET \$\{offsetParam\}/);
   assert.match(directory, /MAX\(t\.created_at\).*status = 'completed'/s);
   assert.match(directory, /COUNT\(\*\).*status = 'completed'/s);
-  assert.doesNotMatch(directory, /INSERT|UPDATE|DELETE/i);
+  assert.doesNotMatch(directory, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i);
 });
 
 test('admin CRM UI exposes search, role, activity status and bounded pagination', async () => {
