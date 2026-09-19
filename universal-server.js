@@ -32,6 +32,7 @@ import {
   freeSpinState,
   paidSpinCost
 } from './wheel.js';
+import { adminUserCrmStatus, queryAdminUserDirectory } from './admin-user-directory.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -1302,30 +1303,10 @@ async function deletePlatformAccount(userId, platform, providerUserId, confirmat
   }
 }
 
-async function getUnifiedAdminUsers() {
-  const result = await pool.query(
-    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role,
-            u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame,
-            w.balance, bl.paid_ml_total, bl.gift_ml_balance,
-            (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured,
-            (SELECT ui.provider_user_id
-             FROM user_identities ui
-             WHERE ui.user_id = u.id AND ui.provider = 'vk'
-             LIMIT 1) AS vk_id,
-            ARRAY(
-              SELECT ui.provider FROM user_identities ui
-              WHERE ui.user_id = u.id ORDER BY ui.provider
-            ) AS linked_platforms
-     FROM users u
-     JOIN wallets w ON w.user_id = u.id
-     LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-     WHERE u.merged_into_user_id IS NULL
-       AND u.deleted_at IS NULL
-     ORDER BY u.created_at DESC
-     LIMIT 200`
-  );
+async function getUnifiedAdminUserDirectory(input = {}) {
+  const directory = await queryAdminUserDirectory(pool, input);
   return {
-    users: result.rows.map((row) => ({
+    users: directory.rows.map((row) => ({
       id: String(row.id),
       telegramId: row.telegram_id === null ? null : String(row.telegram_id),
       vkId: row.vk_id === null ? null : String(row.vk_id),
@@ -1340,9 +1321,18 @@ async function getUnifiedAdminUsers() {
       beerGiftLitersBalance: litersFromMl(row.gift_ml_balance),
       pinConfigured: Boolean(row.pin_configured),
       linkedPlatforms: row.linked_platforms || [],
-      createdAt: row.created_at
-    }))
+      createdAt: row.created_at,
+      lastActivityAt: row.last_activity_at,
+      operationsCount: Number(row.operations_count || 0),
+      crmStatus: adminUserCrmStatus(row)
+    })),
+    pagination: directory.pagination,
+    filters: directory.filters
   };
+}
+
+async function getUnifiedAdminUsers() {
+  return getUnifiedAdminUserDirectory({});
 }
 
 async function getAppPayload(userId, platform = 'unknown', options = {}) {
@@ -3246,7 +3236,7 @@ export const server = http.createServer(async (req, res) => {
       if (!profile || !['viewer', 'admin'].includes(profile.role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
-      return sendJson(res, 200, await getUnifiedAdminUsers());
+      return sendJson(res, 200, await getUnifiedAdminUserDirectory(url.searchParams));
     }
 
     if (req.method === 'POST' && url.pathname === '/api/me/consent') {

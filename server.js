@@ -23,6 +23,7 @@ import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence
 import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
 import { createStaffTransactionPersistence } from './staff-transaction-persistence.js';
 import { createBeerGiftTransactionPersistence } from './beer-gift-transaction-persistence.js';
+import { adminUserCrmStatus, queryAdminUserDirectory } from './admin-user-directory.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -2827,33 +2828,31 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
 
 app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
-    const result = await pool.query(
-      `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role, u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame, w.balance,
-              bl.paid_ml_total, bl.gift_ml_balance,
-              (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured
-       FROM users u
-       JOIN wallets w ON w.user_id = u.id
-       LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-       WHERE u.merged_into_user_id IS NULL
-         AND u.deleted_at IS NULL
-       ORDER BY u.created_at DESC
-       LIMIT 200`
-    );
-    res.json({ users: result.rows.map((row) => ({
-      id: String(row.id),
-      telegramId: row.telegram_id === null ? null : String(row.telegram_id),
-      username: row.username,
-      name: [row.first_name, row.last_name].filter(Boolean).join(' '),
-      role: row.role,
-      balance: hasUnlimitedBonus(row) ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
-      unlimitedBonus: hasUnlimitedBonus(row),
-      profileFrame: profileFrameFromRow(row),
-      qrShortCode: row.qr_short_code,
-      beerPaidLitersTotal: litersFromMl(row.paid_ml_total),
-      beerGiftLitersBalance: litersFromMl(row.gift_ml_balance),
-      pinConfigured: Boolean(row.pin_configured),
-      createdAt: row.created_at
-    })) });
+    const directory = await queryAdminUserDirectory(pool, req.query);
+    res.json({
+      users: directory.rows.map((row) => ({
+        id: String(row.id),
+        telegramId: row.telegram_id === null ? null : String(row.telegram_id),
+        vkId: row.vk_id === null ? null : String(row.vk_id),
+        username: row.username,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        role: row.role,
+        balance: hasUnlimitedBonus(row) ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
+        unlimitedBonus: hasUnlimitedBonus(row),
+        profileFrame: profileFrameFromRow(row),
+        qrShortCode: row.qr_short_code,
+        beerPaidLitersTotal: litersFromMl(row.paid_ml_total),
+        beerGiftLitersBalance: litersFromMl(row.gift_ml_balance),
+        pinConfigured: Boolean(row.pin_configured),
+        linkedPlatforms: row.linked_platforms || [],
+        createdAt: row.created_at,
+        lastActivityAt: row.last_activity_at,
+        operationsCount: Number(row.operations_count || 0),
+        crmStatus: adminUserCrmStatus(row)
+      })),
+      pagination: directory.pagination,
+      filters: directory.filters
+    });
   } catch (error) {
     next(error);
   }
