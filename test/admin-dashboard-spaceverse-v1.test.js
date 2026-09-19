@@ -15,6 +15,13 @@ test('admin dashboard reads only real journal/profile aggregates for V1 KPIs', a
   assert.match(server, /AS lifetime_check_cents/);
   assert.match(server, /status='completed'/);
   assert.match(server, /deleted_at IS NULL/);
+  assert.match(server, /WITH tx_metrics AS/);
+  assert.match(server, /completed_activity AS/);
+  assert.match(server, /LEFT JOIN completed_activity activity ON activity\.client_id = u\.id/);
+  assert.match(server, /WHERE activity\.last_completed_at >= NOW\(\) - INTERVAL '30 days'/);
+  assert.match(server, /WHERE activity\.last_completed_at < NOW\(\) - INTERVAL '30 days'/);
+  assert.match(server, /FROM user_metrics\s+CROSS JOIN tx_metrics/);
+  assert.doesNotMatch(server, /\(SELECT COUNT\(DISTINCT client_id\)::int FROM transactions/);
 
   assert.match(server, /newClients7d:/);
   assert.match(server, /activeClients30d:/);
