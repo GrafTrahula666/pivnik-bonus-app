@@ -58,6 +58,8 @@ test('VK gateway exposes only API routes and converts the second hop to trusted 
   assert.match(source, /VK Hosting Origin is required/);
   assert.match(source, /\.pages\.vk-apps\.com/);
   assert.match(source, /\.pages\.vk-apps\.ru/);
+  assert.match(source, /\.pages-ac\.vk-apps\.com/);
+  assert.match(source, /\.pages-ac\.vk-apps\.ru/);
   assert.match(source, /headers\.set\('origin', RAILWAY_ORIGIN\.origin\)/);
   assert.match(source, /x-pivnik-gateway/);
   assert.doesNotMatch(source, /FORWARDED_REQUEST_HEADERS[\s\S]{0,500}'sec-fetch-site'/);
