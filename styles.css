@@ -6847,13 +6847,30 @@ body {
   box-shadow: 0 -16px 42px rgba(0,0,0,.28);
 }
 .bottom-nav button {
+  background: transparent;
   color: #9992b0;
 }
+.bottom-nav button:not(.qr-nav-button) > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(128, 99, 220, .22);
+  border-radius: 50%;
+  background: rgba(7, 8, 24, .82);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
 .bottom-nav button.active {
-  background: rgba(126,61,255,.09);
+  background: transparent;
   color: #d7c5ff;
 }
+.bottom-nav button.active:not(.qr-nav-button) > span {
+  border-color: rgba(148, 91, 255, .5);
+  background: radial-gradient(circle at 34% 24%, rgba(137,86,255,.22), rgba(7,8,24,.9) 68%);
+  box-shadow: 0 0 20px rgba(108,61,255,.2), inset 0 1px 0 rgba(255,255,255,.07);
+}
 .bottom-nav .qr-nav-button {
+  background: transparent;
   color: #eef1ff;
 }
 .bottom-nav .qr-nav-button > span {
