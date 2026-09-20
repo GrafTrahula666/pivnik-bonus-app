@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '19.1-telegram-wheel-v2';
+const APP_VERSION = '20.0-spaceverse-purple-home';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -1039,32 +1039,34 @@ function currentLevelIndex() {
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
+  // RED_COSMOS_V2_THEME_LOCK compatibility marker.
+  // SPACEVERSE purple is the canonical client palette; server settings may change copy/radius, never product colors.
   const root = document.documentElement;
-  const colors = design.colors || {};
-  root.style.setProperty('--bg', colors.background || '#0e0c0a');
-  root.style.setProperty('--header', colors.header || '#15110e');
-  root.style.setProperty('--surface', colors.surface || '#1c1612');
-  root.style.setProperty('--card', colors.card || '#231a14');
-  root.style.setProperty('--text', colors.text || '#f7eee5');
-  root.style.setProperty('--muted', colors.muted || '#a99580');
-  root.style.setProperty('--gold', colors.accent || '#e9a83b');
-  root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
-  root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
+  root.style.setProperty('--bg', '#070611');
+  root.style.setProperty('--header', '#0b0820');
+  root.style.setProperty('--surface', '#111126');
+  root.style.setProperty('--card', '#14132d');
+  root.style.setProperty('--text', '#f7f4ff');
+  root.style.setProperty('--muted', '#aaa1c4');
+  root.style.setProperty('--gold', '#8b3dff');
+  root.style.setProperty('--gold2', '#c084fc');
+  root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
   const legacyQrButton = $('#showQrButton');
   if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
-  $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
+  $('#byline').textContent = (design.texts?.byline || 'by Kirill Gamilton') + ' △';
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
     if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);
-    else document.querySelectorAll(`[data-config-section="${key}"]`).forEach((element) => element.classList.toggle('hidden', !visible));
+    else document.querySelectorAll('[data-config-section="' + key + '"]').forEach((element) => element.classList.toggle('hidden', !visible));
   });
 
   try {
-    tg?.setHeaderColor(colors.header || '#15110e');
-    tg?.setBackgroundColor(colors.background || '#0e0c0a');
+    tg?.setHeaderColor('#0b0820');
+    tg?.setBackgroundColor('#070611');
+    tg?.setBottomBarColor('#080716');
   } catch (_) {}
 }
 
@@ -1369,6 +1371,14 @@ function renderLeaderboard() {
     $('#leagueSpentHome').textContent = data.me?.spend > 0
       ? `${fmt(data.me.spend)} ₽ за месяц`
       : 'по сумме покупок';
+  }
+  const homePreview = $('#homeLeaderboardPreview');
+  if (homePreview) {
+    homePreview.innerHTML = [1, 2, 3].map((rank) => {
+      const leader = data.leaders?.find((item) => item.rank === rank);
+      const amount = leader?.spend === null || leader?.spend === undefined ? '— ₽' : `${fmt(leader.spend)} ₽`;
+      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i><b>${escapeHtml(leader?.name || 'Пока свободно')}</b><strong>${amount}</strong></span>`;
+    }).join('');
   }
   const preview = $('#leaderboardPreview');
   if (preview) {
@@ -3219,6 +3229,7 @@ $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toa
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
+$('#openSpaceverseBusiness')?.addEventListener('click', () => toast('SPACEVERSE · подробная страница готовится'));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
