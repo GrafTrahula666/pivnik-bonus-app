@@ -6926,3 +6926,42 @@ body {
   .home-league-podium > span { padding: 6px; grid-template-columns: 22px minmax(0,1fr); gap: 2px 5px; }
   .home-league-podium i { width: 22px; height: 22px; }
 }
+
+
+/* SPACEVERSE Customer 360 — read-only CRM surface on canonical purple UI. */
+.user-actions { flex-wrap: wrap; }
+.user-role-readonly { flex: 1 1 160px; }
+.customer360-open-button { flex: 0 0 auto; }
+.customer360-sheet { display:grid; gap:16px; }
+.customer360-sheet h2 { margin:0; padding-right:42px; }
+.customer360-subtitle { margin:-10px 0 0; color:var(--muted); font-size:11px; line-height:1.45; }
+.customer360-error { padding:12px 14px; border:1px solid rgba(255,113,113,.26); border-radius:14px; background:rgba(255,113,113,.055); color:#ffb4b4; font-size:11px; line-height:1.45; }
+.customer360-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+.customer360-metric,.customer360-fact { min-width:0; border:1px solid var(--line); background:var(--surface); box-shadow:inset 0 1px 0 rgba(255,255,255,.035); }
+.customer360-metric { display:grid; gap:5px; min-height:76px; padding:12px; border-radius:16px; }
+.customer360-metric span,.customer360-fact span,.customer360-section-head span { color:var(--muted); font-size:9px; line-height:1.3; }
+.customer360-metric strong { overflow:hidden; color:var(--text); font-size:16px; line-height:1.15; text-overflow:ellipsis; }
+.customer360-loading { grid-column:1/-1; padding:18px; color:var(--muted); text-align:center; font-size:11px; }
+.customer360-section { display:grid; gap:10px; }
+.customer360-section-head { display:flex; align-items:end; justify-content:space-between; gap:10px; }
+.customer360-section-head h3 { margin:0; font-size:14px; }
+.customer360-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.customer360-fact { display:grid; gap:4px; padding:10px 12px; border-radius:13px; }
+.customer360-fact b { overflow:hidden; color:var(--text); font-size:11px; line-height:1.35; text-overflow:ellipsis; }
+.customer360-history { display:grid; gap:8px; }
+.customer360-history-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:start; padding:12px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+.customer360-history-row.is-cancelled { border-color:rgba(255,113,113,.22); }
+.customer360-history-main { min-width:0; display:grid; gap:4px; }
+.customer360-history-main>div { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.customer360-history-main b { color:var(--text); font-size:11px; }
+.customer360-history-main span { padding:2px 6px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:8px; }
+.customer360-history-row.is-cancelled .customer360-history-main span { color:#ffb4b4; border-color:rgba(255,113,113,.24); }
+.customer360-history-main small { color:var(--muted); font-size:9px; line-height:1.4; }
+.customer360-history-main p { margin:2px 0 0; color:var(--muted); font-size:10px; line-height:1.4; }
+.customer360-history-row>strong { white-space:nowrap; color:var(--text); font-size:11px; }
+@media(max-width:420px){
+  .customer360-metrics{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .customer360-facts{grid-template-columns:1fr;}
+  .customer360-history-row{grid-template-columns:1fr;}
+  .customer360-history-row>strong{justify-self:start;}
+}
