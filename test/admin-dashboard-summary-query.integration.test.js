@@ -16,7 +16,7 @@ async function loadAdminSummarySql() {
   return server.slice(sqlStart, sqlEnd);
 }
 
-test('optimized admin summary SQL preserves KPI and period semantics on PostgreSQL aggregates', async () => {
+test('optimized admin summary SQL preserves KPI, period and daily-series semantics on PostgreSQL aggregates', async () => {
   const db = new PGlite();
   try {
     await db.exec(`
@@ -64,6 +64,14 @@ test('optimized admin summary SQL preserves KPI and period semantics on PostgreS
       todayCheckCents: 4000, yesterdayCheckCents: 2000, lifetimeCheckCents: 11000,
       suspiciousOps: 1, cancelledToday: 1
     });
+
+    const series = row.daily_series_30d;
+    assert.ok(Array.isArray(series), 'daily series must be a JSON array');
+    assert.equal(series.length, 30, 'daily series must include every calendar day, including zero days');
+    assert.equal(series.reduce((sum, item) => sum + Number(item.check_cents), 0), 6000, 'daily revenue excludes cancelled and older transactions');
+    assert.equal(series.reduce((sum, item) => sum + Number(item.completed_ops), 0), 3, 'daily sales count includes completed transactions only');
+    assert.equal(Number(series.at(-1).check_cents), 4000, 'last point represents today');
+    assert.equal(Number(series.at(-2).check_cents), 2000, 'previous point represents yesterday');
   } finally {
     await db.close();
   }
