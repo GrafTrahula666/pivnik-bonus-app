@@ -63,8 +63,8 @@ if (!index.includes(INTERACTION_FALLBACK_SRC)) {
 await fs.writeFile(indexPath, index, 'utf8');
 
 const app = await fs.readFile(appPath, 'utf8');
-if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
-  throw new Error('Canonical palette lock is missing from app.js');
+if (!app.includes('SPACEVERSE_CANONICAL_THEME_LOCK')) {
+  throw new Error('Canonical SPACEVERSE palette lock is missing from app.js');
 }
 if (!app.includes("const APP_VERSION = '20.0-spaceverse-purple-home';")) {
   throw new Error('Canonical client version is missing from app.js');
