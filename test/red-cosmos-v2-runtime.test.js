@@ -26,7 +26,7 @@ test('startup shell retires legacy visual layers and preserves only the interact
   assert.match(shell, /\/red-cosmos-v2\\.css/);
   assert.match(shell, /\/black-frosted-glass\\.css/);
   assert.match(shell, /\/red-cosmos-v2\\.js\\?v=2\\.0\\.0/);
-  assert.match(shell, /RED_COSMOS_V2_THEME_LOCK/);
+  assert.match(shell, /SPACEVERSE_CANONICAL_THEME_LOCK/);
 });
 
 test('RED COSMOS backend implements idempotent direct frame purchases', async () => {
