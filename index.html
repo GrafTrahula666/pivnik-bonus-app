@@ -901,6 +901,28 @@
     </div>
   </div>
 
+  <div class="modal" id="customer360Modal" aria-hidden="true">
+    <div class="modal-sheet tall-sheet customer360-sheet">
+      <button class="close" data-close="customer360Modal" aria-label="Закрыть">×</button>
+      <span class="muted">CRM · Customer 360</span>
+      <h2 id="customer360Title">Карточка клиента</h2>
+      <p class="customer360-subtitle" id="customer360Subtitle">Профиль, деньги и активность в одном месте.</p>
+      <div class="customer360-error" id="customer360Error" hidden></div>
+      <div class="customer360-metrics" id="customer360Metrics">
+        <div class="customer360-loading">Выберите клиента из CRM.</div>
+      </div>
+      <section class="customer360-section">
+        <div class="customer360-section-head"><h3>Профиль и экономика</h3><span>Только реальные данные</span></div>
+        <div class="customer360-facts" id="customer360Facts"></div>
+      </section>
+      <section class="customer360-section">
+        <div class="customer360-section-head"><h3>Последние операции</h3><span>До 30 событий</span></div>
+        <div class="customer360-history empty-state" id="customer360History">История появится после загрузки клиента.</div>
+      </section>
+      <button class="secondary full" id="customer360Retry" type="button" hidden>Повторить загрузку</button>
+    </div>
+  </div>
+
   <div class="modal" id="adminTransactionsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet admin-directory-sheet">
       <button class="close" data-close="adminTransactionsModal">×</button>
