@@ -15,6 +15,13 @@ test('admin dashboard reads only real journal/profile aggregates for V1 KPIs', a
   assert.match(server, /AS lifetime_check_cents/);
   assert.match(server, /status='completed'/);
   assert.match(server, /deleted_at IS NULL/);
+  assert.match(server, /WITH tx_metrics AS/);
+  assert.match(server, /completed_activity AS/);
+  assert.match(server, /LEFT JOIN completed_activity activity ON activity\.client_id = u\.id/);
+  assert.match(server, /WHERE activity\.last_completed_at >= NOW\(\) - INTERVAL '30 days'/);
+  assert.match(server, /WHERE activity\.last_completed_at < NOW\(\) - INTERVAL '30 days'/);
+  assert.match(server, /FROM user_metrics\s+CROSS JOIN tx_metrics/);
+  assert.doesNotMatch(server, /\(SELECT COUNT\(DISTINCT client_id\)::int FROM transactions/);
 
   assert.match(server, /newClients7d:/);
   assert.match(server, /activeClients30d:/);
@@ -47,6 +54,29 @@ test('admin V1 exposes real KPI cards and honest AI state', async () => {
   assert.match(app, /summary\.inactiveClients30d/);
   assert.match(app, /summary\.yesterdayCheck/);
   assert.match(app, /summary\.lifetimeCheck/);
+  assert.match(app, /summary\.todayCompletedOperations/);
+  assert.match(app, /summary\.yesterdayCompletedOperations/);
+  assert.match(app, /summary\.todayAverageCheck/);
+  assert.match(app, /summary\.yesterdayAverageCheck/);
+  assert.match(app, /summary\.completedOperations7d/);
+  assert.match(app, /summary\.previousCompletedOperations7d/);
+  assert.match(app, /summary\.check7d/);
+  assert.match(app, /summary\.previousCheck7d/);
+  assert.match(app, /summary\.averageCheck7d/);
+  assert.match(app, /summary\.previousAverageCheck7d/);
+  assert.match(app, /summary\.completedOperations30d/);
+  assert.match(app, /summary\.previousCompletedOperations30d/);
+  assert.match(app, /summary\.check30d/);
+  assert.match(app, /summary\.previousCheck30d/);
+  assert.match(app, /summary\.averageCheck30d/);
+  assert.match(app, /summary\.previousAverageCheck30d/);
+  assert.match(app, /salesDelta/);
+  assert.match(app, /averageCheckDelta/);
+  assert.match(app, /periodTrend/);
+  assert.match(app, /выручка .*продажи .*ср\. чек/s);
+  assert.match(app, /7д/);
+  assert.match(app, /30д/);
+  assert.match(app, /нет базы сравнения/);
 
   assert.match(html, /id="adminAiCard"/);
   assert.match(html, /AI-анализ/);
