@@ -64,10 +64,18 @@ test('admin V1 exposes real KPI cards and honest AI state', async () => {
   assert.match(app, /summary\.previousCheck7d/);
   assert.match(app, /summary\.averageCheck7d/);
   assert.match(app, /summary\.previousAverageCheck7d/);
+  assert.match(app, /summary\.completedOperations30d/);
+  assert.match(app, /summary\.previousCompletedOperations30d/);
+  assert.match(app, /summary\.check30d/);
+  assert.match(app, /summary\.previousCheck30d/);
+  assert.match(app, /summary\.averageCheck30d/);
+  assert.match(app, /summary\.previousAverageCheck30d/);
   assert.match(app, /salesDelta/);
   assert.match(app, /averageCheckDelta/);
+  assert.match(app, /periodTrend/);
   assert.match(app, /выручка .*продажи .*ср\. чек/s);
-  assert.match(app, /7д:/);
+  assert.match(app, /7д/);
+  assert.match(app, /30д/);
   assert.match(app, /нет базы сравнения/);
 
   assert.match(html, /id="adminAiCard"/);
