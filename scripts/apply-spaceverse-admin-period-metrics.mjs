@@ -8,6 +8,7 @@ async function patchFile(path, transform) {
 
 function replaceOnce(source, from, to, label) {
   if (source.includes(to)) return source;
+  if (label === 'summary response period metrics' && source.includes('previousAverageCheck30d:')) return source;
   if (!source.includes(from)) throw new Error(`SPACEVERSE period metrics: ${label} anchor missing`);
   return source.replace(from, to);
 }
