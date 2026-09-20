@@ -41,7 +41,7 @@ test('universal server serves all root black-frosted CSS assets before HTML fall
 
 test('materialized shell keeps one canonical stylesheet and strips legacy visual CSS', async () => {
   const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\\.0-spaceverse-purple-home'/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.0-spaceverse-purple-home'/);
   for (const asset of [
     '/v22.css',
     '/red-cosmos-v2.css',
