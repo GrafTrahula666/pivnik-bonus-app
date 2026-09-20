@@ -58,9 +58,16 @@ test('admin V1 exposes real KPI cards and honest AI state', async () => {
   assert.match(app, /summary\.yesterdayCompletedOperations/);
   assert.match(app, /summary\.todayAverageCheck/);
   assert.match(app, /summary\.yesterdayAverageCheck/);
+  assert.match(app, /summary\.completedOperations7d/);
+  assert.match(app, /summary\.previousCompletedOperations7d/);
+  assert.match(app, /summary\.check7d/);
+  assert.match(app, /summary\.previousCheck7d/);
+  assert.match(app, /summary\.averageCheck7d/);
+  assert.match(app, /summary\.previousAverageCheck7d/);
   assert.match(app, /salesDelta/);
   assert.match(app, /averageCheckDelta/);
   assert.match(app, /выручка .*продажи .*ср\. чек/s);
+  assert.match(app, /7д:/);
   assert.match(app, /нет базы сравнения/);
 
   assert.match(html, /id="adminAiCard"/);
