@@ -28,11 +28,21 @@ await patchFile('server.js', (source) => {
   return source;
 });
 
-await patchFile('app.js', (source) => replaceOnce(
-  source,
-  "  $('#metricTodayOps').textContent = `${summary.todayOperations || 0} операций`;",
-  "  const completedToday = Number(summary.todayCompletedOperations || 0);\n  const averageToday = Number(summary.todayAverageCheck || 0);\n  $('#metricTodayOps').textContent = completedToday > 0\n    ? `${completedToday} заверш. · ср. чек ${fmt(averageToday)} ₽`\n    : 'нет завершённых операций';",
-  'dashboard today KPI copy'
-));
+await patchFile('app.js', (source) => {
+  source = replaceOnce(
+    source,
+    "  $('#metricTodayOps').textContent = `${summary.todayOperations || 0} операций`;",
+    "  const completedToday = Number(summary.todayCompletedOperations || 0);\n  const averageToday = Number(summary.todayAverageCheck || 0);\n  $('#metricTodayOps').textContent = completedToday > 0\n    ? `${completedToday} заверш. · ср. чек ${fmt(averageToday)} ₽`\n    : 'нет завершённых операций';",
+    'dashboard today KPI copy'
+  );
+
+  source = replaceOnce(
+    source,
+    "  $('#metricTodayDelta').textContent = yesterdayCheck > 0 ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% ко вчера` : 'нет базы сравнения';",
+    "  const completedYesterday = Number(summary.yesterdayCompletedOperations || 0);\n  const averageYesterday = Number(summary.yesterdayAverageCheck || 0);\n  const salesDelta = completedYesterday > 0 ? ((completedToday - completedYesterday) / completedYesterday) * 100 : null;\n  const averageCheckDelta = averageYesterday > 0 ? ((averageToday - averageYesterday) / averageYesterday) * 100 : null;\n  const deltaParts = [];\n  if (yesterdayCheck > 0) deltaParts.push(`выручка ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`);\n  if (salesDelta !== null) deltaParts.push(`продажи ${salesDelta >= 0 ? '+' : ''}${salesDelta.toFixed(1)}%`);\n  if (averageCheckDelta !== null) deltaParts.push(`ср. чек ${averageCheckDelta >= 0 ? '+' : ''}${averageCheckDelta.toFixed(1)}%`);\n  $('#metricTodayDelta').textContent = deltaParts.length ? `${deltaParts.join(' · ')} ко вчера` : 'нет базы сравнения';",
+    'dashboard period comparison copy'
+  );
+  return source;
+});
 
 console.log('SPACEVERSE admin period metrics applied.');
