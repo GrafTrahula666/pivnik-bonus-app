@@ -94,6 +94,7 @@ const state = {
   adminUsersDirectory: { page: 1, limit: 25, total: 0, pages: 1, busy: false },
   adminUsersFilterTimer: 0,
   adminUsersRequestSeq: 0,
+  customer360UserId: null,
   adminTransactions: [],
   adminInquiries: [],
   shopContact: null,
@@ -3059,6 +3060,158 @@ function adminCrmActivityMarkup(user) {
   }
   return `<br><span class="crm-user-status status-${escapeHtml(user.crmStatus)}">${escapeHtml(status)}</span><span class="crm-user-activity">${escapeHtml(activity)}</span>`;
 }
+function customer360Date(value, withTime = false) {
+  if (!value) return 'Нет данных';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Нет данных';
+  return date.toLocaleString('ru-RU', withTime
+    ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+    : { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function customer360Money(cents) {
+  return `${fmt(Number(cents || 0) / 100)} ₽`;
+}
+
+function customer360ModeLabel(mode) {
+  return ({
+    accrue: 'Покупка · начисление',
+    redeem: 'Покупка · списание',
+    adjustment: 'Ручная корректировка',
+    beer_reward: 'Пивная награда',
+    gift: 'Подарок'
+  })[mode] || mode || 'Операция';
+}
+
+function renderCustomer360(customer) {
+  const title = $('#customer360Title');
+  const subtitle = $('#customer360Subtitle');
+  const metricsRoot = $('#customer360Metrics');
+  const factsRoot = $('#customer360Facts');
+  const historyRoot = $('#customer360History');
+  const errorRoot = $('#customer360Error');
+  if (!title || !subtitle || !metricsRoot || !factsRoot || !historyRoot) return;
+
+  const metrics = customer?.metrics || {};
+  title.textContent = customer?.name || customer?.username || `Клиент #${customer?.id || ''}`;
+  subtitle.textContent = [
+    customer?.username ? `@${customer.username}` : '',
+    customer?.telegramId ? `Telegram ${customer.telegramId}` : '',
+    `ID ${customer?.id || '—'}`
+  ].filter(Boolean).join(' · ');
+  if (errorRoot) {
+    errorRoot.hidden = true;
+    errorRoot.textContent = '';
+  }
+
+  const metricItems = [
+    ['LTV / оборот', customer360Money(metrics.lifetimeCheckCents)],
+    ['Средний чек', customer360Money(metrics.averageCheckCents)],
+    ['Визиты', fmt(metrics.visits)],
+    ['За 30 дней', customer360Money(metrics.spend30dCents)],
+    ['Визиты · 30 дней', fmt(metrics.visits30d)],
+    ['Частота / 30 дней', fmt(metrics.frequency30d)]
+  ];
+  metricsRoot.innerHTML = metricItems.map(([label, value]) => `
+    <div class="customer360-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `).join('');
+
+  const factItems = [
+    ['Последний визит', customer360Date(metrics.lastVisitAt, true)],
+    ['Регистрация', customer360Date(customer?.createdAt)],
+    ['Бонусный баланс', `${compactBonus(customer?.balance)} Б`],
+    ['Начислено бонусов', `${compactBonus(metrics.bonusEarned)} Б`],
+    ['Списано бонусов', `${compactBonus(metrics.bonusSpent)} Б`],
+    ['Пиво оплачено', `${fmtLiters(Number(customer?.beerPaidMlTotal || 0) / 1000)} л`],
+    ['Подарочный баланс', `${fmtLiters(Number(customer?.beerGiftMlBalance || 0) / 1000)} л`],
+    ['Маркетинг', customer?.marketingOptIn ? 'Согласие получено' : 'Нет согласия'],
+    ['QR', customer?.qrShortCode || 'Не создан']
+  ];
+  factsRoot.innerHTML = factItems.map(([label, value]) => `
+    <div class="customer360-fact">
+      <span>${escapeHtml(label)}</span>
+      <b>${escapeHtml(value)}</b>
+    </div>
+  `).join('');
+
+  const history = Array.isArray(customer?.history) ? customer.history : [];
+  historyRoot.className = `customer360-history${history.length ? '' : ' empty-state'}`;
+  historyRoot.innerHTML = history.length ? history.map((item) => {
+    const checkCents = Number(item.check_amount_cents || 0);
+    const earned = Number(item.bonus_earned || 0);
+    const spent = Number(item.bonus_spent || 0);
+    const status = item.status === 'cancelled' ? 'Отменена' : item.status === 'completed' ? 'Завершена' : (item.status || 'Операция');
+    const statusClass = item.status === 'cancelled' ? 'is-cancelled' : 'is-completed';
+    const money = checkCents > 0 ? customer360Money(checkCents) : 'Без чека';
+    const bonusParts = [
+      earned ? `+${fmt(earned)} Б` : '',
+      spent ? `−${fmt(spent)} Б` : ''
+    ].filter(Boolean).join(' · ');
+    const meta = [
+      customer360Date(item.created_at, true),
+      item.staff_name ? `Сотрудник: ${item.staff_name}` : '',
+      bonusParts
+    ].filter(Boolean).join(' · ');
+    const reason = item.cancel_reason || item.reason || '';
+    return `<div class="customer360-history-row ${statusClass}">
+      <div class="customer360-history-main">
+        <div><b>${escapeHtml(customer360ModeLabel(item.mode))}</b><span>${escapeHtml(status)}</span></div>
+        <small>${escapeHtml(meta)}</small>
+        ${reason ? `<p>${escapeHtml(reason)}</p>` : ''}
+      </div>
+      <strong>${escapeHtml(money)}</strong>
+    </div>`;
+  }).join('') : 'Истории операций пока нет';
+}
+
+async function openCustomer360(userId) {
+  const id = String(userId || '').trim();
+  if (!/^\d+$/.test(id)) throw new Error('Некорректный ID клиента.');
+
+  state.customer360UserId = id;
+  const title = $('#customer360Title');
+  const subtitle = $('#customer360Subtitle');
+  const metricsRoot = $('#customer360Metrics');
+  const factsRoot = $('#customer360Facts');
+  const historyRoot = $('#customer360History');
+  const retry = $('#customer360Retry');
+  const errorRoot = $('#customer360Error');
+
+  if (title) title.textContent = 'Загрузка клиента…';
+  if (subtitle) subtitle.textContent = 'Customer 360';
+  if (metricsRoot) metricsRoot.innerHTML = '<div class="customer360-loading">Собираем показатели…</div>';
+  if (factsRoot) factsRoot.innerHTML = '';
+  if (historyRoot) historyRoot.innerHTML = '';
+  if (retry) retry.hidden = true;
+  if (errorRoot) {
+    errorRoot.hidden = true;
+    errorRoot.textContent = '';
+  }
+  openModal('customer360Modal');
+
+  try {
+    const data = await api(`/api/admin/users/${id}`);
+    if (String(state.customer360UserId) !== id) return;
+    renderCustomer360(data.customer);
+  } catch (error) {
+    if (String(state.customer360UserId) !== id) return;
+    if (title) title.textContent = 'Не удалось загрузить клиента';
+    if (subtitle) subtitle.textContent = `ID ${id}`;
+    if (metricsRoot) metricsRoot.innerHTML = '';
+    if (factsRoot) factsRoot.innerHTML = '';
+    if (historyRoot) historyRoot.innerHTML = '';
+    if (errorRoot) {
+      errorRoot.hidden = false;
+      errorRoot.textContent = error.message || 'Ошибка загрузки Customer 360.';
+    }
+    if (retry) retry.hidden = false;
+    throw error;
+  }
+}
+
 function renderUsers(users, target = '#usersList', compact = false) {
   const root = $(target);
   if (!root) return;
@@ -3097,19 +3250,26 @@ function renderUsers(users, target = '#usersList', compact = false) {
     const possibleMatchNote = possibleMatch
       ? `<br><span class="user-pin-state">Возможное совпадение: ${escapeHtml(possibleMatch.name || possibleMatch.username || possibleMatch.id)} · только подсказка, без объединения</span>`
       : '';
-    const crmActivity = adminCrmActivityMarkup(user);
-    const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
-      ? `<div class="user-actions">
-          <select data-role-user="${user.id}">
+const crmActivity = adminCrmActivityMarkup(user);
+    const roleLabel = user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент';
+    const customerCardButton = user.role === 'client'
+      ? `<button class="text-btn customer360-open-button" data-customer360-user="${user.id}" type="button">Карточка клиента</button>`
+      : '';
+    const canManageUser = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin';
+    const controls = compact
+      ? `<small>${roleLabel}</small>`
+      : `<div class="user-actions">
+          ${customerCardButton}
+          ${canManageUser ? `<select data-role-user="${user.id}">
             <option value="client" ${user.role === 'client' ? 'selected' : ''}>Клиент</option>
             <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Бармен</option>
             <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Партнёрский обзор</option>
           </select>
           <button class="text-btn" data-adjust-user="${user.id}" type="button">Баланс</button>
           ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button><button class="text-btn" data-reset-cancel-user="${user.id}" type="button">Сбросить отмены</button>` : ''}
-          <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
-        </div>`
-      : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
+          <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>` : `<small class="user-role-readonly">${roleLabel}</small>`}
+        </div>`;
+
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
       <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${crmActivity}${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
@@ -3117,6 +3277,9 @@ function renderUsers(users, target = '#usersList', compact = false) {
     </div>`;
   }).join('') : 'Пользователи не найдены';
 
+  root.querySelectorAll('[data-customer360-user]').forEach((button) => button.addEventListener('click', () => {
+    openCustomer360(button.dataset.customer360User).catch((error) => toast(error.message));
+  }));
   root.querySelectorAll('[data-role-user]').forEach((select) => select.addEventListener('change', async () => {
     try {
       await api(`/api/admin/users/${select.dataset.roleUser}/role`, { method: 'POST', body: JSON.stringify({ role: select.value }) });
@@ -3305,6 +3468,7 @@ $('#saveQrCard')?.addEventListener('click', () => saveQrCardImage().catch((error
 $('#addAppleWallet')?.addEventListener('click', () => openWalletIssuer('apple').catch((error) => toast(error.message)));
 $('#addGoogleWallet')?.addEventListener('click', () => openWalletIssuer('google').catch((error) => toast(error.message)));
 $('#openAllUsers')?.addEventListener('click', () => openAllUsers().catch((error) => toast(error.message)));
+$('#customer360Retry')?.addEventListener('click', () => { if (state.customer360UserId) openCustomer360(state.customer360UserId).catch((error) => toast(error.message)); });
 $('#openAllUsersFromCard')?.addEventListener('click', () => openAllUsers().catch((error) => toast(error.message)));
 $('#openAllTransactions')?.addEventListener('click', () => openAllTransactions().catch((error) => toast(error.message)));
 $('#openAllTransactionsFromCard')?.addEventListener('click', () => openAllTransactions().catch((error) => toast(error.message)));
