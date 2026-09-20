@@ -1039,7 +1039,7 @@ function currentLevelIndex() {
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
-  // RED_COSMOS_V2_THEME_LOCK compatibility marker.
+  // SPACEVERSE_CANONICAL_THEME_LOCK
   // SPACEVERSE purple is the canonical client palette; server settings may change copy/radius, never product colors.
   const root = document.documentElement;
   root.style.setProperty('--bg', '#070611');
