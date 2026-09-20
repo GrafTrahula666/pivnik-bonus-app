@@ -151,11 +151,18 @@ try {
     assert.equal(await page.locator('#qrToken').textContent(), 'TEST4242');
     await page.locator('[data-close="qrModal"]').click();
     await page.locator('#qrModal').waitFor({ state: 'hidden' });
-    await page.locator('#openShopButton').click();
+    // Shop is intentionally absent from the redesigned home screen. Verify the
+    // existing feature through its supported Profile entry instead of requiring
+    // a hidden compatibility button to become visible again.
+    await page.locator('.bottom-nav [data-target="profile"]').click();
+    await page.locator('[data-screen="profile"]').waitFor({ state: 'visible' });
+    await page.locator('#openProfileShop').click();
     await page.locator('#shopModal').waitFor({ state: 'visible' });
     await page.locator('[data-close="shopModal"]').click();
     await page.locator('#shopModal').waitFor({ state: 'hidden' });
-    // A delayed visual fallback can briefly reopen Shop in the synthetic fixture
+    await page.locator('.bottom-nav [data-target="client"]').click();
+    await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
+    // A delayed interaction fallback can briefly reopen Shop in the synthetic fixture
     // even after the real close handler already succeeded. Exercise only public UI
     // and retry the Wheel transition with a hard bound so the smoke does not fail
     // on that timing window while still proving the modal can be closed by a user.
