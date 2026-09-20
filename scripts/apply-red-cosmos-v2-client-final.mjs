@@ -21,7 +21,7 @@ function replaceRequired(from, to, label) {
 }
 
 if (!source.includes(MARKER)) {
-  source = source.replace(/const APP_VERSION = '[^']+';/, "const APP_VERSION = '2.0-red-cosmos';");
+  source = source.replace(/const APP_VERSION = '[^']+';/, "const APP_VERSION = '20.0-spaceverse-purple-home';");
   replaceOptional("  selectedShopItem: 'craft-05',", "  selectedShopItem: 'frame-beer-mugs',");
 
   replaceOptional("function renderWheelStatus() {\n  if (IS_VK) return;", "function renderWheelStatus() {");
