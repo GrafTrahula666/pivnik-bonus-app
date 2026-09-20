@@ -66,8 +66,10 @@ const app = await fs.readFile(appPath, 'utf8');
 if (!app.includes('SPACEVERSE_CANONICAL_THEME_LOCK')) {
   throw new Error('Canonical SPACEVERSE palette lock is missing from app.js');
 }
-if (!app.includes("const APP_VERSION = '20.0-spaceverse-purple-home';")) {
-  throw new Error('Canonical client version is missing from app.js');
+const shellInputVersionSupported = app.includes("const APP_VERSION = '22.0-pivnik-rebuild';")
+  || app.includes("const APP_VERSION = '20.0-spaceverse-purple-home';");
+if (!shellInputVersionSupported) {
+  throw new Error('Unsupported client version reached canonical shell finalization');
 }
 
 console.log('Canonical SPACEVERSE purple shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');
