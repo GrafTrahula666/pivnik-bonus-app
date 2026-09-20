@@ -21,11 +21,11 @@ test('RED COSMOS final scripts are wired into materialize and prestart in a dete
 
 test('startup shell retires legacy visual layers and preserves only the interaction fallback', async () => {
   const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\\.0-spaceverse-purple-home'/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.0-spaceverse-purple-home'/);
   assert.match(shell, /forbiddenVisualAssets/);
-  assert.match(shell, /\/red-cosmos-v2\\.css/);
-  assert.match(shell, /\/black-frosted-glass\\.css/);
-  assert.match(shell, /\/red-cosmos-v2\\.js\\?v=2\\.0\\.0/);
+  assert.match(shell, /\/red-cosmos-v2\.css/);
+  assert.match(shell, /\/black-frosted-glass\.css/);
+  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
   assert.match(shell, /SPACEVERSE_CANONICAL_THEME_LOCK/);
 });
 
