@@ -4,6 +4,35 @@ function normalizeUserId(value) {
   return id;
 }
 
+function deriveLifecycle({ visits, lastVisitAt, createdAt }, nowMs = Date.now()) {
+  const createdAtMs = Date.parse(createdAt || '');
+  const lastVisitAtMs = Date.parse(lastVisitAt || '');
+  const daysSinceLastVisit = Number.isFinite(lastVisitAtMs)
+    ? Math.max(0, Math.floor((nowMs - lastVisitAtMs) / 86_400_000))
+    : null;
+  const accountAgeDays = Number.isFinite(createdAtMs)
+    ? Math.max(0, Math.floor((nowMs - createdAtMs) / 86_400_000))
+    : null;
+
+  if (!visits) {
+    return Object.freeze({
+      status: accountAgeDays != null && accountAgeDays <= 30 ? 'new' : 'no_visits',
+      daysSinceLastVisit: null,
+      accountAgeDays
+    });
+  }
+  if (daysSinceLastVisit == null) {
+    return Object.freeze({ status: 'unknown', daysSinceLastVisit: null, accountAgeDays });
+  }
+  if (daysSinceLastVisit <= 30) {
+    return Object.freeze({ status: 'active', daysSinceLastVisit, accountAgeDays });
+  }
+  if (daysSinceLastVisit <= 60) {
+    return Object.freeze({ status: 'at_risk', daysSinceLastVisit, accountAgeDays });
+  }
+  return Object.freeze({ status: 'sleeping', daysSinceLastVisit, accountAgeDays });
+}
+
 /**
  * Read-only Customer 360 projection for the admin CRM.
  * Financial KPIs deliberately use completed sales only. Adjustments, rewards,
@@ -86,6 +115,11 @@ export function createCustomer360Repository({ query }) {
     const frequency30d = accountAgeDays
       ? Number((visits / Math.max(1, accountAgeDays / 30)).toFixed(2))
       : 0;
+    const lifecycle = deriveLifecycle({
+      visits,
+      lastVisitAt: row.last_visit_at,
+      createdAt: row.created_at
+    });
 
     return Object.freeze({
       id: String(row.id),
@@ -99,6 +133,7 @@ export function createCustomer360Repository({ query }) {
       balance: Number(row.balance || 0),
       beerPaidMlTotal: Number(row.paid_ml_total || 0),
       beerGiftMlBalance: Number(row.gift_ml_balance || 0),
+      lifecycle,
       metrics: Object.freeze({
         visits,
         visits30d: Number(row.visits_30d || 0),
