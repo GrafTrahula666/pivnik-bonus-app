@@ -19,12 +19,13 @@ test('RED COSMOS final scripts are wired into materialize and prestart in a dete
   assert.doesNotMatch(pkg.scripts.materialize, /red-cosmos-v2-db-prepare\.mjs/);
 });
 
-test('RED COSMOS shell hard-removes obsolete v22 UI assets after legacy code patches', async () => {
+test('startup shell retires legacy visual layers and preserves only the interaction fallback', async () => {
   const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /v22\\\.css/);
-  assert.match(shell, /v22-ui\\\.js/);
-  assert.match(shell, /red-cosmos-v2\.css\?v=2\.0\.0/);
-  assert.match(shell, /red-cosmos-v2\.js\?v=2\.0\.0/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\\.0-spaceverse-purple-home'/);
+  assert.match(shell, /forbiddenVisualAssets/);
+  assert.match(shell, /\/red-cosmos-v2\\.css/);
+  assert.match(shell, /\/black-frosted-glass\\.css/);
+  assert.match(shell, /\/red-cosmos-v2\\.js\\?v=2\\.0\\.0/);
   assert.match(shell, /RED_COSMOS_V2_THEME_LOCK/);
 });
 
