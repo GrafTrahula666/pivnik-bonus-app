@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=19.1-telegram-wheel-v2" />
-  <script defer src="app.js?v=19.1-telegram-wheel-v2"></script>
+  <link rel="stylesheet" href="styles.css?v=20.0-spaceverse-purple-home" />
+  <script defer src="app.js?v=20.0-spaceverse-purple-home"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -52,17 +52,30 @@
 
     <main>
       <section class="screen active client-screen client-home" data-screen="client">
-        <div class="hero-card vip-hero-card">
+        <div class="hero-card vip-hero-card spaceverse-home-hero">
           <div class="hero-glow" aria-hidden="true"></div>
-          <div class="hero-head">
-            <div class="client-identity">
-              <div class="profile-avatar" id="profileAvatar">П</div>
-              <div>
-                <span class="muted" id="balanceLabel">Ваш баланс</span>
-                <strong class="client-name" id="clientName">Гость</strong>
+          <div class="spaceverse-hero-grid">
+            <div class="spaceverse-hero-user">
+              <div class="client-identity">
+                <div class="profile-avatar" id="profileAvatar">П</div>
+                <div>
+                  <strong class="client-name" id="clientName">Гость</strong>
+                  <span class="muted" id="balanceLabel">Ваш баланс</span>
+                </div>
               </div>
+              <div class="balance"><span id="clientBalance">0</span><small>бонусов</small></div>
             </div>
-            <div class="balance"><span id="clientBalance">0</span><small>бонусов</small></div>
+            <div class="spaceverse-hero-brand" aria-label="SPACEVERSE">
+              <svg class="spaceverse-cube-mark" viewBox="0 0 96 96" aria-hidden="true">
+                <g fill="none" stroke="currentColor" stroke-width="2.4">
+                  <path d="M48 8 67 19 48 30 29 19 48 8Z"/><path d="m29 19 19 11v22L29 41V19Z"/><path d="m67 19-19 11v22l19-11V19Z"/>
+                  <path d="M25 29 44 40 25 51 6 40l19-11Z"/><path d="m6 40 19 11v22L6 62V40Z"/><path d="M44 40 25 51v22l19-11V40Z"/>
+                  <path d="M71 29 90 40 71 51 52 40l19-11Z"/><path d="m52 40 19 11v22L52 62V40Z"/><path d="M90 40 71 51v22l19-11V40Z"/>
+                  <path d="M48 50 67 61 48 72 29 61l19-11Z"/><path d="m29 61 19 11v16L29 77V61Z"/><path d="M67 61 48 72v16l19-11V61Z"/>
+                </g>
+              </svg>
+              <strong>SPACEVERSE</strong>
+            </div>
           </div>
 
           <div class="status-divider"></div>
@@ -77,73 +90,88 @@
           <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
 
-        <!-- telegram-wheel:start -->
-        <button class="home-promo-banner vip-glass-card" id="openWheelButton" type="button">
-          <span class="wheel-entry-mark" aria-hidden="true">
-            <svg viewBox="0 0 48 48" role="presentation">
-              <circle cx="24" cy="24" r="18"></circle>
-              <circle cx="24" cy="24" r="4"></circle>
-              <path d="M24 6v14M24 28v14M6 24h14M28 24h14M11.3 11.3l9.9 9.9M26.8 26.8l9.9 9.9M36.7 11.3l-9.9 9.9M21.2 26.8l-9.9 9.9"></path>
-            </svg>
+        <button class="spaceverse-business-card vip-glass-card" id="openSpaceverseBusiness" type="button">
+          <span class="spaceverse-business-copy">
+            <span class="spaceverse-business-brand">
+              <svg class="spaceverse-cube-mark" viewBox="0 0 96 96" aria-hidden="true">
+                <g fill="none" stroke="currentColor" stroke-width="2.4">
+                  <path d="M48 8 67 19 48 30 29 19 48 8Z"/><path d="m29 19 19 11v22L29 41V19Z"/><path d="m67 19-19 11v22l19-11V19Z"/>
+                  <path d="M25 29 44 40 25 51 6 40l19-11Z"/><path d="m6 40 19 11v22L6 62V40Z"/><path d="M44 40 25 51v22l19-11V40Z"/>
+                  <path d="M71 29 90 40 71 51 52 40l19-11Z"/><path d="m52 40 19 11v22L52 62V40Z"/><path d="M90 40 71 51v22l19-11V40Z"/>
+                  <path d="M48 50 67 61 48 72 29 61l19-11Z"/><path d="m29 61 19 11v16L29 77V61Z"/><path d="M67 61 48 72v16l19-11V61Z"/>
+                </g>
+              </svg>
+              <b>SPACEVERSE</b>
+            </span>
+            <strong>У вас свой бизнес?</strong>
+            <em>Подключим приложение бесплатно за 1 день</em>
+            <small>Бонусная система, приложение для гостей, современные инструменты для бизнеса, аналитика и умные AI-возможности.</small>
+            <span class="spaceverse-business-cta">Подробнее <i>›</i></span>
           </span>
-          <span><small>Ежедневная награда</small><strong>Колесо Пивника</strong><em id="homeWheelStatus">Бесплатное вращение раз в 24 часа</em></span>
-          <i>›</i>
+          <span class="spaceverse-business-art" aria-hidden="true">
+            <i class="spaceverse-planet"></i>
+            <i class="spaceverse-moon"></i>
+            <i class="spaceverse-astronaut">
+              <b></b><em></em><span></span>
+            </i>
+          </span>
+        </button>
+
+        <!-- telegram-wheel:start -->
+        <button class="home-wheel-card vip-glass-card" id="openWheelButton" type="button">
+          <span class="home-wheel-copy">
+            <small>Ежедневная награда</small>
+            <strong>Колесо Пивника</strong>
+            <em id="homeWheelStatus">Бесплатное вращение раз в 24 часа</em>
+            <b class="home-wheel-cta">Крутить сейчас <i>›</i></b>
+          </span>
+          <span class="home-wheel-visual" aria-hidden="true">
+            <i class="home-wheel-pointer"></i>
+            <i class="home-wheel-ring">
+              <b>✦</b><b>◫</b><b>%</b><b>♛</b><b>◫</b><b>✦</b>
+            </i>
+          </span>
         </button>
         <!-- telegram-wheel:end -->
 
-        <article class="beer-loyalty-card vip-glass-card" id="beerLoyaltyCard">
-          <div class="beer-card-top">
+        <article class="beer-loyalty-card vip-glass-card beer-loyalty-card--compact" id="beerLoyaltyCard">
+          <div class="beer-compact-main">
             <div>
-              <span class="beer-kicker">Пивная дистанция</span>
+              <span class="beer-kicker">Литровый путь</span>
               <h2>Каждый 15-й литр — бесплатно</h2>
-              <p>Оплатите 14 литров разливного пива — следующий 1 литр бесплатно.</p>
             </div>
             <div class="beer-gift-counter"><strong id="beerGiftBalance">0</strong><small>л подарка</small></div>
           </div>
           <div class="beer-progress-head"><span id="beerProgressText">0 из 14 л</span><b id="beerRemainingText">ещё 14 л</b></div>
           <div class="beer-progress"><i id="beerProgressBar" style="width:0%"></i></div>
-          <div class="beer-card-foot"><span>Объём фиксирует сотрудник при оплате.</span><strong id="beerGiftReady">Подарков пока нет</strong></div>
+          <div class="beer-card-foot"><span>Литры фиксируются при оплате</span><strong id="beerGiftReady">Подарков пока нет</strong></div>
         </article>
 
-        <div class="home-stat-grid">
-          <article class="home-stat-card vip-glass-card">
-            <span class="home-card-kicker">За всё время</span>
-            <strong><span id="totalLitersHome">0</span> л</strong>
-            <small>учтено разливного</small>
-          </article>
-          <button class="home-stat-card vip-glass-card" id="openLeaderboardButton" type="button">
-            <span class="home-card-kicker">Лига Пивника</span>
-            <strong>№<span id="leaguePlaceHome">—</span></strong>
-            <small id="leagueSpentHome">по сумме покупок</small>
-            <i>›</i>
-          </button>
-        </div>
-
-        <div class="home-feature-grid">
-          <div class="achievement-section home-achievement-card vip-glass-card" id="profileAchievementsSection">
-            <div class="compact-card-head"><div><span class="home-card-kicker">Коллекция</span><h2>Достижения</h2></div><button class="section-link" id="openAchievementsButton" type="button">Все</button></div>
-            <div class="achievement-count"><strong id="achievementCountHome">0</strong><span>получено</span></div>
-            <div class="profile-achievement-showcase" id="profileAchievementShowcase"><div class="achievement-empty">Пока нет</div></div>
+        <button class="home-league-card vip-glass-card" id="openLeaderboardButton" type="button">
+          <div class="home-league-head">
+            <div><span class="home-card-kicker">Рейтинг по покупкам</span><h2>Лига бара</h2></div>
+            <span>Весь рейтинг ›</span>
           </div>
-          <!-- telegram-wheel-legacy:start -->
-          <button class="home-shop-card vip-glass-card" id="openShopButton" type="button">
-            <div class="compact-card-head"><div><span class="home-card-kicker">Private stock</span><h2>Магазин</h2></div><span class="shop-arrow">›</span></div>
-            <span class="home-shop-preview" id="homeShopPreview" aria-live="polite"><span class="home-shop-preview-fallback">П</span></span>
-            <strong id="homeShopCaption">Крафт, награды и коллекционные вещи</strong>
-            <span class="shop-cta">В магазин</span>
-          </button>
-          <!-- telegram-wheel-legacy:end -->
+          <div class="home-league-podium" id="homeLeaderboardPreview" aria-live="polite">
+            <span><i>1</i><b>Пока свободно</b><strong>— ₽</strong></span>
+            <span><i>2</i><b>Пока свободно</b><strong>— ₽</strong></span>
+            <span><i>3</i><b>Пока свободно</b><strong>— ₽</strong></span>
+          </div>
+          <span class="home-league-compat" aria-hidden="true">№<i id="leaguePlaceHome">—</i><small id="leagueSpentHome">по сумме покупок</small></span>
+        </button>
+
+        <div class="home-legacy-entrypoints hidden" aria-hidden="true">
+          <span id="totalLitersHome">0</span>
+          <div class="achievement-section" id="profileAchievementsSection">
+            <button id="openAchievementsButton" type="button">Достижения</button>
+            <span id="achievementCountHome">0</span>
+            <div id="profileAchievementShowcase"></div>
+          </div>
+          <button id="openShopButton" type="button"><span id="homeShopPreview"></span><span id="homeShopCaption"></span></button>
+          <button id="openPromosButton" type="button" data-config-section="promos"><span id="homePromoTitle"></span></button>
         </div>
 
-        <!-- telegram-wheel-legacy:start -->
-        <button class="home-promo-banner vip-glass-card" id="openPromosButton" type="button" data-config-section="promos">
-          <span class="promo-orbit">✦</span>
-          <span><small>Активная акция</small><strong id="homePromoTitle">Orange Blanche 1+1=3</strong><em>Все предложения в разделе «Акции»</em></span>
-          <i>›</i>
-        </button>
-        <!-- telegram-wheel-legacy:end -->
-
-        <div class="byline" id="byline">by Kirill Gamilton △</div>
+        <div class="byline hidden" id="byline">by Kirill Gamilton △</div>
       </section>
 
       <!-- telegram-wheel:start -->
