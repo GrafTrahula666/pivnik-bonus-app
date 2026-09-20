@@ -249,7 +249,8 @@ async function verifyMaterializedState() {
   const pkg = JSON.parse(pkgText);
   const failures = [];
   if (pkg.scripts?.start !== FINAL_START_COMMAND) failures.push('package.json start');
-  const supportedAppVersion = app.includes("const APP_VERSION = '19.1-telegram-wheel-v2';")
+  const supportedAppVersion = app.includes("const APP_VERSION = '20.0-spaceverse-purple-home';")
+    || app.includes("const APP_VERSION = '19.1-telegram-wheel-v2';")
     || app.includes("const APP_VERSION = '2.0-red-cosmos';");
   if (!supportedAppVersion) failures.push('app.js version');
   if (!app.includes("profileFrame === 'vladislav'")) failures.push('app.js Vladislav frame');
