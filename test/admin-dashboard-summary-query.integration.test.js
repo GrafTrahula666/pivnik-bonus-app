@@ -49,12 +49,18 @@ test('optimized admin summary SQL preserves KPI and period semantics on PostgreS
       activeClients30d: Number(row.active_clients_30d), inactiveClients30d: Number(row.inactive_clients_30d),
       issued: Number(row.issued), redeemed: Number(row.redeemed), todayOps: Number(row.today_ops),
       todayCompletedOps: Number(row.today_completed_ops), yesterdayCompletedOps: Number(row.yesterday_completed_ops),
+      completedOps7d: Number(row.completed_ops_7d), previousCompletedOps7d: Number(row.previous_completed_ops_7d),
+      checkCents7d: Number(row.check_cents_7d), previousCheckCents7d: Number(row.previous_check_cents_7d),
+      completedOps30d: Number(row.completed_ops_30d), previousCompletedOps30d: Number(row.previous_completed_ops_30d),
+      checkCents30d: Number(row.check_cents_30d), previousCheckCents30d: Number(row.previous_check_cents_30d),
       todayCheckCents: Number(row.today_check_cents), yesterdayCheckCents: Number(row.yesterday_check_cents),
       lifetimeCheckCents: Number(row.lifetime_check_cents), suspiciousOps: Number(row.suspicious_ops),
       cancelledToday: Number(row.cancelled_today)
     }, {
       clients: 4, newClients7d: 1, activeClients30d: 1, inactiveClients30d: 1,
       issued: 110, redeemed: 11, todayOps: 3, todayCompletedOps: 2, yesterdayCompletedOps: 1,
+      completedOps7d: 3, previousCompletedOps7d: 0, checkCents7d: 6000, previousCheckCents7d: 0,
+      completedOps30d: 3, previousCompletedOps30d: 1, checkCents30d: 6000, previousCheckCents30d: 5000,
       todayCheckCents: 4000, yesterdayCheckCents: 2000, lifetimeCheckCents: 11000,
       suspiciousOps: 1, cancelledToday: 1
     });
