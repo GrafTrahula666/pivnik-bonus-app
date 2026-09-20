@@ -29,19 +29,21 @@ await patchFile('server.js', (source) => {
 });
 
 await patchFile('app.js', (source) => {
-  source = replaceOnce(
-    source,
-    "  $('#metricTodayOps').textContent = `${summary.todayOperations || 0} операций`;",
-    "  const completedToday = Number(summary.todayCompletedOperations || 0);\n  const averageToday = Number(summary.todayAverageCheck || 0);\n  $('#metricTodayOps').textContent = completedToday > 0\n    ? `${completedToday} заверш. · ср. чек ${fmt(averageToday)} ₽`\n    : 'нет завершённых операций';",
-    'dashboard today KPI copy'
-  );
+  const todayLegacy = "  $('#metricTodayOps').textContent = `${summary.todayOperations || 0} операций`;";
+  const todayPatched = "  const completedToday = Number(summary.todayCompletedOperations || 0);\n  const averageToday = Number(summary.todayAverageCheck || 0);\n  $('#metricTodayOps').textContent = completedToday > 0\n    ? `${completedToday} заверш. · ср. чек ${fmt(averageToday)} ₽`\n    : 'нет завершённых операций';";
+  const comparisonLegacy = "  $('#metricTodayDelta').textContent = yesterdayCheck > 0 ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% ко вчера` : 'нет базы сравнения';";
+  const comparisonPatched = "  const completedYesterday = Number(summary.yesterdayCompletedOperations || 0);\n  const averageYesterday = Number(summary.yesterdayAverageCheck || 0);\n  const salesDelta = completedYesterday > 0 ? ((completedToday - completedYesterday) / completedYesterday) * 100 : null;\n  const averageCheckDelta = averageYesterday > 0 ? ((averageToday - averageYesterday) / averageYesterday) * 100 : null;\n  const deltaParts = [];\n  if (yesterdayCheck > 0) deltaParts.push(`выручка ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`);\n  if (salesDelta !== null) deltaParts.push(`продажи ${salesDelta >= 0 ? '+' : ''}${salesDelta.toFixed(1)}%`);\n  if (averageCheckDelta !== null) deltaParts.push(`ср. чек ${averageCheckDelta >= 0 ? '+' : ''}${averageCheckDelta.toFixed(1)}%`);\n  $('#metricTodayDelta').textContent = deltaParts.length ? `${deltaParts.join(' · ')} ко вчера` : 'нет базы сравнения';";
 
-  source = replaceOnce(
-    source,
-    "  $('#metricTodayDelta').textContent = yesterdayCheck > 0 ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% ко вчера` : 'нет базы сравнения';",
-    "  const completedYesterday = Number(summary.yesterdayCompletedOperations || 0);\n  const averageYesterday = Number(summary.yesterdayAverageCheck || 0);\n  const salesDelta = completedYesterday > 0 ? ((completedToday - completedYesterday) / completedYesterday) * 100 : null;\n  const averageCheckDelta = averageYesterday > 0 ? ((averageToday - averageYesterday) / averageYesterday) * 100 : null;\n  const deltaParts = [];\n  if (yesterdayCheck > 0) deltaParts.push(`выручка ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`);\n  if (salesDelta !== null) deltaParts.push(`продажи ${salesDelta >= 0 ? '+' : ''}${salesDelta.toFixed(1)}%`);\n  if (averageCheckDelta !== null) deltaParts.push(`ср. чек ${averageCheckDelta >= 0 ? '+' : ''}${averageCheckDelta.toFixed(1)}%`);\n  $('#metricTodayDelta').textContent = deltaParts.length ? `${deltaParts.join(' · ')} ко вчера` : 'нет базы сравнения';",
-    'dashboard period comparison copy'
-  );
+  // app.js contains the canonical VK startup path. Never fail a lifecycle run
+  // merely because an older materializer restored an admin UI variant without
+  // these optional Dashboard anchors. Patch when the anchors exist; otherwise
+  // leave startup code byte-for-byte untouched and let the canonical source win.
+  if (!source.includes(todayPatched) && source.includes(todayLegacy)) {
+    source = source.replace(todayLegacy, todayPatched);
+  }
+  if (!source.includes(comparisonPatched) && source.includes(comparisonLegacy)) {
+    source = source.replace(comparisonLegacy, comparisonPatched);
+  }
   return source;
 });
 
