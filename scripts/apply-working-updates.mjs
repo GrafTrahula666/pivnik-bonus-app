@@ -28,6 +28,8 @@ const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base
 // Applied SQL migrations are immutable. Updates to RED COSMOS recipients live in migration 008.
 delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
 // VK runtime is canonical source. Never restore an archived startup implementation.
+delete runtimeFiles['app.js'];
+delete runtimeFiles['index.html'];
 delete runtimeFiles['vk-platform.js'];
 // DB prepare is canonical source too. Its startup safety/logging fixes must survive materialization.
 delete runtimeFiles['scripts/red-cosmos-v2-db-prepare.mjs'];
