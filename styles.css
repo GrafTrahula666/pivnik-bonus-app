@@ -6927,3 +6927,335 @@ body {
   .home-league-podium > span { padding: 6px; grid-template-columns: 22px minmax(0,1fr); gap: 2px 5px; }
   .home-league-podium i { width: 22px; height: 22px; }
 }
+
+
+/* SPACEVERSE V20 · compact premium hero + business card */
+.spaceverse-home-hero {
+  padding: 11px 12px 10px;
+  border-color: rgba(190, 143, 54, .34);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.88), rgba(247,242,232,.72)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.92),
+    0 12px 30px rgba(78,55,24,.13);
+  backdrop-filter: blur(16px) saturate(112%);
+  -webkit-backdrop-filter: blur(16px) saturate(112%);
+  color: #171717;
+}
+
+.spaceverse-home-hero::after {
+  border-color: rgba(189,142,50,.18);
+  box-shadow: none;
+}
+
+.spaceverse-hero-grid {
+  grid-template-columns: minmax(0, 1.6fr) minmax(92px, .58fr);
+  gap: 9px;
+}
+
+.spaceverse-hero-user {
+  gap: 7px;
+}
+
+.spaceverse-home-hero .client-identity {
+  gap: 9px;
+}
+
+.spaceverse-home-hero .client-identity > .hero-identity-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.hero-name-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.spaceverse-home-hero .client-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #151515;
+  font-size: 18px;
+  font-weight: 860;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-qr-button {
+  display: inline-flex;
+  min-width: 42px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0 8px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgba(181,128,32,.34);
+  border-radius: 11px;
+  background: linear-gradient(145deg, rgba(255,255,255,.82), rgba(225,193,137,.31));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 4px 12px rgba(122,83,20,.09);
+  color: #9b650c;
+}
+.hero-qr-button span { font-size: 17px; line-height: 1; }
+.hero-qr-button small { font-size: 8px; font-weight: 850; letter-spacing: .06em; }
+
+.spaceverse-home-hero #balanceLabel {
+  margin-top: 3px;
+  color: #6d675d;
+  font-size: 10px;
+}
+
+.spaceverse-home-hero .profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  border-color: rgba(190,139,45,.5);
+  background: linear-gradient(145deg, rgba(255,255,255,.95), rgba(238,220,184,.72));
+  box-shadow: 0 0 0 3px rgba(190,139,45,.06);
+  color: #a96f12;
+  font-size: 21px;
+}
+
+.spaceverse-home-hero .balance {
+  gap: 6px;
+  margin-top: 0;
+  color: #161616;
+  font-size: 31px;
+  line-height: .95;
+}
+.spaceverse-home-hero .balance > span {
+  background: linear-gradient(110deg, #9c6208, #d69b31 46%, #a66a0d 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter: none;
+}
+.spaceverse-home-hero .balance small {
+  color: #39342d;
+  font-size: 10px;
+}
+
+.spaceverse-hero-brand {
+  min-height: 82px;
+  gap: 3px;
+  border-left-color: rgba(177,129,40,.2);
+  color: #b47a18;
+}
+.spaceverse-hero-brand::before {
+  width: 88px;
+  height: 88px;
+  background: radial-gradient(circle, rgba(217,168,73,.16), transparent 70%);
+}
+.spaceverse-hero-brand .spaceverse-cube-mark {
+  width: 54px;
+  height: 54px;
+}
+.spaceverse-hero-brand strong {
+  color: #2c2924;
+  font-size: 8px;
+  font-weight: 820;
+  letter-spacing: .2em;
+}
+
+.spaceverse-cube-mark--gold {
+  color: #c68b24;
+  filter: drop-shadow(0 4px 7px rgba(129,83,12,.18));
+}
+.spaceverse-cube-mark--gold .cube-top { fill: #f5cf7a; }
+.spaceverse-cube-mark--gold .cube-left { fill: #bd7914; }
+.spaceverse-cube-mark--gold .cube-right { fill: #dda43a; }
+
+.spaceverse-home-hero .status-divider {
+  margin: 7px 0 6px;
+  background: linear-gradient(90deg, transparent, rgba(177,126,34,.32), transparent);
+}
+.spaceverse-home-hero .status-button {
+  margin-top: 0;
+}
+.spaceverse-home-hero .status-caption {
+  color: #8b7b60;
+  font-size: 8px;
+}
+.spaceverse-home-hero .status-name {
+  margin-top: 1px;
+  color: #191919;
+  font-size: 14px;
+}
+.spaceverse-home-hero .cashback-orbit {
+  width: 45px;
+  height: 45px;
+  border-color: rgba(185,133,38,.38);
+  background: rgba(255,255,255,.48);
+  box-shadow: inset 0 0 16px rgba(197,145,46,.08);
+}
+.spaceverse-home-hero .cashback-orbit strong {
+  color: #a56c12;
+  font-size: 16px;
+}
+.spaceverse-home-hero .cashback-orbit small {
+  color: #8a806f;
+  font-size: 6px;
+}
+.spaceverse-home-hero .progress {
+  height: 6px;
+  margin: 6px 0 5px;
+  border-color: rgba(175,126,38,.18);
+  background: rgba(120,98,65,.14);
+}
+.spaceverse-home-hero .progress i {
+  background: linear-gradient(90deg, #b77917, #e4b357 60%, #c78a25);
+  box-shadow: none;
+}
+.spaceverse-home-hero .max-status-line {
+  margin-top: 0;
+  color: #776e60;
+  font-size: 8px;
+}
+.spaceverse-home-hero .max-status-line strong { color: #a66d14; }
+
+.spaceverse-business-card {
+  min-height: 158px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(96px, .62fr);
+  gap: 6px;
+  padding: 12px 13px;
+  border-color: rgba(190,143,54,.34);
+  background:
+    radial-gradient(circle at 78% 18%, rgba(255,255,255,.54), transparent 25%),
+    linear-gradient(145deg, rgba(255,255,255,.9), rgba(244,237,222,.76)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.94),
+    0 12px 30px rgba(78,55,24,.12);
+  color: #171717;
+  backdrop-filter: blur(16px) saturate(110%);
+  -webkit-backdrop-filter: blur(16px) saturate(110%);
+}
+.spaceverse-business-card::after {
+  background:
+    linear-gradient(90deg, transparent 0 62%, rgba(208,166,90,.08) 100%);
+}
+.spaceverse-business-brand {
+  gap: 6px;
+  color: #b77917;
+}
+.spaceverse-business-brand .spaceverse-cube-mark {
+  width: 23px;
+  height: 23px;
+}
+.spaceverse-business-brand b {
+  color: #28241e;
+  font-size: 8px;
+  letter-spacing: .21em;
+}
+.spaceverse-business-copy > strong {
+  margin-top: 6px;
+  color: #111;
+  font-size: 19px;
+  line-height: 1;
+}
+.spaceverse-business-copy > em {
+  margin-top: 4px;
+  color: #a7670a;
+  font-size: 10px;
+  line-height: 1.18;
+}
+.spaceverse-business-copy > small {
+  max-width: 250px;
+  margin-top: 4px;
+  color: #5f594f;
+  font-size: 8px;
+  line-height: 1.28;
+}
+.spaceverse-business-cta {
+  min-height: 29px;
+  gap: 16px;
+  margin-top: 7px;
+  padding: 0 12px;
+  border-color: rgba(174,118,25,.42);
+  border-radius: 11px;
+  background: linear-gradient(135deg, #b97715, #e0ad4b);
+  box-shadow: 0 5px 14px rgba(148,94,13,.15), inset 0 1px 0 rgba(255,255,255,.4);
+  color: #fff;
+  font-size: 9px;
+}
+.spaceverse-business-cta i { font-size: 15px; }
+
+.spaceverse-business-art {
+  min-height: 132px;
+}
+.spaceverse-business-card .spaceverse-planet {
+  width: 118px;
+  height: 118px;
+  right: -31px;
+  top: -13px;
+  background:
+    radial-gradient(circle at 36% 32%, rgba(255,240,196,.9), rgba(213,169,90,.56) 31%, rgba(101,72,29,.94) 69%),
+    #6f4a1d;
+  box-shadow: inset -19px -14px 28px rgba(59,34,7,.32), 0 0 28px rgba(210,161,76,.2);
+}
+.spaceverse-business-card .spaceverse-planet::after {
+  width: 143px;
+  height: 29px;
+  left: -14px;
+  top: 44px;
+  border-width: 2px;
+  border-color: rgba(196,139,43,.4);
+  border-left-color: rgba(238,208,148,.66);
+  border-right-color: rgba(142,89,18,.22);
+}
+.spaceverse-business-card .spaceverse-moon {
+  width: 15px;
+  height: 15px;
+  right: 72px;
+  top: 18px;
+  background: #d5aa5b;
+  box-shadow: inset -4px -3px 7px rgba(74,43,5,.28), 0 0 8px rgba(191,139,50,.2);
+}
+.spaceverse-business-card .spaceverse-astronaut {
+  right: 10px;
+  bottom: -13px;
+  transform: scale(.78);
+  transform-origin: right bottom;
+  filter: drop-shadow(0 5px 10px rgba(92,59,15,.2));
+}
+.spaceverse-business-card .spaceverse-astronaut::before {
+  border-color: rgba(202,157,79,.72);
+  background:
+    radial-gradient(circle at 38% 35%, rgba(255,221,153,.5), transparent 24%),
+    linear-gradient(145deg, #6f542d, #21160b 65%);
+  box-shadow: inset 0 0 16px rgba(229,186,103,.18);
+}
+.spaceverse-business-card .spaceverse-astronaut::after {
+  border-color: rgba(190,145,68,.5);
+  background: linear-gradient(145deg, #f2eadb, #b9a17b);
+}
+.spaceverse-business-card .spaceverse-astronaut > b {
+  border-color: #c98b27;
+  box-shadow: 0 0 8px rgba(190,130,35,.28);
+}
+.spaceverse-business-card .spaceverse-astronaut > em,
+.spaceverse-business-card .spaceverse-astronaut > span {
+  border-color: rgba(175,132,65,.5);
+  background: #d9c8aa;
+}
+
+@media (max-width: 390px) {
+  .spaceverse-home-hero { padding: 10px 11px 9px; }
+  .spaceverse-hero-grid { grid-template-columns: minmax(0, 1.65fr) 82px; }
+  .spaceverse-hero-brand .spaceverse-cube-mark { width: 47px; height: 47px; }
+  .spaceverse-business-card {
+    min-height: 150px;
+    grid-template-columns: minmax(0, 1.62fr) 86px;
+    padding: 11px 12px;
+  }
+  .spaceverse-business-copy > small { font-size: 7.5px; }
+}
+
+@media (max-width: 350px) {
+  .spaceverse-business-card { grid-template-columns: minmax(0, 1fr) 72px; }
+  .spaceverse-business-art { display: block; opacity: .8; }
+}
