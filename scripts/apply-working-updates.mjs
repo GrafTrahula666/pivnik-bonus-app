@@ -221,12 +221,15 @@ app = replaceRequired(
 await writeText('app.js', app);
 
 let index = await readText('index.html');
-index = replaceRequired(
-  index,
-  `<meta name="theme-color" content="#0b0e13" />`,
-  `<meta name="theme-color" content="#6f3cff" />`,
-  'RED COSMOS theme color'
-);
+// Home visuals are canonical in index.html/styles.css. Materialization may repair
+// a pre-canonical dark shell, but it must never paint the current white-gold UI
+// back to an obsolete RED COSMOS/purple theme.
+if (index.includes('<meta name="theme-color" content="#0b0e13" />')) {
+  index = index.replace(
+    '<meta name="theme-color" content="#0b0e13" />',
+    '<meta name="theme-color" content="#f4eee4" />'
+  );
+}
 if (index.includes('        <div class="boot-badge">Пивник | Бонусы</div>\n')) {
   index = index.replace('        <div class="boot-badge">Пивник | Бонусы</div>\n', '');
 }
@@ -242,7 +245,7 @@ if (!app.includes('Achievement hub refresh skipped:')) failures.push('achievemen
 if (!platformCore.includes('export function isConfiguredOwnerIdentity(')) failures.push('configured owner identity helper');
 if (!gateway.includes('isConfiguredOwnerIdentity(provider, externalUser.id')) failures.push('provider owner identity mapping');
 if (!gateway.includes('Authorization is independent from profile-metadata ownership')) failures.push('owner role reconciliation');
-if (!index.includes('<meta name="theme-color" content="#6f3cff" />')) failures.push('theme color');
+if (!index.includes('<meta name="theme-color" content="#f4eee4" />')) failures.push('theme color');
 if (index.includes('<div class="boot-badge">Пивник | Бонусы</div>')) failures.push('boot badge');
 const finalCss = await readText('red-cosmos-v2.css');
 if (!finalCss.includes(releaseQrGuard)) failures.push('release QR guard');
