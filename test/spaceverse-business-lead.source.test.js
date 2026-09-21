@@ -17,7 +17,9 @@ test('SPACEVERSE business card opens a real lead page and submits through the ex
   assert.match(index, /id="spaceverseLeadName"/);
   assert.match(index, /id="spaceverseLeadPhone"/);
   assert.match(index, /id="spaceverseLeadSubmit"/);
-  assert.match(index, /Запустим приложение для вашего бизнеса бесплатно за 1 день/);
+  assert.match(index, /Информация о SPACEVERSE/);
+  assert.match(index, /Содержимое страницы будет добавлено позже/);
+  assert.match(index, /class="spaceverse-business-cta" id="openSpaceverseBusiness"/);
 
   assert.match(app, /function openSpaceverseBusinessPage\(\)/);
   assert.match(app, /async function submitSpaceverseBusinessLead\(\)/);
