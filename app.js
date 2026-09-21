@@ -612,7 +612,7 @@ function wheelSectorPath(start, end) {
 }
 
 function renderWheelArtwork() {
-  if (IS_VK || state.wheel.artworkReady) return;
+  if (state.wheel.artworkReady) return;
   const disk = $('#wheelDisk');
   if (!disk) return;
   disk.innerHTML = WHEEL_VISUAL_SECTORS.map((sector, index) => {
@@ -648,7 +648,6 @@ function effectiveWheelStatus() {
 }
 
 function renderWheelStatus() {
-  if (IS_VK) return;
   const current = effectiveWheelStatus();
   const button = $('#wheelSpinButton');
   const availability = $('#wheelAvailability');
@@ -705,7 +704,7 @@ function renderWheelStatus() {
 }
 
 function startWheelCountdown() {
-  if (IS_VK || state.wheel.countdownTimer) return;
+  if (state.wheel.countdownTimer) return;
   state.wheel.countdownTimer = window.setInterval(() => {
     const before = state.wheel.status?.freeAvailable;
     renderWheelStatus();
@@ -718,7 +717,7 @@ function startWheelCountdown() {
 }
 
 async function loadWheelStatus() {
-  if (IS_VK || !state.token || !state.profile?.termsAccepted) return null;
+  if (!state.token || !state.profile?.termsAccepted) return null;
   const status = await api('/api/wheel/status', { retries: 0, timeoutMs: 7000 });
   state.wheel.status = status;
   renderWheelStatus();
@@ -768,7 +767,7 @@ function clearPendingWheelRequest(requestKey) {
 }
 
 async function spinWheel() {
-  if (IS_VK || state.wheel.busy) return;
+  if (state.wheel.busy) return;
   const disk = $('#wheelDisk');
   if (!disk) return;
   // Lock before the first await so status loading cannot admit a second click.
@@ -839,7 +838,6 @@ async function spinWheel() {
 }
 
 function openWheel() {
-  if (IS_VK) return;
   renderWheelArtwork();
   switchScreen('wheel');
   loadWheelStatus().catch((error) => toast(error.message));
@@ -1947,7 +1945,7 @@ async function refreshMe() {
   const data = await api('/api/me');
   applyProfilePayload(data);
   void loadSecondaryData();
-  if (!IS_VK) void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
+  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
 }
 
 async function waitForTelegramInitData(maxWaitMs = 2800) {
@@ -2005,7 +2003,7 @@ async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
   const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
-  if (!IS_VK) jobs.push(loadWheelStatus());
+  jobs.push(loadWheelStatus());
   const results = await Promise.allSettled(jobs);
   const failures = results.filter((item) => item.status === 'rejected');
   failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
