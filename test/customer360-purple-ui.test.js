@@ -53,6 +53,6 @@ test('Customer 360 API keeps admin read authorization and lifecycle UI materiali
   assert.match(apiMaterializer, /req\.method === 'GET'/);
   assert.doesNotMatch(apiMaterializer, /req\.method === '(?:POST|PUT|PATCH|DELETE)'/);
 
-  assert.match(lifecycleMaterializer, /customer\.lifecycle/);
+  assert.match(lifecycleMaterializer, /customer\?\.lifecycle/);
   assert.match(lifecycleMaterializer, /daysSinceLastVisit/);
 });
