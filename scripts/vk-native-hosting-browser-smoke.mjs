@@ -138,8 +138,28 @@ try {
   assert(failedRequests.length === 0, `failed local requests detected: ${JSON.stringify(failedRequests)}`);
 
   await page.screenshot({ path: path.join(outDir, 'vk-home.png'), fullPage: true });
-  await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify({ evidence, pageErrors, failedRequests }, null, 2));
-  console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), evidence }, null, 2));
+
+  await page.click('#openSpaceverseBusiness');
+  await page.waitForFunction(() => document.querySelector('[data-screen="spaceverse-business"]')?.classList.contains('active'));
+  const businessPage = await page.evaluate(() => ({
+    active: document.querySelector('[data-screen="spaceverse-business"]')?.classList.contains('active') || false,
+    nameVisible: Boolean(document.querySelector('#spaceverseLeadName')?.offsetParent),
+    phoneVisible: Boolean(document.querySelector('#spaceverseLeadPhone')?.offsetParent),
+    submitVisible: Boolean(document.querySelector('#spaceverseLeadSubmit')?.offsetParent),
+    bottomNavDisplay: getComputedStyle(document.querySelector('.bottom-nav')).display
+  }));
+  assert(businessPage.active, 'SPACEVERSE business page did not open');
+  assert(businessPage.nameVisible && businessPage.phoneVisible && businessPage.submitVisible, 'SPACEVERSE lead form is incomplete');
+  assert(businessPage.bottomNavDisplay === 'none', `bottom navigation must stay hidden on SPACEVERSE lead page: ${businessPage.bottomNavDisplay}`);
+  await page.screenshot({ path: path.join(outDir, 'vk-spaceverse-business.png'), fullPage: true });
+
+  await page.click('#spaceverseBusinessBack');
+  await page.waitForFunction(() => document.querySelector('[data-screen="client"]')?.classList.contains('active'));
+  assert(pageErrors.length === 0, `page errors detected after SPACEVERSE page navigation: ${pageErrors.join(' | ')}`);
+  assert(failedRequests.length === 0, `failed local requests after SPACEVERSE page navigation: ${JSON.stringify(failedRequests)}`);
+
+  await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify({ evidence, businessPage, pageErrors, failedRequests }, null, 2));
+  console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), evidence, businessPage }, null, 2));
 } finally {
   await context.close();
   await browser.close();
