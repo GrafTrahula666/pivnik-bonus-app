@@ -55,3 +55,29 @@ test('supplied SPACEVERSE raster logos are wired directly into the correct home 
   assert.match(styles, /\.spaceverse-hero-logo-full/);
   assert.match(styles, /SPACEVERSE USER LOGOS \+ READABILITY PASS/);
 });
+
+
+test('home v2 image composition wires the approved artwork to live home blocks without flattening dynamic data', async () => {
+  const [index, app, styles] = await Promise.all([
+    read('index.html'),
+    read('app.js'),
+    read('styles.css')
+  ]);
+
+  assert.match(index, /client-home home-v2/);
+  for (const asset of [
+    'home-background.webp',
+    'profile-card.webp',
+    'business-card.webp',
+    'wheel-card.webp',
+    'wheel-disc.webp',
+    'liters-card.webp',
+    'league-card.webp'
+  ]) {
+    assert.match(styles, new RegExp(asset.replace('.', '\\.')));
+  }
+  assert.match(styles, /HOME V2 IMAGE COMPOSITION/);
+  assert.match(app, /avatarInlineHtml\(leader, 'leader-avatar', true\)/);
+  assert.match(styles, /\.wheel-disk[\s\S]*wheel-disc\.webp/);
+  assert.match(styles, /\.beer-progress-segments[\s\S]*left: 4\.2%/);
+});

@@ -7869,3 +7869,645 @@ body,
     height: 68px;
   }
 }
+
+/* HOME V2 IMAGE COMPOSITION */
+:root {
+  --home-v2-gold: #b97a18;
+  --home-v2-gold-soft: #e7b958;
+  --home-v2-ink: #1b1814;
+  --home-v2-muted: #655d52;
+}
+
+.app-shell::before {
+  background: url('/assets/home-v2/home-background.webp?v=2') center top / cover no-repeat !important;
+}
+
+.app-shell::after {
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(245,237,223,.06) 52%, rgba(216,193,156,.16) 100%) !important;
+}
+
+.client-home.home-v2.active {
+  gap: 6px;
+  padding-bottom: 6px;
+}
+
+.client-home.home-v2 > .spaceverse-home-hero,
+.client-home.home-v2 > .spaceverse-business-card,
+.client-home.home-v2 > .home-wheel-card,
+.client-home.home-v2 > .beer-loyalty-card,
+.client-home.home-v2 > .home-league-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: var(--home-v2-ink);
+}
+
+/* profile / balance */
+.client-home.home-v2 .spaceverse-home-hero {
+  height: 126px;
+  min-height: 126px;
+  padding: 0 !important;
+  border-radius: 24px;
+  background: url('/assets/home-v2/profile-card.webp?v=2') center / 100% 100% no-repeat !important;
+}
+
+.client-home.home-v2 .spaceverse-home-hero::after,
+.client-home.home-v2 .spaceverse-home-hero .hero-glow,
+.client-home.home-v2 .spaceverse-hero-brand,
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar,
+.client-home.home-v2 .spaceverse-home-hero .status-divider {
+  display: none !important;
+}
+
+.client-home.home-v2 .spaceverse-hero-grid,
+.client-home.home-v2 .spaceverse-hero-user {
+  position: absolute;
+  inset: 0;
+  display: block;
+  min-height: 0;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .client-identity {
+  position: absolute;
+  top: 14px;
+  left: 17%;
+  width: 45%;
+  display: block;
+  margin: 0;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .hero-identity-copy {
+  display: block;
+  width: 100%;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .hero-name-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .client-name {
+  max-width: calc(100% - 34px);
+  color: #17130e;
+  font-size: 17px;
+  font-weight: 900;
+  text-shadow: 0 1px 0 rgba(255,255,255,.72);
+}
+
+.client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  display: block;
+  margin-top: 1px;
+  color: #6b6255;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.client-home.home-v2 .hero-qr-button {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  border: 1px solid rgba(174,117,25,.32);
+  border-radius: 9px;
+  background: rgba(255,255,255,.56);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+  color: #a76a0c;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .balance {
+  position: absolute;
+  top: 50px;
+  left: 17%;
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  color: #17130e;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .balance > span {
+  background: linear-gradient(110deg, #985b05, #dfaa43 54%, #9c610a);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .balance small {
+  color: #4d453a;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .status-button {
+  position: absolute;
+  left: 10%;
+  bottom: 24px;
+  width: 37%;
+  min-height: 23px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .status-caption {
+  color: #766b5d;
+  font-size: 6.5px;
+  font-weight: 650;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .status-name {
+  color: #211a12;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.client-home.home-v2 .status-row-chevron {
+  display: none;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .progress {
+  position: absolute;
+  right: 3.3%;
+  bottom: 8px;
+  left: 3.4%;
+  height: 8px;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .progress i {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9d6109, #e7b84f 62%, #bf7e17);
+  box-shadow: 0 0 8px rgba(200,139,36,.18);
+}
+
+.client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  position: absolute;
+  right: 4%;
+  bottom: 20px;
+  left: 49%;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  color: #6d6254;
+  font-size: 6.5px;
+}
+
+/* SPACEVERSE teaser */
+.client-home.home-v2 .spaceverse-business-card {
+  height: 124px;
+  min-height: 124px;
+  display: block;
+  padding: 0 !important;
+  border-radius: 23px;
+  background: url('/assets/home-v2/business-card.webp?v=2') center / 100% 100% no-repeat !important;
+}
+
+.client-home.home-v2 .spaceverse-business-card::after,
+.client-home.home-v2 .spaceverse-business-art,
+.client-home.home-v2 .spaceverse-business-brand {
+  display: none !important;
+}
+
+.client-home.home-v2 .spaceverse-business-copy {
+  position: absolute;
+  inset: 0;
+  display: block;
+  min-width: 0;
+}
+
+.client-home.home-v2 .spaceverse-business-copy > strong {
+  position: absolute;
+  top: 29%;
+  left: 4.4%;
+  width: 43%;
+  margin: 0;
+  color: #14110d;
+  font-size: 16px;
+  line-height: 1.02;
+  text-shadow: 0 1px 0 rgba(255,255,255,.72);
+}
+
+.client-home.home-v2 .spaceverse-business-copy > em {
+  position: absolute;
+  top: 48%;
+  left: 4.4%;
+  width: 43%;
+  margin: 0;
+  color: #8d5708;
+  font-size: 8.5px;
+  line-height: 1.15;
+}
+
+.client-home.home-v2 .spaceverse-business-copy > small {
+  display: none;
+}
+
+.client-home.home-v2 .spaceverse-business-cta {
+  position: absolute;
+  bottom: 7%;
+  left: 4.2%;
+  width: 33.5%;
+  min-height: 29px;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fffaf0;
+  font-size: 9px;
+  text-shadow: 0 1px 2px rgba(83,47,0,.35);
+}
+
+/* home wheel */
+.client-home.home-v2 .home-wheel-card {
+  height: 122px;
+  min-height: 122px;
+  display: block;
+  padding: 0 !important;
+  border-radius: 22px;
+  background: url('/assets/home-v2/wheel-card.webp?v=2') center / 100% 100% no-repeat !important;
+}
+
+.client-home.home-v2 .home-wheel-copy {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.client-home.home-v2 .home-wheel-heading-copy {
+  position: absolute;
+  top: 9px;
+  left: 4.6%;
+}
+
+.client-home.home-v2 .home-wheel-heading-copy > small {
+  color: #7a6d5a;
+  font-size: 6.5px;
+  font-weight: 700;
+}
+
+.client-home.home-v2 .home-wheel-heading-copy > strong {
+  margin-top: 0;
+  color: #17130e;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.client-home.home-v2 .home-wheel-timer {
+  position: absolute;
+  top: 8px;
+  left: 34.5%;
+  width: 25.5%;
+  min-width: 0;
+  max-width: none;
+  min-height: 31px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.client-home.home-v2 .home-wheel-timer > i {
+  display: none;
+}
+
+.client-home.home-v2 .home-wheel-timer small {
+  color: #756a5b;
+  font-size: 5.5px;
+}
+
+.client-home.home-v2 .home-wheel-timer em {
+  color: #1a150f;
+  font-size: 9.5px;
+}
+
+.client-home.home-v2 .home-wheel-prize {
+  position: absolute;
+  top: 46px;
+  left: 4.4%;
+  width: 51%;
+  min-height: 29px;
+  margin: 0;
+  padding: 6px 8px 6px 30px;
+  border: 0;
+  background: transparent;
+  color: #3c3328;
+  font-size: 7.4px;
+  font-weight: 700;
+}
+
+.client-home.home-v2 .home-wheel-prize > i {
+  display: none;
+}
+
+.client-home.home-v2 .home-wheel-cta {
+  position: absolute;
+  bottom: 8px;
+  left: 4.3%;
+  width: 43.5%;
+  min-height: 33px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fffaf0;
+  font-size: 9.5px;
+  text-shadow: 0 1px 2px rgba(83,47,0,.3);
+}
+
+.client-home.home-v2 .home-wheel-visual {
+  position: absolute;
+  top: 50%;
+  right: 3.3%;
+  width: 35.5%;
+  height: auto;
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+}
+
+.client-home.home-v2 .home-wheel-ring {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: url('/assets/home-v2/wheel-disc.webp?v=2') center / contain no-repeat;
+  box-shadow: none;
+}
+
+.client-home.home-v2 .home-wheel-ring::before,
+.client-home.home-v2 .home-wheel-ring::after,
+.client-home.home-v2 .home-wheel-ring > *,
+.client-home.home-v2 .home-wheel-pointer {
+  display: none !important;
+}
+
+/* liters */
+.client-home.home-v2 .beer-loyalty-card--compact {
+  height: 84px;
+  min-height: 84px;
+  padding: 0 !important;
+  border-radius: 20px;
+  background: url('/assets/home-v2/liters-card.webp?v=2') center / 100% 100% no-repeat !important;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact::after,
+.client-home.home-v2 .beer-kicker,
+.client-home.home-v2 .beer-card-foot {
+  display: none !important;
+}
+
+.client-home.home-v2 .beer-compact-main {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.client-home.home-v2 .beer-compact-main h2 {
+  position: absolute;
+  top: 16%;
+  left: 14.5%;
+  width: 55%;
+  margin: 0;
+  color: #1e1913;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.05;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter {
+  position: absolute;
+  top: 17%;
+  right: 3.1%;
+  width: 12.3%;
+  min-height: 44px;
+  display: grid;
+  place-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter strong {
+  color: #9c620b;
+  font-size: 16px;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255,255,255,.8);
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter small {
+  margin-top: 1px;
+  color: #6c6153;
+  font-size: 5.5px;
+  font-weight: 700;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head {
+  position: absolute;
+  top: 44%;
+  right: 18%;
+  left: 14.5%;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  color: #64594b;
+  font-size: 6.5px;
+  font-weight: 700;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments {
+  position: absolute;
+  top: 59%;
+  right: 17.4%;
+  left: 4.2%;
+  width: auto;
+  height: 8px;
+  gap: 2px;
+  margin: 0;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment {
+  height: 8px;
+  border-color: rgba(154,101,17,.18);
+  background: transparent;
+  box-shadow: none;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment > span {
+  background: linear-gradient(90deg, #9d6007, #e8bb55 64%, #bf7d16);
+}
+
+/* league */
+.client-home.home-v2 .home-league-card {
+  height: 132px;
+  min-height: 132px;
+  display: block;
+  padding: 0 !important;
+  border-radius: 22px;
+  background: url('/assets/home-v2/league-card.webp?v=2') center / 100% 100% no-repeat !important;
+}
+
+.client-home.home-v2 .home-league-head {
+  position: absolute;
+  top: 10%;
+  right: 4%;
+  left: 13.2%;
+  display: block;
+  height: 31%;
+}
+
+.client-home.home-v2 .home-league-head .home-card-kicker {
+  display: block;
+  color: #766956;
+  font-size: 6px;
+  font-weight: 700;
+}
+
+.client-home.home-v2 .home-league-head h2 {
+  margin: 1px 0 0;
+  color: #18130e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.client-home.home-v2 .home-league-head > span {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  width: 26.8%;
+  min-height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 12px;
+  color: #85530a;
+  font-size: 6.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.client-home.home-v2 .home-league-podium {
+  position: absolute;
+  right: 3.2%;
+  bottom: 8%;
+  left: 3.2%;
+  height: 55%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.client-home.home-v2 .home-league-podium > span {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  gap: 0 4px;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+}
+
+.client-home.home-v2 .home-league-podium i {
+  display: none;
+}
+
+.client-home.home-v2 .home-league-podium .leader-avatar {
+  grid-row: 1 / 3;
+  width: 43px;
+  height: 43px;
+  margin-left: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(177,119,22,.32);
+  border-radius: 50%;
+  background: rgba(255,255,255,.42);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+.client-home.home-v2 .home-league-podium .leader-avatar img,
+.client-home.home-v2 .home-league-podium .leader-avatar .avatar-render-inner,
+.client-home.home-v2 .home-league-podium .leader-avatar .avatar-fallback {
+  width: 100%;
+  height: 100%;
+}
+
+.client-home.home-v2 .home-league-podium .leader-avatar img {
+  display: block;
+  object-fit: cover;
+}
+
+.client-home.home-v2 .home-league-podium b {
+  align-self: end;
+  padding-bottom: 1px;
+  color: #2a231a;
+  font-size: 7.2px;
+  font-weight: 800;
+}
+
+.client-home.home-v2 .home-league-podium strong {
+  align-self: start;
+  color: #9b620b;
+  font-size: 7px;
+  font-weight: 850;
+}
+
+/* prize wheel page uses the same approved wheel artwork while preserving server-side outcome logic */
+.wheel-rim {
+  border-color: rgba(190,128,24,.42);
+  background: rgba(255,250,241,.48);
+  box-shadow: 0 14px 30px rgba(99,65,14,.16);
+}
+
+.wheel-disk {
+  border-radius: 50%;
+  background: url('/assets/home-v2/wheel-disc.webp?v=2') center / contain no-repeat;
+}
+
+.wheel-disk > * {
+  opacity: 0 !important;
+}
+
+.wheel-emblem,
+.wheel-stage > .wheel-pointer {
+  display: none !important;
+}
+
+@media (max-width: 390px) {
+  .client-home.home-v2.active { gap: 4px; }
+  .client-home.home-v2 .spaceverse-home-hero { height: 118px; min-height: 118px; }
+  .client-home.home-v2 .spaceverse-business-card { height: 116px; min-height: 116px; }
+  .client-home.home-v2 .home-wheel-card { height: 114px; min-height: 114px; }
+  .client-home.home-v2 .beer-loyalty-card--compact { height: 78px; min-height: 78px; }
+  .client-home.home-v2 .home-league-card { height: 124px; min-height: 124px; }
+  .client-home.home-v2 .spaceverse-business-copy > strong { font-size: 15px; }
+  .client-home.home-v2 .spaceverse-home-hero .client-name { font-size: 16px; }
+  .client-home.home-v2 .spaceverse-home-hero .balance { font-size: 24px; top: 47px; }
+  .client-home.home-v2 .home-league-podium > span { grid-template-columns: 48px minmax(0,1fr); }
+  .client-home.home-v2 .home-league-podium .leader-avatar { width: 40px; height: 40px; margin-left: 4px; }
+}
+
+@media (max-width: 350px) {
+  .client-home.home-v2 .spaceverse-business-copy > em { display: none; }
+  .client-home.home-v2 .home-wheel-heading-copy > small { display: none; }
+  .client-home.home-v2 .home-league-podium > span { grid-template-columns: 42px minmax(0,1fr); }
+  .client-home.home-v2 .home-league-podium .leader-avatar { width: 36px; height: 36px; }
+}

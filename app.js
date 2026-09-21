@@ -1461,7 +1461,10 @@ function renderLeaderboard() {
     homePreview.innerHTML = [1, 2, 3].map((rank) => {
       const leader = data.leaders?.find((item) => item.rank === rank);
       const amount = leader?.spend === null || leader?.spend === undefined ? '— ₽' : `${fmt(leader.spend)} ₽`;
-      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i><b>${escapeHtml(leader?.name || 'Пока свободно')}</b><strong>${amount}</strong></span>`;
+      const avatar = leader
+        ? avatarInlineHtml(leader, 'leader-avatar', true)
+        : '<span class="leader-avatar avatar-render"><span class="avatar-fallback">•</span></span>';
+      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i>${avatar}<b>${escapeHtml(leader?.name || 'Пока свободно')}</b><strong>${amount}</strong></span>`;
     }).join('');
   }
   const preview = $('#leaderboardPreview');
