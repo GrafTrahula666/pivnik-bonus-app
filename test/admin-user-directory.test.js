@@ -4,6 +4,9 @@ import { PGlite } from '@electric-sql/pglite';
 
 import {
   adminUserCrmStatus,
+  adminUserDisplayName,
+  adminUserDisplayUsername,
+  isAdminUserUrlLike,
   normalizeAdminUserDirectoryInput,
   queryAdminUserDirectory
 } from '../admin-user-directory.js';
@@ -175,4 +178,38 @@ test('admin CRM pagination reports totals and clamps pages after filtering', asy
   assert.match(calls[0].sql, /activity\.last_activity_at >= NOW\(\) - INTERVAL '30 days'/);
   assert.match(calls[1].sql, /LIMIT \$3/);
   assert.match(calls[1].sql, /OFFSET \$4/);
+});
+
+
+test('admin CRM never presents a URL as the user identity', () => {
+  assert.equal(isAdminUserUrlLike('https://example.com/profile'), true);
+  assert.equal(isAdminUserUrlLike('www.example.com'), true);
+  assert.equal(isAdminUserUrlLike('normal_user'), false);
+
+  assert.equal(
+    adminUserDisplayName({
+      id: 7,
+      first_name: 'https://example.com/profile',
+      last_name: '',
+      username: 'kirill',
+      telegram_id: 7001,
+      vk_id: null
+    }),
+    'kirill'
+  );
+
+  assert.equal(
+    adminUserDisplayName({
+      id: 8,
+      first_name: 'www.example.com',
+      last_name: 'https://vk.com/id8',
+      username: 'https://example.com',
+      telegram_id: null,
+      vk_id: '8001'
+    }),
+    'Пользователь VK'
+  );
+
+  assert.equal(adminUserDisplayUsername('https://example.com'), null);
+  assert.equal(adminUserDisplayUsername('@real_user'), 'real_user');
 });
