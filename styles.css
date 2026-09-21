@@ -8552,3 +8552,501 @@ body,
 .client-home.home-v2 .spaceverse-home-hero .balance {
   left: 19%;
 }
+
+
+/* SPACEVERSE WHITE-GOLD CANONICAL SHELL V20.2 */
+:root {
+  --bg: #f4efe7;
+  --header: #fbf7f0;
+  --surface: #fffdf8;
+  --card: #fffaf2;
+  --text: #211c16;
+  --muted: #746b61;
+  --gold: #b57918;
+  --gold2: #d7aa4c;
+  --green: #2b9a72;
+  --line: rgba(143, 101, 38, .18);
+  --shadow: 0 14px 36px rgba(72, 48, 18, .10);
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #f4efe7 !important;
+  color-scheme: light;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% -12%, rgba(255,255,255,.96), transparent 38%),
+    linear-gradient(180deg, #faf7f1 0%, #f4efe7 56%, #eee5d8 100%) !important;
+  color: var(--text) !important;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  padding-bottom: calc(94px + env(safe-area-inset-bottom));
+  background:
+    linear-gradient(180deg, #fbf8f2 0%, #f4efe7 52%, #eee5d8 100%) !important;
+}
+
+.app-shell::before,
+.app-shell::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+}
+
+.topbar {
+  height: 72px;
+  padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+  border-bottom: 1px solid rgba(150,108,45,.12);
+  background: rgba(250,247,241,.94) !important;
+  box-shadow: 0 5px 18px rgba(78,54,22,.06);
+  backdrop-filter: blur(16px) saturate(112%);
+  -webkit-backdrop-filter: blur(16px) saturate(112%);
+}
+
+.topbar .eyebrow,
+.beta-badge {
+  display: none !important;
+}
+
+.brand-line h1,
+.topbar h1 {
+  color: #211b14 !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  letter-spacing: -.02em !important;
+  text-transform: none !important;
+}
+
+.network-badge {
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid rgba(150,108,45,.16) !important;
+  background: rgba(255,255,255,.72) !important;
+  color: #665d52 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.icon-btn,
+.profile-edit-icon {
+  border-color: rgba(163,112,31,.22) !important;
+  background: rgba(255,255,255,.78) !important;
+  color: #9b650f !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.96), 0 5px 14px rgba(94,63,18,.07);
+}
+
+.screen {
+  padding: 10px 14px 28px;
+  color: var(--text);
+}
+
+.client-page-title > .muted,
+.client-page-title p,
+.muted {
+  color: var(--muted);
+}
+
+.client-page-title h2,
+.screen[data-screen="profile"] h2,
+.screen[data-screen="league"] h2 {
+  color: #211b14;
+}
+
+.bottom-nav {
+  height: 78px !important;
+  padding: 7px 8px calc(7px + env(safe-area-inset-bottom)) !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  border-top: 1px solid rgba(150,108,45,.14) !important;
+  background: rgba(251,248,242,.96) !important;
+  box-shadow: 0 -10px 28px rgba(78,54,22,.09) !important;
+  backdrop-filter: blur(18px) saturate(112%);
+  -webkit-backdrop-filter: blur(18px) saturate(112%);
+}
+
+.bottom-nav button {
+  min-width: 0;
+  background: transparent !important;
+  color: #756b60 !important;
+}
+
+.bottom-nav button:not(.qr-nav-button) > span {
+  border-color: rgba(159,112,39,.14) !important;
+  background: rgba(255,255,255,.72) !important;
+  color: #62584c !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.96) !important;
+}
+
+.bottom-nav button.active {
+  color: #a36a11 !important;
+}
+
+.bottom-nav button.active:not(.qr-nav-button) > span {
+  border-color: rgba(177,122,32,.34) !important;
+  background: linear-gradient(145deg, #fffefb, #f4e5c7) !important;
+  color: #9b650f !important;
+  box-shadow: 0 5px 14px rgba(119,78,17,.10), inset 0 1px 0 #fff !important;
+}
+
+.bottom-nav .qr-nav-button > span {
+  border-color: rgba(176,121,31,.48) !important;
+  background: linear-gradient(145deg, #f3d28d, #bd7f1e) !important;
+  color: #2f2416 !important;
+  box-shadow: 0 6px 16px rgba(121,78,15,.17), inset 0 1px 0 rgba(255,255,255,.52) !important;
+}
+
+.screen[data-screen="profile"] .vip-glass-card,
+.screen[data-screen="league"] .vip-glass-card,
+.screen[data-screen="staff"] .card,
+.screen[data-screen="admin"] .card,
+.screen[data-screen="staff"] .staff-step,
+.screen[data-screen="profile"] .team-strip,
+.modal-sheet,
+.premium-sheet,
+.qr-sheet,
+.achievements-sheet {
+  border: 1px solid rgba(167,116,37,.18) !important;
+  background: rgba(255,252,247,.94) !important;
+  color: #211c16 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.98), 0 12px 30px rgba(77,53,21,.09) !important;
+  backdrop-filter: blur(16px) saturate(108%);
+  -webkit-backdrop-filter: blur(16px) saturate(108%);
+}
+
+.profile-identity-card {
+  border-radius: 22px;
+}
+
+.profile-identity-card h2,
+.profile-history-card h2,
+.profile-menu b,
+.service-access h2,
+.profile-stats-grid strong,
+.op-row b,
+.user-row b,
+.leaderboard-list b,
+.leaderboard-podium-mini b {
+  color: #211c16 !important;
+}
+
+.profile-identity-card small,
+.profile-identity-card strong,
+.profile-menu small,
+.service-access p,
+.profile-history-card .op-row small,
+.profile-stats-grid span,
+.team-strip small,
+.leaderboard-prize-note {
+  color: #756b60 !important;
+}
+
+.profile-avatar--mirror {
+  background: linear-gradient(145deg, #fff, #eee2cb) !important;
+  border-color: rgba(180,124,34,.34) !important;
+  color: #9d670f !important;
+  box-shadow: 0 0 0 4px rgba(183,128,36,.06), 0 7px 18px rgba(96,66,22,.10) !important;
+}
+
+.profile-history-card,
+.profile-menu,
+.service-access {
+  margin-top: 10px;
+}
+
+.service-access {
+  padding: 14px;
+  border-color: rgba(177,122,32,.28) !important;
+  background:
+    radial-gradient(circle at 92% 5%, rgba(224,181,91,.19), transparent 34%),
+    rgba(255,252,247,.96) !important;
+}
+
+.service-access .home-card-kicker {
+  color: #9c650d !important;
+}
+
+.history-tabs {
+  border-color: rgba(161,112,37,.14) !important;
+  background: #f3ede4 !important;
+}
+
+.history-tabs button {
+  color: #746a5f !important;
+}
+
+.history-tabs button.active {
+  background: #fffdf8 !important;
+  color: #9d650e !important;
+  box-shadow: inset 0 0 0 1px rgba(176,121,31,.26), 0 4px 12px rgba(90,60,18,.06) !important;
+}
+
+.profile-history-card .op-row,
+.operation-list .op-row,
+.user-row {
+  border-color: rgba(163,113,39,.13) !important;
+  background: rgba(255,255,255,.72) !important;
+  color: #211c16 !important;
+}
+
+.profile-shortcuts button {
+  border: 1px solid rgba(163,113,39,.16) !important;
+  background: rgba(255,252,247,.94) !important;
+  color: #292219 !important;
+  box-shadow: 0 8px 20px rgba(80,55,20,.07) !important;
+}
+
+.profile-shortcuts button > span,
+.profile-menu > button > span {
+  border-color: rgba(176,121,31,.18) !important;
+  background: #f7eddb !important;
+  color: #a36a11 !important;
+}
+
+.profile-menu > button {
+  border-bottom-color: rgba(156,108,37,.12) !important;
+  background: transparent !important;
+  color: #211c16 !important;
+}
+
+.profile-menu > button > i {
+  color: #9e8b73 !important;
+}
+
+.profile-menu .danger-menu-item b,
+.profile-menu .danger-menu-item > span {
+  color: #a4514c !important;
+}
+
+.league-summary,
+.leaderboard-podium-mini > span,
+.leaderboard-list > * {
+  border-color: rgba(165,114,37,.17) !important;
+  background: rgba(255,252,247,.93) !important;
+  color: #211c16 !important;
+  box-shadow: 0 9px 22px rgba(80,55,19,.07);
+}
+
+.league-summary > span,
+.league-summary > small,
+.leaderboard-list small {
+  color: #766c60 !important;
+}
+
+.league-summary > strong,
+.leaderboard-podium-mini i {
+  color: #a76b0f !important;
+}
+
+.achievements-sheet .help-intro {
+  color: #746b60 !important;
+}
+
+.achievement-tabs {
+  padding: 3px;
+  border: 1px solid rgba(160,111,38,.13);
+  border-radius: 14px;
+  background: #f2ece3;
+}
+
+.achievement-tabs button {
+  border: 0 !important;
+  background: transparent !important;
+  color: #746a5f !important;
+}
+
+.achievement-tabs button.active {
+  background: #fffdf8 !important;
+  color: #9d650e !important;
+  box-shadow: inset 0 0 0 1px rgba(176,121,31,.23), 0 4px 12px rgba(90,60,18,.05);
+}
+
+.achievement-tile,
+.achievement-tile.earned,
+.achievement-tile.earned.rarity-common,
+.achievement-tile.earned.rarity-rare,
+.achievement-tile.earned.rarity-epic,
+.achievement-tile.earned.rarity-legendary {
+  border-color: rgba(166,115,38,.17) !important;
+  background: rgba(255,253,249,.96) !important;
+  color: #211c16 !important;
+  box-shadow: 0 8px 20px rgba(79,54,19,.06) !important;
+  filter: none;
+}
+
+.achievement-tile small,
+.achievement-tile p {
+  color: #766c61 !important;
+}
+
+.achievement-tile-icon,
+.profile-achievement-medal > span,
+.profile-achievement-medal.rarity-common > span,
+.profile-achievement-medal.rarity-rare > span,
+.profile-achievement-medal.rarity-epic > span,
+.profile-achievement-medal.rarity-legendary > span {
+  border-color: rgba(180,124,33,.30) !important;
+  background: radial-gradient(circle at 35% 28%, #fffef9, #ead9b7) !important;
+  color: #9f670f !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.96), 0 5px 14px rgba(113,75,18,.08) !important;
+}
+
+.achievement-tile.locked {
+  color: #847a6f !important;
+  filter: none !important;
+  opacity: .72;
+}
+
+.achievement-tile.locked::after {
+  background: rgba(244,238,228,.35) !important;
+  backdrop-filter: blur(1px) !important;
+  -webkit-backdrop-filter: blur(1px) !important;
+}
+
+.achievement-celebration-modal {
+  background: rgba(45,36,25,.42) !important;
+}
+
+.achievement-celebration {
+  border-color: rgba(181,125,33,.30) !important;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(225,184,93,.24), transparent 32%),
+    linear-gradient(180deg, #fffdf8, #f3eadc 72%) !important;
+  color: #211c16 !important;
+  box-shadow: 0 28px 70px rgba(66,45,17,.18) !important;
+}
+
+.achievement-celebration h2,
+.achievement-celebration p {
+  color: #211c16 !important;
+}
+
+.achievement-celebration-kicker,
+.achievement-celebration-rarity,
+.achievement-celebration-reward {
+  color: #9c650d !important;
+}
+
+.achievement-celebration-icon {
+  border-color: rgba(183,126,33,.45) !important;
+  background: radial-gradient(circle, #fff9e9, #ead8b4 72%) !important;
+  box-shadow: 0 0 34px rgba(183,126,33,.18), inset 0 0 18px rgba(255,255,255,.65) !important;
+}
+
+.modal {
+  background: rgba(51,42,31,.38);
+}
+
+.modal-sheet h2,
+.qr-sheet h2 {
+  color: #211c16 !important;
+}
+
+.qr-frame,
+.qr-sheet img {
+  background: #fff !important;
+  box-shadow: 0 10px 28px rgba(67,47,20,.10);
+}
+
+.token {
+  color: #9e650d !important;
+}
+
+.qr-warning,
+.help-intro {
+  color: #746b60 !important;
+}
+
+.copy-code,
+.secondary,
+.text-btn,
+.text-link {
+  border-color: rgba(165,114,37,.20) !important;
+  background: rgba(255,252,247,.86) !important;
+  color: #7f5819 !important;
+}
+
+.primary,
+.operation-button {
+  border-color: rgba(165,111,26,.30) !important;
+  background: linear-gradient(135deg, #b87a19, #dcae50) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px rgba(136,89,15,.17), inset 0 1px 0 rgba(255,255,255,.32) !important;
+}
+
+.screen[data-screen="staff"],
+.screen[data-screen="admin"] {
+  color: #211c16 !important;
+}
+
+.staff-banner,
+.admin-head {
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid rgba(166,115,38,.17);
+  border-radius: 20px;
+  background: rgba(255,252,247,.93);
+  box-shadow: 0 10px 26px rgba(79,54,19,.07);
+}
+
+.staff-banner h2,
+.admin-head h2,
+.step-heading h3,
+.screen[data-screen="admin"] h3,
+.screen[data-screen="staff"] h3 {
+  color: #211c16 !important;
+}
+
+.staff-banner .muted,
+.admin-head .muted,
+.step-heading small,
+.screen[data-screen="admin"] p,
+.screen[data-screen="staff"] p,
+.field-caption small {
+  color: #746b60 !important;
+}
+
+.screen[data-screen="staff"] input,
+.screen[data-screen="staff"] select,
+.screen[data-screen="admin"] input,
+.screen[data-screen="admin"] select,
+.screen[data-screen="admin"] textarea {
+  border-color: rgba(161,111,38,.18) !important;
+  background: #fffdf9 !important;
+  color: #211c16 !important;
+}
+
+.screen[data-screen="admin"] .metric,
+.screen[data-screen="admin"] .admin-quick-grid button,
+.screen[data-screen="admin"] .toggle-list label,
+.screen[data-screen="admin"] .design-grid label {
+  border-color: rgba(164,113,37,.16) !important;
+  background: rgba(255,253,249,.86) !important;
+  color: #211c16 !important;
+}
+
+.crm-user-status,
+.user-pin-state {
+  color: #8a5b15 !important;
+}
+
+@media (max-width: 390px) {
+  .topbar {
+    height: 66px;
+    padding: calc(7px + env(safe-area-inset-top)) 12px 7px;
+  }
+
+  .brand-line h1,
+  .topbar h1 {
+    font-size: 18px !important;
+  }
+
+  .screen {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
