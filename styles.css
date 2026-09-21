@@ -5348,7 +5348,7 @@ body {
 }
 
 .profile-history-card .op-row > strong {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .profile-shortcuts button {
@@ -6220,7 +6220,7 @@ body,
 .spaceverse-home-hero {
   border-color: rgba(185, 136, 49, .3);
   background:
-    linear-gradient(145deg, rgba(255,255,255,.91), rgba(246,238,224,.78)) !important;
+    linear-gradient(145deg, rgba(255,255,255,.97), rgba(247,240,228,.90)) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.96),
     0 10px 28px rgba(77,54,24,.12);
@@ -6567,14 +6567,14 @@ body,
   position: relative;
   z-index: 2;
   min-height: 112px;
+  align-self: stretch;
+  margin: -9px -11px -9px 0;
   overflow: hidden;
-  border-radius: 17px;
+  border-radius: 0 21px 21px 0;
   background:
-    linear-gradient(90deg, rgba(249,244,235,.2), rgba(249,244,235,0) 24%),
+    linear-gradient(90deg, rgba(250,246,238,.96) 0%, rgba(250,246,238,.42) 15%, rgba(250,246,238,0) 34%),
     url('/assets/spaceverse/business-user.svg?v=1') 58% 43% / cover no-repeat;
-  box-shadow:
-    inset 0 0 0 1px rgba(193,145,59,.16),
-    0 4px 15px rgba(105,73,25,.08);
+  box-shadow: inset 1px 0 0 rgba(193,145,59,.10);
 }
 
 .home-wheel-card {
@@ -6775,8 +6775,8 @@ body,
   filter: drop-shadow(0 2px 4px rgba(113,72,14,.24));
 }
 
-.beer-loyalty-card--compact {
-  padding: 8px 11px;
+ .beer-loyalty-card--compact {
+  padding: 6px 10px;
   border-radius: 20px;
   color: #171717;
 }
@@ -6803,8 +6803,8 @@ body,
 }
 
 .beer-loyalty-card--compact .beer-gift-counter {
-  width: 47px;
-  min-height: 47px;
+  width: 43px;
+  min-height: 43px;
   border-color: rgba(183,129,36,.28);
   border-radius: 14px;
   background: rgba(255,255,255,.48);
@@ -7012,8 +7012,8 @@ body,
 
 @media (max-width: 390px) {
   .topbar {
-    height: 94px;
-    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    height: 86px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
   }
   .eyebrow { font-size: 10px; }
   .topbar h1 { font-size: 27px; }
@@ -7040,6 +7040,7 @@ body,
 
   .spaceverse-business-art {
     min-height: 106px;
+    margin: -8px -10px -8px 0;
   }
 
   .spaceverse-business-copy > strong {
