@@ -1022,6 +1022,7 @@ function switchScreen(target) {
   $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
+  $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
@@ -1303,6 +1304,61 @@ async function contactOwnerAboutItem(code) {
   } else {
     openShopInquiry(code);
     toast('Личный username владельца не настроен — отправьте вопрос через форму');
+  }
+}
+
+function openSpaceverseBusinessPage() {
+  const nameInput = $('#spaceverseLeadName');
+  if (nameInput && !nameInput.value.trim()) {
+    nameInput.value = [state.profile?.firstName, state.profile?.lastName].filter(Boolean).join(' ');
+  }
+  $('#spaceverseLeadSuccess')?.classList.add('hidden');
+  const button = $('#spaceverseLeadSubmit');
+  if (button) {
+    button.disabled = false;
+    button.textContent = 'Оставить заявку';
+  }
+  switchScreen('spaceverse-business');
+}
+
+async function submitSpaceverseBusinessLead() {
+  const name = $('#spaceverseLeadName')?.value?.trim() || '';
+  const phone = $('#spaceverseLeadPhone')?.value?.trim() || '';
+  const digits = phone.replace(/\D/g, '');
+  if (name.length < 2 || name.length > 80) throw new Error('Укажите имя.');
+  if (digits.length < 7 || digits.length > 15) throw new Error('Проверьте номер телефона.');
+
+  const button = $('#spaceverseLeadSubmit');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Отправляем…';
+  }
+
+  try {
+    const platform = IS_VK ? 'VK' : 'Telegram';
+    await api('/api/shop/inquiries', {
+      method: 'POST',
+      body: JSON.stringify({
+        itemCode: 'spaceverse-business-lead',
+        itemTitle: 'SPACEVERSE · подключение приложения',
+        message: [
+          'Заявка на подключение SPACEVERSE',
+          `Имя: ${name}`,
+          `Телефон: ${phone}`,
+          `Платформа: ${platform}`
+        ].join('\n')
+      })
+    });
+    $('#spaceverseLeadSuccess')?.classList.remove('hidden');
+    if (button) button.textContent = 'Заявка отправлена';
+    haptic('medium');
+    toast('Заявка отправлена');
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Оставить заявку';
+    }
+    throw error;
   }
 }
 
@@ -1763,9 +1819,10 @@ function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
-  const platformLabel = profile.platform === 'vk' ? 'VK' : 'Telegram';
+  const profilePlatform = profile.platform || profile.provider || (IS_VK ? 'vk' : 'telegram');
+  const platformLabel = profilePlatform === 'vk' ? 'VK' : 'Telegram';
   const linked = Array.isArray(profile.linkedPlatforms) ? profile.linkedPlatforms : [];
-  $('#eyebrow').textContent = profile.platform === 'vk' ? 'VK Mini App' : 'Telegram Mini App';
+  $('#eyebrow').textContent = profilePlatform === 'vk' ? 'VK Mini App' : 'Telegram Mini App';
   if ($('#clientName')) $('#clientName').textContent = fullName;
   if ($('#profileName')) $('#profileName').textContent = fullName;
   if ($('#profileHandle')) $('#profileHandle').textContent = profile.username ? `@${profile.username} · ${platformLabel}` : platformLabel;
@@ -3228,7 +3285,9 @@ $('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => to
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
-$('#openSpaceverseBusiness')?.addEventListener('click', () => toast('SPACEVERSE · подробная страница готовится'));
+$('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#spaceverseBusinessBack')?.addEventListener('click', () => switchScreen('client'));
+$('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
