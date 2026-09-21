@@ -27,23 +27,32 @@ test('Customer 360 is wired into canonical purple CRM without a write path', asy
   assert.doesNotMatch(source, /method:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i);
 });
 
-test('Customer 360 API materializes last and reuses existing admin read authorization', async () => {
-  const [pkg, materializer] = await Promise.all([
+test('Customer 360 API keeps admin read authorization and lifecycle UI materializes last', async () => {
+  const [pkg, apiMaterializer, lifecycleMaterializer] = await Promise.all([
     read('package.json'),
-    read('scripts/apply-spaceverse-customer360-api.mjs')
+    read('scripts/apply-spaceverse-customer360-api.mjs'),
+    read('scripts/apply-customer360-lifecycle-ui.mjs')
   ]);
 
   const parsed = JSON.parse(pkg);
   for (const scriptName of ['prestart', 'materialize']) {
     const script = parsed.scripts[scriptName];
-    assert.ok(script.endsWith('node scripts/apply-spaceverse-customer360-api.mjs'), `${scriptName} must finish with Customer 360 materialization`);
+    const apiStep = 'node scripts/apply-spaceverse-customer360-api.mjs';
+    const lifecycleStep = 'node scripts/apply-customer360-lifecycle-ui.mjs';
+    assert.ok(script.includes(apiStep), `${scriptName} must include Customer 360 API materialization`);
+    assert.ok(script.endsWith(lifecycleStep), `${scriptName} must finish with Customer 360 lifecycle UI materialization`);
+    assert.ok(script.indexOf(apiStep) < script.indexOf(lifecycleStep), `${scriptName} must materialize API before lifecycle UI`);
   }
   assert.match(parsed.scripts.check, /apply-spaceverse-customer360-api\.mjs/);
+  assert.match(parsed.scripts.check, /apply-customer360-lifecycle-ui\.mjs/);
   assert.match(parsed.scripts.check, /customer-360-repository\.js/);
 
-  assert.match(materializer, /requireGatewayUser\(req\)/);
-  assert.match(materializer, /termsAccepted/);
-  assert.match(materializer, /\['viewer', 'admin'\]/);
-  assert.match(materializer, /req\.method === 'GET'/);
-  assert.doesNotMatch(materializer, /req\.method === '(?:POST|PUT|PATCH|DELETE)'/);
+  assert.match(apiMaterializer, /requireGatewayUser\(req\)/);
+  assert.match(apiMaterializer, /termsAccepted/);
+  assert.match(apiMaterializer, /\['viewer', 'admin'\]/);
+  assert.match(apiMaterializer, /req\.method === 'GET'/);
+  assert.doesNotMatch(apiMaterializer, /req\.method === '(?:POST|PUT|PATCH|DELETE)'/);
+
+  assert.match(lifecycleMaterializer, /customer\.lifecycle/);
+  assert.match(lifecycleMaterializer, /daysSinceLastVisit/);
 });
