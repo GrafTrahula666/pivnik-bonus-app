@@ -22,6 +22,8 @@ test('SPACEVERSE business card opens a real lead page and submits through the ex
   assert.match(index, /class="spaceverse-business-cta" id="openSpaceverseBusiness"/);
 
   assert.match(app, /function openSpaceverseBusinessPage\(\)/);
+  assert.match(app, /\$\('#openSpaceverseBusiness'\)\?\.addEventListener\('click', openSpaceverseBusinessPage\)/);
+  assert.match(app, /\$\('#spaceverseBusinessBack'\)\?\.addEventListener\('click', \(\) => window\.__PIVNIK_GO_BACK__\?\.\(\)\)/);
   assert.match(app, /async function submitSpaceverseBusinessLead\(\)/);
   assert.match(app, /itemCode: 'spaceverse-business-lead'/);
   assert.match(app, /api\('\/api\/shop\/inquiries'/);
