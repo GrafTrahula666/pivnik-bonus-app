@@ -7415,3 +7415,152 @@ body,
     grid-template-columns: 1fr;
   }
 }
+
+
+/* SPACEVERSE HOME FINAL VIEWPORT FIT */
+@media (max-width: 390px) and (min-height: 780px) {
+  .topbar {
+    height: 80px;
+    padding: calc(8px + env(safe-area-inset-top)) 15px 8px;
+  }
+
+  .topbar h1 { font-size: 26px; }
+
+  .client-home.active { gap: 4px; }
+
+  .spaceverse-home-hero {
+    padding: 7px 10px 6px;
+  }
+
+  .spaceverse-home-hero .profile-avatar {
+    width: 42px;
+    height: 42px;
+  }
+
+  .spaceverse-home-hero .balance {
+    font-size: 29px;
+  }
+
+  .spaceverse-hero-brand {
+    min-height: 72px;
+  }
+
+  .spaceverse-hero-brand .spaceverse-cube-mark {
+    width: 43px;
+    height: 43px;
+  }
+
+  .spaceverse-home-hero .status-divider {
+    margin: 3px 0;
+  }
+
+  .spaceverse-home-hero .status-button {
+    min-height: 27px;
+  }
+
+  .spaceverse-home-hero .progress {
+    margin: 3px 0;
+  }
+
+  .spaceverse-home-hero .max-status-line {
+    font-size: 7.5px;
+  }
+
+  .spaceverse-business-card {
+    min-height: 112px;
+    padding: 7px 10px;
+  }
+
+  .spaceverse-business-art {
+    min-height: 98px;
+    margin: -7px -10px -7px 0;
+  }
+
+  .spaceverse-business-copy > strong {
+    font-size: 17px;
+  }
+
+  .spaceverse-business-copy > em {
+    font-size: 9px;
+  }
+
+  .spaceverse-business-copy > small {
+    margin-top: 3px;
+    font-size: 6.8px;
+    line-height: 1.18;
+  }
+
+  .spaceverse-business-cta {
+    min-height: 27px;
+    margin-top: 5px;
+  }
+
+  .home-wheel-card {
+    min-height: 118px;
+    padding: 7px 10px;
+  }
+
+  .home-wheel-heading-copy > strong {
+    font-size: 15px;
+  }
+
+  .home-wheel-prize {
+    min-height: 26px;
+    margin-top: 4px;
+  }
+
+  .home-wheel-cta {
+    min-height: 31px;
+    margin-top: 4px;
+  }
+
+  .home-wheel-visual {
+    width: 104px;
+    height: 104px;
+  }
+
+  .home-wheel-ring {
+    width: 98px;
+    height: 98px;
+  }
+
+  .home-wheel-ring b {
+    font-size: 12px;
+  }
+
+  .home-wheel-ring b:nth-child(1) { top: 10px; left: 43px; }
+  .home-wheel-ring b:nth-child(2) { top: 24px; right: 14px; }
+  .home-wheel-ring b:nth-child(3) { bottom: 24px; right: 16px; }
+  .home-wheel-ring b:nth-child(4) { bottom: 10px; left: 43px; }
+  .home-wheel-ring b:nth-child(5) { bottom: 23px; left: 16px; }
+  .home-wheel-ring b:nth-child(6) { top: 24px; left: 15px; }
+
+  .home-wheel-pointer {
+    left: 44px;
+    border-right-width: 7px;
+    border-left-width: 7px;
+    border-bottom-width: 17px;
+  }
+
+  .beer-loyalty-card--compact {
+    padding: 5px 10px;
+  }
+
+  .beer-loyalty-card--compact .beer-gift-counter {
+    width: 40px;
+    min-height: 40px;
+  }
+
+  .beer-loyalty-card--compact .beer-progress-head {
+    margin-top: 5px;
+  }
+
+  .home-league-card {
+    gap: 5px;
+    padding: 7px 10px;
+  }
+
+  .home-league-podium > span {
+    padding: 5px;
+  }
+}
