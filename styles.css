@@ -7011,10 +7011,16 @@ body,
 }
 
 @media (max-width: 390px) {
-  .client-home.active { gap: 6px; }
+  .topbar {
+    height: 94px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  }
+  .eyebrow { font-size: 10px; }
+  .topbar h1 { font-size: 27px; }
+  .client-home.active { gap: 5px; }
 
   .spaceverse-home-hero {
-    padding: 10px 11px 8px;
+    padding: 8px 10px 7px;
   }
 
   .spaceverse-hero-grid {
@@ -7027,9 +7033,13 @@ body,
   }
 
   .spaceverse-business-card {
-    min-height: 136px;
-    grid-template-columns: minmax(0, 1.62fr) 88px;
-    padding: 10px 11px;
+    min-height: 122px;
+    grid-template-columns: minmax(0, 1.62fr) 92px;
+    padding: 8px 10px;
+  }
+
+  .spaceverse-business-art {
+    min-height: 106px;
   }
 
   .spaceverse-business-copy > strong {
@@ -7041,19 +7051,19 @@ body,
   }
 
   .home-wheel-card {
-    min-height: 146px;
-    grid-template-columns: minmax(0, 1fr) 126px;
-    padding: 10px 11px;
+    min-height: 130px;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    padding: 8px 10px;
   }
 
   .home-wheel-visual {
-    width: 124px;
-    height: 124px;
+    width: 114px;
+    height: 114px;
   }
 
   .home-wheel-ring {
-    width: 118px;
-    height: 118px;
+    width: 108px;
+    height: 108px;
   }
 
   .home-wheel-ring b:nth-child(1) { top: 12px; left: 52px; }
@@ -7064,7 +7074,7 @@ body,
   .home-wheel-ring b:nth-child(6) { top: 27px; left: 17px; }
 
   .home-wheel-pointer {
-    left: 54px;
+    left: 49px;
   }
 
   .home-wheel-timer {
