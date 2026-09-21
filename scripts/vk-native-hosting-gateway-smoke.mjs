@@ -160,7 +160,13 @@ try {
     await page.locator('#shopModal').waitFor({ state: 'visible' });
     await page.locator('[data-close="shopModal"]').click();
     await page.locator('#shopModal').waitFor({ state: 'hidden' });
-    await page.locator('.bottom-nav [data-target="client"]').click();
+    // Synthetic VK fallback can schedule one late Shop reopen. Close that
+    // public modal before navigating Home so it cannot intercept the nav click.
+    if (await page.locator('#shopModal').isVisible()) {
+      await page.locator('[data-close="shopModal"]').click({ timeout: 2000 });
+      await page.locator('#shopModal').waitFor({ state: 'hidden', timeout: 2000 });
+    }
+    await page.locator('.bottom-nav [data-target="client"]').click({ timeout: 4000 });
     await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
     // A delayed interaction fallback can briefly reopen Shop in the synthetic fixture
     // even after the real close handler already succeeded. Exercise only public UI
