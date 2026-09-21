@@ -82,7 +82,7 @@ try {
   const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1`, { waitUntil: 'networkidle' });
   assert(response?.status() === 200, `index.html returned ${response?.status()}`);
 
-  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home{display:block!important}' });
+  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:block!important}.screen.spaceverse-business-screen.active{display:grid!important}' });
   await page.evaluate(() => {
     const html = document.documentElement;
     html.classList.remove('platform-telegram', 'android-webview', 'lite-mode', 'reduce-effects');
