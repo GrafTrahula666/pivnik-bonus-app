@@ -272,7 +272,7 @@ test('Первый вход не открывает цепочку модало�
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
 });
 
-test('Luxury VIP Space сохраняет клиентскую навигацию, реальные данные и видимый космос', async () => {
+test('Home V2 сохраняет клиентскую навигацию, реальные данные и видимый фон', async () => {
   const [index, app, styles, server, gateway, deletionMigration] = await Promise.all([
     source('index.html'),
     source('app.js'),
@@ -285,9 +285,10 @@ test('Luxury VIP Space сохраняет клиентскую навигаци�
   const navEnd = index.indexOf('</nav>', navStart);
   const nav = index.slice(navStart, navEnd);
   assert.match(nav, /Главная/);
-  assert.match(nav, /Акции/);
-  assert.match(nav, /id="navQrButton"/);
   assert.match(nav, /Лига/);
+  assert.match(nav, /id="navQrButton"/);
+  assert.match(nav, /Достижения/);
+  assert.doesNotMatch(nav, /Акции/);
   assert.match(nav, /Профиль/);
   assert.doesNotMatch(nav, /Бармен|Админ/);
   assert.match(styles, /luxury-vip-space\.webp/);
