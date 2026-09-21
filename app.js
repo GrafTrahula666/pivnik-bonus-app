@@ -1014,10 +1014,18 @@ function closeModal(id) {
   modal.setAttribute('aria-hidden', 'true');
 }
 
-function switchScreen(target) {
+function switchScreen(target, navigation = {}) {
   if (!target) return;
-  $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
-  $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  if (target === 'staff' && !roleCanStaff(state.profile?.role)) return;
+  if (target === 'admin' && !roleCanAdmin(state.profile?.role)) return;
+  const active = $('.screen.active')?.dataset.screen || null;
+  state.screenHistory ||= [];
+  if (!navigation.fromHistory && active && active !== target) {
+    state.screenHistory.push(active);
+    if (state.screenHistory.length > 24) state.screenHistory.shift();
+  }
+  $('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
+  $('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
   $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
@@ -1028,6 +1036,14 @@ function switchScreen(target) {
   if (target === 'league') renderLeaderboard();
   if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
+
+window.__PIVNIK_GO_BACK__ = () => {
+  state.screenHistory ||= [];
+  const active = $('.screen.active')?.dataset.screen || 'client';
+  let previous = state.screenHistory.pop();
+  while (previous === active && state.screenHistory.length) previous = state.screenHistory.pop();
+  switchScreen(previous || (active === 'client' ? 'profile' : 'client'), { fromHistory: true });
+};
 
 function currentLevelIndex() {
   return Math.max(0, state.statuses.findIndex((level) => level.name === state.profile?.status?.name));
@@ -3284,7 +3300,7 @@ $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'))
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
-$('#spaceverseBusinessBack')?.addEventListener('click', () => switchScreen('client'));
+$('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
