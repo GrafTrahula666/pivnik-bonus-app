@@ -41,3 +41,15 @@ test('SPACEVERSE logo is the redrawn seven-cube reference mark', async () => {
   assert.match(logo, /glassFront/);
   assert.match(logo, /edgeGlow/);
 });
+
+
+test('supplied SPACEVERSE logo assets are wired into the correct home slots', async () => {
+  const [index, styles] = await Promise.all([
+    read('index.html'),
+    read('styles.css')
+  ]);
+  assert.match(index, /logo-large-user\.svg\?v=1/);
+  assert.match(index, /logo-mark-user\.svg\?v=1/);
+  assert.match(styles, /\.spaceverse-hero-logo-full/);
+  assert.match(styles, /SPACEVERSE USER LOGOS \+ READABILITY PASS/);
+});
