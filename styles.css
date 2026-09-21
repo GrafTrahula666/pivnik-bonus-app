@@ -7161,3 +7161,257 @@ body,
   .home-wheel-cta { margin-top: 5px; min-height: 33px; }
   .beer-loyalty-card--compact .beer-card-foot { margin-top: 3px; }
 }
+
+
+/* SPACEVERSE BUSINESS LEAD PAGE */
+.app-shell.spaceverse-business-mode .topbar,
+.app-shell.spaceverse-business-mode .bottom-nav {
+  display: none;
+}
+
+.app-shell.spaceverse-business-mode main {
+  padding-top: calc(12px + env(safe-area-inset-top));
+}
+
+.spaceverse-business-screen {
+  color: #171717;
+  padding-bottom: 34px;
+}
+
+.spaceverse-business-screen.active {
+  display: grid;
+  gap: 10px;
+}
+
+.spaceverse-business-page-head {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+
+.spaceverse-business-page-head > span:nth-child(2) {
+  display: grid;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.spaceverse-business-page-head small {
+  color: #a66b10;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .18em;
+}
+
+.spaceverse-business-page-head strong {
+  margin-top: 3px;
+  color: #181512;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.spaceverse-page-head-spacer {
+  width: 42px;
+}
+
+.spaceverse-business-page-card,
+.spaceverse-lead-card {
+  border: 1px solid rgba(185,136,49,.28);
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.96), rgba(246,238,224,.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    0 14px 34px rgba(77,54,24,.13);
+  backdrop-filter: blur(18px) saturate(110%);
+  -webkit-backdrop-filter: blur(18px) saturate(110%);
+}
+
+.spaceverse-business-page-card {
+  padding: 16px;
+}
+
+.spaceverse-business-page-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spaceverse-business-page-brand .spaceverse-cube-mark {
+  width: 31px;
+  height: 31px;
+}
+
+.spaceverse-business-page-brand > span {
+  display: grid;
+}
+
+.spaceverse-business-page-brand b {
+  color: #28231c;
+  font-size: 9px;
+  letter-spacing: .2em;
+}
+
+.spaceverse-business-page-brand small {
+  margin-top: 1px;
+  color: #8b7550;
+  font-size: 7px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.spaceverse-business-page-card h2 {
+  margin: 14px 0 7px;
+  max-width: 340px;
+  color: #111;
+  font-size: 24px;
+  line-height: 1.03;
+  letter-spacing: -.035em;
+}
+
+.spaceverse-business-page-card > p {
+  margin: 0;
+  max-width: 360px;
+  color: #5f594f;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.spaceverse-business-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.spaceverse-business-benefits > span {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0,1fr);
+  gap: 2px 7px;
+  align-items: start;
+  padding: 9px;
+  border: 1px solid rgba(183,129,36,.17);
+  border-radius: 14px;
+  background: rgba(255,255,255,.48);
+}
+
+.spaceverse-business-benefits i {
+  grid-row: 1 / 3;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f4d58b, #b87917);
+  color: #fff;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.spaceverse-business-benefits b {
+  color: #2b261f;
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.spaceverse-business-benefits small {
+  color: #766d60;
+  font-size: 7.4px;
+  line-height: 1.25;
+}
+
+.spaceverse-lead-card {
+  padding: 14px;
+}
+
+.spaceverse-lead-kicker {
+  color: #9f6710;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.spaceverse-lead-card h3 {
+  margin: 3px 0 0;
+  color: #181512;
+  font-size: 18px;
+}
+
+.spaceverse-lead-card > p {
+  margin: 3px 0 10px;
+  color: #746b5f;
+  font-size: 9px;
+}
+
+.spaceverse-lead-field {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.spaceverse-lead-field > span {
+  color: #6e6558;
+  font-size: 8px;
+  font-weight: 760;
+}
+
+.spaceverse-lead-field input {
+  width: 100%;
+  min-height: 43px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid rgba(173,121,31,.25);
+  border-radius: 13px;
+  outline: none;
+  background: rgba(255,255,255,.68);
+  color: #181512;
+  font: inherit;
+  font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.spaceverse-lead-field input:focus {
+  border-color: rgba(183,121,23,.58);
+  box-shadow: 0 0 0 3px rgba(183,121,23,.08), inset 0 1px 0 rgba(255,255,255,.92);
+}
+
+.spaceverse-lead-submit {
+  margin-top: 11px;
+  min-height: 44px;
+  border-radius: 14px;
+}
+
+.spaceverse-lead-success {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid rgba(43,159,108,.22);
+  border-radius: 12px;
+  background: rgba(35,178,119,.08);
+  color: #246c50;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.spaceverse-lead-note {
+  display: block;
+  margin-top: 8px;
+  color: #8c8274;
+  font-size: 7px;
+  line-height: 1.35;
+}
+
+@media (max-width: 360px) {
+  .spaceverse-business-page-card {
+    padding: 13px;
+  }
+  .spaceverse-business-page-card h2 {
+    font-size: 21px;
+  }
+  .spaceverse-business-benefits {
+    grid-template-columns: 1fr;
+  }
+}
