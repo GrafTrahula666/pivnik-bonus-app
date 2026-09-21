@@ -437,7 +437,7 @@ img { max-width: 100%; }
   backdrop-filter: blur(18px);
   border-top: 1px solid var(--line);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   z-index: 20;
 }
 .bottom-nav button { border: 0; background: none; color: var(--muted); display: grid; place-items: center; gap: 3px; font-size: 11px; }

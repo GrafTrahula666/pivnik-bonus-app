@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
-const CANONICAL_STYLE_VERSION = '20.0-spaceverse-purple-home';
+const CANONICAL_STYLE_VERSION = '20.1-spaceverse-white-gold-home';
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
 
 function stripLegacyVisualLayers(source) {
@@ -54,7 +54,7 @@ for (const asset of forbiddenVisualAssets) {
 }
 
 if (!index.includes(`styles.css?v=${CANONICAL_STYLE_VERSION}`)) {
-  throw new Error('Canonical SPACEVERSE purple stylesheet is not wired');
+  throw new Error('Canonical SPACEVERSE white-gold stylesheet is not wired');
 }
 if (!index.includes(INTERACTION_FALLBACK_SRC)) {
   throw new Error('VK interaction fallback is not wired');
@@ -72,4 +72,4 @@ if (!shellInputVersionSupported) {
   throw new Error('Unsupported client version reached canonical shell finalization');
 }
 
-console.log('Canonical SPACEVERSE purple shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');
+console.log('Canonical SPACEVERSE white-gold shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');
