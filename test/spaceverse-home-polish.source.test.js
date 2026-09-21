@@ -65,8 +65,8 @@ test('home v2 image composition wires the approved artwork to live home blocks w
   ]);
 
   assert.match(index, /client-home home-v2/);
+  assert.doesNotMatch(styles, /home-background\.webp/);
   for (const asset of [
-    'home-background.webp',
     'profile-card.webp',
     'business-card.webp',
     'wheel-card.webp',
