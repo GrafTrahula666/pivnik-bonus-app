@@ -6167,6 +6167,14 @@ body {
   background: #e9e0d4;
 }
 
+.app-shell::before,
+.app-shell::after {
+  inset: 0 auto 0 50% !important;
+  width: min(100%, 480px) !important;
+  height: auto !important;
+  transform: translateX(-50%) !important;
+}
+
 .app-shell::before {
   background: url('/assets/backgrounds/spaceverse-cloud-city.webp?v=1') center top / cover no-repeat !important;
   filter: none !important;
