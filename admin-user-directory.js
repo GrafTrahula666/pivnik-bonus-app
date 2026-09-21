@@ -1,6 +1,35 @@
 const ADMIN_USER_ROLES = new Set(['client', 'staff', 'viewer', 'admin']);
 const ADMIN_USER_STATUSES = new Set(['new', 'active', 'inactive', 'no_ops']);
 
+
+export function isAdminUserUrlLike(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return false;
+  return /^(?:https?:\/\/|www\.)/i.test(text)
+    || /\b(?:https?:\/\/|www\.)/i.test(text)
+    || /^[^\s@]+\.[a-z]{2,}(?:[/?#]|$)/i.test(text);
+}
+
+export function adminUserDisplayUsername(value) {
+  const username = String(value ?? '').trim().replace(/^@/, '');
+  return username && !isAdminUserUrlLike(username) ? username : null;
+}
+
+export function adminUserDisplayName(row = {}) {
+  const name = [row.first_name, row.last_name]
+    .map((value) => String(value ?? '').trim())
+    .filter((value) => value && !isAdminUserUrlLike(value))
+    .join(' ')
+    .trim();
+  if (name) return name;
+
+  const username = adminUserDisplayUsername(row.username);
+  if (username) return username;
+  if (row.telegram_id !== null && row.telegram_id !== undefined && String(row.telegram_id)) return 'Пользователь Telegram';
+  if (row.vk_id !== null && row.vk_id !== undefined && String(row.vk_id)) return 'Пользователь VK';
+  return `Пользователь #${String(row.id || '—')}`;
+}
+
 function readParam(input, key) {
   if (!input) return '';
   if (typeof input.get === 'function') return input.get(key) ?? '';
