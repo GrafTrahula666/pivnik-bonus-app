@@ -124,24 +124,30 @@ await patchFile('index.html', [`,
   'стили рамки'
 );
 
-replaceOnce(
-  "  }\n]);\n\nawait import('./universal-server.js');",
-  `  },
-  {
-    label: 'версия стилей Владислава',
-    from: '<link rel="stylesheet" href="styles.css?v=17.2-olesya-hearts" />',
-    to: '<link rel="stylesheet" href="styles.css?v=17.3-vlad-poops" />'
-  },
-  {
-    label: 'версия клиента Владислава',
-    from: '<script defer src="app.js?v=17.2-olesya-hearts"></script>',
-    to: '<script defer src="app.js?v=17.3-vlad-poops"></script>'
-  }
-]);
+const vladCachePatchAlreadyApplied =
+  content.includes("label: 'версия стилей Владислава'")
+  && content.includes("label: 'версия клиента Владислава'");
 
-await import('./universal-server.js');`,
-  'обновление кэша'
-);
+if (!vladCachePatchAlreadyApplied) {
+  replaceOnce(
+    "  }\n]);\n\nawait import('./universal-server.js');",
+    `  },
+    {
+      label: 'версия стилей Владислава',
+      from: '<link rel="stylesheet" href="styles.css?v=17.2-olesya-hearts" />',
+      to: '<link rel="stylesheet" href="styles.css?v=17.3-vlad-poops" />'
+    },
+    {
+      label: 'версия клиента Владислава',
+      from: '<script defer src="app.js?v=17.2-olesya-hearts"></script>',
+      to: '<script defer src="app.js?v=17.3-vlad-poops"></script>'
+    }
+  ]);
+  
+  await import('./universal-server.js');`,
+    'обновление кэша'
+  );
+}
 
 if (changed) await fs.writeFile(bootstrapPath, content, 'utf8');
 const preparedBootstrapSource = await fs.readFile(bootstrapPath, 'utf8');
