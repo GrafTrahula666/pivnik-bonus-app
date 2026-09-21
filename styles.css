@@ -6160,28 +6160,21 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(circle at 68% 0%, rgba(111, 52, 255, .18), transparent 29%),
-    radial-gradient(circle at 16% 28%, rgba(41, 107, 255, .11), transparent 31%),
-    #03030a;
+  background: #e9e0d4;
 }
 
 .app-shell {
-  background: #060611;
+  background: #e9e0d4;
 }
 
 .app-shell::before {
-  background:
-    linear-gradient(180deg, rgba(3,3,10,.04), rgba(4,4,14,.28) 36%, rgba(5,5,16,.72) 78%, rgba(5,5,16,.94)),
-    radial-gradient(circle at 72% 15%, rgba(123, 67, 255, .22), transparent 27%),
-    url('/assets/backgrounds/luxury-vip-space.webp?v=17.0') center top / cover no-repeat !important;
-  filter: brightness(1.32) saturate(1.28) contrast(1.06) hue-rotate(14deg) !important;
+  background: url('/assets/backgrounds/spaceverse-cloud-city.webp?v=1') center top / cover no-repeat !important;
+  filter: none !important;
 }
 
 .app-shell::after {
   background:
-    linear-gradient(90deg, rgba(4,4,14,.4), transparent 18% 82%, rgba(4,4,14,.4)),
-    radial-gradient(circle at 30% 16%, rgba(139,61,255,.12), transparent 28%) !important;
+    linear-gradient(180deg, rgba(8,7,14,.03), rgba(8,7,14,.08) 44%, rgba(8,7,14,.18) 100%) !important;
 }
 
 .topbar {
