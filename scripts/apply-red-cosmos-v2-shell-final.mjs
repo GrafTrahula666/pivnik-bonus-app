@@ -54,7 +54,7 @@ for (const asset of forbiddenVisualAssets) {
 }
 
 if (!index.includes(`styles.css?v=${CANONICAL_STYLE_VERSION}`)) {
-  throw new Error('Canonical SPACEVERSE purple stylesheet is not wired');
+  throw new Error('Canonical SPACEVERSE white-gold stylesheet is not wired');
 }
 if (!index.includes(INTERACTION_FALLBACK_SRC)) {
   throw new Error('VK interaction fallback is not wired');
@@ -72,4 +72,4 @@ if (!shellInputVersionSupported) {
   throw new Error('Unsupported client version reached canonical shell finalization');
 }
 
-console.log('Canonical SPACEVERSE purple shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');
+console.log('Canonical SPACEVERSE white-gold shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');
