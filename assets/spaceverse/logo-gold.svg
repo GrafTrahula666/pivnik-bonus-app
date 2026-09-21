@@ -1,34 +1,92 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
   <defs>
-    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#fff7da"/>
-      <stop offset=".45" stop-color="#f2c65c"/>
-      <stop offset="1" stop-color="#c9861e"/>
+    <linearGradient id="glassFront" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff6cf" stop-opacity=".82"/>
+      <stop offset=".45" stop-color="#e8b34a" stop-opacity=".52"/>
+      <stop offset="1" stop-color="#9b5e09" stop-opacity=".72"/>
     </linearGradient>
-    <linearGradient id="left" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#efbd4f"/>
-      <stop offset="1" stop-color="#8f5908"/>
+    <linearGradient id="glassTop" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#f2c665" stop-opacity=".52"/>
+      <stop offset=".55" stop-color="#fff8db" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#c4821a" stop-opacity=".45"/>
     </linearGradient>
-    <linearGradient id="right" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#ffe49a"/>
-      <stop offset=".55" stop-color="#d99a2b"/>
-      <stop offset="1" stop-color="#a5680e"/>
+    <linearGradient id="glassSide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f0bf56" stop-opacity=".62"/>
+      <stop offset="1" stop-color="#7f4c08" stop-opacity=".68"/>
     </linearGradient>
-    <filter id="glow" x="-35%" y="-35%" width="170%" height="170%">
-      <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#7f5109" flood-opacity=".32"/>
-      <feDropShadow dx="0" dy="0" stdDeviation="1" flood-color="#ffd978" flood-opacity=".28"/>
+    <filter id="edgeGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#ffd77a" flood-opacity=".72"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2.2" flood-color="#7f4d08" flood-opacity=".24"/>
+    </filter>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5"/>
     </filter>
   </defs>
-  <g filter="url(#glow)" stroke="#ffe5a0" stroke-width=".55" stroke-linejoin="round">
-    <g transform="translate(48 5)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
-    <g transform="translate(25 20)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
-    <g transform="translate(71 20)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
-    <g transform="translate(48 35)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
-    <g transform="translate(25 50)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
-    <g transform="translate(71 50)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
-    <g transform="translate(48 65)"><path fill="url(#top)" d="M0 0 12 6 0 12-12 6Z"/><path fill="url(#left)" d="M-12 6 0 12V27L-12 21Z"/><path fill="url(#right)" d="M12 6 0 12V27L12 21Z"/></g>
+
+  <ellipse cx="60" cy="63" rx="43" ry="42" fill="#d79a2c" opacity=".08" filter="url(#softGlow)"/>
+
+  <g filter="url(#edgeGlow)" stroke="#ffe7a8" stroke-width="1.1" stroke-linejoin="round">
+    <!-- top -->
+    <g>
+      <path d="M47 18 60 11 73 18 60 25Z" fill="url(#glassTop)"/>
+      <path d="M47 18 60 25V45L47 38Z" fill="url(#glassSide)"/>
+      <path d="M73 18 60 25V45L73 38Z" fill="url(#glassFront)"/>
+      <path d="M60 11V25M47 18l13 7 13-7" opacity=".55"/>
+    </g>
+
+    <!-- upper left -->
+    <g>
+      <path d="M19 36 32 29 45 36 32 43Z" fill="url(#glassTop)"/>
+      <path d="M19 36 32 43V63L19 56Z" fill="url(#glassSide)"/>
+      <path d="M45 36 32 43V63L45 56Z" fill="url(#glassFront)"/>
+      <path d="M32 29V43M19 36l13 7 13-7" opacity=".55"/>
+    </g>
+
+    <!-- upper right -->
+    <g>
+      <path d="M75 36 88 29 101 36 88 43Z" fill="url(#glassTop)"/>
+      <path d="M75 36 88 43V63L75 56Z" fill="url(#glassSide)"/>
+      <path d="M101 36 88 43V63L101 56Z" fill="url(#glassFront)"/>
+      <path d="M88 29V43M75 36l13 7 13-7" opacity=".55"/>
+    </g>
+
+    <!-- lower left -->
+    <g>
+      <path d="M19 68 32 61 45 68 32 75Z" fill="url(#glassTop)"/>
+      <path d="M19 68 32 75V95L19 88Z" fill="url(#glassSide)"/>
+      <path d="M45 68 32 75V95L45 88Z" fill="url(#glassFront)"/>
+      <path d="M32 61V75M19 68l13 7 13-7" opacity=".55"/>
+    </g>
+
+    <!-- lower right -->
+    <g>
+      <path d="M75 68 88 61 101 68 88 75Z" fill="url(#glassTop)"/>
+      <path d="M75 68 88 75V95L75 88Z" fill="url(#glassSide)"/>
+      <path d="M101 68 88 75V95L101 88Z" fill="url(#glassFront)"/>
+      <path d="M88 61V75M75 68l13 7 13-7" opacity=".55"/>
+    </g>
+
+    <!-- bottom -->
+    <g>
+      <path d="M47 86 60 79 73 86 60 93Z" fill="url(#glassTop)"/>
+      <path d="M47 86 60 93V113L47 106Z" fill="url(#glassSide)"/>
+      <path d="M73 86 60 93V113L73 106Z" fill="url(#glassFront)"/>
+      <path d="M60 79V93M47 86l13 7 13-7" opacity=".55"/>
+    </g>
+
+    <!-- center -->
+    <g stroke-width="1.35">
+      <path d="M43 49 60 40 77 49 60 58Z" fill="url(#glassTop)"/>
+      <path d="M43 49 60 58V84L43 75Z" fill="url(#glassSide)"/>
+      <path d="M77 49 60 58V84L77 75Z" fill="url(#glassFront)"/>
+      <path d="M60 40V58M43 49l17 9 17-9" opacity=".58"/>
+    </g>
   </g>
-  <g opacity=".58" fill="#fff8dc">
-    <circle cx="48" cy="6" r="1.2"/><circle cx="71" cy="21" r="1"/><circle cx="25" cy="21" r="1"/>
+
+  <g fill="#fff8dc">
+    <circle cx="60" cy="12" r="1.5" opacity=".9"/>
+    <circle cx="88" cy="30" r="1.2" opacity=".8"/>
+    <circle cx="32" cy="30" r="1.1" opacity=".72"/>
+    <circle cx="61" cy="42" r="1.4" opacity=".9"/>
   </g>
 </svg>
