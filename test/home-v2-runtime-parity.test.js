@@ -34,3 +34,10 @@ test('Home V2 production shell keeps the white-gold cache key and five-column na
   assert.doesNotMatch(nav, />Акции</);
   assert.equal((index.match(/id="openAchievementsButton"/g) || []).length, 1);
 });
+
+test('bootstrap-vlad materializer is restart-safe after its cache patch is already present', async () => {
+  const source = await read('bootstrap-vlad.js');
+  assert.match(source, /vladCachePatchAlreadyApplied/);
+  assert.match(source, /версия стилей Владислава/);
+  assert.match(source, /версия клиента Владислава/);
+});
