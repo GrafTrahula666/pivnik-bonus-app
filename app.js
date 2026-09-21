@@ -699,7 +699,9 @@ function renderWheelStatus() {
       ? `Баланс: ${fmt(current.balance)} бонусов`
       : `На балансе ${fmt(current.balance)} · для вращения нужно ${paidCost}`;
   if (homeStatus) {
-    homeStatus.textContent = free ? 'Доступно' : wheelDurationLabel(remaining);
+    const homeLabel = $('#homeWheelTimerLabel');
+    if (homeLabel) homeLabel.textContent = free ? 'Вращение' : 'Следующее вращение через';
+    homeStatus.textContent = free ? 'Доступно сейчас' : wheelDurationLabel(remaining);
   }
 }
 
