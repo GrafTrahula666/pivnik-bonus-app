@@ -6229,8 +6229,8 @@ body,
 }
 
 .spaceverse-home-hero {
-  padding: 11px 12px 9px;
-  border-radius: 23px;
+  padding: 9px 11px 8px;
+  border-radius: 22px;
   color: #171717;
 }
 
@@ -6471,11 +6471,11 @@ body,
   position: relative;
   display: grid;
   width: 100%;
-  min-height: 142px;
+  min-height: 126px;
   overflow: hidden;
-  grid-template-columns: minmax(0, 1.55fr) minmax(106px, .67fr);
+  grid-template-columns: minmax(0, 1.58fr) minmax(102px, .64fr);
   gap: 7px;
-  padding: 11px 12px;
+  padding: 9px 11px;
   border-radius: 22px;
   color: #171717;
   text-align: left;
@@ -6566,129 +6566,28 @@ body,
 .spaceverse-business-art {
   position: relative;
   z-index: 2;
-  min-height: 120px;
+  min-height: 112px;
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: 17px;
   background:
-    linear-gradient(90deg, rgba(249,244,235,.15), rgba(249,244,235,0) 35%),
-    url('/assets/backgrounds/spaceverse-cloud-city.webp?v=1') 64% 48% / cover no-repeat;
-  box-shadow: inset 0 0 0 1px rgba(193,145,59,.16);
+    linear-gradient(90deg, rgba(249,244,235,.2), rgba(249,244,235,0) 24%),
+    url('/assets/spaceverse/business-user.svg?v=1') 58% 43% / cover no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(193,145,59,.16),
+    0 4px 15px rgba(105,73,25,.08);
 }
-
-.spaceverse-planet {
-  position: absolute;
-  width: 104px;
-  height: 104px;
-  right: -28px;
-  top: -16px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 36% 32%, rgba(255,240,196,.92), rgba(213,169,90,.58) 31%, rgba(101,72,29,.94) 69%);
-  box-shadow: inset -18px -14px 28px rgba(59,34,7,.3), 0 0 26px rgba(210,161,76,.18);
-}
-
-.spaceverse-planet::after {
-  content: "";
-  position: absolute;
-  width: 132px;
-  height: 28px;
-  left: -14px;
-  top: 39px;
-  border: 2px solid rgba(196,139,43,.4);
-  border-left-color: rgba(238,208,148,.66);
-  border-right-color: rgba(142,89,18,.22);
-  border-radius: 50%;
-  transform: rotate(-14deg);
-}
-
-.spaceverse-moon {
-  position: absolute;
-  width: 13px;
-  height: 13px;
-  right: 70px;
-  top: 17px;
-  border-radius: 50%;
-  background: #d5aa5b;
-  box-shadow: inset -4px -3px 7px rgba(74,43,5,.28), 0 0 8px rgba(191,139,50,.2);
-}
-
-.spaceverse-astronaut {
-  position: absolute;
-  right: 5px;
-  bottom: -17px;
-  width: 83px;
-  height: 110px;
-  transform: scale(.76);
-  transform-origin: right bottom;
-  filter: drop-shadow(0 5px 10px rgba(92,59,15,.2));
-}
-
-.spaceverse-astronaut::before {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  width: 48px;
-  height: 48px;
-  top: 0;
-  left: 18px;
-  border: 3px solid rgba(202,157,79,.72);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 38% 35%, rgba(255,221,153,.5), transparent 24%),
-    linear-gradient(145deg, #6f542d, #21160b 65%);
-  box-shadow: inset 0 0 16px rgba(229,186,103,.18);
-}
-
-.spaceverse-astronaut::after {
-  content: "";
-  position: absolute;
-  width: 70px;
-  height: 69px;
-  left: 7px;
-  bottom: 4px;
-  border: 2px solid rgba(190,145,68,.5);
-  border-radius: 26px 26px 18px 18px;
-  background: linear-gradient(145deg, #f2eadb, #b9a17b);
-}
-
-.spaceverse-astronaut > b {
-  position: absolute;
-  z-index: 3;
-  width: 22px;
-  height: 22px;
-  left: 31px;
-  bottom: 29px;
-  border: 2px solid #c98b27;
-  border-radius: 6px;
-  box-shadow: 0 0 8px rgba(190,130,35,.28);
-}
-
-.spaceverse-astronaut > em,
-.spaceverse-astronaut > span {
-  position: absolute;
-  z-index: 1;
-  width: 17px;
-  height: 48px;
-  bottom: -5px;
-  border: 2px solid rgba(175,132,65,.5);
-  border-radius: 12px;
-  background: #d9c8aa;
-}
-
-.spaceverse-astronaut > em { left: 15px; transform: rotate(4deg); }
-.spaceverse-astronaut > span { right: 14px; transform: rotate(-5deg); }
 
 .home-wheel-card {
   position: relative;
   display: grid;
   width: 100%;
-  min-height: 151px;
+  min-height: 134px;
   overflow: hidden;
   grid-template-columns: minmax(0, 1fr) 142px;
   align-items: center;
   gap: 6px;
-  padding: 11px 12px;
-  border-radius: 22px;
+  padding: 9px 11px;
+  border-radius: 21px;
   color: #171717;
   text-align: left;
 }
@@ -6816,8 +6715,8 @@ body,
 .home-wheel-visual {
   position: relative;
   display: grid;
-  width: 140px;
-  height: 140px;
+  width: 124px;
+  height: 124px;
   place-items: center;
   justify-self: end;
 }
@@ -6825,8 +6724,8 @@ body,
 .home-wheel-ring {
   position: relative;
   display: grid;
-  width: 132px;
-  height: 132px;
+  width: 116px;
+  height: 116px;
   place-items: center;
   border: 4px double #c8902f;
   border-radius: 50%;
@@ -6867,7 +6766,7 @@ body,
   position: absolute;
   z-index: 3;
   top: -2px;
-  left: 62px;
+  left: 54px;
   width: 0;
   height: 0;
   border-right: 8px solid transparent;
@@ -6877,7 +6776,7 @@ body,
 }
 
 .beer-loyalty-card--compact {
-  padding: 10px 12px;
+  padding: 8px 11px;
   border-radius: 20px;
   color: #171717;
 }
@@ -6904,8 +6803,8 @@ body,
 }
 
 .beer-loyalty-card--compact .beer-gift-counter {
-  width: 53px;
-  min-height: 53px;
+  width: 47px;
+  min-height: 47px;
   border-color: rgba(183,129,36,.28);
   border-radius: 14px;
   background: rgba(255,255,255,.48);
@@ -6958,8 +6857,8 @@ body,
   position: relative;
   display: grid;
   width: 100%;
-  gap: 7px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 8px 11px;
   border-radius: 20px;
   color: #171717;
   text-align: left;
@@ -7225,3 +7124,18 @@ body,
   }
 }
 
+
+/* V20 compact-home viewport discipline */
+.client-home {
+  padding-bottom: 92px;
+}
+@media (min-height: 780px) and (max-width: 430px) {
+  .client-home.active { gap: 5px; }
+  .spaceverse-home-hero .status-divider { margin: 4px 0; }
+  .spaceverse-home-hero .status-button { min-height: 29px; }
+  .spaceverse-home-hero .progress { margin: 4px 0 3px; }
+  .spaceverse-business-copy > small { line-height: 1.18; }
+  .home-wheel-prize { margin-top: 5px; }
+  .home-wheel-cta { margin-top: 5px; min-height: 33px; }
+  .beer-loyalty-card--compact .beer-card-foot { margin-top: 3px; }
+}
