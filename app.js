@@ -700,9 +700,7 @@ function renderWheelStatus() {
       ? `Баланс: ${fmt(current.balance)} бонусов`
       : `На балансе ${fmt(current.balance)} · для вращения нужно ${paidCost}`;
   if (homeStatus) {
-    homeStatus.textContent = free
-      ? 'Бесплатное вращение доступно'
-      : `Бесплатно через ${wheelDurationLabel(remaining)}`;
+    homeStatus.textContent = free ? 'Доступно' : wheelDurationLabel(remaining);
   }
 }
 
@@ -1040,16 +1038,16 @@ function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
   // SPACEVERSE_CANONICAL_THEME_LOCK
-  // SPACEVERSE purple is the canonical client palette; server settings may change copy/radius, never product colors.
+  // White-gold SPACEVERSE is the canonical client palette; server settings may change copy/radius, never product colors.
   const root = document.documentElement;
-  root.style.setProperty('--bg', '#070611');
-  root.style.setProperty('--header', '#0b0820');
-  root.style.setProperty('--surface', '#111126');
-  root.style.setProperty('--card', '#14132d');
-  root.style.setProperty('--text', '#f7f4ff');
-  root.style.setProperty('--muted', '#aaa1c4');
-  root.style.setProperty('--gold', '#8b3dff');
-  root.style.setProperty('--gold2', '#c084fc');
+  root.style.setProperty('--bg', '#efe7dc');
+  root.style.setProperty('--header', '#f8f3eb');
+  root.style.setProperty('--surface', '#f4eee5');
+  root.style.setProperty('--card', '#fffaf2');
+  root.style.setProperty('--text', '#171717');
+  root.style.setProperty('--muted', '#746b5e');
+  root.style.setProperty('--gold', '#b77917');
+  root.style.setProperty('--gold2', '#e4b357');
   root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
@@ -1064,9 +1062,9 @@ function applyDesign(design) {
   });
 
   try {
-    tg?.setHeaderColor('#0b0820');
-    tg?.setBackgroundColor('#070611');
-    tg?.setBottomBarColor('#080716');
+    tg?.setHeaderColor('#f8f3eb');
+    tg?.setBackgroundColor('#efe7dc');
+    tg?.setBottomBarColor('#f8f3eb');
   } catch (_) {}
 }
 
@@ -1767,7 +1765,7 @@ function renderProfile() {
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
   const platformLabel = profile.platform === 'vk' ? 'VK' : 'Telegram';
   const linked = Array.isArray(profile.linkedPlatforms) ? profile.linkedPlatforms : [];
-  $('#eyebrow').textContent = `${profile.firstName || 'Гость'}${profile.username ? ` · @${profile.username}` : ''}`;
+  $('#eyebrow').textContent = profile.platform === 'vk' ? 'VK Mini App' : 'Telegram Mini App';
   if ($('#clientName')) $('#clientName').textContent = fullName;
   if ($('#profileName')) $('#profileName').textContent = fullName;
   if ($('#profileHandle')) $('#profileHandle').textContent = profile.username ? `@${profile.username} · ${platformLabel}` : platformLabel;
@@ -1781,7 +1779,7 @@ function renderProfile() {
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
-  $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
+  if ($('#bonusPercent')) $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   renderAvatarInto($('#profileAvatar'), profile);
   renderAvatarInto($('#profileAvatarMirror'), profile);
