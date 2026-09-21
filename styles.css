@@ -6391,8 +6391,8 @@ body,
 }
 
 .spaceverse-hero-brand .spaceverse-cube-mark {
-  width: 54px;
-  height: 54px;
+  width: 62px;
+  height: 62px;
 }
 
 .spaceverse-hero-brand strong {
@@ -6727,40 +6727,72 @@ body,
   width: 116px;
   height: 116px;
   place-items: center;
-  border: 4px double #c8902f;
+  border: 3px solid #c48824;
   border-radius: 50%;
   background:
-    repeating-conic-gradient(from -30deg, rgba(255,255,255,.92) 0 29.4deg, rgba(232,210,169,.45) 29.4deg 30deg, rgba(250,245,236,.92) 30deg 59.4deg, rgba(202,154,70,.24) 59.4deg 60deg);
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,.98) 0 15%, transparent 16%),
+    repeating-conic-gradient(
+      from -30deg,
+      rgba(255,252,245,.98) 0 58.6deg,
+      rgba(187,132,39,.34) 58.6deg 60deg
+    );
   box-shadow:
-    inset 0 0 0 4px rgba(255,255,255,.62),
-    inset 0 0 20px rgba(173,119,31,.12),
-    0 4px 13px rgba(113,77,22,.14);
+    inset 0 0 0 3px rgba(255,255,255,.78),
+    inset 0 0 0 6px rgba(197,142,49,.11),
+    inset 0 0 18px rgba(151,96,20,.11),
+    0 0 0 1px rgba(255,241,202,.8),
+    0 5px 14px rgba(105,70,17,.16);
+}
+
+.home-wheel-ring::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(173,117,27,.22);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .home-wheel-ring::after {
   content: "";
-  width: 23px;
-  height: 23px;
-  border: 2px solid #bd8120;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #b87818;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #f6d889, #b77917 68%);
-  box-shadow: 0 2px 7px rgba(102,66,12,.24);
+  background:
+    radial-gradient(circle at 34% 28%, #fff1b6 0 18%, #e2ad47 38%, #b56f0d 74%, #8c5208 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255,255,255,.7),
+    0 2px 8px rgba(103,65,9,.28);
 }
 
 .home-wheel-ring b {
   position: absolute;
-  color: #b77917;
-  font-size: 14px;
-  font-weight: 760;
-  text-shadow: 0 1px 0 rgba(255,255,255,.8);
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: #a96d10;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.9));
 }
 
-.home-wheel-ring b:nth-child(1) { top: 13px; left: 58px; }
-.home-wheel-ring b:nth-child(2) { top: 30px; right: 18px; }
-.home-wheel-ring b:nth-child(3) { bottom: 30px; right: 21px; }
-.home-wheel-ring b:nth-child(4) { bottom: 13px; left: 59px; }
-.home-wheel-ring b:nth-child(5) { bottom: 29px; left: 20px; }
-.home-wheel-ring b:nth-child(6) { top: 30px; left: 19px; }
+.home-wheel-ring b svg {
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.home-wheel-ring b:nth-child(1) { top: 9px; left: 47px; }
+.home-wheel-ring b:nth-child(2) { top: 25px; right: 13px; }
+.home-wheel-ring b:nth-child(3) { bottom: 25px; right: 13px; }
+.home-wheel-ring b:nth-child(4) { bottom: 9px; left: 47px; }
+.home-wheel-ring b:nth-child(5) { bottom: 25px; left: 13px; }
+.home-wheel-ring b:nth-child(6) { top: 25px; left: 13px; }
 
 .home-wheel-pointer {
   position: absolute;
@@ -6830,13 +6862,49 @@ body,
 
 .beer-loyalty-card--compact .beer-progress {
   margin-top: 5px;
-  border-color: rgba(175,126,38,.16);
-  background: rgba(120,98,65,.13);
 }
 
-.beer-loyalty-card--compact .beer-progress i {
-  background: linear-gradient(90deg, #b77917, #e4b357 60%, #c78a25);
+.beer-loyalty-card--compact .beer-progress-segments {
+  display: grid;
+  width: 100%;
+  height: 8px;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 2px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
   box-shadow: none;
+}
+
+.beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(169,112,22,.22);
+  border-radius: 4px;
+  background: rgba(139,112,74,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.56);
+}
+
+.beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--segment-fill, 0%);
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ad6e0e, #e1ac46 62%, #f0c86f);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.42);
+  transition: width .28s ease;
+}
+
+.beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment.is-filled {
+  border-color: rgba(167,108,15,.42);
+}
+
+.beer-loyalty-card--compact.gift-ready .beer-progress-segments .beer-progress-segment {
+  box-shadow: 0 0 5px rgba(199,142,41,.12), inset 0 1px 0 rgba(255,255,255,.6);
 }
 
 .beer-loyalty-card--compact .beer-card-foot {
@@ -7028,8 +7096,8 @@ body,
   }
 
   .spaceverse-hero-brand .spaceverse-cube-mark {
-    width: 47px;
-    height: 47px;
+    width: 52px;
+    height: 52px;
   }
 
   .spaceverse-business-card {
@@ -7446,8 +7514,8 @@ body,
   }
 
   .spaceverse-hero-brand .spaceverse-cube-mark {
-    width: 43px;
-    height: 43px;
+    width: 50px;
+    height: 50px;
   }
 
   .spaceverse-home-hero .status-divider {
