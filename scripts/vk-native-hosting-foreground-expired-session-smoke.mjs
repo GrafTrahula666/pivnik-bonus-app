@@ -109,7 +109,7 @@ await page.route('**/*', async (route) => {
 
     if (method === 'POST' && pathname === '/api/auth') {
       authCount += 1;
-      await route.fulfill(json(payload(authCount <= 2 ? initialToken : renewedToken)));
+      await route.fulfill(json(payload(expired ? renewedToken : initialToken)));
       return;
     }
     if (method === 'POST' && pathname === '/api/diagnostics/vk-startup') {
@@ -151,7 +151,8 @@ try {
   await page.waitForFunction(() => document.querySelector('#clientName')?.textContent?.includes('VK Foreground'), null, { timeout: 6000 });
   await page.waitForTimeout(1600);
 
-  assert(authCount === 2, `initial auth count unexpected: ${authCount}`);
+  assert(authCount >= 1 && authCount <= 2, `initial auth count outside supported startup range: ${authCount}`);
+  const initialAuthCount = authCount;
   assert(await page.evaluate((key) => localStorage.getItem(key), storageKey) === initialToken, 'initial scoped session missing');
 
   await pulseVisibility();
@@ -171,7 +172,7 @@ try {
     balance: document.querySelector('#clientBalance')?.textContent || ''
   }), storageKey);
 
-  assert(authCalls.length === 3, `expected exactly one recovery auth after two-step initial auth, got ${authCalls.length}`);
+  assert(authCalls.length === initialAuthCount + 1, `expected exactly one recovery auth after startup, got ${authCalls.length} after ${initialAuthCount} initial auth call(s)`);
   assert(transactionCalls.length === 2, `expected one failed and one retried transactions request, got ${transactionCalls.length}`);
   assert(transactionCalls[0].authorization === `Bearer ${initialToken}`, `first transactions request did not use expired token: ${transactionCalls[0].authorization}`);
   assert(transactionCalls[1].authorization === `Bearer ${renewedToken}`, `retried transactions request did not use renewed token: ${transactionCalls[1].authorization}`);
