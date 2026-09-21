@@ -36,3 +36,15 @@ test('profile platform label accepts provider payloads used by VK startup smokes
   assert.match(app, /profile\.platform \|\| profile\.provider \|\| \(IS_VK \? 'vk' : 'telegram'\)/);
   assert.match(app, /profilePlatform === 'vk' \? 'VK Mini App' : 'Telegram Mini App'/);
 });
+
+
+test('canonical VK document keeps wheel markup instead of stripping Telegram-era markers', async () => {
+  const [gateway, app] = await Promise.all([
+    read('universal-server.js'),
+    read('app.js')
+  ]);
+  assert.doesNotMatch(gateway, /telegram-wheel:start -->\[\\s\\S\]\*\?<!-- telegram-wheel:end/);
+  assert.doesNotMatch(app, /function renderWheelStatus\(\) \{\n\s*if \(IS_VK\) return;/);
+  assert.doesNotMatch(app, /function openWheel\(\) \{\n\s*if \(IS_VK\) return;/);
+  assert.doesNotMatch(app, /async function spinWheel\(\) \{\n\s*if \(IS_VK \|\|/);
+});
