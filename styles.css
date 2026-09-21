@@ -6542,6 +6542,7 @@ body,
 }
 
 .spaceverse-business-cta {
+  appearance: none;
   display: inline-flex;
   min-height: 29px;
   align-items: center;
@@ -6553,9 +6554,11 @@ body,
   background: linear-gradient(135deg, #b97715, #e0ad4b);
   box-shadow: 0 5px 14px rgba(148,94,13,.15), inset 0 1px 0 rgba(255,255,255,.4);
   color: #fff;
+  font: inherit;
   font-size: 9px;
   font-style: normal;
   font-weight: 800;
+  cursor: pointer;
 }
 
 .spaceverse-business-cta i {
@@ -7631,4 +7634,56 @@ body,
   .home-league-podium > span {
     padding: 5px;
   }
+}
+
+
+.spaceverse-business-page-placeholder {
+  overflow: hidden;
+}
+
+.spaceverse-content-placeholder {
+  position: relative;
+  display: grid;
+  min-height: 150px;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px dashed rgba(176,126,39,.28);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(232,183,91,.12), transparent 56%),
+    rgba(255,255,255,.42);
+  text-align: center;
+}
+
+.spaceverse-content-placeholder::before {
+  content: "";
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  border: 1px solid rgba(179,128,38,.09);
+  border-radius: 28px;
+  transform: rotate(45deg);
+}
+
+.spaceverse-content-placeholder > * {
+  position: relative;
+  z-index: 1;
+}
+
+.spaceverse-content-placeholder span {
+  color: #a66b10;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .2em;
+}
+
+.spaceverse-content-placeholder strong {
+  max-width: 245px;
+  color: #51483d;
+  font-size: 12px;
+  line-height: 1.3;
 }
