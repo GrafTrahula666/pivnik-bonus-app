@@ -54,6 +54,9 @@ test('Customer 360 derives visits, LTV and average check only from completed sal
     assert.equal(customer.metrics.bonusEarned, 260, 'completed adjustment remains in bonus audit totals');
     assert.equal(customer.metrics.bonusSpent, 10);
     assert.ok(customer.metrics.frequency30d >= 0.9 && customer.metrics.frequency30d <= 1.1);
+    assert.equal(customer.lifecycle.status, 'active');
+    assert.ok(customer.lifecycle.daysSinceLastVisit >= 4 && customer.lifecycle.daysSinceLastVisit <= 6);
+    assert.ok(customer.lifecycle.accountAgeDays >= 59 && customer.lifecycle.accountAgeDays <= 61);
     assert.equal(customer.history.length, 4, 'history preserves cancelled and adjustment audit events');
     assert.equal(customer.history[0].status, 'cancelled');
     assert.equal(customer.history[0].staff_name, 'Анна Бармен');
@@ -63,6 +66,35 @@ test('Customer 360 derives visits, LTV and average check only from completed sal
   } finally {
     await db.close();
   }
+});
+
+test('Customer 360 exposes factual lifecycle states without changing financial metrics', async () => {
+  const now = Date.now();
+  const rows = [
+    { id: 11, created_at: new Date(now - 10 * 86_400_000).toISOString(), visits: 0, last_visit_at: null },
+    { id: 12, created_at: new Date(now - 90 * 86_400_000).toISOString(), visits: 0, last_visit_at: null },
+    { id: 13, created_at: new Date(now - 100 * 86_400_000).toISOString(), visits: 3, last_visit_at: new Date(now - 45 * 86_400_000).toISOString() },
+    { id: 14, created_at: new Date(now - 200 * 86_400_000).toISOString(), visits: 5, last_visit_at: new Date(now - 90 * 86_400_000).toISOString() }
+  ];
+  const query = async (sql, params) => {
+    if (sql.includes('FROM users u')) {
+      const source = rows.find((item) => String(item.id) === String(params[0]));
+      if (!source) return { rows: [] };
+      return { rows: [{
+        ...source, telegram_id: null, username: null, first_name: 'Клиент', last_name: null,
+        role: 'client', qr_short_code: null, marketing_opt_in: false, balance: 0,
+        paid_ml_total: 0, gift_ml_balance: 0, visits_30d: 0, lifetime_check_cents: 0,
+        average_check_cents: 0, spend_30d_cents: 0, bonus_earned: 0, bonus_spent: 0
+      }] };
+    }
+    return { rows: [] };
+  };
+  const loadCustomer360 = createCustomer360Repository({ query });
+
+  assert.equal((await loadCustomer360(11)).lifecycle.status, 'new');
+  assert.equal((await loadCustomer360(12)).lifecycle.status, 'no_visits');
+  assert.equal((await loadCustomer360(13)).lifecycle.status, 'at_risk');
+  assert.equal((await loadCustomer360(14)).lifecycle.status, 'sleeping');
 });
 
 test('Customer 360 clamps history limit and returns null for unknown customer', async () => {
@@ -80,8 +112,9 @@ test('Customer 360 clamps history limit and returns null for unknown customer', 
       return { rows: [] };
     }
   });
-  await loadCustomer360(7, { historyLimit: 999 });
+  const customer = await loadCustomer360(7, { historyLimit: 999 });
   assert.deepEqual(calls[1].params, ['7', 100]);
+  assert.equal(customer.lifecycle.status, 'new');
 
   const missing = createCustomer360Repository({ query: async () => ({ rows: [] }) });
   assert.equal(await missing(999), null);
