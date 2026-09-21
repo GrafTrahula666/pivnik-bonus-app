@@ -32,7 +32,12 @@ import {
   freeSpinState,
   paidSpinCost
 } from './wheel.js';
-import { adminUserCrmStatus, queryAdminUserDirectory } from './admin-user-directory.js';
+import {
+  adminUserCrmStatus,
+  adminUserDisplayName,
+  adminUserDisplayUsername,
+  queryAdminUserDirectory
+} from './admin-user-directory.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -1310,8 +1315,8 @@ async function getUnifiedAdminUserDirectory(input = {}) {
       id: String(row.id),
       telegramId: row.telegram_id === null ? null : String(row.telegram_id),
       vkId: row.vk_id === null ? null : String(row.vk_id),
-      username: row.username,
-      name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      username: adminUserDisplayUsername(row.username),
+      name: adminUserDisplayName(row),
       role: row.role,
       balance: hasUnlimitedBonus(row) ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
       unlimitedBonus: hasUnlimitedBonus(row),
