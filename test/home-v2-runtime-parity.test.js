@@ -41,3 +41,9 @@ test('bootstrap-vlad materializer is restart-safe after its cache patch is alrea
   assert.match(source, /версия стилей Владислава/);
   assert.match(source, /версия клиента Владислава/);
 });
+
+test('materializer recognizes the white-gold Home V2 asset version as already canonical', async () => {
+  const source = await read('scripts/materialize-runtime-patches.mjs');
+  assert.match(source, /styles\.css\?v=20\.1-spaceverse-white-gold-home/);
+  assert.match(source, /supportedAssetVersion/);
+});
