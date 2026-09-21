@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20.0-spaceverse-purple-home" />
-  <script defer src="app.js?v=20.0-spaceverse-purple-home"></script>
+  <link rel="stylesheet" href="styles.css?v=20.1-spaceverse-white-gold-home" />
+  <script defer src="app.js?v=20.1-spaceverse-white-gold-home"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -27,7 +27,6 @@
         <div class="boot-smoke"><i></i><i></i><i></i></div>
       </div>
       <div class="boot-copy">
-        <div class="boot-badge">Пивник | Бонусы</div>
         <h1>Загружаем приложение</h1>
         <p id="bootText">Подключаем бонусный счёт…</p>
         <div class="boot-actions hidden" id="bootActions">
@@ -164,7 +163,7 @@
         <div class="home-legacy-entrypoints hidden" aria-hidden="true">
           <span id="totalLitersHome">0</span>
           <div class="achievement-section" id="profileAchievementsSection">
-            <button id="openAchievementsButton" type="button">Достижения</button>
+            <span class="home-achievement-legacy-anchor" aria-hidden="true"></span>
             <span id="achievementCountHome">0</span>
             <div id="profileAchievementShowcase"></div>
           </div>
@@ -515,9 +514,9 @@
 
     <nav class="bottom-nav" aria-label="Клиентская навигация">
       <button class="active" data-target="client" type="button"><span>⌂</span><small>Главная</small></button>
-      <button data-target="actions" type="button"><span>✦</span><small>Акции</small></button>
-      <button class="qr-nav-button" id="navQrButton" type="button" aria-label="Открыть личный QR"><span>⌗</span><small>QR</small></button>
       <button data-target="league" type="button"><span>♛</span><small>Лига</small></button>
+      <button class="qr-nav-button" id="navQrButton" type="button" aria-label="Открыть личный QR"><span>⌗</span><small>QR</small></button>
+      <button id="openAchievementsButton" type="button" aria-label="Открыть достижения"><span>✦</span><small>Достижения</small></button>
       <button data-target="profile" type="button"><span>◎</span><small>Профиль</small></button>
     </nav>
   </div>
