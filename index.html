@@ -7,8 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20.1-spaceverse-white-gold-home" />
-  <script defer src="app.js?v=20.1-spaceverse-white-gold-home"></script>
+  <link rel="stylesheet" href="styles.css?v=20.2-spaceverse-white-gold-shell" />
+  <script defer src="app.js?v=20.2-spaceverse-white-gold-shell"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -301,7 +301,13 @@
           <button class="profile-edit-icon" id="openProfileSettings" type="button" aria-label="Настройки профиля">✎</button>
         </div>
 
-        <section class="profile-history-card vip-glass-card">
+        <section class="service-access vip-glass-card hidden" id="profileServiceAccess">
+          <span class="home-card-kicker">Служебный доступ</span>
+          <h2>Рабочие режимы</h2>
+          <p>Кнопки видны только пользователям с подтверждёнными правами.</p>
+          <button class="secondary hidden" id="profileStaffNav" type="button">Перейти в режим бармена</button>
+          <button class="primary hidden" id="profileAdminNav" type="button">Открыть админ-панель</button>
+        </section>\n\n        <section class="profile-history-card vip-glass-card">
           <div class="compact-card-head"><div><span class="home-card-kicker">Бонусный счёт</span><h2>История</h2></div><span>⌁</span></div>
           <div class="history-tabs" role="tablist">
             <button class="active" data-history-tab="purchases" type="button">Покупки</button>
@@ -331,13 +337,7 @@
           <div class="team-strip" id="currentShiftTeam"><div class="person"><span class="avatar">П</span><div><b>Команда Пивника</b><small>Смена пока не выбрана.</small></div></div></div>
         </div>
 
-        <section class="service-access vip-glass-card hidden" id="profileServiceAccess">
-          <span class="home-card-kicker">Служебный доступ</span>
-          <h2>Рабочие режимы</h2>
-          <p>Кнопки видны только пользователям с подтверждёнными правами.</p>
-          <button class="secondary hidden" id="profileStaffNav" type="button">Перейти в режим бармена</button>
-          <button class="primary hidden" id="profileAdminNav" type="button">Открыть админ-панель</button>
-        </section>
+
       </section>
 
       <section class="screen" data-screen="staff">
