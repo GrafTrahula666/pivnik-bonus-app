@@ -1092,8 +1092,22 @@ function renderBeer(profile = state.profile) {
   const progress = Number(beer.progressLiters || 0);
   const remaining = Math.max(0, Number(beer.nextGiftLiters ?? target));
   const gifts = Number(beer.giftLitersBalance || 0);
-  const percentage = Math.max(0, Math.min(100, (progress / target) * 100));
-  $('#beerProgressBar').style.width = `${percentage}%`;
+
+  const segmentCount = 14;
+  const normalizedProgress = target > 0
+    ? Math.max(0, Math.min(segmentCount, (progress / target) * segmentCount))
+    : 0;
+  const segments = $('#beerProgressBar .beer-progress-segment');
+  segments.forEach((segment, index) => {
+    const fill = Math.max(0, Math.min(1, normalizedProgress - index));
+    segment.style.setProperty('--segment-fill', `${fill * 100}%`);
+    segment.classList.toggle('is-filled', fill >= 1);
+    segment.classList.toggle('is-partial', fill > 0 && fill < 1);
+  });
+  $('#beerProgressBar')?.setAttribute('aria-valuenow', String(progress));
+  $('#beerProgressBar')?.setAttribute('aria-valuemin', '0');
+  $('#beerProgressBar')?.setAttribute('aria-valuemax', String(target));
+
   $('#beerProgressText').textContent = `${fmtLiters(progress)} из ${fmtLiters(target)} л`;
   $('#beerRemainingText').textContent = remaining > 0 ? `ещё ${fmtLiters(remaining)} л` : 'подарок готов';
   $('#beerGiftBalance').textContent = fmtLiters(gifts);
