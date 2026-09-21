@@ -17,8 +17,11 @@ test('SPACEVERSE business card opens a real lead page and submits through the ex
   assert.match(index, /id="spaceverseLeadName"/);
   assert.match(index, /id="spaceverseLeadPhone"/);
   assert.match(index, /id="spaceverseLeadSubmit"/);
-  assert.match(index, /Информация о SPACEVERSE/);
-  assert.match(index, /Содержимое страницы будет добавлено позже/);
+  assert.match(index, /Ваш бизнес уже может быть приложением/);
+  assert.match(index, /Кому подходит/);
+  assert.match(index, /Первый месяц/);
+  assert.match(index, /Просто попробуйте/);
+  assert.match(index, /Под ваш бренд/);
   assert.match(index, /class="spaceverse-business-cta" id="openSpaceverseBusiness"/);
 
   assert.match(app, /function openSpaceverseBusinessPage\(\)/);
@@ -33,6 +36,8 @@ test('SPACEVERSE business card opens a real lead page and submits through the ex
   assert.match(server, /Новая заявка SPACEVERSE/);
   assert.match(styles, /SPACEVERSE BUSINESS LEAD PAGE/);
   assert.match(styles, /\.app-shell\.spaceverse-business-mode \.bottom-nav/);
+  assert.match(styles, /\.spaceverse-business-trial/);
+  assert.match(styles, /\.spaceverse-business-section/);
 });
 
 test('profile platform label accepts provider payloads used by VK startup smokes', async () => {
