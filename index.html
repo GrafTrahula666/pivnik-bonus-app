@@ -90,7 +90,7 @@
           <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
 
-        <button class="spaceverse-business-card vip-glass-card" id="openSpaceverseBusiness" type="button">
+        <article class="spaceverse-business-card vip-glass-card">
           <span class="spaceverse-business-copy">
             <span class="spaceverse-business-brand">
               <img class="spaceverse-cube-mark spaceverse-cube-mark--gold" src="/assets/spaceverse/logo-gold.svg?v=1" alt="" aria-hidden="true" decoding="async" />
@@ -99,10 +99,10 @@
             <strong>У вас свой бизнес?</strong>
             <em>Подключим приложение бесплатно за 1 день</em>
             <small>Бонусная система, приложение для гостей, современные инструменты для бизнеса, аналитика и умные AI-возможности.</small>
-            <span class="spaceverse-business-cta">Подробнее <i>›</i></span>
+            <button class="spaceverse-business-cta" id="openSpaceverseBusiness" type="button">Подробнее <i aria-hidden="true">›</i></button>
           </span>
           <span class="spaceverse-business-art" aria-hidden="true"></span>
-        </button>
+        </article>
 
         <!-- telegram-wheel:start -->
         <button class="home-wheel-card vip-glass-card" id="openWheelButton" type="button">
@@ -181,31 +181,28 @@
           <button class="icon-btn" id="spaceverseBusinessBack" type="button" aria-label="Назад">‹</button>
           <span>
             <small>SPACEVERSE</small>
-            <strong>Приложение для вашего бизнеса</strong>
+            <strong>Для бизнеса</strong>
           </span>
           <span class="spaceverse-page-head-spacer" aria-hidden="true"></span>
         </div>
 
-        <div class="spaceverse-business-page-card">
+        <div class="spaceverse-business-page-card spaceverse-business-page-placeholder">
           <div class="spaceverse-business-page-brand">
             <img class="spaceverse-cube-mark spaceverse-cube-mark--gold" src="/assets/spaceverse/logo-gold.svg?v=1" alt="" aria-hidden="true" decoding="async" />
             <span><b>SPACEVERSE</b><small>business ecosystem</small></span>
           </div>
-          <h2>Запустим приложение для вашего бизнеса бесплатно за 1 день</h2>
-          <p>Бонусная система, приложение для гостей, аналитика, CRM и AI-инструменты в одном интерфейсе. Начинаем с простого рабочего запуска, без долгой разработки.</p>
-
-          <div class="spaceverse-business-benefits">
-            <span><i>01</i><b>Бонусы и лояльность</b><small>Баланс, статусы, награды и персональные механики.</small></span>
-            <span><i>02</i><b>Приложение для гостей</b><small>VK и Telegram, QR и единый профиль клиента.</small></span>
-            <span><i>03</i><b>Аналитика и CRM</b><small>Покупки, активность, сегменты и управление аудиторией.</small></span>
-            <span><i>04</i><b>AI-возможности</b><small>Автоматизация и умные инструменты по мере роста бизнеса.</small></span>
+          <h2>Информация о SPACEVERSE</h2>
+          <p>Страница подключена к кнопке «Подробнее». Финальное наполнение будет добавлено по отдельному материалу.</p>
+          <div class="spaceverse-content-placeholder" aria-label="Место для будущего контента SPACEVERSE">
+            <span>SPACEVERSE</span>
+            <strong>Содержимое страницы будет добавлено позже</strong>
           </div>
         </div>
 
         <div class="spaceverse-lead-card">
           <span class="spaceverse-lead-kicker">Подключение</span>
           <h3>Оставьте контакты</h3>
-          <p>Короткая заявка. Без оплаты и обязательств.</p>
+          <p>Имя и телефон для связи по подключению приложения.</p>
           <label class="spaceverse-lead-field">
             <span>Имя</span>
             <input id="spaceverseLeadName" type="text" maxlength="80" autocomplete="name" placeholder="Как к вам обращаться">
@@ -216,10 +213,9 @@
           </label>
           <button class="primary full spaceverse-lead-submit" id="spaceverseLeadSubmit" type="button">Оставить заявку</button>
           <div class="spaceverse-lead-success hidden" id="spaceverseLeadSuccess" role="status">Заявка отправлена. Контакты сохранены.</div>
-          <small class="spaceverse-lead-note">Нажимая кнопку, вы отправляете имя и телефон владельцу SPACEVERSE для связи по заявке.</small>
+          <small class="spaceverse-lead-note">Имя и телефон используются только для связи по заявке SPACEVERSE.</small>
         </div>
       </section>
-
       <!-- telegram-wheel:start -->
       <section class="screen client-screen wheel-screen" data-screen="wheel">
         <div class="wheel-page-head">
