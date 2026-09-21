@@ -8540,3 +8540,15 @@ body,
   background-position: center 59% !important;
   background-repeat: no-repeat !important;
 }
+
+/* HOME V2 DIRECT SCENE BACKDROP */
+.app-shell {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.02), rgba(241,228,205,.07) 58%, rgba(218,191,148,.12)),
+    url('/assets/home-v2/home-background.webp?v=4') center top / cover no-repeat !important;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .client-identity,
+.client-home.home-v2 .spaceverse-home-hero .balance {
+  left: 19%;
+}
