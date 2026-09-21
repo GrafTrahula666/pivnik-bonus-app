@@ -2802,10 +2802,6 @@ export async function renderAppIndex(platform) {
     );
   }
   return withLinking
-    .replace(
-      /<!-- telegram-wheel:start -->[\s\S]*?<!-- telegram-wheel:end -->/g,
-      ''
-    )
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
