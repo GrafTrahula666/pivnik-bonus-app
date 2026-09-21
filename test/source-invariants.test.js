@@ -272,7 +272,7 @@ test('Первый вход не открывает цепочку модало�
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
 });
 
-test('Home V2 сохраняет клиентскую навигацию, реальные данные и видимый фон', async () => {
+test('Home V2 сохраняет клиентскую навигацию, реальные данные и чистый white-gold shell', async () => {
   const [index, app, styles, server, gateway, deletionMigration] = await Promise.all([
     source('index.html'),
     source('app.js'),
@@ -291,8 +291,10 @@ test('Home V2 сохраняет клиентскую навигацию, реа
   assert.doesNotMatch(nav, /Акции/);
   assert.match(nav, /Профиль/);
   assert.doesNotMatch(nav, /Бармен|Админ/);
-  assert.match(styles, /luxury-vip-space\.webp/);
-  assert.match(styles, /filter: brightness\(1\.72\)/);
+  assert.doesNotMatch(styles, /luxury-vip-space\.webp/);
+  assert.doesNotMatch(styles, /home-background\.webp/);
+  assert.match(styles, /V20\.2 · SPACEVERSE white-gold canonical client experience/);
+  assert.match(styles, /HOME V2 CLEAN SHELL BACKDROP/);
   assert.match(app, /profile\.status\.bonusPercent/);
   assert.match(app, /profileStaffNav/);
   assert.match(app, /profileAdminNav/);
