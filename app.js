@@ -3226,6 +3226,7 @@ $$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('cli
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
+$('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
