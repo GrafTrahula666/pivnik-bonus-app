@@ -82,7 +82,7 @@ try {
   const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1`, { waitUntil: 'networkidle' });
   assert(response?.status() === 200, `index.html returned ${response?.status()}`);
 
-  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home{display:block!important}' });
+  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:block!important}.screen.spaceverse-business-screen.active{display:grid!important}' });
   await page.evaluate(() => {
     const html = document.documentElement;
     html.classList.remove('platform-telegram', 'android-webview', 'lite-mode', 'reduce-effects');
@@ -138,8 +138,34 @@ try {
   assert(failedRequests.length === 0, `failed local requests detected: ${JSON.stringify(failedRequests)}`);
 
   await page.screenshot({ path: path.join(outDir, 'vk-home.png'), fullPage: true });
-  await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify({ evidence, pageErrors, failedRequests }, null, 2));
-  console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), evidence }, null, 2));
+
+  await page.evaluate(() => {
+    document.querySelector('.screen.client-home')?.classList.remove('active');
+    document.querySelector('[data-screen="spaceverse-business"]')?.classList.add('active');
+    document.querySelector('#appShell')?.classList.add('spaceverse-business-mode');
+  });
+  const businessPage = await page.evaluate(() => ({
+    active: document.querySelector('[data-screen="spaceverse-business"]')?.classList.contains('active') || false,
+    nameVisible: Boolean(document.querySelector('#spaceverseLeadName')?.offsetParent),
+    phoneVisible: Boolean(document.querySelector('#spaceverseLeadPhone')?.offsetParent),
+    submitVisible: Boolean(document.querySelector('#spaceverseLeadSubmit')?.offsetParent),
+    bottomNavDisplay: getComputedStyle(document.querySelector('.bottom-nav')).display
+  }));
+  assert(businessPage.active, 'SPACEVERSE business page markup missing');
+  assert(businessPage.nameVisible && businessPage.phoneVisible && businessPage.submitVisible, 'SPACEVERSE lead form is incomplete');
+  assert(businessPage.bottomNavDisplay === 'none', `bottom navigation must stay hidden on SPACEVERSE lead page: ${businessPage.bottomNavDisplay}`);
+  await page.screenshot({ path: path.join(outDir, 'vk-spaceverse-business.png'), fullPage: true });
+
+  await page.evaluate(() => {
+    document.querySelector('[data-screen="spaceverse-business"]')?.classList.remove('active');
+    document.querySelector('.screen.client-home')?.classList.add('active');
+    document.querySelector('#appShell')?.classList.remove('spaceverse-business-mode');
+  });
+  assert(pageErrors.length === 0, `page errors detected after SPACEVERSE page render: ${pageErrors.join(' | ')}`);
+  assert(failedRequests.length === 0, `failed local requests after SPACEVERSE page render: ${JSON.stringify(failedRequests)}`);
+
+  await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify({ evidence, businessPage, pageErrors, failedRequests }, null, 2));
+  console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), evidence, businessPage }, null, 2));
 } finally {
   await context.close();
   await browser.close();

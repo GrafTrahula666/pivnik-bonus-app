@@ -76,7 +76,7 @@ async function applyReleaseHardening() {
     `function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
   const consentSafeTarget = event.target?.closest?.(
-    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent'
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, .spaceverse-business-screen'
   );
   if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
@@ -249,7 +249,8 @@ async function verifyMaterializedState() {
   const pkg = JSON.parse(pkgText);
   const failures = [];
   if (pkg.scripts?.start !== FINAL_START_COMMAND) failures.push('package.json start');
-  const supportedAppVersion = app.includes("const APP_VERSION = '19.1-telegram-wheel-v2';")
+  const supportedAppVersion = app.includes("const APP_VERSION = '20.0-spaceverse-purple-home';")
+    || app.includes("const APP_VERSION = '19.1-telegram-wheel-v2';")
     || app.includes("const APP_VERSION = '2.0-red-cosmos';");
   if (!supportedAppVersion) failures.push('app.js version');
   if (!app.includes("profileFrame === 'vladislav'")) failures.push('app.js Vladislav frame');
@@ -258,7 +259,9 @@ async function verifyMaterializedState() {
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  if (!index.includes('styles.css?v=19.1-telegram-wheel-v2')) failures.push('index.html asset version');
+  const supportedAssetVersion = index.includes('styles.css?v=20.0-spaceverse-purple-home')
+    || index.includes('styles.css?v=19.1-telegram-wheel-v2');
+  if (!supportedAssetVersion) failures.push('index.html asset version');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (!app.includes('WHEEL_VISUAL_SECTORS')) failures.push('app.js wheel artwork');

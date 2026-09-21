@@ -4,21 +4,24 @@ import test from 'node:test';
 
 const root = new URL('../', import.meta.url);
 
-test('Telegram wheel UI keeps the approved home-page order', async () => {
+test('home page keeps the approved SPACEVERSE → wheel → liters → league order', async () => {
   const index = await readFile(new URL('index.html', root), 'utf8');
-  const hero = index.indexOf('class="hero-card vip-hero-card"');
+  const hero = index.indexOf('class="hero-card vip-hero-card spaceverse-home-hero"');
+  const spaceverse = index.indexOf('id="openSpaceverseBusiness"');
   const wheel = index.indexOf('id="openWheelButton"');
   const beer = index.indexOf('id="beerLoyaltyCard"');
-  const stats = index.indexOf('class="home-stat-grid"');
-  const achievements = index.indexOf('id="profileAchievementsSection"');
+  const league = index.indexOf('id="openLeaderboardButton"');
 
   assert.ok(hero >= 0);
-  assert.ok(hero < wheel);
+  assert.ok(hero < spaceverse);
+  assert.ok(spaceverse < wheel);
   assert.ok(wheel < beer);
-  assert.ok(beer < stats);
-  assert.ok(stats < achievements);
-  assert.match(index, /telegram-wheel-legacy:start[\s\S]*id="openShopButton"/);
-  assert.match(index, /telegram-wheel-legacy:start[\s\S]*id="openPromosButton"/);
+  assert.ok(beer < league);
+  assert.match(index, /У вас свой бизнес\?/);
+  assert.match(index, /Подключим приложение бесплатно за 1 день/);
+  assert.match(index, /id="homeLeaderboardPreview"/);
+  assert.match(index, /id="openShopButton"/);
+  assert.match(index, /id="openPromosButton"/);
 });
 
 test('Second wheel design contains one large prize and twenty narrow sectors', async () => {

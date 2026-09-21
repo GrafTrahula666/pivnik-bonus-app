@@ -1,5 +1,5 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '19.1-telegram-wheel-v2';
+const APP_VERSION = '20.0-spaceverse-purple-home';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -612,7 +612,7 @@ function wheelSectorPath(start, end) {
 }
 
 function renderWheelArtwork() {
-  if (IS_VK || state.wheel.artworkReady) return;
+  if (state.wheel.artworkReady) return;
   const disk = $('#wheelDisk');
   if (!disk) return;
   disk.innerHTML = WHEEL_VISUAL_SECTORS.map((sector, index) => {
@@ -648,7 +648,6 @@ function effectiveWheelStatus() {
 }
 
 function renderWheelStatus() {
-  if (IS_VK) return;
   const current = effectiveWheelStatus();
   const button = $('#wheelSpinButton');
   const availability = $('#wheelAvailability');
@@ -700,14 +699,14 @@ function renderWheelStatus() {
       ? `Баланс: ${fmt(current.balance)} бонусов`
       : `На балансе ${fmt(current.balance)} · для вращения нужно ${paidCost}`;
   if (homeStatus) {
-    homeStatus.textContent = free
-      ? 'Бесплатное вращение доступно'
-      : `Бесплатно через ${wheelDurationLabel(remaining)}`;
+    const homeLabel = $('#homeWheelTimerLabel');
+    if (homeLabel) homeLabel.textContent = free ? 'Вращение' : 'Следующее вращение через';
+    homeStatus.textContent = free ? 'Доступно сейчас' : wheelDurationLabel(remaining);
   }
 }
 
 function startWheelCountdown() {
-  if (IS_VK || state.wheel.countdownTimer) return;
+  if (state.wheel.countdownTimer) return;
   state.wheel.countdownTimer = window.setInterval(() => {
     const before = state.wheel.status?.freeAvailable;
     renderWheelStatus();
@@ -720,7 +719,7 @@ function startWheelCountdown() {
 }
 
 async function loadWheelStatus() {
-  if (IS_VK || !state.token || !state.profile?.termsAccepted) return null;
+  if (!state.token || !state.profile?.termsAccepted) return null;
   const status = await api('/api/wheel/status', { retries: 0, timeoutMs: 7000 });
   state.wheel.status = status;
   renderWheelStatus();
@@ -770,7 +769,7 @@ function clearPendingWheelRequest(requestKey) {
 }
 
 async function spinWheel() {
-  if (IS_VK || state.wheel.busy) return;
+  if (state.wheel.busy) return;
   const disk = $('#wheelDisk');
   if (!disk) return;
   // Lock before the first await so status loading cannot admit a second click.
@@ -841,7 +840,6 @@ async function spinWheel() {
 }
 
 function openWheel() {
-  if (IS_VK) return;
   renderWheelArtwork();
   switchScreen('wheel');
   loadWheelStatus().catch((error) => toast(error.message));
@@ -1018,12 +1016,21 @@ function closeModal(id) {
   modal.setAttribute('aria-hidden', 'true');
 }
 
-function switchScreen(target) {
+function switchScreen(target, navigation = {}) {
   if (!target) return;
-  $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
-  $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  if (target === 'staff' && !roleCanStaff(state.profile?.role)) return;
+  if (target === 'admin' && !roleCanAdmin(state.profile?.role)) return;
+  const active = $('.screen.active')?.dataset.screen || null;
+  state.screenHistory ||= [];
+  if (!navigation.fromHistory && active && active !== target) {
+    state.screenHistory.push(active);
+    if (state.screenHistory.length > 24) state.screenHistory.shift();
+  }
+  $('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
+  $('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
+  $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
@@ -1032,6 +1039,14 @@ function switchScreen(target) {
   if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
 
+window.__PIVNIK_GO_BACK__ = () => {
+  state.screenHistory ||= [];
+  const active = $('.screen.active')?.dataset.screen || 'client';
+  let previous = state.screenHistory.pop();
+  while (previous === active && state.screenHistory.length) previous = state.screenHistory.pop();
+  switchScreen(previous || (active === 'client' ? 'profile' : 'client'), { fromHistory: true });
+};
+
 function currentLevelIndex() {
   return Math.max(0, state.statuses.findIndex((level) => level.name === state.profile?.status?.name));
 }
@@ -1039,32 +1054,34 @@ function currentLevelIndex() {
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
+  // SPACEVERSE_CANONICAL_THEME_LOCK
+  // White-gold SPACEVERSE is the canonical client palette; server settings may change copy/radius, never product colors.
   const root = document.documentElement;
-  const colors = design.colors || {};
-  root.style.setProperty('--bg', colors.background || '#0e0c0a');
-  root.style.setProperty('--header', colors.header || '#15110e');
-  root.style.setProperty('--surface', colors.surface || '#1c1612');
-  root.style.setProperty('--card', colors.card || '#231a14');
-  root.style.setProperty('--text', colors.text || '#f7eee5');
-  root.style.setProperty('--muted', colors.muted || '#a99580');
-  root.style.setProperty('--gold', colors.accent || '#e9a83b');
-  root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
-  root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
+  root.style.setProperty('--bg', '#efe7dc');
+  root.style.setProperty('--header', '#f8f3eb');
+  root.style.setProperty('--surface', '#f4eee5');
+  root.style.setProperty('--card', '#fffaf2');
+  root.style.setProperty('--text', '#171717');
+  root.style.setProperty('--muted', '#746b5e');
+  root.style.setProperty('--gold', '#b77917');
+  root.style.setProperty('--gold2', '#e4b357');
+  root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
   const legacyQrButton = $('#showQrButton');
   if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
-  $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
+  $('#byline').textContent = (design.texts?.byline || 'by Kirill Gamilton') + ' △';
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
     if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);
-    else document.querySelectorAll(`[data-config-section="${key}"]`).forEach((element) => element.classList.toggle('hidden', !visible));
+    else document.querySelectorAll('[data-config-section="' + key + '"]').forEach((element) => element.classList.toggle('hidden', !visible));
   });
 
   try {
-    tg?.setHeaderColor(colors.header || '#15110e');
-    tg?.setBackgroundColor(colors.background || '#0e0c0a');
+    tg?.setHeaderColor('#f8f3eb');
+    tg?.setBackgroundColor('#efe7dc');
+    tg?.setBottomBarColor('#f8f3eb');
   } catch (_) {}
 }
 
@@ -1075,8 +1092,22 @@ function renderBeer(profile = state.profile) {
   const progress = Number(beer.progressLiters || 0);
   const remaining = Math.max(0, Number(beer.nextGiftLiters ?? target));
   const gifts = Number(beer.giftLitersBalance || 0);
-  const percentage = Math.max(0, Math.min(100, (progress / target) * 100));
-  $('#beerProgressBar').style.width = `${percentage}%`;
+
+  const segmentCount = 14;
+  const normalizedProgress = target > 0
+    ? Math.max(0, Math.min(segmentCount, (progress / target) * segmentCount))
+    : 0;
+  const segments = $('#beerProgressBar .beer-progress-segment');
+  segments.forEach((segment, index) => {
+    const fill = Math.max(0, Math.min(1, normalizedProgress - index));
+    segment.style.setProperty('--segment-fill', `${fill * 100}%`);
+    segment.classList.toggle('is-filled', fill >= 1);
+    segment.classList.toggle('is-partial', fill > 0 && fill < 1);
+  });
+  $('#beerProgressBar')?.setAttribute('aria-valuenow', String(progress));
+  $('#beerProgressBar')?.setAttribute('aria-valuemin', '0');
+  $('#beerProgressBar')?.setAttribute('aria-valuemax', String(target));
+
   $('#beerProgressText').textContent = `${fmtLiters(progress)} из ${fmtLiters(target)} л`;
   $('#beerRemainingText').textContent = remaining > 0 ? `ещё ${fmtLiters(remaining)} л` : 'подарок готов';
   $('#beerGiftBalance').textContent = fmtLiters(gifts);
@@ -1306,6 +1337,61 @@ async function contactOwnerAboutItem(code) {
   }
 }
 
+function openSpaceverseBusinessPage() {
+  const nameInput = $('#spaceverseLeadName');
+  if (nameInput && !nameInput.value.trim()) {
+    nameInput.value = [state.profile?.firstName, state.profile?.lastName].filter(Boolean).join(' ');
+  }
+  $('#spaceverseLeadSuccess')?.classList.add('hidden');
+  const button = $('#spaceverseLeadSubmit');
+  if (button) {
+    button.disabled = false;
+    button.textContent = 'Оставить заявку';
+  }
+  switchScreen('spaceverse-business');
+}
+
+async function submitSpaceverseBusinessLead() {
+  const name = $('#spaceverseLeadName')?.value?.trim() || '';
+  const phone = $('#spaceverseLeadPhone')?.value?.trim() || '';
+  const digits = phone.replace(/\D/g, '');
+  if (name.length < 2 || name.length > 80) throw new Error('Укажите имя.');
+  if (digits.length < 7 || digits.length > 15) throw new Error('Проверьте номер телефона.');
+
+  const button = $('#spaceverseLeadSubmit');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Отправляем…';
+  }
+
+  try {
+    const platform = IS_VK ? 'VK' : 'Telegram';
+    await api('/api/shop/inquiries', {
+      method: 'POST',
+      body: JSON.stringify({
+        itemCode: 'spaceverse-business-lead',
+        itemTitle: 'SPACEVERSE · подключение приложения',
+        message: [
+          'Заявка на подключение SPACEVERSE',
+          `Имя: ${name}`,
+          `Телефон: ${phone}`,
+          `Платформа: ${platform}`
+        ].join('\n')
+      })
+    });
+    $('#spaceverseLeadSuccess')?.classList.remove('hidden');
+    if (button) button.textContent = 'Заявка отправлена';
+    haptic('medium');
+    toast('Заявка отправлена');
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Оставить заявку';
+    }
+    throw error;
+  }
+}
+
 async function loadWalletConfig() {
   try { state.walletConfig = await api('/api/wallet/config'); } catch (_) { state.walletConfig = { appleAvailable: false, googleAvailable: false, fallbackAvailable: true }; }
   $('#addAppleWallet')?.classList.toggle('hidden', !state.walletConfig.appleAvailable);
@@ -1369,6 +1455,17 @@ function renderLeaderboard() {
     $('#leagueSpentHome').textContent = data.me?.spend > 0
       ? `${fmt(data.me.spend)} ₽ за месяц`
       : 'по сумме покупок';
+  }
+  const homePreview = $('#homeLeaderboardPreview');
+  if (homePreview) {
+    homePreview.innerHTML = [1, 2, 3].map((rank) => {
+      const leader = data.leaders?.find((item) => item.rank === rank);
+      const amount = leader?.spend === null || leader?.spend === undefined ? '— ₽' : `${fmt(leader.spend)} ₽`;
+      const avatar = leader
+        ? avatarInlineHtml(leader, 'leader-avatar', true)
+        : '<span class="leader-avatar avatar-render"><span class="avatar-fallback">•</span></span>';
+      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i>${avatar}<b>${escapeHtml(leader?.name || 'Пока свободно')}</b><strong>${amount}</strong></span>`;
+    }).join('');
   }
   const preview = $('#leaderboardPreview');
   if (preview) {
@@ -1755,9 +1852,10 @@ function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
-  const platformLabel = profile.platform === 'vk' ? 'VK' : 'Telegram';
+  const profilePlatform = profile.platform || profile.provider || (IS_VK ? 'vk' : 'telegram');
+  const platformLabel = profilePlatform === 'vk' ? 'VK' : 'Telegram';
   const linked = Array.isArray(profile.linkedPlatforms) ? profile.linkedPlatforms : [];
-  $('#eyebrow').textContent = `${profile.firstName || 'Гость'}${profile.username ? ` · @${profile.username}` : ''}`;
+  $('#eyebrow').textContent = profilePlatform === 'vk' ? 'VK Mini App' : 'Telegram Mini App';
   if ($('#clientName')) $('#clientName').textContent = fullName;
   if ($('#profileName')) $('#profileName').textContent = fullName;
   if ($('#profileHandle')) $('#profileHandle').textContent = profile.username ? `@${profile.username} · ${platformLabel}` : platformLabel;
@@ -1771,7 +1869,7 @@ function renderProfile() {
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
-  $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
+  if ($('#bonusPercent')) $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   renderAvatarInto($('#profileAvatar'), profile);
   renderAvatarInto($('#profileAvatarMirror'), profile);
@@ -1882,7 +1980,7 @@ async function refreshMe() {
   const data = await api('/api/me');
   applyProfilePayload(data);
   void loadSecondaryData();
-  if (!IS_VK) void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
+  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
 }
 
 async function waitForTelegramInitData(maxWaitMs = 2800) {
@@ -1940,7 +2038,7 @@ async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
   const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
-  if (!IS_VK) jobs.push(loadWheelStatus());
+  jobs.push(loadWheelStatus());
   const results = await Promise.allSettled(jobs);
   const failures = results.filter((item) => item.status === 'rejected');
   failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
@@ -1978,7 +2076,7 @@ function schedulePostBootHydration() {
 function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
   const consentSafeTarget = event.target?.closest?.(
-    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent'
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, .spaceverse-business-screen'
   );
   if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
@@ -3216,9 +3314,13 @@ $$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('cli
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
+$('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
+$('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
+$('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));

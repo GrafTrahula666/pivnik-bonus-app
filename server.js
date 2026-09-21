@@ -1962,7 +1962,10 @@ app.post('/api/shop/inquiries', authRequired, async (req, res, next) => {
     );
     const clientName = [req.user.firstName, req.user.lastName].filter(Boolean).join(' ') || req.user.telegramId;
     if (ownerTelegramId) {
-      await sendTelegramMessage(ownerTelegramId, `🛒 Новый вопрос из магазина «Пивника»\n\nКлиент: ${clientName}${req.user.username ? ` (@${req.user.username})` : ''}\nТовар: ${itemTitle}\n\n${message}`);
+      const isSpaceverseLead = itemCode === 'spaceverse-business-lead';
+      const heading = isSpaceverseLead ? '🚀 Новая заявка SPACEVERSE' : '🛒 Новый вопрос из магазина «Пивника»';
+      const subject = isSpaceverseLead ? 'Заявка' : 'Товар';
+      await sendTelegramMessage(ownerTelegramId, `${heading}\n\nКлиент: ${clientName}${req.user.username ? ` (@${req.user.username})` : ''}\n${subject}: ${itemTitle}\n\n${message}`);
     }
     res.json({ ok: true, inquiry: { id: String(saved.rows[0].id), status: saved.rows[0].status, createdAt: saved.rows[0].created_at } });
   } catch (error) { next(error); }

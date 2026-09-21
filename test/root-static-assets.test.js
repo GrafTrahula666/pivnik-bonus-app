@@ -39,21 +39,17 @@ test('universal server serves all root black-frosted CSS assets before HTML fall
   }
 });
 
-test('materialized shell references only root CSS assets that universal server knows how to serve', async () => {
-  const [source, shell] = await Promise.all([
-    read('universal-server.js'),
-    read('scripts/apply-red-cosmos-v2-shell-final.mjs')
-  ]);
-  const hrefs = [...shell.matchAll(/BLACK_FROSTED_[A-Z_]+_HREF\s*=\s*'\/([^?']+)/g)]
-    .map((match) => match[1]);
-
-  assert.deepEqual(hrefs.sort(), [
-    'black-frosted-controls.css',
-    'black-frosted-glass.css',
-    'black-frosted-surfaces.css'
-  ]);
-
-  for (const asset of hrefs) {
-    assert.match(source, new RegExp(`url\\.pathname === '/${asset.replaceAll('.', '\\.')}'`));
+test('materialized shell keeps one canonical stylesheet and strips legacy visual CSS', async () => {
+  const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.0-spaceverse-purple-home'/);
+  for (const asset of [
+    '/v22.css',
+    '/red-cosmos-v2.css',
+    '/black-frosted-glass.css',
+    '/black-frosted-surfaces.css',
+    '/black-frosted-controls.css'
+  ]) {
+    assert.ok(shell.includes(asset), `${asset} must be explicitly stripped`);
   }
+  assert.match(shell, /Legacy visual layer still wired/);
 });

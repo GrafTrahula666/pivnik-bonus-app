@@ -6,72 +6,70 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
-const BLACK_FROSTED_GLASS_HREF = '/black-frosted-glass.css?v=20260904-1';
-const BLACK_FROSTED_SURFACES_HREF = '/black-frosted-surfaces.css?v=20260904-1';
-const BLACK_FROSTED_CONTROLS_HREF = '/black-frosted-controls.css?v=20260904-1';
+const CANONICAL_STYLE_VERSION = '20.0-spaceverse-purple-home';
+const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
 
-let index = await fs.readFile(indexPath, 'utf8');
-if (!index.includes(INDEX_MARKER)) {
-  index = index
+function stripLegacyVisualLayers(source) {
+  return source
     .replace(/\s*<link rel="stylesheet" href="\/v22\.css[^"]*"\s*\/>/g, '')
-    .replace(/\s*<script defer src="\/v22-ui\.js[^"]*"><\/script>/g, '');
-  if (!index.includes('/red-cosmos-v2.css?v=2.0.0')) {
-    index = index.replace(/(<link rel="stylesheet" href="styles\.css[^"]*"\s*\/>)/, '$1\n  <link rel="stylesheet" href="/red-cosmos-v2.css?v=2.0.0" />');
-  }
-  if (!index.includes('/red-cosmos-v2.js?v=2.0.0')) {
-    index = index.replace(/(<script defer src="app\.js[^"]*"><\/script>)/, '$1\n  <script defer src="/red-cosmos-v2.js?v=2.0.0"></script>');
-  }
-  index += `\n${INDEX_MARKER}\n`;
+    .replace(/\s*<script defer src="\/v22-ui\.js[^"]*"><\/script>/g, '')
+    .replace(/\s*<link rel="stylesheet" href="\/red-cosmos-v2\.css[^"]*"\s*\/>/g, '')
+    .replace(/\s*<link rel="stylesheet" href="\/black-frosted-glass\.css[^"]*"\s*\/>/g, '')
+    .replace(/\s*<link rel="stylesheet" href="\/black-frosted-surfaces\.css[^"]*"\s*\/>/g, '')
+    .replace(/\s*<link rel="stylesheet" href="\/black-frosted-controls\.css[^"]*"\s*\/>/g, '');
 }
 
-if (!index.includes(BLACK_FROSTED_GLASS_HREF)) {
-  const redCosmosLayer = '<link rel="stylesheet" href="/red-cosmos-v2.css?v=2.0.0" />';
-  index = index.replace(redCosmosLayer, `${redCosmosLayer}\n  <link rel="stylesheet" href="${BLACK_FROSTED_GLASS_HREF}" />`);
-}
-if (!index.includes(BLACK_FROSTED_SURFACES_HREF)) {
-  const iconLayer = `<link rel="stylesheet" href="${BLACK_FROSTED_GLASS_HREF}" />`;
-  index = index.replace(iconLayer, `${iconLayer}\n  <link rel="stylesheet" href="${BLACK_FROSTED_SURFACES_HREF}" />`);
-}
-if (!index.includes(BLACK_FROSTED_CONTROLS_HREF)) {
-  const surfaceLayer = `<link rel="stylesheet" href="${BLACK_FROSTED_SURFACES_HREF}" />`;
-  index = index.replace(surfaceLayer, `${surfaceLayer}\n  <link rel="stylesheet" href="${BLACK_FROSTED_CONTROLS_HREF}" />`);
+let index = stripLegacyVisualLayers(await fs.readFile(indexPath, 'utf8'));
+
+index = index.replace(
+  /styles\.css\?v=[^"]+/g,
+  `styles.css?v=${CANONICAL_STYLE_VERSION}`
+);
+index = index.replace(
+  /app\.js\?v=[^"]+/g,
+  `app.js?v=${CANONICAL_STYLE_VERSION}`
+);
+
+if (!index.includes(INTERACTION_FALLBACK_SRC)) {
+  const appScript = new RegExp(
+    '(<script defer src="app\\.js\\?v=' + CANONICAL_STYLE_VERSION.replaceAll('.', '\\.') + '"><\\/script>)'
+  );
+  if (!appScript.test(index)) throw new Error('Canonical app.js script tag not found');
+  index = index.replace(appScript, `$1\n  <script defer src="${INTERACTION_FALLBACK_SRC}"></script>`);
 }
 
-if (!index.includes('/red-cosmos-v2.css?v=2.0.0') || !index.includes('/red-cosmos-v2.js?v=2.0.0')) throw new Error('RED COSMOS v2 shell assets not wired');
-if (!index.includes(BLACK_FROSTED_GLASS_HREF)) throw new Error('Black frosted glass layer not wired');
-if (!index.includes(BLACK_FROSTED_SURFACES_HREF)) throw new Error('Black frosted surfaces layer not wired');
-if (!index.includes(BLACK_FROSTED_CONTROLS_HREF)) throw new Error('Black frosted controls layer not wired');
-if (index.indexOf(BLACK_FROSTED_SURFACES_HREF) < index.indexOf(BLACK_FROSTED_GLASS_HREF)) throw new Error('Black frosted surfaces layer must load after icon glass');
-if (index.indexOf(BLACK_FROSTED_CONTROLS_HREF) < index.indexOf(BLACK_FROSTED_SURFACES_HREF)) throw new Error('Black frosted controls layer must load after surfaces');
-if (index.includes('/v22.css') || index.includes('/v22-ui.js')) throw new Error('RED COSMOS v2 shell still loads obsolete v22 UI layer');
+if (!index.includes(INDEX_MARKER)) index += `\n${INDEX_MARKER}\n`;
+
+const forbiddenVisualAssets = [
+  '/v22.css',
+  '/v22-ui.js',
+  '/red-cosmos-v2.css',
+  '/black-frosted-glass.css',
+  '/black-frosted-surfaces.css',
+  '/black-frosted-controls.css'
+];
+
+for (const asset of forbiddenVisualAssets) {
+  if (index.includes(asset)) throw new Error(`Legacy visual layer still wired: ${asset}`);
+}
+
+if (!index.includes(`styles.css?v=${CANONICAL_STYLE_VERSION}`)) {
+  throw new Error('Canonical SPACEVERSE purple stylesheet is not wired');
+}
+if (!index.includes(INTERACTION_FALLBACK_SRC)) {
+  throw new Error('VK interaction fallback is not wired');
+}
+
 await fs.writeFile(indexPath, index, 'utf8');
 
-let app = await fs.readFile(appPath, 'utf8');
-if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) {
-  const pattern = /function applyDesign\(design\) \{[\s\S]*?\n\}\n\nfunction renderBeer/;
-  if (!pattern.test(app)) throw new Error('RED COSMOS v2 shell: applyDesign not found');
-  app = app.replace(pattern, `function applyDesign(design) {
-  if (!design) return;
-  state.design = deepClone(design);
-  // RED_COSMOS_V2_THEME_LOCK: server content settings may change copy/radius, never product colors.
-  document.documentElement.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
-  $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
-  $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
-  const legacyQrButton = $('#showQrButton');
-  if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
-  $('#byline').textContent = (design.texts?.byline || 'by Kirill Gamilton') + ' △';
-  Object.entries(design.sections || {}).forEach(([key, visible]) => {
-    if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);
-    else document.querySelectorAll('[data-config-section="' + key + '"]').forEach((element) => element.classList.toggle('hidden', !visible));
-  });
-  try {
-    tg?.setHeaderColor('#16030e');
-    tg?.setBackgroundColor('#0d0002');
-    tg?.setBottomBarColor('#0d0002');
-  } catch (_) {}
+const app = await fs.readFile(appPath, 'utf8');
+if (!app.includes('SPACEVERSE_CANONICAL_THEME_LOCK')) {
+  throw new Error('Canonical SPACEVERSE palette lock is missing from app.js');
+}
+const shellInputVersionSupported = app.includes("const APP_VERSION = '22.0-pivnik-rebuild';")
+  || app.includes("const APP_VERSION = '20.0-spaceverse-purple-home';");
+if (!shellInputVersionSupported) {
+  throw new Error('Unsupported client version reached canonical shell finalization');
 }
 
-function renderBeer`);
-}
-await fs.writeFile(appPath, app, 'utf8');
-console.log('RED COSMOS v2 shell wired; black-frosted icons, surfaces and neutral controls restored; server palette overrides disabled.');
+console.log('Canonical SPACEVERSE purple shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');

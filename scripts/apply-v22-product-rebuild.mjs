@@ -106,6 +106,7 @@ async function patchApp() {
     'версия клиента'
   );
 
+  if (!source.includes('window.__PIVNIK_GO_BACK__')) {
   source = replaceRequired(
     source,
     `function switchScreen(target) {
@@ -150,6 +151,7 @@ window.__PIVNIK_GO_BACK__ = () => {
 };`,
     'история экранов'
   );
+  }
 
   source = replaceRequired(
     source,

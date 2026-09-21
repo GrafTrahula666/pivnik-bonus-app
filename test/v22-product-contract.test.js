@@ -6,20 +6,18 @@ async function text(file) {
   return fs.readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 }
 
-test('RED COSMOS final shell replaces the obsolete v22 visual layer', async () => {
-  const [index, css, ui] = await Promise.all([
+test('canonical SPACEVERSE shell replaces obsolete visual layers without losing interaction fallback', async () => {
+  const [index, shell, ui] = await Promise.all([
     text('index.html'),
-    text('red-cosmos-v2.css'),
+    text('scripts/apply-red-cosmos-v2-shell-final.mjs'),
     text('red-cosmos-v2.js')
   ]);
-  assert.match(index, /\/red-cosmos-v2\.css\?v=2\.0\.0/);
-  assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
-  assert.doesNotMatch(index, /\/v22\.css/);
-  assert.doesNotMatch(index, /\/v22-ui\.js/);
-  assert.match(css, /--primary-red:\s*#c41e3a/);
-  assert.match(css, /\.achievement-tile\.locked/);
-  assert.match(css, /\.achievement-tile\.earned/);
-  assert.match(css, /\.red-cosmos-admin-tabs/);
+  assert.match(index, /styles\.css\?v=20\.0-spaceverse-purple-home/);
+  assert.doesNotMatch(index, /\/red-cosmos-v2\.css/);
+  assert.doesNotMatch(index, /\/black-frosted-(?:glass|surfaces|controls)\.css/);
+  assert.doesNotMatch(index, /\/v22\\.css/);
+  assert.doesNotMatch(index, /\/v22-ui\\.js/);
+  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
   assert.match(ui, /← Назад/);
   assert.match(ui, /installVkInteractionFallback/);
 });
