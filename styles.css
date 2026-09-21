@@ -7077,11 +7077,22 @@ body,
     left: 49px;
   }
 
-  .home-wheel-timer {
-    min-width: 98px;
-    max-width: 108px;
-    padding-inline: 6px;
+  .home-wheel-heading-copy > strong {
+    font-size: 16px;
+    white-space: nowrap;
   }
+
+  .home-wheel-timer {
+    min-width: 86px;
+    max-width: 90px;
+    min-height: 34px;
+    gap: 4px;
+    padding: 4px 5px;
+  }
+
+  .home-wheel-timer > i { font-size: 17px; }
+  .home-wheel-timer small { font-size: 5.7px; }
+  .home-wheel-timer em { font-size: 10px; }
 }
 
 @media (max-width: 350px) {
