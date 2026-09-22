@@ -19,6 +19,12 @@ test('Customer 360 UI materializer produces valid JavaScript and is idempotent',
     cpSync(path.join(root, 'styles.css'), path.join(work, 'styles.css'));
     cpSync(path.join(root, 'scripts', 'apply-admin-customer360-ui.mjs'), path.join(work, 'apply-admin-customer360-ui.mjs'));
 
+    const sourceHtml = readFileSync(path.join(work, 'index.html'), 'utf8');
+    assert.match(sourceHtml, /value="new">Новые · до 7 дней/);
+    assert.match(sourceHtml, /value="active">Активные · были за 30 дней/);
+    assert.match(sourceHtml, /value="inactive">Давно не были · 30\+ дней/);
+    assert.match(sourceHtml, /value="no_ops">Без операций/);
+
     execFileSync(process.execPath, ['apply-admin-customer360-ui.mjs'], { cwd: work, stdio: 'pipe' });
     execFileSync(process.execPath, ['--check', 'app.js'], { cwd: work, stdio: 'pipe' });
 
