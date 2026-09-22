@@ -82,6 +82,24 @@ async function openCustomer360(userId) {
   changed = true;
 }
 
+const legacyStatusOptions = `          <option value="">Все статусы</option>
+          <option value="new">Новые · до 7 дней</option>
+          <option value="active">Активные · были за 30 дней</option>
+          <option value="inactive">Давно не были · 30+ дней</option>
+          <option value="no_ops">Без операций</option>`;
+const lifecycleStatusOptions = `          <option value="">Все статусы</option>
+          <option value="new">Новые · без визитов до 30 дней</option>
+          <option value="active">Активные · визит до 30 дней</option>
+          <option value="at_risk">В зоне риска · 30–60 дней</option>
+          <option value="sleeping">Спящие · более 60 дней</option>
+          <option value="no_visits">Без визитов · более 30 дней</option>`;
+if (html.includes(legacyStatusOptions)) {
+  html = html.replace(legacyStatusOptions, lifecycleStatusOptions);
+  changed = true;
+} else if (!html.includes('<option value="at_risk">В зоне риска · 30–60 дней</option>')) {
+  throw new Error('Customer 360 lifecycle filter anchor not found');
+}
+
 if (!html.includes('id="customer360Modal"')) {
   const modal = `\n  <div class="modal" id="customer360Modal" aria-hidden="true"><div class="modal-backdrop" data-close="customer360Modal"></div><section class="modal-card customer360-card"><button class="modal-close" data-close="customer360Modal" type="button">×</button><span class="eyebrow">CRM · CUSTOMER 360</span><h2 id="customer360Title">Карточка клиента</h2><p id="customer360Subtitle" class="muted">Показатели и история</p><div id="customer360Error" class="customer360-error" hidden></div><button id="customer360Retry" class="text-btn" type="button" hidden>Повторить</button><div id="customer360Metrics" class="customer360-metrics"></div><div id="customer360Facts" class="customer360-facts"></div><h3>История операций</h3><div id="customer360History" class="customer360-history"></div></section></div>\n`;
   if (!html.includes('</body>')) throw new Error('Customer 360 body anchor not found');
