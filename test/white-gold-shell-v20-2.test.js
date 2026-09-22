@@ -23,6 +23,8 @@ test('v20.2 replaces the legacy dark shell at its source', async () => {
 
   assert.match(index, /styles\.css\?v=20\.2-spaceverse-white-gold-shell/);
   assert.match(index, /app\.js\?v=20\.2-spaceverse-white-gold-shell/);
+  assert.doesNotMatch(index, /<\/section>\\n\\n\s*<section class="profile-history-card/);
+  assert.match(index, /<\/section>\n\n\s*<section class="profile-history-card/);
 
   const serviceAccess = index.indexOf('id="profileServiceAccess"');
   const history = index.indexOf('class="profile-history-card');
