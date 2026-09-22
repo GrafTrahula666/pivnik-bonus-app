@@ -233,6 +233,13 @@ if (index.includes('<meta name="theme-color" content="#0b0e13" />')) {
 if (index.includes('        <div class="boot-badge">Пивник | Бонусы</div>\n')) {
   index = index.replace('        <div class="boot-badge">Пивник | Бонусы</div>\n', '');
 }
+const escapedProfileHistorySeparator = '</section>\\n\\n        <section class="profile-history-card vip-glass-card">';
+if (index.includes(escapedProfileHistorySeparator)) {
+  index = index.replace(
+    escapedProfileHistorySeparator,
+    '</section>\n\n        <section class="profile-history-card vip-glass-card">'
+  );
+}
 await writeText('index.html', index);
 
 const failures = [];
@@ -247,6 +254,7 @@ if (!gateway.includes('isConfiguredOwnerIdentity(provider, externalUser.id')) fa
 if (!gateway.includes('Authorization is independent from profile-metadata ownership')) failures.push('owner role reconciliation');
 if (!index.includes('<meta name="theme-color" content="#f4eee4" />')) failures.push('theme color');
 if (index.includes('<div class="boot-badge">Пивник | Бонусы</div>')) failures.push('boot badge');
+if (index.includes(escapedProfileHistorySeparator)) failures.push('profile literal newline escape');
 const finalCss = await readText('red-cosmos-v2.css');
 if (!finalCss.includes(releaseQrGuard)) failures.push('release QR guard');
 if (failures.length) throw new Error(`working updates verification failed: ${failures.join(', ')}`);
