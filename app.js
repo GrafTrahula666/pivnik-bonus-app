@@ -1026,8 +1026,8 @@ function switchScreen(target, navigation = {}) {
     state.screenHistory.push(active);
     if (state.screenHistory.length > 24) state.screenHistory.shift();
   }
-  $('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
-  $('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
+  $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
+  $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
   $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
