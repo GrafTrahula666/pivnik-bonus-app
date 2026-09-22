@@ -29,11 +29,9 @@ export function normalizeAdminUserDirectoryInput(input = {}) {
   const status = ADMIN_USER_STATUSES.has(rawStatus) ? rawStatus : '';
   const lifecycle = ADMIN_USER_LIFECYCLES.has(rawLifecycle) ? rawLifecycle : '';
   const page = clampInt(rawPage, 1, 1, 100_000);
-  const limit = rawLimit
-    ? clampInt(rawLimit, 25, 5, 100)
-    : controlled ? 25 : 200;
-
-  return { q, role, status, lifecycle, page, limit };
+  const limit = rawLimit ? clampInt(rawLimit, 25, 5, 100) : controlled ? 25 : 200;
+  const base = { q, role, status, page, limit };
+  return rawLifecycle ? { ...base, lifecycle } : base;
 }
 
 export function adminUserCrmStatus(row, nowMs = Date.now()) {
@@ -42,7 +40,6 @@ export function adminUserCrmStatus(row, nowMs = Date.now()) {
   const operationsCount = Number(row?.operations_count ?? row?.operationsCount ?? 0);
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-
   if (Number.isFinite(createdMs) && createdMs >= nowMs - sevenDays) return 'new';
   if (operationsCount <= 0) return 'no_ops';
   if (Number.isFinite(lastActivityMs) && lastActivityMs >= nowMs - thirtyDays) return 'active';
@@ -55,10 +52,7 @@ export function adminUserLifecycle(row, nowMs = Date.now()) {
   const visits = Number(row?.sales_visits ?? row?.salesVisits ?? 0);
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
   const sixtyDays = 60 * 24 * 60 * 60 * 1000;
-
-  if (visits <= 0) {
-    return Number.isFinite(createdMs) && createdMs >= nowMs - thirtyDays ? 'new' : 'no_visits';
-  }
+  if (visits <= 0) return Number.isFinite(createdMs) && createdMs >= nowMs - thirtyDays ? 'new' : 'no_visits';
   if (!Number.isFinite(lastVisitMs)) return 'no_visits';
   if (lastVisitMs >= nowMs - thirtyDays) return 'active';
   if (lastVisitMs >= nowMs - sixtyDays) return 'at_risk';
@@ -67,13 +61,9 @@ export function adminUserLifecycle(row, nowMs = Date.now()) {
 
 export async function queryAdminUserDirectory(pool, input = {}) {
   if (!pool || typeof pool.query !== 'function') throw new TypeError('pool.query is required');
-
   const filters = normalizeAdminUserDirectoryInput(input);
   const params = [];
-  const where = [
-    'u.merged_into_user_id IS NULL',
-    'u.deleted_at IS NULL'
-  ];
+  const where = ['u.merged_into_user_id IS NULL', 'u.deleted_at IS NULL'];
 
   if (filters.q) {
     params.push(`%${filters.q}%`);
@@ -83,31 +73,23 @@ export async function queryAdminUserDirectory(pool, input = {}) {
       OR COALESCE(u.username, '') ILIKE ${p}
       OR COALESCE(u.telegram_id::text, '') ILIKE ${p}
       OR EXISTS (
-        SELECT 1
-        FROM user_identities ui_search
-        WHERE ui_search.user_id = u.id
-          AND ui_search.provider_user_id::text ILIKE ${p}
+        SELECT 1 FROM user_identities ui_search
+        WHERE ui_search.user_id = u.id AND ui_search.provider_user_id::text ILIKE ${p}
       )
     )`);
   }
-
   if (filters.role) {
     params.push(filters.role);
     where.push(`u.role = $${params.length}`);
   }
-
   if (filters.status === 'new') {
     where.push(`u.created_at >= NOW() - INTERVAL '7 days'`);
   } else if (filters.status === 'no_ops') {
     where.push(`u.created_at < NOW() - INTERVAL '7 days' AND COALESCE(activity.operations_count, 0) = 0`);
   } else if (filters.status === 'active') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days'
-      AND COALESCE(activity.operations_count, 0) > 0
-      AND activity.last_activity_at >= NOW() - INTERVAL '30 days'`);
+    where.push(`u.created_at < NOW() - INTERVAL '7 days' AND COALESCE(activity.operations_count, 0) > 0 AND activity.last_activity_at >= NOW() - INTERVAL '30 days'`);
   } else if (filters.status === 'inactive') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days'
-      AND COALESCE(activity.operations_count, 0) > 0
-      AND activity.last_activity_at < NOW() - INTERVAL '30 days'`);
+    where.push(`u.created_at < NOW() - INTERVAL '7 days' AND COALESCE(activity.operations_count, 0) > 0 AND activity.last_activity_at < NOW() - INTERVAL '30 days'`);
   }
 
   if (filters.lifecycle === 'new') {
@@ -117,13 +99,14 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   } else if (filters.lifecycle === 'active') {
     where.push(`COALESCE(activity.sales_visits, 0) > 0 AND activity.last_visit_at >= NOW() - INTERVAL '30 days'`);
   } else if (filters.lifecycle === 'at_risk') {
-    where.push(`COALESCE(activity.sales_visits, 0) > 0
-      AND activity.last_visit_at < NOW() - INTERVAL '30 days'
-      AND activity.last_visit_at >= NOW() - INTERVAL '60 days'`);
+    where.push(`COALESCE(activity.sales_visits, 0) > 0 AND activity.last_visit_at < NOW() - INTERVAL '30 days' AND activity.last_visit_at >= NOW() - INTERVAL '60 days'`);
   } else if (filters.lifecycle === 'sleeping') {
     where.push(`COALESCE(activity.sales_visits, 0) > 0 AND activity.last_visit_at < NOW() - INTERVAL '60 days'`);
   }
 
+  const lifecycleActivitySql = filters.lifecycle ? `,
+        MAX(t.created_at) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')) AS last_visit_at,
+        COUNT(*) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem'))::int AS sales_visits` : '';
   const fromSql = `
     FROM users u
     JOIN wallets w ON w.user_id = u.id
@@ -131,65 +114,36 @@ export async function queryAdminUserDirectory(pool, input = {}) {
     LEFT JOIN LATERAL (
       SELECT
         MAX(t.created_at) FILTER (WHERE t.status = 'completed') AS last_activity_at,
-        COUNT(*) FILTER (WHERE t.status = 'completed')::int AS operations_count,
-        MAX(t.created_at) FILTER (
-          WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')
-        ) AS last_visit_at,
-        COUNT(*) FILTER (
-          WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')
-        )::int AS sales_visits
+        COUNT(*) FILTER (WHERE t.status = 'completed')::int AS operations_count${lifecycleActivitySql}
       FROM transactions t
       WHERE t.client_id = u.id
     ) activity ON TRUE
     WHERE ${where.join(' AND ')}
   `;
 
-  const countResult = await pool.query(
-    `SELECT COUNT(*)::int AS total ${fromSql}`,
-    params
-  );
+  const countResult = await pool.query(`SELECT COUNT(*)::int AS total ${fromSql}`, params);
   const total = Number(countResult.rows[0]?.total || 0);
   const pages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, pages);
   const offset = (page - 1) * filters.limit;
-
   const dataParams = [...params, filters.limit, offset];
   const limitParam = `$${dataParams.length - 1}`;
   const offsetParam = `$${dataParams.length}`;
-  const orderSql = filters.limit === 200
-    ? 'u.created_at DESC, u.id DESC'
-    : 'COALESCE(activity.last_activity_at, u.created_at) DESC, u.created_at DESC, u.id DESC';
+  const orderSql = filters.limit === 200 ? 'u.created_at DESC, u.id DESC' : 'COALESCE(activity.last_activity_at, u.created_at) DESC, u.created_at DESC, u.id DESC';
+  const lifecycleSelectSql = filters.lifecycle ? `,
+        activity.last_visit_at,
+        COALESCE(activity.sales_visits, 0)::int AS sales_visits` : '';
 
   const result = await pool.query(
     `SELECT
-        u.id,
-        u.telegram_id,
-        u.username,
-        u.first_name,
-        u.last_name,
-        u.role,
-        u.created_at,
-        u.qr_short_code,
-        u.unlimited_bonus,
-        u.profile_frame,
-        w.balance,
-        bl.paid_ml_total,
-        bl.gift_ml_balance,
+        u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role,
+        u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame,
+        w.balance, bl.paid_ml_total, bl.gift_ml_balance,
         (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured,
         activity.last_activity_at,
-        COALESCE(activity.operations_count, 0)::int AS operations_count,
-        activity.last_visit_at,
-        COALESCE(activity.sales_visits, 0)::int AS sales_visits,
-        (SELECT ui.provider_user_id
-         FROM user_identities ui
-         WHERE ui.user_id = u.id AND ui.provider = 'vk'
-         LIMIT 1) AS vk_id,
-        ARRAY(
-          SELECT ui.provider
-          FROM user_identities ui
-          WHERE ui.user_id = u.id
-          ORDER BY ui.provider
-        ) AS linked_platforms
+        COALESCE(activity.operations_count, 0)::int AS operations_count${lifecycleSelectSql},
+        (SELECT ui.provider_user_id FROM user_identities ui WHERE ui.user_id = u.id AND ui.provider = 'vk' LIMIT 1) AS vk_id,
+        ARRAY(SELECT ui.provider FROM user_identities ui WHERE ui.user_id = u.id ORDER BY ui.provider) AS linked_platforms
      ${fromSql}
      ORDER BY ${orderSql}
      LIMIT ${limitParam}
@@ -197,14 +151,5 @@ export async function queryAdminUserDirectory(pool, input = {}) {
     dataParams
   );
 
-  return {
-    rows: result.rows,
-    pagination: {
-      page,
-      limit: filters.limit,
-      total,
-      pages
-    },
-    filters
-  };
+  return { rows: result.rows, pagination: { page, limit: filters.limit, total, pages }, filters };
 }
