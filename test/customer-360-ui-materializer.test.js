@@ -31,6 +31,13 @@ test('Customer 360 UI materializer produces valid JavaScript and is idempotent',
     assert.equal(count(once.app, 'function openCustomer360(userId)'), 1);
     assert.equal(count(once.html, 'id="customer360Modal"'), 1);
     assert.equal(count(once.css, '/* CUSTOMER360_UI */'), 1);
+    assert.match(once.html, /value="new">Новые · без визитов до 30 дней/);
+    assert.match(once.html, /value="active">Активные · визит до 30 дней/);
+    assert.match(once.html, /value="at_risk">В зоне риска · 30–60 дней/);
+    assert.match(once.html, /value="sleeping">Спящие · более 60 дней/);
+    assert.match(once.html, /value="no_visits">Без визитов · более 30 дней/);
+    assert.doesNotMatch(once.html, /value="inactive">Давно не были/);
+    assert.doesNotMatch(once.html, /value="no_ops">Без операций/);
 
     execFileSync(process.execPath, ['apply-admin-customer360-ui.mjs'], { cwd: work, stdio: 'pipe' });
 
