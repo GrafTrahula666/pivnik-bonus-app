@@ -895,7 +895,8 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
       showMonthlySpend: row.show_leaderboard_amount !== false,
       showStats: row.show_stats !== false
     },
-    role: row.role,
+    // A configured Telegram owner keeps owner capabilities even when a legacy row has a stale role.
+    role: isOwnerRow(row) ? 'admin' : row.role,
     balance: unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
     termsAccepted: Boolean(row.terms_accepted_at && row.terms_version === TERMS_VERSION),
