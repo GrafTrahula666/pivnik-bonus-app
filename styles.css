@@ -8520,3 +8520,46 @@ body,
 .client-home.home-v2 .spaceverse-home-hero .balance {
   left: 19%;
 }
+
+
+/* V20.3 · SERVICE NAVIGATION + IPHONE LAYOUT STABILIZATION */
+/* Preserve approved artwork; stabilize shell geometry and service screens only. */
+.screen { padding-top: 8px; }
+.client-home.home-v2.active { padding-top: 2px; gap: 4px; }
+
+.app-shell { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
+
+.bottom-nav {
+  box-sizing: border-box !important;
+  height: auto !important;
+  min-height: calc(78px + env(safe-area-inset-bottom)) !important;
+  padding: 7px 8px max(7px, env(safe-area-inset-bottom)) !important;
+  align-items: center !important;
+}
+.bottom-nav button { min-height: 56px; justify-content: center; }
+.bottom-nav .qr-nav-button { min-height: 60px; }
+
+.service-access button:not(.hidden) {
+  display: block;
+  min-height: 46px;
+}
+
+.app-shell.service-mode { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.app-shell.service-mode .screen[data-screen="staff"].active,
+.app-shell.service-mode .screen[data-screen="admin"].active {
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+
+@media (max-height: 900px) {
+  .topbar {
+    height: 66px;
+    padding-top: calc(6px + env(safe-area-inset-top));
+    padding-bottom: 6px;
+  }
+  .client-home.home-v2.active { gap: 3px; padding-top: 1px; }
+  .client-home.home-v2 .spaceverse-home-hero { height: 116px; min-height: 116px; }
+  .client-home.home-v2 .spaceverse-business-card { height: 114px; min-height: 114px; }
+  .client-home.home-v2 .home-wheel-card { height: 112px; min-height: 112px; }
+  .client-home.home-v2 .beer-loyalty-card--compact { height: 76px; min-height: 76px; }
+  .client-home.home-v2 .home-league-card { height: 120px; min-height: 120px; }
+}
