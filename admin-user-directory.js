@@ -1,6 +1,5 @@
 const ADMIN_USER_ROLES = new Set(['client', 'staff', 'viewer', 'admin']);
-const ADMIN_USER_STATUSES = new Set(['new', 'active', 'inactive', 'no_ops']);
-
+const ADMIN_USER_STATUSES = new Set(['new', 'active', 'at_risk', 'sleeping', 'no_visits', 'inactive', 'no_ops']);
 
 export function isAdminUserUrlLike(value) {
   const text = String(value ?? '').trim();
@@ -66,13 +65,16 @@ export function adminUserCrmStatus(row, nowMs = Date.now()) {
   const createdMs = Date.parse(row?.created_at || row?.createdAt || '');
   const lastActivityMs = Date.parse(row?.last_activity_at || row?.lastActivityAt || '');
   const operationsCount = Number(row?.operations_count ?? row?.operationsCount ?? 0);
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const sixtyDays = 60 * 24 * 60 * 60 * 1000;
 
-  if (Number.isFinite(createdMs) && createdMs >= nowMs - sevenDays) return 'new';
-  if (operationsCount <= 0) return 'no_ops';
-  if (Number.isFinite(lastActivityMs) && lastActivityMs >= nowMs - thirtyDays) return 'active';
-  return 'inactive';
+  if (operationsCount <= 0) {
+    return Number.isFinite(createdMs) && createdMs >= nowMs - thirtyDays ? 'new' : 'no_visits';
+  }
+  if (!Number.isFinite(lastActivityMs)) return 'sleeping';
+  if (lastActivityMs >= nowMs - thirtyDays) return 'active';
+  if (lastActivityMs >= nowMs - sixtyDays) return 'at_risk';
+  return 'sleeping';
 }
 
 export async function queryAdminUserDirectory(pool, input = {}) {
@@ -107,16 +109,21 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   }
 
   if (filters.status === 'new') {
-    where.push(`u.created_at >= NOW() - INTERVAL '7 days'`);
-  } else if (filters.status === 'no_ops') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days' AND COALESCE(activity.operations_count, 0) = 0`);
+    where.push(`u.created_at >= NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0`);
+  } else if (filters.status === 'no_visits' || filters.status === 'no_ops') {
+    where.push(`u.created_at < NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0`);
   } else if (filters.status === 'active') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days'
-      AND COALESCE(activity.operations_count, 0) > 0
+    where.push(`COALESCE(activity.operations_count, 0) > 0
       AND activity.last_activity_at >= NOW() - INTERVAL '30 days'`);
+  } else if (filters.status === 'at_risk') {
+    where.push(`COALESCE(activity.operations_count, 0) > 0
+      AND activity.last_activity_at < NOW() - INTERVAL '30 days'
+      AND activity.last_activity_at >= NOW() - INTERVAL '60 days'`);
+  } else if (filters.status === 'sleeping') {
+    where.push(`COALESCE(activity.operations_count, 0) > 0
+      AND (activity.last_activity_at < NOW() - INTERVAL '60 days' OR activity.last_activity_at IS NULL)`);
   } else if (filters.status === 'inactive') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days'
-      AND COALESCE(activity.operations_count, 0) > 0
+    where.push(`COALESCE(activity.operations_count, 0) > 0
       AND activity.last_activity_at < NOW() - INTERVAL '30 days'`);
   }
 
@@ -126,8 +133,8 @@ export async function queryAdminUserDirectory(pool, input = {}) {
     LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
     LEFT JOIN LATERAL (
       SELECT
-        MAX(t.created_at) FILTER (WHERE t.status = 'completed') AS last_activity_at,
-        COUNT(*) FILTER (WHERE t.status = 'completed')::int AS operations_count
+        MAX(t.created_at) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')) AS last_activity_at,
+        COUNT(*) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem'))::int AS operations_count
       FROM transactions t
       WHERE t.client_id = u.id
     ) activity ON TRUE
