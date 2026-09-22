@@ -5,7 +5,7 @@ INSTALL_DIR="${PIVNIK_GATEWAY_DIR:-/opt/pivnik-vk-gateway}"
 GATEWAY_DIR="$INSTALL_DIR/vk-api-gateway"
 GATEWAY_URL="${PIVNIK_GATEWAY_URL:-https://139.100.238.159.nip.io}"
 PROD_ORIGIN="${PIVNIK_VK_PRODUCTION_ORIGIN:-https://prod-app54694987-989ea78abfeb.pages-ac.vk-apps.ru}"
-REPO_REF="${PIVNIK_REPO_REF:-fix/vk-native-hosting-main-parity-20260912}"
+REPO_REF="${PIVNIK_REPO_REF:-main}"
 SOURCE_URL="https://raw.githubusercontent.com/GrafTrahula666/pivnik-bonus-app/${REPO_REF}/vk-api-gateway/server.mjs"
 
 if [ "$(id -u)" -ne 0 ]; then
