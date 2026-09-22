@@ -1,6 +1,6 @@
 function normalizeUserId(value) {
   const id = String(value ?? '').trim();
-  if (!/^\d+$/.test(id)) throw new TypeError('userId must be a positive integer identifier');
+  if (!/^\d+$/.test(id) || BigInt(id) <= 0n) throw new TypeError('userId must be a positive integer identifier');
   return id;
 }
 
