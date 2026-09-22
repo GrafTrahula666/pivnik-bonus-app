@@ -82,7 +82,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
 
   const filters = normalizeAdminUserDirectoryInput(input);
   const params = [];
-  const where = [
+  const baseWhere = [
     'u.merged_into_user_id IS NULL',
     'u.deleted_at IS NULL'
   ];
@@ -90,7 +90,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   if (filters.q) {
     params.push(`%${filters.q}%`);
     const p = `$${params.length}`;
-    where.push(`(
+    baseWhere.push(`(
       CONCAT_WS(' ', u.first_name, u.last_name) ILIKE ${p}
       OR COALESCE(u.username, '') ILIKE ${p}
       OR COALESCE(u.telegram_id::text, '') ILIKE ${p}
@@ -105,9 +105,10 @@ export async function queryAdminUserDirectory(pool, input = {}) {
 
   if (filters.role) {
     params.push(filters.role);
-    where.push(`u.role = $${params.length}`);
+    baseWhere.push(`u.role = $${params.length}`);
   }
 
+  const where = [...baseWhere];
   if (filters.status === 'new') {
     where.push(`u.created_at >= NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0`);
   } else if (filters.status === 'no_visits' || filters.status === 'no_ops') {
@@ -127,7 +128,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
       AND activity.last_activity_at < NOW() - INTERVAL '30 days'`);
   }
 
-  const fromSql = `
+  const activityJoinSql = `
     FROM users u
     JOIN wallets w ON w.user_id = u.id
     LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
@@ -137,7 +138,8 @@ export async function queryAdminUserDirectory(pool, input = {}) {
         COUNT(*) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem'))::int AS operations_count
       FROM transactions t
       WHERE t.client_id = u.id
-    ) activity ON TRUE
+    ) activity ON TRUE`;
+  const fromSql = `${activityJoinSql}
     WHERE ${where.join(' AND ')}
   `;
 
@@ -149,6 +151,26 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   const pages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, pages);
   const offset = (page - 1) * filters.limit;
+
+  const segmentResult = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE u.created_at >= NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0)::int AS new,
+       COUNT(*) FILTER (WHERE COALESCE(activity.operations_count, 0) > 0 AND activity.last_activity_at >= NOW() - INTERVAL '30 days')::int AS active,
+       COUNT(*) FILTER (WHERE COALESCE(activity.operations_count, 0) > 0 AND activity.last_activity_at < NOW() - INTERVAL '30 days' AND activity.last_activity_at >= NOW() - INTERVAL '60 days')::int AS at_risk,
+       COUNT(*) FILTER (WHERE COALESCE(activity.operations_count, 0) > 0 AND (activity.last_activity_at < NOW() - INTERVAL '60 days' OR activity.last_activity_at IS NULL))::int AS sleeping,
+       COUNT(*) FILTER (WHERE u.created_at < NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0)::int AS no_visits
+     ${activityJoinSql}
+     WHERE ${baseWhere.join(' AND ')}`,
+    params
+  );
+  const segmentRow = segmentResult.rows[0] || {};
+  const segments = {
+    new: Number(segmentRow.new || 0),
+    active: Number(segmentRow.active || 0),
+    at_risk: Number(segmentRow.at_risk || 0),
+    sleeping: Number(segmentRow.sleeping || 0),
+    no_visits: Number(segmentRow.no_visits || 0)
+  };
 
   const dataParams = [...params, filters.limit, offset];
   const limitParam = `$${dataParams.length - 1}`;
@@ -200,6 +222,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
       total,
       pages
     },
+    segments,
     filters
   };
 }
