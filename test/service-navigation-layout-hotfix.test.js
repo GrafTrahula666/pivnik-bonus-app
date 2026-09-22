@@ -27,3 +27,5 @@ test('service panels and iPhone safe area keep a stable final shell override', a
   assert.match(index, /styles\.css\?v=20\.3-service-layout-hotfix/);
   assert.match(index, /app\.js\?v=20\.3-service-layout-hotfix/);
 });
+
+// Complete hotfix head validation.
