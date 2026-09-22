@@ -1,5 +1,6 @@
 const ADMIN_USER_ROLES = new Set(['client', 'staff', 'viewer', 'admin']);
 const ADMIN_USER_STATUSES = new Set(['new', 'active', 'inactive', 'no_ops']);
+const ADMIN_USER_LIFECYCLES = new Set(['new', 'active', 'at_risk', 'sleeping', 'no_visits']);
 
 function readParam(input, key) {
   if (!input) return '';
@@ -18,19 +19,21 @@ export function normalizeAdminUserDirectoryInput(input = {}) {
   const rawQ = String(readParam(input, 'q') || '').trim();
   const rawRole = String(readParam(input, 'role') || '').trim();
   const rawStatus = String(readParam(input, 'status') || '').trim();
+  const rawLifecycle = String(readParam(input, 'lifecycle') || '').trim();
   const rawPage = String(readParam(input, 'page') || '').trim();
   const rawLimit = String(readParam(input, 'limit') || '').trim();
 
-  const controlled = Boolean(rawQ || rawRole || rawStatus || rawPage || rawLimit);
+  const controlled = Boolean(rawQ || rawRole || rawStatus || rawLifecycle || rawPage || rawLimit);
   const q = rawQ.slice(0, 120);
   const role = ADMIN_USER_ROLES.has(rawRole) ? rawRole : '';
   const status = ADMIN_USER_STATUSES.has(rawStatus) ? rawStatus : '';
+  const lifecycle = ADMIN_USER_LIFECYCLES.has(rawLifecycle) ? rawLifecycle : '';
   const page = clampInt(rawPage, 1, 1, 100_000);
   const limit = rawLimit
     ? clampInt(rawLimit, 25, 5, 100)
     : controlled ? 25 : 200;
 
-  return { q, role, status, page, limit };
+  return { q, role, status, lifecycle, page, limit };
 }
 
 export function adminUserCrmStatus(row, nowMs = Date.now()) {
@@ -44,6 +47,22 @@ export function adminUserCrmStatus(row, nowMs = Date.now()) {
   if (operationsCount <= 0) return 'no_ops';
   if (Number.isFinite(lastActivityMs) && lastActivityMs >= nowMs - thirtyDays) return 'active';
   return 'inactive';
+}
+
+export function adminUserLifecycle(row, nowMs = Date.now()) {
+  const createdMs = Date.parse(row?.created_at || row?.createdAt || '');
+  const lastVisitMs = Date.parse(row?.last_visit_at || row?.lastVisitAt || '');
+  const visits = Number(row?.sales_visits ?? row?.salesVisits ?? 0);
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const sixtyDays = 60 * 24 * 60 * 60 * 1000;
+
+  if (visits <= 0) {
+    return Number.isFinite(createdMs) && createdMs >= nowMs - thirtyDays ? 'new' : 'no_visits';
+  }
+  if (!Number.isFinite(lastVisitMs)) return 'no_visits';
+  if (lastVisitMs >= nowMs - thirtyDays) return 'active';
+  if (lastVisitMs >= nowMs - sixtyDays) return 'at_risk';
+  return 'sleeping';
 }
 
 export async function queryAdminUserDirectory(pool, input = {}) {
@@ -91,6 +110,20 @@ export async function queryAdminUserDirectory(pool, input = {}) {
       AND activity.last_activity_at < NOW() - INTERVAL '30 days'`);
   }
 
+  if (filters.lifecycle === 'new') {
+    where.push(`COALESCE(activity.sales_visits, 0) = 0 AND u.created_at >= NOW() - INTERVAL '30 days'`);
+  } else if (filters.lifecycle === 'no_visits') {
+    where.push(`COALESCE(activity.sales_visits, 0) = 0 AND u.created_at < NOW() - INTERVAL '30 days'`);
+  } else if (filters.lifecycle === 'active') {
+    where.push(`COALESCE(activity.sales_visits, 0) > 0 AND activity.last_visit_at >= NOW() - INTERVAL '30 days'`);
+  } else if (filters.lifecycle === 'at_risk') {
+    where.push(`COALESCE(activity.sales_visits, 0) > 0
+      AND activity.last_visit_at < NOW() - INTERVAL '30 days'
+      AND activity.last_visit_at >= NOW() - INTERVAL '60 days'`);
+  } else if (filters.lifecycle === 'sleeping') {
+    where.push(`COALESCE(activity.sales_visits, 0) > 0 AND activity.last_visit_at < NOW() - INTERVAL '60 days'`);
+  }
+
   const fromSql = `
     FROM users u
     JOIN wallets w ON w.user_id = u.id
@@ -98,7 +131,13 @@ export async function queryAdminUserDirectory(pool, input = {}) {
     LEFT JOIN LATERAL (
       SELECT
         MAX(t.created_at) FILTER (WHERE t.status = 'completed') AS last_activity_at,
-        COUNT(*) FILTER (WHERE t.status = 'completed')::int AS operations_count
+        COUNT(*) FILTER (WHERE t.status = 'completed')::int AS operations_count,
+        MAX(t.created_at) FILTER (
+          WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')
+        ) AS last_visit_at,
+        COUNT(*) FILTER (
+          WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')
+        )::int AS sales_visits
       FROM transactions t
       WHERE t.client_id = u.id
     ) activity ON TRUE
@@ -139,6 +178,8 @@ export async function queryAdminUserDirectory(pool, input = {}) {
         (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured,
         activity.last_activity_at,
         COALESCE(activity.operations_count, 0)::int AS operations_count,
+        activity.last_visit_at,
+        COALESCE(activity.sales_visits, 0)::int AS sales_visits,
         (SELECT ui.provider_user_id
          FROM user_identities ui
          WHERE ui.user_id = u.id AND ui.provider = 'vk'
