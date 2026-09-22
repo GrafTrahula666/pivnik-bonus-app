@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import https from 'node:https';
+import net from 'node:net';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { productionUrl } from './railway-production-config.mjs';
@@ -40,6 +41,42 @@ async function get(url) {
   } catch (error) {
     return { record: { url, error: safeError(error), elapsedMs: Math.round(performance.now() - started) }, body: '' };
   }
+}
+
+async function requestNoRedirect(url) {
+  const started = performance.now();
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10_000),
+      redirect: 'manual',
+      headers: { 'user-agent': 'pivnik-vk-startup-readonly-probe/1.2' }
+    });
+    await response.arrayBuffer();
+    return {
+      url, status: response.status, elapsedMs: Math.round(performance.now() - started),
+      location: response.headers.get('location')
+    };
+  } catch (error) {
+    return { url, error: safeError(error), elapsedMs: Math.round(performance.now() - started) };
+  }
+}
+
+function tcpPortProbe(host, port) {
+  return new Promise((resolve) => {
+    const started = performance.now();
+    const socket = net.createConnection({ host, port });
+    let finished = false;
+    const done = (result) => {
+      if (finished) return;
+      finished = true;
+      socket.destroy();
+      resolve({ port, elapsedMs: Math.round(performance.now() - started), ...result });
+    };
+    socket.setTimeout(7000);
+    socket.once('connect', () => done({ open: true }));
+    socket.once('timeout', () => done({ open: false, error: 'TCP_TIMEOUT' }));
+    socket.once('error', (error) => done({ open: false, error: safeError(error) }));
+  });
 }
 
 async function preflight(url, origin) {
@@ -153,14 +190,17 @@ const nativeLocalAssets = await Promise.all(nativeAssetUrls
   .filter((url) => new URL(url).origin === hostingOrigin)
   .map(get));
 const runtimeGateway = parseRuntimeGateway(nativeIndex.body);
-const [gatewayHealth, gatewayReady, gatewayCors, nativeDns, gatewayDns, nativeTransports, gatewayTransports] = await Promise.all([
+const gatewayHostname = new URL(gatewayUrl).hostname;
+const [gatewayHealth, gatewayReady, gatewayCors, nativeDns, gatewayDns, nativeTransports, gatewayTransports, gatewayTcpPorts, gatewayHttp80] = await Promise.all([
   get(new URL('/healthz', gatewayUrl).href),
   get(new URL('/readyz', gatewayUrl).href),
   preflight(new URL('/api/me', gatewayUrl).href, hostingOrigin),
   dnsFor(hostingUrl),
   dnsFor(gatewayUrl),
   Promise.all([transport(hostingOrigin, 4, '/index.html'), transport(hostingOrigin, 6, '/index.html')]),
-  Promise.all([transport(gatewayOrigin, 4, '/healthz'), transport(gatewayOrigin, 6, '/healthz')])
+  Promise.all([transport(gatewayOrigin, 4, '/healthz'), transport(gatewayOrigin, 6, '/healthz')]),
+  Promise.all([22, 80, 443].map((port) => tcpPortProbe(gatewayHostname, port))),
+  requestNoRedirect(`http://${gatewayHostname}/healthz`)
 ]);
 
 let gatewayReadiness = null;
@@ -181,6 +221,10 @@ const nativeVk = {
   },
   dns: { hosting: nativeDns, gateway: gatewayDns },
   transports: { hosting: nativeTransports, gateway: gatewayTransports },
+  gatewayReachability: {
+    tcpPorts: gatewayTcpPorts,
+    http80: gatewayHttp80
+  },
   requests: {
     hosting: [nativeIndex, ...nativeLocalAssets].map((result) => result.record),
     gatewayHealth: gatewayHealth.record,
