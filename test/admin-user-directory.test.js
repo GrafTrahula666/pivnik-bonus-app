@@ -68,9 +68,11 @@ test('admin CRM directory filters real PostgreSQL rows with Customer 360 lifecyc
     const active = await queryAdminUserDirectory(db, { status: 'active', limit: '25' });
     assert.deepEqual(active.rows.map((row) => String(row.id)), ['2']);
     assert.equal(active.rows[0].operations_count, 2);
+    assert.deepEqual(active.segments, { new: 1, active: 1, at_risk: 1, sleeping: 1, no_visits: 1 });
 
     const atRisk = await queryAdminUserDirectory(db, { status: 'at_risk', limit: '25' });
     assert.deepEqual(atRisk.rows.map((row) => String(row.id)), ['3']);
+    assert.deepEqual(atRisk.segments, active.segments, 'segment counters ignore the selected lifecycle filter');
 
     const sleeping = await queryAdminUserDirectory(db, { status: 'sleeping', limit: '25' });
     assert.deepEqual(sleeping.rows.map((row) => String(row.id)), ['4']);
@@ -90,9 +92,11 @@ test('admin CRM directory filters real PostgreSQL rows with Customer 360 lifecyc
     const vkSearch = await queryAdminUserDirectory(db, { q: '900002', limit: '25' });
     assert.deepEqual(vkSearch.rows.map((row) => String(row.id)), ['2']);
     assert.equal(String(vkSearch.rows[0].vk_id), '900002');
+    assert.deepEqual(vkSearch.segments, { new: 0, active: 1, at_risk: 0, sleeping: 0, no_visits: 0 });
 
     const viewer = await queryAdminUserDirectory(db, { role: 'viewer', limit: '25' });
     assert.deepEqual(viewer.rows.map((row) => String(row.id)), ['5']);
+    assert.deepEqual(viewer.segments, { new: 0, active: 0, at_risk: 0, sleeping: 0, no_visits: 1 });
 
     await db.exec(`
       INSERT INTO users (id, role, created_at) SELECT n, 'staff', '2026-01-01T00:00:00Z'::timestamptz FROM generate_series(10, 21) n;
@@ -115,20 +119,28 @@ test('admin CRM pagination reports totals and lifecycle SQL boundaries', async (
     async query(sql, params) {
       calls.push({ sql, params });
       if (/SELECT COUNT\(\*\)::int AS total/.test(sql)) return { rows: [{ total: 53 }] };
+      if (/AS at_risk/.test(sql) && /AS no_visits/.test(sql)) {
+        return { rows: [{ new: 4, active: 20, at_risk: 9, sleeping: 11, no_visits: 9 }] };
+      }
       return { rows: [] };
     }
   };
 
   const result = await queryAdminUserDirectory(pool, { q: 'anna', role: 'client', status: 'at_risk', page: '2', limit: '25' });
   assert.deepEqual(result.pagination, { page: 2, limit: 25, total: 53, pages: 3 });
+  assert.deepEqual(result.segments, { new: 4, active: 20, at_risk: 9, sleeping: 11, no_visits: 9 });
+  assert.equal(calls.length, 3, 'directory uses one aggregate segment query, not one query per segment');
   assert.deepEqual(calls[0].params, ['%anna%', 'client']);
-  assert.deepEqual(calls[1].params, ['%anna%', 'client', 25, 25]);
+  assert.deepEqual(calls[1].params, ['%anna%', 'client']);
+  assert.deepEqual(calls[2].params, ['%anna%', 'client', 25, 25]);
   assert.match(calls[0].sql, /ui_search\.provider_user_id::text ILIKE/);
   assert.match(calls[0].sql, /activity\.last_activity_at < NOW\(\) - INTERVAL '30 days'/);
   assert.match(calls[0].sql, /activity\.last_activity_at >= NOW\(\) - INTERVAL '60 days'/);
   assert.match(calls[0].sql, /t\.mode IN \('accrue','redeem'\)/);
-  assert.match(calls[1].sql, /LIMIT \$3/);
-  assert.match(calls[1].sql, /OFFSET \$4/);
+  assert.match(calls[1].sql, /COUNT\(\*\) FILTER/);
+  assert.doesNotMatch(calls[1].sql, /WHERE u\.created_at.*at_risk/);
+  assert.match(calls[2].sql, /LIMIT \$3/);
+  assert.match(calls[2].sql, /OFFSET \$4/);
 });
 
 test('admin CRM never presents a URL as the user identity', () => {
