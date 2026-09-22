@@ -1739,7 +1739,7 @@ function renderProfileAchievements() {
   const sorted = [...achievements].sort((a, b) => (order[a.rarity] || 9) - (order[b.rarity] || 9));
   if (!sorted.length) {
     holder.innerHTML = '<button class="achievement-empty" id="achievementEmptyOpen" type="button">Открыть путь достижений <span>›</span></button>';
-    $('#achievementEmptyOpen')?.addEventListener('click', openAchievements);
+    $('#achievementEmptyOpen')?.addEventListener('click', openAchievementHub);
     return;
   }
   holder.innerHTML = sorted.map((item) => `<button class="profile-achievement-medal rarity-${escapeHtml(item.rarity)}" data-profile-achievement="${escapeHtml(item.code)}" type="button" title="${escapeHtml(item.title)}">
@@ -1748,7 +1748,7 @@ function renderProfileAchievements() {
   holder.querySelectorAll('[data-profile-achievement]').forEach((button) => button.addEventListener('click', () => {
     const selected = (state.profile?.achievements || []).find((item) => item.code === button.dataset.profileAchievement);
     state.achievementTab = selected?.rarity || 'common';
-    openAchievements(button.dataset.profileAchievement);
+    openAchievementHub();
   }));
 }
 
@@ -3279,11 +3279,16 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
 document.addEventListener('click', blockUnacceptedAction, true);
 
 function openAchievementHub() {
-  if ((state.profile?.unannouncedAchievements || []).length) {
-    maybeShowAchievementCelebration();
-    return;
-  }
+  const hasPendingReward = (state.profile?.unannouncedAchievements || []).length > 0;
+  if (hasPendingReward) window.setTimeout(maybeShowAchievementCelebration, 0);
   openAchievements();
+  if (!state.achievementsLoaded) {
+    void loadAchievements().catch((error) => {
+      console.warn('Achievement hub refresh skipped:', error);
+      const catalog = $('#achievementCatalog');
+      if (catalog && !state.achievementsLoaded) catalog.innerHTML = `<div class="achievement-catalog-empty">${escapeHtml(error.message || 'Не удалось загрузить достижения.')}</div>`;
+    });
+  }
 }
 
 $('#openAchievementsButton')?.addEventListener('click', openAchievementHub);
