@@ -13,7 +13,7 @@ write_files:
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      export PIVNIK_REPO_REF=fix/vk-native-hosting-main-parity-20260912
+      export PIVNIK_REPO_REF="${PIVNIK_REPO_REF:-main}"
       archive="$(mktemp)"
       trap 'rm -f "$archive"' EXIT
       url="https://codeload.github.com/GrafTrahula666/pivnik-bonus-app/tar.gz/refs/heads/${PIVNIK_REPO_REF}"

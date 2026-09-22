@@ -44,7 +44,7 @@ test('Selectel gateway accepts VK dev and production Hosting origins but exposes
   assert.doesNotMatch(source, /FORWARDED_REQUEST_HEADERS[\s\S]{0,500}'sec-fetch-site'/);
 });
 
-test('Selectel bootstrap uses nip.io and the consolidated VK branch', async () => {
+test('Selectel bootstrap uses nip.io and defaults recovery to current main', async () => {
   const [bootstrap, cloudInit] = await Promise.all([
     read('vk-api-gateway/bootstrap-nip.sh'),
     read('vk-api-gateway/selectel-cloud-init.yaml')
@@ -60,6 +60,8 @@ test('Selectel bootstrap uses nip.io and the consolidated VK branch', async () =
 
 test('pages-ac hotfix is rollback-safe and validates the current production origin', async () => {
   const source = await read('vk-api-gateway/apply-pages-ac-hotfix.sh');
+  assert.match(source, /PIVNIK_REPO_REF:-main/);
+  assert.doesNotMatch(source, /fix\\/vk-native-hosting-main-parity-20260912/);
   assert.match(source, /server\.mjs\.backup-/);
   assert.match(source, /pages-ac\.vk-apps\.ru/);
   assert.match(source, /docker compose up -d --build --force-recreate gateway/);

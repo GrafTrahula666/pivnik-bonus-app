@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_REF="${PIVNIK_REPO_REF:-fix/vk-native-hosting-main-parity-20260912}"
+REPO_REF="${PIVNIK_REPO_REF:-main}"
 INSTALL_DIR="${PIVNIK_GATEWAY_DIR:-/opt/pivnik-vk-gateway}"
 # Direct Selectel -> Railway TLS is not reliable from the RU segment. The
 # existing Vercel proxy is a server-to-server relay to the same VK production
