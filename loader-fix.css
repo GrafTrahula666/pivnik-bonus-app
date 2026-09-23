@@ -60,6 +60,11 @@ body {
   inset: 0 !important;
 }
 
+/* The selected loading artwork is complete; keep the legacy decorative overlay off it. */
+.boot-overlay {
+  display: none !important;
+}
+
 .boot-sign-glitch {
   left: 67.48% !important;
   top: 56.52% !important;
