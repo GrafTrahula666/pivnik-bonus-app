@@ -38,6 +38,9 @@ on:
       - app.js
       - vk-platform.js
       - account-link.js
+      - platform-core.js
+      - server.js
+      - universal-server.js
       - v22-ui.js
       - red-cosmos-v2.js
       - styles.css
