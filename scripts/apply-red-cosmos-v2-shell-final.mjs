@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
-const CANONICAL_STYLE_VERSION = '20.5-home-v2-top-card';
+const CANONICAL_STYLE_VERSION = '20.6-app-background-restore';
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
 
 function stripLegacyVisualLayers(source) {
