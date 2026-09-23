@@ -3044,6 +3044,10 @@ export const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(__dirname, 'loader-fix.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
+    if (req.method === 'GET' && url.pathname === '/service-white-gold.css') {
+      return serveFile(res, path.join(__dirname, 'service-white-gold.css'), 'text/css; charset=utf-8', 'no-cache');
+    }
+
     if (req.method === 'GET' && url.pathname === '/vendor/vk-bridge.js') {
       return serveFile(
         res,
