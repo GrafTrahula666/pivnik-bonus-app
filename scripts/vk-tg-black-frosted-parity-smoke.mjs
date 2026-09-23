@@ -81,7 +81,7 @@ async function inspectPlatform(platform) {
   try {
     const response = await page.goto(`http://127.0.0.1:${port}/index.html?parity=${platform}`, { waitUntil: 'networkidle' });
     assert(response?.status() === 200, `${platform}: index.html returned ${response?.status()}`);
-    await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home{display:block!important}' });
+    await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}' });
     await page.evaluate((name) => {
       const html = document.documentElement;
       html.classList.remove('platform-vk', 'platform-telegram', 'android-webview', 'lite-mode', 'reduce-effects');
@@ -112,7 +112,35 @@ async function inspectPlatform(platform) {
         activeNav: read('.bottom-nav button.active'),
         activeNavIcon: read('.bottom-nav button.active:not(.qr-nav-button) > span'),
         qrButton: read('.bottom-nav .qr-nav-button'),
-        qrIcon: read('.bottom-nav .qr-nav-button > span')
+        qrIcon: read('.bottom-nav .qr-nav-button > span'),
+        homeGeometry: (() => {
+          const home = document.querySelector('.client-home.home-v2.active');
+          const nav = document.querySelector('.bottom-nav');
+          const selectors = {
+            hero: '.spaceverse-home-hero',
+            business: '.spaceverse-business-card',
+            wheel: '.home-wheel-card',
+            liters: '.beer-loyalty-card--compact',
+            league: '.home-league-card'
+          };
+          const cards = Object.fromEntries(Object.entries(selectors).map(([key, selector]) => {
+            const node = document.querySelector(selector);
+            const rect = node?.getBoundingClientRect();
+            return [key, rect ? { top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } : null];
+          }));
+          const homeRect = home?.getBoundingClientRect();
+          const navRect = nav?.getBoundingClientRect();
+          const topbar = document.querySelector('.topbar')?.getBoundingClientRect();
+          return {
+            viewport: { width: innerWidth, height: innerHeight },
+            display: home ? getComputedStyle(home).display : null,
+            topbar: topbar ? { top: topbar.top, bottom: topbar.bottom, height: topbar.height } : null,
+            home: homeRect ? { top: homeRect.top, bottom: homeRect.bottom, height: homeRect.height } : null,
+            nav: navRect ? { top: navRect.top, bottom: navRect.bottom, height: navRect.height } : null,
+            bottomGap: homeRect && navRect ? navRect.top - homeRect.bottom : null,
+            cards
+          };
+        })()
       };
     });
 
@@ -126,6 +154,27 @@ async function inspectPlatform(platform) {
     assert(evidence.activeNavIcon.backgroundImage !== 'none' || rgbMax(evidence.activeNavIcon.backgroundColor) < 40, `${platform}: active icon is not black-frosted`);
     assert(evidence.qrIcon.backgroundImage !== 'none' || rgbMax(evidence.qrIcon.backgroundColor) < 40, `${platform}: QR icon is not black-frosted`);
     assert(evidence.hero.backgroundImage !== 'none' || rgbMax(evidence.hero.backgroundColor) < 50, `${platform}: hero is not black-frosted`);
+
+    const geometry = evidence.homeGeometry;
+    assert(geometry?.display === 'grid', `${platform}: Home V2 must render as grid, got ${geometry?.display}`);
+    assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844,
+      `${platform}: unexpected viewport ${JSON.stringify(geometry?.viewport)}`);
+    const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
+    for (const [key, minimum] of Object.entries(minimumHeights)) {
+      const card = geometry?.cards?.[key];
+      assert(card, `${platform}: missing ${key} geometry`);
+      assert(card.height >= minimum - 0.5,
+        `${platform}: ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
+      assert(card.width >= 350,
+        `${platform}: ${key} unexpectedly narrow at ${card.width}px`);
+    }
+    assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
+      `${platform}: excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
+    if (platform === 'telegram') {
+      assert(geometry.topbar && geometry.topbar.height <= 60.5,
+        `telegram: topbar reserves too much vertical space: ${JSON.stringify(geometry.topbar)}`);
+    }
+
     assert(pageErrors.length === 0, `${platform}: page errors: ${pageErrors.join(' | ')}`);
     assert(failedRequests.length === 0, `${platform}: failed local requests: ${JSON.stringify(failedRequests)}`);
 
@@ -144,6 +193,10 @@ try {
   assert(vk.navButtons === tg.navButtons, `VK/TG navigation count differs: ${vk.navButtons} vs ${tg.navButtons}`);
   assert(isTransparent(vk.activeNav.backgroundColor) === isTransparent(tg.activeNav.backgroundColor), 'VK/TG active navigation transparency differs');
   assert(isTransparent(vk.qrButton.backgroundColor) === isTransparent(tg.qrButton.backgroundColor), 'VK/TG QR outer transparency differs');
+  for (const key of ['hero', 'business', 'wheel', 'liters', 'league']) {
+    const delta = Math.abs(vk.homeGeometry.cards[key].height - tg.homeGeometry.cards[key].height);
+    assert(delta <= 1.5, `VK/TG ${key} height drift is too large: ${delta}px`);
+  }
   await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify(results, null, 2));
   console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), platforms: Object.keys(results) }, null, 2));
 } finally {
