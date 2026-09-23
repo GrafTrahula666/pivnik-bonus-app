@@ -15,7 +15,9 @@ import {
 } from './achievements.js';
 import {
   chooseCanonicalUser,
+  effectiveRoleForAuthenticatedIdentity,
   hashLinkCode,
+  isConfiguredOwnerIdentity,
   normalizeLinkCode as normalizeCoreLinkCode,
   planMergedLedger,
   signSession as signCoreSession,
@@ -722,7 +724,7 @@ async function requireGatewayUser(req) {
   const platform = normalized.payload.platform === 'vk' ? 'vk' : 'telegram';
   const providerUserId = String(normalized.payload.pid || '');
   const result = await pool.query(
-    `SELECT u.id, u.terms_accepted_at, u.terms_version,
+    `SELECT u.id, u.role, u.terms_accepted_at, u.terms_version,
             EXISTS(
               SELECT 1
               FROM user_identities ui
@@ -739,11 +741,19 @@ async function requireGatewayUser(req) {
   if (!result.rowCount || !providerUserId || !result.rows[0].identity_matches) {
     throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 401 });
   }
+  const effectiveRole = effectiveRoleForAuthenticatedIdentity(
+    result.rows[0].role,
+    platform,
+    providerUserId,
+    { telegram: ownerTelegramId, vk: ownerVkId }
+  );
   return {
     id: String(result.rows[0].id),
     token: normalized.token,
     payload: normalized.payload,
     platform,
+    providerUserId,
+    role: effectiveRole,
     termsAccepted: Boolean(
       result.rows[0].terms_accepted_at
       && result.rows[0].terms_version === TERMS_VERSION
@@ -1436,9 +1446,10 @@ async function resolveProviderUser(provider, externalUser) {
       if (legacy.rowCount) userId = await canonicalUserId(client, legacy.rows[0].id);
     }
 
-    const isOwner = provider === 'telegram'
-      ? Boolean(ownerTelegramId && externalUser.id === ownerTelegramId)
-      : Boolean(ownerVkId && externalUser.id === ownerVkId);
+    const isOwner = isConfiguredOwnerIdentity(provider, externalUser.id, {
+      telegram: ownerTelegramId,
+      vk: ownerVkId
+    });
 
     // VK and Telegram identities are intentionally independent, including the owner.
 
@@ -1466,6 +1477,20 @@ async function resolveProviderUser(provider, externalUser) {
       );
       userId = String(inserted.rows[0].id);
     } else {
+      // Authorization is independent from profile-metadata ownership. Legacy rows can
+      // still contain both platform identities; a signed configured owner must regain
+      // the persisted admin role even when shouldUpdateMainProfile is false.
+      if (isOwner) {
+        await client.query(
+          `UPDATE users
+           SET role = 'admin',
+               updated_at = CASE WHEN role <> 'admin' THEN NOW() ELSE updated_at END
+           WHERE id = $1::bigint
+             AND role <> 'admin'`,
+          [userId]
+        );
+      }
+
       const identityCount = await client.query(
         'SELECT COUNT(*)::int AS count FROM user_identities WHERE user_id = $1::bigint',
         [userId]
@@ -2970,6 +2995,9 @@ async function serveStartupProfile(req, res, startup) {
     const user = await requireGatewayUser(req);
     const platform = platformFromRequest(req, user.payload.platform || 'unknown');
     const payload = await getAppPayload(user.id, platform, { startup });
+    // A valid signed owner session must expose service access immediately, even when
+    // the stored row still carries a legacy client role from an older linked account.
+    if (payload?.profile) payload.profile.role = user.role;
     trace('VK_PROFILE_SUCCESS', { status: 200 });
     return sendJson(res, 200, payload);
   } catch (error) {
@@ -3233,8 +3261,7 @@ export const server = http.createServer(async (req, res) => {
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      const profile = await getProfile(user.id);
-      if (!profile || !['viewer', 'admin'].includes(profile.role)) {
+      if (!['viewer', 'admin'].includes(user.role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
       return sendJson(res, 200, await getUnifiedAdminUserDirectory(url.searchParams));
@@ -3303,7 +3330,7 @@ export const server = http.createServer(async (req, res) => {
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      if (!['staff', 'admin'].includes((await getProfile(user.id)).role)) {
+      if (!['staff', 'admin'].includes(user.role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
       enforceRateLimit(`qr:${user.id}:${requestAddress(req)}`, 60, 60 * 1000);
