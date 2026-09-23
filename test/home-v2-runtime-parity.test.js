@@ -12,9 +12,9 @@ test('Home V2 production shell keeps the white-gold cache key and five-column na
     read('scripts/apply-red-cosmos-v2-shell-final.mjs')
   ]);
 
-  assert.match(index, /styles\.css\?v=20\.5-home-v2-top-card/);
-  assert.match(index, /app\.js\?v=20\.5-home-v2-top-card/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.5-home-v2-top-card'/);
+  assert.match(index, /styles\.css\?v=20\.6-app-background-restore/);
+  assert.match(index, /app\.js\?v=20\.6-app-background-restore/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.6-app-background-restore'/);
   assert.match(css, /\.bottom-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
 
   const nav = index.match(/<nav class="bottom-nav"[\s\S]*?<\/nav>/)?.[0] || '';
@@ -44,6 +44,6 @@ test('bootstrap-vlad materializer is restart-safe after its cache patch is alrea
 
 test('materializer recognizes the white-gold Home V2 asset version as already canonical', async () => {
   const source = await read('scripts/materialize-runtime-patches.mjs');
-  assert.match(source, /styles\.css\?v=20\.5-home-v2-top-card/);
+  assert.match(source, /styles\.css\?v=20\.6-app-background-restore/);
   assert.match(source, /supportedAssetVersion/);
 });

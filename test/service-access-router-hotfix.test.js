@@ -24,5 +24,5 @@ test('service entrypoints remain present and cache-busted', async () => {
   assert.match(index, /id="profileAdminNav"/);
   assert.match(index, /data-screen="staff"/);
   assert.match(index, /data-screen="admin"/);
-  assert.match(index, /app\.js\?v=20\.5-home-v2-top-card/);
+  assert.match(index, /app\.js\?v=20\.6-app-background-restore/);
 });

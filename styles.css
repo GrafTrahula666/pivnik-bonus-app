@@ -9135,3 +9135,44 @@ body,
 .client-home.home-v2 .spaceverse-business-copy {
   z-index: 2;
 }
+
+
+/* V20.6 · APP BACKGROUND RESTORE */
+/* Restore the approved SPACEVERSE cloud-city shell background after Home V2
+   intentionally nulled the pseudo-layers. The loading screen is untouched. */
+.app-shell {
+  background: #e8ded2 !important;
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: "" !important;
+  display: block !important;
+  position: fixed !important;
+  inset: 0 auto 0 50% !important;
+  width: min(100%, 480px) !important;
+  height: auto !important;
+  min-height: 100dvh !important;
+  transform: translateX(-50%) !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+}
+
+.app-shell::before {
+  background: url('/assets/backgrounds/spaceverse-cloud-city.webp?v=2') center top / cover no-repeat !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+.app-shell::after {
+  background:
+    linear-gradient(180deg, rgba(255,250,242,.08), rgba(240,229,211,.14) 42%, rgba(214,196,169,.24) 100%) !important;
+  opacity: 1 !important;
+}
+
+.topbar,
+.app-shell > main,
+.bottom-nav {
+  position: relative;
+  z-index: 2;
+}
