@@ -22,7 +22,7 @@ export async function queryRetentionAudiencePreview(pool, segment) {
     WITH audience AS (
       SELECT
         u.id,
-        u.marketing_opt_in = TRUE AS consented,
+        COALESCE(u.marketing_opt_in, FALSE) AS consented,
         (
           u.telegram_id IS NOT NULL
           OR EXISTS (
