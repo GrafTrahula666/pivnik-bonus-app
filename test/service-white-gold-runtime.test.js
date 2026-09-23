@@ -19,6 +19,7 @@ test('service layer is visual-only and scoped to service-mode staff/admin runtim
   assert.doesNotMatch(css, /pointer-events\s*:/);
   assert.doesNotMatch(css, /position\s*:\s*fixed/);
   assert.doesNotMatch(css, /z-index\s*:/);
+  assert.doesNotMatch(css, /display\s*:\s*none/);
   assert.doesNotMatch(css, /\.client-home|data-screen="client"|data-screen="profile"|data-screen="league"/);
 });
 
