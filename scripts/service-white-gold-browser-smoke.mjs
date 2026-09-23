@@ -198,7 +198,7 @@ async function inspect(platform, target) {
 
     const clickable = target === 'admin' ? '#backToProfileFromAdmin' : '#backToProfileFromStaff';
     await page.locator(clickable).click({ trial: true });
-    const action = target === 'admin' ? '#saveShift' : '#createSale';
+    const action = target === 'admin' ? '#openAllUsers' : '#scanClient';
     await page.locator(action).click({ trial: true });
 
     assert(pageErrors.length === 0, `${platform}/${target}: page errors: ${pageErrors.join(' | ')}`);
