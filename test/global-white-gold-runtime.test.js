@@ -5,8 +5,12 @@ import test from 'node:test';
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
 function block(css, selector) {
-  const escaped = selector.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&');
-  return css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`))?.[1] || '';
+  const start = css.indexOf(`${selector} {`);
+  assert.notEqual(start, -1, `${selector} block missing`);
+  const bodyStart = css.indexOf('{', start) + 1;
+  const end = css.indexOf('}', bodyStart);
+  assert.notEqual(end, -1, `${selector} block is not closed`);
+  return css.slice(bodyStart, end);
 }
 
 test('global client surfaces keep white-gold contrast instead of legacy dark cards', async () => {
@@ -53,7 +57,7 @@ test('approved Home V2 geometry baseline and loader contract remain intact', asy
     ['beer-loyalty-card--compact', 84],
     ['home-league-card', 132]
   ]) {
-    assert.match(css, new RegExp(`\\.client-home\\.home-v2 \\\.${selector} \\\{ min-height: ${minimum}px; \\\}`));
+    assert.ok(css.includes(`.client-home.home-v2 .${selector} { min-height: ${minimum}px; }`), `${selector} baseline must stay >= ${minimum}px`);
   }
 
   assert.match(index, /id="bootScreen"/);
