@@ -17,6 +17,7 @@ const paths = [
   '/api/health',
   '/api/platform-health',
   '/api/release-readiness',
+  '/service-white-gold.css?v=20.8-service-white-gold',
   '/legal/privacy',
   '/legal/terms'
 ];
@@ -37,7 +38,11 @@ async function probe(service, pathname) {
       signal: AbortSignal.timeout(15_000),
       headers: {
         'user-agent': 'pivnik-release-probe/2.0',
-        accept: pathname.startsWith('/api/') ? 'application/json' : 'text/html,*/*;q=0.8'
+        accept: pathname.startsWith('/api/')
+          ? 'application/json'
+          : pathname.startsWith('/service-white-gold.css')
+            ? 'text/css,*/*;q=0.8'
+            : 'text/html,*/*;q=0.8'
       }
     });
     const body = await response.text();
@@ -56,6 +61,14 @@ async function probe(service, pathname) {
     if ((pathname === '/vk' || (pathname === '/' && service.name === 'vk'))
         && !body.includes('/vk-platform.js')) {
       failures.push('VK document is missing the VK runtime');
+    }
+    if (pathname.startsWith('/service-white-gold.css')) {
+      if (!/^text\/css\b/i.test(response.headers.get('content-type') || '')) {
+        failures.push('service white-gold asset is not CSS');
+      }
+      if (!body.includes('.app-shell.service-mode')) {
+        failures.push('service white-gold asset is missing its runtime scope');
+      }
     }
 
     return {
