@@ -54,31 +54,12 @@ body {
   transform: none !important;
 }
 
-.boot-overlay,
 .boot-copy {
   position: absolute !important;
   inset: 0 !important;
 }
 
-/* The selected loading artwork is complete; keep the legacy decorative overlay off it. */
-.boot-overlay {
-  display: none !important;
-}
 
-.boot-sign-glitch {
-  left: 67.48% !important;
-  top: 56.52% !important;
-  width: 16.47% !important;
-  height: 5.38% !important;
-  overflow: visible !important;
-}
-
-.sign-layer {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-  object-position: center !important;
-}
 
 .boot-copy {
   padding:

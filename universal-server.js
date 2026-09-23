@@ -2793,7 +2793,7 @@ export async function renderAppIndex(platform) {
   const source = await fs.readFile(path.join(__dirname, 'index.html'), 'utf8');
   const withLoader = source.replace(
     /<link rel="stylesheet" href="styles\.css([^"]*)"\s*\/>/i,
-    '<link rel="stylesheet" href="styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=2.1.0" />'
+    '<link rel="stylesheet" href="styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />'
   );
   const withLinking = withLoader.replace(
     /<script defer src="app\.js([^"]*)"><\/script>/i,
