@@ -1849,21 +1849,16 @@ function maybeShowAchievementCelebration() {
   haptic('heavy');
 }
 
-function syncServiceAccess(profile = state.profile) {
-  const role = profile?.role;
-  const hasStaffAccess = roleCanStaff(role);
-  const hasAdminAccess = roleCanAdmin(role);
-  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
-  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
-  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
-}
-
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
-  // Service access is operational UI. Sync it before any optional profile rendering
+  // Service access is operational UI. Resolve it before optional profile rendering
   // so a later cosmetic/rendering failure cannot hide bartender/admin entrypoints.
-  syncServiceAccess(profile);
+  const hasStaffAccess = roleCanStaff(profile.role);
+  const hasAdminAccess = roleCanAdmin(profile.role);
+  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
+  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
+  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
   const profilePlatform = profile.platform || profile.provider || (IS_VK ? 'vk' : 'telegram');
   const platformLabel = profilePlatform === 'vk' ? 'VK' : 'Telegram';
