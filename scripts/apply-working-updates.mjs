@@ -221,13 +221,12 @@ app = replaceRequired(
 await writeText('app.js', app);
 
 let index = await readText('index.html');
-// Home visuals are canonical in index.html/styles.css. Materialization may repair
-// a pre-canonical dark shell, but it must never paint the current white-gold UI
-// back to an obsolete RED COSMOS/purple theme.
-if (index.includes('<meta name="theme-color" content="#0b0e13" />')) {
+// The client surface is white-gold, but Telegram's native top chrome is
+// intentionally dark. Materialization must preserve the canonical header color.
+if (index.includes('<meta name="theme-color" content="#f4eee4" />')) {
   index = index.replace(
-    '<meta name="theme-color" content="#0b0e13" />',
-    '<meta name="theme-color" content="#f4eee4" />'
+    '<meta name="theme-color" content="#f4eee4" />',
+    '<meta name="theme-color" content="#0b0e13" />'
   );
 }
 if (index.includes('        <div class="boot-badge">Пивник | Бонусы</div>\n')) {
@@ -252,7 +251,7 @@ if (!app.includes('Achievement hub refresh skipped:')) failures.push('achievemen
 if (!platformCore.includes('export function isConfiguredOwnerIdentity(')) failures.push('configured owner identity helper');
 if (!gateway.includes('isConfiguredOwnerIdentity(provider, externalUser.id')) failures.push('provider owner identity mapping');
 if (!gateway.includes('Authorization is independent from profile-metadata ownership')) failures.push('owner role reconciliation');
-if (!index.includes('<meta name="theme-color" content="#f4eee4" />')) failures.push('theme color');
+if (!index.includes('<meta name="theme-color" content="#0b0e13" />')) failures.push('theme color');
 if (index.includes('<div class="boot-badge">Пивник | Бонусы</div>')) failures.push('boot badge');
 if (index.includes(escapedProfileHistorySeparator)) failures.push('profile literal newline escape');
 const finalCss = await readText('red-cosmos-v2.css');
