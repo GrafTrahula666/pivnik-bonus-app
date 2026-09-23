@@ -33,9 +33,9 @@ test('Home V2 precision polish is cache-busted', async () => {
     read('index.html'),
     read('scripts/apply-red-cosmos-v2-shell-final.mjs')
   ]);
-  assert.match(index, /styles\.css\?v=20\.4-home-v2-precision-polish/);
-  assert.match(index, /app\.js\?v=20\.4-home-v2-precision-polish/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.4-home-v2-precision-polish'/);
+  assert.match(index, /styles\.css\?v=20\.5-app-background-restore/);
+  assert.match(index, /app\.js\?v=20\.5-app-background-restore/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.5-app-background-restore'/);
 });
 
 
