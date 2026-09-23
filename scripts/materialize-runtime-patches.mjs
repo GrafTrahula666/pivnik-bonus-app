@@ -259,7 +259,7 @@ async function verifyMaterializedState() {
   if (!gateway.includes("storedFrame === 'olesya'")) failures.push('universal-server.js Olesya frame');
   if (!gateway.includes('deletedIdentityHash')) failures.push('deleted identity reward guard');
   if (!styles.includes('avatar-frame-vladislav')) failures.push('styles.css Vladislav frame');
-  const supportedAssetVersion = index.includes('styles.css?v=20.4-home-v2-precision-polish')
+  const supportedAssetVersion = index.includes('styles.css?v=20.5-home-v2-top-card')
     || index.includes('styles.css?v=20.3-service-access-router-hotfix')
     || index.includes('styles.css?v=20.2-home-v2-large-iphone-fit')
     || index.includes('styles.css?v=20.2-spaceverse-white-gold-shell')

@@ -7,9 +7,11 @@ const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.met
 test('Home V2 exposes the real profile avatar and right-column status', async () => {
   const css = await read('styles.css');
   assert.match(css, /V20\.4 · HOME V2 PRECISION POLISH/);
-  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*display: grid !important/);
-  assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*right: 4\.2%/);
-  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 61\.5%/);
+  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*top: 7px[\s\S]*left: 3\.4%/);
+  assert.match(css, /\.spaceverse-home-hero \.hero-name-row[\s\S]*grid-template-columns: minmax\(0, 1fr\) 30px/);
+  assert.match(css, /\.hero-qr-button[\s\S]*width: 30px[\s\S]*justify-self: end/);
+  assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 58px[\s\S]*right: 4\.1%/);
+  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 3\.4%/);
 });
 
 test('Home wheel prize and CTA keep fixed centered alignment', async () => {
@@ -33,9 +35,9 @@ test('Home V2 precision polish is cache-busted', async () => {
     read('index.html'),
     read('scripts/apply-red-cosmos-v2-shell-final.mjs')
   ]);
-  assert.match(index, /styles\.css\?v=20\.4-home-v2-precision-polish/);
-  assert.match(index, /app\.js\?v=20\.4-home-v2-precision-polish/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.4-home-v2-precision-polish'/);
+  assert.match(index, /styles\.css\?v=20\.5-home-v2-top-card/);
+  assert.match(index, /app\.js\?v=20\.5-home-v2-top-card/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.5-home-v2-top-card'/);
 });
 
 
