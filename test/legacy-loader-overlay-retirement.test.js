@@ -26,9 +26,9 @@ test('legacy loader decoration is removed from active runtime sources', async ()
   ];
 
   for (const token of forbidden) {
-    assert.doesNotMatch(index, new RegExp(token.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&')));
-    assert.doesNotMatch(styles, new RegExp(token.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&')));
-    assert.doesNotMatch(loader, new RegExp(token.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&')));
+    assert.equal(index.includes(token), false, `index.html still contains ${token}`);
+    assert.equal(styles.includes(token), false, `styles.css still contains ${token}`);
+    assert.equal(loader.includes(token), false, `loader-fix.css still contains ${token}`);
   }
 
   assert.match(index, /class="boot-image"/);
