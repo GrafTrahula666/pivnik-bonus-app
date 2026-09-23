@@ -2284,7 +2284,12 @@ body {
 .shop-product,
 .leaderboard-row,
 .beer-loyalty-card,
-.help-entry,
+.help-entry {
+  background: linear-gradient(145deg, rgba(16,20,27,.93), rgba(8,11,16,.9));
+  border-color: rgba(255,255,255,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 14px 34px rgba(0,0,0,.22);
+  backdrop-filter: blur(13px);
+}
 
 /* Компактный безлимит не выталкивает аватар */
 #clientBalance.unlimited-balance {
