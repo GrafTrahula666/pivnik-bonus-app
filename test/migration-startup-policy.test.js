@@ -24,4 +24,15 @@ test('Actual gateway migration loader skips 009 and unknown future files before 
   assert.deepEqual(read, []);
   assert.equal(queries.length, 3, 'only migration bookkeeping and advisory lock/unlock are allowed');
   assert.equal(isAutomaticStartupMigration('008_tester_recipient_aliases.sql'), true);
+  assert.equal(isAutomaticStartupMigration('010_repair_originaltopg_admin.sql'), true);
+  assert.equal(isAutomaticStartupMigration('010_unapproved.sql'), false);
+});
+
+test('OriginalTopG role repair is exact, Telegram-scoped and changes only the role', async () => {
+  const sql = await fs.readFile(new URL('../migrations/010_repair_originaltopg_admin.sql', import.meta.url), 'utf8');
+  assert.match(sql, /ui\.provider = 'telegram'/);
+  assert.match(sql, /originaltopg/);
+  assert.match(sql, /candidate_count <> 1/);
+  assert.match(sql, /UPDATE users[\s\S]*SET role = 'admin'/);
+  assert.doesNotMatch(sql, /UPDATE\s+wallets|UPDATE\s+user_identities|session_version\s*=|unlimited_bonus\s*=|profile_frame\s*=/i);
 });
