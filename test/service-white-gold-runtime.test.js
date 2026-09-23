@@ -43,8 +43,8 @@ test('service layer targets the actual dynamic admin and staff row classes', asy
   const [css, app] = await Promise.all([read('service-white-gold.css'), read('app.js')]);
 
   for (const selector of ['op-row', 'user-row', 'inquiry-row', 'admin-content-row', 'shift-staff-option', 'staff-shop-item']) {
-    assert.match(app, new RegExp(`class=["\\\\`][^"\\\\`]*${selector}`), `${selector} must be rendered by app.js`);
-    assert.match(css, new RegExp(`\\\\.${selector.replaceAll('-', '\\-')}`), `${selector} must be styled by the service layer`);
+    assert.ok(app.includes(`class="${selector}`), `${selector} must be rendered by app.js`);
+    assert.ok(css.includes(`.${selector}`), `${selector} must be styled by the service layer`);
   }
 
   assert.match(css, /#adminUsersModal \.admin-filter-row/);
