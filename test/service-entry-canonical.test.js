@@ -4,27 +4,23 @@ import test from 'node:test';
 
 const read = (name) => readFile(new URL(`../${name}`, import.meta.url), 'utf8');
 
-test('Home service entry is canonical markup with role-gated app wiring', async () => {
-  const [index, app, css] = await Promise.all([
-    read('index.html'),
-    read('app.js'),
-    read('styles.css')
-  ]);
+test('service entry stays in Profile and cannot distort Home V2 grid', async () => {
+  const [index, app] = await Promise.all([read('index.html'), read('app.js')]);
 
-  assert.match(index, /id="homeServiceAccess"/);
-  assert.match(index, /id="homeStaffNav"/);
-  assert.match(index, /id="homeAdminNav"/);
-  assert.doesNotMatch(index, /emergency-service-hotfix\.(?:css|js)/);
+  assert.match(index, /id="profileServiceAccess"/);
+  assert.match(index, /id="profileStaffNav"/);
+  assert.match(index, /id="profileAdminNav"/);
+  assert.doesNotMatch(index, /id="homeServiceAccess"|id="homeStaffNav"|id="homeAdminNav"/);
 
-  assert.match(app, /#homeStaffNav'\)\?\.classList\.toggle\('hidden', !hasStaffAccess\)/);
-  assert.match(app, /#homeAdminNav'\)\?\.classList\.toggle\('hidden', !hasAdminAccess\)/);
-  assert.match(app, /#homeServiceAccess'\)\?\.classList\.toggle\('hidden', !hasStaffAccess && !hasAdminAccess\)/);
-  assert.match(app, /#homeStaffNav'\)\?\.addEventListener\('click', \(\) => switchScreen\('staff'\)\)/);
-  assert.match(app, /#homeAdminNav'\)\?\.addEventListener\('click', \(\) => switchScreen\('admin'\)\)/);
-
-  assert.match(css, /V20\.9 · CANONICAL HOME SERVICE ACCESS/);
-  assert.match(css, /\.home-service-access/);
-  assert.match(css, /\.home-service-actions/);
+  const renderStart = app.indexOf('function renderProfile() {');
+  assert.ok(renderStart >= 0);
+  const earlyRender = app.slice(renderStart, renderStart + 1600);
+  assert.match(earlyRender, /const hasStaffAccess = roleCanStaff\(profile\.role\);/);
+  assert.match(earlyRender, /const hasAdminAccess = roleCanAdmin\(profile\.role\);/);
+  assert.match(earlyRender, /#profileStaffNav/);
+  assert.match(earlyRender, /#profileAdminNav/);
+  assert.match(earlyRender, /(?:#profileServiceAccess|const serviceAccess = \$\('#profileServiceAccess'\))/);
+  assert.doesNotMatch(app, /#homeStaffNav|#homeAdminNav|#homeServiceAccess/);
 });
 
 test('Telegram header color has one canonical runtime source', async () => {
@@ -37,7 +33,7 @@ test('Telegram header color has one canonical runtime source', async () => {
   assert.doesNotMatch(app, /setHeaderColor\('#f8f3eb'\)/);
 });
 
-test('canonical cache key replaces the emergency asset layer', async () => {
+test('canonical cache key remains materializer-compatible', async () => {
   const [index, shell, materializer] = await Promise.all([
     read('index.html'),
     read('scripts/apply-red-cosmos-v2-shell-final.mjs'),

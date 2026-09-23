@@ -1852,6 +1852,13 @@ function maybeShowAchievementCelebration() {
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
+  // Service access is operational UI. Resolve it before optional profile rendering
+  // so a later cosmetic/rendering failure cannot hide bartender/admin entrypoints.
+  const hasStaffAccess = roleCanStaff(profile.role);
+  const hasAdminAccess = roleCanAdmin(profile.role);
+  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
+  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
+  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
   const profilePlatform = profile.platform || profile.provider || (IS_VK ? 'vk' : 'telegram');
   const platformLabel = profilePlatform === 'vk' ? 'VK' : 'Telegram';
@@ -1896,14 +1903,6 @@ function renderProfile() {
     $('#nextRewardText').textContent = 'Максимальный статус';
   }
 
-  const hasStaffAccess = roleCanStaff(profile.role);
-  const hasAdminAccess = roleCanAdmin(profile.role);
-  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
-  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
-  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
-  $('#homeStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
-  $('#homeAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
-  $('#homeServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
   if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
   const partnerView = profile.role === 'viewer';
@@ -3361,8 +3360,6 @@ $('#deleteAccountButton')?.addEventListener('click', async () => {
 });
 $('#profileStaffNav')?.addEventListener('click', () => switchScreen('staff'));
 $('#profileAdminNav')?.addEventListener('click', () => switchScreen('admin'));
-$('#homeStaffNav')?.addEventListener('click', () => switchScreen('staff'));
-$('#homeAdminNav')?.addEventListener('click', () => switchScreen('admin'));
 $('#backToProfileFromStaff')?.addEventListener('click', () => switchScreen('profile'));
 $('#backToProfileFromAdmin')?.addEventListener('click', () => switchScreen('profile'));
 $('#openTermsFromConsent').addEventListener('click', () => openModal('helpModal'));
