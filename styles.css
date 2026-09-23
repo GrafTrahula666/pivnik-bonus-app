@@ -64,12 +64,10 @@ img { max-width: 100%; }
   object-fit: cover;
   filter: saturate(.95) contrast(1.04);
 }
-.boot-overlay,
 .boot-copy {
   position: absolute;
   inset: 0;
 }
-.boot-overlay { pointer-events: none; }
 .boot-copy {
   display: flex;
   flex-direction: column;
@@ -113,92 +111,6 @@ img { max-width: 100%; }
   line-height: 1.45;
 }
 
-.shooting-star {
-  position: absolute;
-  width: 2px;
-  height: 2px;
-  border-radius: 999px;
-  background: #fff;
-  opacity: 0;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, .9));
-}
-.shooting-star::before {
-  content: "";
-  position: absolute;
-  inset: -1px auto auto -1px;
-  width: 92px;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(255,255,255,.4), transparent);
-  transform-origin: left center;
-}
-.star-a { top: 17%; left: 68%; animation: shootingStar 14s linear infinite; animation-delay: 3s; }
-.star-b { top: 34%; left: 78%; animation: shootingStar 18s linear infinite; animation-delay: 8s; }
-.star-c { top: 24%; left: 50%; animation: shootingStar 20s linear infinite; animation-delay: 13s; }
-
-.boot-sign-glitch {
-  position: absolute;
-  left: 67.48%;
-  top: 56.52%;
-  width: 16.47%;
-  height: 5.38%;
-  overflow: hidden;
-  filter: drop-shadow(0 0 5px rgba(255,255,255,.25));
-}
-.sign-layer {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.sign-main { animation: signMainGlitch 9s infinite steps(1, end); }
-.sign-red {
-  opacity: 0;
-  mix-blend-mode: screen;
-  filter: sepia(1) saturate(8) hue-rotate(320deg) contrast(1.2);
-  clip-path: inset(0 0 55% 0);
-  animation: signRedGlitch 9s infinite steps(1, end);
-}
-.sign-cyan {
-  opacity: 0;
-  mix-blend-mode: screen;
-  filter: sepia(1) saturate(8) hue-rotate(145deg) contrast(1.2);
-  clip-path: inset(48% 0 0 0);
-  animation: signCyanGlitch 9s infinite steps(1, end);
-}
-.boot-person {
-  position: absolute;
-  left: 15.41%;
-  top: 52.51%;
-  width: 6.06%;
-  height: 10.41%;
-  object-fit: contain;
-  transform-origin: 50% 100%;
-  animation: personWalk 8.8s ease-in-out infinite;
-  filter: drop-shadow(0 0 2px rgba(255,255,255,.16));
-}
-.boot-smoke {
-  position: absolute;
-  left: 18.8%;
-  top: 53.2%;
-  width: 9%;
-  height: 10%;
-  pointer-events: none;
-}
-.boot-smoke i {
-  position: absolute;
-  bottom: 68%;
-  left: 12%;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.55), rgba(255,255,255,.18) 58%, transparent 78%);
-  opacity: 0;
-  filter: blur(1px);
-}
-.boot-smoke i:nth-child(1) { animation: smokeFloat 7s ease-in-out infinite; }
-.boot-smoke i:nth-child(2) { animation: smokeFloat 7s ease-in-out infinite 2.3s; }
-.boot-smoke i:nth-child(3) { animation: smokeFloat 7s ease-in-out infinite 4.6s; }
 
 .app-shell {
   width: min(100%, 480px);
@@ -520,45 +432,6 @@ img { max-width: 100%; }
 
 @keyframes up {
   from { transform: translateY(18px); opacity: 0; }
-}
-@keyframes shootingStar {
-  0%, 84%, 100% { opacity: 0; transform: translate3d(0, 0, 0) scale(.8) rotate(-24deg); }
-  85% { opacity: 0; }
-  86% { opacity: .95; }
-  93% { opacity: .95; }
-  100% { opacity: 0; transform: translate3d(-120px, 95px, 0) scale(1) rotate(-24deg); }
-}
-@keyframes signMainGlitch {
-  0%, 88%, 100% { transform: translate(0, 0); opacity: 1; filter: brightness(1); }
-  89% { transform: translate(-1px, 0); opacity: .92; }
-  90% { transform: translate(1px, -1px); filter: brightness(1.18); }
-  91% { transform: translate(0, 1px); opacity: .84; }
-  92% { transform: translate(0, 0); opacity: 1; filter: brightness(1.28); }
-  93% { filter: brightness(1); }
-}
-@keyframes signRedGlitch {
-  0%, 88%, 93%, 100% { opacity: 0; transform: translate(0, 0); }
-  89%, 91% { opacity: .58; transform: translate(-2px, 0); }
-  90%, 92% { opacity: .25; transform: translate(1px, 1px); }
-}
-@keyframes signCyanGlitch {
-  0%, 88%, 93%, 100% { opacity: 0; transform: translate(0, 0); }
-  89%, 91% { opacity: .42; transform: translate(2px, 0); }
-  90%, 92% { opacity: .2; transform: translate(-1px, -1px); }
-}
-@keyframes personWalk {
-  0%, 15%, 100% { transform: translateX(0) rotate(0deg); }
-  28% { transform: translateX(2px) rotate(.35deg); }
-  42% { transform: translateX(4px) rotate(-.35deg); }
-  56% { transform: translateX(3px) rotate(.2deg); }
-  72% { transform: translateX(1px) rotate(-.15deg); }
-  86% { transform: translateX(0) rotate(0deg); }
-}
-@keyframes smokeFloat {
-  0% { opacity: 0; transform: translate(0, 0) scale(.45); }
-  12% { opacity: .3; }
-  55% { opacity: .18; }
-  100% { opacity: 0; transform: translate(18px, -58px) scale(2.7); }
 }
 
 @media (max-width: 390px) {
@@ -1328,9 +1201,7 @@ button:active { transform: translateY(1px) scale(.995); }
 }
 
 /* v8: shift management and loader hardening */
-.boot-image,
-.sign-layer,
-.boot-person {
+.boot-image {
   -webkit-user-drag: none;
   user-select: none;
 }
@@ -1342,7 +1213,6 @@ button:active { transform: translateY(1px) scale(.995); }
   background: radial-gradient(circle at 50% 15%, transparent 0 52%, rgba(0,0,0,.12) 100%);
   z-index: 1;
 }
-.boot-overlay,
 .boot-copy { z-index: 2; }
 
 .shift-badge {
@@ -3550,7 +3420,6 @@ body {
 
 /* Android Telegram WebView: avoid expensive effects and preserve the functional shell. */
 .android-webview .boot-scene { width: min(100%, 420px); box-shadow: none; }
-.android-webview .boot-smoke, .lite-mode .boot-smoke { display: none; }
 .android-webview .boot-image { filter: none; }
 .android-webview .app-shell::before, .lite-mode .app-shell::before { background-attachment: scroll !important; }
 .android-webview .modal-sheet, .android-webview .bottom-nav, .android-webview .topbar,
@@ -3568,7 +3437,7 @@ body {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.android-webview .boot-image, .android-webview .sign-layer, .android-webview .app-shell::before {
+.android-webview .boot-image, .android-webview .app-shell::before {
   mix-blend-mode: normal !important;
 }
 .android-webview .achievement-tile.locked::after {
