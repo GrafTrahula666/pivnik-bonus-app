@@ -9043,3 +9043,30 @@ body,
     font-size: 8px;
   }
 }
+
+
+/* Hide only the baked left cube; keep SPACEVERSE wordmark and astronaut-held cube. */
+.client-home.home-v2 .spaceverse-business-card::after {
+  content: '' !important;
+  position: absolute;
+  top: 6%;
+  left: 1.6%;
+  width: 10.8%;
+  height: 34%;
+  display: block !important;
+  pointer-events: none;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 46% 50%,
+      rgba(255,253,248,.995) 0%,
+      rgba(255,252,246,.985) 52%,
+      rgba(253,249,241,.92) 70%,
+      rgba(253,249,241,.45) 84%,
+      transparent 100%);
+  filter: blur(.3px);
+  z-index: 1;
+}
+
+.client-home.home-v2 .spaceverse-business-copy {
+  z-index: 2;
+}
