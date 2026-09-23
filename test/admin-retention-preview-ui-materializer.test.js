@@ -13,8 +13,9 @@ test('retention preview UI is read-only, valid and idempotent', () => {
   try {
     mkdirSync(path.join(work, 'scripts'));
     for (const file of ['app.js', 'index.html', 'styles.css']) cpSync(path.join(root, file), path.join(work, file));
-    cpSync(path.join(root, 'scripts', 'apply-admin-customer360-ui.mjs'), path.join(work, 'scripts', 'apply-admin-customer360-ui.mjs'));
-    cpSync(path.join(root, 'scripts', 'apply-admin-retention-preview-ui.mjs'), path.join(work, 'scripts', 'apply-admin-retention-preview-ui.mjs'));
+    for (const script of ['apply-admin-customer360-ui.mjs', 'apply-admin-retention-preview-ui.mjs', 'apply-admin-retention-draft-ui.mjs']) {
+      cpSync(path.join(root, 'scripts', script), path.join(work, 'scripts', script));
+    }
 
     execFileSync(process.execPath, ['scripts/apply-admin-customer360-ui.mjs'], { cwd: work, stdio: 'pipe' });
     execFileSync(process.execPath, ['scripts/apply-admin-retention-preview-ui.mjs'], { cwd: work, stdio: 'pipe' });
@@ -28,6 +29,8 @@ test('retention preview UI is read-only, valid and idempotent', () => {
     assert.equal(count(once.app, 'async function refreshRetentionAudiencePreview()'), 1);
     assert.equal(count(once.html, 'id="retentionAudiencePreview"'), 1);
     assert.equal(count(once.css, '/* ADMIN_RETENTION_PREVIEW_UI */'), 1);
+    assert.equal(count(once.app, 'function updateRetentionCampaignDraft()'), 1);
+    assert.equal(count(once.html, 'id="retentionCampaignDraft"'), 1);
     assert.match(once.app, /\/api\/admin\/retention\/audience-preview\?segment=/);
     assert.match(once.app, /\['at_risk', 'sleeping'\]\.includes\(segment\)/);
     assert.match(once.app, /refreshRetentionAudiencePreview\(\);/);
