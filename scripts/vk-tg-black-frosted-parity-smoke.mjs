@@ -198,7 +198,15 @@ try {
     assert(delta <= 1.5, `VK/TG ${key} height drift is too large: ${delta}px`);
   }
   await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify(results, null, 2));
-  console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), platforms: Object.keys(results) }, null, 2));
+  const geometry = Object.fromEntries(
+    Object.entries(results).map(([platform, result]) => [platform, result.evidence.homeGeometry])
+  );
+  console.log(JSON.stringify({
+    ok: true,
+    outDir: path.relative(root, outDir),
+    platforms: Object.keys(results),
+    geometry
+  }, null, 2));
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
