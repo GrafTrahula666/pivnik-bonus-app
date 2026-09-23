@@ -226,10 +226,10 @@ globalThis.switchScreenForTest = switchScreen;`,
   );
   assert.match(
     gateway,
-    /if \(!\['staff', 'admin'\]\.includes\(\(await getProfile\(user\.id\)\)\.role\)\)/
+    /if \(!\['staff', 'admin'\]\.includes\(user\.role\)\)/
   );
   assert.match(
     gateway,
-    /if \(!profile \|\| !\['viewer', 'admin'\]\.includes\(profile\.role\)\)/
+    /if \(!\['viewer', 'admin'\]\.includes\(user\.role\)\)/
   );
 });
