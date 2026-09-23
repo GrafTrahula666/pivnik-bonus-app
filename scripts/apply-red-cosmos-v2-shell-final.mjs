@@ -7,6 +7,8 @@ const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const CANONICAL_STYLE_VERSION = '20.7-home-v2-full-height';
+const SERVICE_STYLE_VERSION = '20.8-service-white-gold';
+const SERVICE_STYLE_HREF = `/service-white-gold.css?v=${SERVICE_STYLE_VERSION}`;
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
 
 function stripLegacyVisualLayers(source) {
@@ -29,6 +31,12 @@ index = index.replace(
   /app\.js\?v=[^"]+/g,
   `app.js?v=${CANONICAL_STYLE_VERSION}`
 );
+
+if (!index.includes(SERVICE_STYLE_HREF)) {
+  const canonicalStyleTag = `<link rel="stylesheet" href="styles.css?v=${CANONICAL_STYLE_VERSION}" />`;
+  if (!index.includes(canonicalStyleTag)) throw new Error('Canonical styles.css tag not found');
+  index = index.replace(canonicalStyleTag, `${canonicalStyleTag}\n  <link rel="stylesheet" href="${SERVICE_STYLE_HREF}" />`);
+}
 
 if (!index.includes(INTERACTION_FALLBACK_SRC)) {
   const appScript = new RegExp(
@@ -56,6 +64,9 @@ for (const asset of forbiddenVisualAssets) {
 if (!index.includes(`styles.css?v=${CANONICAL_STYLE_VERSION}`)) {
   throw new Error('Canonical SPACEVERSE white-gold stylesheet is not wired');
 }
+if (!index.includes(SERVICE_STYLE_HREF)) {
+  throw new Error('Service white-gold stylesheet is not wired');
+}
 if (!index.includes(INTERACTION_FALLBACK_SRC)) {
   throw new Error('VK interaction fallback is not wired');
 }
@@ -72,4 +83,4 @@ if (!shellInputVersionSupported) {
   throw new Error('Unsupported client version reached canonical shell finalization');
 }
 
-console.log('Canonical SPACEVERSE white-gold shell verified; legacy RED COSMOS/black-frosted visual layers are retired.');
+console.log('Canonical SPACEVERSE white-gold shell verified; service white-gold layer wired; legacy RED COSMOS/black-frosted visual layers are retired.');

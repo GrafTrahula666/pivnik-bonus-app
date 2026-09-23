@@ -1,0 +1,335 @@
+/* SERVICE WHITE-GOLD · isolated visual layer for bartender/admin runtime.
+   Visual only: no layout hiding, pointer-events, auth, RBAC or business logic. */
+
+.app-shell.service-mode {
+  background:
+    radial-gradient(circle at 50% -8%, rgba(218, 178, 104, .18), transparent 30%),
+    linear-gradient(180deg, #fffdf9 0%, #f7f0e5 46%, #eee4d5 100%);
+  color: #2b241c;
+  color-scheme: light;
+}
+
+
+.app-shell.service-mode .screen[data-screen="staff"],
+.app-shell.service-mode .screen[data-screen="admin"] {
+  color: #2b241c;
+  padding-right: 14px;
+  padding-bottom: calc(28px + env(safe-area-inset-bottom));
+  padding-left: 14px;
+}
+
+.app-shell.service-mode .staff-banner,
+.app-shell.service-mode .admin-head {
+  margin: 0 0 12px;
+  padding: 15px 16px;
+  border: 1px solid rgba(159, 109, 34, .18);
+  border-radius: 22px;
+  background: linear-gradient(150deg, rgba(255,255,255,.94), rgba(245,234,216,.94));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.98), 0 10px 26px rgba(85,58,21,.08);
+}
+
+.app-shell.service-mode .staff-banner h2,
+.app-shell.service-mode .admin-head h2,
+.app-shell.service-mode .card h3 { color: #2b241c; }
+
+.app-shell.service-mode .muted,
+.app-shell.service-mode .card p,
+.app-shell.service-mode .card label,
+.app-shell.service-mode .field-caption small,
+.app-shell.service-mode .step-heading small,
+.app-shell.service-mode .calc-box span,
+.app-shell.service-mode .shift-meta,
+.app-shell.service-mode .admin-hint { color: #786e62; }
+
+.app-shell.service-mode .service-back,
+.app-shell.service-mode .text-btn {
+  border-color: rgba(158,108,34,.20);
+  color: #96620f;
+}
+
+.app-shell.service-mode .card,
+.app-shell.service-mode .staff-step,
+.app-shell.service-mode .metric,
+.app-shell.service-mode .admin-quick-grid > button {
+  border-color: rgba(158, 108, 34, .16);
+  background:
+    radial-gradient(circle at 92% 4%, rgba(224,177,91,.10), transparent 34%),
+    linear-gradient(155deg, rgba(255,255,255,.96), rgba(246,238,226,.95));
+  color: #2b241c;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.98), 0 8px 22px rgba(78,52,18,.06);
+}
+
+.app-shell.service-mode .admin-quick-grid > button span,
+.app-shell.service-mode .metric strong { color: #2b241c; }
+.app-shell.service-mode .admin-quick-grid > button small,
+.app-shell.service-mode .metric span,
+.app-shell.service-mode .metric small { color: #786e62; }
+
+.app-shell.service-mode .pill,
+.app-shell.service-mode .shift-badge {
+  border-color: rgba(181,121,24,.25);
+  background: rgba(255,247,228,.92);
+  color: #96620f;
+}
+
+/* ADMIN is a role marker, not a destructive state. */
+.app-shell.service-mode #adminRoleBadge.pill.danger {
+  border-color: rgba(181,121,24,.25);
+  background: rgba(255,247,228,.92);
+  color: #96620f;
+}
+
+.app-shell.service-mode .shift-badge.on {
+  border-color: rgba(81,139,94,.25);
+  background: rgba(231,246,232,.92);
+  color: #3f7d4d;
+}
+
+.app-shell.service-mode .step-heading > span,
+.app-shell.service-mode .scan-icon {
+  border-color: rgba(177,119,25,.22);
+  background: linear-gradient(145deg, #fffefb, #eadcc4);
+  color: #98620e;
+}
+
+.app-shell.service-mode .money-input,
+.app-shell.service-mode .text-input,
+.app-shell.service-mode .design-grid label,
+.app-shell.service-mode .scan-zone,
+.app-shell.service-mode .mode,
+.app-shell.service-mode .manual-code-button,
+.app-shell.service-mode .volume-input,
+.app-shell.service-mode .volume-presets button,
+.app-shell.service-mode .gift-volume,
+.app-shell.service-mode .staff-shop-items,
+.app-shell.service-mode .shift-note-label input {
+  border-color: rgba(151,112,59,.18);
+  background: rgba(255,255,255,.72);
+  color: #2b241c;
+}
+
+.app-shell.service-mode input::placeholder { color: #a99b89; }
+.app-shell.service-mode .money-input input,
+.app-shell.service-mode .volume-input input { color: #2b241c; }
+.app-shell.service-mode .money-input span,
+.app-shell.service-mode .volume-input span { color: #8b7c69; }
+
+.app-shell.service-mode .mode.active,
+.app-shell.service-mode .volume-presets button.active,
+.app-shell.service-mode .gift-volume.active {
+  border-color: rgba(181,121,24,.42);
+  background: linear-gradient(145deg, #fff9eb, #efdbb8);
+  color: #8e5b0c;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.96);
+}
+
+.app-shell.service-mode .scan-zone {
+  border-style: dashed;
+  border-color: rgba(177,119,25,.34);
+}
+
+.app-shell.service-mode .client-found {
+  border-color: rgba(81,139,94,.22);
+  background: rgba(238,248,238,.86);
+  color: #2b241c;
+}
+
+.app-shell.service-mode .calc-box { border-top-color: rgba(151,112,59,.16); }
+
+.app-shell.service-mode .primary {
+  background: linear-gradient(135deg, #b77b20, #e5bd70);
+  color: #fffdf8;
+  box-shadow: 0 6px 16px rgba(139,89,14,.15);
+}
+
+.app-shell.service-mode .secondary {
+  border: 1px solid rgba(158,108,34,.20);
+  background: rgba(255,255,255,.70);
+  color: #76501a;
+}
+
+.app-shell.service-mode .operation-list,
+.app-shell.service-mode .inquiry-list,
+.app-shell.service-mode .admin-content-list,
+.app-shell.service-mode .empty-state {
+  color: #786e62;
+}
+
+.app-shell.service-mode .operation-item,
+.app-shell.service-mode .inquiry-item,
+.app-shell.service-mode .admin-user-row,
+.app-shell.service-mode .admin-content-item {
+  border-color: rgba(151,112,59,.14);
+  background: rgba(255,255,255,.58);
+  color: #2b241c;
+}
+
+.app-shell.service-mode .metric-alert {
+  border-color: rgba(181,121,24,.24);
+  background: linear-gradient(155deg, #fffdf8, #f3e5ca);
+}
+
+/* Red remains reserved for genuinely destructive/danger controls. */
+.app-shell.service-mode .danger,
+.app-shell.service-mode button.danger,
+.app-shell.service-mode .danger-button {
+  border-color: rgba(190,69,61,.24);
+  background: rgba(190,69,61,.08);
+  color: #a23f38;
+}
+.app-shell.service-mode #adminRoleBadge.danger { color: #96620f; }
+
+@media (min-width: 700px) {
+  .app-shell.service-mode { width: min(100%, 980px); }
+  .app-shell.service-mode .screen[data-screen="admin"],
+  .app-shell.service-mode .screen[data-screen="staff"] { padding-right: 22px; padding-left: 22px; }
+  .app-shell.service-mode .admin-quick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-shell.service-mode .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+
+/* Runtime row/card repair: target the classes app.js actually renders. */
+.app-shell.service-mode .op-row,
+.app-shell.service-mode .user-row,
+.app-shell.service-mode .inquiry-row,
+.app-shell.service-mode .admin-content-row,
+.app-shell.service-mode .shift-staff-option,
+.app-shell.service-mode .staff-shop-item,
+.app-shell.service-mode .content-admin-columns > section,
+.app-shell.service-mode .toggle-list label {
+  border-color: rgba(151,112,59,.16);
+  background: rgba(255,252,247,.88);
+  color: #2b241c;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.86);
+}
+
+.app-shell.service-mode .op-row b,
+.app-shell.service-mode .user-row b,
+.app-shell.service-mode .inquiry-row b,
+.app-shell.service-mode .admin-content-row b,
+.app-shell.service-mode .shift-staff-option b,
+.app-shell.service-mode .staff-shop-item b {
+  color: #2b241c;
+}
+
+.app-shell.service-mode .op-row small,
+.app-shell.service-mode .user-row small,
+.app-shell.service-mode .inquiry-row small,
+.app-shell.service-mode .admin-content-row small,
+.app-shell.service-mode .shift-staff-option small,
+.app-shell.service-mode .staff-shop-item small {
+  color: #786e62;
+}
+
+.app-shell.service-mode .op-row strong,
+.app-shell.service-mode .user-row strong {
+  color: #96620f;
+}
+
+.app-shell.service-mode .op-icon {
+  border-color: rgba(177,119,25,.18);
+  background: #f7eddb;
+  color: #98620e;
+}
+
+.app-shell.service-mode .op-row.suspicious {
+  border-color: rgba(181,121,24,.32);
+  background: #fff8e9;
+}
+
+.app-shell.service-mode .op-row.suspicious .op-icon,
+.app-shell.service-mode .op-alert {
+  border-color: rgba(181,121,24,.24);
+  background: rgba(181,121,24,.09);
+  color: #96620f;
+}
+
+.app-shell.service-mode .user-actions select,
+.app-shell.service-mode .inquiry-actions select {
+  border-color: rgba(151,112,59,.20);
+  background: rgba(255,255,255,.82);
+  color: #2b241c;
+}
+
+.app-shell.service-mode .staff-shop-item input,
+.app-shell.service-mode .shift-staff-option input,
+.app-shell.service-mode .toggle-list input {
+  accent-color: #b57918;
+}
+
+.app-shell.service-mode .content-admin-title b,
+.app-shell.service-mode .content-admin-title small {
+  color: #2b241c;
+}
+.app-shell.service-mode .content-admin-title small { color: #786e62; }
+
+.app-shell.service-mode .danger-text,
+.app-shell.service-mode .cancel-operation-button {
+  color: #a23f38;
+}
+
+/* Admin directory/editor modals live outside .app-shell, so scope them by explicit IDs. */
+#adminUsersModal .modal-sheet,
+#adminTransactionsModal .modal-sheet,
+#adminInquiriesModal .modal-sheet,
+#contentEditorModal .modal-sheet {
+  border-color: rgba(159,109,34,.18);
+  background:
+    radial-gradient(circle at 90% 0, rgba(224,177,91,.10), transparent 30%),
+    linear-gradient(180deg, rgba(255,253,248,.99), rgba(247,240,229,.99));
+  color: #2b241c;
+}
+
+#adminUsersModal .admin-filter-row,
+#adminTransactionsModal .admin-filter-row,
+#adminInquiriesModal .admin-filter-row {
+  background: linear-gradient(180deg, rgba(255,253,248,.99) 72%, rgba(255,253,248,0));
+}
+
+#adminUsersModal .text-input,
+#adminTransactionsModal .text-input,
+#adminInquiriesModal .text-input,
+#contentEditorModal .text-input,
+#contentEditorModal .content-textarea {
+  border-color: rgba(151,112,59,.20);
+  background: rgba(255,255,255,.84);
+  color: #2b241c;
+}
+
+#adminUsersModal .user-row,
+#adminTransactionsModal .op-row,
+#adminInquiriesModal .inquiry-row,
+#contentEditorModal .content-image-preview,
+#contentEditorModal .content-active-label {
+  border-color: rgba(151,112,59,.16);
+  background: rgba(255,252,247,.88);
+  color: #2b241c;
+}
+
+#adminUsersModal .user-row small,
+#adminTransactionsModal .op-row small,
+#adminInquiriesModal .inquiry-row small,
+#adminInquiriesModal .inquiry-row p,
+#contentEditorModal label,
+#contentEditorModal .muted {
+  color: #786e62;
+}
+
+#adminUsersModal .user-row strong,
+#adminTransactionsModal .op-row strong {
+  color: #96620f;
+}
+
+#adminUsersModal .user-actions select,
+#adminInquiriesModal .inquiry-actions select {
+  border-color: rgba(151,112,59,.20);
+  background: rgba(255,255,255,.84);
+  color: #2b241c;
+}
+
+#adminUsersModal .danger-text,
+#adminTransactionsModal .danger-text,
+#adminInquiriesModal .danger-text,
+#contentEditorModal .danger-text {
+  color: #a23f38;
+}
