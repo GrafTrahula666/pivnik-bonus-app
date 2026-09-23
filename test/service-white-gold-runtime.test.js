@@ -37,3 +37,26 @@ test('service layer preserves mobile scrolling and safe-area padding instead of 
   assert.doesNotMatch(css, /overflow\s*:\s*hidden/);
   assert.doesNotMatch(css, /transform\s*:\s*scale/);
 });
+
+
+test('service layer targets the actual dynamic admin and staff row classes', async () => {
+  const [css, app] = await Promise.all([read('service-white-gold.css'), read('app.js')]);
+
+  for (const selector of ['op-row', 'user-row', 'inquiry-row', 'admin-content-row', 'shift-staff-option', 'staff-shop-item']) {
+    assert.match(app, new RegExp(`class=["\\\\`][^"\\\\`]*${selector}`), `${selector} must be rendered by app.js`);
+    assert.match(css, new RegExp(`\\\\.${selector.replaceAll('-', '\\-')}`), `${selector} must be styled by the service layer`);
+  }
+
+  assert.match(css, /#adminUsersModal \.admin-filter-row/);
+  assert.match(css, /#adminTransactionsModal \.admin-filter-row/);
+  assert.match(css, /#adminInquiriesModal \.admin-filter-row/);
+  assert.match(css, /#contentEditorModal \.modal-sheet/);
+  assert.doesNotMatch(css, /rgba\(12,\s*15,\s*20,\s*\.98\)/);
+});
+
+test('service row repair keeps warning and destructive colors semantic', async () => {
+  const css = await read('service-white-gold.css');
+  assert.match(css, /\.op-row\.suspicious[\s\S]*?background:\s*#fff8e9/);
+  assert.match(css, /\.danger-text,[\s\S]*?\.cancel-operation-button[\s\S]*?color:\s*#a23f38/);
+  assert.match(css, /#adminRoleBadge\.pill\.danger[\s\S]*?color:\s*#96620f/);
+});
