@@ -61,3 +61,12 @@ test('service row repair keeps warning and destructive colors semantic', async (
   assert.match(css, /\.danger-text,[\s\S]*?\.cancel-operation-button[\s\S]*?color:\s*#a23f38/);
   assert.match(css, /#adminRoleBadge\.pill\.danger[\s\S]*?color:\s*#96620f/);
 });
+
+
+test('universal gateway serves the service stylesheet as CSS instead of HTML fallback', async () => {
+  const gateway = await read('universal-server.js');
+  assert.match(
+    gateway,
+    /url\.pathname === '\/service-white-gold\.css'[\s\S]*?serveFile\(res, path\.join\(__dirname, 'service-white-gold\.css'\), 'text\/css; charset=utf-8', 'no-cache'\)/
+  );
+});
