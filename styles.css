@@ -8436,6 +8436,14 @@ body,
   line-height: 1.2;
 }
 
+/* V20's large-iPhone shell uses an 80px topbar at this exact viewport.
+   Match Home's reserve to the rendered chrome instead of overlapping it by 8px. */
+@media (max-width: 390px) and (min-height: 780px) {
+  .client-home.home-v2.active {
+    --home-v2-topbar-reserve: 80px;
+  }
+}
+
 /* Telegram already owns the iPhone top chrome. Reserve it once, not twice. */
 @media (max-width: 480px) and (max-height: 950px) {
   .platform-telegram .topbar {
