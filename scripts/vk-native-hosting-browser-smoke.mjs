@@ -82,7 +82,7 @@ try {
   const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1`, { waitUntil: 'networkidle' });
   assert(response?.status() === 200, `index.html returned ${response?.status()}`);
 
-  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:block!important}.screen.spaceverse-business-screen.active{display:grid!important}' });
+  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}.screen.spaceverse-business-screen.active{display:grid!important}' });
   await page.evaluate(() => {
     const html = document.documentElement;
     html.classList.remove('platform-telegram', 'android-webview', 'lite-mode', 'reduce-effects');
@@ -115,7 +115,33 @@ try {
       activeNavIcon: read('.bottom-nav button.active:not(.qr-nav-button) > span'),
       qrButton: read('.bottom-nav .qr-nav-button'),
       qrIcon: read('.bottom-nav .qr-nav-button > span'),
-      profileLink: read('[data-screen="profile"], [data-target="profile"]')
+      profileLink: read('[data-screen="profile"], [data-target="profile"]'),
+      homeGeometry: (() => {
+        const home = document.querySelector('.client-home.home-v2.active');
+        const nav = document.querySelector('.bottom-nav');
+        const selectors = {
+          hero: '.spaceverse-home-hero',
+          business: '.spaceverse-business-card',
+          wheel: '.home-wheel-card',
+          liters: '.beer-loyalty-card--compact',
+          league: '.home-league-card'
+        };
+        const cards = Object.fromEntries(Object.entries(selectors).map(([key, selector]) => {
+          const node = document.querySelector(selector);
+          const rect = node?.getBoundingClientRect();
+          return [key, rect ? { top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } : null];
+        }));
+        const homeRect = home?.getBoundingClientRect();
+        const navRect = nav?.getBoundingClientRect();
+        return {
+          viewport: { width: innerWidth, height: innerHeight },
+          display: home ? getComputedStyle(home).display : null,
+          home: homeRect ? { top: homeRect.top, bottom: homeRect.bottom, height: homeRect.height } : null,
+          nav: navRect ? { top: navRect.top, bottom: navRect.bottom, height: navRect.height } : null,
+          bottomGap: homeRect && navRect ? navRect.top - homeRect.bottom : null,
+          cards
+        };
+      })()
     };
   });
 
@@ -133,6 +159,20 @@ try {
   assert(evidence.activeNavIcon.backgroundImage !== 'none' || rgbMax(evidence.activeNavIcon.backgroundColor) < 40, `active navigation icon is not black-frosted: ${JSON.stringify(evidence.activeNavIcon)}`);
   assert(evidence.qrIcon.backgroundImage !== 'none' || rgbMax(evidence.qrIcon.backgroundColor) < 40, `QR icon is not black-frosted: ${JSON.stringify(evidence.qrIcon)}`);
   assert(evidence.hero.backgroundImage !== 'none' || rgbMax(evidence.hero.backgroundColor) < 50, `hero surface is not black-frosted: ${JSON.stringify(evidence.hero)}`);
+
+  const geometry = evidence.homeGeometry;
+  assert(geometry?.display === 'grid', `Home V2 must render as grid, got ${geometry?.display}`);
+  assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844, `unexpected geometry viewport: ${JSON.stringify(geometry?.viewport)}`);
+  const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
+  for (const [key, minimum] of Object.entries(minimumHeights)) {
+    const card = geometry?.cards?.[key];
+    assert(card, `missing Home V2 ${key} geometry`);
+    assert(card.height >= minimum - 0.5, `Home V2 ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
+    assert(card.width >= 350, `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
+  }
+  assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
+    `Home V2 leaves an excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
+
   assert(!/telegram\.org\/js\/telegram-web-app\.js/i.test(await page.content()), 'Telegram runtime leaked into VK bundle');
   assert(pageErrors.length === 0, `page errors detected: ${pageErrors.join(' | ')}`);
   assert(failedRequests.length === 0, `failed local requests detected: ${JSON.stringify(failedRequests)}`);
