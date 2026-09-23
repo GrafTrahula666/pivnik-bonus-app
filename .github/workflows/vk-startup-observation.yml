@@ -8,6 +8,7 @@ on:
       - 'vk-startup-diagnostics.js'
       - 'universal-server.js'
       - 'app.js'
+      - 'service-white-gold.css'
       - 'scripts/probe-vk-startup-network.mjs'
       - '.github/workflows/vk-startup-observation.yml'
 
@@ -28,6 +29,7 @@ jobs:
         run: node scripts/probe-vk-startup-network.mjs
       - name: Save public observation
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: vk-startup-network-${{ github.run_id }}
