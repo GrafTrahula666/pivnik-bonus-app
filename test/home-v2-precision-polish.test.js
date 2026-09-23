@@ -37,3 +37,12 @@ test('Home V2 precision polish is cache-busted', async () => {
   assert.match(index, /app\.js\?v=20\.4-home-v2-precision-polish/);
   assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.4-home-v2-precision-polish'/);
 });
+
+
+test('SPACEVERSE teaser masks only the redundant baked left cube', async () => {
+  const css = await read('styles.css');
+  assert.match(css, /Hide only the baked left cube/);
+  assert.match(css, /\.spaceverse-business-card::after[\s\S]*left: 1\.6%/);
+  assert.match(css, /\.spaceverse-business-card::after[\s\S]*width: 10\.8%/);
+  assert.match(css, /\.spaceverse-business-copy[\s\S]*z-index: 2/);
+});
