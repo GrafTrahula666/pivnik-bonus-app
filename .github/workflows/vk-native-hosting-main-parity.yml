@@ -3,6 +3,7 @@ name: VK native hosting main parity
 on:
   push:
     branches:
+      - main
       - fix/vk-native-hosting-main-parity-20260912
   pull_request:
     paths:
