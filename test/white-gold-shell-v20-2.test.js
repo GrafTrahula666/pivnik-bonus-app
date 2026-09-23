@@ -21,8 +21,8 @@ test('v20.2 replaces the legacy dark shell at its source', async () => {
   assert.match(css, /HOME V2 CLEAN SHELL BACKDROP/);
   assert.match(css, /grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
 
-  assert.match(index, /styles\.css\?v=20\.4-home-v2-precision-polish/);
-  assert.match(index, /app\.js\?v=20\.4-home-v2-precision-polish/);
+  assert.match(index, /styles\.css\?v=20\.5-app-background-restore/);
+  assert.match(index, /app\.js\?v=20\.5-app-background-restore/);
   assert.doesNotMatch(index, /<\/section>\\n\\n\s*<section class="profile-history-card/);
   assert.match(index, /<\/section>\n\n\s*<section class="profile-history-card/);
 
