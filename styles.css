@@ -8391,50 +8391,52 @@ body,
 }
 
 
-/* HOME V2 · LARGE IPHONE VIEWPORT FIT */
-/* Home-only correction for wide iPhones inside Telegram/VK mini-app viewports.
-   Keeps approved artwork and content; fixes shell/card vertical fit. */
-@media (max-width: 480px) and (max-height: 950px) {
-  .client-home.home-v2.active {
-    gap: 3px;
-    padding-top: 0;
-    padding-bottom: 0;
-  }
-
-  .client-home.home-v2 .spaceverse-home-hero {
-    height: 114px;
-    min-height: 114px;
-  }
-
-  .client-home.home-v2 .spaceverse-business-card {
-    height: 112px;
-    min-height: 112px;
-  }
-
-  .client-home.home-v2 .home-wheel-card {
-    height: 110px;
-    min-height: 110px;
-  }
-
-  .client-home.home-v2 .beer-loyalty-card--compact {
-    height: 74px;
-    min-height: 74px;
-  }
-
-  .client-home.home-v2 .home-league-card {
-    height: 118px;
-    min-height: 118px;
-  }
-
-  .client-home.home-v2 .byline {
-    margin: 6px 0 0;
-    min-height: 12px;
-    font-size: 9px;
-    line-height: 1.2;
-  }
+/* HOME V2 · FULL HEIGHT VIEWPORT FIT */
+/* Keep the approved cards at their intended minimum size and use the remaining
+   mini-app viewport instead of shrinking the whole composition on large iPhones.
+   Short viewports scroll; they never compress the artwork below its baseline. */
+.client-home.home-v2.active {
+  --home-v2-topbar-reserve: 72px;
+  --home-v2-bottom-reserve: calc(94px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  height: calc(100dvh - var(--home-v2-topbar-reserve) - var(--home-v2-bottom-reserve));
+  min-height: 636px;
+  grid-template-rows:
+    minmax(126px, 1.05fr)
+    minmax(124px, 1.03fr)
+    minmax(122px, 1.02fr)
+    minmax(84px, .70fr)
+    minmax(132px, 1.10fr)
+    minmax(12px, auto);
+  align-content: stretch;
+  gap: clamp(5px, .72dvh, 8px);
+  padding-top: 0;
+  padding-bottom: 6px;
 }
 
-/* Telegram already owns the iPhone top chrome. Do not reserve that space twice. */
+.client-home.home-v2 > .spaceverse-home-hero,
+.client-home.home-v2 > .spaceverse-business-card,
+.client-home.home-v2 > .home-wheel-card,
+.client-home.home-v2 > .beer-loyalty-card--compact,
+.client-home.home-v2 > .home-league-card {
+  height: 100%;
+}
+
+.client-home.home-v2 .spaceverse-home-hero { min-height: 126px; }
+.client-home.home-v2 .spaceverse-business-card { min-height: 124px; }
+.client-home.home-v2 .home-wheel-card { min-height: 122px; }
+.client-home.home-v2 .beer-loyalty-card--compact { min-height: 84px; }
+.client-home.home-v2 .home-league-card { min-height: 132px; }
+
+.client-home.home-v2 .byline {
+  align-self: end;
+  margin: 4px 0 0;
+  min-height: 12px;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+/* Telegram already owns the iPhone top chrome. Reserve it once, not twice. */
 @media (max-width: 480px) and (max-height: 950px) {
   .platform-telegram .topbar {
     height: 60px;
@@ -8443,6 +8445,10 @@ body,
 
   .platform-telegram .topbar h1 {
     font-size: 26px;
+  }
+
+  .platform-telegram .client-home.home-v2.active {
+    --home-v2-topbar-reserve: 60px;
   }
 }
 
