@@ -26,7 +26,13 @@ test('retention audience preview API materializes once with role gate and no rec
     assert.match(once, /!\['viewer', 'admin'\]\.includes\(profile\.role\)/);
     assert.match(once, /queryRetentionAudiencePreview\(pool, url\.searchParams\.get\('segment'\)\)/);
     assert.match(once, /error instanceof TypeError/);
-    assert.doesNotMatch(once, /\/api\/admin\/retention\/audience-preview[\s\S]{0,1200}(telegram_id|vk_id|username|display_name)/);
+
+    const routeStart = once.indexOf("    if (req.method === 'GET' && url.pathname === '/api/admin/retention/audience-preview') {");
+    const routeEnd = once.indexOf("    if (req.method === 'GET'", routeStart + 1);
+    assert.notEqual(routeStart, -1);
+    assert.notEqual(routeEnd, -1);
+    const retentionRoute = once.slice(routeStart, routeEnd);
+    assert.doesNotMatch(retentionRoute, /telegram_id|vk_id|username|display_name/);
 
     execFileSync(process.execPath, ['apply-admin-customer360-api.mjs'], { cwd: work, stdio: 'pipe' });
     assert.equal(readFileSync(path.join(work, 'universal-server.js'), 'utf8'), once);
