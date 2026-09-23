@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
+
+test('service white-gold layer is wired after the canonical stylesheet by the runtime materializer', async () => {
+  const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
+  assert.match(shell, /SERVICE_STYLE_HREF/);
+  assert.match(shell, /service-white-gold\.css\?v=\$\{SERVICE_STYLE_VERSION\}/);
+  assert.match(shell, /canonicalStyleTag[\s\S]*SERVICE_STYLE_HREF/);
+});
+
+test('service layer is visual-only and scoped to service-mode staff/admin runtime', async () => {
+  const css = await read('service-white-gold.css');
+  assert.match(css, /\.app-shell\.service-mode/);
+  assert.match(css, /screen\[data-screen="staff"\]/);
+  assert.match(css, /screen\[data-screen="admin"\]/);
+  assert.doesNotMatch(css, /pointer-events\s*:/);
+  assert.doesNotMatch(css, /position\s*:\s*fixed/);
+  assert.doesNotMatch(css, /z-index\s*:/);
+  assert.doesNotMatch(css, /\.client-home|data-screen="client"|data-screen="profile"|data-screen="league"/);
+});
+
+test('service layer removes legacy purple/blue/red surfaces while reserving red for danger semantics', async () => {
+  const css = await read('service-white-gold.css');
+  assert.doesNotMatch(css, /#[0-9a-f]{0,2}(?:6f|7c|8b)[0-9a-f]{2,4}/i);
+  assert.match(css, /Red remains reserved for genuinely destructive\/danger controls/);
+  assert.match(css, /#adminRoleBadge\.pill\.danger/);
+  assert.match(css, /#adminRoleBadge\.danger \{ color: #96620f; \}/);
+});
+
+test('service layer preserves mobile scrolling and safe-area padding instead of viewport shrinking', async () => {
+  const css = await read('service-white-gold.css');
+  assert.match(css, /padding-bottom: calc\(28px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.doesNotMatch(css, /max-height\s*:/);
+  assert.doesNotMatch(css, /overflow\s*:\s*hidden/);
+  assert.doesNotMatch(css, /transform\s*:\s*scale/);
+});
