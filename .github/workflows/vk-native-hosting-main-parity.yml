@@ -25,6 +25,9 @@ on:
       - scripts/vk-native-hosting-reauth-failure-then-success-smoke.mjs
       - scripts/vk-native-hosting-post-reauth-timeout-smoke.mjs
       - scripts/vk-tg-black-frosted-parity-smoke.mjs
+      - scripts/service-white-gold-browser-smoke.mjs
+      - service-white-gold.css
+      - test/service-white-gold-runtime.test.js
       - vk-hosting-config.json
       - test/vk-native-hosting-main-parity.test.js
       - .github/workflows/vk-native-hosting-main-parity.yml
@@ -135,6 +138,8 @@ jobs:
         run: node scripts/vk-native-hosting-post-reauth-timeout-smoke.mjs
       - name: Run VK Telegram materialized parity smoke
         run: node scripts/vk-tg-black-frosted-parity-smoke.mjs
+      - name: Run VK Telegram service panels browser smoke
+        run: node scripts/service-white-gold-browser-smoke.mjs
       - name: Upload browser evidence
         if: always()
         continue-on-error: true
@@ -160,5 +165,6 @@ jobs:
             artifacts/vk-native-hosting-reauth-failure-then-success-smoke
             artifacts/vk-native-hosting-post-reauth-timeout-smoke
             artifacts/vk-tg-black-frosted-parity-smoke
+            artifacts/service-white-gold-browser-smoke
           if-no-files-found: error
           retention-days: 7
