@@ -114,13 +114,15 @@ test('existing configured VK owner is promoted independently of legacy multi-ide
   const reconcileIndex = gateway.indexOf('Authorization is independent from profile-metadata ownership');
   const identityCountIndex = gateway.indexOf('const identityCount = await client.query(', reconcileIndex);
   const refreshGateIndex = gateway.indexOf('const shouldUpdateMainProfile = identityCountValue <= 1;', reconcileIndex);
-  const returnPayloadIndex = gateway.indexOf('return { token, ...(await getAppPayload(userId, provider, { startup: true })) };');
+  const authPayloadIndex = gateway.indexOf('const authPayload = await getAppPayload(userId, provider, { startup: true });');
+  const effectiveRoleIndex = gateway.indexOf('authPayload.profile.role = effectiveRoleForAuthenticatedIdentity(', authPayloadIndex);
 
   assert.ok(mappingIndex > 0, 'provider owner mapping must exist');
   assert.ok(reconcileIndex > mappingIndex, 'owner role reconciliation must follow signed identity mapping');
   assert.ok(identityCountIndex > reconcileIndex, 'owner role reconciliation must run before identity-count gating');
   assert.ok(refreshGateIndex > identityCountIndex, 'profile metadata gate must not wrap owner role reconciliation');
-  assert.ok(returnPayloadIndex > refreshGateIndex, 'auth response must be built after role reconciliation');
+  assert.ok(authPayloadIndex > refreshGateIndex, 'auth response must be built after role reconciliation');
+  assert.ok(effectiveRoleIndex > authPayloadIndex, 'auth response must expose the effective signed-identity role');
   assert.match(
     gateway.slice(reconcileIndex, identityCountIndex),
     /if \(isOwner\)[\s\S]*?UPDATE users[\s\S]*?SET role = 'admin'[\s\S]*?AND role <> 'admin'/
