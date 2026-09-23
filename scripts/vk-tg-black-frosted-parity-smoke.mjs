@@ -193,9 +193,17 @@ try {
   assert(vk.navButtons === tg.navButtons, `VK/TG navigation count differs: ${vk.navButtons} vs ${tg.navButtons}`);
   assert(isTransparent(vk.activeNav.backgroundColor) === isTransparent(tg.activeNav.backgroundColor), 'VK/TG active navigation transparency differs');
   assert(isTransparent(vk.qrButton.backgroundColor) === isTransparent(tg.qrButton.backgroundColor), 'VK/TG QR outer transparency differs');
+  const extraTelegramHeight = vk.homeGeometry.topbar.height - tg.homeGeometry.topbar.height;
+  const homeHeightDelta = tg.homeGeometry.home.height - vk.homeGeometry.home.height;
+  assert(extraTelegramHeight >= 0,
+    `Telegram topbar unexpectedly reserves more height than VK: ${extraTelegramHeight}px`);
+  assert(Math.abs(homeHeightDelta - extraTelegramHeight) <= 1.5,
+    `Telegram free vertical space was not transferred into Home: topbar delta ${extraTelegramHeight}px, Home delta ${homeHeightDelta}px`);
   for (const key of ['hero', 'business', 'wheel', 'liters', 'league']) {
-    const delta = Math.abs(vk.homeGeometry.cards[key].height - tg.homeGeometry.cards[key].height);
-    assert(delta <= 1.5, `VK/TG ${key} height drift is too large: ${delta}px`);
+    const vkHeight = vk.homeGeometry.cards[key].height;
+    const tgHeight = tg.homeGeometry.cards[key].height;
+    assert(tgHeight >= vkHeight - 0.5,
+      `Telegram ${key} became smaller than VK despite having at least as much usable height: VK ${vkHeight}px, TG ${tgHeight}px`);
   }
   await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify(results, null, 2));
   const geometry = Object.fromEntries(
