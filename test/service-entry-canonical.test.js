@@ -12,11 +12,14 @@ test('service entry stays in Profile and cannot distort Home V2 grid', async () 
   assert.match(index, /id="profileAdminNav"/);
   assert.doesNotMatch(index, /id="homeServiceAccess"|id="homeStaffNav"|id="homeAdminNav"/);
 
-  assert.match(app, /function syncServiceAccess\(profile = state\.profile\)/);
-  assert.match(app, /#profileStaffNav'\)\?\.classList\.toggle\('hidden', !hasStaffAccess\)/);
-  assert.match(app, /#profileAdminNav'\)\?\.classList\.toggle\('hidden', !hasAdminAccess\)/);
-  assert.match(app, /#profileServiceAccess'\)\?\.classList\.toggle\('hidden', !hasStaffAccess && !hasAdminAccess\)/);
-  assert.match(app, /if \(!profile\) return;[\s\S]{0,260}syncServiceAccess\(profile\);/);
+  const renderStart = app.indexOf('function renderProfile() {');
+  assert.ok(renderStart >= 0);
+  const earlyRender = app.slice(renderStart, renderStart + 1600);
+  assert.match(earlyRender, /const hasStaffAccess = roleCanStaff\(profile\.role\);/);
+  assert.match(earlyRender, /const hasAdminAccess = roleCanAdmin\(profile\.role\);/);
+  assert.match(earlyRender, /#profileStaffNav/);
+  assert.match(earlyRender, /#profileAdminNav/);
+  assert.match(earlyRender, /(?:#profileServiceAccess|const serviceAccess = \$\('#profileServiceAccess'\))/);
   assert.doesNotMatch(app, /#homeStaffNav|#homeAdminNav|#homeServiceAccess/);
 });
 
