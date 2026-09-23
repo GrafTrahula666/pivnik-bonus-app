@@ -40,5 +40,3 @@ if (changed) {
   fs.writeFileSync(stylesPath, css);
   console.log('Admin retention preview UI materialized');
 } else console.log('Admin retention preview UI already materialized');
-
-await import('./apply-admin-retention-draft-ui.mjs');
