@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -14,10 +14,13 @@ function count(source, needle) {
 test('retention audience preview API materializes once with role gate and no recipient data', () => {
   const work = mkdtempSync(path.join(tmpdir(), 'pivnik-retention-api-'));
   try {
+    const scriptsDir = path.join(work, 'scripts');
+    mkdirSync(scriptsDir);
     cpSync(path.join(root, 'universal-server.js'), path.join(work, 'universal-server.js'));
-    cpSync(path.join(root, 'scripts', 'apply-admin-customer360-api.mjs'), path.join(work, 'apply-admin-customer360-api.mjs'));
+    cpSync(path.join(root, 'scripts', 'apply-admin-customer360-api.mjs'), path.join(scriptsDir, 'apply-admin-customer360-api.mjs'));
 
-    execFileSync(process.execPath, ['apply-admin-customer360-api.mjs'], { cwd: work, stdio: 'pipe' });
+    const materializer = path.join('scripts', 'apply-admin-customer360-api.mjs');
+    execFileSync(process.execPath, [materializer], { cwd: work, stdio: 'pipe' });
     execFileSync(process.execPath, ['--check', 'universal-server.js'], { cwd: work, stdio: 'pipe' });
 
     const once = readFileSync(path.join(work, 'universal-server.js'), 'utf8');
@@ -34,7 +37,7 @@ test('retention audience preview API materializes once with role gate and no rec
     const retentionRoute = once.slice(routeStart, routeEnd);
     assert.doesNotMatch(retentionRoute, /telegram_id|vk_id|username|display_name/);
 
-    execFileSync(process.execPath, ['apply-admin-customer360-api.mjs'], { cwd: work, stdio: 'pipe' });
+    execFileSync(process.execPath, [materializer], { cwd: work, stdio: 'pipe' });
     assert.equal(readFileSync(path.join(work, 'universal-server.js'), 'utf8'), once);
   } finally {
     rmSync(work, { recursive: true, force: true });
