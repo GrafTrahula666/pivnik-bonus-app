@@ -13,6 +13,7 @@ import {
   syncUserAchievements
 } from './achievements.js';
 import {
+  effectiveRoleForAuthenticatedIdentity,
   normalizeRequestKey,
   signSession as signCoreSession,
   validateTelegramInitData as validateCoreTelegramInitData,
@@ -39,6 +40,7 @@ const vkCommunityId = String(process.env.VK_COMMUNITY_ID || '').trim();
 const vkCommunityToken = String(process.env.VK_COMMUNITY_TOKEN || '').trim();
 const vkApiVersion = String(process.env.VK_API_VERSION || '5.199').trim() || '5.199';
 const ownerTelegramId = String(process.env.OWNER_TELEGRAM_ID || '').trim();
+const ownerVkId = String(process.env.OWNER_VK_ID || '').trim();
 const ownerTelegramUsername = String(process.env.OWNER_TELEGRAM_USERNAME || '').replace(/^@/, '').trim();
 const annaTelegramId = String(process.env.ANNA_TELEGRAM_ID || '').trim();
 const olesyaTelegramId = String(process.env.OLESYA_TELEGRAM_ID || '').trim();
@@ -1195,6 +1197,12 @@ async function authRequired(req, res, next) {
     }
     const profile = await getProfile(payload.uid);
     if (!profile) return res.status(401).json({ error: 'Пользователь не найден.' });
+    profile.role = effectiveRoleForAuthenticatedIdentity(
+      profile.role,
+      payload.platform === 'vk' ? 'vk' : 'telegram',
+      payload.pid,
+      { telegram: ownerTelegramId, vk: ownerVkId }
+    );
     req.user = profile;
     req.session = payload;
     next();
