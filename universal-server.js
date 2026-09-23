@@ -1574,7 +1574,16 @@ async function resolveProviderUser(provider, externalUser) {
   });
   traceVkStage('VK_SESSION_CREATED');
   traceVkStage('VK_PROFILE_ASSEMBLY_START');
-  return { token, ...(await getAppPayload(userId, provider, { startup: true })) };
+  const authPayload = await getAppPayload(userId, provider, { startup: true });
+  if (authPayload?.profile) {
+    authPayload.profile.role = effectiveRoleForAuthenticatedIdentity(
+      authPayload.profile.role,
+      provider,
+      externalUser.id,
+      { telegram: ownerTelegramId, vk: ownerVkId }
+    );
+  }
+  return { token, ...authPayload };
 }
 
 async function authenticateVk(body) {
@@ -3040,6 +3049,15 @@ export const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(__dirname, 'vk-platform.js'), 'text/javascript; charset=utf-8', 'no-cache');
     }
 
+    // app.js/styles.css are mutable release assets. Serve them at the gateway with
+    // no-store so Telegram/VK WebViews cannot keep a stale ETag-backed 304 copy.
+    if (req.method === 'GET' && url.pathname === '/app.js') {
+      return serveFile(res, path.join(__dirname, 'app.js'), 'text/javascript; charset=utf-8', 'no-store');
+    }
+    if (req.method === 'GET' && url.pathname === '/styles.css') {
+      return serveFile(res, path.join(__dirname, 'styles.css'), 'text/css; charset=utf-8', 'no-store');
+    }
+
     if (req.method === 'GET' && url.pathname === '/loader-fix.css') {
       return serveFile(res, path.join(__dirname, 'loader-fix.css'), 'text/css; charset=utf-8', 'no-cache');
     }
@@ -3238,7 +3256,9 @@ export const server = http.createServer(async (req, res) => {
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await updateUnifiedProfile(user.id, platform, body));
+      const updated = await updateUnifiedProfile(user.id, platform, body);
+      if (updated?.profile) updated.profile.role = user.role;
+      return sendJson(res, 200, updated);
     }
 
     if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
