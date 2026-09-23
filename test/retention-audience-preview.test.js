@@ -40,7 +40,7 @@ test('at_risk preview is read-only, consent gated and channel aware', async () =
   });
   assert.equal(pool.calls.length, 1);
   const sql = pool.calls[0].sql;
-  assert.match(sql, /marketing_opt_in = TRUE AS consented/);
+  assert.match(sql, /COALESCE\(u\.marketing_opt_in, FALSE\) AS consented/);
   assert.match(sql, /ui\.provider = 'telegram'/);
   assert.match(sql, /ui\.provider = 'vk'/);
   assert.match(sql, /last_activity_at < NOW\(\) - INTERVAL '30 days'/);
