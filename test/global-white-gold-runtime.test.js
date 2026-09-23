@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
+
+function block(css, selector) {
+  const start = css.indexOf(`${selector} {`);
+  assert.notEqual(start, -1, `${selector} block missing`);
+  const bodyStart = css.indexOf('{', start) + 1;
+  const end = css.indexOf('}', bodyStart);
+  assert.notEqual(end, -1, `${selector} block is not closed`);
+  return css.slice(bodyStart, end);
+}
+
+test('global client surfaces keep white-gold contrast instead of legacy dark cards', async () => {
+  const css = await read('styles.css');
+
+  assert.match(block(css, '.status-level'), /background:\s*rgba\(255,252,247,\.90\)/);
+  assert.doesNotMatch(block(css, '.status-level'), /#14100c/i);
+  assert.match(block(css, '.status-rank'), /background:\s*#f7eddb/);
+  assert.doesNotMatch(block(css, '.status-rank'), /#2b2119/i);
+
+  assert.match(block(css, '.help-section'), /background:\s*rgba\(255,252,247,\.90\)/);
+  assert.doesNotMatch(block(css, '.help-section'), /#14100c/i);
+  assert.match(block(css, '.confirm-summary'), /background:\s*rgba\(255,252,247,\.90\)/);
+  assert.doesNotMatch(block(css, '.confirm-summary'), /#100d0a/i);
+});
+
+test('full wheel screen uses readable white-gold controls while keeping approved artwork', async () => {
+  const css = await read('styles.css');
+
+  assert.match(block(css, '.wheel-page-head h2'), /color:\s*#211c16/);
+  assert.match(block(css, '.wheel-spin-button'), /background:\s*linear-gradient\(145deg,\s*#fff9eb,\s*#e7c982\)/);
+  assert.match(block(css, '.wheel-spin-button'), /color:\s*#2b2115/);
+  assert.doesNotMatch(block(css, '.wheel-spin-button'), /rgba\(42,\s*20,\s*22/);
+  assert.match(css, /\.wheel-disk\s*\{[\s\S]*?background:\s*url\('\/assets\/home-v2\/wheel-disc\.webp\?v=3'\)/);
+  assert.match(css, /@keyframes wheelExistingGlow[\s\S]*?rgba\(255,250,241,\.86\)/);
+});
+
+test('league and QR accents remain readable on the light shell', async () => {
+  const css = await read('styles.css');
+
+  assert.match(block(css, '.league-summary > strong'), /color:\s*#9b650f/);
+  assert.match(block(css, '.league-summary > b'), /color:\s*#806d59/);
+  assert.match(block(css, '.token'), /color:\s*#9b650f/);
+});
+
+test('approved Home V2 geometry baseline and loader contract remain intact', async () => {
+  const [css, index] = await Promise.all([read('styles.css'), read('index.html')]);
+
+  assert.match(css, /HOME V2 · FULL HEIGHT VIEWPORT FIT/);
+  for (const [selector, minimum] of [
+    ['spaceverse-home-hero', 126],
+    ['spaceverse-business-card', 124],
+    ['home-wheel-card', 122],
+    ['beer-loyalty-card--compact', 84],
+    ['home-league-card', 132]
+  ]) {
+    assert.ok(css.includes(`.client-home.home-v2 .${selector} { min-height: ${minimum}px; }`), `${selector} baseline must stay >= ${minimum}px`);
+  }
+
+  assert.match(index, /id="bootScreen"/);
+  assert.match(index, /class="boot-image"/);
+  assert.match(index, /id="bootText"/);
+});
