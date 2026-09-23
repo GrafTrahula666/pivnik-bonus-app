@@ -9141,3 +9141,213 @@ body,
 @media (max-width:360px) {
   .home-service-actions { grid-template-columns: 1fr; }
 }
+
+
+/* V20.10 · HOME ARTWORK ALIGNMENT PREVIEW
+   Cosmetic-only alignment pass. Keeps Home artwork, card sizes and business logic intact.
+   Dynamic UI is centered against the baked visual slots instead of nested offsets. */
+
+/* Profile: the avatar used to be positioned inside the already-offset identity block,
+   so both offsets compounded. Make the identity layer span the artwork and place each
+   dynamic element directly against its visual slot. */
+.client-home.home-v2 .spaceverse-home-hero .client-identity {
+  top: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 78px;
+  margin: 0 !important;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  top: 13px !important;
+  left: 4.4% !important;
+  width: 48px !important;
+  height: 48px !important;
+  margin: 0 !important;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .avatar-fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .hero-identity-copy {
+  position: absolute;
+  top: 15px;
+  left: 20%;
+  width: 43.5%;
+  min-width: 0;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .hero-name-row {
+  min-height: 30px;
+  align-items: center;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .client-name,
+.client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  text-align: left;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .balance {
+  top: 52px !important;
+  left: 20% !important;
+  width: 43.5% !important;
+  min-height: 27px;
+  align-items: center;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .status-button {
+  top: 55px !important;
+  right: 4.2% !important;
+  width: 24.2% !important;
+  min-height: 29px !important;
+  place-content: center;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .status-button > div {
+  display: grid;
+  place-items: center;
+}
+
+/* Wheel: center the live copy inside the artwork's left-hand information wells. */
+.client-home.home-v2 .home-wheel-prize {
+  top: 45px !important;
+  left: 4.3% !important;
+  width: 55% !important;
+  min-height: 27px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px !important;
+  text-align: center;
+}
+
+.client-home.home-v2 .home-wheel-prize > span {
+  width: 100%;
+  text-align: center;
+}
+
+.client-home.home-v2 .home-wheel-cta {
+  bottom: 9px !important;
+  left: 4.3% !important;
+  width: 43.5% !important;
+  min-height: 34px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px 0 10px !important;
+  text-align: center;
+}
+
+/* Liters: vertically center the heading/counter pair and keep both labels on the rail. */
+.client-home.home-v2 .beer-loyalty-card--compact .beer-compact-main {
+  min-height: 38px;
+  align-items: center;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-compact-main > div:first-child {
+  display: grid;
+  align-content: center;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head,
+.client-home.home-v2 .beer-loyalty-card--compact .beer-card-foot {
+  align-items: center;
+}
+
+/* League: the live portraits/text sat too low inside the three baked podium wells.
+   Center every trio as one unit and keep portrait/name/value on one vertical axis. */
+.client-home.home-v2 .home-league-podium {
+  top: 39% !important;
+  right: 3.5% !important;
+  bottom: auto !important;
+  left: 3.5% !important;
+  height: 55% !important;
+  align-items: center !important;
+}
+
+.client-home.home-v2 .home-league-podium > span {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: 44px 13px 12px !important;
+  align-content: center !important;
+  justify-items: center !important;
+  gap: 1px !important;
+  padding: 0 4px !important;
+  text-align: center !important;
+}
+
+.client-home.home-v2 .home-league-podium .leader-avatar {
+  position: relative;
+  grid-row: 1 !important;
+  width: 42px !important;
+  height: 42px !important;
+  margin: 0 !important;
+  align-self: center;
+  justify-self: center;
+}
+
+.client-home.home-v2 .home-league-podium .leader-avatar .avatar-fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.client-home.home-v2 .home-league-podium b,
+.client-home.home-v2 .home-league-podium strong {
+  width: 100%;
+  align-self: center !important;
+  justify-self: center;
+  line-height: 1 !important;
+  text-align: center !important;
+}
+
+.client-home.home-v2 .home-league-podium b {
+  font-size: 8.3px !important;
+}
+
+.client-home.home-v2 .home-league-podium strong {
+  font-size: 8.1px !important;
+}
+
+/* Bottom navigation: equal visual centers for icon + caption pairs. */
+.client-home.home-v2 ~ .bottom-nav button,
+.bottom-nav button {
+  justify-items: center;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+    width: 44px !important;
+    height: 44px !important;
+    top: 14px !important;
+  }
+
+  .client-home.home-v2 .spaceverse-home-hero .hero-identity-copy,
+  .client-home.home-v2 .spaceverse-home-hero .balance {
+    left: 19.5% !important;
+    width: 44% !important;
+  }
+
+  .client-home.home-v2 .home-league-podium {
+    top: 40% !important;
+    height: 54% !important;
+  }
+
+  .client-home.home-v2 .home-league-podium .leader-avatar {
+    width: 39px !important;
+    height: 39px !important;
+  }
+}
