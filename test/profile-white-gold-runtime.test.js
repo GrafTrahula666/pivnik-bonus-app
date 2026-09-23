@@ -74,4 +74,12 @@ test('Profile page and modal contrast is explicitly white-gold while danger stay
 
   assert.match(css, /\.service-access \.primary,[\s\S]*?#profileSetupModal \.primary,[\s\S]*?#notificationsModal \.primary/);
   assert.match(css, /\.service-access \.secondary[\s\S]*?color:\s*#85540a/);
+
+  assert.match(css, /\.profile-history-card \.compact-card-head h2[\s\S]*?color:\s*#2b241c/);
+  assert.match(css, /\.profile-history-card \.op-row b[\s\S]*?color:\s*#2b241c/);
+  assert.match(css, /\.profile-history-card \.op-row small[\s\S]*?color:\s*#806d59/);
+  assert.match(css, /\.profile-history-card \.op-row > strong[\s\S]*?color:\s*#9b650f/);
+  assert.match(css, /\.profile-identity-card > div > \.muted[\s\S]*?color:\s*#9d7a45/);
+  assert.match(css, /\.profile-setup-sheet \.avatar-render,[\s\S]*?background:\s*#f2eadc/);
+  assert.match(css, /\.profile-shift-block \.avatar[\s\S]*?background:\s*#f2eadc/);
 });
