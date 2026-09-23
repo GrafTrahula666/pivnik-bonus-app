@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [app, css] = await Promise.all([
+const [app, css, index] = await Promise.all([
   readFile(new URL('../app.js', import.meta.url), 'utf8'),
-  readFile(new URL('../styles.css', import.meta.url), 'utf8')
+  readFile(new URL('../styles.css', import.meta.url), 'utf8'),
+  readFile(new URL('../index.html', import.meta.url), 'utf8')
 ]);
 
 test('achievement hub opens the catalog immediately and refreshes it on demand', () => {
@@ -47,4 +48,33 @@ test('white-gold achievement repair wins after the canonical client shell', () =
   assert.match(repairedCss, /@media \(max-width: 380px\)/);
 
   assert.doesNotMatch(repairedCss, /#141922|#1a1421|rgba\(69,133,218|rgba\(157,68,218|#ff8095/);
+});
+
+
+test('achievements have one canonical runtime visual source', () => {
+  assert.match(index, /styles\.css\?v=20\.7-home-v2-full-height/);
+  assert.doesNotMatch(index, /v22\.css|red-cosmos-v2\.css|black-frosted-glass\.css/);
+
+  assert.match(app, /class="achievement-tile \$\{item\.earned \? 'earned' : 'locked'\} rarity-/);
+  assert.doesNotMatch(app, /achievement-card/);
+
+  assert.doesNotMatch(
+    css,
+    /(?:^|\n)\.achievement-card(?:[\s:{>,.]|$)/m,
+    'dead purple achievement-card presentation must not return to canonical runtime CSS'
+  );
+  assert.doesNotMatch(
+    css,
+    /rgba\(87,144,214,.25\)|rgba\(179,96,230,.3\)|#141922|#1a1421/,
+    'legacy blue/purple rarity presentation must not exist before the white-gold repair'
+  );
+
+  const repair = css.indexOf('V20.2.1 · ACHIEVEMENTS WHITE-GOLD REPAIR');
+  assert.ok(repair >= 0, 'canonical white-gold achievement block must exist');
+  const canonical = css.slice(repair);
+  assert.match(canonical, /\.achievement-tile,\s*\.achievement-tile\.rarity-rare,\s*\.achievement-tile\.rarity-epic,\s*\.achievement-tile\.rarity-legendary/);
+  assert.match(canonical, /\.achievement-tile\.locked/);
+  assert.match(canonical, /\.achievement-tile\.earned/);
+  assert.match(canonical, /\.achievement-progress i/);
+  assert.match(canonical, /\.achievement-celebration/);
 });
