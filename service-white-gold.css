@@ -9,8 +9,6 @@
   color-scheme: light;
 }
 
-.app-shell.service-mode .topbar,
-.app-shell.service-mode .bottom-nav { display: none; }
 
 .app-shell.service-mode .screen[data-screen="staff"],
 .app-shell.service-mode .screen[data-screen="admin"] {
