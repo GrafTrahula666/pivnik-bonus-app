@@ -90,6 +90,45 @@ async function inspectPlatform(platform) {
       document.querySelector('#bootScreen')?.classList.add('hidden');
     }, platform);
 
+    // Deterministic preview content for visual review. Test-only, never runtime logic.
+    await page.evaluate(() => {
+      const setText = (selector, value) => {
+        const node = document.querySelector(selector);
+        if (node) node.textContent = value;
+      };
+      setText('#clientName', 'Кирилл');
+      setText('#clientBalance', '12 840');
+      setText('#statusName', 'Свой');
+      setText('#statusProgressText', '64 000 / 100 000 ₽');
+      setText('#nextRewardText', 'ещё 36 000 ₽');
+      const progress = document.querySelector('#statusProgress');
+      if (progress) progress.style.width = '64%';
+      setText('#homeWheelTimerLabel', 'Следующее вращение через');
+      setText('#homeWheelStatus', '18:42:17');
+      setText('#beerGiftBalance', '0,5');
+      setText('#beerProgressText', '9 из 14 л');
+      setText('#beerRemainingText', 'ещё 5 л');
+      setText('#beerGiftReady', '0,5 л в подарок');
+      const segments = [...document.querySelectorAll('#beerProgressBar .beer-progress-segment')];
+      segments.forEach((node, index) => {
+        node.classList.toggle('is-filled', index < 9);
+        const fill = node.querySelector('span');
+        if (fill) fill.style.setProperty('--segment-fill', index < 9 ? '100%' : '0%');
+      });
+      const avatar = document.querySelector('#profileAvatar');
+      if (avatar) avatar.innerHTML = '<span class="avatar-fallback">К</span>';
+      const podium = document.querySelector('#homeLeaderboardPreview');
+      if (podium) {
+        podium.innerHTML = [
+          ['А', 'Алексей', '28 450 ₽'],
+          ['М', 'Мария', '21 380 ₽'],
+          ['Д', 'Дмитрий', '17 920 ₽']
+        ].map(([initial, name, amount]) =>
+          `<span><span class="leader-avatar"><span class="avatar-fallback">${initial}</span></span><b>${name}</b><strong>${amount}</strong></span>`
+        ).join('');
+      }
+    });
+
     const evidence = await page.evaluate(() => {
       const read = (selector) => {
         const node = document.querySelector(selector);
@@ -179,6 +218,12 @@ async function inspectPlatform(platform) {
     assert(failedRequests.length === 0, `${platform}: failed local requests: ${JSON.stringify(failedRequests)}`);
 
     await page.screenshot({ path: path.join(outDir, `${platform}-home.png`), fullPage: true });
+    if (platform === 'telegram') {
+      const preview = await page.screenshot({ type: 'jpeg', quality: 42, fullPage: true });
+      console.log('HOME_PREVIEW_JPEG_BASE64_BEGIN');
+      console.log(preview.toString('base64'));
+      console.log('HOME_PREVIEW_JPEG_BASE64_END');
+    }
     return { evidence, pageErrors, failedRequests };
   } finally {
     await context.close();
