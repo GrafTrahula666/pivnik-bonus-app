@@ -30,8 +30,8 @@ test('VK service screens are visible only for authorized roles and direct UI nav
   assert.match(app, /if \(target === 'admin' && !roleCanAdmin\(state\.profile\?\.role\)\) return;/);
   assert.match(app, /#profileStaffNav'\)\?\.classList\.toggle\('hidden', !hasStaffAccess\)/);
   assert.match(app, /#profileAdminNav'\)\?\.classList\.toggle\('hidden', !hasAdminAccess\)/);
-  assert.match(gateway, /!\['viewer', 'admin'\]\.includes\(profile\.role\)/);
-  assert.match(gateway, /!\['staff', 'admin'\]\.includes\(\(await getProfile\(user\.id\)\)\.role\)/);
+  assert.match(gateway, /!\['viewer', 'admin'\]\.includes\(user\.role\)/);
+  assert.match(gateway, /!\['staff', 'admin'\]\.includes\(user\.role\)/);
 });
 
 test('VK client no longer creates the redundant personal QR plaque while QR logic remains intact', async () => {
