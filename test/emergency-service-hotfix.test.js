@@ -20,11 +20,9 @@ test('emergency Home service entry mirrors canonical role-gated controls', async
 });
 
 test('emergency hotfix removes the white Telegram header without changing app background', async () => {
-  const [index, hotfix] = await Promise.all([
-    read('index.html'),
-    read('emergency-service-hotfix.js')
-  ]);
-  assert.match(index, /meta name="theme-color" content="#0b0e13"/);
+  const hotfix = await read('emergency-service-hotfix.js');
+  assert.match(hotfix, /const DARK_HEADER = '#0b0e13'/);
   assert.match(hotfix, /setHeaderColor\?\.\(DARK_HEADER\)/);
+  assert.match(hotfix, /meta\.setAttribute\('content', DARK_HEADER\)/);
   assert.doesNotMatch(hotfix, /setBackgroundColor/);
 });
