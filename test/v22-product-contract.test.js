@@ -12,7 +12,7 @@ test('canonical SPACEVERSE shell replaces obsolete visual layers without losing 
     text('scripts/apply-red-cosmos-v2-shell-final.mjs'),
     text('red-cosmos-v2.js')
   ]);
-  assert.match(index, /styles\.css\?v=20\.4-home-v2-precision-polish/);
+  assert.match(index, /styles\.css\?v=20\.5-app-background-restore/);
   assert.doesNotMatch(index, /\/red-cosmos-v2\.css/);
   assert.doesNotMatch(index, /\/black-frosted-(?:glass|surfaces|controls)\.css/);
   assert.doesNotMatch(index, /\/v22\\.css/);
