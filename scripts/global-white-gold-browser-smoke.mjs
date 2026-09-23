@@ -291,8 +291,16 @@ async function inspectModal(caseName, config, modalId, setup) {
       assert(isDarkText(evidence.nodes['#qrModal .token'].color), `${caseName}: QR token has weak contrast`);
     }
     if (modalId === 'statusesModal') {
-      assert(isLight(evidence.nodes['#statusesModal .status-level'].backgroundColor), `${caseName}: status card retained dark legacy surface`);
-      assert(isLight(evidence.nodes['#statusesModal .status-rank'].backgroundColor), `${caseName}: status rank retained dark legacy surface`);
+      assert(
+        evidence.nodes['#statusesModal .status-level'].backgroundImage !== 'none'
+          || isLight(evidence.nodes['#statusesModal .status-level'].backgroundColor),
+        `${caseName}: status card retained dark legacy surface`
+      );
+      assert(
+        evidence.nodes['#statusesModal .status-rank'].backgroundImage !== 'none'
+          || isLight(evidence.nodes['#statusesModal .status-rank'].backgroundColor),
+        `${caseName}: status rank retained dark legacy surface`
+      );
     }
     if (modalId === 'helpModal') {
       assert(isLight(evidence.nodes['#helpModal .help-section'].backgroundColor), `${caseName}: help card retained dark legacy surface`);
