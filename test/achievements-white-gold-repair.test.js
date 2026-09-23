@@ -52,7 +52,7 @@ test('white-gold achievement repair wins after the canonical client shell', () =
 
 
 test('achievements have one canonical runtime visual source', () => {
-  assert.match(index, /styles\.css\?v=20\.7-home-v2-full-height/);
+  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.doesNotMatch(index, /v22\.css|red-cosmos-v2\.css|black-frosted-glass\.css/);
 
   assert.match(app, /class="achievement-tile \$\{item\.earned \? 'earned' : 'locked'\} rarity-/);

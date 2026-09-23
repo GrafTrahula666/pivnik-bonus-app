@@ -2,6 +2,7 @@ let tg = window.Telegram?.WebApp ?? null;
 const APP_VERSION = '20.0-spaceverse-purple-home';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
+const TELEGRAM_HEADER_COLOR = '#0b0e13';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 const telegramInitDataFromUrl = readTelegramLaunchData();
@@ -31,7 +32,7 @@ function refreshTelegramBridge() {
   try { tg.ready(); } catch (_) {}
   try { tg.expand(); } catch (_) {}
   try {
-    tg.setHeaderColor('#15110e');
+    tg.setHeaderColor(TELEGRAM_HEADER_COLOR);
     tg.setBackgroundColor('#0e0c0a');
     tg.setBottomBarColor('#120e0b');
   } catch (_) {}
@@ -1079,7 +1080,7 @@ function applyDesign(design) {
   });
 
   try {
-    tg?.setHeaderColor('#f8f3eb');
+    tg?.setHeaderColor(TELEGRAM_HEADER_COLOR);
     tg?.setBackgroundColor('#efe7dc');
     tg?.setBottomBarColor('#f8f3eb');
   } catch (_) {}
@@ -1900,6 +1901,9 @@ function renderProfile() {
   $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
   $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
   $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
+  $('#homeStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
+  $('#homeAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
+  $('#homeServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
   if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
   const partnerView = profile.role === 'viewer';
@@ -3357,6 +3361,8 @@ $('#deleteAccountButton')?.addEventListener('click', async () => {
 });
 $('#profileStaffNav')?.addEventListener('click', () => switchScreen('staff'));
 $('#profileAdminNav')?.addEventListener('click', () => switchScreen('admin'));
+$('#homeStaffNav')?.addEventListener('click', () => switchScreen('staff'));
+$('#homeAdminNav')?.addEventListener('click', () => switchScreen('admin'));
 $('#backToProfileFromStaff')?.addEventListener('click', () => switchScreen('profile'));
 $('#backToProfileFromAdmin')?.addEventListener('click', () => switchScreen('profile'));
 $('#openTermsFromConsent').addEventListener('click', () => openModal('helpModal'));

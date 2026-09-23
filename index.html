@@ -7,10 +7,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20.7-home-v2-full-height" />
-  <link rel="stylesheet" href="emergency-service-hotfix.css?v=1.0.0" />
-  <script defer src="app.js?v=20.7-home-v2-full-height"></script>
-  <script defer src="emergency-service-hotfix.js?v=1.0.0"></script>
+  <link rel="stylesheet" href="styles.css?v=20.9-service-entry-canonical" />
+  <script defer src="app.js?v=20.9-service-entry-canonical"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -77,6 +75,14 @@
           <div class="progress"><i id="statusProgress" style="width:0%"></i></div>
           <div class="max-status-line"><span id="statusProgressText">0 / 10 000 ₽</span><strong id="nextRewardText">ещё 10 000 ₽</strong></div>
         </div>
+
+        <section class="home-service-access hidden" id="homeServiceAccess" aria-label="Служебный доступ">
+          <span class="home-service-kicker">Служебный доступ</span>
+          <div class="home-service-actions">
+            <button class="secondary hidden" type="button" id="homeStaffNav">Бармен</button>
+            <button class="primary hidden" type="button" id="homeAdminNav">Админ-панель</button>
+          </div>
+        </section>
 
         <article class="spaceverse-business-card vip-glass-card">
           <span class="spaceverse-business-copy">
