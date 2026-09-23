@@ -24,7 +24,7 @@ test('service layer is visual-only and scoped to service-mode staff/admin runtim
 
 test('service layer removes legacy purple/blue/red surfaces while reserving red for danger semantics', async () => {
   const css = await read('service-white-gold.css');
-  assert.doesNotMatch(css, /#[0-9a-f]{0,2}(?:6f|7c|8b)[0-9a-f]{2,4}/i);
+  assert.doesNotMatch(css, /(?:--primary-red|--dark-red|--cosmic-purple|#c41e3a|#8b0000|#4a0d3a|#0d0002|#16030e|#2a0a1f|rgba\(47,\s*8,\s*31|rgba\(13,\s*0,\s*2)/i);
   assert.match(css, /Red remains reserved for genuinely destructive\/danger controls/);
   assert.match(css, /#adminRoleBadge\.pill\.danger/);
   assert.match(css, /#adminRoleBadge\.danger \{ color: #96620f; \}/);
