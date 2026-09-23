@@ -10,11 +10,25 @@ if (!source.includes(importLine)) {
   source = source.replace(anchor, `${anchor}\n${importLine}`);
 }
 
+const retentionImportLine = "import { queryRetentionAudiencePreview } from './retention-audience-preview.js';";
+if (!source.includes(retentionImportLine)) {
+  if (!source.includes(importLine)) throw new Error('Retention preview import anchor not found');
+  source = source.replace(importLine, `${importLine}\n${retentionImportLine}`);
+}
+
 const repositoryLine = 'const loadCustomer360 = createCustomer360Repository({ query: (...args) => pool.query(...args) });';
 if (!source.includes(repositoryLine)) {
   const anchor = "const pool = new Pool({\n  connectionString: databaseUrl,\n  ssl: useSsl ? { rejectUnauthorized: false } : false,\n  max: 8,\n  idleTimeoutMillis: 30_000,\n  connectionTimeoutMillis: 10_000\n});";
   if (!source.includes(anchor)) throw new Error('Customer 360 repository anchor not found');
   source = source.replace(anchor, `${anchor}\n\n${repositoryLine}`);
+}
+
+const retentionRouteMarker = "url.pathname === '/api/admin/retention/audience-preview'";
+if (!source.includes(retentionRouteMarker)) {
+  const anchor = "    if (req.method === 'GET' && url.pathname === '/api/admin/users') {";
+  if (!source.includes(anchor)) throw new Error('Retention preview route anchor not found');
+  const route = `    if (req.method === 'GET' && url.pathname === '/api/admin/retention/audience-preview') {\n      const user = await requireGatewayUser(req);\n      if (!user.termsAccepted) {\n        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });\n      }\n      const profile = await getProfile(user.id);\n      if (!profile || !['viewer', 'admin'].includes(profile.role)) {\n        return sendJson(res, 403, { error: 'Недостаточно прав.' });\n      }\n      try {\n        const preview = await queryRetentionAudiencePreview(pool, url.searchParams.get('segment'));\n        return sendJson(res, 200, preview);\n      } catch (error) {\n        if (error instanceof TypeError) {\n          return sendJson(res, 400, { error: error.message });\n        }\n        throw error;\n      }\n    }\n\n`;
+  source = source.replace(anchor, route + anchor);
 }
 
 const routeMarker = "url.pathname.match(/^\\/api\\/admin\\/users\\/(\\d+)$/)";
