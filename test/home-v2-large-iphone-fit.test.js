@@ -14,6 +14,7 @@ test('Home V2 fills large iPhone mini-app viewports without shrinking approved c
   assert.match(block, /min-height:\s*636px/);
   assert.match(block, /grid-template-rows:[\s\S]*minmax\(126px,\s*1\.05fr\)[\s\S]*minmax\(124px,\s*1\.03fr\)[\s\S]*minmax\(122px,\s*1\.02fr\)[\s\S]*minmax\(84px,\s*\.70fr\)[\s\S]*minmax\(132px,\s*1\.10fr\)/);
   assert.match(block, /\.client-home\.home-v2 > \.spaceverse-home-hero,[\s\S]*height:\s*100%/);
+  assert.match(block, /@media \(max-width: 390px\) and \(min-height: 780px\)[\s\S]*\.client-home\.home-v2\.active[\s\S]*--home-v2-topbar-reserve:\s*80px/);
   assert.match(block, /\.platform-telegram \.client-home\.home-v2\.active[\s\S]*--home-v2-topbar-reserve:\s*60px/);
 
   for (const compressed of ['height: 114px', 'height: 112px', 'height: 110px', 'height: 74px', 'height: 118px']) {
