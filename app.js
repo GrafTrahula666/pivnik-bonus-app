@@ -573,26 +573,47 @@ function requestId() {
 }
 
 const WHEEL_VISUAL_SECTORS = (() => {
+  // Visual geometry is intentionally independent from server odds. The single
+  // jackpot slice is larger for theatre; the server still decides every prize.
   const smallPrizes = [
     'bonus-5', 'bonus-10', 'beer-glass', 'bonus-20', 'bonus-5',
     'bonus-50', 'bonus-10', 'bonus-5', 'bonus-100', 'bonus-20',
     'beer-glass', 'bonus-5', 'bonus-10', 'bonus-50', 'bonus-20',
-    'bonus-5', 'bonus-100', 'bonus-10', 'beer-glass', 'bonus-5'
+    'bonus-5', 'bonus-100', 'bonus-10', 'beer-glass', 'bonus-5',
+    'bonus-20', 'bonus-50', 'bonus-10', 'bonus-5', 'bonus-20',
+    'bonus-10', 'bonus-5'
   ];
   const labels = {
-    'bonus-5': '5 бонусов',
-    'bonus-10': '10 бонусов',
-    'bonus-20': '20 бонусов',
-    'bonus-50': '50 бонусов',
-    'bonus-100': '100 бонусов',
-    'beer-glass': 'Бокал пива',
+    'bonus-5': '5 б',
+    'bonus-10': '10 б',
+    'bonus-20': '20 б',
+    'bonus-50': '50 б',
+    'bonus-100': '100 б',
+    'beer-glass': 'Пиво',
     'annual-beer': 'Годовой запас пива'
   };
-  const sectors = [{ code: 'annual-beer', label: labels['annual-beer'], start: -22, end: 22, center: 0, jackpot: true }];
-  const size = 316 / smallPrizes.length;
+  const jackpotDegrees = 34;
+  const jackpotHalf = jackpotDegrees / 2;
+  const sectors = [{
+    code: 'annual-beer',
+    label: labels['annual-beer'],
+    start: -jackpotHalf,
+    end: jackpotHalf,
+    center: 0,
+    jackpot: true
+  }];
+  const size = (360 - jackpotDegrees) / smallPrizes.length;
   smallPrizes.forEach((code, index) => {
-    const start = 22 + index * size;
-    sectors.push({ code, label: labels[code], start, end: start + size, center: start + size / 2, jackpot: false });
+    const start = jackpotHalf + index * size;
+    sectors.push({
+      code,
+      label: labels[code],
+      start,
+      end: start + size,
+      center: start + size / 2,
+      jackpot: false,
+      tone: index % 2 === 0 ? 'white' : 'gold'
+    });
   });
   return sectors;
 })();
@@ -616,18 +637,58 @@ function renderWheelArtwork() {
   if (state.wheel.artworkReady) return;
   const disk = $('#wheelDisk');
   if (!disk) return;
-  disk.innerHTML = WHEEL_VISUAL_SECTORS.map((sector, index) => {
-    const path = `<path class="wheel-sector ${sector.jackpot ? 'wheel-sector-jackpot' : `wheel-sector-${index % 3}`}" d="${wheelSectorPath(sector.start, sector.end)}"></path>`;
+
+  const defs = `
+    <defs>
+      <linearGradient id="wheelSectorWhite" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fffef9"/>
+        <stop offset=".48" stop-color="#f7f0e6"/>
+        <stop offset="1" stop-color="#fffdf7"/>
+      </linearGradient>
+      <linearGradient id="wheelSectorGold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#f8d783"/>
+        <stop offset=".48" stop-color="#c88920"/>
+        <stop offset="1" stop-color="#f1c562"/>
+      </linearGradient>
+      <linearGradient id="wheelJackpotPrism" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fffdf8"/>
+        <stop offset=".22" stop-color="#d9efff"/>
+        <stop offset=".45" stop-color="#f3ddff"/>
+        <stop offset=".66" stop-color="#d9fff3"/>
+        <stop offset=".84" stop-color="#fff1ba"/>
+        <stop offset="1" stop-color="#ffffff"/>
+      </linearGradient>
+      <filter id="wheelJackpotGlow" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="2.2" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>`;
+
+  const sectors = WHEEL_VISUAL_SECTORS.map((sector) => {
+    const fill = sector.jackpot
+      ? 'url(#wheelJackpotPrism)'
+      : sector.tone === 'gold'
+        ? 'url(#wheelSectorGold)'
+        : 'url(#wheelSectorWhite)';
+    const path = `<path class="wheel-sector ${sector.jackpot ? 'wheel-sector-jackpot' : `wheel-sector-${sector.tone}`}" fill="${fill}" d="${wheelSectorPath(sector.start, sector.end)}"></path>`;
+
     if (sector.jackpot) {
-      return `${path}<text class="wheel-sector-label wheel-jackpot-label" x="160" y="42" text-anchor="middle"><tspan x="160">ГОДОВОЙ ЗАПАС</tspan><tspan x="160" dy="11">ПИВА</tspan></text>`;
+      return `${path}<g class="wheel-jackpot-copy" filter="url(#wheelJackpotGlow)">
+        <text class="wheel-sector-label wheel-jackpot-label" x="160" y="37" text-anchor="middle">
+          <tspan x="160">ГОДОВОЙ</tspan><tspan x="160" dy="9">ЗАПАС ПИВА</tspan>
+        </text>
+      </g>`;
     }
-    const flipped = sector.center > 90 && sector.center < 270;
-    const labelRotation = flipped ? 90 : -90;
-    // Keep every label on the same radial ring. Moving flipped labels to y=268
-    // mirrors them into the upper half of the wheel and leaves the bottom empty.
-    const labelY = 52;
-    return `${path}<g transform="rotate(${sector.center.toFixed(3)} 160 160)"><text class="wheel-sector-label" x="160" y="${labelY}" text-anchor="middle" transform="rotate(${labelRotation} 160 ${labelY})">${escapeHtml(sector.label)}</text></g>`;
+
+    const point = wheelPoint(sector.center, 116);
+    const labelWidth = sector.code === 'bonus-100' ? 28 : 25;
+    return `${path}<g class="wheel-label-pill" transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})">
+      <rect x="${(-labelWidth / 2).toFixed(1)}" y="-6.2" width="${labelWidth}" height="12.4" rx="5.2"></rect>
+      <text class="wheel-sector-label" x="0" y="2.4" text-anchor="middle">${escapeHtml(sector.label)}</text>
+    </g>`;
   }).join('');
+
+  disk.innerHTML = defs + sectors;
   state.wheel.artworkReady = true;
 }
 
