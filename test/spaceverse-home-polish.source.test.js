@@ -70,7 +70,7 @@ test('home v2 image composition wires the approved artwork to live home blocks w
     'profile-card.webp',
     'business-card.webp',
     'wheel-card.webp',
-    'wheel-disc.webp',
+    'wheel-luxury-v1.webp',
     'liters-card.webp',
     'league-card.webp'
   ]) {
@@ -78,6 +78,6 @@ test('home v2 image composition wires the approved artwork to live home blocks w
   }
   assert.match(styles, /HOME V2 IMAGE COMPOSITION/);
   assert.match(app, /avatarInlineHtml\(leader, 'leader-avatar', true\)/);
-  assert.match(styles, /\.wheel-disk[\s\S]*wheel-disc\.webp/);
+  assert.match(styles, /\.wheel-disk[\s\S]*wheel-luxury-v1\\.webp/);
   assert.match(styles, /\.beer-progress-segments[\s\S]*left: 4\.2%/);
 });
