@@ -51,5 +51,5 @@ test('service entrypoints remain present and cache-busted', async () => {
   assert.match(index, /id="profileAdminNav"/);
   assert.match(index, /data-screen="staff"/);
   assert.match(index, /data-screen="admin"/);
-  assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
+  assert.match(index, /app\.js\?v=20\.10-profile-reference-geometry/);
 });
