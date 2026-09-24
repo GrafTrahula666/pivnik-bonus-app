@@ -13,7 +13,7 @@ test('Home V2 exposes the real profile avatar and canonical live status layout',
   assert.match(css, /\.hero-qr-button[\s\S]*width: 30px[\s\S]*height: 30px[\s\S]*justify-self: end/);
   assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 74px[\s\S]*left: 27%/);
   assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 27%[\s\S]*right: 27\.3%/);
-  assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: grid !important/);
+  assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: none !important/);
 });
 
 test('Home wheel prize and CTA keep fixed centered alignment', async () => {
@@ -37,9 +37,9 @@ test('Home V2 precision polish is cache-busted', async () => {
     read('index.html'),
     read('scripts/apply-red-cosmos-v2-shell-final.mjs')
   ]);
-  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
-  assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical'/);
+  assert.match(index, /styles\.css\?v=20\.10-profile-reference-geometry/);
+  assert.match(index, /app\.js\?v=20\.10-profile-reference-geometry/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.10-profile-reference-geometry'/);
 });
 
 
