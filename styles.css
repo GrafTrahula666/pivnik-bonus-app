@@ -8864,7 +8864,7 @@ body,
 
 .client-home.home-v2 .spaceverse-home-hero .hero-name-row {
   display: grid;
-  grid-template-columns: minmax(0,1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
   gap: 6px;
   width: 100%;
@@ -8890,22 +8890,22 @@ body,
 }
 
 .client-home.home-v2 .hero-qr-button {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
   margin: 0;
   padding: 0;
   justify-self: end;
   border: 1px solid rgba(174,117,25,.34);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255,255,255,.68);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.94);
   color: #a76a0c;
 }
 
 .client-home.home-v2 .hero-qr-button .hero-qr-icon {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .balance {
