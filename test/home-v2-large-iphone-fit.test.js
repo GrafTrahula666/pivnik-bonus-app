@@ -40,7 +40,7 @@ test('Home V2 viewport fix is cache-busted in the canonical shell', async () => 
     read('index.html'),
     read('scripts/apply-red-cosmos-v2-shell-final.mjs')
   ]);
-  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
-  assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical'/);
+  assert.match(index, /styles\.css\?v=20\.10-profile-reference-geometry/);
+  assert.match(index, /app\.js\?v=20\.10-profile-reference-geometry/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.10-profile-reference-geometry'/);
 });
