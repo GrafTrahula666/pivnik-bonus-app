@@ -14,7 +14,7 @@ test('Home V2 exposes the real profile avatar and canonical live status layout',
   assert.match(css, /\.spaceverse-home-hero \.hero-name-row[\s\S]*grid-template-columns: minmax\(0, 1fr\) 30px/);
   assert.match(css, /\.hero-qr-button[\s\S]*width: 30px[\s\S]*height: 30px[\s\S]*justify-self: end/);
   assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 66px[\s\S]*right: 4\.2%[\s\S]*width: 24\.2%/);
-  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 18\.8%[\s\S]*right: 24\.5%/);
+  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*right: 24\.5%[\s\S]*left: 18\.8%/);
   assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: none !important/);
   assert.match(css, /profile-card\.webp\?v=5-reference-slots/);
 });
