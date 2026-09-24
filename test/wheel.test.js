@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   WHEEL_FREE_INTERVAL_MS,
+  WHEEL_JACKPOT_GATE,
   WHEEL_PRIZES,
   WHEEL_TICKET_COUNT,
   drawWheelPrize,
@@ -28,14 +29,30 @@ test('Колесо: таблица покрывает ровно 500 000 рав�
   assert.equal(selectWheelPrize(499_999).code, 'annual-beer');
 });
 
-test('Колесо: случайный билет выбирает приз только на серверной шкале', () => {
-  const result = drawWheelPrize((min, max) => {
+test('Колесо: годовой запас имеет итоговый шанс ровно 1 к 1 000 000', () => {
+  assert.equal(WHEEL_JACKPOT_GATE, 2);
+  let call = 0;
+  const win = drawWheelPrize((min, max) => {
+    call += 1;
+    if (call === 1) {
+      assert.equal(min, 0);
+      assert.equal(max, 500_000);
+      return 499_999;
+    }
     assert.equal(min, 0);
-    assert.equal(max, 500_000);
-    return 499_999;
+    assert.equal(max, 2);
+    return 0;
   });
-  assert.equal(result.ticket, 499_999);
-  assert.equal(result.prize.code, 'annual-beer');
+  assert.equal(win.ticket, 499_999);
+  assert.equal(win.prize.code, 'annual-beer');
+
+  call = 0;
+  const miss = drawWheelPrize((min, max) => {
+    call += 1;
+    return call === 1 ? 499_999 : 1;
+  });
+  assert.equal(miss.ticket, 499_998);
+  assert.equal(miss.prize.code, 'beer-glass');
 });
 
 test('Колесо: бесплатное вращение открывается ровно через 24 часа', () => {

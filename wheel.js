@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 export const WHEEL_TICKET_COUNT = 500_000;
+export const WHEEL_JACKPOT_GATE = 2;
 export const WHEEL_FREE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export const WHEEL_PRIZES = Object.freeze([
@@ -27,7 +28,19 @@ export function selectWheelPrize(ticket) {
 
 export function drawWheelPrize(randomInt = crypto.randomInt) {
   const ticket = randomInt(0, WHEEL_TICKET_COUNT);
-  return { ticket, prize: selectWheelPrize(ticket) };
+  const candidate = selectWheelPrize(ticket);
+  if (!candidate.annualSupply) return { ticket, prize: candidate };
+
+  // The single jackpot candidate ticket is gated once more by an independent
+  // cryptographic 50/50 draw: 1/500,000 × 1/2 = exactly 1/1,000,000.
+  // A failed gate becomes the ordinary beer prize. Store 499,998 so the
+  // persisted ticket remains consistent with selectWheelPrize(ticket).
+  const gate = randomInt(0, WHEEL_JACKPOT_GATE);
+  if (gate === 0) return { ticket, prize: candidate };
+  return {
+    ticket: WHEEL_TICKET_COUNT - 2,
+    prize: WHEEL_PRIZES.find((item) => item.code === 'beer-glass')
+  };
 }
 
 export function freeSpinState(lastFreeSpinAt, now = new Date()) {

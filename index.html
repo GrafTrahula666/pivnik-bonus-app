@@ -238,14 +238,7 @@
           <div class="wheel-pointer" aria-hidden="true"></div>
           <div class="wheel-rim" id="wheelRim">
             <svg class="wheel-disk" id="wheelDisk" viewBox="0 0 320 320" role="img" aria-label="Колесо с призами"></svg>
-            <div class="wheel-emblem" aria-hidden="true">
-              <svg viewBox="0 0 74 66" role="presentation">
-                <path class="wheel-emblem-triangle" d="M37 5 69 61H5Z"></path>
-                <path class="wheel-emblem-eye" d="M17 39c9-14 31-14 40 0-9 14-31 14-40 0Z"></path>
-                <circle class="wheel-emblem-pupil" cx="37" cy="39" r="7"></circle>
-                <circle class="wheel-emblem-glint" cx="39" cy="36" r="1.8"></circle>
-              </svg>
-            </div>
+            <div class="wheel-emblem" aria-hidden="true"></div>
           </div>
           <div class="wheel-result" id="wheelResult" aria-live="polite" aria-hidden="true">
             <span id="wheelResultKicker">Ваше вращение готово</span>
@@ -533,17 +526,17 @@
         <details class="help-section">
           <summary><span>2</span><b>Вероятности призов</b></summary>
           <div class="help-text">
-            <p>Результат определяет сервер с помощью криптографически стойкого генератора. Используется ровно 500 000 равновероятных целочисленных билетов на каждое вращение.</p>
+            <p>Результат определяет сервер с помощью криптографически стойкого генератора. Сначала выбирается один из 500 000 базовых билетов. Единственный билет годового приза дополнительно проходит независимую проверку 50/50, поэтому итоговый шанс главного приза составляет ровно 1 из 1 000 000.</p>
             <ul class="wheel-odds-list">
               <li><b>5 бонусов</b><span>40%</span></li>
               <li><b>10 бонусов</b><span>20%</span></li>
               <li><b>20 бонусов</b><span>20%</span></li>
               <li><b>50 бонусов</b><span>10%</span></li>
               <li><b>100 бонусов</b><span>5%</span></li>
-              <li><b>Бокал пива</b><span>4,9998%</span></li>
-              <li><b>Годовой запас пива</b><span>0,0002% · 1 из 500 000</span></li>
+              <li><b>Бокал пива</b><span>4,9999%</span></li>
+              <li><b>Годовой запас пива</b><span>0,0001% · 1 из 1 000 000</span></li>
             </ul>
-            <p>Размер и количество нарисованных секторов не задают вероятность. Крупный сектор годового запаса является только визуальным элементом; серверный шанс остаётся 1 из 500 000.</p>
+            <p>Размер и количество нарисованных секторов не задают вероятность. Крупный переливающийся сектор годового запаса является визуальным акцентом; серверный шанс остаётся 1 из 1 000 000.</p>
           </div>
         </details>
 
