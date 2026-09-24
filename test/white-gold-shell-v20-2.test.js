@@ -21,8 +21,8 @@ test('v20.2 replaces the legacy dark shell at its source', async () => {
   assert.match(css, /HOME V2 CLEAN SHELL BACKDROP/);
   assert.match(css, /grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
 
-  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
-  assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
+  assert.match(index, /styles\.css\?v=20\.10-profile-reference-geometry/);
+  assert.match(index, /app\.js\?v=20\.10-profile-reference-geometry/);
   assert.doesNotMatch(index, /<\/section>\\n\\n\s*<section class="profile-history-card/);
   assert.match(index, /<\/section>\n\n\s*<section class="profile-history-card/);
 
@@ -37,6 +37,7 @@ test('v20.2 replaces the legacy dark shell at its source', async () => {
 test('approved Home V2 card artwork stays wired while the shell texture is removed', async () => {
   const css = await read('styles.css');
   for (const asset of [
+    'profile-card.webp',
     'business-card.webp',
     'wheel-card.webp',
     'wheel-luxury-v1.webp',
@@ -44,9 +45,9 @@ test('approved Home V2 card artwork stays wired while the shell texture is remov
     'league-card.webp'
   ]) assert.match(css, new RegExp(asset.replace('.', '\\.')));
 
-  assert.doesNotMatch(css, /profile-card\.webp/);
+  assert.match(css, /profile-card\.webp\?v=5-reference-slots/);
   assert.match(css, /Profile card: canonical live layout based on the approved white-gold reference/);
-  assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: grid !important/);
+  assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: none !important/);
   assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*display: grid !important/);
 
   assert.match(css, /profile-achievement-medal\.rarity-epic[^}]*rgba\(180,124,33/);
