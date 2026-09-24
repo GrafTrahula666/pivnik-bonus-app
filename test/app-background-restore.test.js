@@ -26,8 +26,8 @@ test('restored background is cache-busted in the canonical shell', async () => {
     read('scripts/materialize-runtime-patches.mjs')
   ]);
 
-  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
-  assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical'/);
-  assert.match(materializer, /styles\.css\?v=20\.9-service-entry-canonical/);
+  assert.match(index, /styles\.css\?v=20\.10-profile-reference-geometry/);
+  assert.match(index, /app\.js\?v=20\.10-profile-reference-geometry/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.10-profile-reference-geometry'/);
+  assert.match(materializer, /styles\.css\?v=20\.10-profile-reference-geometry/);
 });
