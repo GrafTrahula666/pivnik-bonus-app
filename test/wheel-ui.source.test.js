@@ -48,7 +48,7 @@ test('Luxury wheel contains one large jackpot and twenty-seven alternating prize
   assert.match(styles, /wheel-luxury-v1\.webp\?v=1/);
   assert.match(styles, /\.wheel-sector-white/);
   assert.match(styles, /\.wheel-sector-gold/);
-  assert.match(styles, /wheelJackpotPrism/);
+  assert.match(app, /wheelJackpotPrism/);
   assert.doesNotMatch(styles, /\.wheel-disk > \*\s*\{\s*opacity:\s*0/);
 });
 
