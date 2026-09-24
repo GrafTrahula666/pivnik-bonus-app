@@ -1934,7 +1934,7 @@ function renderProfile() {
       ? 'Telegram и VK связаны'
       : `Подключён ${platformLabel}`;
   }
-  $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : compactBonus(profile.balance);
+  $('#clientBalance').textContent = profile.unlimitedBonus ? '∞' : fmt(profile.balance);
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
@@ -1952,6 +1952,7 @@ function renderProfile() {
 
   const min = Number(profile.status.minSpend || 0);
   const next = profile.status.nextSpend;
+  $('#nextRewardText').classList.toggle('is-max-level', !next);
   if (next) {
     const percentage = Math.max(0, Math.min(100, ((profile.spend12m - min) / (next - min)) * 100));
     const remaining = Math.max(0, next - profile.spend12m);

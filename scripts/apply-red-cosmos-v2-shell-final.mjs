@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
-const CANONICAL_STYLE_VERSION = '20.10-profile-reference-geometry';
+const CANONICAL_STYLE_VERSION = '20.11-profile-original-artwork';
 const SERVICE_STYLE_VERSION = '20.8-service-white-gold';
 const SERVICE_STYLE_HREF = `/service-white-gold.css?v=${SERVICE_STYLE_VERSION}`;
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';

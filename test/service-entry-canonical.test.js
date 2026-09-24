@@ -40,8 +40,8 @@ test('canonical cache key remains materializer-compatible', async () => {
     read('scripts/materialize-runtime-patches.mjs')
   ]);
 
-  assert.match(index, /styles\.css\?v=20\.10-profile-reference-geometry/);
-  assert.match(index, /app\.js\?v=20\.10-profile-reference-geometry/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.10-profile-reference-geometry'/);
-  assert.match(materializer, /styles\.css\?v=20\.10-profile-reference-geometry/);
+  assert.match(index, /styles\.css\?v=20\.11-profile-original-artwork/);
+  assert.match(index, /app\.js\?v=20\.11-profile-original-artwork/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.11-profile-original-artwork'/);
+  assert.match(materializer, /styles\.css\?v=20\.11-profile-original-artwork/);
 });

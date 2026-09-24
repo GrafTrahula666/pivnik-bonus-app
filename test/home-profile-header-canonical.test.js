@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
@@ -27,22 +28,21 @@ test('Home profile header keeps the approved live structure without baked accoun
   assert.match(index, /class="spaceverse-hero-brand"/);
   assert.match(index, /class="spaceverse-hero-logo-full"/);
 
-  const marker = css.indexOf('Profile card: canonical live layout based on the approved white-gold reference.');
+  const marker = css.indexOf('Profile header: positions measured on the untouched 2048 × 682 artwork.');
   assert.ok(marker >= 0, 'canonical profile-header marker must exist');
   const block = css.slice(marker, css.indexOf('/* The SPACEVERSE teaser artwork', marker));
 
-  assert.match(block, /\.profile-avatar[\s\S]*display:\s*grid\s*!important[\s\S]*top:\s*12px[\s\S]*left:\s*4\.1%[\s\S]*width:\s*54px[\s\S]*height:\s*54px/);
-  assert.match(block, /\.client-identity[\s\S]*inset:\s*0[\s\S]*width:\s*100%[\s\S]*height:\s*100%/);
-  assert.match(block, /\.hero-identity-copy[\s\S]*left:\s*20%[\s\S]*width:\s*44%/);
-  assert.match(block, /\.spaceverse-hero-brand[\s\S]*display:\s*none\s*!important/);
-  assert.match(block, /\.status-divider[\s\S]*display:\s*none\s*!important/);
-  assert.match(block, /\.hero-name-row[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) 30px/);
-  assert.match(block, /\.hero-qr-button[\s\S]*width:\s*30px[\s\S]*height:\s*30px/);
-  assert.match(block, /\.progress[\s\S]*right:\s*24\.5%[\s\S]*left:\s*18\.8%/);
+  assert.match(block, /\.client-identity[^}]*inset:\s*0/);
+  assert.match(block, /\.profile-avatar[^}]*top:\s*9%[^}]*left:\s*3%[^}]*width:\s*min\(14%, 54px\)/);
+  assert.match(block, /\.hero-identity-copy[^}]*left:\s*18\.7%[^}]*width:\s*47%/);
+  assert.match(block, /\.status-button[^}]*top:\s*61%[^}]*left:\s*10\.5%/);
+  assert.match(block, /\.progress[^}]*top:\s*80%[^}]*left:\s*3\.4%[^}]*height:\s*5\.2%/);
+  assert.match(block, /\.spaceverse-hero-brand[^}]*display:\s*block\s*!important/);
+  assert.match(block, /\.hero-name-row[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 26px/);
   assert.doesNotMatch(block, /transform:\s*scale/);
 
   assert.match(css, /\.client-home\.home-v2 \.spaceverse-home-hero \{[\s\S]*height:\s*126px;[\s\S]*min-height:\s*126px;/);
-  assert.match(css, /profile-card\.webp\?v=5-reference-slots/);
+  assert.match(css, /profile-card\.png\?v=6-original-layout/);
 
   assert.match(app, /renderAvatarInto\(\$\('#profileAvatar'\), profile\)/);
   assert.match(app, /\$\('#clientBalance'\)\.textContent = profile\.unlimitedBonus/);
@@ -57,4 +57,11 @@ test('Home profile header does not change status business logic', async () => {
   assert.match(app, /const next = profile\.status\.nextSpend/);
   assert.match(app, /\(\(profile\.spend12m - min\) \/ \(next - min\)\) \* 100/);
   assert.match(app, /const remaining = Math\.max\(0, next - profile\.spend12m\)/);
+});
+
+test('Home artwork preserves the supplied original pixel for pixel', async () => {
+  const asset = await readFile(new URL('../assets/home-v2/profile-card.png', import.meta.url));
+  assert.equal(asset.readUInt32BE(16), 2048);
+  assert.equal(asset.readUInt32BE(20), 682);
+  assert.equal(createHash('sha256').update(asset).digest('hex'), 'b1c5a84be372bf1cb7f43a4d26f16e4f3eccfcd2f6cf915156d1fe81b6a17fcb');
 });
