@@ -81,6 +81,15 @@ jobs:
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
 
+      - name: Run admin directory regression tests
+        run: node --test test/admin-user-directory*.test.js
+
+      - name: Run Customer 360 regression tests
+        run: node --test test/customer-360*.test.js
+
+      - name: Run retention regression tests
+        run: node --test test/retention-*.test.js test/admin-retention-*.test.js
+
       - name: Run automated tests
         shell: bash
         run: |
@@ -101,6 +110,7 @@ jobs:
 
       - name: Upload automated test diagnostics
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: automated-test-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
