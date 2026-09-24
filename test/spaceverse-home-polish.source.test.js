@@ -67,7 +67,6 @@ test('home v2 image composition wires the approved artwork to live home blocks w
   assert.match(index, /client-home home-v2/);
   assert.doesNotMatch(styles, /home-background\.webp/);
   for (const asset of [
-    'profile-card.webp',
     'business-card.webp',
     'wheel-card.webp',
     'wheel-luxury-v1.webp',
@@ -77,6 +76,9 @@ test('home v2 image composition wires the approved artwork to live home blocks w
     assert.match(styles, new RegExp(asset.replace('.', '\\.')));
   }
   assert.match(styles, /HOME V2 IMAGE COMPOSITION/);
+  assert.doesNotMatch(styles, /profile-card\.webp/);
+  assert.match(styles, /Profile card: canonical live layout based on the approved white-gold reference/);
+  assert.match(app, /renderAvatarInto\(\$\('#profileAvatar'\), profile\)/);
   assert.match(app, /avatarInlineHtml\(leader, 'leader-avatar', true\)/);
   assert.match(styles, /\.wheel-disk[\s\S]*wheel-luxury-v1\.webp/);
   assert.match(styles, /\.beer-progress-segments[\s\S]*left: 4\.2%/);
