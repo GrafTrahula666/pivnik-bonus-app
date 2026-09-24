@@ -37,13 +37,17 @@ test('v20.2 replaces the legacy dark shell at its source', async () => {
 test('approved Home V2 card artwork stays wired while the shell texture is removed', async () => {
   const css = await read('styles.css');
   for (const asset of [
-    'profile-card.webp',
     'business-card.webp',
     'wheel-card.webp',
     'wheel-luxury-v1.webp',
     'liters-card.webp',
     'league-card.webp'
   ]) assert.match(css, new RegExp(asset.replace('.', '\\.')));
+
+  assert.doesNotMatch(css, /profile-card\.webp/);
+  assert.match(css, /Profile card: canonical live layout based on the approved white-gold reference/);
+  assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: grid !important/);
+  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*display: grid !important/);
 
   assert.match(css, /profile-achievement-medal\.rarity-epic[^}]*rgba\(180,124,33/);
   assert.match(css, /profile-achievement-medal\.rarity-rare[^}]*rgba\(180,124,33/);
