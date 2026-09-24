@@ -28,7 +28,14 @@ test('retention campaign draft is idempotent and cannot dispatch messages', () =
   assert.match(html, /id="retentionDraftChannel"/);
   assert.match(html, /id="retentionDraftMessage"/);
   assert.match(html, /maxlength="500"/);
-  assert.doesNotMatch(app, /sendMessage|dispatch|broadcast|fetch\([^)]*retention/i);
+
+  // Scope the dispatch-safety assertion to the draft code itself. The canonical
+  // app legitimately contains unrelated broadcast/send functionality elsewhere.
+  const draftStart = app.indexOf('function updateRetentionCampaignDraft()');
+  const draftEnd = app.indexOf('async function refreshRetentionAudiencePreview()', draftStart);
+  assert.ok(draftStart >= 0 && draftEnd > draftStart, 'retention draft source boundaries must exist');
+  const draftSource = app.slice(draftStart, draftEnd);
+  assert.doesNotMatch(draftSource, /sendMessage|dispatch|broadcast|fetch\([^)]*retention/i);
   assert.doesNotMatch(html, /Отправить|Запустить кампанию/i);
   execFileSync(process.execPath, ['--check', path.join(temp, 'app.js')]);
 });
