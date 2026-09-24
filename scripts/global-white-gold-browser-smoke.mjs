@@ -177,7 +177,18 @@ async function inspectScreen(caseName, config, screenName) {
           scrollHeight: screen.scrollHeight,
           clientHeight: screen.clientHeight
         } : null,
-        nodes: Object.fromEntries(selectorsToRead.map((selector) => [selector, readStyle(selector)]))
+        nodes: Object.fromEntries(selectorsToRead.map((selector) => [selector, readStyle(selector)])),
+        wheelGeometry: target === 'wheel' ? {
+          sectors: document.querySelectorAll('#wheelDisk .wheel-sector').length,
+          labels: document.querySelectorAll('#wheelDisk .wheel-label-pill').length,
+          jackpots: document.querySelectorAll('#wheelDisk .wheel-sector-jackpot').length,
+          diskBackground: getComputedStyle(document.querySelector('#wheelDisk')).backgroundImage,
+          labelTexts: [...document.querySelectorAll('#wheelDisk .wheel-label-pill text')].map((node) => node.textContent?.trim() || ''),
+          labelRects: [...document.querySelectorAll('#wheelDisk .wheel-label-pill')].map((node) => {
+            const rect = node.getBoundingClientRect();
+            return { width: rect.width, height: rect.height };
+          })
+        } : null
       };
     }, { target: screenName, selectorsToRead: selectors });
 
@@ -199,6 +210,14 @@ async function inspectScreen(caseName, config, screenName) {
       assert(evidence.nodes['.wheel-spin-button'].backgroundImage !== 'none' || isLight(evidence.nodes['.wheel-spin-button'].backgroundColor),
         `${caseName}: wheel button retained a dark legacy surface`);
       assert(isDarkText(evidence.nodes['.wheel-spin-button'].color), `${caseName}: wheel button text has weak contrast`);
+      assert(evidence.wheelGeometry?.sectors === 28, `${caseName}: expected 28 wheel sectors, got ${evidence.wheelGeometry?.sectors}`);
+      assert(evidence.wheelGeometry?.labels === 27, `${caseName}: expected 27 ordinary wheel labels, got ${evidence.wheelGeometry?.labels}`);
+      assert(evidence.wheelGeometry?.jackpots === 1, `${caseName}: expected one jackpot sector`);
+      assert(/wheel-luxury-v1\.webp/i.test(evidence.wheelGeometry?.diskBackground || ''), `${caseName}: luxury wheel artwork missing`);
+      assert(evidence.wheelGeometry?.labelTexts?.every((label) => /^(?:5|10|20|50|100) б$|^Пиво$/.test(label)),
+        `${caseName}: unexpected visual wheel label: ${JSON.stringify(evidence.wheelGeometry?.labelTexts)}`);
+      assert(evidence.wheelGeometry?.labelRects?.every((rect) => rect.width > 0 && rect.height > 0),
+        `${caseName}: wheel labels collapsed: ${JSON.stringify(evidence.wheelGeometry?.labelRects)}`);
       await page.locator('#wheelBackButton').click({ trial: true });
       await page.locator('#wheelSpinButton').click({ trial: true });
     } else {
