@@ -838,6 +838,7 @@ async function spinWheel() {
   state.wheel.busy = true;
   renderWheelStatus();
   let requestKey;
+  let confirmedPrize = null;
   try {
     const pending = pendingWheelRequest();
     if (!pending && !state.wheel.status) await loadWheelStatus();
@@ -865,8 +866,9 @@ async function spinWheel() {
     if (!data?.spin?.prize || !data?.status || !data?.account) {
       throw new Error('Не удалось подтвердить результат вращения. Повторите проверку.');
     }
+    confirmedPrize = data.spin.prize;
     clearPendingWheelRequest(requestKey);
-    const sector = visualSectorForPrize(data.spin?.prize?.code);
+    const sector = visualSectorForPrize(confirmedPrize.code);
     const currentAngle = ((state.wheel.rotation % 360) + 360) % 360;
     const alignment = ((360 - sector.center - currentAngle) % 360 + 360) % 360;
     state.wheel.rotation += 5 * 360 + alignment;
@@ -880,21 +882,47 @@ async function spinWheel() {
       state.profile.balance = data.account.balance;
       state.profile.unlimitedBonus = data.account.unlimitedBonus;
       if (state.profile.beer) state.profile.beer.giftLitersBalance = data.account.giftBeerLiters;
-      renderProfile();
+      try {
+        renderProfile();
+      } catch (renderError) {
+        console.error('Profile render failed after confirmed wheel prize', renderError);
+      }
     }
     $('#wheelResultKicker').textContent = 'Ваш приз';
-    $('#wheelResultTitle').textContent = data.spin?.prize?.title || 'Приз зачислен';
+    $('#wheelResultTitle').textContent = confirmedPrize.title || 'Приз зачислен';
     $('#wheelRim').classList.add('wheel-win');
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
   } catch (error) {
+    // Once the server confirmed a prize, a later client-side rendering problem
+    // must never replace that prize with an internal JavaScript error.
+    if (confirmedPrize) {
+      console.error('Post-spin UI update failed after confirmed prize', error);
+      $('#wheelResultKicker').textContent = 'Ваш приз';
+      $('#wheelResultTitle').textContent = confirmedPrize.title || 'Приз зачислен';
+      toast('Приз сохранён. Обновляем данные…');
+      await loadWheelStatus().catch(() => {});
+      return;
+    }
+
     // These responses are returned before a successful mutation. Auth, transport
     // and 5xx errors can also occur after a prior commit and must keep the key.
     if ([400, 404, 409].includes(error?.status)) clearPendingWheelRequest(requestKey);
-    $('#wheelResultKicker').textContent = pendingWheelRequest() ? 'Результат уточняется' : 'Вращение не выполнено';
-    $('#wheelResultTitle').textContent = error.message;
+    const hasPending = Boolean(pendingWheelRequest());
+    const rawMessage = String(error?.message || '').trim();
+    const technicalMessage = !rawMessage
+      || rawMessage.length > 180
+      || /(?:TypeError|ReferenceError|SyntaxError|\.forEach| is not a function|undefined|=>|[\r\n{}])/i.test(rawMessage);
+    const publicMessage = hasPending
+      ? 'Не удалось получить ответ. Нажмите «Проверить результат».'
+      : technicalMessage
+        ? 'Не удалось выполнить вращение. Попробуйте ещё раз.'
+        : rawMessage;
+
+    $('#wheelResultKicker').textContent = hasPending ? 'Результат уточняется' : 'Вращение не выполнено';
+    $('#wheelResultTitle').textContent = publicMessage;
     await loadWheelStatus().catch(() => {});
-    toast(error.message);
+    toast(publicMessage);
   } finally {
     state.wheel.busy = false;
     renderWheelStatus();
@@ -1159,7 +1187,7 @@ function renderBeer(profile = state.profile) {
   const normalizedProgress = target > 0
     ? Math.max(0, Math.min(segmentCount, (progress / target) * segmentCount))
     : 0;
-  const segments = $('#beerProgressBar .beer-progress-segment');
+  const segments = $$('#beerProgressBar .beer-progress-segment');
   segments.forEach((segment, index) => {
     const fill = Math.max(0, Math.min(1, normalizedProgress - index));
     segment.style.setProperty('--segment-fill', `${fill * 100}%`);
