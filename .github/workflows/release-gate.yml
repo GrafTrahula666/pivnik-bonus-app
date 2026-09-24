@@ -88,7 +88,35 @@ jobs:
         run: node --test test/customer-360*.test.js
 
       - name: Run retention regression tests
-        run: node --test test/retention-*.test.js test/admin-retention-*.test.js
+        shell: bash
+        run: |
+          mkdir -p artifacts/test-results
+          set +e
+          node --test test/retention-*.test.js test/admin-retention-*.test.js 2>&1 | tee artifacts/test-results/retention-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Retention regression diagnostics"
+            details=$(awk '/^not ok /{capture=1} capture{print}' artifacts/test-results/retention-test.log | tail -c 14000)
+            if [ -z "$details" ]; then
+              details=$(tail -c 14000 artifacts/test-results/retention-test.log)
+            fi
+            safe=${details//'%'/'%25'}
+            safe=${safe//$'\r'/'%0D'}
+            safe=${safe//$'\n'/'%0A'}
+            echo "::error title=Retention regression diagnostics::$safe"
+            echo "::endgroup::"
+            exit "$status"
+          fi
+
+      - name: Upload retention regression diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-regression-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-results/retention-test.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Run automated tests
         shell: bash
