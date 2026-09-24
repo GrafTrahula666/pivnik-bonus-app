@@ -8,14 +8,16 @@ test('Home V2 exposes the real profile avatar and canonical live status layout',
   const css = await read('styles.css');
   assert.match(css, /V20\.4 · HOME V2 PRECISION POLISH/);
   assert.match(css, /Profile card: canonical live layout based on the approved white-gold reference/);
-  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*top: 14px[\s\S]*left: 3\.8%[\s\S]*width: 74px[\s\S]*height: 74px/);
+  assert.match(css, /\.spaceverse-home-hero \.client-identity[\s\S]*inset: 0[\s\S]*width: 100%[\s\S]*height: 100%/);
+  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*top: 12px[\s\S]*left: 4\.1%[\s\S]*width: 54px[\s\S]*height: 54px/);
+  assert.match(css, /\.spaceverse-home-hero \.hero-identity-copy[\s\S]*left: 20%[\s\S]*width: 44%/);
   assert.match(css, /\.spaceverse-home-hero \.hero-name-row[\s\S]*grid-template-columns: minmax\(0, 1fr\) 30px/);
   assert.match(css, /\.hero-qr-button[\s\S]*width: 30px[\s\S]*height: 30px[\s\S]*justify-self: end/);
-  assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 74px[\s\S]*left: 27%/);
-  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 27%[\s\S]*right: 27\.3%/);
+  assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 66px[\s\S]*right: 4\.2%[\s\S]*width: 24\.2%/);
+  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 18\.8%[\s\S]*right: 24\.5%/);
   assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: none !important/);
+  assert.match(css, /profile-card\.webp\?v=5-reference-slots/);
 });
-
 test('Home wheel prize and CTA keep fixed centered alignment', async () => {
   const css = await read('styles.css');
   assert.match(css, /\.home-wheel-prize[\s\S]*top: 39px/);
