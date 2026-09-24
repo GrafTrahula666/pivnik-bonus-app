@@ -7649,17 +7649,6 @@ body,
   background: radial-gradient(circle, rgba(217,168,73,.20), transparent 72%);
 }
 
-.spaceverse-hero-logo-full {
-  position: relative;
-  z-index: 2;
-  display: block;
-  width: 82px;
-  height: 82px;
-  object-fit: contain;
-  opacity: 1;
-  filter: drop-shadow(0 4px 8px rgba(120,76,11,.18));
-}
-
 .spaceverse-business-brand .spaceverse-cube-mark,
 .spaceverse-business-page-brand .spaceverse-cube-mark {
   opacity: 1;
@@ -7733,20 +7722,6 @@ body,
 
 .home-league-podium strong {
   font-weight: 820;
-}
-
-@media (max-width: 390px) {
-  .spaceverse-hero-logo-full {
-    width: 76px;
-    height: 76px;
-  }
-}
-
-@media (max-width: 350px) {
-  .spaceverse-hero-logo-full {
-    width: 68px;
-    height: 68px;
-  }
 }
 
 /* HOME V2 IMAGE COMPOSITION */
@@ -8836,8 +8811,7 @@ body,
 }
 
 .client-home.home-v2 .status-row-chevron,
-.client-home.home-v2 .spaceverse-home-hero .status-divider,
-.client-home.home-v2 .spaceverse-hero-logo-full { display: none !important; }
+.client-home.home-v2 .spaceverse-home-hero .status-divider { display: none !important; }
 
 /* The cube and divider are part of the original artwork. Only its wordmark is UI. */
 .client-home.home-v2 .spaceverse-hero-brand {

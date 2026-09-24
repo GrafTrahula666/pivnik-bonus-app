@@ -43,16 +43,16 @@ test('SPACEVERSE logo is the redrawn seven-cube reference mark', async () => {
 });
 
 
-test('supplied SPACEVERSE raster logos are wired directly into the correct home slots', async () => {
+test('SPACEVERSE artwork provides the profile logo without a duplicate inline image', async () => {
   const [index, styles] = await Promise.all([
     read('index.html'),
     read('styles.css')
   ]);
   const inlineWebp = index.match(/data:image\/webp;base64,/g) || [];
-  assert.ok(inlineWebp.length >= 3, 'expected large logo and compact marks to render as inline WEBP assets');
-  assert.match(index, /class="spaceverse-hero-logo-full" src="data:image\/webp;base64,/);
+  assert.ok(inlineWebp.length >= 2, 'expected the compact marks to render as inline WEBP assets');
+  assert.doesNotMatch(index, /class="spaceverse-hero-logo-full"/, 'the profile artwork contains its own cube');
   assert.match(index, /class="spaceverse-cube-mark spaceverse-cube-mark--gold" src="data:image\/webp;base64,/);
-  assert.match(styles, /\.spaceverse-hero-logo-full/);
+  assert.doesNotMatch(styles, /\.spaceverse-hero-logo-full/);
   assert.match(styles, /SPACEVERSE USER LOGOS \+ READABILITY PASS/);
 });
 

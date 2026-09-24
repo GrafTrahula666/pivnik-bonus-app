@@ -26,7 +26,7 @@ test('Home profile header keeps the approved live structure without baked accoun
   }
 
   assert.match(index, /class="spaceverse-hero-brand"/);
-  assert.match(index, /class="spaceverse-hero-logo-full"/);
+  assert.doesNotMatch(index, /class="spaceverse-hero-logo-full"/, 'the static cube lives in the original artwork');
 
   const marker = css.indexOf('Profile header: positions measured on the untouched 2048 × 682 artwork.');
   assert.ok(marker >= 0, 'canonical profile-header marker must exist');
