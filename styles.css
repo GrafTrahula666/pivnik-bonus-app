@@ -7800,14 +7800,9 @@ body,
   min-height: 126px;
   padding: 0 !important;
   border-radius: 24px;
-  border: 1px solid rgba(181,126,35,.28) !important;
-  background:
-    linear-gradient(110deg, rgba(255,255,255,.96), rgba(255,253,248,.88) 54%, rgba(255,248,236,.93)),
-    url('/assets/backgrounds/spaceverse-cloud-city.webp?v=2') center 42% / 152% auto no-repeat !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.98),
-    inset 0 0 0 1px rgba(255,255,255,.48),
-    0 10px 24px rgba(105,70,17,.11) !important;
+  border: 0 !important;
+  background: url('/assets/home-v2/profile-card.webp?v=5-reference-slots') center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
 }
 
 .client-home.home-v2 .spaceverse-home-hero::after,
@@ -8818,22 +8813,33 @@ body,
    cleaner wheel copy alignment and centered top-3 league cards. */
 
 /* Profile card: canonical live layout based on the approved white-gold reference.
-   Card height and Home geometry stay untouched; all account data remains live. */
+   Coordinate system is the card itself. The prepared artwork owns all static decoration;
+   only account-specific values are live DOM overlays. */
+.client-home.home-v2 .spaceverse-home-hero .client-identity {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  display: block;
+}
+
 .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
   display: grid !important;
   position: absolute;
-  top: 14px;
-  left: 3.8%;
-  width: 74px;
-  height: 74px;
+  top: 12px;
+  left: 4.1%;
+  width: 54px;
+  height: 54px;
+  margin: 0;
   place-items: center;
   overflow: hidden !important;
-  border: 2px solid rgba(183,123,24,.46);
+  border: 2px solid rgba(182,121,25,.42);
   border-radius: 50%;
-  background: rgba(255,250,242,.96);
+  background: rgba(255,250,242,.98);
   box-shadow:
-    0 0 0 3px rgba(255,255,255,.72),
-    0 5px 16px rgba(105,69,18,.14);
+    0 0 0 2px rgba(255,255,255,.78),
+    0 4px 12px rgba(105,69,18,.11);
   z-index: 4;
 }
 
@@ -8849,17 +8855,13 @@ body,
   object-fit: cover;
 }
 
-.client-home.home-v2 .spaceverse-home-hero .client-identity {
-  top: 10px;
-  left: 27%;
-  width: 45.5%;
-  height: 64px;
-}
-
 .client-home.home-v2 .spaceverse-home-hero .hero-identity-copy {
-  position: relative;
+  position: absolute;
+  top: 11px;
+  left: 20%;
+  width: 44%;
+  min-width: 0;
   display: block;
-  width: 100%;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .hero-name-row {
@@ -8879,6 +8881,7 @@ body,
   line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255,255,255,.72);
 }
 
 .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
@@ -8887,6 +8890,7 @@ body,
   color: #62594d;
   font-size: 7.5px;
   font-weight: 650;
+  line-height: 1;
 }
 
 .client-home.home-v2 .hero-qr-button {
@@ -8898,8 +8902,10 @@ body,
   justify-self: end;
   border: 1px solid rgba(174,117,25,.34);
   border-radius: 10px;
-  background: rgba(255,255,255,.68);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.94);
+  background: rgba(255,255,255,.76);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.96),
+    0 3px 8px rgba(110,72,15,.07);
   color: #a76a0c;
 }
 
@@ -8910,15 +8916,22 @@ body,
 
 .client-home.home-v2 .spaceverse-home-hero .balance {
   position: absolute;
-  top: 43px;
-  left: 27%;
-  width: 45.5%;
+  top: 49px;
+  left: 20%;
+  width: 44%;
   display: flex;
   align-items: baseline;
   gap: 5px;
   margin: 0;
-  font-size: 27px;
+  font-size: 26px;
   line-height: 1;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .balance > span {
+  background: linear-gradient(110deg,#985b05,#dfaa43 54%,#9c610a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .balance small {
@@ -8929,32 +8942,45 @@ body,
 
 .client-home.home-v2 .spaceverse-home-hero .status-button {
   position: absolute;
-  top: 74px;
-  left: 27%;
-  width: 45.5%;
-  min-height: 22px;
-  display: block;
+  top: 66px;
+  right: 4.2%;
+  bottom: auto;
+  left: auto;
+  width: 24.2%;
+  min-height: 27px;
+  display: grid;
+  place-content: center;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
-  text-align: left;
+  box-shadow: none;
+  text-align: center;
+}
+
+.client-home.home-v2 .spaceverse-home-hero .status-button > div {
+  display: grid;
+  place-items: center;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .status-caption {
   display: block;
   color: #74695b;
-  font-size: 6.2px;
-  font-weight: 650;
+  font-size: 6.3px;
+  font-weight: 700;
   line-height: 1;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .status-name {
   display: block;
-  margin-top: 2px;
+  max-width: 100%;
+  margin-top: 3px;
   overflow: hidden;
   color: #211a12;
   font-size: 10.5px;
-  font-weight: 850;
+  font-weight: 900;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8962,57 +8988,30 @@ body,
 
 .client-home.home-v2 .status-row-chevron { display: none; }
 
-.client-home.home-v2 .spaceverse-home-hero .status-divider {
-  display: block !important;
-  position: absolute;
-  top: 13px;
-  right: 25.2%;
-  bottom: 13px;
-  width: 1px;
-  margin: 0;
-  background: linear-gradient(180deg, transparent, rgba(126,103,69,.32) 15% 85%, transparent);
-  z-index: 2;
-}
-
+/* The reference artwork already contains the divider and the right-side gold mark.
+   Never render a second image on top of it. */
+.client-home.home-v2 .spaceverse-home-hero .status-divider,
 .client-home.home-v2 .spaceverse-hero-brand {
-  display: grid !important;
-  position: absolute;
-  top: 7px;
-  right: 1.6%;
-  bottom: 7px;
-  width: 22.6%;
-  min-height: 0;
-  place-items: center;
-  overflow: visible;
-  border: 0;
-  z-index: 3;
-}
-
-.client-home.home-v2 .spaceverse-hero-brand::before { display: none; }
-
-.client-home.home-v2 .spaceverse-hero-logo-full {
-  display: block;
-  width: 92%;
-  height: 92%;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 7px rgba(129,83,12,.12));
+  display: none !important;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .progress {
   position: absolute;
-  right: 27.3%;
+  right: 24.5%;
   bottom: 17px;
-  left: 27%;
-  height: 6px;
+  left: 18.8%;
+  height: 7px;
   margin: 0;
   overflow: hidden;
-  border: 0;
+  border: 1px solid rgba(135,111,76,.14);
   border-radius: 999px;
-  background: rgba(110,95,74,.17);
-  box-shadow: inset 0 1px 2px rgba(83,61,26,.10);
+  background: #d9d5ce;
+  box-shadow: inset 0 1px 2px rgba(83,61,26,.11);
+  z-index: 4;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .progress i {
+  display: block;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg,#a9650a,#e6b750 62%,#bd7d18);
@@ -9021,20 +9020,23 @@ body,
 
 .client-home.home-v2 .spaceverse-home-hero .max-status-line {
   position: absolute;
-  right: 27.3%;
+  right: 4.3%;
   bottom: 4px;
-  left: 27%;
+  left: 8.2%;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   justify-content: space-between;
+  align-items: center;
   margin: 0;
   color: #655b4f;
-  font-size: 5.8px;
+  font-size: 6.4px;
   line-height: 1;
   white-space: nowrap;
+  z-index: 4;
 }
 
 .client-home.home-v2 .spaceverse-home-hero .max-status-line > span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -9042,6 +9044,8 @@ body,
 .client-home.home-v2 .spaceverse-home-hero .max-status-line > strong {
   flex: 0 0 auto;
   color: #9b620b;
+  font-size: 8.7px;
+  font-weight: 900;
   text-align: right;
 }
 
