@@ -40,7 +40,7 @@ test('approved Home V2 card artwork stays wired while the shell texture is remov
     'profile-card.webp',
     'business-card.webp',
     'wheel-card.webp',
-    'wheel-disc.webp',
+    'wheel-luxury-v1.webp',
     'liters-card.webp',
     'league-card.webp'
   ]) assert.match(css, new RegExp(asset.replace('.', '\\.')));
