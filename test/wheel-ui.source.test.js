@@ -24,24 +24,35 @@ test('home page keeps the approved SPACEVERSE → wheel → liters → league or
   assert.match(index, /id="openPromosButton"/);
 });
 
-test('Second wheel design contains one large prize and twenty narrow sectors', async () => {
-  const app = await readFile(new URL('app.js', root), 'utf8');
+test('Luxury wheel contains one large jackpot and twenty-seven alternating prize sectors', async () => {
+  const [app, styles] = await Promise.all([
+    readFile(new URL('app.js', root), 'utf8'),
+    readFile(new URL('styles.css', root), 'utf8')
+  ]);
   const list = app.match(/const smallPrizes = \[([\s\S]*?)\];/)?.[1] || '';
   const visualPrizeCodes = [...list.matchAll(/'(bonus-(?:5|10|20|50|100)|beer-glass)'/g)]
     .map((match) => match[1]);
 
-  assert.equal(visualPrizeCodes.length, 20);
-  assert.match(app, /code: 'annual-beer'.*start: -22, end: 22/s);
-  assert.match(app, /'bonus-5': '5 бонусов'/);
-  assert.match(app, /'bonus-10': '10 бонусов'/);
-  assert.match(app, /'bonus-20': '20 бонусов'/);
-  assert.match(app, /'bonus-50': '50 бонусов'/);
-  assert.match(app, /'bonus-100': '100 бонусов'/);
-  assert.match(app, /'beer-glass': 'Бокал пива'/);
-  assert.doesNotMatch(app, />\s*(?:5|10|20|50|100)Б\s*</);
+  assert.equal(visualPrizeCodes.length, 27);
+  assert.match(app, /const jackpotDegrees = 34/);
+  assert.match(app, /'bonus-5': '5 б'/);
+  assert.match(app, /'bonus-10': '10 б'/);
+  assert.match(app, /'bonus-20': '20 б'/);
+  assert.match(app, /'bonus-50': '50 б'/);
+  assert.match(app, /'bonus-100': '100 б'/);
+  assert.match(app, /'beer-glass': 'Пиво'/);
+  assert.match(app, /tone: index % 2 === 0 \? 'white' : 'gold'/);
+  assert.match(app, /wheelPoint\(sector\.center, 116\)/);
+  assert.doesNotMatch(app, /labelRotation/);
+  assert.doesNotMatch(app, /transform="rotate\([^"]+\)">\$\{escapeHtml\(sector\.label\)\}/);
+  assert.match(styles, /wheel-luxury-v1\.webp\?v=1/);
+  assert.match(styles, /\.wheel-sector-white/);
+  assert.match(styles, /\.wheel-sector-gold/);
+  assert.match(styles, /wheelJackpotPrism/);
+  assert.doesNotMatch(styles, /\.wheel-disk > \*\s*\{\s*opacity:\s*0/);
 });
 
-test('Wheel screen uses the approved controls and Eye of Providence emblem', async () => {
+test('Wheel screen keeps functional controls and uses the luxury crown hub', async () => {
   const [index, styles] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('styles.css', root), 'utf8')
@@ -50,8 +61,9 @@ test('Wheel screen uses the approved controls and Eye of Providence emblem', asy
   assert.match(index, /id="wheelAvailability">Бесплатное вращение доступно/);
   assert.match(index, /id="wheelSpinButton"[^>]*>Крутить бесплатно</);
   assert.match(index, /id="wheelNextFreeHint">Следующее бесплатное вращение — через 24 часа после этого\./);
-  assert.match(index, /wheel-emblem-triangle/);
-  assert.match(index, /wheel-emblem-eye/);
+  assert.match(index, /<div class="wheel-emblem" aria-hidden="true"><\/div>/);
+  assert.doesNotMatch(index, /wheel-emblem-eye/);
+  assert.match(styles, /\.wheel-emblem::before[\s\S]*content: "♛"/);
   assert.match(index, /id="openWheelRulesButton"[^>]*><span>Документы<\/span>/);
   assert.match(styles, /\.app-shell\.wheel-mode \.bottom-nav\s*\{\s*display:\s*none;/);
   assert.match(styles, /\.wheel-sector-jackpot\s*\{/);
