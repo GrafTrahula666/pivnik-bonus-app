@@ -14,12 +14,13 @@ const result = {
   account: { balance: 5, unlimitedBonus: false, giftBeerLiters: 0 }
 };
 
-function harness({ vk = false, storage = new Map(), userId = '42', status, api, loadStatus } = {}) {
+function harness({ vk = false, storage = new Map(), userId = '42', status, api, loadStatus, renderProfile, toast } = {}) {
   const elements = new Map();
   const state = {
     profile: { id: userId, balance: 100, termsAccepted: true },
     wheel: { busy: false, rotation: 0, status: status === undefined ? { freeAvailable: true, canAffordPaid: true } : status }
   };
+  const toasts = [];
   const context = vm.createContext({
     state, IS_VK: vk, JSON,
     safeStorage: {
@@ -33,12 +34,16 @@ function harness({ vk = false, storage = new Map(), userId = '42', status, api, 
     effectiveWheelStatus: () => state.wheel.status,
     loadWheelStatus: async () => { if (loadStatus) await loadStatus(state); },
     api: api || (async () => result),
-    renderWheelStatus() {}, renderProfile() {}, toast() {}, haptic() {},
+    renderWheelStatus() {},
+    renderProfile: renderProfile || (() => {}),
+    toast: (message) => { toasts.push(message); toast?.(message); },
+    haptic() {},
+    console: { error() {} },
     visualSectorForPrize: () => ({ center: 0 }), waitForWheelStop: async () => {},
     window: { setTimeout() {} }
   });
   vm.runInContext(source, context);
-  return { state, storage, spin: () => vm.runInContext('spinWheel()', context) };
+  return { state, storage, elements, toasts, spin: () => vm.runInContext('spinWheel()', context) };
 }
 
 for (const vk of [false, true]) {
@@ -126,4 +131,32 @@ test('failed status loading unlocks the wheel without reserving a mutation key',
   await h.spin().catch(() => {});
   assert.equal(h.state.wheel.busy, false);
   assert.equal(h.storage.size, 0);
+});
+
+
+test('confirmed wheel prize is never replaced by a later profile rendering exception', async () => {
+  const h = harness({
+    renderProfile: () => { throw new TypeError('segments.forEach is not a function'); }
+  });
+  await h.spin();
+
+  assert.equal(h.elements.get('#wheelResultKicker').textContent, 'Ваш приз');
+  assert.equal(h.elements.get('#wheelResultTitle').textContent, '5 бонусов');
+  assert.equal(h.toasts.some((message) => /segments|forEach/i.test(message)), false);
+});
+
+test('unconfirmed technical exceptions are not rendered verbatim to the user', async () => {
+  const h = harness({
+    api: async () => { throw new TypeError("segments.forEach is not a function; undefined => {}"); }
+  });
+  await h.spin();
+
+  const title = h.elements.get('#wheelResultTitle').textContent;
+  assert.equal(title, 'Не удалось получить ответ. Нажмите «Проверить результат».');
+  assert.doesNotMatch(title, /segments|forEach|undefined|=>/i);
+});
+
+test('beer progress renderer queries a collection before using forEach', () => {
+  assert.match(app, /const segments = \$\$\('#beerProgressBar \.beer-progress-segment'\);/);
+  assert.doesNotMatch(app, /const segments = \$\('#beerProgressBar \.beer-progress-segment'\);/);
 });
