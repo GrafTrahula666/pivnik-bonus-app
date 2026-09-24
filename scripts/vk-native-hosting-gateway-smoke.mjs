@@ -187,6 +187,33 @@ try {
       }
     }
     assert.equal(wheelOpened, true, 'Shop fallback must not permanently block Wheel navigation');
+
+    const wheelVisual = await page.evaluate(() => {
+      const disk = document.querySelector('#wheelDisk');
+      return {
+        sectors: disk?.querySelectorAll('.wheel-sector').length || 0,
+        labels: disk?.querySelectorAll('.wheel-label-pill').length || 0,
+        jackpots: disk?.querySelectorAll('.wheel-sector-jackpot').length || 0,
+        backgroundImage: disk ? getComputedStyle(disk).backgroundImage : '',
+        labelTexts: [...(disk?.querySelectorAll('.wheel-label-pill text') || [])]
+          .map((node) => node.textContent?.trim() || ''),
+        labelTransforms: [...(disk?.querySelectorAll('.wheel-label-pill') || [])]
+          .map((node) => node.getAttribute('transform') || '')
+      };
+    });
+    assert.equal(wheelVisual.sectors, 28, `expected 28 rendered wheel sectors, got ${wheelVisual.sectors}`);
+    assert.equal(wheelVisual.labels, 27, `expected 27 ordinary wheel labels, got ${wheelVisual.labels}`);
+    assert.equal(wheelVisual.jackpots, 1, 'expected one rendered jackpot sector');
+    assert.match(wheelVisual.backgroundImage, /wheel-luxury-v1\.webp/i, 'luxury wheel background asset must be active');
+    assert.ok(
+      wheelVisual.labelTexts.every((label) => /^(?:5|10|20|50|100) б$|^Пиво$/.test(label)),
+      `unexpected visual wheel label: ${JSON.stringify(wheelVisual.labelTexts)}`
+    );
+    assert.ok(
+      wheelVisual.labelTransforms.every((transform) => /^translate\(/.test(transform) && !/rotate/i.test(transform)),
+      `wheel labels must remain horizontally laid out: ${JSON.stringify(wheelVisual.labelTransforms)}`
+    );
+
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
     if (role === 'client') {
       await page.locator('#wheelSpinButton').click();
