@@ -7,6 +7,7 @@ const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const CANONICAL_STYLE_VERSION = '20.9-service-entry-canonical-profile-placement-20260925';
+const HOME_LEAGUE_STYLE_VERSION = `${CANONICAL_STYLE_VERSION}-league-portrait-20260925`;
 const SERVICE_STYLE_VERSION = '20.8-service-white-gold';
 const SERVICE_STYLE_HREF = `/service-white-gold.css?v=${SERVICE_STYLE_VERSION}`;
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
@@ -25,7 +26,7 @@ let index = stripLegacyVisualLayers(await fs.readFile(indexPath, 'utf8'));
 
 index = index.replace(
   /styles\.css\?v=[^"]+/g,
-  `styles.css?v=${CANONICAL_STYLE_VERSION}`
+  `styles.css?v=${HOME_LEAGUE_STYLE_VERSION}`
 );
 index = index.replace(
   /app\.js\?v=[^"]+/g,
@@ -33,7 +34,7 @@ index = index.replace(
 );
 
 if (!index.includes(SERVICE_STYLE_HREF)) {
-  const canonicalStyleTag = `<link rel="stylesheet" href="styles.css?v=${CANONICAL_STYLE_VERSION}" />`;
+  const canonicalStyleTag = `<link rel="stylesheet" href="styles.css?v=${HOME_LEAGUE_STYLE_VERSION}" />`;
   if (!index.includes(canonicalStyleTag)) throw new Error('Canonical styles.css tag not found');
   index = index.replace(canonicalStyleTag, `${canonicalStyleTag}\n  <link rel="stylesheet" href="${SERVICE_STYLE_HREF}" />`);
 }
@@ -61,7 +62,7 @@ for (const asset of forbiddenVisualAssets) {
   if (index.includes(asset)) throw new Error(`Legacy visual layer still wired: ${asset}`);
 }
 
-if (!index.includes(`styles.css?v=${CANONICAL_STYLE_VERSION}`)) {
+if (!index.includes(`styles.css?v=${HOME_LEAGUE_STYLE_VERSION}`)) {
   throw new Error('Canonical SPACEVERSE white-gold stylesheet is not wired');
 }
 if (!index.includes(SERVICE_STYLE_HREF)) {
