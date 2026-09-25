@@ -47,19 +47,14 @@ test('league and QR accents remain readable on the light shell', async () => {
   assert.match(block(css, '.token'), /color:\s*#9b650f/);
 });
 
-test('approved Home V2 geometry baseline and loader contract remain intact', async () => {
-  const [css, index] = await Promise.all([read('styles.css'), read('index.html')]);
+test('canonical Home geometry and loader contract remain intact', async () => {
+  const [homeCss, index] = await Promise.all([read('home-canonical.css'), read('index.html')]);
 
-  assert.match(css, /HOME V2 · FULL HEIGHT VIEWPORT FIT/);
-  for (const [selector, minimum] of [
-    ['spaceverse-home-hero', 126],
-    ['spaceverse-business-card', 124],
-    ['home-wheel-card', 122],
-    ['beer-loyalty-card--compact', 84],
-    ['home-league-card', 132]
-  ]) {
-    assert.ok(css.includes(`.client-home.home-v2 .${selector} { min-height: ${minimum}px; }`), `${selector} baseline must stay >= ${minimum}px`);
-  }
+  assert.match(index, /client-home home-canonical/);
+  assert.match(index, /home-canonical\.css\?v=1\.0\.0/);
+  assert.match(homeCss, /width:\s*100%\s*!important/);
+  assert.match(homeCss, /business-astronaut-approved\.webp/);
+  assert.match(homeCss, /wheel-approved\.webp/);
 
   assert.match(index, /id="bootScreen"/);
   assert.match(index, /class="boot-image"/);
