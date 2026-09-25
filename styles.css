@@ -9387,8 +9387,13 @@ body,
 }
 
 .client-home.home-v2 .home-league-card::after {
-  background: url('/assets/home-v2/league-card.webp?v=3') center calc(59% + 21px) / 100% auto no-repeat;
-  clip-path: inset(91% 0 0);
+  /* The artwork's lower edge is y=213 in a 600x267 image. Anchor that
+     coordinate to the card bottom at every viewport, without a pixel offset. */
+  inset: auto 0 0;
+  aspect-ratio: 600 / 267;
+  transform: translateY(20.2247%);
+  background: url('/assets/home-v2/league-card.webp?v=3') center / 100% 100% no-repeat;
+  clip-path: inset(72% 0 18%);
 }
 
 .client-home.home-v2 .home-league-card > * {
