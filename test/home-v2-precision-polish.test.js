@@ -8,11 +8,11 @@ test('Home V2 exposes the real profile avatar and canonical live status layout',
   const css = await read('styles.css');
   assert.match(css, /V20\.4 · HOME V2 PRECISION POLISH/);
   assert.match(css, /Profile card: canonical live layout based on the approved white-gold reference/);
-  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*top: 14px[\s\S]*left: 3\.8%[\s\S]*width: 74px[\s\S]*height: 74px/);
+  assert.match(css, /\.spaceverse-home-hero \.profile-avatar[\s\S]*top: 50%[\s\S]*left: 3\.8%[\s\S]*aspect-ratio: 1/);
   assert.match(css, /\.spaceverse-home-hero \.hero-name-row[\s\S]*grid-template-columns: minmax\(0, 1fr\) 30px/);
   assert.match(css, /\.hero-qr-button[\s\S]*width: 30px[\s\S]*height: 30px[\s\S]*justify-self: end/);
-  assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 74px[\s\S]*left: 27%/);
-  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 27%[\s\S]*right: 27\.3%/);
+  assert.match(css, /\.spaceverse-home-hero \.status-button[\s\S]*top: 74px[\s\S]*left: 25%/);
+  assert.match(css, /\.spaceverse-home-hero \.progress[\s\S]*left: 25%[\s\S]*right: 29\.3%/);
   assert.match(css, /\.spaceverse-hero-brand[\s\S]*display: grid !important/);
 });
 
@@ -39,7 +39,7 @@ test('Home V2 precision polish is cache-busted', async () => {
   ]);
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical'/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
 });
 
 

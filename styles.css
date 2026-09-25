@@ -8822,10 +8822,12 @@ body,
 .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
   display: grid !important;
   position: absolute;
-  top: 14px;
+  top: 50%;
   left: 3.8%;
-  width: 74px;
-  height: 74px;
+  width: min(74px, calc(21.2% - 8px));
+  height: auto;
+  aspect-ratio: 1;
+  transform: translateY(-50%);
   place-items: center;
   overflow: hidden !important;
   border: 2px solid rgba(183,123,24,.46);
@@ -8851,7 +8853,7 @@ body,
 
 .client-home.home-v2 .spaceverse-home-hero .client-identity {
   top: 10px;
-  left: 27%;
+  left: 25%;
   width: 45.5%;
   height: 64px;
 }
@@ -8911,7 +8913,7 @@ body,
 .client-home.home-v2 .spaceverse-home-hero .balance {
   position: absolute;
   top: 43px;
-  left: 27%;
+  left: 25%;
   width: 45.5%;
   display: flex;
   align-items: baseline;
@@ -8930,7 +8932,7 @@ body,
 .client-home.home-v2 .spaceverse-home-hero .status-button {
   position: absolute;
   top: 74px;
-  left: 27%;
+  left: 25%;
   width: 45.5%;
   min-height: 22px;
   display: block;
@@ -8983,6 +8985,9 @@ body,
   width: 22.6%;
   min-height: 0;
   place-items: center;
+  align-content: center;
+  grid-template-rows: auto auto;
+  gap: 3px;
   overflow: visible;
   border: 0;
   z-index: 3;
@@ -8992,17 +8997,18 @@ body,
 
 .client-home.home-v2 .spaceverse-hero-logo-full {
   display: block;
-  width: 92%;
-  height: 92%;
+  width: min(74px, 92%);
+  height: auto;
+  aspect-ratio: 1;
   object-fit: contain;
   filter: drop-shadow(0 4px 7px rgba(129,83,12,.12));
 }
 
 .client-home.home-v2 .spaceverse-home-hero .progress {
   position: absolute;
-  right: 27.3%;
+  right: 29.3%;
   bottom: 17px;
-  left: 27%;
+  left: 25%;
   height: 6px;
   margin: 0;
   overflow: hidden;
@@ -9021,9 +9027,9 @@ body,
 
 .client-home.home-v2 .spaceverse-home-hero .max-status-line {
   position: absolute;
-  right: 27.3%;
+  right: 29.3%;
   bottom: 4px;
-  left: 27%;
+  left: 25%;
   display: flex;
   gap: 8px;
   justify-content: space-between;
@@ -9043,6 +9049,17 @@ body,
   flex: 0 0 auto;
   color: #9b620b;
   text-align: right;
+}
+
+.client-home.home-v2 .spaceverse-hero-wordmark {
+  display: block;
+  color: #17130e;
+  font-size: clamp(6px, 1.85vw, 9px);
+  font-weight: 600;
+  letter-spacing: .1em;
+  line-height: 1;
+  white-space: nowrap;
+  text-align: center;
 }
 
 /* The SPACEVERSE teaser artwork already contains the cube in the astronaut's hand. */
