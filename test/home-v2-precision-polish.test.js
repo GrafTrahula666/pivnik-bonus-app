@@ -18,9 +18,8 @@ test('Home V2 exposes the real profile avatar and canonical live status layout',
 
 test('Home wheel prize and CTA keep fixed centered alignment', async () => {
   const css = await read('styles.css');
-  assert.match(css, /\.home-wheel-prize[\s\S]*top: 39px/);
-  assert.match(css, /\.home-wheel-cta[\s\S]*justify-content: center/);
-  assert.match(css, /\.home-wheel-cta[\s\S]*font-size: 12px/);
+  assert.match(css, /\.client-home\.home-v2 \.home-wheel-prize\s*\{[^}]*top: 38px;[^}]*align-items: center;[^}]*justify-content: center;[^}]*font-size: clamp\(9px, 2\.7vw, 12px\)/);
+  assert.match(css, /\.client-home\.home-v2 \.home-wheel-cta\s*\{[^}]*align-items: center;[^}]*justify-content: center;[^}]*font-size: clamp\(13px, 3\.6vw, 17px\)/);
   assert.match(css, /\.home-wheel-timer[\s\S]*text-align: center/);
 });
 
