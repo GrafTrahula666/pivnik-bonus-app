@@ -141,6 +141,10 @@ const captureVisualState = (page) => page.evaluate(() => {
       && node.position === 'fixed' && node.height > 300)
   };
 });
+const waitForVisibleScreenPaint = (page) => page.waitForFunction(() => {
+  const screen = document.querySelector('.screen.active');
+  return screen && getComputedStyle(screen).opacity === '1';
+});
 try {
   for (const role of ['client', 'admin', 'staff']) {
     scenario = { role, accepted: role !== 'client', calls: [], preflights: [], unexpected: [], spinRequests: [] };
@@ -192,6 +196,7 @@ try {
     await page.locator('.bottom-nav [data-target="client"]').click({ timeout: 4000 });
     await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
     if (role === 'client') {
+      await waitForVisibleScreenPaint(page);
       scenario.homeOverlays = await page.evaluate(() => [...document.querySelectorAll('.modal.open')].map(node => node.id));
       scenario.homeVisual = await captureVisualState(page);
       await page.screenshot({ path: path.join(outDir, 'wheel-home.png'), fullPage: true });
@@ -230,6 +235,7 @@ try {
     assert.ok(wheelHeading.labelHidden && wheelHeading.backText === '←' && wheelHeading.titleLeft >= wheelHeading.backRight,
       `wheel back label must not overlap title: ${JSON.stringify(wheelHeading)}`);
     if (role === 'client') {
+      await waitForVisibleScreenPaint(page);
       scenario.readyOverlays = wheelHeading.openModals;
       scenario.readyVisual = await captureVisualState(page);
       await page.screenshot({ path: path.join(outDir, 'wheel-ready.png'), fullPage: true });
