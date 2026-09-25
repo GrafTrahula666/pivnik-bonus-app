@@ -4,43 +4,35 @@ import test from 'node:test';
 
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
-test('Home V2 fills large iPhone mini-app viewports without shrinking approved cards', async () => {
-  const css = await read('styles.css');
-  const marker = css.indexOf('HOME V2 · FULL HEIGHT VIEWPORT FIT');
-  assert.ok(marker >= 0, 'full-height Home V2 marker must exist');
-  const block = css.slice(marker, css.indexOf('/* V20.2.1 · ACHIEVEMENTS WHITE-GOLD REPAIR */', marker));
+test('canonical Home owns the five-card stack on one shared width', async () => {
+  const [index, css] = await Promise.all([read('index.html'), read('home-canonical.css')]);
+  assert.match(index, /client-home home-canonical/);
+  assert.doesNotMatch(index, /client-home home-v2/);
+  assert.match(index, /home-canonical\.css\?v=1\.0\.0/);
 
-  assert.match(block, /height:\s*calc\(100dvh - var\(--home-v2-topbar-reserve\) - var\(--home-v2-bottom-reserve\)\)/);
-  assert.match(block, /min-height:\s*636px/);
-  assert.match(block, /grid-template-rows:[\s\S]*minmax\(126px,\s*1\.05fr\)[\s\S]*minmax\(124px,\s*1\.03fr\)[\s\S]*minmax\(122px,\s*1\.02fr\)[\s\S]*minmax\(84px,\s*\.70fr\)[\s\S]*minmax\(132px,\s*1\.10fr\)/);
-  assert.match(block, /\.client-home\.home-v2 > \.spaceverse-home-hero,[\s\S]*height:\s*100%/);
-  assert.match(block, /@media \(max-width: 390px\) and \(min-height: 780px\)[\s\S]*\.client-home\.home-v2\.active[\s\S]*--home-v2-topbar-reserve:\s*80px/);
-  assert.match(block, /\.platform-telegram \.client-home\.home-v2\.active[\s\S]*--home-v2-topbar-reserve:\s*60px/);
-
-  for (const compressed of ['height: 114px', 'height: 112px', 'height: 110px', 'height: 74px', 'height: 118px']) {
-    assert.equal(block.includes(compressed), false, `legacy forced shrink remains: ${compressed}`);
-  }
+  const equalWidth = /\.client-home\.home-canonical > \.spaceverse-home-hero,[\s\S]*?\.home-league-card \{[\s\S]*?width:\s*100%\s*!important[\s\S]*?margin:\s*0\s*!important/;
+  assert.match(css, equalWidth);
+  assert.doesNotMatch(css, /transform:\s*scale\(/);
 });
 
-test('short mini-app viewports scroll instead of compressing Home V2 artwork', async () => {
-  const css = await read('styles.css');
-  const marker = css.indexOf('HOME V2 · FULL HEIGHT VIEWPORT FIT');
-  const block = css.slice(marker, css.indexOf('/* V20.2.1 · ACHIEVEMENTS WHITE-GOLD REPAIR */', marker));
-
-  assert.match(block, /\.client-home\.home-v2 \.spaceverse-home-hero \{ min-height: 126px; \}/);
-  assert.match(block, /\.client-home\.home-v2 \.spaceverse-business-card \{ min-height: 124px; \}/);
-  assert.match(block, /\.client-home\.home-v2 \.home-wheel-card \{ min-height: 122px; \}/);
-  assert.match(block, /\.client-home\.home-v2 \.beer-loyalty-card--compact \{ min-height: 84px; \}/);
-  assert.match(block, /\.client-home\.home-v2 \.home-league-card \{ min-height: 132px; \}/);
-  assert.doesNotMatch(block, /transform:\s*scale/);
+test('canonical Home keeps approved card heights without cross-card shifts', async () => {
+  const css = await read('home-canonical.css');
+  assert.match(css, /\.spaceverse-business-card[\s\S]*height:\s*124px\s*!important/);
+  assert.match(css, /\.home-wheel-card[\s\S]*height:\s*122px\s*!important/);
+  assert.match(css, /\.beer-loyalty-card--compact[\s\S]*height:\s*84px\s*!important/);
+  assert.match(css, /\.home-league-card[\s\S]*height:\s*132px\s*!important/);
+  assert.match(css, /\.spaceverse-home-hero[\s\S]*aspect-ratio:\s*3\s*\/\s*1/);
 });
 
-test('Home V2 viewport fix is cache-busted in the canonical shell', async () => {
-  const [index, shell] = await Promise.all([
+test('canonical Home survives shell materialization as a separate source', async () => {
+  const [index, shell, materializer] = await Promise.all([
     read('index.html'),
-    read('scripts/apply-red-cosmos-v2-shell-final.mjs')
+    read('scripts/apply-red-cosmos-v2-shell-final.mjs'),
+    read('scripts/materialize-runtime-patches.mjs')
   ]);
-  assert.match(index, /styles\.css\?v=20\.11-profile-original-artwork/);
-  assert.match(index, /app\.js\?v=20\.11-profile-original-artwork/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.11-profile-original-artwork'/);
+  assert.match(index, /home-canonical\.css\?v=1\.0\.0/);
+  assert.match(shell, /HOME_STYLE_VERSION = '1\.0\.0'/);
+  assert.match(shell, /HOME_STYLE_HREF/);
+  assert.match(materializer, /canonical Home stylesheet/);
+  assert.match(materializer, /canonical Home namespace/);
 });
