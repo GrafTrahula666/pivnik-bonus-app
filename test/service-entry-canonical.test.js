@@ -42,6 +42,6 @@ test('canonical cache key remains materializer-compatible', async () => {
 
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical'/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
   assert.match(materializer, /styles\.css\?v=20\.9-service-entry-canonical/);
 });
