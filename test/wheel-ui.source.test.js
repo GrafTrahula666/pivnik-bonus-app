@@ -55,7 +55,7 @@ test('Luxury wheel contains one large jackpot and twenty-seven alternating prize
 
 test('rendering beer progress updates every segment without throwing on wheel result refresh', async () => {
   const source = await readFile(new URL('app.js', root), 'utf8');
-  const body = source.match(/function renderBeer\\([\\s\\S]*?\\n}\\n\\nfunction imageMarkup/)?.[0].replace(/\\n\\nfunction imageMarkup$/, '');
+  const body = source.match(/function renderBeer\([\s\S]*?\n}\n\nfunction imageMarkup/)?.[0].replace(/\n\nfunction imageMarkup$/, '');
   assert.ok(body, 'renderBeer must be available');
   const segments = Array.from({ length: 14 }, () => ({
     style: { setProperty(name, value) { this[name] = value; } },
