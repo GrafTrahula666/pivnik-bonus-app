@@ -65,11 +65,12 @@ test('rendering beer progress updates every segment without throwing on wheel re
   for (const id of ['beerProgressBar', 'beerProgressText', 'beerRemainingText', 'beerGiftBalance', 'beerGiftReady', 'beerLoyaltyCard']) {
     nodes.set(`#${id}`, { textContent: '', setAttribute() {}, classList: { toggle() {} } });
   }
-  const render = runInNewContext(`${body}; renderBeer`, {
+  const context = {
     $: (selector) => nodes.get(selector),
-    $: (selector) => selector === '#beerProgressBar .beer-progress-segment' ? segments : [],
     fmtLiters: String
-  });
+  };
+  context[String.fromCharCode(36, 36)] = (selector) => selector === '#beerProgressBar .beer-progress-segment' ? segments : [];
+  const render = runInNewContext(`${body}; renderBeer`, context);
   render({ beer: { paidTargetLiters: 14, progressLiters: 2.5, nextGiftLiters: 11.5, giftLitersBalance: 1 } });
   assert.equal(segments[0].style['--segment-fill'], '100%');
   assert.equal(segments[1].style['--segment-fill'], '100%');
