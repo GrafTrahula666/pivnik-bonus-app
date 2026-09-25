@@ -14,6 +14,12 @@ test('admin broadcast backend is admin-only and supports Telegram plus VK', () =
   assert.match(server, /BROADCAST_MAX_TEXT = 3000/);
   assert.match(server, /BROADCAST_MAX_RECIPIENTS = 500/);
   assert.match(server, /api\.telegram\.org\/bot\$\{botToken\}\/sendMessage/);
+  assert.match(server, /TELEGRAM_BROADCAST_MAX_RETRY_AFTER_SECONDS = 15/);
+  assert.match(server, /payload\?\.parameters\?\.retry_after/);
+  assert.match(server, /response\.status === 429/);
+  assert.match(server, /retryAttempt < 1/);
+  assert.match(server, /sendTelegramMessage\(telegramId, text, retryAttempt \+ 1\)/);
+  assert.doesNotMatch(server, /allow_paid_broadcast/);
   assert.match(server, /api\.vk\.com\/method\/messages\.send/);
   assert.match(server, /VK_COMMUNITY_TOKEN/);
   assert.match(server, /random_id/);
