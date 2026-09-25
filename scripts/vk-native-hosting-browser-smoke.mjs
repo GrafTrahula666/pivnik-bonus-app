@@ -117,7 +117,7 @@ try {
       qrIcon: read('.bottom-nav .qr-nav-button > span'),
       profileLink: read('[data-screen="profile"], [data-target="profile"]'),
       homeGeometry: (() => {
-        const home = document.querySelector('.client-home.home-v2.active');
+        const home = document.querySelector('.client-home.home-canonical.active');
         const nav = document.querySelector('.bottom-nav');
         const selectors = {
           hero: '.spaceverse-home-hero',
