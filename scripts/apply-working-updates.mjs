@@ -83,6 +83,14 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
     overlay = overlay.replace(legacyFallback, safeFallback);
     await writeText(path, overlay);
   }
+  // The archived payload is replayed on every build. Keep the wheel Back
+  // button compact after restoring it, or its label crosses the wheel title.
+  const legacyWheelBack = "    button.textContent = '← Назад';";
+  const compactWheelBack = "    button.textContent = button.id === 'wheelBackButton' ? '←' : '← Назад';";
+  if (!overlay.includes(compactWheelBack)) {
+    overlay = replaceRequired(overlay, legacyWheelBack, compactWheelBack, 'wheel back label');
+    await writeText(path, overlay);
+  }
 }
 
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
