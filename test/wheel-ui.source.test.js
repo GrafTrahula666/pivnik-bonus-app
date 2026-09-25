@@ -86,8 +86,8 @@ test('materialized RED COSMOS keeps the wheel back label compact', async () => {
     readFile(new URL('scripts/apply-working-updates.mjs', root), 'utf8')
   ]);
   assert.match(overlay, /button\.id === 'wheelBackButton' \? '←' : '← Назад'/);
-  assert.match(v22, /wheelBack\.innerHTML = '<span aria-hidden="true">←<\\/span>';/);
-  assert.doesNotMatch(v22, /wheelBack\.innerHTML = '<span aria-hidden="true">←<\\/span><span>Назад<\\/span>';/);
+  assert.ok(v22.includes("wheelBack.innerHTML = '<span aria-hidden=\"true\">←</span>';"));
+  assert.ok(!v22.includes("wheelBack.innerHTML = '<span aria-hidden=\"true\">←</span><span>Назад</span>';"));
   assert.match(materializer, /compactWheelBack/);
   assert.match(materializer, /wheel back label/);
 });
