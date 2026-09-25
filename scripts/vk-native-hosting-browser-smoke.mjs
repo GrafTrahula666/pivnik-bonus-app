@@ -179,6 +179,47 @@ try {
 
   await page.screenshot({ path: path.join(outDir, 'vk-home.png'), fullPage: true });
 
+  // Exercise the supplied Home artwork at actual phone sizes with live text.
+  const homeCardEvidence = [];
+  for (const viewport of [{ width: 320, height: 768 }, { width: 390, height: 844 }, { width: 430, height: 932 }]) {
+    await page.setViewportSize(viewport);
+    for (const status of ['Доступно', '24:00:00']) {
+      const geometry = await page.evaluate((text) => {
+        document.querySelector('#homeWheelStatus').textContent = text;
+        document.querySelectorAll('#homeLeaderboardPreview > span').forEach((node, index) => {
+          node.querySelector('b').textContent = ['SevTrout', 'Evstag90', 'Marina'][index];
+          node.querySelector('strong').textContent = ['14 806 ₽', '10 229 ₽', '4 301 ₽'][index];
+        });
+        const card = document.querySelector('.home-wheel-card');
+        const rect = card.getBoundingClientRect();
+        const cta = card.querySelector('.home-wheel-cta > span');
+        const ctaRect = cta.getBoundingClientRect();
+        const statusNode = card.querySelector('#homeWheelStatus');
+        const statusRect = statusNode.getBoundingClientRect();
+        const timerRect = card.querySelector('.home-wheel-timer').getBoundingClientRect();
+        return {
+          viewport: innerWidth, text,
+          artwork: getComputedStyle(card).backgroundImage,
+          ctaText: cta.textContent,
+          ctaCenterErrorX: Math.abs((ctaRect.left + ctaRect.right) / 2 - (rect.left + rect.width * .2605)),
+          ctaCenterErrorY: Math.abs((ctaRect.top + ctaRect.bottom) / 2 - (rect.top + rect.height * .756)),
+          statusFits: statusNode.scrollWidth <= statusNode.clientWidth && statusRect.width <= timerRect.width && statusRect.height <= timerRect.height,
+          duplicatedWheelVisible: getComputedStyle(card.querySelector('.home-wheel-visual')).display !== 'none'
+        };
+      }, status);
+      assert(geometry.artwork.includes('wheel-card-reference-20260926.webp'), 'supplied wheel artwork missing');
+      assert(geometry.ctaText === 'ВРАЩАТЬ', 'wheel CTA text changed');
+      assert(geometry.ctaCenterErrorX <= 1 && geometry.ctaCenterErrorY <= 1, `wheel CTA is off center: ${JSON.stringify(geometry)}`);
+      assert(geometry.statusFits, `wheel status overflows the clock slot: ${JSON.stringify(geometry)}`);
+      assert(!geometry.duplicatedWheelVisible, 'old wheel overlay covers supplied artwork');
+      homeCardEvidence.push(geometry);
+      const stateName = status === 'Доступно' ? 'ready' : 'countdown';
+      await page.screenshot({ path: path.join(outDir, `home-cards-${viewport.width}-${stateName}.png`), fullPage: true });
+    }
+  }
+  await fs.writeFile(path.join(outDir, 'home-cards-evidence.json'), JSON.stringify(homeCardEvidence, null, 2));
+  await page.setViewportSize({ width: 390, height: 844 });
+
   await page.evaluate(() => {
     document.querySelector('.screen.client-home')?.classList.remove('active');
     document.querySelector('[data-screen="spaceverse-business"]')?.classList.add('active');
