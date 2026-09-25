@@ -138,6 +138,7 @@ async function inspectPlatform(platform) {
             home: homeRect ? { top: homeRect.top, bottom: homeRect.bottom, height: homeRect.height } : null,
             nav: navRect ? { top: navRect.top, bottom: navRect.bottom, height: navRect.height } : null,
             bottomGap: homeRect && navRect ? navRect.top - homeRect.bottom : null,
+            contentBottomGap: cards.league && navRect ? navRect.top - cards.league.bottom : null,
             cards
           };
         })()
