@@ -9167,7 +9167,7 @@ body,
   position: absolute;
   top: 59.9%;
   left: 50%;
-  width: clamp(32px, 10vw, 43px);
+  width: 38%;
   height: auto;
   aspect-ratio: 1;
   margin: 0;
