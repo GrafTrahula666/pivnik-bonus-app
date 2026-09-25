@@ -153,7 +153,7 @@ test('complete and fail persist only aggregate delivery outcome and safe error c
           completed_at: new Date().toISOString()
         })], rowCount: 1 };
       }
-      return { rows: [campaignRow({ status: 'failed', error_code: 'broadcast_failed' })], rowCount: 1 };
+      return { rows: [campaignRow({ status: 'failed', error_code: params[1] })], rowCount: 1 };
     },
     connect: async () => { throw new Error('not used'); }
   };
