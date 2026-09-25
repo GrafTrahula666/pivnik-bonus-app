@@ -154,6 +154,35 @@ body::after {
 
 .wheel-head-spacer { display: none !important; }
 
+/* Keep the wheel title centered after V22 adds a text label to Back. */
+.wheel-page-head {
+  grid-template-columns: 44px minmax(0, 1fr) 44px !important;
+  gap: 6px !important;
+}
+
+.wheel-page-head .wheel-back.v22-back-button {
+  box-sizing: border-box;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #8b5b14 !important;
+  border-color: rgba(218, 161, 91, .28) !important;
+  background: rgba(255,252,247,.90) !important;
+}
+
+.wheel-page-head .wheel-back.v22-back-button > span:not(:first-child),
+.wheel-page-head .wheel-back::after {
+  display: none !important;
+}
+
+.wheel-page-head .wheel-head-spacer {
+  display: block !important;
+  width: 44px !important;
+}
+
 /* Admin is tabbed instead of one endless page. */
 .v22-admin-tabs {
   position: sticky;

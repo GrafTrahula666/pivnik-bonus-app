@@ -138,6 +138,7 @@ try {
       await page.locator('#acceptTerms').click();
       await page.locator('#consentModal').waitFor({ state: 'hidden' });
       assert.ok(scenario.calls.some(({ pathname }) => pathname === '/api/me/consent'));
+      await page.waitForFunction(() => !document.querySelector('#toast')?.classList.contains('show'));
     }
     await page.waitForFunction(() => window.__PIVNIK_VK_PROFILE_HYDRATION__?.profile?.id === '4242');
     assert.ok(scenario.calls.some(({ pathname, body }) => pathname === '/api/auth' && body.user?.id === 4242), 'delayed hydration must pass the real gateway write guard');
@@ -191,6 +192,18 @@ try {
       }
     }
     assert.equal(wheelOpened, true, 'Shop fallback must not permanently block Wheel navigation');
+    const wheelHeading = await page.evaluate(() => {
+      const back = document.querySelector('#wheelBackButton');
+      const title = document.querySelector('.wheel-page-head h2');
+      const label = back?.querySelector('span:last-child');
+      return {
+        backRight: back?.getBoundingClientRect().right,
+        titleLeft: title?.getBoundingClientRect().left,
+        labelHidden: !label || getComputedStyle(label).display === 'none'
+      };
+    });
+    assert.ok(wheelHeading.labelHidden && wheelHeading.titleLeft >= wheelHeading.backRight,
+      `wheel back label must not overlap title: ${JSON.stringify(wheelHeading)}`);
     if (role === 'client') {
       await page.screenshot({ path: path.join(outDir, 'wheel-ready.png'), fullPage: true });
     }
