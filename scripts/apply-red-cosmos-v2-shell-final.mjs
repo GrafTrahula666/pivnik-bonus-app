@@ -9,6 +9,8 @@ const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const CANONICAL_STYLE_VERSION = '20.11-profile-original-artwork';
 const SERVICE_STYLE_VERSION = '20.8-service-white-gold';
 const SERVICE_STYLE_HREF = `/service-white-gold.css?v=${SERVICE_STYLE_VERSION}`;
+const HOME_STYLE_VERSION = '1.0.0';
+const HOME_STYLE_HREF = `home-canonical.css?v=${HOME_STYLE_VERSION}`;
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
 
 function stripLegacyVisualLayers(source) {
@@ -32,10 +34,16 @@ index = index.replace(
   `app.js?v=${CANONICAL_STYLE_VERSION}`
 );
 
-if (!index.includes(SERVICE_STYLE_HREF)) {
+if (!index.includes(HOME_STYLE_HREF)) {
   const canonicalStyleTag = `<link rel="stylesheet" href="styles.css?v=${CANONICAL_STYLE_VERSION}" />`;
   if (!index.includes(canonicalStyleTag)) throw new Error('Canonical styles.css tag not found');
-  index = index.replace(canonicalStyleTag, `${canonicalStyleTag}\n  <link rel="stylesheet" href="${SERVICE_STYLE_HREF}" />`);
+  index = index.replace(canonicalStyleTag, `${canonicalStyleTag}\n  <link rel="stylesheet" href="${HOME_STYLE_HREF}" />`);
+}
+
+if (!index.includes(SERVICE_STYLE_HREF)) {
+  const homeStyleTag = `<link rel="stylesheet" href="${HOME_STYLE_HREF}" />`;
+  if (!index.includes(homeStyleTag)) throw new Error('Canonical Home stylesheet tag not found');
+  index = index.replace(homeStyleTag, `${homeStyleTag}\n  <link rel="stylesheet" href="${SERVICE_STYLE_HREF}" />`);
 }
 
 if (!index.includes(INTERACTION_FALLBACK_SRC)) {
@@ -63,6 +71,9 @@ for (const asset of forbiddenVisualAssets) {
 
 if (!index.includes(`styles.css?v=${CANONICAL_STYLE_VERSION}`)) {
   throw new Error('Canonical SPACEVERSE white-gold stylesheet is not wired');
+}
+if (!index.includes(HOME_STYLE_HREF)) {
+  throw new Error('Canonical Home stylesheet is not wired');
 }
 if (!index.includes(SERVICE_STYLE_HREF)) {
   throw new Error('Service white-gold stylesheet is not wired');
