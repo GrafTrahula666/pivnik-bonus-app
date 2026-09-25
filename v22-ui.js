@@ -37,7 +37,7 @@
       wheelBack.dataset.v22BackReady = '1';
       wheelBack.classList.remove('icon-btn');
       wheelBack.classList.add('v22-back-button');
-      wheelBack.innerHTML = '<span aria-hidden="true">←</span><span>Назад</span>';
+      wheelBack.innerHTML = '<span aria-hidden="true">←</span>';
       wheelBack.setAttribute('aria-label', 'Назад');
     }
     attachHistoryBack(wheelBack);
