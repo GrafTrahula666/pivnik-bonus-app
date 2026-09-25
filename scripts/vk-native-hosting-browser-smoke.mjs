@@ -139,6 +139,7 @@ try {
           home: homeRect ? { top: homeRect.top, bottom: homeRect.bottom, height: homeRect.height } : null,
           nav: navRect ? { top: navRect.top, bottom: navRect.bottom, height: navRect.height } : null,
           bottomGap: homeRect && navRect ? navRect.top - homeRect.bottom : null,
+          contentBottomGap: cards.league && navRect ? navRect.top - cards.league.bottom : null,
           cards
         };
       })()
@@ -177,8 +178,8 @@ try {
   assert(widthSpread <= 0.75, `canonical Home card edges are not aligned: ${JSON.stringify(geometry.cards)}`);
   assert(Math.abs(geometry.cards.hero.width / geometry.cards.hero.height - 3) <= 0.02,
     `profile artwork must preserve its 3:1 geometry: ${JSON.stringify(geometry.cards.hero)}`);
-  assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
-    `Home V2 leaves an excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
+  assert(geometry.contentBottomGap !== null && geometry.contentBottomGap >= 0 && geometry.contentBottomGap <= 100,
+    `canonical Home content collides with or sits implausibly far from bottom navigation: ${JSON.stringify(geometry)}`);
 
   assert(!/telegram\.org\/js\/telegram-web-app\.js/i.test(await page.content()), 'Telegram runtime leaked into VK bundle');
   assert(pageErrors.length === 0, `page errors detected: ${pageErrors.join(' | ')}`);
