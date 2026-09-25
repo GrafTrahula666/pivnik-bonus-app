@@ -724,11 +724,14 @@ function renderWheelStatus() {
     availability.textContent = 'Результат предыдущего вращения ещё не подтверждён.';
     nextFreeHint.textContent = 'Повторная проверка использует то же вращение.';
     balanceHint.textContent = 'Новое вращение станет доступно после проверки.';
-    if (homeStatus) homeStatus.textContent = 'Проверьте результат вращения';
+    if (homeStatus) homeStatus.textContent = current && !current.freeAvailable && current.nextFreeAt
+      ? wheelDurationLabel(new Date(current.nextFreeAt).getTime() - Date.now())
+      : '';
     return;
   }
 
   if (!current) {
+    if (homeStatus) homeStatus.textContent = '';
     button.textContent = 'Проверяем доступность…';
     button.disabled = true;
     availability.textContent = 'Синхронизируем время последнего вращения.';
@@ -761,9 +764,7 @@ function renderWheelStatus() {
       ? `Баланс: ${fmt(current.balance)} бонусов`
       : `На балансе ${fmt(current.balance)} · для вращения нужно ${paidCost}`;
   if (homeStatus) {
-    const homeLabel = $('#homeWheelTimerLabel');
-    if (homeLabel) homeLabel.textContent = free ? 'Вращение' : 'Следующее вращение через';
-    homeStatus.textContent = free ? 'Доступно сейчас' : wheelDurationLabel(remaining);
+    homeStatus.textContent = free ? 'Доступно' : wheelDurationLabel(remaining);
   }
 }
 
