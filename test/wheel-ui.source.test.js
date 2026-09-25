@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 
 const root = new URL('../', import.meta.url);
@@ -50,6 +51,41 @@ test('Luxury wheel contains one large jackpot and twenty-seven alternating prize
   assert.match(styles, /\.wheel-sector-gold/);
   assert.match(app, /wheelJackpotPrism/);
   assert.doesNotMatch(styles, /\.wheel-disk > \*\s*\{\s*opacity:\s*0/);
+});
+
+test('rendering beer progress updates every segment without throwing on wheel result refresh', async () => {
+  const source = await readFile(new URL('app.js', root), 'utf8');
+  const body = source.match(/function renderBeer\\([\\s\\S]*?\\n}\\n\\nfunction imageMarkup/)?.[0].replace(/\\n\\nfunction imageMarkup$/, '');
+  assert.ok(body, 'renderBeer must be available');
+  const segments = Array.from({ length: 14 }, () => ({
+    style: { setProperty(name, value) { this[name] = value; } },
+    classList: { toggle() {} }
+  }));
+  const nodes = new Map();
+  for (const id of ['beerProgressBar', 'beerProgressText', 'beerRemainingText', 'beerGiftBalance', 'beerGiftReady', 'beerLoyaltyCard']) {
+    nodes.set(`#${id}`, { textContent: '', setAttribute() {}, classList: { toggle() {} } });
+  }
+  const render = runInNewContext(`${body}; renderBeer`, {
+    $: (selector) => nodes.get(selector),
+    $: (selector) => selector === '#beerProgressBar .beer-progress-segment' ? segments : [],
+    fmtLiters: String
+  });
+  render({ beer: { paidTargetLiters: 14, progressLiters: 2.5, nextGiftLiters: 11.5, giftLitersBalance: 1 } });
+  assert.equal(segments[0].style['--segment-fill'], '100%');
+  assert.equal(segments[1].style['--segment-fill'], '100%');
+  assert.equal(segments[2].style['--segment-fill'], '50%');
+  assert.equal(segments[3].style['--segment-fill'], '0%');
+  assert.equal(nodes.get('#beerGiftBalance').textContent, '1');
+});
+
+test('materialized RED COSMOS keeps the wheel back label compact', async () => {
+  const [overlay, materializer] = await Promise.all([
+    readFile(new URL('red-cosmos-v2.js', root), 'utf8'),
+    readFile(new URL('scripts/apply-working-updates.mjs', root), 'utf8')
+  ]);
+  assert.match(overlay, /button\.id === 'wheelBackButton' \? '←' : '← Назад'/);
+  assert.match(materializer, /compactWheelBack/);
+  assert.match(materializer, /wheel back label/);
 });
 
 test('Wheel screen keeps functional controls and uses the luxury crown hub', async () => {
