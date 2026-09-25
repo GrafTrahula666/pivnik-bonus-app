@@ -120,6 +120,27 @@ gatewayOrigin = `http://127.0.0.1:${gateway.address().port}`;
 await new Promise((resolve) => staticServer.listen(0, '127.0.0.1', resolve));
 staticOrigin = `http://127.0.0.1:${staticServer.address().port}`;
 const browser = await chromium.launch({ headless: true });
+const captureVisualState = (page) => page.evaluate(() => {
+  const css = (selector) => {
+    const node = document.querySelector(selector);
+    if (!node) return null;
+    const style = getComputedStyle(node);
+    return { display: style.display, opacity: style.opacity, filter: style.filter,
+      visibility: style.visibility, background: style.backgroundColor };
+  };
+  return {
+    shell: css('#appShell'), main: css('#appShell > main'), active: css('.screen.active'),
+    wheel: css('#wheelDisk'), boot: css('#bootScreen'),
+    coveringLayers: [...document.body.children].map((node) => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return { id: node.id, className: node.className, display: style.display,
+        visibility: style.visibility, opacity: style.opacity,
+        position: style.position, zIndex: style.zIndex, height: Math.round(rect.height) };
+    }).filter((node) => node.display !== 'none' && node.visibility !== 'hidden'
+      && node.position === 'fixed' && node.height > 300)
+  };
+});
 try {
   for (const role of ['client', 'admin', 'staff']) {
     scenario = { role, accepted: role !== 'client', calls: [], preflights: [], unexpected: [], spinRequests: [] };
@@ -172,6 +193,7 @@ try {
     await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
     if (role === 'client') {
       scenario.homeOverlays = await page.evaluate(() => [...document.querySelectorAll('.modal.open')].map(node => node.id));
+      scenario.homeVisual = await captureVisualState(page);
       await page.screenshot({ path: path.join(outDir, 'wheel-home.png'), fullPage: true });
     }
     // A delayed interaction fallback can briefly reopen Shop in the synthetic fixture
@@ -209,6 +231,7 @@ try {
       `wheel back label must not overlap title: ${JSON.stringify(wheelHeading)}`);
     if (role === 'client') {
       scenario.readyOverlays = wheelHeading.openModals;
+      scenario.readyVisual = await captureVisualState(page);
       await page.screenshot({ path: path.join(outDir, 'wheel-ready.png'), fullPage: true });
     }
 
@@ -243,6 +266,7 @@ try {
       await page.locator('#wheelSpinButton').click();
       await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
       assert.equal((await page.locator('#toast').getAttribute('class'))?.includes('show'), false, 'profile refresh must not show a code error');
+      scenario.resultVisual = await captureVisualState(page);
       await page.screenshot({ path: path.join(outDir, 'wheel-result.png'), fullPage: true });
       assert.equal(scenario.spinRequests.length, 3);
       assert.equal(new Set(scenario.spinRequests).size, 1, 'automatic retries must reuse one idempotency key');
