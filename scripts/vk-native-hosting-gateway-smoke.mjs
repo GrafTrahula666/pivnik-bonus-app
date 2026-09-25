@@ -171,6 +171,7 @@ try {
     await page.locator('.bottom-nav [data-target="client"]').click({ timeout: 4000 });
     await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
     if (role === 'client') {
+      scenario.homeOverlays = await page.evaluate(() => [...document.querySelectorAll('.modal.open')].map(node => node.id));
       await page.screenshot({ path: path.join(outDir, 'wheel-home.png'), fullPage: true });
     }
     // A delayed interaction fallback can briefly reopen Shop in the synthetic fixture
@@ -199,12 +200,15 @@ try {
       return {
         backRight: back?.getBoundingClientRect().right,
         titleLeft: title?.getBoundingClientRect().left,
-        labelHidden: !label || getComputedStyle(label).display === 'none'
+        labelHidden: !label || getComputedStyle(label).display === 'none',
+        backText: back?.textContent?.trim(),
+        openModals: [...document.querySelectorAll('.modal.open')].map(node => node.id)
       };
     });
-    assert.ok(wheelHeading.labelHidden && wheelHeading.titleLeft >= wheelHeading.backRight,
+    assert.ok(wheelHeading.labelHidden && wheelHeading.backText === '←' && wheelHeading.titleLeft >= wheelHeading.backRight,
       `wheel back label must not overlap title: ${JSON.stringify(wheelHeading)}`);
     if (role === 'client') {
+      scenario.readyOverlays = wheelHeading.openModals;
       await page.screenshot({ path: path.join(outDir, 'wheel-ready.png'), fullPage: true });
     }
 
