@@ -1259,7 +1259,9 @@ async function resolveActingStaff(req) {
   return profile;
 }
 
-async function sendTelegramMessage(telegramId, text) {
+const TELEGRAM_BROADCAST_MAX_RETRY_AFTER_SECONDS = 15;
+
+async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
   if (!botToken || !telegramId) {
     return { ok: false, status: 0, error: 'telegram_not_configured' };
   }
@@ -1271,6 +1273,17 @@ async function sendTelegramMessage(telegramId, text) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.ok === false) {
+      const retryAfterSeconds = Number(payload?.parameters?.retry_after);
+      if (
+        response.status === 429
+        && retryAttempt < 1
+        && Number.isFinite(retryAfterSeconds)
+        && retryAfterSeconds > 0
+        && retryAfterSeconds <= TELEGRAM_BROADCAST_MAX_RETRY_AFTER_SECONDS
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, Math.ceil(retryAfterSeconds * 1000)));
+        return sendTelegramMessage(telegramId, text, retryAttempt + 1);
+      }
       console.error('Telegram sendMessage failed with status:', response.status);
       return {
         ok: false,
