@@ -161,15 +161,22 @@ try {
   assert(evidence.hero.backgroundImage !== 'none' || rgbMax(evidence.hero.backgroundColor) < 50, `hero surface is not black-frosted: ${JSON.stringify(evidence.hero)}`);
 
   const geometry = evidence.homeGeometry;
-  assert(geometry?.display === 'grid', `Home V2 must render as grid, got ${geometry?.display}`);
+  assert(geometry?.display === 'grid', `Canonical Home must render as grid, got ${geometry?.display}`);
   assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844, `unexpected geometry viewport: ${JSON.stringify(geometry?.viewport)}`);
-  const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
-  for (const [key, minimum] of Object.entries(minimumHeights)) {
+  const expectedHeights = { hero: 122, business: 118, wheel: 118, liters: 82, league: 128 };
+  const widths = [];
+  for (const [key, expected] of Object.entries(expectedHeights)) {
     const card = geometry?.cards?.[key];
-    assert(card, `missing Home V2 ${key} geometry`);
-    assert(card.height >= minimum - 0.5, `Home V2 ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
-    assert(card.width >= 350, `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
+    assert(card, `missing canonical Home ${key} geometry`);
+    assert(Math.abs(card.height - expected) <= 1,
+      `canonical Home ${key} height drifted to ${card.height}px; expected ~${expected}px`);
+    assert(card.width >= 350, `canonical Home ${key} unexpectedly narrow at ${card.width}px`);
+    widths.push(card.width);
   }
+  const widthSpread = Math.max(...widths) - Math.min(...widths);
+  assert(widthSpread <= 0.75, `canonical Home card edges are not aligned: ${JSON.stringify(geometry.cards)}`);
+  assert(Math.abs(geometry.cards.hero.width / geometry.cards.hero.height - 3) <= 0.02,
+    `profile artwork must preserve its 3:1 geometry: ${JSON.stringify(geometry.cards.hero)}`);
   assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
     `Home V2 leaves an excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
 
