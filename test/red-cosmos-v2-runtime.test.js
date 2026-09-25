@@ -21,7 +21,7 @@ test('RED COSMOS final scripts are wired into materialize and prestart in a dete
 
 test('startup shell retires legacy visual layers and preserves only the interaction fallback', async () => {
   const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical'/);
+  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
   assert.match(shell, /forbiddenVisualAssets/);
   assert.match(shell, /\/red-cosmos-v2\.css/);
   assert.match(shell, /\/black-frosted-glass\.css/);

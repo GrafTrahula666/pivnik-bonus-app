@@ -37,7 +37,7 @@ test('Home profile header keeps the approved live structure without baked accoun
   assert.match(block, /\.spaceverse-hero-logo-full[\s\S]*object-fit:\s*contain/);
   assert.match(block, /\.hero-name-row[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) 30px/);
   assert.match(block, /\.hero-qr-button[\s\S]*width:\s*30px[\s\S]*height:\s*30px/);
-  assert.match(block, /\.progress[\s\S]*left:\s*27%[\s\S]*right:\s*27\.3%/);
+  assert.match(block, /\.progress[\s\S]*left:\s*25%[\s\S]*right:\s*29\.3%/);
   assert.doesNotMatch(block, /transform:\s*scale/);
 
   assert.match(css, /\.client-home\.home-v2 \.spaceverse-home-hero \{[\s\S]*height:\s*126px;[\s\S]*min-height:\s*126px;/);
