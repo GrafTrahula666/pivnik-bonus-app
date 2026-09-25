@@ -80,11 +80,14 @@ test('rendering beer progress updates every segment without throwing on wheel re
 });
 
 test('materialized RED COSMOS keeps the wheel back label compact', async () => {
-  const [overlay, materializer] = await Promise.all([
+  const [overlay, v22, materializer] = await Promise.all([
     readFile(new URL('red-cosmos-v2.js', root), 'utf8'),
+    readFile(new URL('v22-ui.js', root), 'utf8'),
     readFile(new URL('scripts/apply-working-updates.mjs', root), 'utf8')
   ]);
   assert.match(overlay, /button\.id === 'wheelBackButton' \? '←' : '← Назад'/);
+  assert.match(v22, /wheelBack\.innerHTML = '<span aria-hidden="true">←<\\/span>';/);
+  assert.doesNotMatch(v22, /wheelBack\.innerHTML = '<span aria-hidden="true">←<\\/span><span>Назад<\\/span>';/);
   assert.match(materializer, /compactWheelBack/);
   assert.match(materializer, /wheel back label/);
 });
