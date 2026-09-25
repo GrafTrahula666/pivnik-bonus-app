@@ -114,7 +114,7 @@ async function inspectPlatform(platform) {
         qrButton: read('.bottom-nav .qr-nav-button'),
         qrIcon: read('.bottom-nav .qr-nav-button > span'),
         homeGeometry: (() => {
-          const home = document.querySelector('.client-home.home-v2.active');
+          const home = document.querySelector('.client-home.home-canonical.active');
           const nav = document.querySelector('.bottom-nav');
           const selectors = {
             hero: '.spaceverse-home-hero',
