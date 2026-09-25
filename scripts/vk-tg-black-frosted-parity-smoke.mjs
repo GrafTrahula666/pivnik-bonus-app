@@ -156,18 +156,25 @@ async function inspectPlatform(platform) {
     assert(evidence.hero.backgroundImage !== 'none' || rgbMax(evidence.hero.backgroundColor) < 50, `${platform}: hero is not black-frosted`);
 
     const geometry = evidence.homeGeometry;
-    assert(geometry?.display === 'grid', `${platform}: Home V2 must render as grid, got ${geometry?.display}`);
+    assert(geometry?.display === 'grid', `${platform}: canonical Home must render as grid, got ${geometry?.display}`);
     assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844,
       `${platform}: unexpected viewport ${JSON.stringify(geometry?.viewport)}`);
-    const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
-    for (const [key, minimum] of Object.entries(minimumHeights)) {
+    const expectedHeights = { hero: 122, business: 118, wheel: 118, liters: 82, league: 128 };
+    const widths = [];
+    for (const [key, expected] of Object.entries(expectedHeights)) {
       const card = geometry?.cards?.[key];
       assert(card, `${platform}: missing ${key} geometry`);
-      assert(card.height >= minimum - 0.5,
-        `${platform}: ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
+      assert(Math.abs(card.height - expected) <= 1,
+        `${platform}: ${key} height drifted to ${card.height}px; expected ~${expected}px`);
       assert(card.width >= 350,
         `${platform}: ${key} unexpectedly narrow at ${card.width}px`);
+      widths.push(card.width);
     }
+    const widthSpread = Math.max(...widths) - Math.min(...widths);
+    assert(widthSpread <= 0.75,
+      `${platform}: Home card edges are not aligned: ${JSON.stringify(geometry.cards)}`);
+    assert(Math.abs(geometry.cards.hero.width / geometry.cards.hero.height - 3) <= 0.02,
+      `${platform}: profile artwork lost its 3:1 geometry: ${JSON.stringify(geometry.cards.hero)}`);
     assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
       `${platform}: excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
     if (platform === 'telegram') {
@@ -193,17 +200,13 @@ try {
   assert(vk.navButtons === tg.navButtons, `VK/TG navigation count differs: ${vk.navButtons} vs ${tg.navButtons}`);
   assert(isTransparent(vk.activeNav.backgroundColor) === isTransparent(tg.activeNav.backgroundColor), 'VK/TG active navigation transparency differs');
   assert(isTransparent(vk.qrButton.backgroundColor) === isTransparent(tg.qrButton.backgroundColor), 'VK/TG QR outer transparency differs');
-  const extraTelegramHeight = vk.homeGeometry.topbar.height - tg.homeGeometry.topbar.height;
-  const homeHeightDelta = tg.homeGeometry.home.height - vk.homeGeometry.home.height;
-  assert(extraTelegramHeight >= 0,
-    `Telegram topbar unexpectedly reserves more height than VK: ${extraTelegramHeight}px`);
-  assert(Math.abs(homeHeightDelta - extraTelegramHeight) <= 1.5,
-    `Telegram free vertical space was not transferred into Home: topbar delta ${extraTelegramHeight}px, Home delta ${homeHeightDelta}px`);
   for (const key of ['hero', 'business', 'wheel', 'liters', 'league']) {
-    const vkHeight = vk.homeGeometry.cards[key].height;
-    const tgHeight = tg.homeGeometry.cards[key].height;
-    assert(tgHeight >= vkHeight - 0.5,
-      `Telegram ${key} became smaller than VK despite having at least as much usable height: VK ${vkHeight}px, TG ${tgHeight}px`);
+    const vkCard = vk.homeGeometry.cards[key];
+    const tgCard = tg.homeGeometry.cards[key];
+    assert(Math.abs(tgCard.height - vkCard.height) <= 0.75,
+      `VK/TG canonical Home height differs for ${key}: VK ${vkCard.height}px, TG ${tgCard.height}px`);
+    assert(Math.abs(tgCard.width - vkCard.width) <= 0.75,
+      `VK/TG canonical Home width differs for ${key}: VK ${vkCard.width}px, TG ${tgCard.width}px`);
   }
   await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify(results, null, 2));
   const geometry = Object.fromEntries(
