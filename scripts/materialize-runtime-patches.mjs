@@ -270,6 +270,8 @@ async function verifyMaterializedState() {
     || index.includes('styles.css?v=20.0-spaceverse-purple-home')
     || index.includes('styles.css?v=19.1-telegram-wheel-v2');
   if (!supportedAssetVersion) failures.push('index.html asset version');
+  if (!index.includes('home-canonical.css?v=1.0.0')) failures.push('canonical Home stylesheet');
+  if (!index.includes('client-home home-canonical')) failures.push('canonical Home namespace');
   if (!index.includes('deleteAccountFromConsent')) failures.push('consent account deletion button');
   if (!deletionMigration.includes('identity_hash')) failures.push('deleted identity migration');
   if (!app.includes('WHEEL_VISUAL_SECTORS')) failures.push('app.js wheel artwork');
