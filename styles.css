@@ -9224,6 +9224,38 @@ body,
   text-align: center;
 }
 
+/* The lower gold stroke is baked into league-card.webp at y≈203/267. Its
+   original position crosses the live names and amounts. Cover only that
+   bottom strip, then reveal the same artwork's stroke against the card edge.
+   The avatar seats and the rest of the approved artwork stay in place. */
+.client-home.home-v2 .home-league-card::before,
+.client-home.home-v2 .home-league-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.client-home.home-v2 .home-league-card::before {
+  top: 70%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(250, 249, 245, .97) 28%,
+    rgba(250, 249, 245, .97)
+  );
+}
+
+.client-home.home-v2 .home-league-card::after {
+  background: url('/assets/home-v2/league-card.webp?v=3') center calc(59% + 21px) / 100% auto no-repeat;
+  clip-path: inset(91% 0 0);
+}
+
+.client-home.home-v2 .home-league-card > * {
+  z-index: 1;
+}
+
 /* Hide only the baked left cube; keep SPACEVERSE wordmark and astronaut-held cube. */
 .client-home.home-v2 .spaceverse-business-card::after {
   content: '' !important;

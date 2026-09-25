@@ -7,7 +7,7 @@ const indexPath = path.join(root, 'index.html');
 const appPath = path.join(root, 'app.js');
 const INDEX_MARKER = '<!-- RED_COSMOS_V2_FINAL_SHELL -->';
 const CANONICAL_STYLE_VERSION = '20.9-service-entry-canonical-profile-placement-20260925';
-const HOME_LEAGUE_STYLE_VERSION = `${CANONICAL_STYLE_VERSION}-league-portrait-20260925-v2`;
+const HOME_LEAGUE_STYLE_VERSION = `${CANONICAL_STYLE_VERSION}-league-portrait-20260925-v2-frame-bottom-20260926`;
 const SERVICE_STYLE_VERSION = '20.8-service-white-gold';
 const SERVICE_STYLE_HREF = `/service-white-gold.css?v=${SERVICE_STYLE_VERSION}`;
 const INTERACTION_FALLBACK_SRC = '/red-cosmos-v2.js?v=2.0.0';
