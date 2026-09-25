@@ -20,6 +20,13 @@ test('admin broadcast backend is admin-only and supports Telegram plus VK', () =
   assert.match(server, /retryAttempt < 1/);
   assert.match(server, /sendTelegramMessage\(telegramId, text, retryAttempt \+ 1\)/);
   assert.doesNotMatch(server, /allow_paid_broadcast/);
+  assert.match(server, /createBroadcastCampaignStore/);
+  assert.match(server, /broadcastCampaignStore\.ensureSchema/);
+  assert.match(server, /broadcastCampaignStore\.claim/);
+  assert.match(server, /broadcastCampaignStore\.complete/);
+  assert.match(server, /broadcastCampaignStore\.fail/);
+  assert.match(server, /deduplicated: true/);
+  assert.match(server, /Повторная отправка заблокирована/);
   assert.match(server, /api\.vk\.com\/method\/messages\.send/);
   assert.match(server, /VK_COMMUNITY_TOKEN/);
   assert.match(server, /random_id/);
