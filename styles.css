@@ -9126,7 +9126,9 @@ body,
   font-size: 15px;
 }
 
-/* League: real circular avatars and a genuinely centered top 3. */
+/* League: anchor each live portrait to the three circular seats in league-card.webp.
+   Seat centers in the 600x267 artwork: (77, 160), (276, 160), (464, 160).
+   Names and amounts share each portrait's horizontal center. */
 .client-home.home-v2 .home-league-head h2 {
   font-size: 15px;
   line-height: 1;
@@ -9141,36 +9143,41 @@ body,
 }
 
 .client-home.home-v2 .home-league-podium {
-  right: 3.5%;
-  bottom: 5%;
-  left: 3.5%;
-  height: 57%;
-  gap: 2px;
-  align-items: center;
+  inset: 0;
+  height: 100%;
+  display: block;
 }
 
 .client-home.home-v2 .home-league-podium > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28%;
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: 46px auto auto;
-  justify-items: center;
-  align-content: center;
-  gap: 2px;
-  padding: 0 4px;
+  padding: 0;
   text-align: center;
 }
 
+.client-home.home-v2 .home-league-podium > span:nth-child(1) { left: -1.17%; }
+.client-home.home-v2 .home-league-podium > span:nth-child(2) { left: 32%; }
+.client-home.home-v2 .home-league-podium > span:nth-child(3) { left: 63.33%; }
+
 .client-home.home-v2 .home-league-podium .leader-avatar {
-  grid-row: auto;
-  width: 44px;
-  height: 44px;
+  position: absolute;
+  top: 59.9%;
+  left: 50%;
+  width: clamp(32px, 10vw, 43px);
+  height: auto;
+  aspect-ratio: 1;
   margin: 0;
+  transform: translate(-50%, -50%);
   overflow: hidden !important;
-  border: 2px solid rgba(177,119,22,.38);
+  border: 2px solid rgba(190, 126, 19, .78);
   border-radius: 50% !important;
   background: rgba(255,255,255,.72);
   box-shadow:
-    0 0 0 2px rgba(255,255,255,.48),
+    0 0 0 2px rgba(255,255,255,.72),
     0 4px 10px rgba(100,67,18,.10);
 }
 
@@ -9189,7 +9196,10 @@ body,
 }
 
 .client-home.home-v2 .home-league-podium b {
-  align-self: center;
+  position: absolute;
+  top: 76.5%;
+  left: 0;
+  width: 100%;
   max-width: 100%;
   padding: 0;
   overflow: hidden;
@@ -9203,33 +9213,16 @@ body,
 }
 
 .client-home.home-v2 .home-league-podium strong {
-  align-self: center;
+  position: absolute;
+  top: 86%;
+  left: 0;
+  width: 100%;
   color: #9b620b;
   font-size: 8.4px;
   font-weight: 900;
   line-height: 1.05;
   text-align: center;
 }
-
-@media (max-width: 480px) and (max-height: 950px) {
-  .client-home.home-v2 .home-league-podium > span {
-    grid-template-rows: 42px auto auto;
-  }
-
-  .client-home.home-v2 .home-league-podium .leader-avatar {
-    width: 40px;
-    height: 40px;
-  }
-
-  .client-home.home-v2 .home-league-podium b {
-    font-size: 8.2px;
-  }
-
-  .client-home.home-v2 .home-league-podium strong {
-    font-size: 8px;
-  }
-}
-
 
 /* Hide only the baked left cube; keep SPACEVERSE wordmark and astronaut-held cube. */
 .client-home.home-v2 .spaceverse-business-card::after {
