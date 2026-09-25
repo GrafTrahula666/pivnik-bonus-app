@@ -8246,6 +8246,73 @@ body,
   background: linear-gradient(90deg, #9d6007, #e8bb55 64%, #bf7d16);
 }
 
+/* Approved liters reference: the artwork supplies the frame, static heading,
+   beer mug and 14 empty seats. All changing values remain live DOM elements. */
+.client-home.home-v2 .beer-loyalty-card--compact {
+  background: url('/assets/home-v2/liters-card-reference-20260926.webp?v=1') center / 102% 112% no-repeat !important;
+}
+
+.client-home.home-v2 .beer-compact-main h2 {
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head {
+  top: 41%;
+  right: 51%;
+  left: 16%;
+  align-items: center;
+  color: #54483a;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head b {
+  color: #986009;
+  font-size: 8px;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments {
+  top: 59%;
+  right: 17%;
+  left: 5%;
+  height: 8px;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment {
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment > span {
+  top: 1px;
+  bottom: 1px;
+  left: 1px;
+  height: auto;
+  border-radius: 999px;
+  opacity: .83;
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter {
+  top: 29%;
+  right: 16.7%;
+  width: 8.5%;
+  min-height: 0;
+  height: 36%;
+  border-radius: 8px;
+  background: rgba(255, 252, 244, .84);
+}
+
+.client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter strong {
+  font-size: 14px;
+}
+
 /* league */
 .client-home.home-v2 .home-league-card {
   height: 132px;
