@@ -24,6 +24,7 @@ import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence
 import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
 import { createStaffTransactionPersistence } from './staff-transaction-persistence.js';
 import { createBeerGiftTransactionPersistence } from './beer-gift-transaction-persistence.js';
+import { createBroadcastCampaignStore } from './broadcast-campaign-store.js';
 import {
   adminUserCrmStatus,
   adminUserDisplayName,
@@ -67,6 +68,8 @@ const pool = new Pool({
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000
 });
+
+const broadcastCampaignStore = createBroadcastCampaignStore(pool);
 
 const app = express();
 app.disable('x-powered-by');
@@ -671,6 +674,7 @@ async function initDatabase() {
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await broadcastCampaignStore.ensureSchema((text, params) => client.query(text, params));
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_token_unique ON users(qr_token) WHERE qr_token IS NOT NULL');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_qr_short_unique ON users(qr_short_code) WHERE qr_short_code IS NOT NULL');
     await client.query(`
@@ -2792,6 +2796,7 @@ app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), asyn
 });
 
 app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req, res, next) => {
+  let campaignId = null;
   try {
     const channel = normalizeBroadcastChannel(req.body?.channel);
     const audience = normalizeBroadcastAudience(req.body?.audience);
@@ -2816,6 +2821,38 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
       return res.status(503).json({ error: 'Для VK нужны VK_COMMUNITY_ID и VK_COMMUNITY_TOKEN.' });
     }
 
+    const claim = await broadcastCampaignStore.claim({
+      actorUserId: req.user.id,
+      channel,
+      audience,
+      message,
+      totalUsers: recipients.rows.length,
+      truncated: recipients.truncated
+    });
+    campaignId = claim.campaign.id;
+
+    if (!claim.created) {
+      if (claim.campaign.status === 'completed') {
+        return res.json({
+          ok: true,
+          deduplicated: true,
+          campaignId: claim.campaign.id,
+          channel,
+          audience,
+          totalUsers: claim.campaign.totalUsers,
+          truncated: claim.campaign.truncated,
+          telegram: claim.campaign.telegram,
+          vk: claim.campaign.vk
+        });
+      }
+      return res.status(409).json({
+        error: claim.campaign.status === 'processing'
+          ? 'Такая рассылка уже выполняется. Повторная отправка заблокирована.'
+          : 'Такая рассылка недавно завершилась с ошибкой. Повтор автоматически заблокирован, чтобы не отправить сообщение дважды.',
+        campaignId: claim.campaign.id
+      });
+    }
+
     const telegram = wantsTelegram && botToken
       ? await deliverBroadcast(
           telegramIds,
@@ -2832,7 +2869,10 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
         )
       : { attempted: 0, delivered: 0, failed: 0, skipped: wantsVk ? 'not_configured' : 'not_selected', errors: [] };
 
+    await broadcastCampaignStore.complete(campaignId, { telegram, vk });
+
     console.info('Admin broadcast completed', {
+      campaignId,
       actor: String(req.user.id),
       channel,
       audience,
@@ -2843,6 +2883,8 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
 
     res.json({
       ok: true,
+      deduplicated: false,
+      campaignId,
       channel,
       audience,
       totalUsers: recipients.rows.length,
@@ -2851,6 +2893,11 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
       vk
     });
   } catch (error) {
+    if (campaignId) {
+      await broadcastCampaignStore.fail(campaignId, error).catch((auditError) => {
+        console.error('Broadcast campaign audit failure:', auditError.message);
+      });
+    }
     next(error);
   }
 });
