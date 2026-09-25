@@ -19,7 +19,7 @@ function safeCount(value) {
 }
 
 function safeErrorCode(error) {
-  const candidate = String(error?.code || error?.name || 'broadcast_failed').trim();
+  const candidate = String(error?.code || 'broadcast_failed').trim();
   return /^[a-z0-9_.:-]{1,80}$/i.test(candidate) ? candidate : 'broadcast_failed';
 }
 
