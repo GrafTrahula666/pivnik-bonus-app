@@ -1,0 +1,915 @@
+/* PIVNIK HOME CANONICAL
+   One visual source for the client Home screen.
+   Approved static artwork stays static; account-specific values stay live DOM. */
+
+.client-home.home-canonical {
+  display: none;
+  width: 100%;
+  padding: 0 13px 92px;
+  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.client-home.home-canonical.active {
+  display: grid;
+}
+
+.client-home.home-canonical > .spaceverse-home-hero,
+.client-home.home-canonical > .spaceverse-business-card,
+.client-home.home-canonical > .home-wheel-card,
+.client-home.home-canonical > .beer-loyalty-card--compact,
+.client-home.home-canonical > .home-league-card {
+  position: relative;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  justify-self: stretch;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: none !important;
+}
+
+/* ---------------- PROFILE ----------------
+   Static layer: untouched 960x320 profile-card.webp.
+   Live layer: avatar/name/balance/status/progress/remaining. */
+.client-home.home-canonical .spaceverse-home-hero {
+  min-height: 0 !important;
+  height: auto !important;
+  aspect-ratio: 3 / 1;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 23px;
+  background: url('/assets/home-v2/profile-card.webp?v=canonical-1') center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  color: #17130e;
+  isolation: isolate;
+}
+
+.client-home.home-canonical .spaceverse-home-hero::before,
+.client-home.home-canonical .spaceverse-home-hero::after,
+.client-home.home-canonical .spaceverse-home-hero .hero-glow {
+  display: none !important;
+}
+
+.client-home.home-canonical .spaceverse-hero-grid,
+.client-home.home-canonical .spaceverse-hero-user,
+.client-home.home-canonical .spaceverse-home-hero .client-identity {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .profile-avatar {
+  position: absolute !important;
+  top: 11.5% !important;
+  left: 5.25% !important;
+  width: 13.6% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+  display: grid !important;
+  place-items: center;
+  overflow: hidden !important;
+  margin: 0 !important;
+  border: 2px solid rgba(191,132,35,.48) !important;
+  border-radius: 50% !important;
+  background: #f7efe1 !important;
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,.78),
+    0 4px 12px rgba(117,77,15,.18) !important;
+  z-index: 4;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .profile-avatar .avatar-render,
+.client-home.home-canonical .spaceverse-home-hero .profile-avatar .avatar-render-inner,
+.client-home.home-canonical .spaceverse-home-hero .profile-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  border-radius: 50% !important;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .hero-identity-copy {
+  position: absolute !important;
+  top: 9.5% !important;
+  left: 23.8% !important;
+  width: 39.5% !important;
+  min-width: 0;
+  display: block !important;
+  margin: 0 !important;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .hero-name-row {
+  position: relative;
+  display: block !important;
+  width: 100%;
+  min-height: 30px;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .client-name {
+  display: block;
+  max-width: calc(100% - 38px);
+  margin: 0 !important;
+  overflow: hidden;
+  color: #17130e !important;
+  font-size: clamp(14px, 4.05vw, 18px) !important;
+  font-weight: 900 !important;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .spaceverse-home-hero #balanceLabel {
+  display: block !important;
+  margin-top: 3px !important;
+  color: #6b6155 !important;
+  font-size: clamp(7px, 2.05vw, 9px) !important;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.client-home.home-canonical .hero-qr-button {
+  position: absolute !important;
+  top: -2px !important;
+  right: 0 !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  display: grid !important;
+  place-items: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid rgba(177,118,22,.38) !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,.70) !important;
+  color: #a66a0d !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.96) !important;
+  z-index: 6;
+}
+
+.client-home.home-canonical .hero-qr-button .hero-qr-icon {
+  width: 18px !important;
+  height: 18px !important;
+  fill: currentColor;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .balance {
+  position: absolute !important;
+  top: 35.5% !important;
+  left: 23.8% !important;
+  width: 39.5% !important;
+  display: flex !important;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0 !important;
+  color: #a9690b !important;
+  font-size: clamp(24px, 7.6vw, 34px) !important;
+  font-weight: 900 !important;
+  line-height: .95;
+  letter-spacing: -.04em;
+  z-index: 3;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .balance small {
+  display: inline !important;
+  margin: 0 !important;
+  color: #3d352c !important;
+  font-size: clamp(8px, 2.35vw, 11px) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .status-button {
+  position: absolute !important;
+  top: 60.5% !important;
+  left: 23.8% !important;
+  width: 39.5% !important;
+  min-height: 0 !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  text-align: left !important;
+  color: #211a12 !important;
+  z-index: 3;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .status-button > div {
+  display: block !important;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .status-caption {
+  display: block !important;
+  color: #74695b !important;
+  font-size: clamp(5.5px, 1.65vw, 7px) !important;
+  font-weight: 650 !important;
+  line-height: 1;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .status-name {
+  display: block !important;
+  max-width: 100%;
+  margin-top: 2px !important;
+  overflow: hidden;
+  color: #211a12 !important;
+  font-size: clamp(8.5px, 2.55vw, 11px) !important;
+  font-weight: 900 !important;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .status-row-chevron,
+.client-home.home-canonical .spaceverse-home-hero .status-divider {
+  display: none !important;
+}
+
+.client-home.home-canonical .spaceverse-hero-brand {
+  position: absolute !important;
+  top: 10% !important;
+  right: 2.6% !important;
+  bottom: 14% !important;
+  width: 27.2% !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 0 3.5% !important;
+  border: 0 !important;
+  background: transparent !important;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.client-home.home-canonical .spaceverse-hero-brand::before {
+  display: none !important;
+}
+
+.client-home.home-canonical .spaceverse-hero-brand::after {
+  content: "SPACEVERSE";
+  display: block;
+  color: #27231f;
+  font-size: clamp(6px, 1.85vw, 8.5px);
+  font-weight: 650;
+  letter-spacing: .22em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .progress {
+  position: absolute !important;
+  right: 7.0% !important;
+  bottom: 15.5% !important;
+  left: 16.0% !important;
+  width: auto !important;
+  height: 5px !important;
+  margin: 0 !important;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 999px;
+  background: rgba(120,105,84,.14) !important;
+  box-shadow: none !important;
+  z-index: 3;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #a9670a, #e3b34d 65%, #bd7a15) !important;
+  box-shadow: 0 0 6px rgba(196,132,25,.18);
+}
+
+.client-home.home-canonical .spaceverse-home-hero .max-status-line {
+  position: absolute !important;
+  right: 7.1% !important;
+  bottom: 4.1% !important;
+  left: 7.2% !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 !important;
+  color: #675d50 !important;
+  font-size: clamp(5.4px, 1.55vw, 7px) !important;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .max-status-line > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-home.home-canonical .spaceverse-home-hero .max-status-line > strong {
+  flex: 0 0 auto;
+  color: #9d620a !important;
+  font-weight: 850 !important;
+}
+
+/* ---------------- SPACEVERSE BUSINESS ---------------- */
+.client-home.home-canonical .spaceverse-business-card {
+  min-height: 124px !important;
+  height: 124px !important;
+  display: block !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  background: url('/assets/home-v2/business-astronaut-approved.webp?v=canonical-1') center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  color: #17130e;
+}
+
+.client-home.home-canonical .spaceverse-business-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  display: block !important;
+  background: linear-gradient(90deg, rgba(255,255,255,.96) 0%, rgba(255,253,247,.92) 38%, rgba(255,255,255,.34) 62%, rgba(255,255,255,0) 78%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.client-home.home-canonical .spaceverse-business-card::after {
+  display: none !important;
+}
+
+.client-home.home-canonical .spaceverse-business-copy {
+  position: absolute !important;
+  z-index: 2;
+  top: 10px !important;
+  bottom: 9px !important;
+  left: 14px !important;
+  width: 58% !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
+.client-home.home-canonical .spaceverse-business-brand {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  height: 16px;
+  margin: 0 0 3px !important;
+}
+
+.client-home.home-canonical .spaceverse-business-brand .spaceverse-cube-mark {
+  display: none !important;
+}
+
+.client-home.home-canonical .spaceverse-business-brand b {
+  color: #25211d !important;
+  font-size: 7px !important;
+  font-weight: 750 !important;
+  letter-spacing: .24em !important;
+}
+
+.client-home.home-canonical .spaceverse-business-copy > strong {
+  margin: 0 !important;
+  color: #16130f !important;
+  font-size: clamp(16px, 4.55vw, 20px) !important;
+  font-weight: 900 !important;
+  line-height: 1.02;
+}
+
+.client-home.home-canonical .spaceverse-business-copy > em {
+  margin-top: 3px !important;
+  color: #a6670b !important;
+  font-size: clamp(7px, 2.15vw, 9px) !important;
+  font-weight: 850 !important;
+  line-height: 1.05;
+  font-style: normal;
+}
+
+.client-home.home-canonical .spaceverse-business-copy > small {
+  display: -webkit-box !important;
+  margin-top: 3px !important;
+  overflow: hidden;
+  color: #403a33 !important;
+  font-size: clamp(6px, 1.75vw, 7.5px) !important;
+  line-height: 1.16;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.client-home.home-canonical .spaceverse-business-cta {
+  min-height: 27px !important;
+  width: min(78%, 174px) !important;
+  margin-top: auto !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #e9bc61, #b97817) !important;
+  color: #fff !important;
+  font-size: 9px !important;
+  font-weight: 850 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 9px rgba(123,78,12,.15) !important;
+}
+
+.client-home.home-canonical .spaceverse-business-art {
+  display: none !important;
+}
+
+/* ---------------- WHEEL ---------------- */
+.client-home.home-canonical .home-wheel-card {
+  min-height: 122px !important;
+  height: 122px !important;
+  display: block !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  background: url('/assets/home-v2/wheel-card.webp?v=canonical-1') center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  color: #18140f !important;
+  text-align: left;
+}
+
+.client-home.home-canonical .home-wheel-copy {
+  position: absolute !important;
+  top: 8px !important;
+  bottom: 8px !important;
+  left: 13px !important;
+  width: 57% !important;
+  display: flex !important;
+  flex-direction: column;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 3;
+}
+
+.client-home.home-canonical .home-wheel-heading {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 45%;
+  align-items: start;
+  gap: 6px;
+}
+
+.client-home.home-canonical .home-wheel-heading-copy {
+  min-width: 0;
+  display: block !important;
+}
+
+.client-home.home-canonical .home-wheel-heading-copy > small {
+  display: block !important;
+  color: #776c5e !important;
+  font-size: 6px !important;
+  line-height: 1;
+}
+
+.client-home.home-canonical .home-wheel-heading-copy > strong {
+  display: block !important;
+  margin-top: 2px !important;
+  color: #19150f !important;
+  font-size: clamp(14px, 4.1vw, 18px) !important;
+  font-weight: 900 !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .home-wheel-timer {
+  position: static !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 29px !important;
+  display: grid !important;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  margin: 0 !important;
+  padding: 3px 5px !important;
+  border: 1px solid rgba(164,109,20,.16) !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,.62) !important;
+  text-align: center;
+}
+
+.client-home.home-canonical .home-wheel-timer > i {
+  color: #ad700f !important;
+  font-size: 14px !important;
+}
+
+.client-home.home-canonical .home-wheel-timer > span {
+  display: block !important;
+  min-width: 0;
+}
+
+.client-home.home-canonical .home-wheel-timer small {
+  display: block;
+  overflow: hidden;
+  color: #665c4f !important;
+  font-size: 4.8px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .home-wheel-timer em {
+  display: block;
+  margin-top: 1px !important;
+  color: #1b1711 !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .home-wheel-prize {
+  min-height: 24px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px !important;
+  padding: 4px 7px !important;
+  border: 1px solid rgba(169,112,22,.14) !important;
+  border-radius: 9px !important;
+  background: rgba(255,255,255,.61) !important;
+  color: #30291f !important;
+  font-size: 7px !important;
+  line-height: 1.05;
+}
+
+.client-home.home-canonical .home-wheel-prize > i {
+  display: inline !important;
+  color: #b87917 !important;
+  font-style: normal;
+}
+
+.client-home.home-canonical .home-wheel-cta {
+  min-height: 30px !important;
+  width: 80%;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  margin-top: auto !important;
+  padding: 0 19px 0 11px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #e9bc61, #b97817) !important;
+  color: #fff !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.48), 0 4px 9px rgba(123,78,12,.14) !important;
+}
+
+.client-home.home-canonical .home-wheel-cta > i {
+  position: absolute;
+  right: 10px;
+  font-size: 14px;
+}
+
+.client-home.home-canonical .home-wheel-visual {
+  position: absolute !important;
+  z-index: 2;
+  top: 1px !important;
+  right: 1.5% !important;
+  bottom: auto !important;
+  left: auto !important;
+  width: 38.5% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+  display: block !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: url('/assets/home-v2/wheel-approved.webp?v=canonical-1') center / contain no-repeat !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.client-home.home-canonical .home-wheel-pointer,
+.client-home.home-canonical .home-wheel-ring {
+  display: none !important;
+}
+
+/* ---------------- LITERS ---------------- */
+.client-home.home-canonical .beer-loyalty-card--compact {
+  min-height: 84px !important;
+  height: 84px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 20px !important;
+  background: url('/assets/home-v2/liters-card.webp?v=canonical-1') center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  color: #19150f !important;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact::before,
+.client-home.home-canonical .beer-loyalty-card--compact::after,
+.client-home.home-canonical .beer-kicker,
+.client-home.home-canonical .beer-card-foot {
+  display: none !important;
+}
+
+.client-home.home-canonical .beer-compact-main {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+}
+
+.client-home.home-canonical .beer-compact-main h2 {
+  position: absolute !important;
+  top: 15% !important;
+  left: 14.5% !important;
+  width: 55% !important;
+  margin: 0 !important;
+  color: #1e1913 !important;
+  font-size: clamp(10px, 3.05vw, 13px) !important;
+  font-weight: 900 !important;
+  line-height: 1.05;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact .beer-gift-counter {
+  position: absolute !important;
+  top: 15% !important;
+  right: 3.2% !important;
+  width: 12% !important;
+  min-height: 45px !important;
+  display: grid !important;
+  place-content: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: center;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact .beer-gift-counter strong {
+  color: #a3670a !important;
+  font-size: 16px !important;
+  line-height: 1;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact .beer-gift-counter small {
+  margin-top: 1px;
+  color: #6b6153 !important;
+  font-size: 5.4px !important;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact .beer-progress-head {
+  position: absolute !important;
+  top: 43% !important;
+  right: 18% !important;
+  left: 14.5% !important;
+  display: flex !important;
+  justify-content: space-between;
+  margin: 0 !important;
+  color: #655b4d !important;
+  font-size: 6.4px !important;
+  font-weight: 700 !important;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact .beer-progress-head b {
+  color: #a5690d !important;
+}
+
+.client-home.home-canonical .beer-loyalty-card--compact .beer-progress-segments {
+  position: absolute !important;
+  top: 59% !important;
+  right: 17.4% !important;
+  left: 4.2% !important;
+  width: auto !important;
+  height: 8px !important;
+  display: grid !important;
+  grid-template-columns: repeat(14, minmax(0,1fr));
+  gap: 2px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.client-home.home-canonical .beer-progress-segments .beer-progress-segment {
+  position: relative;
+  height: 8px !important;
+  overflow: hidden;
+  border: 1px solid rgba(158,104,18,.20) !important;
+  border-radius: 4px !important;
+  background: rgba(135,110,76,.10) !important;
+  box-shadow: none !important;
+}
+
+.client-home.home-canonical .beer-progress-segments .beer-progress-segment > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--segment-fill, 0%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #e5b454, #b87413) !important;
+}
+
+/* ---------------- LEAGUE ---------------- */
+.client-home.home-canonical .home-league-card {
+  min-height: 132px !important;
+  height: 132px !important;
+  display: block !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  background: url('/assets/home-v2/league-card.webp?v=canonical-1') center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  color: #19150f !important;
+  text-align: left;
+}
+
+.client-home.home-canonical .home-league-card::before,
+.client-home.home-canonical .home-league-card::after,
+.client-home.home-canonical .home-league-compat {
+  display: none !important;
+}
+
+.client-home.home-canonical .home-league-head {
+  position: absolute !important;
+  z-index: 3;
+  top: 11px !important;
+  right: 4% !important;
+  left: 14.5% !important;
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 !important;
+}
+
+.client-home.home-canonical .home-league-head > div {
+  min-width: 0;
+}
+
+.client-home.home-canonical .home-league-head .home-card-kicker {
+  display: block !important;
+  color: #827667 !important;
+  font-size: 5.8px !important;
+  font-weight: 700 !important;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.client-home.home-canonical .home-league-head h2 {
+  margin: 2px 0 0 !important;
+  color: #17130f !important;
+  font-size: clamp(14px, 4vw, 18px) !important;
+  font-weight: 900 !important;
+  line-height: 1;
+}
+
+.client-home.home-canonical .home-league-head > span {
+  min-height: 25px;
+  display: flex !important;
+  align-items: center;
+  margin-top: 1px;
+  padding: 0 9px;
+  border: 1px solid rgba(171,115,24,.24);
+  border-radius: 999px;
+  color: #76521a !important;
+  background: rgba(255,255,255,.50);
+  font-size: 6.5px !important;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .home-league-podium {
+  position: absolute !important;
+  z-index: 3;
+  right: 4% !important;
+  bottom: 8px !important;
+  left: 4% !important;
+  height: 68px !important;
+  display: grid !important;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  align-items: end;
+  gap: 4px !important;
+  margin: 0 !important;
+}
+
+.client-home.home-canonical .home-league-podium > span {
+  position: relative;
+  min-width: 0;
+  min-height: 61px;
+  display: grid !important;
+  grid-template-columns: 38px minmax(0,1fr) !important;
+  grid-template-rows: auto auto !important;
+  align-items: center;
+  gap: 0 5px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.client-home.home-canonical .home-league-podium > span > i {
+  grid-row: 1 / 3;
+  width: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(178,120,26,.42) !important;
+  border-radius: 50% !important;
+  background: rgba(255,255,255,.60);
+  color: transparent !important;
+  font-size: 0 !important;
+}
+
+.client-home.home-canonical .home-league-podium .leader-avatar,
+.client-home.home-canonical .home-league-podium > span > i img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 50% !important;
+}
+
+.client-home.home-canonical .home-league-podium b {
+  align-self: end;
+  overflow: hidden;
+  color: #1f1a14 !important;
+  font-size: 7.2px !important;
+  font-weight: 850 !important;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-home.home-canonical .home-league-podium strong {
+  align-self: start;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #a4670b !important;
+  font-size: 7px !important;
+  font-weight: 900 !important;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Explicitly neutralize old Home-only motion/scale tricks. */
+.client-home.home-canonical .spaceverse-home-hero *,
+.client-home.home-canonical .spaceverse-business-card *,
+.client-home.home-canonical .home-wheel-card *,
+.client-home.home-canonical .beer-loyalty-card--compact *,
+.client-home.home-canonical .home-league-card * {
+  transform: none;
+}
+
+@media (max-width: 390px) {
+  .client-home.home-canonical {
+    padding-right: 12px;
+    padding-left: 12px;
+    gap: 6px;
+  }
+
+  .client-home.home-canonical .spaceverse-business-card {
+    height: 118px !important;
+    min-height: 118px !important;
+  }
+
+  .client-home.home-canonical .home-wheel-card {
+    height: 118px !important;
+    min-height: 118px !important;
+  }
+
+  .client-home.home-canonical .beer-loyalty-card--compact {
+    height: 82px !important;
+    min-height: 82px !important;
+  }
+
+  .client-home.home-canonical .home-league-card {
+    height: 128px !important;
+    min-height: 128px !important;
+  }
+}
+
+@media (max-width: 350px) {
+  .client-home.home-canonical {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .client-home.home-canonical .hero-qr-button {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+  }
+
+  .client-home.home-canonical .spaceverse-business-copy > small {
+    -webkit-line-clamp: 1;
+  }
+}
