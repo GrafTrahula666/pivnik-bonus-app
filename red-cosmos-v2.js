@@ -78,7 +78,7 @@
     if (!button || button.dataset.redCosmosBack === '1') return;
     button.dataset.redCosmosBack = '1';
     button.classList.add(button.closest('.modal-sheet') ? 'v2-modal-back' : 'v2-back-button');
-    button.textContent = '← Назад';
+    button.textContent = button.id === 'wheelBackButton' ? '←' : '← Назад';
     button.setAttribute('aria-label', 'Назад');
   }
 
