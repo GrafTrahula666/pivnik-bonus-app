@@ -35,7 +35,8 @@ function payload() {
       id: '4242', firstName: 'Gateway Fixture', lastName: 'VK', provider: 'vk', role: scenario.role,
       termsAccepted: scenario.accepted, onboardingComplete: true, balance: scenario.spinKey ? 5 : 321,
       avatarSource: 'preset_male', photoUrl: '', profileFrame: 'none',
-      status: { code: 'traveler', name: 'Путник', bonusPercent: 5 }, privacy: {}
+      status: { code: 'traveler', name: 'Путник', bonusPercent: 5 }, privacy: {},
+      beer: { paidTargetLiters: 14, progressLiters: 2.5, nextGiftLiters: 11.5, giftLitersBalance: 0 }
     },
     statuses: [], design: null, promotions: [], shopItems: [], achievements: [], transactions: [],
     leaderboard: { entries: [], currentUser: null }
@@ -168,6 +169,9 @@ try {
     }
     await page.locator('.bottom-nav [data-target="client"]').click({ timeout: 4000 });
     await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
+    if (role === 'client') {
+      await page.screenshot({ path: path.join(outDir, 'wheel-home.png'), fullPage: true });
+    }
     // A delayed interaction fallback can briefly reopen Shop in the synthetic fixture
     // even after the real close handler already succeeded. Exercise only public UI
     // and retry the Wheel transition with a hard bound so the smoke does not fail
@@ -187,6 +191,9 @@ try {
       }
     }
     assert.equal(wheelOpened, true, 'Shop fallback must not permanently block Wheel navigation');
+    if (role === 'client') {
+      await page.screenshot({ path: path.join(outDir, 'wheel-ready.png'), fullPage: true });
+    }
 
     const wheelVisual = await page.evaluate(() => {
       const disk = document.querySelector('#wheelDisk');
@@ -204,7 +211,7 @@ try {
     assert.equal(wheelVisual.sectors, 28, `expected 28 rendered wheel sectors, got ${wheelVisual.sectors}`);
     assert.equal(wheelVisual.labels, 27, `expected 27 ordinary wheel labels, got ${wheelVisual.labels}`);
     assert.equal(wheelVisual.jackpots, 1, 'expected one rendered jackpot sector');
-    assert.match(wheelVisual.backgroundImage, /wheel-luxury-v1\.webp/i, 'luxury wheel background asset must be active');
+    assert.match(wheelVisual.backgroundImage, /radial-gradient/i, 'wheel must not depend on broken artwork');
     assert.ok(
       wheelVisual.labelTexts.every((label) => /^(?:5|10|20|50|100) б$|^Пиво$/.test(label)),
       `unexpected visual wheel label: ${JSON.stringify(wheelVisual.labelTexts)}`
@@ -218,6 +225,8 @@ try {
     if (role === 'client') {
       await page.locator('#wheelSpinButton').click();
       await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
+      assert.equal((await page.locator('#toast').getAttribute('class'))?.includes('show'), false, 'profile refresh must not show a code error');
+      await page.screenshot({ path: path.join(outDir, 'wheel-result.png'), fullPage: true });
       assert.equal(scenario.spinRequests.length, 3);
       assert.equal(new Set(scenario.spinRequests).size, 1, 'automatic retries must reuse one idempotency key');
     }

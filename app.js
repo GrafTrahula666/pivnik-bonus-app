@@ -1159,7 +1159,7 @@ function renderBeer(profile = state.profile) {
   const normalizedProgress = target > 0
     ? Math.max(0, Math.min(segmentCount, (progress / target) * segmentCount))
     : 0;
-  const segments = $('#beerProgressBar .beer-progress-segment');
+  const segments = $$('#beerProgressBar .beer-progress-segment');
   segments.forEach((segment, index) => {
     const fill = Math.max(0, Math.min(1, normalizedProgress - index));
     segment.style.setProperty('--segment-fill', `${fill * 100}%`);

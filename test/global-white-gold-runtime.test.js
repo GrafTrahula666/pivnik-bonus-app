@@ -34,7 +34,7 @@ test('full wheel screen uses readable white-gold controls while keeping approved
   assert.match(block(css, '.wheel-spin-button'), /background:\s*linear-gradient\(145deg,\s*#fff9eb,\s*#e7c982\)/);
   assert.match(block(css, '.wheel-spin-button'), /color:\s*#2b2115/);
   assert.doesNotMatch(block(css, '.wheel-spin-button'), /rgba\(42,\s*20,\s*22/);
-  assert.match(css, /\.wheel-disk\s*\{[\s\S]*?wheel-luxury-v1\.webp\?v=1/);
+  assert.match(css, /\.wheel-disk\s*\{[\s\S]*?radial-gradient\(circle, #fffaf0/);
   assert.match(css, /@keyframes wheelLuxuryWin[\s\S]*?rgba\(211,179,90,\.42\)/);
   assert.doesNotMatch(css, /\.wheel-disk > \*\s*\{\s*opacity:\s*0/);
 });
