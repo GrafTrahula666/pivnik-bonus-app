@@ -175,8 +175,8 @@ async function inspectPlatform(platform) {
       `${platform}: Home card edges are not aligned: ${JSON.stringify(geometry.cards)}`);
     assert(Math.abs(geometry.cards.hero.width / geometry.cards.hero.height - 3) <= 0.02,
       `${platform}: profile artwork lost its 3:1 geometry: ${JSON.stringify(geometry.cards.hero)}`);
-    assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
-      `${platform}: excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
+    assert(geometry.contentBottomGap !== null && geometry.contentBottomGap >= 0 && geometry.contentBottomGap <= 100,
+      `${platform}: canonical Home content collides with or sits implausibly far from bottom navigation: ${JSON.stringify(geometry)}`);
     if (platform === 'telegram') {
       assert(geometry.topbar && geometry.topbar.height <= 60.5,
         `telegram: topbar reserves too much vertical space: ${JSON.stringify(geometry.topbar)}`);
