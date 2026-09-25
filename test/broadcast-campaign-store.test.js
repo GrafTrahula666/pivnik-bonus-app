@@ -165,7 +165,7 @@ test('complete and fail persist only aggregate delivery outcome and safe error c
   assert.equal(completed.telegram.delivered, 4);
 
   const failed = await store.fail(1, new Error('secret connection string should not be stored'));
-  assert.equal(failed.errorCode, 'Error');
-  assert.equal(calls.at(-1).params[1], 'Error');
+  assert.equal(failed.errorCode, 'broadcast_failed');
+  assert.equal(calls.at(-1).params[1], 'broadcast_failed');
   assert.equal(calls.at(-1).params.some((value) => String(value).includes('secret connection string')), false);
 });
