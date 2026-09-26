@@ -8,15 +8,24 @@ body {
 
 .boot-screen {
   position: fixed !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  padding: 0 !important;
+  z-index: 2147483647 !important;
+  top: calc(-1 * env(safe-area-inset-top, 0px)) !important;
+  right: 0 !important;
+  bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: auto !important;
+  min-height: calc(100dvh + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)) !important;
+  box-sizing: border-box !important;
+  padding:
+    env(safe-area-inset-top, 0px)
+    0
+    env(safe-area-inset-bottom, 0px) !important;
   overflow: hidden !important;
   display: grid !important;
   place-items: center !important;
   background: #000 !important;
+  overscroll-behavior: none !important;
 }
 
 .boot-screen.hidden {
