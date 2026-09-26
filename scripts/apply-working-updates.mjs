@@ -77,7 +77,8 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
     });
   }`;
   let overlay = await readText(path);
-  if (!overlay.includes(safeFallback)) {
+  const fallbackAlreadyHardened = /function scheduleFallback\(check, action, delay = 60\)[\s\S]*?queueMicrotask\(\(\) => \{/.test(overlay);
+  if (!fallbackAlreadyHardened) {
     if (!overlay.includes(legacyFallback)) {
       throw new Error('working updates: RED COSMOS fallback marker missing');
     }
