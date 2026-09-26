@@ -123,6 +123,12 @@ try {
   for (const role of ['client', 'admin', 'staff']) {
     scenario = { role, accepted: role !== 'client', calls: [], preflights: [], unexpected: [], spinRequests: [] };
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    // The boot illustration is external; its CDN availability is outside this
+    // gateway/CORS smoke, so serve a valid local image for that exact URL.
+    await context.route('https://cdn.creativeclaw.co/u/0ec82469/images/7097b68a-c43a-4cc1-bd8b-5fc28778a7e8.png', (route) => route.fulfill({
+      status: 200, contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=', 'base64')
+    }));
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -160,14 +166,23 @@ try {
     await page.locator('#shopModal').waitFor({ state: 'visible' });
     await page.locator('[data-close="shopModal"]').click();
     await page.locator('#shopModal').waitFor({ state: 'hidden' });
-    // Synthetic VK fallback can schedule one late Shop reopen. Close that
-    // public modal before navigating Home so it cannot intercept the nav click.
-    if (await page.locator('#shopModal').isVisible()) {
-      await page.locator('[data-close="shopModal"]').click({ timeout: 2000 });
-      await page.locator('#shopModal').waitFor({ state: 'hidden', timeout: 2000 });
+    // Synthetic VK fallback can reopen Shop between closing it and navigating
+    // Home. Retry through public controls while keeping a hard attempt bound.
+    let homeReached = false;
+    for (let attempt = 0; attempt < 3 && !homeReached; attempt += 1) {
+      if (await page.locator('#shopModal').isVisible()) {
+        await page.locator('[data-close="shopModal"]').click({ timeout: 2000 });
+        await page.locator('#shopModal').waitFor({ state: 'hidden', timeout: 2000 });
+      }
+      try {
+        await page.locator('.bottom-nav [data-target="client"]').click({ timeout: 1500 });
+        await page.locator('[data-screen="client"]').waitFor({ state: 'visible', timeout: 1500 });
+        homeReached = true;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
     }
-    await page.locator('.bottom-nav [data-target="client"]').click({ timeout: 4000 });
-    await page.locator('[data-screen="client"]').waitFor({ state: 'visible' });
+    assert.equal(homeReached, true, 'Shop fallback must not permanently block Home navigation');
     // A delayed interaction fallback can briefly reopen Shop in the synthetic fixture
     // even after the real close handler already succeeded. Exercise only public UI
     // and retry the Wheel transition with a hard bound so the smoke does not fail
