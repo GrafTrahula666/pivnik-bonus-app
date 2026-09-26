@@ -77,14 +77,16 @@
   function makeBackButton(button) {
     if (!button || button.dataset.redCosmosBack === '1') return;
     button.dataset.redCosmosBack = '1';
-    button.classList.add(button.closest('.modal-sheet') ? 'v2-modal-back' : 'v2-back-button');
-    button.textContent = '← Назад';
+    button.classList.remove('v22-back-button', 'v22-modal-back', 'v2-back-button', 'v2-modal-back');
+    button.classList.add('pivnik-back-button');
+    button.textContent = '←';
     button.setAttribute('aria-label', 'Назад');
+    button.setAttribute('title', 'Назад');
   }
 
   function upgradeBackButtons() {
     $$('.modal-sheet > .close').forEach(makeBackButton);
-    ['wheelBackButton', 'backToProfileFromStaff', 'backToProfileFromAdmin', 'profileSetupBack'].forEach((id) => makeBackButton(document.getElementById(id)));
+    ['wheelBackButton', 'spaceverseBusinessBack', 'backToProfileFromStaff', 'backToProfileFromAdmin', 'profileSetupBack'].forEach((id) => makeBackButton(document.getElementById(id)));
     ['wheelBackButton', 'backToProfileFromStaff', 'backToProfileFromAdmin'].forEach((id) => {
       const button = document.getElementById(id);
       if (!button || button.dataset.redCosmosHistoryBound === '1') return;
