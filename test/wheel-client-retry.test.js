@@ -4,8 +4,8 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
-const start = app.includes('function wheelPrizeDisplayTitle()')
-  ? app.indexOf('function wheelPrizeDisplayTitle()')
+const start = app.includes('function wheelPrizeDisplayTitle(')
+  ? app.indexOf('function wheelPrizeDisplayTitle(')
   : app.includes('function pendingWheelRequest()')
     ? app.indexOf('function pendingWheelRequest()') : app.indexOf('async function spinWheel()');
 const source = app.slice(start, app.indexOf('function openWheel()', start));
