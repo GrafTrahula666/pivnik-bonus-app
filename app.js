@@ -813,6 +813,27 @@ function waitForWheelStop(disk) {
   });
 }
 
+function wheelPrizeDisplayTitle(prize) {
+  const titles = {
+    'bonus-5': '5 бонусов',
+    'bonus-10': '10 бонусов',
+    'bonus-20': '20 бонусов',
+    'bonus-50': '50 бонусов',
+    'bonus-100': '100 бонусов',
+    'beer-glass': 'Бокал пива',
+    'annual-beer': 'Годовой запас пива'
+  };
+  return titles[String(prize?.code || '')] || 'Приз зачислен';
+}
+
+function wheelUserErrorMessage(error) {
+  if (error?.status === 401) return 'Сессия истекла. Откройте приложение ещё раз.';
+  if (error?.status === 409) return 'Сейчас это вращение недоступно. Проверьте таймер и баланс.';
+  if (error?.status === 429) return 'Слишком много попыток. Попробуйте немного позже.';
+  if (error?.code === 'TIMEOUT' || error instanceof TypeError) return 'Не удалось получить результат. Проверьте интернет и повторите.';
+  return 'Не удалось завершить вращение. Попробуйте ещё раз.';
+}
+
 function pendingWheelRequest() {
   let pending = state.wheel.pendingRequest;
   if (!pending) {
@@ -884,7 +905,7 @@ async function spinWheel() {
       renderProfile();
     }
     $('#wheelResultKicker').textContent = 'Ваш приз';
-    $('#wheelResultTitle').textContent = data.spin?.prize?.title || 'Приз зачислен';
+    $('#wheelResultTitle').textContent = wheelPrizeDisplayTitle(data.spin?.prize);
     $('#wheelRim').classList.add('wheel-win');
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
@@ -892,10 +913,11 @@ async function spinWheel() {
     // These responses are returned before a successful mutation. Auth, transport
     // and 5xx errors can also occur after a prior commit and must keep the key.
     if ([400, 404, 409].includes(error?.status)) clearPendingWheelRequest(requestKey);
+    const userMessage = wheelUserErrorMessage(error);
     $('#wheelResultKicker').textContent = pendingWheelRequest() ? 'Результат уточняется' : 'Вращение не выполнено';
-    $('#wheelResultTitle').textContent = error.message;
+    $('#wheelResultTitle').textContent = userMessage;
     await loadWheelStatus().catch(() => {});
-    toast(error.message);
+    toast(userMessage);
   } finally {
     state.wheel.busy = false;
     renderWheelStatus();
