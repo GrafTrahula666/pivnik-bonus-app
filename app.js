@@ -2,7 +2,10 @@ let tg = window.Telegram?.WebApp ?? null;
 const APP_VERSION = '20.0-spaceverse-purple-home';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
+const TELEGRAM_BOOT_COLOR = '#000000';
 const TELEGRAM_HEADER_COLOR = '#0b0e13';
+const TELEGRAM_BACKGROUND_COLOR = '#0e0c0a';
+const TELEGRAM_BOTTOM_BAR_COLOR = '#120e0b';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 const telegramInitDataFromUrl = readTelegramLaunchData();
@@ -33,12 +36,22 @@ function refreshTelegramBridge() {
   try { tg.expand(); } catch (_) {}
   try {
     tg.setHeaderColor(TELEGRAM_HEADER_COLOR);
-    tg.setBackgroundColor('#0e0c0a');
-    tg.setBottomBarColor('#120e0b');
+    tg.setBackgroundColor(TELEGRAM_BACKGROUND_COLOR);
+    tg.setBottomBarColor(TELEGRAM_BOTTOM_BAR_COLOR);
   } catch (_) {}
   return tg;
 }
 refreshTelegramBridge();
+
+function setTelegramBootChrome() {
+  if (IS_VK) return;
+  try {
+    tg?.setHeaderColor(TELEGRAM_BOOT_COLOR);
+    tg?.setBackgroundColor(TELEGRAM_BOOT_COLOR);
+    tg?.setBottomBarColor(TELEGRAM_BOOT_COLOR);
+  } catch (_) {}
+}
+setTelegramBootChrome();
 
 function localStorageKey(key) {
   const prefix = String(window.__PIVNIK_STORAGE_PREFIX__ || 'pivnik_tg_');
@@ -55,7 +68,7 @@ const deepClone = (value) => {
   catch (_) { return JSON.parse(JSON.stringify(value)); }
 };
 
-const BOOT_MIN_MS = isAndroid ? 450 : 900;
+const BOOT_MIN_MS = 2500;
 const BOOT_FAILSAFE_MS = 10000;
 const API_TIMEOUT_MS = 9000;
 const bootStartedAt = performance.now();
@@ -939,6 +952,15 @@ async function finishBoot() {
   if (elapsed < BOOT_MIN_MS) await delay(BOOT_MIN_MS - elapsed);
   $('#bootScreen')?.classList.add('hidden');
   $('#appShell')?.classList.remove('hidden');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', TELEGRAM_HEADER_COLOR);
+  if (!IS_VK) {
+    tg = refreshTelegramBridge();
+    try {
+      tg?.setHeaderColor(TELEGRAM_HEADER_COLOR);
+      tg?.setBackgroundColor(TELEGRAM_BACKGROUND_COLOR);
+      tg?.setBottomBarColor(TELEGRAM_BOTTOM_BAR_COLOR);
+    } catch (_) {}
+  }
   try {
     window.dispatchEvent(new CustomEvent('pivnik:boot-complete'));
   } catch (_) {}
