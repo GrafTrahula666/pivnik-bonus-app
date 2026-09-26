@@ -40,6 +40,6 @@ test('loader geometry stylesheet is cache-busted after cleanup', async () => {
     read('universal-server.js'),
     read('scripts/apply-release-candidate-fixes.mjs')
   ]);
-  assert.match(server, /loader-fix\.css\?v=2\.2\.0/);
-  assert.match(patcher, /loader-fix\.css\?v=2\.2\.0/);
+  assert.match(server, /loader-fix\.css\?v=2\.3\.0/);
+  assert.match(patcher, /loader-fix\.css\?v=2\.3\.0/);
 });
