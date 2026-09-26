@@ -114,7 +114,7 @@
     const help = $('#helpModal');
     if (help) {
       $$('p,li', help).forEach((node) => {
-        if (/QR является постоянным|QR постоянный|многораз/i.test(node.textContent || '')) node.textContent = 'Показывайте QR сотруднику «Пивника» при начислении или списании.';
+        if (/QR является постоянным|QR постоянный|многораз|короткий код|указан[^.]*под QR/i.test(node.textContent || '')) node.textContent = 'Показывайте личный QR сотруднику «Пивника» при начислении или списании. Если QR не читается, сотрудник использует служебный ручной ввод.';
       });
     }
   }
@@ -255,6 +255,19 @@
         return;
       }
       const id = target.id;
+      const screenRoutes = {
+        profileStaffNav: 'staff',
+        profileAdminNav: 'admin'
+      };
+      if (screenRoutes[id]) {
+        const screen = screenRoutes[id];
+        scheduleFallback(
+          () => $(`.screen[data-screen="${CSS.escape(screen)}"]`)?.classList.contains('active'),
+          () => callMaybe('switchScreen', screen),
+          35
+        );
+        return;
+      }
       const routes = {
         navQrButton: ['qrModal', 'showQr'],
         openShopButton: ['shopModal', null],
