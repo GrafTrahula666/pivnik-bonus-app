@@ -173,6 +173,8 @@ async function inspectBackControls(caseName, config) {
           display: style.display,
           visibility: style.visibility,
           pointerEvents: style.pointerEvents,
+          afterContent: getComputedStyle(button, '::after').content,
+          afterDisplay: getComputedStyle(button, '::after').display,
           rect,
           anchorRect,
           overlapsAnchor: overlaps(rect, anchorRect)
@@ -238,6 +240,8 @@ async function inspectBackControls(caseName, config) {
       assert(control.position === 'static', `${caseName}/${control.name}: back control escaped normal flow: ${control.position}`);
       assert(control.display !== 'none' && control.visibility !== 'hidden', `${caseName}/${control.name}: back control hidden`);
       assert(control.pointerEvents !== 'none', `${caseName}/${control.name}: back control not clickable`);
+      assert(control.afterContent === 'none' || control.afterContent === 'normal' || control.afterContent === '""',
+        `${caseName}/${control.name}: pseudo-element adds visible back-label content: ${control.afterContent}`);
       assert(Math.abs(control.rect.width - evidence.expectedSize) < 0.5,
         `${caseName}/${control.name}: width ${control.rect.width} != ${evidence.expectedSize}`);
       assert(Math.abs(control.rect.height - evidence.expectedSize) < 0.5,
