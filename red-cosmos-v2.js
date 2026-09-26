@@ -253,6 +253,42 @@
         return;
       }
       const id = target.id;
+
+      if (target.matches('.app-back-button')) {
+        if (target.dataset.close) {
+          const modalId = target.dataset.close;
+          scheduleFallback(
+            () => !document.getElementById(modalId)?.classList.contains('open'),
+            () => {
+              const modal = document.getElementById(modalId);
+              modal?.classList.remove('open');
+              modal?.setAttribute('aria-hidden', 'true');
+            },
+            35
+          );
+          return;
+        }
+
+        if (id === 'wheelBackButton' || id === 'spaceverseBusinessBack') {
+          const activeBefore = activeScreen();
+          scheduleFallback(
+            () => activeScreen() !== activeBefore,
+            () => callMaybe('__PIVNIK_GO_BACK__') || forceScreen('client'),
+            35
+          );
+          return;
+        }
+
+        if (id === 'backToProfileFromStaff' || id === 'backToProfileFromAdmin') {
+          scheduleFallback(
+            () => activeScreen() === 'profile',
+            () => callMaybe('switchScreen', 'profile') || forceScreen('profile'),
+            35
+          );
+          return;
+        }
+      }
+
       const routes = {
         navQrButton: ['qrModal', 'showQr'],
         openShopButton: ['shopModal', null],
@@ -294,8 +330,8 @@
   function runEnhancements() {
     mutationScheduled = false;
     verifyTheme();
-    installScreenHistory();
-    upgradeBackButtons();
+    // Canonical app.js owns screen history and back-button behavior.
+    // RED COSMOS stays as a non-blocking VK interaction fallback only.
     cleanVkQrCopy();
     installAdminTabs();
     installVkInteractionFallback();
