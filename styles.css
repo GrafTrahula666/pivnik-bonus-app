@@ -9512,6 +9512,10 @@ body,
 
 
 /* PIVNIK CANONICAL BACK CONTROL · 2026-09-26 */
+
+.app-back-button.hidden {
+  display: none !important;
+}
 .app-back-button,
 .screen .app-back-button,
 .modal-sheet > .app-back-button.close {
