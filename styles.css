@@ -9558,6 +9558,10 @@ body,
 .pivnik-back-button.hidden {
   display: none !important;
 }
+.wheel-back.pivnik-back-button::after {
+  content: none !important;
+  display: none !important;
+}
 .modal-sheet > .pivnik-back-button {
   align-self: flex-start !important;
   margin: 0 0 12px !important;
