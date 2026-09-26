@@ -96,11 +96,11 @@ test('VK profile data is rejected when Bridge user differs from signed launch us
   assert.match(runtime, /(?:return null|vkUser = null)/);
 });
 
-test('working updates preserve archived VK repairs but harden the restored RED COSMOS fallback', async () => {
+test('working updates cannot overwrite the canonical RED COSMOS interaction runtime', async () => {
   const materializer = await read('scripts/apply-working-updates.mjs');
   assert.match(materializer, /delete runtimeFiles\['app\.js'\]/);
   assert.match(materializer, /delete runtimeFiles\['index\.html'\]/);
-  assert.doesNotMatch(materializer, /delete runtimeFiles\['red-cosmos-v2\.js'\]/);
+  assert.match(materializer, /delete runtimeFiles\['red-cosmos-v2\.js'\]/);
   assert.match(materializer, /const legacyFallback =/);
   assert.match(materializer, /const safeFallback =/);
   assert.match(materializer, /queueMicrotask\(\(\) => \{/);
