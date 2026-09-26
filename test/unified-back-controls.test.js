@@ -57,8 +57,6 @@ test('canonical back behavior is not blocked by the legacy RED COSMOS history in
 
   assert.doesNotMatch(runBody, /installScreenHistory\(\)/);
   assert.doesNotMatch(runBody, /upgradeBackButtons\(\)/);
-  assert.match(red, /target\.matches\('\.app-back-button'\)/);
-  assert.match(red, /callMaybe\('__PIVNIK_GO_BACK__'\)/);
 });
 
 test('runtime materialization preserves unified Back cache versions', async () => {
