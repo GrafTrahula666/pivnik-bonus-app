@@ -510,8 +510,8 @@ function enhanceDom() {
   if (!$('#profileSetupModal')) {
     document.body.insertAdjacentHTML('beforeend', `<div class="modal consent-modal profile-setup-modal" id="profileSetupModal" aria-hidden="true">
       <div class="modal-sheet tall-sheet profile-setup-sheet">
-        <button class="close" id="profileSetupClose" type="button">×</button>
-        <button class="profile-back hidden" id="profileSetupBack" type="button">← Назад</button>
+        <button class="close app-back-button" id="profileSetupClose" type="button" aria-label="Назад">← Назад</button>
+        <button class="profile-back app-back-button hidden" id="profileSetupBack" type="button" aria-label="Назад">← Назад</button>
         <section id="profileSetupStepAvatar">
           <span class="muted">Настройки профиля</span>
           <h2>Аватар и оформление</h2>
@@ -557,7 +557,7 @@ function enhanceDom() {
     </div>
     <div class="modal" id="animalPickerModal" aria-hidden="true">
       <div class="modal-sheet tall-sheet animal-picker-sheet">
-        <button class="close" data-close="animalPickerModal">×</button>
+        <button class="close app-back-button" data-close="animalPickerModal" type="button" aria-label="Назад">← Назад</button>
         <span class="muted">Бесплатная коллекция</span>
         <h2>Выберите аватар</h2>
         <div class="animal-avatar-grid" id="animalAvatarGrid"></div>
@@ -3391,7 +3391,7 @@ $('#openWheelButton')?.addEventListener('click', openWheel);
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
-$('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#wheelBackButton')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
