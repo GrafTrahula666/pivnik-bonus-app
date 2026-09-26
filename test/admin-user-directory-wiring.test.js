@@ -24,7 +24,7 @@ test('admin CRM users endpoint uses one shared directory query in both server pa
   assert.doesNotMatch(directory, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i);
 });
 
-test('admin CRM UI exposes search, role, activity status and bounded pagination', async () => {
+test('admin CRM UI exposes search, role, lifecycle status and bounded pagination', async () => {
   const [html, app, css] = await Promise.all([
     read('index.html'),
     read('app.js'),
@@ -43,9 +43,13 @@ test('admin CRM UI exposes search, role, activity status and bounded pagination'
     assert.match(html, new RegExp(`id=["']${id}["']`));
   }
 
-  assert.match(html, /value="active">Активные · были за 30 дней/);
-  assert.match(html, /value="inactive">Давно не были · 30\+ дней/);
-  assert.match(html, /value="no_ops">Без операций/);
+  assert.match(html, /value="new">Новые · без визитов до 30 дней/);
+  assert.match(html, /value="active">Активные · визит до 30 дней/);
+  assert.match(html, /value="at_risk">В зоне риска · 30–60 дней/);
+  assert.match(html, /value="sleeping">Спящие · более 60 дней/);
+  assert.match(html, /value="no_visits">Без визитов · более 30 дней/);
+  assert.doesNotMatch(html, /value="inactive">Давно не были/);
+  assert.doesNotMatch(html, /value="no_ops">Без операций/);
 
   assert.match(app, /limit: 25/);
   assert.match(app, /loadAdminUsersDirectory\(1\)/);
@@ -59,7 +63,6 @@ test('admin CRM UI exposes search, role, activity status and bounded pagination'
 
   assert.match(css, /\.admin-pagination/);
   assert.match(css, /\.crm-user-status\.status-active/);
-  assert.match(css, /\.crm-user-status\.status-inactive/);
 });
 
 test('dashboard preview keeps a small bounded admin users request', async () => {

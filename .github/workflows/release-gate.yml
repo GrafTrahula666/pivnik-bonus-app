@@ -82,22 +82,70 @@ jobs:
       - name: Check backup and restore scripts
         run: bash -n ops/backup-postgres.sh ops/restore-postgres.sh
 
-      - name: Run automated tests
+      - name: Run admin directory regression tests
+        run: node --test test/admin-user-directory*.test.js
+
+      - name: Run Customer 360 regression tests
+        run: node --test test/customer-360*.test.js
+
+      - name: Run retention regression tests
         shell: bash
         run: |
+          mkdir -p artifacts/test-results
           set +e
-          npm test 2>&1 | tee /tmp/pivnik-tests.log
+          node --test test/retention-*.test.js test/admin-retention-*.test.js 2>&1 | tee artifacts/test-results/retention-test.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            echo "::group::Failing test diagnostics"
-            details=$(awk '/^not ok 13 - Gateway render:|^not ok 14 - VK Railway service/{capture=1} capture{print}' /tmp/pivnik-tests.log | tail -c 14000)
+            echo "::group::Retention regression diagnostics"
+            details=$(awk '/^not ok /{capture=1} capture{print}' artifacts/test-results/retention-test.log | tail -c 14000)
+            if [ -z "$details" ]; then
+              details=$(tail -c 14000 artifacts/test-results/retention-test.log)
+            fi
             safe=${details//'%'/'%25'}
             safe=${safe//$'\r'/'%0D'}
             safe=${safe//$'\n'/'%0A'}
-            echo "::error title=Gateway test diagnostics::$safe"
+            echo "::error title=Retention regression diagnostics::$safe"
             echo "::endgroup::"
             exit "$status"
           fi
+
+      - name: Upload retention regression diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-regression-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-results/retention-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run automated tests
+        shell: bash
+        run: |
+          mkdir -p artifacts/test-results
+          set +e
+          npm test 2>&1 | tee artifacts/test-results/node-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Failing test diagnostics"
+            details=$(awk '/^not ok /{capture=1} capture{print}' artifacts/test-results/node-test.log | tail -c 14000)
+            safe=${details//'%'/'%25'}
+            safe=${safe//$'\r'/'%0D'}
+            safe=${safe//$'\n'/'%0A'}
+            echo "::error title=Automated test diagnostics::$safe"
+            echo "::endgroup::"
+            exit "$status"
+          fi
+
+      - name: Upload automated test diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: automated-test-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-results/node-test.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

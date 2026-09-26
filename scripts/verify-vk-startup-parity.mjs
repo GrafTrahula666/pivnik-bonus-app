@@ -52,7 +52,16 @@ try {
     for (const command of pkg.scripts[phase].split(' && ')) {
       const match = /^node (scripts\/[a-z0-9-]+\.mjs)$/.exec(command);
       assert.ok(match, `Unexpected lifecycle command: ${command}`);
-      execFileSync(process.execPath, [match[1]], { cwd: temporary, env, timeout: 30_000, stdio: 'pipe' });
+      try {
+        execFileSync(process.execPath, [match[1]], { cwd: temporary, env, timeout: 30_000, stdio: 'pipe' });
+      } catch (error) {
+        const stdout = Buffer.isBuffer(error?.stdout) ? error.stdout.toString('utf8') : String(error?.stdout || '');
+        const stderr = Buffer.isBuffer(error?.stderr) ? error.stderr.toString('utf8') : String(error?.stderr || '');
+        console.error(`VK startup parity lifecycle command failed: ${phase} -> ${command}`);
+        if (stdout.trim()) console.error(`stdout:\n${stdout.trimEnd()}`);
+        if (stderr.trim()) console.error(`stderr:\n${stderr.trimEnd()}`);
+        throw error;
+      }
     }
     assert.deepEqual(await snapshot(temporary), canonical, `${phase} changed canonical VK startup code`);
     console.log(`VK startup parity passed: ${phase}`);

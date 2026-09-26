@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+
+const root = process.cwd();
+
+function count(source, needle) {
+  return source.split(needle).length - 1;
+}
+
+test('retention audience preview API materializes once with role gate and no recipient data', () => {
+  const work = mkdtempSync(path.join(tmpdir(), 'pivnik-retention-api-'));
+  try {
+    const scriptsDir = path.join(work, 'scripts');
+    mkdirSync(scriptsDir);
+    cpSync(path.join(root, 'universal-server.js'), path.join(work, 'universal-server.js'));
+    cpSync(path.join(root, 'scripts', 'apply-admin-customer360-api.mjs'), path.join(scriptsDir, 'apply-admin-customer360-api.mjs'));
+
+    const materializer = path.join('scripts', 'apply-admin-customer360-api.mjs');
+    execFileSync(process.execPath, [materializer], { cwd: work, stdio: 'pipe' });
+    execFileSync(process.execPath, ['--check', 'universal-server.js'], { cwd: work, stdio: 'pipe' });
+
+    const once = readFileSync(path.join(work, 'universal-server.js'), 'utf8');
+    assert.equal(count(once, "import { queryRetentionAudiencePreview } from './retention-audience-preview.js';"), 1);
+    assert.equal(count(once, "url.pathname === '/api/admin/retention/audience-preview'"), 1);
+    assert.match(once, /!\['viewer', 'admin'\]\.includes\(profile\.role\)/);
+    assert.match(once, /queryRetentionAudiencePreview\(pool, url\.searchParams\.get\('segment'\)\)/);
+    assert.match(once, /error instanceof TypeError/);
+
+    const routeStart = once.indexOf("    if (req.method === 'GET' && url.pathname === '/api/admin/retention/audience-preview') {");
+    const routeEnd = once.indexOf("    if (req.method === 'GET'", routeStart + 1);
+    assert.notEqual(routeStart, -1);
+    assert.notEqual(routeEnd, -1);
+    const retentionRoute = once.slice(routeStart, routeEnd);
+    assert.doesNotMatch(retentionRoute, /telegram_id|vk_id|username|display_name/);
+
+    execFileSync(process.execPath, [materializer], { cwd: work, stdio: 'pipe' });
+    assert.equal(readFileSync(path.join(work, 'universal-server.js'), 'utf8'), once);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
