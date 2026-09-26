@@ -9509,3 +9509,99 @@ body,
 @media (max-width:360px) {
   .home-service-actions { grid-template-columns: 1fr; }
 }
+
+
+/* PIVNIK_UNIFIED_BACK_CONTROLS_20260926 */
+/* Shared compact back control: one geometry, normal flow, no content overlap. */
+.pivnik-back-button {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  flex: 0 0 40px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid rgba(158, 108, 34, .30) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 253, 246, .88) !important;
+  color: #8a5a12 !important;
+  box-shadow: none !important;
+  font-size: 20px !important;
+  font-weight: 760 !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  transform: none !important;
+  z-index: 2 !important;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.pivnik-back-button:hover {
+  background: rgba(255, 250, 235, .98) !important;
+  border-color: rgba(158, 108, 34, .44) !important;
+}
+.pivnik-back-button:active {
+  transform: translateY(1px) !important;
+  background: rgba(248, 238, 214, .96) !important;
+}
+.pivnik-back-button:focus-visible {
+  outline: 2px solid rgba(181, 127, 31, .55) !important;
+  outline-offset: 2px !important;
+}
+.pivnik-back-button.hidden {
+  display: none !important;
+}
+.modal-sheet > .pivnik-back-button {
+  align-self: flex-start !important;
+  margin: 0 0 12px !important;
+}
+.screen[data-screen='staff'] .service-back.pivnik-back-button,
+.screen[data-screen='admin'] .service-back.pivnik-back-button {
+  display: flex !important;
+  margin: 0 0 9px !important;
+}
+.wheel-page-head {
+  grid-template-columns: 40px minmax(0, 1fr) 40px !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.wheel-page-head .pivnik-back-button {
+  grid-column: 1 !important;
+}
+.wheel-head-spacer {
+  width: 40px !important;
+}
+.spaceverse-business-page-head {
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+@media (max-width: 360px) {
+  .pivnik-back-button {
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+    flex-basis: 38px !important;
+  }
+  .wheel-page-head {
+    grid-template-columns: 38px minmax(0, 1fr) 38px !important;
+    gap: 8px !important;
+  }
+  .wheel-head-spacer {
+    width: 38px !important;
+  }
+  .spaceverse-business-page-head {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+}
