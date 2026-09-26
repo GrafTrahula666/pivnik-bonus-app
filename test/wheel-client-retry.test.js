@@ -4,8 +4,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
-const start = app.includes('function pendingWheelRequest()')
-  ? app.indexOf('function pendingWheelRequest()') : app.indexOf('async function spinWheel()');
+const start = app.includes('function wheelPrizeDisplayTitle()')
+  ? app.indexOf('function wheelPrizeDisplayTitle()')
+  : app.includes('function pendingWheelRequest()')
+    ? app.indexOf('function pendingWheelRequest()') : app.indexOf('async function spinWheel()');
 const source = app.slice(start, app.indexOf('function openWheel()', start));
 let sequence = 0;
 const result = {
@@ -20,8 +22,9 @@ function harness({ vk = false, storage = new Map(), userId = '42', status, api, 
     profile: { id: userId, balance: 100, termsAccepted: true },
     wheel: { busy: false, rotation: 0, status: status === undefined ? { freeAvailable: true, canAffordPaid: true } : status }
   };
+  const toasts = [];
   const context = vm.createContext({
-    state, IS_VK: vk, JSON,
+    state, IS_VK: vk, JSON, TypeError,
     safeStorage: {
       get: (key) => storage.get(key) || '', set: (key, value) => storage.set(key, value), remove: (key) => storage.delete(key)
     },
@@ -33,12 +36,12 @@ function harness({ vk = false, storage = new Map(), userId = '42', status, api, 
     effectiveWheelStatus: () => state.wheel.status,
     loadWheelStatus: async () => { if (loadStatus) await loadStatus(state); },
     api: api || (async () => result),
-    renderWheelStatus() {}, renderProfile() {}, toast() {}, haptic() {},
+    renderWheelStatus() {}, renderProfile() {}, toast(message) { toasts.push(message); }, haptic() {},
     visualSectorForPrize: () => ({ center: 0 }), waitForWheelStop: async () => {},
     window: { setTimeout() {} }
   });
   vm.runInContext(source, context);
-  return { state, storage, spin: () => vm.runInContext('spinWheel()', context) };
+  return { state, storage, elements, toasts, spin: () => vm.runInContext('spinWheel()', context) };
 }
 
 for (const vk of [false, true]) {
@@ -126,4 +129,24 @@ test('failed status loading unlocks the wheel without reserving a mutation key',
   await h.spin().catch(() => {});
   assert.equal(h.state.wheel.busy, false);
   assert.equal(h.storage.size, 0);
+});
+
+
+test('wheel renders a trusted Russian prize title instead of server-supplied garbage', async () => {
+  const h = harness({ api: async () => ({
+    ...result,
+    spin: { prize: { code: 'bonus-20', title: '<script>JAWA{}[]\\u0000%%%' } }
+  }) });
+  await h.spin();
+  assert.equal(h.elements.get('#wheelResultKicker').textContent, 'Ваш приз');
+  assert.equal(h.elements.get('#wheelResultTitle').textContent, '20 бонусов');
+});
+
+test('wheel errors never expose raw technical text to the user', async () => {
+  const h = harness({ api: async () => {
+    throw Object.assign(new Error('SyntaxError: Unexpected token < in JSON at position 0 {JAWA}'), { status: 500 });
+  } });
+  await h.spin();
+  assert.equal(h.elements.get('#wheelResultTitle').textContent, 'Не удалось завершить вращение. Попробуйте ещё раз.');
+  assert.deepEqual(h.toasts, ['Не удалось завершить вращение. Попробуйте ещё раз.']);
 });
