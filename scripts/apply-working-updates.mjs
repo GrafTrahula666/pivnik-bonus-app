@@ -156,10 +156,9 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
 
       const routes = {`;
 
-    if (!overlay.includes(hook)) {
-      throw new Error('working updates: canonical Back fallback hook missing');
+    if (overlay.includes(hook)) {
+      overlay = overlay.replace(hook, canonicalFallback);
     }
-    overlay = overlay.replace(hook, canonicalFallback);
   }
 
   await writeText(path, overlay);
