@@ -165,7 +165,7 @@
 
       <section class="screen client-screen spaceverse-business-screen" data-screen="spaceverse-business">
         <div class="spaceverse-business-page-head">
-          <button class="icon-btn" id="spaceverseBusinessBack" type="button" aria-label="Назад">‹</button>
+          <button class="icon-btn app-back-button" id="spaceverseBusinessBack" type="button" aria-label="Назад">← Назад</button>
           <span>
             <small>SPACEVERSE</small>
             <strong>Для бизнеса</strong>
@@ -228,7 +228,7 @@
       <!-- telegram-wheel:start -->
       <section class="screen client-screen wheel-screen" data-screen="wheel">
         <div class="wheel-page-head">
-          <button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>
+          <button class="icon-btn wheel-back app-back-button" id="wheelBackButton" type="button" aria-label="Назад">← Назад</button>
           <h2>Колесо Пивника</h2>
           <span class="wheel-head-spacer" aria-hidden="true"></span>
         </div>
@@ -326,7 +326,7 @@
 
       <section class="screen" data-screen="staff">
         <div class="staff-banner">
-          <div><button class="service-back" id="backToProfileFromStaff" type="button">← Профиль</button><span class="muted">Рабочее место</span><h2 id="staffName">Бармен</h2><button class="text-btn staff-switch-button" id="changeStaffButton" type="button">Сотрудник / PIN</button></div>
+          <div><button class="service-back app-back-button" id="backToProfileFromStaff" type="button" aria-label="Назад">← Назад</button><span class="muted">Рабочее место</span><h2 id="staffName">Бармен</h2><button class="text-btn staff-switch-button" id="changeStaffButton" type="button">Сотрудник / PIN</button></div>
           <span class="shift-badge" id="staffShiftBadge"><i></i><span>проверяем смену</span></span>
         </div>
 
@@ -403,7 +403,7 @@
 
       <section class="screen" data-screen="admin">
         <div class="admin-head">
-          <div><button class="service-back" id="backToProfileFromAdmin" type="button">← Профиль</button><span class="muted" id="adminAccessLabel">Управление</span><h2 id="adminPanelTitle">Панель владельца</h2></div>
+          <div><button class="service-back app-back-button" id="backToProfileFromAdmin" type="button" aria-label="Назад">← Назад</button><span class="muted" id="adminAccessLabel">Управление</span><h2 id="adminPanelTitle">Панель владельца</h2></div>
           <span class="pill danger" id="adminRoleBadge">ADMIN</span>
         </div>
 
@@ -508,7 +508,7 @@
   <!-- telegram-wheel:start -->
   <div class="modal" id="wheelRulesModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet wheel-rules-sheet">
-      <button class="close" data-close="wheelRulesModal">×</button>
+      <button class="close app-back-button" data-close="wheelRulesModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Колесо Пивника</span>
       <h2>Правила ежедневной акции</h2>
       <p class="help-intro">Редакция от 15.08.2026. Организатор — ИП Иживильгин Виталий Викторович, ИНН 380415014659, бар «ПИВНИК», Санкт-Петербург, проспект Энгельса, д. 55.</p>
@@ -572,7 +572,7 @@
 
   <div class="modal" id="qrModal" aria-hidden="true">
     <div class="modal-sheet qr-sheet">
-      <button class="close" data-close="qrModal">×</button>
+      <button class="close app-back-button" data-close="qrModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Личная бонусная карта</span>
       <h2>Покажите сотруднику</h2>
       <div class="qr-frame"><img id="qrImage" alt="QR-код клиента" /></div>
@@ -589,7 +589,7 @@
 
   <div class="modal" id="statusesModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet">
-      <button class="close" data-close="statusesModal">×</button>
+      <button class="close app-back-button" data-close="statusesModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Система лояльности</span>
       <h2>Ранги Пивника</h2>
       <div class="status-levels" id="statusLevelsList"></div>
@@ -598,7 +598,7 @@
 
   <div class="modal" id="helpModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet help-sheet">
-      <button class="close" data-close="helpModal">×</button>
+      <button class="close app-back-button" data-close="helpModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Клиентский раздел</span>
       <h2>Справка и правила</h2>
       <p class="help-intro">Здесь собраны правила бонусной программы, инструкция по использованию приложения и ответы на частые вопросы. Для быстрого просмотра откройте нужный пункт.</p>
@@ -724,7 +724,7 @@
 
   <div class="modal" id="achievementsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet achievements-sheet">
-      <button class="close" data-close="achievementsModal">×</button>
+      <button class="close app-back-button" data-close="achievementsModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Коллекция Пивника</span>
       <h2>Достижения</h2>
       <p class="help-intro">Условия считаются автоматически по завершённым операциям. Обычные награды дают 10 бонусов, редкие — 20, эпические — 30.</p>
@@ -753,7 +753,7 @@
 
   <div class="modal" id="profileStatsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
-      <button class="close" data-close="profileStatsModal">×</button>
+      <button class="close app-back-button" data-close="profileStatsModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Личная статистика</span>
       <h2>Ваш путь в Пивнике</h2>
       <div class="profile-stats-grid">
@@ -768,7 +768,7 @@
 
   <div class="modal" id="notificationsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
-      <button class="close" data-close="notificationsModal">×</button>
+      <button class="close app-back-button" data-close="notificationsModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Настройки профиля</span>
       <h2>Уведомления</h2>
       <p class="help-intro">Служебные уведомления остаются настройками устройства. Сообщения об акциях включаются отдельно и сохраняются как ваше согласие на рекламную рассылку.</p>
@@ -783,7 +783,7 @@
 
   <div class="modal" id="deleteAccountModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet delete-account-sheet">
-      <button class="close" data-close="deleteAccountModal">×</button>
+      <button class="close app-back-button" data-close="deleteAccountModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Опасное действие</span>
       <h2>Удалить аккаунт безвозвратно?</h2>
       <p class="help-intro">Профиль, бонусный доступ, привязки Telegram/VK и личный QR будут отключены. Операцию нельзя отменить.</p>
@@ -796,7 +796,7 @@
 
   <div class="modal" id="shopModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
-      <button class="close" data-close="shopModal">×</button>
+      <button class="close app-back-button" data-close="shopModal" type="button" aria-label="Назад">← Назад</button>
       <div class="modal-title-row"><div><span class="muted">Лавка Пивника</span><h2>Магазин</h2></div><button class="text-btn admin-write-only" id="editShopQuick" type="button">Редактировать</button></div>
       <div class="shop-private-stock" aria-label="Привилегии магазина">
         <span class="shop-private-monogram">P</span>
@@ -812,7 +812,7 @@
 
   <div class="modal" id="contentEditorModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet content-editor-sheet">
-      <button class="close" data-close="contentEditorModal">×</button>
+      <button class="close app-back-button" data-close="contentEditorModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Доступно только владельцу</span>
       <h2 id="contentEditorTitle">Редактирование</h2>
       <input type="hidden" id="contentEditorType" />
@@ -874,7 +874,7 @@
 
   <div class="modal" id="shopInquiryModal" aria-hidden="true">
     <div class="modal-sheet inquiry-sheet">
-      <button class="close" data-close="shopInquiryModal">×</button>
+      <button class="close app-back-button" data-close="shopInquiryModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Связь с владельцем</span>
       <h2 id="shopInquiryItem">Товар</h2>
       <p>Сообщение сохранится в админ-панели и придёт Кириллу через бота.</p>
@@ -885,7 +885,7 @@
 
   <div class="modal" id="broadcastModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet premium-sheet">
-      <button class="close" data-close="broadcastModal">×</button>
+      <button class="close app-back-button" data-close="broadcastModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Панель владельца</span>
       <h2>Рассылка клиентам</h2>
       <p class="help-intro">Напишите сообщение, проверьте количество получателей и отправьте его через бота. Перед массовой отправкой приложение попросит подтверждение.</p>
@@ -917,7 +917,7 @@
 
   <div class="modal" id="adminUsersModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet admin-directory-sheet">
-      <button class="close" data-close="adminUsersModal">×</button>
+      <button class="close app-back-button" data-close="adminUsersModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Админ-панель</span><h2>Все пользователи</h2>
       <div class="admin-filter-row admin-user-filter-row">
         <input class="text-input" id="userSearch" placeholder="Имя, username, Telegram или VK ID">
@@ -949,7 +949,7 @@
 
   <div class="modal" id="adminTransactionsModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet admin-directory-sheet">
-      <button class="close" data-close="adminTransactionsModal">×</button>
+      <button class="close app-back-button" data-close="adminTransactionsModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Админ-панель</span><h2>Все транзакции</h2>
       <div class="admin-filter-row"><input class="text-input" id="transactionSearch" placeholder="Клиент, сотрудник или причина"><select class="text-input" id="transactionModeFilter"><option value="">Все типы</option><option value="accrue">Начисления</option><option value="redeem">Списания</option><option value="shop">Магазин</option><option value="beer_gift">Подарки</option><option value="adjustment">Корректировки</option></select></div>
       <div id="allTransactionsList" class="operation-list empty-state">Загрузка…</div>
@@ -958,7 +958,7 @@
 
   <div class="modal" id="adminInquiriesModal" aria-hidden="true">
     <div class="modal-sheet tall-sheet admin-directory-sheet">
-      <button class="close" data-close="adminInquiriesModal">×</button>
+      <button class="close app-back-button" data-close="adminInquiriesModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Админ-панель</span><h2>Вопросы и заказы</h2>
       <div class="admin-filter-row"><input class="text-input" id="inquirySearch" placeholder="Клиент, товар или текст"><select class="text-input" id="inquiryStatusFilter"><option value="">Все статусы</option><option value="new">Новые</option><option value="answered">Отвечено</option><option value="order">Заказ оформлен</option></select></div>
       <div id="allInquiriesList" class="inquiry-list empty-state">Загрузка…</div>
@@ -967,7 +967,7 @@
 
   <div class="modal" id="staffLoginModal" aria-hidden="true">
     <div class="modal-sheet staff-login-sheet">
-      <button class="close" data-close="staffLoginModal">×</button>
+      <button class="close app-back-button" data-close="staffLoginModal" type="button" aria-label="Назад">← Назад</button>
       <span class="muted">Общий терминал</span>
       <h2>Кто работает сейчас</h2>
       <p>Сотрудник выбирается один раз в начале работы. Операции будут записаны на него.</p>
