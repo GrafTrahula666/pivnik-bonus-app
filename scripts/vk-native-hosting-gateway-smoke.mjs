@@ -11,6 +11,8 @@ const allowedHeaders = 'authorization,content-type,x-pivnik-version,x-pivnik-pla
 const root = process.cwd();
 const outDir = path.join(root, 'artifacts/vk-native-hosting-gateway-smoke');
 const signed = 'vk_app_id=54694987&vk_user_id=4242&vk_ts=123456&vk_platform=mobile_iphone&sign=fixture-sign';
+const bootImageUrl = 'https://cdn.creativeclaw.co/u/0ec82469/images/7097b68a-c43a-4cc1-bd8b-5fc28778a7e8.png';
+const fixtureBootImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=';
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
 let scenario;
 let staticOrigin;
@@ -106,7 +108,9 @@ const staticServer = createServer(async (req, res) => {
     if (relative.split('/').includes('..')) throw new Error('invalid path');
     let bytes = await fs.readFile(path.join(root, 'vk-hosting-build', relative));
     if (relative === 'index.html') {
-      bytes = bytes.toString().replace(/window\.__PIVNIK_VK_API_BASE__=[^;]+;/, `window.__PIVNIK_VK_API_BASE__=${JSON.stringify(gatewayOrigin)};`);
+      bytes = bytes.toString()
+        .replace(/window\.__PIVNIK_VK_API_BASE__=[^;]+;/, `window.__PIVNIK_VK_API_BASE__=${JSON.stringify(gatewayOrigin)};`)
+        .replace(bootImageUrl, fixtureBootImage);
     }
     res.writeHead(200, { 'content-type': mime[path.extname(relative)] || 'application/octet-stream', 'cache-control': 'no-store' });
     res.end(bytes);
@@ -123,12 +127,6 @@ try {
   for (const role of ['client', 'admin', 'staff']) {
     scenario = { role, accepted: role !== 'client', calls: [], preflights: [], unexpected: [], spinRequests: [] };
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    // The boot illustration is external; its CDN availability is outside this
-    // gateway/CORS smoke, so serve a valid local image for that exact URL.
-    await context.route('https://cdn.creativeclaw.co/u/0ec82469/images/7097b68a-c43a-4cc1-bd8b-5fc28778a7e8.png', (route) => route.fulfill({
-      status: 200, contentType: 'image/png',
-      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=', 'base64')
-    }));
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
