@@ -82,6 +82,24 @@ try {
   const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1`, { waitUntil: 'networkidle' });
   assert(response?.status() === 200, `index.html returned ${response?.status()}`);
 
+  const bootEvidence = await page.evaluate(() => {
+    const node = document.querySelector('#bootScreen');
+    const rect = node?.getBoundingClientRect();
+    const style = node ? getComputedStyle(node) : null;
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      rect: rect ? { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left } : null,
+      backgroundColor: style?.backgroundColor || ''
+    };
+  });
+  assert(bootEvidence.rect, 'loading screen is missing');
+  assert(bootEvidence.rect.top <= 0, `loading screen leaves a top gap: ${JSON.stringify(bootEvidence)}`);
+  assert(bootEvidence.rect.left <= 0, `loading screen leaves a left gap: ${JSON.stringify(bootEvidence)}`);
+  assert(bootEvidence.rect.right >= bootEvidence.viewport.width, `loading screen leaves a right gap: ${JSON.stringify(bootEvidence)}`);
+  assert(bootEvidence.rect.bottom >= bootEvidence.viewport.height, `loading screen leaves a bottom gap: ${JSON.stringify(bootEvidence)}`);
+  assert(rgbMax(bootEvidence.backgroundColor) <= 5, `loading screen background is not black: ${JSON.stringify(bootEvidence)}`);
+  await page.screenshot({ path: path.join(outDir, 'vk-loading-screen.png'), fullPage: true });
+
   await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}.screen.spaceverse-business-screen.active{display:grid!important}' });
   await page.evaluate(() => {
     const html = document.documentElement;
