@@ -103,7 +103,8 @@ test('working updates cannot overwrite the canonical RED COSMOS interaction runt
   assert.match(materializer, /delete runtimeFiles\['red-cosmos-v2\.js'\]/);
   assert.match(materializer, /const legacyFallback =/);
   assert.match(materializer, /const safeFallback =/);
-  assert.match(materializer, /queueMicrotask\(\(\) => \{/);
+  assert.match(materializer, /fallbackAlreadyHardened/);
+  assert.match(materializer, /queueMicrotask\\\(\\\(\\\) => \\\{/);
   assert.match(materializer, /overlay = overlay\.replace\(legacyFallback, safeFallback\)/);
 });
 
