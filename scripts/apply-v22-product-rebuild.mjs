@@ -82,12 +82,14 @@ async function patchIndex() {
     '/v22-ui.js?v=22.0.0',
     'v22 ui script'
   );
-  source = replaceRequired(
-    source,
-    '<button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>',
-    '<button class="v22-back-button wheel-back" id="wheelBackButton" type="button" aria-label="Назад"><span aria-hidden="true">←</span><span>Назад</span></button>',
-    'кнопка Назад в колесе'
-  );
+  if (!/<button[^>]*id="wheelBackButton"[^>]*app-back-button|<button[^>]*app-back-button[^>]*id="wheelBackButton"/.test(source)) {
+    source = replaceRequired(
+      source,
+      '<button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>',
+      '<button class="v22-back-button wheel-back" id="wheelBackButton" type="button" aria-label="Назад"><span aria-hidden="true">←</span><span>Назад</span></button>',
+      'кнопка Назад в колесе'
+    );
+  }
   source = source.replace(
     'Акция доступна авторизованным пользователям Telegram Mini App, достигшим 18 лет',
     'Акция доступна авторизованным пользователям VK или Telegram Mini App, достигшим 18 лет'
