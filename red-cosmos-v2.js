@@ -77,14 +77,16 @@
   function makeBackButton(button) {
     if (!button || button.dataset.redCosmosBack === '1') return;
     button.dataset.redCosmosBack = '1';
-    button.classList.add(button.closest('.modal-sheet') ? 'v2-modal-back' : 'v2-back-button');
-    button.textContent = '← Назад';
+    button.classList.remove('v22-back-button', 'v22-modal-back', 'v2-back-button', 'v2-modal-back');
+    button.classList.add('pivnik-back-button');
+    button.textContent = '←';
     button.setAttribute('aria-label', 'Назад');
+    button.setAttribute('title', 'Назад');
   }
 
   function upgradeBackButtons() {
     $$('.modal-sheet > .close').forEach(makeBackButton);
-    ['wheelBackButton', 'backToProfileFromStaff', 'backToProfileFromAdmin', 'profileSetupBack'].forEach((id) => makeBackButton(document.getElementById(id)));
+    ['wheelBackButton', 'spaceverseBusinessBack', 'backToProfileFromStaff', 'backToProfileFromAdmin', 'profileSetupBack'].forEach((id) => makeBackButton(document.getElementById(id)));
     ['wheelBackButton', 'backToProfileFromStaff', 'backToProfileFromAdmin'].forEach((id) => {
       const button = document.getElementById(id);
       if (!button || button.dataset.redCosmosHistoryBound === '1') return;
@@ -112,7 +114,7 @@
     const help = $('#helpModal');
     if (help) {
       $$('p,li', help).forEach((node) => {
-        if (/QR является постоянным|QR постоянный|многораз/i.test(node.textContent || '')) node.textContent = 'Показывайте QR сотруднику «Пивника» при начислении или списании.';
+        if (/QR является постоянным|QR постоянный|многораз|короткий код|указан[^.]*под QR/i.test(node.textContent || '')) node.textContent = 'Показывайте личный QR сотруднику «Пивника» при начислении или списании. Если QR не читается, сотрудник использует служебный ручной ввод.';
       });
     }
   }
@@ -253,6 +255,19 @@
         return;
       }
       const id = target.id;
+      const screenRoutes = {
+        profileStaffNav: 'staff',
+        profileAdminNav: 'admin'
+      };
+      if (screenRoutes[id]) {
+        const screen = screenRoutes[id];
+        scheduleFallback(
+          () => $(`.screen[data-screen="${CSS.escape(screen)}"]`)?.classList.contains('active'),
+          () => callMaybe('switchScreen', screen),
+          35
+        );
+        return;
+      }
       const routes = {
         navQrButton: ['qrModal', 'showQr'],
         openShopButton: ['shopModal', null],
