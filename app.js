@@ -35,13 +35,23 @@ function refreshTelegramBridge() {
   try { tg.ready(); } catch (_) {}
   try { tg.expand(); } catch (_) {}
   try {
-    tg.setHeaderColor(TELEGRAM_BOOT_COLOR);
-    tg.setBackgroundColor(TELEGRAM_BOOT_COLOR);
-    tg.setBottomBarColor(TELEGRAM_BOOT_COLOR);
+    tg.setHeaderColor(TELEGRAM_HEADER_COLOR);
+    tg.setBackgroundColor(TELEGRAM_BACKGROUND_COLOR);
+    tg.setBottomBarColor(TELEGRAM_BOTTOM_BAR_COLOR);
   } catch (_) {}
   return tg;
 }
 refreshTelegramBridge();
+
+function setTelegramBootChrome() {
+  if (IS_VK) return;
+  try {
+    tg?.setHeaderColor(TELEGRAM_BOOT_COLOR);
+    tg?.setBackgroundColor(TELEGRAM_BOOT_COLOR);
+    tg?.setBottomBarColor(TELEGRAM_BOOT_COLOR);
+  } catch (_) {}
+}
+setTelegramBootChrome();
 
 function localStorageKey(key) {
   const prefix = String(window.__PIVNIK_STORAGE_PREFIX__ || 'pivnik_tg_');
@@ -922,11 +932,11 @@ async function finishBoot() {
   $('#appShell')?.classList.remove('hidden');
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', TELEGRAM_HEADER_COLOR);
   if (!IS_VK) {
-    const bridge = refreshTelegramBridge();
+    tg = refreshTelegramBridge();
     try {
-      bridge?.setHeaderColor(TELEGRAM_HEADER_COLOR);
-      bridge?.setBackgroundColor(TELEGRAM_BACKGROUND_COLOR);
-      bridge?.setBottomBarColor(TELEGRAM_BOTTOM_BAR_COLOR);
+      tg?.setHeaderColor(TELEGRAM_HEADER_COLOR);
+      tg?.setBackgroundColor(TELEGRAM_BACKGROUND_COLOR);
+      tg?.setBottomBarColor(TELEGRAM_BOTTOM_BAR_COLOR);
     } catch (_) {}
   }
   try {
