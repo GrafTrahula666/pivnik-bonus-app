@@ -85,6 +85,86 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   }
 }
 
+// Canonical back navigation 2026-09-26.
+// The archived payload still contains the retired RED COSMOS history interceptor.
+// Keep the payload for unrelated repairs, then neutralize only its Back override.
+{
+  const path = 'red-cosmos-v2.js';
+  let overlay = await readText(path);
+
+  overlay = overlay.replace(
+    `    verifyTheme();
+    applyPlatformChrome();
+    installScreenHistory();
+    upgradeBackButtons();
+    cleanVkQrCopy();`,
+    `    verifyTheme();
+    applyPlatformChrome();
+    // Canonical app.js owns screen history and Back behavior.
+    cleanVkQrCopy();`
+  );
+
+  overlay = overlay.replace(
+    `    verifyTheme();
+    installScreenHistory();
+    upgradeBackButtons();
+    cleanVkQrCopy();`,
+    `    verifyTheme();
+    // Canonical app.js owns screen history and Back behavior.
+    cleanVkQrCopy();`
+  );
+
+  if (!overlay.includes("target.matches('.app-back-button')")) {
+    const hook = `      const id = target.id;
+      const routes = {`;
+    const canonicalFallback = `      const id = target.id;
+
+      if (target.matches('.app-back-button')) {
+        if (target.dataset.close) {
+          const modalId = target.dataset.close;
+          scheduleFallback(
+            () => !document.getElementById(modalId)?.classList.contains('open'),
+            () => {
+              const modal = document.getElementById(modalId);
+              modal?.classList.remove('open');
+              modal?.setAttribute('aria-hidden', 'true');
+            },
+            35
+          );
+          return;
+        }
+
+        if (id === 'wheelBackButton' || id === 'spaceverseBusinessBack') {
+          const activeBefore = activeScreen();
+          scheduleFallback(
+            () => activeScreen() !== activeBefore,
+            () => callMaybe('__PIVNIK_GO_BACK__') || forceScreen('client'),
+            35
+          );
+          return;
+        }
+
+        if (id === 'backToProfileFromStaff' || id === 'backToProfileFromAdmin') {
+          scheduleFallback(
+            () => activeScreen() === 'profile',
+            () => callMaybe('switchScreen', 'profile') || forceScreen('profile'),
+            35
+          );
+          return;
+        }
+      }
+
+      const routes = {`;
+
+    if (!overlay.includes(hook)) {
+      throw new Error('working updates: canonical Back fallback hook missing');
+    }
+    overlay = overlay.replace(hook, canonicalFallback);
+  }
+
+  await writeText(path, overlay);
+}
+
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
 // the authenticated provider identity, and must not depend on whether legacy
 // multi-identity profile metadata is eligible for refresh.
