@@ -342,6 +342,8 @@ async function ensurePersonalQr(db, userId, force = false) {
     return current.rows[0];
   }
   if (force && (current.rows[0].qr_token || current.rows[0].qr_short_code)) {
+    // Reserve the old code as a self-alias so it is never issued again.
+    // resolvePersonalQrRecord ignores self-aliases, which revokes the old QR.
     await db.query(
       `INSERT INTO qr_aliases (qr_token, qr_short_code, user_id, source_user_id)
        VALUES ($1, $2, $3::bigint, $3::bigint)
@@ -1263,6 +1265,9 @@ async function resolveActingStaff(req) {
   return profile;
 }
 
+// Staff and shop handlers await notifications while still holding a pooled
+// database client, so a stalled Telegram API must not block them indefinitely.
+const TELEGRAM_SEND_TIMEOUT_MS = 8_000;
 const TELEGRAM_BROADCAST_MAX_RETRY_AFTER_SECONDS = 15;
 
 async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
@@ -1273,7 +1278,8 @@ async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: telegramId, text })
+      body: JSON.stringify({ chat_id: telegramId, text }),
+      signal: AbortSignal.timeout(TELEGRAM_SEND_TIMEOUT_MS)
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.ok === false) {
