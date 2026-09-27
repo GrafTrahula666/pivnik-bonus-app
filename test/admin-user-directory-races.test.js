@@ -7,7 +7,19 @@ const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const source = app.slice(app.indexOf('function adminUsersDirectoryParams('), app.indexOf('async function refreshAdminUsersDirectory('));
 
 function harness() {
-  const nodes = Object.fromEntries(['userSearch', 'userRoleFilter', 'userStatusFilter', 'allUsersList', 'adminUsersRetry', 'adminUsersMeta', 'adminUsersPageLabel', 'adminUsersPrev', 'adminUsersNext'].map(id => [id, { value: '', hidden: true }]));
+  const nodes = Object.fromEntries(['userSearch', 'userRoleFilter', 'allUsersList', 'adminUsersRetry', 'adminUsersMeta', 'adminUsersPageLabel', 'adminUsersPrev', 'adminUsersNext'].map(id => [id, { value: '', hidden: true }]));
+  nodes.userStatusFilter = {
+    value: '',
+    hidden: true,
+    options: [
+      { value: '', textContent: 'Все' },
+      { value: 'new', textContent: 'Новые' },
+      { value: 'active', textContent: 'Активные' },
+      { value: 'at_risk', textContent: 'В зоне риска' },
+      { value: 'sleeping', textContent: 'Спящие' },
+      { value: 'no_visits', textContent: 'Без визитов' }
+    ]
+  };
   const pending = [], renders = [], timers = new Map();
   let timerId = 0;
   const state = { profile: { id: '1' }, adminUsers: [], adminUsersRequestSeq: 0, adminUsersDirectory: { page: 1, pages: 3, limit: 25, total: 60 }, adminUsersFilterTimer: 0 };
@@ -20,7 +32,7 @@ function harness() {
   return { context, state, nodes, pending, renders, timers };
 }
 
-const response = name => ({ users: [{ id: name }], pagination: { page: 1, limit: 25, total: 1, pages: 1 } });
+const response = name => ({ users: [{ id: name }], pagination: { page: 1, limit: 25, total: 1, pages: 1 }, segments: { new: 1, active: 0, at_risk: 0, sleeping: 0, no_visits: 0 } });
 
 test('CRM search never replaces newer results with a late older response', async () => {
   const h = harness();

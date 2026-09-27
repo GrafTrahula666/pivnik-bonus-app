@@ -1,6 +1,5 @@
 const ADMIN_USER_ROLES = new Set(['client', 'staff', 'viewer', 'admin']);
-const ADMIN_USER_STATUSES = new Set(['new', 'active', 'inactive', 'no_ops']);
-
+const ADMIN_USER_STATUSES = new Set(['new', 'active', 'at_risk', 'sleeping', 'no_visits', 'inactive', 'no_ops']);
 
 export function isAdminUserUrlLike(value) {
   const text = String(value ?? '').trim();
@@ -66,13 +65,16 @@ export function adminUserCrmStatus(row, nowMs = Date.now()) {
   const createdMs = Date.parse(row?.created_at || row?.createdAt || '');
   const lastActivityMs = Date.parse(row?.last_activity_at || row?.lastActivityAt || '');
   const operationsCount = Number(row?.operations_count ?? row?.operationsCount ?? 0);
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const sixtyDays = 60 * 24 * 60 * 60 * 1000;
 
-  if (Number.isFinite(createdMs) && createdMs >= nowMs - sevenDays) return 'new';
-  if (operationsCount <= 0) return 'no_ops';
-  if (Number.isFinite(lastActivityMs) && lastActivityMs >= nowMs - thirtyDays) return 'active';
-  return 'inactive';
+  if (operationsCount <= 0) {
+    return Number.isFinite(createdMs) && createdMs >= nowMs - thirtyDays ? 'new' : 'no_visits';
+  }
+  if (!Number.isFinite(lastActivityMs)) return 'sleeping';
+  if (lastActivityMs >= nowMs - thirtyDays) return 'active';
+  if (lastActivityMs >= nowMs - sixtyDays) return 'at_risk';
+  return 'sleeping';
 }
 
 export async function queryAdminUserDirectory(pool, input = {}) {
@@ -80,7 +82,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
 
   const filters = normalizeAdminUserDirectoryInput(input);
   const params = [];
-  const where = [
+  const baseWhere = [
     'u.merged_into_user_id IS NULL',
     'u.deleted_at IS NULL'
   ];
@@ -88,7 +90,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   if (filters.q) {
     params.push(`%${filters.q}%`);
     const p = `$${params.length}`;
-    where.push(`(
+    baseWhere.push(`(
       CONCAT_WS(' ', u.first_name, u.last_name) ILIKE ${p}
       OR COALESCE(u.username, '') ILIKE ${p}
       OR COALESCE(u.telegram_id::text, '') ILIKE ${p}
@@ -103,34 +105,41 @@ export async function queryAdminUserDirectory(pool, input = {}) {
 
   if (filters.role) {
     params.push(filters.role);
-    where.push(`u.role = $${params.length}`);
+    baseWhere.push(`u.role = $${params.length}`);
   }
 
+  const where = [...baseWhere];
   if (filters.status === 'new') {
-    where.push(`u.created_at >= NOW() - INTERVAL '7 days'`);
-  } else if (filters.status === 'no_ops') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days' AND COALESCE(activity.operations_count, 0) = 0`);
+    where.push(`u.created_at >= NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0`);
+  } else if (filters.status === 'no_visits' || filters.status === 'no_ops') {
+    where.push(`u.created_at < NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0`);
   } else if (filters.status === 'active') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days'
-      AND COALESCE(activity.operations_count, 0) > 0
+    where.push(`COALESCE(activity.operations_count, 0) > 0
       AND activity.last_activity_at >= NOW() - INTERVAL '30 days'`);
+  } else if (filters.status === 'at_risk') {
+    where.push(`COALESCE(activity.operations_count, 0) > 0
+      AND activity.last_activity_at < NOW() - INTERVAL '30 days'
+      AND activity.last_activity_at >= NOW() - INTERVAL '60 days'`);
+  } else if (filters.status === 'sleeping') {
+    where.push(`COALESCE(activity.operations_count, 0) > 0
+      AND (activity.last_activity_at < NOW() - INTERVAL '60 days' OR activity.last_activity_at IS NULL)`);
   } else if (filters.status === 'inactive') {
-    where.push(`u.created_at < NOW() - INTERVAL '7 days'
-      AND COALESCE(activity.operations_count, 0) > 0
+    where.push(`COALESCE(activity.operations_count, 0) > 0
       AND activity.last_activity_at < NOW() - INTERVAL '30 days'`);
   }
 
-  const fromSql = `
+  const activityJoinSql = `
     FROM users u
     JOIN wallets w ON w.user_id = u.id
     LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
     LEFT JOIN LATERAL (
       SELECT
-        MAX(t.created_at) FILTER (WHERE t.status = 'completed') AS last_activity_at,
-        COUNT(*) FILTER (WHERE t.status = 'completed')::int AS operations_count
+        MAX(t.created_at) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')) AS last_activity_at,
+        COUNT(*) FILTER (WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem'))::int AS operations_count
       FROM transactions t
       WHERE t.client_id = u.id
-    ) activity ON TRUE
+    ) activity ON TRUE`;
+  const fromSql = `${activityJoinSql}
     WHERE ${where.join(' AND ')}
   `;
 
@@ -142,6 +151,26 @@ export async function queryAdminUserDirectory(pool, input = {}) {
   const pages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, pages);
   const offset = (page - 1) * filters.limit;
+
+  const segmentResult = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE u.created_at >= NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0)::int AS new,
+       COUNT(*) FILTER (WHERE COALESCE(activity.operations_count, 0) > 0 AND activity.last_activity_at >= NOW() - INTERVAL '30 days')::int AS active,
+       COUNT(*) FILTER (WHERE COALESCE(activity.operations_count, 0) > 0 AND activity.last_activity_at < NOW() - INTERVAL '30 days' AND activity.last_activity_at >= NOW() - INTERVAL '60 days')::int AS at_risk,
+       COUNT(*) FILTER (WHERE COALESCE(activity.operations_count, 0) > 0 AND (activity.last_activity_at < NOW() - INTERVAL '60 days' OR activity.last_activity_at IS NULL))::int AS sleeping,
+       COUNT(*) FILTER (WHERE u.created_at < NOW() - INTERVAL '30 days' AND COALESCE(activity.operations_count, 0) = 0)::int AS no_visits
+     ${activityJoinSql}
+     WHERE ${baseWhere.join(' AND ')}`,
+    params
+  );
+  const segmentRow = segmentResult.rows[0] || {};
+  const segments = {
+    new: Number(segmentRow.new || 0),
+    active: Number(segmentRow.active || 0),
+    at_risk: Number(segmentRow.at_risk || 0),
+    sleeping: Number(segmentRow.sleeping || 0),
+    no_visits: Number(segmentRow.no_visits || 0)
+  };
 
   const dataParams = [...params, filters.limit, offset];
   const limitParam = `$${dataParams.length - 1}`;
@@ -193,6 +222,7 @@ export async function queryAdminUserDirectory(pool, input = {}) {
       total,
       pages
     },
+    segments,
     filters
   };
 }
