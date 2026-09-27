@@ -203,6 +203,7 @@ try {
   const firstNavigation = firstPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
   const first = await waitForReady(firstPage, 'fresh launch');
   await firstNavigation;
+  await firstPage.waitForLoadState('networkidle');
   await firstPage.screenshot({ path: path.join(outDir, 'fresh.png'), fullPage: true });
 
   const firstAuthCalls = apiCalls.filter((call) => call.pathname === '/api/auth');
@@ -216,6 +217,7 @@ try {
   const reloadNavigation = firstPage.reload({ waitUntil: 'domcontentloaded' });
   const reload = await waitForReady(firstPage, 'reload');
   await reloadNavigation;
+  await firstPage.waitForLoadState('networkidle');
   await firstPage.screenshot({ path: path.join(outDir, 'reload.png'), fullPage: true });
 
   const reloadCalls = apiCalls.slice(beforeReloadCount);
@@ -229,6 +231,7 @@ try {
   const reopenNavigation = reopenedPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
   const reopened = await waitForReady(reopenedPage, 'reopen');
   await reopenNavigation;
+  await reopenedPage.waitForLoadState('networkidle');
   await reopenedPage.screenshot({ path: path.join(outDir, 'reopen.png'), fullPage: true });
 
   const reopenCalls = apiCalls.slice(beforeReopenCount);
