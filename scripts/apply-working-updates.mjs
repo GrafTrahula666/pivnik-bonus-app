@@ -27,10 +27,11 @@ const payloadBase64 = (await Promise.all(payloadParts.map((name) => fs.readFile(
 const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base64')).toString('utf8'));
 // Applied SQL migrations are immutable. Updates to RED COSMOS recipients live in migration 008.
 delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
-// VK runtime is canonical source. Never restore an archived startup implementation.
+// Current client/runtime files are canonical sources. Never restore archived UI or startup implementations.
 delete runtimeFiles['app.js'];
 delete runtimeFiles['index.html'];
 delete runtimeFiles['vk-platform.js'];
+delete runtimeFiles['red-cosmos-v2.js'];
 // DB prepare is canonical source too. Its startup safety/logging fixes must survive materialization.
 delete runtimeFiles['scripts/red-cosmos-v2-db-prepare.mjs'];
 const runtimeAnchors = {
@@ -50,10 +51,10 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   await writeText(relativePath, targetContent);
 }
 
-// The archived working-updates payload intentionally carries several later VK
-// repairs (service-role fallbacks and QR help cleanup). Preserve those, but do
-// not restore the old delayed interaction fallback that could reopen a modal
-// after the user had already closed it.
+// Preserve the current RED COSMOS interaction runtime. The archived payload may
+// still carry other later VK repairs, but it must never overwrite current UI
+// geometry or back-control behavior. Only harden the delayed fallback in-place
+// when an older canonical source reaches this materializer.
 {
   const path = 'red-cosmos-v2.js';
   const legacyFallback = `  function scheduleFallback(check, action, delay = 60) {
@@ -76,7 +77,8 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
     });
   }`;
   let overlay = await readText(path);
-  if (!overlay.includes(safeFallback)) {
+  const fallbackAlreadyHardened = /function scheduleFallback\(check, action, delay = 60\)[\s\S]*?queueMicrotask\(\(\) => \{/.test(overlay);
+  if (!fallbackAlreadyHardened) {
     if (!overlay.includes(legacyFallback)) {
       throw new Error('working updates: RED COSMOS fallback marker missing');
     }

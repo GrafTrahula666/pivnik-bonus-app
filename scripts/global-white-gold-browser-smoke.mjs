@@ -77,7 +77,11 @@ async function openPage({ platform, android = false, viewport = { width: 390, he
     const requestUrl = new URL(route.request().url());
     if (requestUrl.hostname === '127.0.0.1') {
       if (requestUrl.pathname.endsWith('.js')) {
-        await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: '' });
+        if (requestUrl.pathname === '/red-cosmos-v2.js') {
+          await route.continue();
+        } else {
+          await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: '' });
+        }
         return;
       }
       await route.continue();
@@ -124,6 +128,133 @@ async function openPage({ platform, android = false, viewport = { width: 390, he
   }, { platformName: platform, androidWebView: android });
 
   return { context, page, pageErrors, failedLocal, boot };
+}
+
+async function inspectBackControls(caseName, config) {
+  const { context, page, pageErrors, failedLocal } = await openPage(config);
+  try {
+    await page.waitForFunction(() => document.querySelectorAll('.pivnik-back-button').length > 0);
+
+    const evidence = await page.evaluate(({ viewportWidth }) => {
+      const expectedSize = viewportWidth <= 360 ? 38 : 40;
+      const shell = document.querySelector('#appShell');
+
+      const activateScreen = (target) => {
+        document.querySelectorAll('.screen').forEach((screen) => {
+          screen.classList.toggle('active', screen.dataset.screen === target);
+        });
+        shell?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
+        shell?.classList.toggle('wheel-mode', target === 'wheel');
+      };
+
+      const rectOf = (node) => {
+        const rect = node?.getBoundingClientRect();
+        return rect ? {
+          x: rect.x, y: rect.y, left: rect.left, right: rect.right,
+          top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height
+        } : null;
+      };
+
+      const overlaps = (a, b) => Boolean(a && b
+        && a.left < b.right && a.right > b.left
+        && a.top < b.bottom && a.bottom > b.top);
+
+      const readButton = (button, anchor = null) => {
+        if (!button) return null;
+        const style = getComputedStyle(button);
+        const rect = rectOf(button);
+        const anchorRect = rectOf(anchor);
+        return {
+          id: button.id || null,
+          classes: [...button.classList],
+          text: button.textContent?.trim() || '',
+          ariaLabel: button.getAttribute('aria-label'),
+          position: style.position,
+          display: style.display,
+          visibility: style.visibility,
+          pointerEvents: style.pointerEvents,
+          afterContent: getComputedStyle(button, '::after').content,
+          afterDisplay: getComputedStyle(button, '::after').display,
+          rect,
+          anchorRect,
+          overlapsAnchor: overlaps(rect, anchorRect)
+        };
+      };
+
+      const screenDefinitions = [
+        ['wheelBackButton', 'wheel', '.wheel-page-head h2'],
+        ['spaceverseBusinessBack', 'spaceverse-business', '.spaceverse-business-page-head > span:nth-child(2)'],
+        ['backToProfileFromStaff', 'staff', '.staff-banner h2'],
+        ['backToProfileFromAdmin', 'admin', '.admin-head h2']
+      ];
+
+      const screens = screenDefinitions.map(([id, screenName, anchorSelector]) => {
+        activateScreen(screenName);
+        return {
+          screenName,
+          control: readButton(document.getElementById(id), document.querySelector(anchorSelector))
+        };
+      });
+
+      activateScreen('profile');
+      const modals = [...document.querySelectorAll('.modal')].map((modal) => {
+        const close = modal.querySelector(':scope > .modal-sheet > .close');
+        if (!close) return null;
+        document.querySelectorAll('.modal.open').forEach((other) => {
+          if (other !== modal) {
+            other.classList.remove('open');
+            other.setAttribute('aria-hidden', 'true');
+          }
+        });
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        const siblings = [...(close.parentElement?.children || [])].filter((node) => node !== close);
+        const anchor = siblings.find((node) => {
+          const rect = node.getBoundingClientRect();
+          const style = getComputedStyle(node);
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        }) || null;
+        const result = {
+          modalId: modal.id || null,
+          control: readButton(close, anchor)
+        };
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        return result;
+      }).filter(Boolean);
+
+      return { expectedSize, screens, modals };
+    }, { viewportWidth: config.viewport.width });
+
+    const all = [
+      ...evidence.screens.map((item) => ({ name: item.screenName, ...item.control })),
+      ...evidence.modals.map((item) => ({ name: item.modalId, ...item.control }))
+    ];
+
+    assert(all.length >= 8, `${caseName}: too few back controls inspected: ${all.length}`);
+    for (const control of all) {
+      assert(control, `${caseName}: missing back control`);
+      assert(control.classes.includes('pivnik-back-button'), `${caseName}/${control.name}: canonical back class missing`);
+      assert(control.text === '←', `${caseName}/${control.name}: inconsistent back glyph "${control.text}"`);
+      assert(control.ariaLabel === 'Назад', `${caseName}/${control.name}: accessible label missing`);
+      assert(control.position === 'static', `${caseName}/${control.name}: back control escaped normal flow: ${control.position}`);
+      assert(control.display !== 'none' && control.visibility !== 'hidden', `${caseName}/${control.name}: back control hidden`);
+      assert(control.pointerEvents !== 'none', `${caseName}/${control.name}: back control not clickable`);
+      assert(control.afterContent === 'none' || control.afterContent === 'normal' || control.afterContent === '""',
+        `${caseName}/${control.name}: pseudo-element adds visible back-label content: ${control.afterContent}`);
+      assert(Math.abs(control.rect.width - evidence.expectedSize) < 0.5,
+        `${caseName}/${control.name}: width ${control.rect.width} != ${evidence.expectedSize}`);
+      assert(Math.abs(control.rect.height - evidence.expectedSize) < 0.5,
+        `${caseName}/${control.name}: height ${control.rect.height} != ${evidence.expectedSize}`);
+      assert(!control.overlapsAnchor, `${caseName}/${control.name}: back control overlaps nearby content`);
+    }
+
+    assert(pageErrors.length === 0, `${caseName}/back-controls: page errors: ${pageErrors.join(' | ')}`);
+    assert(failedLocal.length === 0, `${caseName}/back-controls: failed local requests: ${JSON.stringify(failedLocal)}`);
+    return evidence;
+  } finally {
+    await context.close();
+  }
 }
 
 async function inspectScreen(caseName, config, screenName) {
@@ -326,6 +457,7 @@ try {
   ];
 
   for (const config of cases) {
+    results[`${config.name}-back-controls`] = await inspectBackControls(config.name, config);
     results[`${config.name}-league`] = await inspectScreen(config.name, config, 'league');
     results[`${config.name}-wheel`] = await inspectScreen(config.name, config, 'wheel');
     results[`${config.name}-qr`] = await inspectModal(config.name, config, 'qrModal', 'qr');

@@ -25,7 +25,7 @@ test('startup shell retires legacy visual layers and preserves only the interact
   assert.match(shell, /forbiddenVisualAssets/);
   assert.match(shell, /\/red-cosmos-v2\.css/);
   assert.match(shell, /\/black-frosted-glass\.css/);
-  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
+  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.1/);
   assert.match(shell, /SPACEVERSE_CANONICAL_THEME_LOCK/);
 });
 
@@ -53,13 +53,17 @@ test('RED COSMOS client removes all VK-only wheel guards and renders premium fra
   assert.match(fragment, /Рамка куплена и сохранена в профиле/);
 });
 
-test('RED COSMOS UI reserves visible layout space for back controls and modal stacking', async () => {
-  const css = await read('red-cosmos-v2.css');
-  assert.match(css, /\.v2-back-button/);
+test('canonical back controls are compact, in-flow and shared by screens and modals', async () => {
+  const [css, ui] = await Promise.all([read('styles.css'), read('red-cosmos-v2.js')]);
+  assert.match(css, /PIVNIK_UNIFIED_BACK_CONTROLS_20260926/);
+  assert.match(css, /\.pivnik-back-button/);
   assert.match(css, /position:\s*static\s*!important/);
-  assert.match(css, /min-height:\s*46px/);
-  assert.match(css, /\.modal\.open/);
-  assert.match(css, /z-index:\s*10000/);
-  assert.match(css, /\.bottom-nav/);
-  assert.match(css, /grid-template-columns:\s*repeat\(5/);
+  assert.match(css, /width:\s*40px\s*!important/);
+  assert.match(css, /height:\s*40px\s*!important/);
+  assert.match(css, /box-shadow:\s*none\s*!important/);
+  assert.match(css, /\.pivnik-back-button\.hidden/);
+  assert.match(ui, /\.modal-sheet > \.close/);
+  assert.match(ui, /spaceverseBusinessBack/);
+  assert.match(ui, /button\.classList\.add\('pivnik-back-button'\)/);
+  assert.match(ui, /button\.textContent = '←'/);
 });

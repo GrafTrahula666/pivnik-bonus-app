@@ -17,8 +17,9 @@ test('canonical SPACEVERSE shell replaces obsolete visual layers without losing 
   assert.doesNotMatch(index, /\/black-frosted-(?:glass|surfaces|controls)\.css/);
   assert.doesNotMatch(index, /\/v22\\.css/);
   assert.doesNotMatch(index, /\/v22-ui\\.js/);
-  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
-  assert.match(ui, /← Назад/);
+  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.1/);
+  assert.match(ui, /pivnik-back-button/);
+  assert.match(ui, /button\.textContent = '←'/);
   assert.match(ui, /installVkInteractionFallback/);
 });
 

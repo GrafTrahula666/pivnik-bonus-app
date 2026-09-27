@@ -82,12 +82,14 @@ async function patchIndex() {
     '/v22-ui.js?v=22.0.0',
     'v22 ui script'
   );
-  source = replaceRequired(
-    source,
-    '<button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>',
-    '<button class="v22-back-button wheel-back" id="wheelBackButton" type="button" aria-label="Назад"><span aria-hidden="true">←</span><span>Назад</span></button>',
-    'кнопка Назад в колесе'
-  );
+  const legacyWheelBack = '<button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>';
+  const v22WheelBack = '<button class="v22-back-button wheel-back" id="wheelBackButton" type="button" aria-label="Назад"><span aria-hidden="true">←</span><span>Назад</span></button>';
+  const canonicalWheelBack = '<button class="icon-btn wheel-back pivnik-back-button" id="wheelBackButton" type="button" aria-label="Назад" title="Назад">←</button>';
+  if (source.includes(legacyWheelBack)) {
+    source = source.replace(legacyWheelBack, v22WheelBack);
+  } else if (!source.includes(v22WheelBack) && !source.includes(canonicalWheelBack)) {
+    throw new Error('v22: не найден фрагмент «кнопка Назад в колесе»');
+  }
   source = source.replace(
     'Акция доступна авторизованным пользователям Telegram Mini App, достигшим 18 лет',
     'Акция доступна авторизованным пользователям VK или Telegram Mini App, достигшим 18 лет'
