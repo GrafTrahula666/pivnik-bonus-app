@@ -133,6 +133,10 @@
     return panel;
   }
 
+  function escapeAdminText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  }
+
   function renderAdminRows(target, items, kind) {
     if (!target) return;
     target.className = `operation-list${items.length ? '' : ' empty-state'}`;
@@ -140,12 +144,13 @@
       target.textContent = kind === 'frames' ? 'Рамок пока нет' : 'Данных достижений пока нет';
       return;
     }
+    // Names come from Telegram/VK profiles and must never be parsed as HTML.
     target.innerHTML = items.map((item) => {
-      const name = [item.first_name, item.username ? `@${item.username}` : ''].filter(Boolean).join(' · ') || 'Пользователь';
+      const name = escapeAdminText([item.first_name, item.username ? `@${item.username}` : ''].filter(Boolean).join(' · ') || 'Пользователь');
       if (kind === 'frames') {
-        return `<div class="op-row"><span class="op-icon">◇</span><div><b>${name}</b><small>${String(item.frame_id)} · ${String(item.acquired_source || '')}${item.restored_from_legacy ? ' · восстановлено' : ''}</small></div><strong>${item.selected_frame === item.frame_id ? 'Выбрана' : 'Есть'}</strong></div>`;
+        return `<div class="op-row"><span class="op-icon">◇</span><div><b>${name}</b><small>${escapeAdminText(item.frame_id)} · ${escapeAdminText(item.acquired_source || '')}${item.restored_from_legacy ? ' · восстановлено' : ''}</small></div><strong>${item.selected_frame === item.frame_id ? 'Выбрана' : 'Есть'}</strong></div>`;
       }
-      return `<div class="op-row"><span class="op-icon">◆</span><div><b>${name}</b><small>${String(item.achievement_code)} · ${Number(item.current_progress || 0)}/${Number(item.required_progress || 0)}</small></div><strong>${item.is_granted ? 'Получено' : 'В процессе'}</strong></div>`;
+      return `<div class="op-row"><span class="op-icon">◆</span><div><b>${name}</b><small>${escapeAdminText(item.achievement_code)} · ${Number(item.current_progress || 0)}/${Number(item.required_progress || 0)}</small></div><strong>${item.is_granted ? 'Получено' : 'В процессе'}</strong></div>`;
     }).join('');
   }
 

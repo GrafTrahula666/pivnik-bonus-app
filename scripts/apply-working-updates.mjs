@@ -85,6 +85,54 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   }
 }
 
+// The archived admin data panels interpolated Telegram/VK profile names into
+// innerHTML. Keep the canonical escaped renderer after restoring the payload.
+{
+  const path = 'red-cosmos-v2.js';
+  const unsafeRows = `  function renderAdminRows(target, items, kind) {
+    if (!target) return;
+    target.className = \`operation-list\${items.length ? '' : ' empty-state'}\`;
+    if (!items.length) {
+      target.textContent = kind === 'frames' ? 'Рамок пока нет' : 'Данных достижений пока нет';
+      return;
+    }
+    target.innerHTML = items.map((item) => {
+      const name = [item.first_name, item.username ? \`@\${item.username}\` : ''].filter(Boolean).join(' · ') || 'Пользователь';
+      if (kind === 'frames') {
+        return \`<div class="op-row"><span class="op-icon">◇</span><div><b>\${name}</b><small>\${String(item.frame_id)} · \${String(item.acquired_source || '')}\${item.restored_from_legacy ? ' · восстановлено' : ''}</small></div><strong>\${item.selected_frame === item.frame_id ? 'Выбрана' : 'Есть'}</strong></div>\`;
+      }
+      return \`<div class="op-row"><span class="op-icon">◆</span><div><b>\${name}</b><small>\${String(item.achievement_code)} · \${Number(item.current_progress || 0)}/\${Number(item.required_progress || 0)}</small></div><strong>\${item.is_granted ? 'Получено' : 'В процессе'}</strong></div>\`;
+    }).join('');
+  }`;
+  const safeRows = `  function escapeAdminText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  }
+
+  function renderAdminRows(target, items, kind) {
+    if (!target) return;
+    target.className = \`operation-list\${items.length ? '' : ' empty-state'}\`;
+    if (!items.length) {
+      target.textContent = kind === 'frames' ? 'Рамок пока нет' : 'Данных достижений пока нет';
+      return;
+    }
+    // Names come from Telegram/VK profiles and must never be parsed as HTML.
+    target.innerHTML = items.map((item) => {
+      const name = escapeAdminText([item.first_name, item.username ? \`@\${item.username}\` : ''].filter(Boolean).join(' · ') || 'Пользователь');
+      if (kind === 'frames') {
+        return \`<div class="op-row"><span class="op-icon">◇</span><div><b>\${name}</b><small>\${escapeAdminText(item.frame_id)} · \${escapeAdminText(item.acquired_source || '')}\${item.restored_from_legacy ? ' · восстановлено' : ''}</small></div><strong>\${item.selected_frame === item.frame_id ? 'Выбрана' : 'Есть'}</strong></div>\`;
+      }
+      return \`<div class="op-row"><span class="op-icon">◆</span><div><b>\${name}</b><small>\${escapeAdminText(item.achievement_code)} · \${Number(item.current_progress || 0)}/\${Number(item.required_progress || 0)}</small></div><strong>\${item.is_granted ? 'Получено' : 'В процессе'}</strong></div>\`;
+    }).join('');
+  }`;
+  const overlay = await readText(path);
+  if (!overlay.includes(safeRows)) {
+    if (!overlay.includes(unsafeRows)) {
+      throw new Error('working updates: RED COSMOS admin rows marker missing');
+    }
+    await writeText(path, overlay.replace(unsafeRows, () => safeRows));
+  }
+}
+
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
 // the authenticated provider identity, and must not depend on whether legacy
 // multi-identity profile metadata is eligible for refresh.
