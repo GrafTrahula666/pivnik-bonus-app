@@ -84,11 +84,25 @@ By rough domain, all still living as inline Express handlers in `server.js`:
 
 ## The prestart/materialize patch chain
 
-`npm start`'s `prestart` runs 13 `scripts/apply-*.mjs` in a fixed order before
+`npm start`'s `prestart` runs `scripts/apply-*.mjs` in a fixed order before
 `node universal-server.js`; `npm run materialize` runs the equivalent subset
 without the Telegram/DB-specific steps. **This is a real, previously-documented
 risk** (`docs/vk-startup-forensic-20260913.md` already flagged it: "the archive
 overwrite is proven architectural risk"), not a new finding.
+
+**2026-09-28: retired `apply-icecream69a-frame.mjs`** as the proof-of-concept
+for this process (see git history / PR for the exact commit). Its diff — a
+small, self-contained per-username avatar frame, touching only `app.js`,
+`server.js`, `styles.css`, `universal-server.js` and never auth or money — was
+copied into canonical source, the script deleted, and it was removed from
+`prestart`, `materialize`, `check` and the `APPROVED_PRESTART_COMMANDS`
+allowlist in `scripts/audit-runtime-patch-chain.mjs` in the same change.
+**12 scripts remain.** The process took: run the script against a scratch
+copy to get its exact diff, copy the already-verified patched files into
+canonical source (not retype them — the script's own internal assertions
+already proved the diff correct), remove it from all four places that
+reference it by name, then re-run the full regression bar below. This is the
+repeatable process for the remaining 12.
 
 Ran the existing conservative audit tool as of this writing
 (`npm run audit:runtime-retirement`, canonical phase):
@@ -98,16 +112,20 @@ Conservative retirement candidates: 0
 Startup side-effect review required: 1 (scripts/repair-telegram-runtime.mjs — external network call)
 ```
 
-**All 13 scripts are still classified as required** (`materialized-release-step`
-or `keep-database-step`) by the tool's own conservative criteria. This means
-the easy part of "kill the patch chain" is already done (there's history of
-`retirement-materialize-once.yml` / `retirement-materialize-v22-preflight-once.yml`
-workflows that already retired earlier patches into canonical source) — what's
-**left active now is the harder remainder**, not low-hanging fruit. Retiring
-any one of these means: read exactly what it changes, move that change into
-the canonical source file it patches, delete the apply-script, run the audit
-tool again to confirm it now reports the retirement as safe, and keep
-`npm run check` + full `node --test` + materialize-idempotency green throughout.
+**The remaining 12 scripts are still classified as required**
+(`materialized-release-step` or `keep-database-step`) by the tool's own
+conservative criteria. This means the easy part of "kill the patch chain" is
+already done (there's history of `retirement-materialize-once.yml` /
+`retirement-materialize-v22-preflight-once.yml` workflows that already retired
+earlier patches into canonical source, and now this one) — what's **left
+active is the harder remainder**, not low-hanging fruit. Retiring any one of
+these means: read exactly what it changes, move that change into the
+canonical source file it patches, delete the apply-script, remove it from
+`package.json` (`prestart`/`materialize`/`check`) and from
+`APPROVED_PRESTART_COMMANDS` in `scripts/audit-runtime-patch-chain.mjs`, run
+the audit tool again to confirm it now reports the retirement as safe, and
+keep `npm run check` + full `node --test` + materialize-idempotency green
+throughout.
 
 Scripts, in prestart order, and what each one touches (from
 `scripts/audit-runtime-patch-chain.mjs` static-target detection):
@@ -127,8 +145,12 @@ Scripts, in prestart order, and what each one touches (from
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
 10. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
 11. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
-12. `apply-icecream69a-frame.mjs` — `app.js`, `server.js`, `styles.css`, `universal-server.js`.
-13. `apply-frame-shop-polish.mjs` — `red-cosmos-v2.css`, `server.js`, `universal-server.js`.
+12. `apply-frame-shop-polish.mjs` — `red-cosmos-v2.css`, `server.js`, `universal-server.js`.
+    (Natural next candidate for retirement — same reasoning as the one just
+    retired: small, isolated, no auth/money.)
+
+~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
+`server.js`, `styles.css`, `universal-server.js` directly.
 
 Step 9 (`apply-working-updates.mjs`) is the one this session already had to
 extend twice (once for the admin-XSS fix, once historically for the
@@ -197,17 +219,20 @@ Two adjustments to the plan as written:
    auth, wheel — the last one specifically has to be *added* to `server.js`
    consistently or explicitly documented as gateway-only, not just moved.
 
-## Proposed first two PRs (in order)
+## Progress
 
 1. **This document** (done) — no code change, establishes the shared map.
-2. **Proof-of-concept retirement of exactly one patch script.** Candidate:
-   `apply-icecream69a-frame.mjs` or `apply-frame-shop-polish.mjs` — both have
-   small, well-isolated targets (frame ownership / shop shelf polish) and
-   don't touch auth or money-moving code paths. Goal: prove the
-   read-diff-move-delete-reverify workflow end to end once, so the remaining
-   ~11 scripts are a known, repeatable process rather than an open-ended risk.
+2. **Proof-of-concept retirement of `apply-icecream69a-frame.mjs`** (done,
+   2026-09-28) — proved the read-diff-move-delete-reverify workflow end to
+   end. **12 scripts remain**, a known, repeatable process rather than an
+   open-ended risk.
+3. **Next candidate: `apply-frame-shop-polish.mjs`** — same reasoning
+   (isolated frame-shop polish, no auth/money), not started yet. Take it only
+   after this one is reviewed and merged — one script at a time, per the
+   original instruction, not several in a row.
 
-Everything past that (route-file extraction by domain) should wait until the
+Everything past retiring the whole patch chain (route-file extraction by
+domain) should wait until the
 patch-chain retirement process is proven, since both change the same two huge
 files and doing them interleaved would make each harder to review in
 isolation.
