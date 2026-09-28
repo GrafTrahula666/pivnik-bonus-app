@@ -37,8 +37,10 @@ public final class KioskController {
         PackageManager pm = c.getPackageManager();
         List<Intent> probes = new ArrayList<>();
         probes.add(new Intent(MediaStore.ACTION_IMAGE_CAPTURE));
-        probes.add(new Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE));
+        // Android 13+ has the narrow system photo picker; the generic GET_CONTENT
+        // handlers (Photos, Drive, Files) would widen what can run inside the kiosk.
         if (Build.VERSION.SDK_INT >= 33) probes.add(new Intent(MediaStore.ACTION_PICK_IMAGES));
+        else probes.add(new Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE));
         for (Intent probe : probes) {
             for (ResolveInfo info : pm.queryIntentActivities(probe, 0)) {
                 ApplicationInfo app = info.activityInfo == null ? null : info.activityInfo.applicationInfo;
