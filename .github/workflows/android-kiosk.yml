@@ -3,6 +3,8 @@ on:
   push:
     branches: [feature/android-bar-kiosk]
     paths: ['android-kiosk/**', '.github/workflows/android-kiosk.yml']
+  pull_request:
+    paths: ['android-kiosk/**', '.github/workflows/android-kiosk.yml']
   workflow_dispatch:
 
 env:
