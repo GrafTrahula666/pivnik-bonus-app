@@ -28,6 +28,7 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { createKioskShiftGateway, KIOSK_SHIFT_PATH_PREFIX } from './kiosk-shifts/gateway.js';
 import {
   WHEEL_PRIZES,
   drawWheelPrize,
@@ -3045,10 +3046,24 @@ async function serveStartupProfile(req, res, startup) {
   }
 }
 
+// Bar kiosk shifts: self-contained module with its own device auth and tables
+// (migration 012). Off unless PIVNIK_KIOSK_SHIFTS=true.
+const kioskShifts = createKioskShiftGateway({
+  pool,
+  sessionSecret,
+  enforceRateLimit,
+  requestAddress,
+  startWorker: !isTestImport
+});
+
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+
+    if (url.pathname.startsWith(KIOSK_SHIFT_PATH_PREFIX)) {
+      return await kioskShifts.handler(req, res, url);
+    }
 
     // Available even during DB startup; no session, identity or database access.
     if (req.method === 'POST' && url.pathname === '/api/diagnostics/vk-startup') {
