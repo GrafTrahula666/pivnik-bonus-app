@@ -8,7 +8,6 @@ const packagePath = path.join(root, 'package.json');
 const APPROVED_PRESTART_COMMANDS = Object.freeze([
   'node scripts/repair-telegram-runtime.mjs',
   'node scripts/apply-v22-runtime.mjs',
-  'node scripts/apply-v22-production-polish.mjs',
   'node scripts/apply-red-cosmos-v2-shell-final.mjs',
   'node scripts/apply-red-cosmos-v2-backend-final.mjs',
   'node scripts/apply-red-cosmos-v2-client-final.mjs',
