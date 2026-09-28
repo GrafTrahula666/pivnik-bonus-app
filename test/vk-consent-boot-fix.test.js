@@ -30,7 +30,11 @@ test('VK hotfix forces a fresh client script and fully removes the loader', () =
 
   const server = fs.readFileSync(path.join(root, 'universal-server.js'), 'utf8');
   const loader = fs.readFileSync(path.join(root, 'loader-fix.css'), 'utf8');
+  const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
   assert.match(server, /vk-platform\.js\?v=3\.2\.2-anna-consent-persistence/);
   assert.match(loader, /\.boot-screen\.hidden\s*\{[\s\S]*display: none !important;/);
+  assert.match(loader, /safe-area-inset-top/);
+  assert.match(loader, /z-index: 2147483647 !important/);
+  assert.match(app, /const BOOT_MIN_MS = 2500;/);
 });

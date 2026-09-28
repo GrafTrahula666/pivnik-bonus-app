@@ -55,9 +55,9 @@ let gateway = await read('gateway');
 gateway = replaceRequired(
   gateway,
   `    /<link rel="stylesheet" href="styles\\.css([^"]*)"\\s*\\/>/i,
-    '<link rel="stylesheet" href="styles.css$1" />\\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />'`,
+    '<link rel="stylesheet" href="styles.css$1" />\\n  <link rel="stylesheet" href="/loader-fix.css?v=2.3.0" />'`,
   `    /<link rel="stylesheet" href="\\/?styles\\.css([^"]*)"\\s*\\/>/i,
-    '<link rel="stylesheet" href="/styles.css$1" />\\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />'`,
+    '<link rel="stylesheet" href="/styles.css$1" />\\n  <link rel="stylesheet" href="/loader-fix.css?v=2.3.0" />'`,
   'root styles.css path'
 );
 gateway = replaceRequired(
