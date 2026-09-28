@@ -34,14 +34,12 @@ test('Telegram header color has one canonical runtime source', async () => {
 });
 
 test('canonical cache key remains materializer-compatible', async () => {
-  const [index, shell, materializer] = await Promise.all([
+  const [index, materializer] = await Promise.all([
     read('index.html'),
-    read('scripts/apply-red-cosmos-v2-shell-final.mjs'),
     read('scripts/materialize-runtime-patches.mjs')
   ]);
 
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
   assert.match(materializer, /styles\.css\?v=20\.9-service-entry-canonical/);
 });

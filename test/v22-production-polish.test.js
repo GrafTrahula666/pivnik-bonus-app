@@ -43,7 +43,6 @@ test('RED COSMOS startup performs fail-closed database backup before migration',
     text('package.json'), text('scripts/red-cosmos-v2-db-prepare.mjs')
   ]);
   const prestart = JSON.parse(pkg).scripts.prestart;
-  assert.match(prestart, /apply-red-cosmos-v2-shell-final\.mjs/);
   assert.match(prestart, /apply-red-cosmos-v2-backend-final\.mjs/);
   assert.match(prestart, /apply-red-cosmos-v2-client-final\.mjs/);
   assert.match(prestart, /red-cosmos-v2-db-prepare\.mjs/);

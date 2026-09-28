@@ -131,6 +131,44 @@ necessarily went away with the script file they read, per the same
 tests alone" rule already applied to `test/frame-shop-polish.test.js`
 surviving the previous retirement untouched.
 
+**2026-09-28: retired `apply-red-cosmos-v2-shell-final.mjs`** the same way.
+**9 scripts remain.** This script only ever wrote `index.html` (it read and
+asserted against `app.js` but never wrote to it); on `origin/main` at
+retirement time its diff was already a near no-op — the canonical
+`styles.css`/`app.js` cache-busting query strings and the "strip legacy
+visual layer" regexes were all already satisfied — so folding it in meant
+adding exactly two `<link>`/`<script>` tags right after the canonical
+`styles.css`/`app.js` tags (`/service-white-gold.css`, `/red-cosmos-v2.js`)
+and dropping its own idempotency marker comment
+(`<!-- RED_COSMOS_V2_FINAL_SHELL -->`), which like the v22-production-polish
+marker before it, nothing else reads. One real hidden dependency was found
+and fixed: `apply-v22-product-rebuild.mjs` (invoked by the still-active
+`apply-v22-runtime.mjs`, which runs *before* where shell-final used to sit)
+temporarily wires `/v22.css` and `/v22-ui.js` into `index.html` as part of
+its own migration — its own `verify()` even asserted they were present —
+on the assumption that shell-final would immediately strip them again a few
+steps later in the same `materialize`/`prestart` run, the way it always had.
+With shell-final gone, nothing did, so the first post-retirement
+materialized `index.html` still had these two legacy tags wired — a real,
+observable runtime regression the byte-diff below caught immediately.
+Fixed by moving that exact strip (the same two regexes shell-final used)
+into `apply-v22-product-rebuild.mjs` itself, right after it wires the tags,
+and flipping its own `verify()` check from "these must be present" to
+"these must be absent" — restoring the original final behavior without
+touching anything else in that script. No other active patch script touches
+this part of `index.html` (`apply-release-candidate-fixes.mjs` only edits
+regex literals embedded in `universal-server.js`'s own source, not
+`index.html` directly; `apply-working-updates.mjs` edits an unrelated
+theme-color meta tag and two unrelated HTML fragments further down the
+file). What *did* need cleanup on top of that: **ten** test files read the
+script file directly to assert its own internal constants/regexes
+(`CANONICAL_STYLE_VERSION`, `forbiddenVisualAssets`, `SERVICE_STYLE_HREF`,
+etc.) rather than the canonical `index.html` outcome those constants
+produce; each was rewritten to assert the same fact against `index.html`
+(and `app.js` for the `SPACEVERSE_CANONICAL_THEME_LOCK` check) directly, and
+one redundant script-only assertion in `test/v22-production-polish.test.js`
+(prestart still containing this script's name) was removed outright.
+
 Ran the existing conservative audit tool as of this writing
 (`npm run audit:runtime-retirement`, canonical phase):
 
@@ -139,7 +177,7 @@ Conservative retirement candidates: 0
 Startup side-effect review required: 1 (scripts/repair-telegram-runtime.mjs — external network call)
 ```
 
-**The remaining 10 scripts are still classified as required**
+**The remaining 9 scripts are still classified as required**
 (`materialized-release-step` or `keep-database-step`) by the tool's own
 conservative criteria. This means the easy part of "kill the patch chain" is
 already done (there's history of `retirement-materialize-once.yml` /
@@ -160,17 +198,16 @@ Scripts, in prestart order, and what each one touches (from
 1. `repair-telegram-runtime.mjs` — Telegram bot menu API call; no file writes.
 2. `apply-v22-runtime.mjs` — `achievements.js`, `app.js`, `index.html`, `server.js`,
    `universal-server.js`; triggers steps 2b/2c below.
-3. `apply-red-cosmos-v2-shell-final.mjs` — `app.js`, `index.html`.
-4. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
-5. `apply-red-cosmos-v2-client-final.mjs` — `app.js`.
-6. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
-7. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
-8. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
+3. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
+4. `apply-red-cosmos-v2-client-final.mjs` — `app.js`.
+5. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
+6. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
+7. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
    `platform-core.js`, `red-cosmos-v2.css`/`.js`, `universal-server.js`,
    `vk-platform.js`, plus two DB/audit scripts. Ships as a gzip+base64 blob
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
-9. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
-10. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
+8. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
+9. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
@@ -179,7 +216,10 @@ Scripts, in prestart order, and what each one touches (from
 `universal-server.js`, `red-cosmos-v2.css` directly.
 
 ~~`apply-v22-production-polish.mjs`~~ — retired 2026-09-28, folded into
-`universal-server.js` directly. **10 scripts remain.**
+`universal-server.js` directly.
+
+~~`apply-red-cosmos-v2-shell-final.mjs`~~ — retired 2026-09-28, folded into
+`index.html` directly. **9 scripts remain.**
 
 ### Hidden dependencies this second retirement surfaced
 
@@ -309,8 +349,18 @@ Two adjustments to the plan as written:
    same process; touched only `universal-server.js`'s auth/account-link
    `COALESCE` guards, no new hidden inter-script dependency in the runtime
    files, but two pre-existing tests bound to the script's own execution
-   had to go with it (see above). **10 scripts remain.**
-5. **Next candidate**: not chosen yet. Take it only after this one is
+   had to go with it (see above).
+5. **Retirement of `apply-red-cosmos-v2-shell-final.mjs`** (done, 2026-09-28)
+   — same process; touched only `index.html` (two `<link>`/`<script>`
+   tags). Surfaced one real hidden inter-script dependency: a still-active
+   sub-step (`apply-v22-product-rebuild.mjs`) temporarily wired `/v22.css`
+   and `/v22-ui.js` expecting shell-final to strip them a few steps later,
+   the way it always had; fixed by moving that exact strip into the
+   dependent script itself (see above). Also, ten pre-existing tests that
+   read the script file directly to check its own constants had to be
+   rewritten against the canonical `index.html` outcome instead. **9
+   scripts remain.**
+6. **Next candidate**: not chosen yet. Take it only after this one is
    reviewed and merged — one script at a time, per the original instruction,
    not several in a row. Prefer another small, isolated one over
    `apply-working-updates.mjs` (the biggest, blob-based one) until more of
