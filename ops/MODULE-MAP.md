@@ -20,39 +20,44 @@ route wiring**: two huge files that register and inline-handle HTTP routes.
 | `app.js` | 3599 | Entire client SPA: all screens, all API calls, all rendering. Single file, no bundler. |
 | `index.html` | 1004 | Shell markup + a large amount of inline `<script>`/CSS the client relies on. |
 
-Total across these four: ~11,750 lines. This is the real size of the "cut by
+Total across these four: ~11,430 lines. This is the real size of the "cut by
 layers" job — bigger than the patch-chain, and the part with the most user-facing
 risk if split carelessly.
 
 ## The two-server split is the sharpest edge
 
 `universal-server.js` does not proxy everything. It **directly implements**
-(never forwarding to `server.js`) these paths, using its own database code and
-its own session logic, duplicated from — not shared with — `server.js`'s
-versions of the same routes:
+(never forwarding to `server.js`) 12 paths, split into two genuinely different
+situations — conflating them was the one inaccuracy an earlier pass of this
+document had:
 
-- `/api/auth`, `/api/bootstrap`, `/api/me` (GET), `/api/me/consent`,
-  `/api/account-link/*`, `/api/wheel/status`, `/api/wheel/spin`,
-  `/api/staff/qr/resolve`, `/api/staff/activate`, `/api/admin/users`,
-  `/api/leaderboard/monthly`, `/api/me/beta-tester/claim`.
+**A) Truly duplicated — `server.js` defines the exact same path independently**,
+with its own copy of the handler logic (verified by path, not assumed):
+`/api/auth` (`server.js:1580`), `/api/me` GET (`server.js:1674`),
+`/api/me/consent` (`server.js:1721`), `/api/me/beta-tester/claim`
+(`server.js:1738`), `/api/leaderboard/monthly` (`server.js:1893`),
+`/api/staff/activate` (`server.js:2066`), `/api/staff/qr/resolve`
+(`server.js:2108`), `/api/admin/users` (`server.js:2911`).
 
-**`server.js` also defines routes with these exact same paths** (e.g. `app.get('/api/me', ...)`
-at `server.js:1674`, `app.post('/api/staff/activate', ...)` at `server.js:2066`).
-Those are **not dead code** — they're what runs when a test imports `server.js`
+These are **not dead code** — they're what runs when a test imports `server.js`
 directly, or if `server.js` is ever run standalone — but in the real deployed
 gateway path, the `universal-server.js` copy wins and `server.js`'s copy for
 these specific paths is never reached by real traffic.
 
-**Consequence for any refactor:** if you change wheel, auth, staff-activation or
-account-link behavior, you must change it in `universal-server.js`, and you
+**Consequence for any refactor:** if you change auth, staff-activation or
+similar behavior, you must change it in `universal-server.js`, and you
 should check whether `server.js`'s same-named route needs the identical change
 for test/standalone parity — they are two independent implementations today,
 not one shared handler.
 
-This also means: **the wheel (`/api/wheel/status`, `/api/wheel/spin`) has no
-route in `server.js` at all.** It only exists in `universal-server.js`, calling
-into `wheel.js` for the prize table/draw and doing its own transaction/wallet
-SQL inline (`spinTelegramWheel`, `universal-server.js:1858`).
+**B) Gateway-only — `server.js` has no route for this path at all**:
+`/api/bootstrap`, `/api/wheel/status`, `/api/wheel/spin`,
+`/api/account-link/*`. There is nothing to keep in parity here, but it means
+searching only `server.js` for these will find nothing, which is its own trap.
+The wheel is the sharpest case: it calls into `wheel.js` for the prize
+table/draw, then does its own transaction/wallet SQL inline
+(`spinTelegramWheel`, `universal-server.js:1858`) — there is no
+`server.js`-side wheel logic to fall back to or compare against.
 
 ## Route inventory (everything else — `server.js`, proxied as-is)
 
@@ -73,7 +78,9 @@ By rough domain, all still living as inline Express handlers in `server.js`:
   `/api/admin/inquiries` (+ `:id`), `/api/admin/content`, `/api/admin/promotions`
   (CRUD), `/api/admin/design/*`
 - **achievements/leaderboard**: `/api/achievements`, `/api/leaderboard/monthly`
-- **platform account linking**: `/api/account-link/*`
+
+(`/api/account-link/*`, `/api/bootstrap` and the wheel are gateway-only — see
+"Gateway-only" above, they are not in this file.)
 
 ## The prestart/materialize patch chain
 
