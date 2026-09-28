@@ -83,7 +83,7 @@ const state = {
   promotions: [],
   adminContent: { promotions: [], shopItems: [] },
   editingContent: null,
-  selectedShopItem: 'craft-05',
+  selectedShopItem: 'frame-beer-mugs',
   leaderboard: null,
   staffRecent: [],
   profileDraft: null,
@@ -393,7 +393,7 @@ function enhanceDom() {
   if (IS_VK && hero && !$('.client-tip')) {
     const tip = document.createElement('div');
     tip.className = 'client-tip';
-    tip.innerHTML = '<span class="client-tip-icon">⌗</span><div><b>Один личный код</b><small>QR постоянный. Не отправляйте его посторонним.</small></div>';
+    tip.innerHTML = '<span class="client-tip-icon">⌗</span><div><b>Один личный код</b><small>Не отправляйте QR посторонним.</small></div>';
     hero.after(tip);
   }
 
@@ -458,7 +458,7 @@ function enhanceDom() {
     const title = qrSheet.querySelector('h2');
     if (title) title.textContent = 'Личная бонусная карта';
     const qrParagraph = qrSheet.querySelector('p');
-    if (qrParagraph) qrParagraph.innerHTML = 'Код постоянный и принадлежит только вам.';
+    if (qrParagraph) qrParagraph.innerHTML = 'Покажите QR сотруднику перед оплатой.';
     const copy = document.createElement('button');
     copy.id = 'copyQrCode';
     copy.type = 'button';
@@ -1321,10 +1321,56 @@ function restartHomeShopCarousel() {
   }
 }
 
+const RED_COSMOS_SHOP_FRAMES = Object.freeze({
+  'frame-beer-mugs': 'beer-mugs',
+  'frame-beer-bottles': 'beer-bottles',
+  'frame-lights': 'lights',
+  'frame-premium-smiling-fuck': 'premium-smiling-fuck'
+});
+
+function shopFrameOwned(item = {}) {
+  const frameId = RED_COSMOS_SHOP_FRAMES[item.code];
+  if (!frameId) return false;
+  return (state.profile?.availableFrames || []).some((frame) => frame.code === frameId);
+}
+
+function shopFramePreviewMarkup(item = {}) {
+  const frameId = RED_COSMOS_SHOP_FRAMES[item.code];
+  if (!frameId) return shopImageMarkup(item, 'shop-list-media');
+  const entity = {
+    ...(state.profile || {}),
+    firstName: state.profile?.firstName || 'П',
+    profileFrame: frameId
+  };
+  return `<div class="shop-list-media shop-frame-live-preview" data-frame-preview="${escapeHtml(frameId)}">
+    ${avatarInlineHtml(entity, 'shop-frame-preview-avatar')}
+    <span class="shop-frame-preview-caption">Так выглядит рамка</span>
+  </div>`;
+}
+
 function shopActionLabel(item = {}) {
-  if (item.category === 'limited') return 'Уточнить по кружке';
-  if (item.priceType === 'bonus') return 'Как купить';
-  return 'Уточнить покупку';
+  return shopFrameOwned(item) ? '✓ Куплено' : 'Купить';
+}
+
+async function buyShopItem(code, button = null) {
+  const item = findShopItem(code);
+  if (!item) throw new Error('Товар не найден.');
+  if (shopFrameOwned(item)) return toast('✓ Эта рамка уже куплена.');
+  if (button) button.disabled = true;
+  try {
+    const data = await api('/api/shop/buy', {
+      method: 'POST',
+      body: JSON.stringify({ itemCode: code, requestKey: requestId() }),
+      retries: 1
+    });
+    if (data.profile) state.profile = data.profile;
+    renderProfile();
+    await loadCatalog();
+    toast('Рамка куплена и сохранена в профиле');
+  } finally {
+    const refreshed = findShopItem(code);
+    if (button && !shopFrameOwned(refreshed || item)) button.disabled = false;
+  }
 }
 
 function renderShopCatalog() {
@@ -1334,24 +1380,20 @@ function renderShopCatalog() {
     if (!state.catalog.length) {
       clientList.innerHTML = 'Каталог пока пуст';
     } else {
-      const categoryOrder = ['craft', 'limited', 'profile', 'other'];
-      const groups = categoryOrder
-        .map((category) => ({ category, items: state.catalog.filter((item) => (item.category || 'other') === category) }))
-        .filter((group) => group.items.length);
-      clientList.innerHTML = groups.map((group) => {
-        const meta = SHOP_CATEGORY_META[group.category] || SHOP_CATEGORY_META.other;
-        return `<section class="shop-category" data-shop-category="${escapeHtml(group.category)}">
-          <div class="shop-category-head"><div><span>${escapeHtml(meta.subtitle)}</span><h3>${escapeHtml(meta.title)}</h3></div><b>${group.items.length}</b></div>
-          <div class="shop-category-grid">${group.items.map((item) => `<article class="shop-list-card ${item.active ? '' : 'disabled'}">
-            ${shopImageMarkup(item, 'shop-list-media')}
-            <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${escapeHtml(shopAvailabilityLabel(item))}</small></div>
-            <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions"><button class="secondary" data-shop-inquiry="${escapeHtml(item.code)}" type="button">${escapeHtml(shopActionLabel(item))}</button><button class="text-btn" data-shop-chat="${escapeHtml(item.code)}" type="button">Написать Кириллу</button></div></div>
-          </article>`).join('')}</div>
-        </section>`;
-      }).join('');
+      clientList.innerHTML = `<div class="red-cosmos-shop-grid">${state.catalog.map((item) => {
+        const owned = shopFrameOwned(item);
+        const premium = item.code === 'frame-premium-smiling-fuck';
+        return `<article class="shop-list-card ${premium ? 'v2-premium' : ''}">
+          ${premium ? '<span class="v2-premium-badge">★ PREMIUM</span>' : ''}
+          ${shopFramePreviewMarkup(item)}
+          <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${owned ? 'Навсегда в вашей коллекции' : 'Покупка за бонусы'}</small></div>
+          <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions">
+            <button class="secondary ${owned ? 'v2-owned-button' : ''}" data-shop-buy="${escapeHtml(item.code)}" type="button" ${owned ? 'disabled' : ''}>${escapeHtml(shopActionLabel(item))}</button>
+          </div></div>
+        </article>`;
+      }).join('')}</div>`;
       bindContentImageFallbacks(clientList);
-      clientList.querySelectorAll('[data-shop-inquiry]').forEach((button) => button.addEventListener('click', () => openShopInquiry(button.dataset.shopInquiry)));
-      clientList.querySelectorAll('[data-shop-chat]').forEach((button) => button.addEventListener('click', () => contactOwnerAboutItem(button.dataset.shopChat)));
+      clientList.querySelectorAll('[data-shop-buy]').forEach((button) => button.addEventListener('click', () => buyShopItem(button.dataset.shopBuy, button).catch((error) => toast(error.message))));
     }
   }
   const staffList = $('#staffShopItems');
@@ -1359,14 +1401,8 @@ function renderShopCatalog() {
     const activeItems = state.catalog.filter((item) => item.active && item.priceType === 'bonus' && Number(item.bonusPrice) > 0);
     if (!activeItems.some((item) => item.code === state.selectedShopItem)) state.selectedShopItem = activeItems[0]?.code || '';
     staffList.className = `staff-shop-items${activeItems.length ? '' : ' empty-state'}`;
-    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item">
-      <input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} />
-      <span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span>
-    </label>`).join('') : 'Активных товаров пока нет';
-    staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => {
-      state.selectedShopItem = input.value;
-      updateCalculation();
-    }));
+    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item"><input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} /><span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span></label>`).join('') : 'Активных товаров пока нет';
+    staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => { state.selectedShopItem = input.value; updateCalculation(); }));
   }
 }
 
@@ -1872,7 +1908,7 @@ function renderAchievementCatalog() {
   const earnedCount = items.filter((item) => item.earned).length;
   catalog.innerHTML = `<div class="achievement-summary">
       <span>${escapeHtml(achievementRarityLabel(rarity))}</span>
-      <b>${earnedCount} из ${items.length}</b>
+      <b>Получено ${earnedCount} · Всего ${items.length}</b>
     </div>
     <div class="achievement-grid">${items.map((item) => {
       const progress = item.progress || { percent: item.earned ? 100 : 0, label: item.earned ? 'Получено' : 'Уникальное условие' };

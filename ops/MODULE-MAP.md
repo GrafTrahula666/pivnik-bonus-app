@@ -169,6 +169,84 @@ produce; each was rewritten to assert the same fact against `index.html`
 one redundant script-only assertion in `test/v22-production-polish.test.js`
 (prestart still containing this script's name) was removed outright.
 
+**2026-09-28: retired `apply-red-cosmos-v2-client-final.mjs`.** **8 scripts
+remain.** Client-only (`app.js` alone; never touches the DB, auth/session or
+server money-paths), but a large diff, and the retirement with the most
+subtle hidden-dependency trap so far.
+
+**The trap:** running the script standalone against raw canonical `app.js`
+gives the *wrong* diff. Its wheel-guard and `APP_VERSION` edits are real
+no-ops (canonical `app.js` never had `IS_VK` wheel guards and the committed
+`APP_VERSION` already read `'20.0-spaceverse-purple-home'`), but its frame
+patch is not: the script's frame-class insertion branches on whether a
+`middle-finger` line already exists in `app.js` at the moment it runs. That
+line does not exist in *committed* canonical `app.js` — it only exists
+*transiently*, added a few steps earlier in the same `prestart`/`materialize`
+run by `apply-v22-product-rebuild.mjs` (invoked internally by the
+still-active `apply-v22-runtime.mjs`, step 2, well before where client-final
+used to sit at step 4). Run the script against committed source directly
+and it takes the *other* branch, inserting four new lines after `vladislav`
+that never actually fire in real production. The only way to get the real
+diff is to reproduce the real chain order: run `apply-v22-runtime.mjs`
+first, snapshot `app.js`, *then* run client-final and diff from there. Doing
+that gives the true, much smaller diff: `selectedShopItem` set to a real
+frame code, **one** new `avatarFrameClass()` line (`premium-smiling-fuck`,
+inserted right after the `middle-finger` line that `apply-v22-product-rebuild.mjs`
+itself creates), **one** new emoji-map entry (same idea, in that script's
+`v22Orbits` map), both QR helper texts swapped, the achievement summary
+copy changed, `APP_VERSION` flipped from the intermediate
+`'22.0-pivnik-rebuild'` to the final `'20.0-spaceverse-purple-home'`, and —
+the biggest piece — the whole `shopActionLabel`/`renderShopCatalog` block
+replaced with the contents of `scripts/fragments/red-cosmos-shop-client.fragment.txt`
+(adds `RED_COSMOS_SHOP_FRAMES`, `shopFrameOwned`, `shopFramePreviewMarkup`
+and `buyShopItem`, replacing the old category-grouped/`data-shop-inquiry`
+shop renderer with the direct-buy `data-shop-buy` one).
+
+**The two real hidden dependencies, both in `apply-v22-product-rebuild.mjs`
+(the sub-step `apply-v22-runtime.mjs` invokes, running well before where
+client-final used to sit):** it creates the `middle-finger` frame-class line
+and `v22Orbits` emoji entry that client-final's `premium-smiling-fuck`
+insertion depended on, and it unconditionally sets `APP_VERSION` to the
+intermediate `'22.0-pivnik-rebuild'` — client-final was the only thing that
+ever flipped it back to the final value, in a later, separate script
+invocation within the same `materialize` run. With client-final retired,
+first materialize after this change left `app.js` with `APP_VERSION` stuck
+at `'22.0-pivnik-rebuild'` and the `premium-smiling-fuck` frame-class/emoji
+entries silently absent — both real, observable regressions the
+before/after byte-diff caught immediately, not something visible in a
+standalone script run. Fixed minimally: `premium-smiling-fuck` was added to
+`apply-v22-product-rebuild.mjs`'s own `middle-finger`
+frame-class/`v22Orbits` insertions (right next to where it already creates
+those anchors), and `apply-v22-runtime.mjs` gained one small block, run
+*after* its own existing verification already passed, that flips
+`APP_VERSION` from the intermediate value to the final one before finishing
+that step — mirroring exactly what client-final used to do, just one script
+earlier in the chain. Neither script's own existing checks were touched.
+One line in the original script (adding a `'premium-smiling-fuck': '🖕'`
+emoji-map entry keyed off a **top-level** `'middle-finger': '🖕'` anchor,
+a *different* map than `v22Orbits`) is a genuinely separate,
+**pre-existing, already-silent no-op in current production** — that
+specific anchor string does not exist anywhere in materialized `app.js`
+either, so that particular guarded `replace` never fires; left untouched
+and documented here, not fixed, since it predates this retirement.
+
+No other hidden inter-script dependency was found beyond the two above:
+no other active script touches `shopActionLabel`/`renderShopCatalog`/
+`RED_COSMOS_SHOP_FRAMES`/the QR texts (`apply-release-candidate-fixes.mjs`
+only adds a click handler that *calls* `renderShopCatalog()`, never edits
+its body; `apply-working-updates.mjs`'s only overlapping area is the
+unrelated profile frame-*picker*, not the shop). The fully materialized
+`app.js` before/after this retirement is byte-identical except for the now-
+dead `// RED_COSMOS_V2_FINAL_CLIENT_RUNTIME` marker comment disappearing
+(nothing else reads it, consistent with the others). `index.html`,
+`server.js`, `universal-server.js` and `red-cosmos-v2.css` are all
+untouched by this retirement, confirmed by the same worktree diff.
+`scripts/fragments/red-cosmos-shop-client.fragment.txt` is **not** deleted
+in this change — per scope, it's flagged here as a cleanup candidate for a
+future PR, since after this retirement no active script reads it anymore
+(only two test files read its raw content for assertions, which still work
+with the file left in place).
+
 Ran the existing conservative audit tool as of this writing
 (`npm run audit:runtime-retirement`, canonical phase):
 
@@ -177,7 +255,7 @@ Conservative retirement candidates: 0
 Startup side-effect review required: 1 (scripts/repair-telegram-runtime.mjs — external network call)
 ```
 
-**The remaining 9 scripts are still classified as required**
+**The remaining 8 scripts are still classified as required**
 (`materialized-release-step` or `keep-database-step`) by the tool's own
 conservative criteria. This means the easy part of "kill the patch chain" is
 already done (there's history of `retirement-materialize-once.yml` /
@@ -199,15 +277,14 @@ Scripts, in prestart order, and what each one touches (from
 2. `apply-v22-runtime.mjs` — `achievements.js`, `app.js`, `index.html`, `server.js`,
    `universal-server.js`; triggers steps 2b/2c below.
 3. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
-4. `apply-red-cosmos-v2-client-final.mjs` — `app.js`.
-5. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
-6. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
-7. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
+4. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
+5. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
+6. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
    `platform-core.js`, `red-cosmos-v2.css`/`.js`, `universal-server.js`,
    `vk-platform.js`, plus two DB/audit scripts. Ships as a gzip+base64 blob
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
-8. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
-9. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
+7. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
+8. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
@@ -219,7 +296,12 @@ Scripts, in prestart order, and what each one touches (from
 `universal-server.js` directly.
 
 ~~`apply-red-cosmos-v2-shell-final.mjs`~~ — retired 2026-09-28, folded into
-`index.html` directly. **9 scripts remain.**
+`index.html` directly.
+
+~~`apply-red-cosmos-v2-client-final.mjs`~~ — retired 2026-09-28, folded into
+`app.js` directly (`scripts/fragments/red-cosmos-shop-client.fragment.txt`
+kept, no longer read by any active script — cleanup candidate, not deleted
+in this change). **8 scripts remain.**
 
 ### Hidden dependencies this second retirement surfaced
 
@@ -358,9 +440,21 @@ Two adjustments to the plan as written:
    the way it always had; fixed by moving that exact strip into the
    dependent script itself (see above). Also, ten pre-existing tests that
    read the script file directly to check its own constants had to be
-   rewritten against the canonical `index.html` outcome instead. **9
-   scripts remain.**
-6. **Next candidate**: not chosen yet. Take it only after this one is
+   rewritten against the canonical `index.html` outcome instead.
+6. **Retirement of `apply-red-cosmos-v2-client-final.mjs`** (done,
+   2026-09-28) — same process, client-only (`app.js` alone), but the
+   trickiest hidden-dependency case so far: a standalone script run gives
+   the wrong diff because the script's own frame-patch branches on state
+   `apply-v22-product-rebuild.mjs` creates transiently a few steps earlier
+   in the same run. Two real hidden dependencies found and fixed there
+   (a missing `premium-smiling-fuck` frame-class/emoji entry, and
+   `APP_VERSION` left stuck at an intermediate value) without touching
+   either script's own verification logic; one separate, genuinely
+   pre-existing no-op left untouched and documented (see above).
+   `scripts/fragments/red-cosmos-shop-client.fragment.txt` kept in place,
+   flagged as a future cleanup candidate now that nothing active reads it.
+   **8 scripts remain.**
+7. **Next candidate**: not chosen yet. Take it only after this one is
    reviewed and merged — one script at a time, per the original instruction,
    not several in a row. Prefer another small, isolated one over
    `apply-working-updates.mjs` (the biggest, blob-based one) until more of

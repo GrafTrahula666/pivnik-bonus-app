@@ -7,8 +7,7 @@ const read = (file) => fs.readFile(new URL(`../${file}`, import.meta.url), 'utf8
 test('RED COSMOS final scripts are wired into materialize and prestart in a deterministic order', async () => {
   const pkg = JSON.parse(await read('package.json'));
   for (const name of [
-    'apply-red-cosmos-v2-backend-final.mjs',
-    'apply-red-cosmos-v2-client-final.mjs'
+    'apply-red-cosmos-v2-backend-final.mjs'
   ]) {
     assert.match(pkg.scripts.materialize, new RegExp(name.replaceAll('.', '\\.')));
     assert.match(pkg.scripts.prestart, new RegExp(name.replaceAll('.', '\\.')));
@@ -17,6 +16,9 @@ test('RED COSMOS final scripts are wired into materialize and prestart in a dete
   assert.doesNotMatch(pkg.scripts.prestart, /apply-red-cosmos-v2-shell-final\.mjs/);
   assert.doesNotMatch(pkg.scripts.materialize, /apply-red-cosmos-v2-shell-final\.mjs/);
   assert.doesNotMatch(pkg.scripts.check, /apply-red-cosmos-v2-shell-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.prestart, /apply-red-cosmos-v2-client-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.materialize, /apply-red-cosmos-v2-client-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.check, /apply-red-cosmos-v2-client-final\.mjs/);
   assert.match(pkg.scripts.prestart, /red-cosmos-v2-db-prepare\.mjs/);
   assert.doesNotMatch(pkg.scripts.materialize, /red-cosmos-v2-db-prepare\.mjs/);
 });
@@ -47,11 +49,11 @@ test('RED COSMOS backend implements idempotent direct frame purchases', async ()
 
 test('RED COSMOS client removes all VK-only wheel guards and renders premium frame', async () => {
   const [client, fragment] = await Promise.all([
-    read('scripts/apply-red-cosmos-v2-client-final.mjs'),
+    read('app.js'),
     read('scripts/fragments/red-cosmos-shop-client.fragment.txt')
   ]);
   for (const name of ['renderWheelStatus', 'startWheelCountdown', 'loadWheelStatus', 'spinWheel', 'openWheel']) {
-    assert.match(client, new RegExp(name));
+    assert.match(client, new RegExp(`function ${name}\\(\\) \\{(?!\\n\\s*if \\(IS_VK)`));
   }
   assert.match(client, /premium-smiling-fuck/);
   assert.match(fragment, /\/api\/shop\/buy/);

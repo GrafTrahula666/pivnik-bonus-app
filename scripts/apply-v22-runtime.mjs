@@ -78,4 +78,17 @@ if (!finalServer.includes("code: 'raise-shields'")) failures.push('special teste
 if (!finalGateway.includes("achievement_code = 'raise-shields'")) failures.push('special tester lookup');
 if (failures.length) throw new Error(`v22 runtime verification failed: ${failures.join(', ')}`);
 
+// apply-red-cosmos-v2-client-final.mjs used to flip APP_VERSION from this
+// step's intermediate v22-rebuild value to the final client version right
+// after this script ran (retired 2026-09-28, folded here). Nothing
+// downstream needs the intermediate value, so finish this step by writing
+// the final one directly.
+if (finalApp.includes("APP_VERSION = '22.0-pivnik-rebuild';")) {
+  await fs.writeFile(
+    path.join(root, 'app.js'),
+    finalApp.replace("APP_VERSION = '22.0-pivnik-rebuild';", "APP_VERSION = '20.0-spaceverse-purple-home';"),
+    'utf8'
+  );
+}
+
 console.log('Pivnik v22 runtime state is restart-safe and verified.');
