@@ -39,9 +39,9 @@ test('universal server serves all root black-frosted CSS assets before HTML fall
   }
 });
 
-test('materialized shell keeps one canonical stylesheet and strips legacy visual CSS', async () => {
-  const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
+test('canonical shell keeps one stylesheet and never wires legacy visual CSS', async () => {
+  const index = await read('index.html');
+  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical-profile-placement-20260925/);
   for (const asset of [
     '/v22.css',
     '/red-cosmos-v2.css',
@@ -49,7 +49,6 @@ test('materialized shell keeps one canonical stylesheet and strips legacy visual
     '/black-frosted-surfaces.css',
     '/black-frosted-controls.css'
   ]) {
-    assert.ok(shell.includes(asset), `${asset} must be explicitly stripped`);
+    assert.equal(index.includes(asset), false, `${asset} must not be wired`);
   }
-  assert.match(shell, /Legacy visual layer still wired/);
 });

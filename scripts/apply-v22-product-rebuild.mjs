@@ -82,6 +82,13 @@ async function patchIndex() {
     '/v22-ui.js?v=22.0.0',
     'v22 ui script'
   );
+  // apply-red-cosmos-v2-shell-final.mjs used to strip these two transient
+  // v22 shell tags again immediately after this script ran (retired
+  // 2026-09-28, folded into index.html). Nothing wires or needs them past
+  // this point, so this script now retires its own scaffolding directly.
+  source = source
+    .replace(/\s*<link rel="stylesheet" href="\/v22\.css[^"]*"\s*\/>/g, '')
+    .replace(/\s*<script defer src="\/v22-ui\.js[^"]*"><\/script>/g, '');
   source = replaceRequired(
     source,
     '<button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>',
@@ -599,7 +606,7 @@ async function verify() {
     read('v22-ui.js')
   ]);
   const failures = [];
-  if (!index.includes('/v22.css?v=22.0.0') || !index.includes('/v22-ui.js?v=22.0.0')) failures.push('v22 assets');
+  if (index.includes('/v22.css?v=22.0.0') || index.includes('/v22-ui.js?v=22.0.0')) failures.push('v22 assets not retired');
   if (!app.includes("APP_VERSION = '22.0-pivnik-rebuild'")) failures.push('client version');
   if (!app.includes('window.__PIVNIK_GO_BACK__')) failures.push('back history');
   if (!app.includes("profileFrame === 'middle-finger'")) failures.push('new frame render');

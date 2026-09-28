@@ -36,11 +36,7 @@ test('short mini-app viewports scroll instead of compressing Home V2 artwork', a
 });
 
 test('Home V2 viewport fix is cache-busted in the canonical shell', async () => {
-  const [index, shell] = await Promise.all([
-    read('index.html'),
-    read('scripts/apply-red-cosmos-v2-shell-final.mjs')
-  ]);
+  const index = await read('index.html');
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
 });
