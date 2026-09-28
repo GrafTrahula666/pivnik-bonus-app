@@ -19,9 +19,42 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.FrameLayout;
+import android.widget.ScrollView;
+
+import ru.pivnik.kiosk.shift.Doc;
+import ru.pivnik.kiosk.shift.DocumentActivity;
+import ru.pivnik.kiosk.shift.HttpShiftApi;
+import ru.pivnik.kiosk.shift.Shift;
+import ru.pivnik.kiosk.shift.ShiftController;
+import ru.pivnik.kiosk.shift.ShiftCredentialStore;
+import ru.pivnik.kiosk.shift.ShiftRules;
+import ru.pivnik.kiosk.shift.ShiftService;
+import ru.pivnik.kiosk.shift.Ui;
 
 public class MainActivity extends Activity {
+    private static final long SYNC_INTERVAL_MS = 30_000;
+
     private TextView status;
+    private TextView battery;
+    private LinearLayout shiftCard;
+    private boolean shiftBusy;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable syncTick = new Runnable() {
+        @Override public void run() {
+            syncShiftStart();
+            handler.postDelayed(this, SYNC_INTERVAL_MS);
+        }
+    };
+    private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) { showBattery(intent); }
+    };
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -34,6 +67,25 @@ public class MainActivity extends Activity {
         getWindow().getDecorView().post(this::hideSystemUi);
         if (Prefs.isKioskEnabled(this)) KioskController.apply(this);
         refreshStatus();
+        // ACTION_BATTERY_CHANGED is sticky: registering returns the current level immediately.
+        showBattery(registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED)));
+        renderShift();
+        handler.post(syncTick);
+    }
+
+    @Override protected void onPause() {
+        super.onPause();
+        handler.removeCallbacks(syncTick);
+        try { unregisterReceiver(batteryReceiver); } catch (IllegalArgumentException ignored) {}
+    }
+
+    private void showBattery(Intent intent) {
+        if (battery == null || intent == null) return;
+        int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+        battery.setText(ShiftRules.batteryLabel(
+                intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+                intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1),
+                plugged != 0));
     }
 
     private void hideSystemUi() {
@@ -64,7 +116,14 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
         title.setOnLongClickListener(v -> { showAdminPin(); return true; });
-        root.addView(title, lp());
+        // Small, always-visible battery level in the corner of the title row.
+        FrameLayout titleRow = new FrameLayout(this);
+        titleRow.addView(title, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        battery = new TextView(this);
+        battery.setTextColor(Color.rgb(170,170,185));
+        battery.setTextSize(15);
+        titleRow.addView(battery, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END));
+        root.addView(titleRow, lp());
 
         TextView sub = new TextView(this);
         sub.setText("Терминал бармена");
@@ -83,14 +142,193 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams tlp = buttonLp(); tlp.topMargin = dp(16);
         root.addView(tg, tlp);
 
+        shiftCard = Ui.card(this);
+        LinearLayout.LayoutParams clp = lp(); clp.topMargin = dp(24);
+        root.addView(shiftCard, clp);
+
+        Button docs = button("ДОКУМЕНТЫ / НАКЛАДНЫЕ");
+        docs.setOnClickListener(v -> openDocuments(Shift.KIND_INVOICE));
+        LinearLayout.LayoutParams dlp = buttonLp(); dlp.topMargin = dp(16);
+        root.addView(docs, dlp);
+
         status = new TextView(this);
         status.setTextColor(Color.rgb(155,155,170));
         status.setTextSize(12);
         status.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams st = lp(); st.topMargin = dp(38);
         root.addView(status, st);
-        setContentView(root);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(Color.rgb(11,11,16));
+        scroll.addView(root);
+        setContentView(scroll);
         refreshStatus();
+        renderShift();
+    }
+
+    // ---------------- current shift card ----------------
+
+    private ShiftController shifts() { return ShiftService.get(this).controller; }
+
+    private void renderShift() {
+        if (shiftCard == null) return;
+        shiftCard.removeAllViews();
+        shiftCard.addView(Ui.text(this, "ТЕКУЩАЯ СМЕНА", 15, Ui.MUTED, true), lp());
+        Shift shift = shifts().current();
+        if (shift == null) {
+            shiftCard.addView(Ui.text(this, "Смена не открыта", 20, Color.WHITE, false), Ui.wide(this, 8));
+            Button start = button("НАЧАТЬ СМЕНУ");
+            start.setEnabled(!shiftBusy);
+            start.setOnClickListener(v -> askEmployeeName());
+            shiftCard.addView(start, Ui.wide(this, 16));
+            return;
+        }
+        TextView name = Ui.text(this, shift.employeeName, 28, Color.WHITE, true);
+        shiftCard.addView(name, Ui.wide(this, 8));
+        String opened = "Смена открыта · " + ShiftRules.localTime(shift.openedAt);
+        if (!ShiftRules.sameBarDay(shift.openedAt, System.currentTimeMillis())) opened += " · " + ShiftRules.localDate(shift.openedAt);
+        shiftCard.addView(Ui.text(this, opened, 20, Color.WHITE, false), Ui.wide(this, 4));
+        if (shift.late) shiftCard.addView(Ui.text(this, "ОПОЗДАНИЕ", 18, Ui.DANGER, true), Ui.wide(this, 4));
+        if (!shift.serverConfirmed) {
+            String sync = shift.syncError.isEmpty() ? "Отправляю владельцам…" : shift.syncError;
+            shiftCard.addView(Ui.text(this, sync, 15, shift.syncError.isEmpty() ? Ui.MUTED : Ui.WARN, false), Ui.wide(this, 6));
+        }
+
+        for (Doc doc : new Doc[]{shift.report, shift.receipt}) {
+            TextView line = Ui.text(this, Ui.docStatusLine(doc), 18, Ui.docStatusColor(doc), true);
+            shiftCard.addView(line, Ui.wide(this, 16));
+            if (!Doc.ACCEPTED.equals(doc.status)) {
+                Button open = button(Shift.KIND_REPORT.equals(doc.kind) ? "СДАТЬ ОТЧЁТ / ТАБЕЛЬ" : "СДАТЬ ЧЕК");
+                open.setOnClickListener(v -> openDocuments(doc.kind));
+                shiftCard.addView(open, Ui.wide(this, 8));
+            }
+        }
+
+        boolean canClose = ShiftRules.canClose(shift);
+        TextView gate = Ui.text(this, canClose
+                ? "Документы приняты.\nСмену можно завершить."
+                : "Документы не сданы.\nЗавершить смену невозможно.", 18, canClose ? Ui.OK : Ui.WARN, true);
+        gate.setGravity(Gravity.CENTER);
+        shiftCard.addView(gate, Ui.wide(this, 20));
+        Button close = button("ЗАВЕРШИТЬ СМЕНУ");
+        close.setEnabled(canClose && !shiftBusy);
+        close.setOnClickListener(v -> confirmClose());
+        shiftCard.addView(close, Ui.wide(this, 12));
+
+        if (ShiftRules.isStale(shift, System.currentTimeMillis())) {
+            Button replace = button("НАЧАТЬ НОВУЮ СМЕНУ");
+            replace.setEnabled(!shiftBusy);
+            replace.setOnClickListener(v -> warnPreviousUnclosed(shift));
+            shiftCard.addView(replace, Ui.wide(this, 12));
+        }
+        if (!shift.unclosedWarnings.isEmpty()) showServerUnclosedWarning(shift);
+    }
+
+    private void askEmployeeName() {
+        EditText input = new EditText(this);
+        input.setHint("Имя");
+        input.setSingleLine(true);
+        input.setTextSize(22);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        new AlertDialog.Builder(this)
+                .setTitle("Введите имя")
+                .setView(input)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("НАЧАТЬ", (d, w) -> {
+                    try {
+                        shifts().openShift(input.getText().toString());
+                    } catch (IllegalArgumentException e) {
+                        Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                        askEmployeeName();
+                        return;
+                    }
+                    renderShift();
+                    syncShiftStart();
+                }).show();
+    }
+
+    private void warnPreviousUnclosed(Shift previous) {
+        new AlertDialog.Builder(this)
+                .setTitle("Предыдущая смена не была закрыта")
+                .setMessage(previous.employeeName + ", открыта " + ShiftRules.localDate(previous.openedAt) + " в "
+                        + ShiftRules.localTime(previous.openedAt)
+                        + ".\n\nОна не будет удалена. Владельцы получат уведомление.")
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Продолжить", (d, w) -> askEmployeeName())
+                .show();
+    }
+
+    private void showServerUnclosedWarning(Shift shift) {
+        String names = String.join(", ", shift.unclosedWarnings);
+        shifts().clearWarnings();
+        new AlertDialog.Builder(this)
+                .setTitle("Предыдущая смена не была закрыта")
+                .setMessage("Незакрытая смена: " + names + ".\nВладельцы уведомлены.")
+                .setPositiveButton("Понятно", null)
+                .show();
+    }
+
+    private void syncShiftStart() {
+        Shift shift = shifts().current();
+        if (shift == null || shift.serverConfirmed || shiftBusy) return;
+        ShiftService.get(this).worker.execute(() -> {
+            try { shifts().syncStart(); } catch (Exception ignored) {}
+            runOnUiThread(this::renderShift);
+        });
+    }
+
+    private void openDocuments(String kind) {
+        Shift shift = shifts().current();
+        if (shift == null) { Toast.makeText(this, "Сначала начните смену", Toast.LENGTH_LONG).show(); return; }
+        startActivity(new Intent(this, DocumentActivity.class).putExtra(DocumentActivity.EXTRA_KIND, kind));
+    }
+
+    private void confirmClose() {
+        new AlertDialog.Builder(this)
+                .setTitle("Завершить смену?")
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("ЗАВЕРШИТЬ", (d, w) -> {
+                    shiftBusy = true;
+                    renderShift();
+                    ShiftService.get(this).worker.execute(() -> {
+                        String message;
+                        try {
+                            shifts().close();
+                            message = "Смена завершена";
+                        } catch (java.io.IOException e) {
+                            message = "Нет связи с сервером. Смена не закрыта — попробуйте ещё раз.";
+                        } catch (Exception e) {
+                            message = safeMessage(e);
+                        }
+                        final String text = message;
+                        runOnUiThread(() -> {
+                            shiftBusy = false;
+                            Toast.makeText(this, text, Toast.LENGTH_LONG).show();
+                            renderShift();
+                        });
+                    });
+                }).show();
+    }
+
+    private void enrollShifts(String code, String label) {
+        if (code == null || code.trim().isEmpty()) {
+            Toast.makeText(this, "Введите код подключения смен", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "Подключаю смены…", Toast.LENGTH_SHORT).show();
+        ShiftService.get(this).worker.execute(() -> {
+            String message;
+            try {
+                String token = new HttpShiftApi(this).enroll(code, label).optString("deviceToken", "");
+                if (!token.startsWith("pvkshift_")) throw new IllegalStateException("Сервер не вернул ключ смен");
+                ShiftCredentialStore.save(this, token);
+                message = "Смены подключены";
+            } catch (Exception e) {
+                message = "Не удалось подключить смены: " + safeMessage(e);
+            }
+            final String text = message;
+            runOnUiThread(() -> { refreshStatus(); Toast.makeText(this, text, Toast.LENGTH_LONG).show(); syncShiftStart(); });
+        });
     }
 
     private Button button(String s) {
@@ -103,7 +341,8 @@ public class MainActivity extends Activity {
                 (Prefs.isKioskEnabled(this) ? "KIOSK: ON" : "KIOSK: OFF") +
                 "  •  Device Owner: " + (KioskController.isDeviceOwner(this) ? "OK" : "не настроен") +
                 "\nDEVICE AUTH: " + (DeviceCredentialStore.hasToken(this) ? "OK" : "не привязан") +
-                "  •  Админ: удерживайте ПИВНИК");
+                "  •  СМЕНЫ: " + (ShiftCredentialStore.hasToken(this) ? "OK" : "не подключены") +
+                "\nАдмин: удерживайте ПИВНИК");
     }
 
     private void openPlatform(boolean telegram) {
@@ -188,11 +427,12 @@ public class MainActivity extends Activity {
         EditText api = textField("HTTPS сервер Пивника", Prefs.getApiBaseUrl(this));
         EditText label = textField("Имя устройства", Prefs.getDeviceLabel(this));
         EditText pair = textField("Одноразовый код BAR-XXXX-XXXX", "");
-        box.addView(vk); box.addView(tg); box.addView(vpn); box.addView(api); box.addView(label); box.addView(pair);
+        EditText shiftCode = textField("Код подключения смен (с сервера)", "");
+        box.addView(vk); box.addView(tg); box.addView(vpn); box.addView(api); box.addView(label); box.addView(pair); box.addView(shiftCode);
 
         String[] actions = KioskController.isDeviceOwner(this)
-                ? new String[]{"Сохранить", "Привязать устройство", "Сбросить привязку", "Включить Kiosk", "Выйти из Kiosk", "Настроить Always-on VPN", "Системные настройки"}
-                : new String[]{"Сохранить", "Привязать устройство", "Сбросить привязку", "Показать инструкцию Device Owner", "Системные настройки"};
+                ? new String[]{"Сохранить", "Привязать устройство", "Сбросить привязку", "Подключить смены", "Включить Kiosk", "Выйти из Kiosk", "Настроить Always-on VPN", "Системные настройки"}
+                : new String[]{"Сохранить", "Привязать устройство", "Сбросить привязку", "Подключить смены", "Показать инструкцию Device Owner", "Системные настройки"};
 
         new AlertDialog.Builder(this)
                 .setTitle("Пивник — администрирование")
@@ -201,6 +441,7 @@ public class MainActivity extends Activity {
                     saveAdminFields(vk, tg, vpn, api, label);
                     String action = actions[which];
                     if (action.equals("Привязать устройство")) pairDevice(pair.getText().toString(), label.getText().toString());
+                    else if (action.equals("Подключить смены")) enrollShifts(shiftCode.getText().toString(), label.getText().toString());
                     else if (action.equals("Сбросить привязку")) {
                         DeviceCredentialStore.clear(this); refreshStatus(); Toast.makeText(this, "Локальный ключ удалён", Toast.LENGTH_SHORT).show();
                     }

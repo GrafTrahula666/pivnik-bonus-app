@@ -18,5 +18,7 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
+        <activity android:name=".shift.DocumentActivity" android:excludeFromRecents="true" android:exported="false" android:screenOrientation="portrait" />
+        <provider android:name=".shift.PhotoOutputProvider" android:authorities="ru.pivnik.kiosk.photos" android:exported="false" android:grantUriPermissions="true" />
     </application>
 </manifest>

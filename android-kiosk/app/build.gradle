@@ -10,8 +10,8 @@ android {
         applicationId 'ru.pivnik.kiosk'
         minSdk 28
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.2.0'
     }
 
     signingConfigs {
@@ -24,6 +24,17 @@ android {
                 keyPassword 'android'
             }
         }
+        // Permanent release key: supplied only by CI secrets / the owner's machine.
+        // Nothing is generated here; without these variables release stays unsigned.
+        release {
+            def releaseStore = System.getenv('KIOSK_RELEASE_STORE_FILE')
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('KIOSK_RELEASE_STORE_PASSWORD')
+                keyAlias System.getenv('KIOSK_RELEASE_KEY_ALIAS')
+                keyPassword System.getenv('KIOSK_RELEASE_KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
@@ -33,6 +44,23 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (System.getenv('KIOSK_RELEASE_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
         }
     }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    // Real org.json for JVM unit tests (Android's copy is a stub off-device).
+    testImplementation 'org.json:json:20240303'
 }
