@@ -377,9 +377,30 @@ function isIceCream69ARow(row) {
     .toLowerCase() === 'icecream69a';
 }
 
+// PIVNIK_FRAME_SHOP_ROTATION_OWNER_ALL_20260909
+const OWNER_FRAME_CATALOG = Object.freeze([
+  { code: 'none', title: 'Без рамки' },
+  { code: 'money', title: 'Долларовая рамка' },
+  { code: 'fire', title: 'Огненная рамка' },
+  { code: 'diamond', title: 'Алмазная рамка' },
+  { code: 'beer-mugs', title: 'Пивные кружки' },
+  { code: 'beer-bottles', title: 'Пивные бутылки' },
+  { code: 'lights', title: 'Огоньки' },
+  { code: 'middle-finger', title: 'Смайлик с факом' },
+  { code: 'premium-smiling-fuck', title: 'Premium рамка' },
+  { code: 'anna', title: 'Персональная рамка Анны' },
+  { code: 'olesya', title: 'Рамка из множества сердечек' },
+  { code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' },
+  { code: 'icecream69a', title: 'Персональная рамка 🔞 😈' }
+]);
+const OWNER_FRAME_CODES = new Set(OWNER_FRAME_CATALOG.map((frame) => frame.code));
+
 function profileFrameFromRow(row) {
   if (isIceCream69ARow(row)) return 'icecream69a';
-  if (isOwnerRow(row)) return 'money';
+  if (isOwnerRow(row)) {
+    const selectedFrame = String(row?.profile_frame || row?.profileFrame || '');
+    return OWNER_FRAME_CODES.has(selectedFrame) ? selectedFrame : 'money';
+  }
   if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
@@ -391,7 +412,7 @@ function profileFrameFromRow(row) {
 
 function availableFramesFromRow(row) {
   if (isIceCream69ARow(row)) return [{ code: 'icecream69a', title: 'Персональная рамка 🔞 😈' }];
-  if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
+  if (isOwnerRow(row)) return OWNER_FRAME_CATALOG.map((frame) => ({ ...frame }));
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
   if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
@@ -1084,8 +1105,7 @@ async function updateUnifiedProfile(userId, platform, body) {
     const allowedFrames = availableFramesFromRow(row);
     const requestedFrame = String(body?.profileFrame || profileFrameFromRow(row) || 'none');
     let storedFrame = requestedFrame;
-    if (isOwnerRow(row)) storedFrame = 'money';
-    else if (isAnnaRow(row)) storedFrame = 'anna';
+    if (isAnnaRow(row)) storedFrame = 'anna';
     else if (row.role === 'viewer') storedFrame = 'fire';
     else if (!allowedFrames.some((frame) => frame.code === requestedFrame)) {
       throw Object.assign(new Error('Эта рамка недоступна вашему аккаунту.'), { statusCode: 400 });
