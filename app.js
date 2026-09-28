@@ -276,12 +276,15 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
     const selected = state.profileDraft.avatarSource === source;
     button.classList.toggle('active', selected);
     if (source === 'telegram') {
-      button.disabled = !state.profile?.photoUrl;
+      const hasPlatformPhoto = Boolean(state.profile?.photoUrl);
+      button.disabled = !hasPlatformPhoto && !IS_VK;
       const small = button.querySelector('small');
       if (small) {
-        small.textContent = state.profile?.photoUrl
+        small.textContent = hasPlatformPhoto
           ? `Фото из профиля ${PLATFORM_NAME}`
-          : `В ${PLATFORM_NAME} нет фото`;
+          : IS_VK
+            ? 'Нажмите, чтобы загрузить фото VK'
+            : `В ${PLATFORM_NAME} нет фото`;
       }
     }
   });
@@ -3391,12 +3394,34 @@ $('#profileSetupBack')?.addEventListener('click', () => renderProfileSetup(1));
 $('#profileSetupNext')?.addEventListener('click', () => renderProfileSetup(2));
 $('#saveProfileSettings')?.addEventListener('click', () => saveProfileSettings().catch((error) => toast(error.message)));
 $('#openAnimalPicker')?.addEventListener('click', () => { renderAnimalPicker(); openModal('animalPickerModal'); });
-$$('#profileSetupModal [data-avatar-source]').forEach((button) => button.addEventListener('click', () => {
+$$('#profileSetupModal [data-avatar-source]').forEach((button) => button.addEventListener('click', async () => {
   if (button.disabled) return;
+  const source = button.dataset.avatarSource;
+  if (IS_VK && source === 'telegram' && !state.profile?.photoUrl) {
+    const refresh = window.__PIVNIK_VK_REFRESH_PROFILE__;
+    if (typeof refresh !== 'function') {
+      toast('Фото VK пока недоступно');
+      return;
+    }
+    button.disabled = true;
+    try {
+      const hydration = await refresh();
+      if (hydration?.profile) applyVkProfileHydration(hydration);
+    } catch (error) {
+      console.warn('VK profile photo refresh failed:', error);
+      toast(error.message || 'Не удалось загрузить фото VK');
+    } finally {
+      button.disabled = false;
+    }
+    if (!state.profile?.photoUrl) {
+      renderProfileSetup();
+      return;
+    }
+  }
   state.profileDraft = state.profileDraft || profileDraftFromCurrent();
-  state.profileDraft.avatarSource = button.dataset.avatarSource;
+  state.profileDraft.avatarSource = source;
   state.profileDraft.avatarKey = null;
-  if (!state.profile?.onboardingComplete) state.profileDraft.privacy.showAvatar = button.dataset.avatarSource !== 'telegram';
+  if (!state.profile?.onboardingComplete) state.profileDraft.privacy.showAvatar = source !== 'telegram';
   renderProfileSetup();
 }));
 $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener('click', () => {
