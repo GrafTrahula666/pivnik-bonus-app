@@ -97,12 +97,19 @@ small, self-contained per-username avatar frame, touching only `app.js`,
 copied into canonical source, the script deleted, and it was removed from
 `prestart`, `materialize`, `check` and the `APPROVED_PRESTART_COMMANDS`
 allowlist in `scripts/audit-runtime-patch-chain.mjs` in the same change.
-**12 scripts remain.** The process took: run the script against a scratch
-copy to get its exact diff, copy the already-verified patched files into
-canonical source (not retype them — the script's own internal assertions
-already proved the diff correct), remove it from all four places that
-reference it by name, then re-run the full regression bar below. This is the
-repeatable process for the remaining 12.
+The process: run the script against a scratch copy to get its exact diff,
+copy the already-verified patched files into canonical source (not retype
+them — the script's own internal assertions already proved the diff
+correct), remove it from all four places that reference it by name, then
+re-run the full regression bar below — **plus** diff the fully materialized
+runtime files before/after against the pre-retirement baseline, since a
+retired script's canonical-source diff can silently change how a *different*,
+still-active script behaves (see "Hidden dependencies" below; both
+retirements so far have hit this).
+
+**2026-09-28: retired `apply-frame-shop-polish.mjs`** the same way. **11
+scripts remain** (see below for the two hidden dependencies it surfaced and
+how they were fixed).
 
 Ran the existing conservative audit tool as of this writing
 (`npm run audit:runtime-retirement`, canonical phase):
@@ -112,7 +119,7 @@ Conservative retirement candidates: 0
 Startup side-effect review required: 1 (scripts/repair-telegram-runtime.mjs — external network call)
 ```
 
-**The remaining 12 scripts are still classified as required**
+**The remaining 11 scripts are still classified as required**
 (`materialized-release-step` or `keep-database-step`) by the tool's own
 conservative criteria. This means the easy part of "kill the patch chain" is
 already done (there's history of `retirement-materialize-once.yml` /
@@ -145,12 +152,60 @@ Scripts, in prestart order, and what each one touches (from
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
 10. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
 11. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
-12. `apply-frame-shop-polish.mjs` — `red-cosmos-v2.css`, `server.js`, `universal-server.js`.
-    (Natural next candidate for retirement — same reasoning as the one just
-    retired: small, isolated, no auth/money.)
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
+
+~~`apply-frame-shop-polish.mjs`~~ — retired 2026-09-28, folded into `server.js`,
+`universal-server.js`, `red-cosmos-v2.css` directly. **11 scripts remain.**
+
+### Hidden dependencies this second retirement surfaced
+
+Retiring one patch script can make an *unrelated, still-active* script behave
+differently, because several of them do bare-substring "is this already
+applied?" checks against the whole file rather than checking their own exact
+target text. Two were found and fixed this time, both in
+`apply-red-cosmos-v2-backend-final.mjs` (step 5 — runs long before where
+`apply-frame-shop-polish.mjs` used to sit at step 12):
+
+- Its `addPremiumFrameSupport()` guarded on the bare substring
+  `"'premium-smiling-fuck'"` to decide whether its own patch (adding
+  `premium-smiling-fuck` to an allowed-frame array and a `frames.push()`
+  branch) had already run. Once `apply-frame-shop-polish.mjs`'s
+  `OWNER_FRAME_CATALOG` — which legitimately lists every frame code,
+  including this one — became permanent canonical source in
+  `universal-server.js`, that bare check read "already applied" and silently
+  skipped this script's real, unrelated patch for the gateway. Fixed by
+  checking for its own exact target string instead, **for the gateway path
+  only**.
+- **The `server.js` path was deliberately left on the old, bare check.**
+  Tracing the *original*, unretired chain step by step proved this script's
+  `server.js` patch was **already a no-op in current production**, for an
+  unrelated reason: its `"'money', 'fire', ...'middle-finger'"` anchor simply
+  does not match `server.js`'s actual array text, so `String.replace()`
+  silently returns the input unchanged (no exception — `replace()` never
+  throws on a non-match) — and the old bare check then still read "applied"
+  for an unrelated reason (a different, adjacent `replace()` in the same
+  function *does* match `server.js`, adding a `frames.push()` line whose text
+  happens to satisfy the same bare substring test). That bug is real, but
+  it predates this retirement and this retirement does not touch it —
+  fixing it here would have been exactly the "use it as an excuse for
+  extra scope" this process is supposed to avoid. It's flagged here as a
+  known, separate, pre-existing defect for whoever picks it up next.
+- `apply-working-updates.mjs` (step 9) restores `red-cosmos-v2.css` from a
+  compressed, versioned blob (`scripts/working-updates-runtime-*.txt`) by
+  **wholesale overwrite**, not an anchor-based patch. Its blob predated
+  `apply-frame-shop-polish.mjs`'s shelf-animation CSS, so once that CSS was
+  folded into canonical source, this step's overwrite silently deleted it
+  again on every `materialize`. Fixed by regenerating the blob itself (same
+  gzip+base64 format, same 3-file split) to include the shelf-animation CSS
+  permanently, rather than changing this script's overwrite mechanism.
+
+None of these three fixes change any script's target behavior versus current
+production — each was verified by diffing the fully materialized
+`server.js`, `universal-server.js` and `red-cosmos-v2.css` before and after
+this retirement (byte-identical for the first two; same CSS rules, just
+inserted earlier in the file, for the third).
 
 Step 9 (`apply-working-updates.mjs`) is the one this session already had to
 extend twice (once for the admin-XSS fix, once historically for the
@@ -224,12 +279,15 @@ Two adjustments to the plan as written:
 1. **This document** (done) — no code change, establishes the shared map.
 2. **Proof-of-concept retirement of `apply-icecream69a-frame.mjs`** (done,
    2026-09-28) — proved the read-diff-move-delete-reverify workflow end to
-   end. **12 scripts remain**, a known, repeatable process rather than an
-   open-ended risk.
-3. **Next candidate: `apply-frame-shop-polish.mjs`** — same reasoning
-   (isolated frame-shop polish, no auth/money), not started yet. Take it only
-   after this one is reviewed and merged — one script at a time, per the
-   original instruction, not several in a row.
+   end.
+3. **Retirement of `apply-frame-shop-polish.mjs`** (done, 2026-09-28) — same
+   process, this time surfacing and fixing two real hidden inter-script
+   dependencies rather than zero (see above). **11 scripts remain.**
+4. **Next candidate**: not chosen yet. Take it only after this one is
+   reviewed and merged — one script at a time, per the original instruction,
+   not several in a row. Prefer another small, isolated one over
+   `apply-working-updates.mjs` (the biggest, blob-based one) until more of
+   the smaller scripts are cleared.
 
 Everything past retiring the whole patch chain (route-file extraction by
 domain) should wait until the

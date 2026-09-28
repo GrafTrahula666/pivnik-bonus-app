@@ -14,11 +14,30 @@ function replaceOrThrow(source, from, to, label) {
   return source.replace(from, to);
 }
 
+// This script's own patched form of the allowed-frame array. Checked instead
+// of the bare "'premium-smiling-fuck'" substring for the gateway: canonical
+// universal-server.js now permanently lists every frame code (including this
+// one) via the owner frame catalog (frame-shop-polish retirement,
+// 2026-09-28), without this script's own gateway patch having run — the old
+// bare substring check would then falsely treat the patch as already applied
+// and silently skip the unrelated frames.push()/DB-column additions below.
+//
+// server.js is intentionally left on the original bare check. Its
+// "'money', 'fire', ...'middle-finger'" anchor already does not match
+// server.js's actual array text (a pre-existing drift, unrelated to this
+// retirement — confirmed present on current main before this change), so
+// this script's server.js patch was already a silent no-op in production.
+// Preserve that exact prior behavior here; fixing it is a separate task.
+const PREMIUM_FRAME_ARRAY_APPLIED = "'money', 'fire', 'diamond', 'beer-mugs', 'beer-bottles', 'lights', 'middle-finger', 'premium-smiling-fuck'";
+
 function addPremiumFrameSupport(source, label) {
-  if (!source.includes("'premium-smiling-fuck'")) {
+  const alreadyApplied = (text) => (label === 'gateway'
+    ? text.includes(PREMIUM_FRAME_ARRAY_APPLIED)
+    : text.includes("'premium-smiling-fuck'"));
+  if (!alreadyApplied(source)) {
     source = source.replace(
       "'money', 'fire', 'diamond', 'beer-mugs', 'beer-bottles', 'lights', 'middle-finger'",
-      "'money', 'fire', 'diamond', 'beer-mugs', 'beer-bottles', 'lights', 'middle-finger', 'premium-smiling-fuck'"
+      PREMIUM_FRAME_ARRAY_APPLIED
     );
     source = source.replace(
       "if (row?.owns_middle_finger_frame || String(row?.profile_frame || '') === 'middle-finger') frames.push({ code: 'middle-finger', title: 'Смайлик с факом' });",
@@ -31,7 +50,9 @@ function addPremiumFrameSupport(source, label) {
       "EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-middle-finger') AS owns_middle_finger_frame,\n            EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-premium-smiling-fuck') AS owns_premium_smiling_fuck_frame"
     );
   }
-  if (!source.includes("'premium-smiling-fuck'")) throw new Error(`RED COSMOS v2 backend: ${label} premium frame support failed`);
+  if (!alreadyApplied(source)) {
+    throw new Error(`RED COSMOS v2 backend: ${label} premium frame support failed`);
+  }
   return source;
 }
 
@@ -192,7 +213,9 @@ const requiredServer = [
 ];
 for (const token of requiredServer) if (!server.includes(token)) throw new Error(`RED COSMOS v2 backend verification missing ${token}`);
 if (server.includes("code: 'custom-mug-design'")) throw new Error('RED COSMOS v2 backend: custom mug leaked into visible defaults');
-if (!gateway.includes("'premium-smiling-fuck'")) throw new Error('RED COSMOS v2 backend: gateway premium frame missing');
+if (!gateway.includes(PREMIUM_FRAME_ARRAY_APPLIED) || !gateway.includes('owns_premium_smiling_fuck_frame')) {
+  throw new Error('RED COSMOS v2 backend: gateway premium frame missing');
+}
 
 await fs.writeFile(serverPath, server, 'utf8');
 await fs.writeFile(gatewayPath, gateway, 'utf8');

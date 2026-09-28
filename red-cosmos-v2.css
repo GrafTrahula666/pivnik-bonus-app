@@ -110,3 +110,63 @@ body::after { content:""; position:fixed; inset:-25%; z-index:-1; pointer-events
 }
 
 @media(max-width:520px){.shop-category-grid,.red-cosmos-shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.v2-back-button,.v2-modal-back{min-height:48px!important}.shop-frame-live-preview .shop-frame-preview-avatar{width:78px!important;height:78px!important;min-width:78px!important;min-height:78px!important}}
+
+/* PIVNIK_FRAME_SHOP_ROTATION_OWNER_ALL_20260909: animation exists only on the shop shelf; equipped profile frames keep their own behavior. */
+.shop-frame-live-preview[data-frame-preview] {
+  --shop-frame-a: rgba(196,30,58,.96);
+  --shop-frame-b: rgba(126,56,255,.92);
+}
+.shop-frame-live-preview[data-frame-preview="beer-mugs"] { --shop-frame-a:#ffbd45; --shop-frame-b:#ff7a20; }
+.shop-frame-live-preview[data-frame-preview="beer-bottles"] { --shop-frame-a:#7ed06a; --shop-frame-b:#2f8d49; }
+.shop-frame-live-preview[data-frame-preview="lights"] { --shop-frame-a:#ff3154; --shop-frame-b:#a532e1; }
+.shop-frame-live-preview[data-frame-preview="premium-smiling-fuck"] { --shop-frame-a:#ffd700; --shop-frame-b:#fff1a1; }
+
+.shop-frame-live-preview[data-frame-preview]::before {
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:124px;
+  height:124px;
+  margin:-70px 0 0 -62px;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:0;
+  background:conic-gradient(
+    from 0deg,
+    transparent 0 16deg,
+    var(--shop-frame-a) 16deg 62deg,
+    transparent 62deg 106deg,
+    var(--shop-frame-b) 106deg 176deg,
+    transparent 176deg 226deg,
+    var(--shop-frame-a) 226deg 292deg,
+    transparent 292deg 326deg,
+    var(--shop-frame-b) 326deg 360deg
+  );
+  -webkit-mask:radial-gradient(circle,transparent 0 54px,#000 55px 61px,transparent 62px);
+  mask:radial-gradient(circle,transparent 0 54px,#000 55px 61px,transparent 62px);
+  filter:drop-shadow(0 0 8px var(--shop-frame-a));
+  animation:shopFrameShelfSpin 4.6s linear infinite;
+}
+
+.shop-frame-live-preview[data-frame-preview] .shop-frame-preview-avatar {
+  z-index:1;
+}
+
+@keyframes shopFrameShelfSpin {
+  to { transform:rotate(360deg); }
+}
+
+@media(max-width:520px) {
+  .shop-frame-live-preview[data-frame-preview]::before {
+    width:108px;
+    height:108px;
+    margin:-62px 0 0 -54px;
+    -webkit-mask:radial-gradient(circle,transparent 0 46px,#000 47px 53px,transparent 54px);
+    mask:radial-gradient(circle,transparent 0 46px,#000 47px 53px,transparent 54px);
+  }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .shop-frame-live-preview[data-frame-preview]::before { animation:none!important; }
+}

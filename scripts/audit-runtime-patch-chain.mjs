@@ -16,8 +16,7 @@ const APPROVED_PRESTART_COMMANDS = Object.freeze([
   'node scripts/apply-release-candidate-fixes.mjs',
   'node scripts/apply-working-updates.mjs',
   'node scripts/apply-vk-production-hotfix-20260831.mjs',
-  'node scripts/red-cosmos-v2-db-prepare.mjs',
-  'node scripts/apply-frame-shop-polish.mjs'
+  'node scripts/red-cosmos-v2-db-prepare.mjs'
 ]);
 
 const MATERIALIZE_BOOTSTRAP_COMMAND = 'node scripts/materialize-runtime-patches.mjs';
