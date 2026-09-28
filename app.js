@@ -2169,6 +2169,20 @@ function applyProfilePayload(data) {
   renderCoreProfile();
 }
 
+function applyVkProfileHydration(data) {
+  if (!IS_VK || !data?.profile) return;
+  if (state.profile?.id && String(state.profile.id) !== String(data.profile.id)) return;
+  applyProfilePayload(data);
+}
+
+window.addEventListener('pivnik:vk-profile-hydrated', (event) => {
+  applyVkProfileHydration(event.detail);
+});
+
+if (window.__PIVNIK_VK_PROFILE_HYDRATION__) {
+  applyVkProfileHydration(window.__PIVNIK_VK_PROFILE_HYDRATION__);
+}
+
 async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
