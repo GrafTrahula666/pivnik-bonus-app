@@ -43,20 +43,11 @@ test('RED COSMOS startup performs fail-closed database backup before migration',
     text('package.json'), text('scripts/red-cosmos-v2-db-prepare.mjs')
   ]);
   const prestart = JSON.parse(pkg).scripts.prestart;
-  assert.match(prestart, /apply-red-cosmos-v2-shell-final\.mjs/);
   assert.match(prestart, /apply-red-cosmos-v2-backend-final\.mjs/);
-  assert.match(prestart, /apply-red-cosmos-v2-client-final\.mjs/);
   assert.match(prestart, /red-cosmos-v2-db-prepare\.mjs/);
-  assert.ok(prestart.indexOf('red-cosmos-v2-db-prepare.mjs') > prestart.indexOf('apply-red-cosmos-v2-client-final.mjs'));
+  assert.ok(prestart.indexOf('red-cosmos-v2-db-prepare.mjs') > prestart.indexOf('apply-red-cosmos-v2-backend-final.mjs'));
   assert.match(prepare, /BEGIN/);
   assert.match(prepare, /createBackup\(client\)/);
   assert.match(prepare, /007_red_cosmos_v2\.sql/);
   assert.match(prepare, /ROLLBACK/);
-});
-
-test('RED COSMOS production startup retires the obsolete v22 delayed DB audit', async () => {
-  const polish = await text('scripts/apply-v22-production-polish.mjs');
-  assert.match(polish, /legacy startup audit retired/);
-  assert.doesNotMatch(polish, /v22-data-audit-and-repair\.mjs/);
-  assert.doesNotMatch(polish, /PIVNIK_V22_REPAIR_CONFIRM/);
 });

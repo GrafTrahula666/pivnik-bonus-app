@@ -33,13 +33,9 @@ test('Home league top 3 uses centered circular avatars and larger copy', async (
 });
 
 test('Home V2 precision polish is cache-busted', async () => {
-  const [index, shell] = await Promise.all([
-    read('index.html'),
-    read('scripts/apply-red-cosmos-v2-shell-final.mjs')
-  ]);
+  const index = await read('index.html');
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
 });
 
 

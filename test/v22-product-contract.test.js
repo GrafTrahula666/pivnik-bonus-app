@@ -7,9 +7,8 @@ async function text(file) {
 }
 
 test('canonical SPACEVERSE shell replaces obsolete visual layers without losing interaction fallback', async () => {
-  const [index, shell, ui] = await Promise.all([
+  const [index, ui] = await Promise.all([
     text('index.html'),
-    text('scripts/apply-red-cosmos-v2-shell-final.mjs'),
     text('red-cosmos-v2.js')
   ]);
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
@@ -17,7 +16,7 @@ test('canonical SPACEVERSE shell replaces obsolete visual layers without losing 
   assert.doesNotMatch(index, /\/black-frosted-(?:glass|surfaces|controls)\.css/);
   assert.doesNotMatch(index, /\/v22\\.css/);
   assert.doesNotMatch(index, /\/v22-ui\\.js/);
-  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
+  assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
   assert.match(ui, /← Назад/);
   assert.match(ui, /installVkInteractionFallback/);
 });

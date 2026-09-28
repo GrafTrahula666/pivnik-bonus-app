@@ -8,16 +8,12 @@ const packagePath = path.join(root, 'package.json');
 const APPROVED_PRESTART_COMMANDS = Object.freeze([
   'node scripts/repair-telegram-runtime.mjs',
   'node scripts/apply-v22-runtime.mjs',
-  'node scripts/apply-v22-production-polish.mjs',
-  'node scripts/apply-red-cosmos-v2-shell-final.mjs',
   'node scripts/apply-red-cosmos-v2-backend-final.mjs',
-  'node scripts/apply-red-cosmos-v2-client-final.mjs',
   'node scripts/apply-red-cosmos-v2-tester-claims.mjs',
   'node scripts/apply-release-candidate-fixes.mjs',
   'node scripts/apply-working-updates.mjs',
   'node scripts/apply-vk-production-hotfix-20260831.mjs',
-  'node scripts/red-cosmos-v2-db-prepare.mjs',
-  'node scripts/apply-frame-shop-polish.mjs'
+  'node scripts/red-cosmos-v2-db-prepare.mjs'
 ]);
 
 const MATERIALIZE_BOOTSTRAP_COMMAND = 'node scripts/materialize-runtime-patches.mjs';

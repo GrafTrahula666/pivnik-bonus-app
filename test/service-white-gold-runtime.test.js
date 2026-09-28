@@ -4,11 +4,12 @@ import test from 'node:test';
 
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
-test('service white-gold layer is wired after the canonical stylesheet by the runtime materializer', async () => {
-  const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /SERVICE_STYLE_HREF/);
-  assert.match(shell, /service-white-gold\.css\?v=\$\{SERVICE_STYLE_VERSION\}/);
-  assert.match(shell, /canonicalStyleTag[\s\S]*SERVICE_STYLE_HREF/);
+test('service white-gold layer is wired after the canonical stylesheet in the canonical shell', async () => {
+  const index = await read('index.html');
+  assert.match(
+    index,
+    /<link rel="stylesheet" href="styles\.css\?v=20\.9-service-entry-canonical[^"]*" \/>\s*\n\s*<link rel="stylesheet" href="\/service-white-gold\.css\?v=20\.8-service-white-gold" \/>/
+  );
 });
 
 test('service layer is visual-only and scoped to service-mode staff/admin runtime', async () => {

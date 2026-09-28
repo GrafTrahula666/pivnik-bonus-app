@@ -6,15 +6,13 @@ const root = new URL('../', import.meta.url);
 const read = (name) => readFile(new URL(name, root), 'utf8');
 
 test('Home V2 production shell keeps the white-gold cache key and five-column navigation', async () => {
-  const [index, css, shell] = await Promise.all([
+  const [index, css] = await Promise.all([
     read('index.html'),
-    read('styles.css'),
-    read('scripts/apply-red-cosmos-v2-shell-final.mjs')
+    read('styles.css')
   ]);
 
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical/);
   assert.match(index, /app\.js\?v=20\.9-service-entry-canonical/);
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
   assert.match(css, /\.bottom-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
 
   const nav = index.match(/<nav class="bottom-nav"[\s\S]*?<\/nav>/)?.[0] || '';

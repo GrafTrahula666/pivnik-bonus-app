@@ -7,26 +7,33 @@ const read = (file) => fs.readFile(new URL(`../${file}`, import.meta.url), 'utf8
 test('RED COSMOS final scripts are wired into materialize and prestart in a deterministic order', async () => {
   const pkg = JSON.parse(await read('package.json'));
   for (const name of [
-    'apply-red-cosmos-v2-shell-final.mjs',
-    'apply-red-cosmos-v2-backend-final.mjs',
-    'apply-red-cosmos-v2-client-final.mjs'
+    'apply-red-cosmos-v2-backend-final.mjs'
   ]) {
     assert.match(pkg.scripts.materialize, new RegExp(name.replaceAll('.', '\\.')));
     assert.match(pkg.scripts.prestart, new RegExp(name.replaceAll('.', '\\.')));
     assert.match(pkg.scripts.check, new RegExp(name.replaceAll('.', '\\.')));
   }
+  assert.doesNotMatch(pkg.scripts.prestart, /apply-red-cosmos-v2-shell-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.materialize, /apply-red-cosmos-v2-shell-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.check, /apply-red-cosmos-v2-shell-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.prestart, /apply-red-cosmos-v2-client-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.materialize, /apply-red-cosmos-v2-client-final\.mjs/);
+  assert.doesNotMatch(pkg.scripts.check, /apply-red-cosmos-v2-client-final\.mjs/);
   assert.match(pkg.scripts.prestart, /red-cosmos-v2-db-prepare\.mjs/);
   assert.doesNotMatch(pkg.scripts.materialize, /red-cosmos-v2-db-prepare\.mjs/);
 });
 
-test('startup shell retires legacy visual layers and preserves only the interaction fallback', async () => {
-  const shell = await read('scripts/apply-red-cosmos-v2-shell-final.mjs');
-  assert.match(shell, /CANONICAL_STYLE_VERSION = '20\.9-service-entry-canonical-profile-placement-20260925'/);
-  assert.match(shell, /forbiddenVisualAssets/);
-  assert.match(shell, /\/red-cosmos-v2\.css/);
-  assert.match(shell, /\/black-frosted-glass\.css/);
-  assert.match(shell, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
-  assert.match(shell, /SPACEVERSE_CANONICAL_THEME_LOCK/);
+test('canonical shell retires legacy visual layers and preserves only the interaction fallback', async () => {
+  const [index, app] = await Promise.all([read('index.html'), read('app.js')]);
+  assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical-profile-placement-20260925/);
+  for (const asset of [
+    '/v22.css', '/v22-ui.js', '/red-cosmos-v2.css',
+    '/black-frosted-glass.css', '/black-frosted-surfaces.css', '/black-frosted-controls.css'
+  ]) {
+    assert.equal(index.includes(asset), false, `${asset} must not be wired`);
+  }
+  assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.0/);
+  assert.match(app, /SPACEVERSE_CANONICAL_THEME_LOCK/);
 });
 
 test('RED COSMOS backend implements idempotent direct frame purchases', async () => {
@@ -42,11 +49,11 @@ test('RED COSMOS backend implements idempotent direct frame purchases', async ()
 
 test('RED COSMOS client removes all VK-only wheel guards and renders premium frame', async () => {
   const [client, fragment] = await Promise.all([
-    read('scripts/apply-red-cosmos-v2-client-final.mjs'),
+    read('app.js'),
     read('scripts/fragments/red-cosmos-shop-client.fragment.txt')
   ]);
   for (const name of ['renderWheelStatus', 'startWheelCountdown', 'loadWheelStatus', 'spinWheel', 'openWheel']) {
-    assert.match(client, new RegExp(name));
+    assert.match(client, new RegExp(`function ${name}\\(\\) \\{(?!\\n\\s*if \\(IS_VK)`));
   }
   assert.match(client, /premium-smiling-fuck/);
   assert.match(fragment, /\/api\/shop\/buy/);
