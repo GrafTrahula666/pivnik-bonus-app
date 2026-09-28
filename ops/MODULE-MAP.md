@@ -247,6 +247,53 @@ future PR, since after this retirement no active script reads it anymore
 (only two test files read its raw content for assertions, which still work
 with the file left in place).
 
+**2026-09-28: retired `apply-vk-production-hotfix-20260831.mjs`.** **7
+scripts remain.** Touches `app.js` (VK photo-button actionability and an
+on-demand VK photo refresh flow on the avatar-source picker) and appends a
+CSS block to `red-cosmos-v2.css` (`PIVNIK_VK_COSMOS_BACKGROUND_20260831`,
+the VK background/transparent-inner-canvas fix); only *reads* and asserts
+against `vk-platform.js`, never writes it (those hooks already live in
+canonical source). Both diffs were clean, unambiguous single-target
+anchors — unlike the client-final retirement, nothing here depends on
+another active script's transient state, so a standalone script run gave
+the true diff directly.
+
+**The hidden dependency this retirement was chosen to prove out:** this
+script ran *after* `apply-working-updates.mjs` in the old chain (position 7
+of 7 remaining, one before `red-cosmos-v2-db-prepare.mjs`), and
+`apply-working-updates.mjs` restores `red-cosmos-v2.css` from its
+gzip+base64 blob by **wholesale overwrite** whenever the file doesn't
+already match the blob's snapshot exactly — the same mechanism that broke
+`apply-frame-shop-polish.mjs`'s CSS during its own retirement (PR #162).
+Once the `PIVNIK_VK_COSMOS_BACKGROUND_20260831` block was folded into
+canonical `red-cosmos-v2.css`, the *next* `materialize` would have hit
+`existing !== targetContent` inside `apply-working-updates.mjs`'s restore
+loop and silently wiped the VK background CSS back to the blob's older
+snapshot. Fixed the same way as PR #162: decoded the blob, appended the
+exact same CSS fragment (extracted from the retired script's own
+`vkBackgroundFix` template literal) to its `red-cosmos-v2.css` entry,
+re-gzipped, re-base64'd, and re-split into the same 3-file,
+16000-char-chunk convention (`scripts/working-updates-runtime-*.txt`);
+round-trip decode verified before committing. The blob's
+`red-cosmos-v2.css` entry now carries both this fix and the frame-shop-polish
+one from PR #162.
+
+**A separate, genuinely pre-existing bug, left untouched and documented
+here rather than fixed:** the folded-in `app.js` code calls
+`applyVkProfileHydration(hydration)` on a successful on-demand VK photo
+refresh — but no function of that name exists anywhere in the codebase
+(`app.js`, `vk-platform.js`, or anywhere else). This is not something this
+retirement introduced; it is exactly what the script has been shipping to
+production already. Because the call sits inside a `try`, the resulting
+`ReferenceError` is caught by the surrounding `catch` and surfaces as a
+generic "не удалось загрузить фото VK" toast — a real, silent regression in
+that one on-demand-refresh code path (the hydrated photo data returned by
+`refresh()` never actually reaches `state`), but pre-existing and out of
+scope for this PR per the "don't use a found bug as an excuse to fix it"
+instruction. No other active script references `applyVkProfileHydration`,
+the VK photo button logic, or the `PIVNIK_VK_COSMOS_BACKGROUND_20260831`
+CSS block, so there is no second hidden dependency to trace here.
+
 Ran the existing conservative audit tool as of this writing
 (`npm run audit:runtime-retirement`, canonical phase):
 
@@ -255,7 +302,7 @@ Conservative retirement candidates: 0
 Startup side-effect review required: 1 (scripts/repair-telegram-runtime.mjs — external network call)
 ```
 
-**The remaining 8 scripts are still classified as required**
+**The remaining 7 scripts are still classified as required**
 (`materialized-release-step` or `keep-database-step`) by the tool's own
 conservative criteria. This means the easy part of "kill the patch chain" is
 already done (there's history of `retirement-materialize-once.yml` /
@@ -283,8 +330,7 @@ Scripts, in prestart order, and what each one touches (from
    `platform-core.js`, `red-cosmos-v2.css`/`.js`, `universal-server.js`,
    `vk-platform.js`, plus two DB/audit scripts. Ships as a gzip+base64 blob
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
-7. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
-8. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
+7. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
@@ -301,7 +347,13 @@ Scripts, in prestart order, and what each one touches (from
 ~~`apply-red-cosmos-v2-client-final.mjs`~~ — retired 2026-09-28, folded into
 `app.js` directly (`scripts/fragments/red-cosmos-shop-client.fragment.txt`
 kept, no longer read by any active script — cleanup candidate, not deleted
-in this change). **8 scripts remain.**
+in this change).
+
+~~`apply-vk-production-hotfix-20260831.mjs`~~ — retired 2026-09-28, folded
+into `app.js` and `red-cosmos-v2.css` directly; the
+`working-updates-runtime-*.txt` blob was regenerated so its
+`red-cosmos-v2.css` snapshot carries the VK background CSS too (see below).
+**7 scripts remain.**
 
 ### Hidden dependencies this second retirement surfaced
 
@@ -453,8 +505,19 @@ Two adjustments to the plan as written:
    pre-existing no-op left untouched and documented (see above).
    `scripts/fragments/red-cosmos-shop-client.fragment.txt` kept in place,
    flagged as a future cleanup candidate now that nothing active reads it.
-   **8 scripts remain.**
-7. **Next candidate**: not chosen yet. Take it only after this one is
+7. **Retirement of `apply-vk-production-hotfix-20260831.mjs`** (done,
+   2026-09-28) — same process; the diff itself was clean and unambiguous
+   (`app.js` VK photo-button flow, one CSS block in `red-cosmos-v2.css`),
+   but confirmed the exact `apply-working-updates.mjs` blob-overwrite hidden
+   dependency this script was chosen to test for: its wholesale-restore of
+   `red-cosmos-v2.css` from the gzip+base64 blob would have silently wiped
+   the newly-canonical VK background CSS on the very next `materialize`.
+   Fixed the same way as PR #162 — regenerated the blob to include the new
+   CSS. One separate, genuinely pre-existing bug (`app.js` calls an
+   undefined `applyVkProfileHydration` function on VK on-demand photo
+   refresh) found, left untouched and documented (see above). **7 scripts
+   remain.**
+8. **Next candidate**: not chosen yet. Take it only after this one is
    reviewed and merged — one script at a time, per the original instruction,
    not several in a row. Prefer another small, isolated one over
    `apply-working-updates.mjs` (the biggest, blob-based one) until more of
