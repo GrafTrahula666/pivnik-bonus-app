@@ -53,10 +53,3 @@ test('RED COSMOS startup performs fail-closed database backup before migration',
   assert.match(prepare, /007_red_cosmos_v2\.sql/);
   assert.match(prepare, /ROLLBACK/);
 });
-
-test('RED COSMOS production startup retires the obsolete v22 delayed DB audit', async () => {
-  const polish = await text('scripts/apply-v22-production-polish.mjs');
-  assert.match(polish, /legacy startup audit retired/);
-  assert.doesNotMatch(polish, /v22-data-audit-and-repair\.mjs/);
-  assert.doesNotMatch(polish, /PIVNIK_V22_REPAIR_CONFIRM/);
-});

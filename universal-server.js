@@ -1535,7 +1535,7 @@ async function resolveProviderUser(provider, externalUser) {
            SET username = $2,
                first_name = $3,
                last_name = $4,
-               photo_url = $5,
+               photo_url = COALESCE($5, photo_url),
                language_code = $6,
                role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
                unlimited_bonus = CASE WHEN $7 = 'admin' THEN TRUE ELSE unlimited_bonus END,
@@ -1564,8 +1564,8 @@ async function resolveProviderUser(provider, externalUser) {
        ) VALUES ($1::bigint, $2, $3, $4, $5)
        ON CONFLICT (provider, provider_user_id) DO UPDATE
        SET user_id = EXCLUDED.user_id,
-           provider_username = EXCLUDED.provider_username,
-           profile_url = EXCLUDED.profile_url,
+           provider_username = COALESCE(EXCLUDED.provider_username, user_identities.provider_username),
+           profile_url = COALESCE(EXCLUDED.profile_url, user_identities.profile_url),
            updated_at = NOW()`,
       [
         userId,

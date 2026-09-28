@@ -107,9 +107,29 @@ retired script's canonical-source diff can silently change how a *different*,
 still-active script behaves (see "Hidden dependencies" below; both
 retirements so far have hit this).
 
-**2026-09-28: retired `apply-frame-shop-polish.mjs`** the same way. **11
-scripts remain** (see below for the two hidden dependencies it surfaced and
-how they were fixed).
+**2026-09-28: retired `apply-frame-shop-polish.mjs`** the same way, surfacing
+two hidden dependencies fixed in the same change (see below).
+
+**2026-09-28: retired `apply-v22-production-polish.mjs`** the same way. **10
+scripts remain.** Its whole diff was two SQL fragments in
+`universal-server.js`'s auth/account-link paths (`COALESCE` guards so a
+partial re-auth payload can't null out an existing `photo_url`,
+`provider_username` or `profile_url`) plus its own idempotency-marker
+comment, which was dropped rather than folded in since nothing else reads it
+now that the script and its self-referential tests are gone. No new hidden
+inter-script dependency was found in the runtime files themselves — this
+script's two anchors were unique to it, and the fully materialized
+`universal-server.js` before/after this retirement is byte-identical except
+for the now-dead `// PIVNIK_V22_PRODUCTION_POLISH_20260827` marker comment
+disappearing (nothing else ever read it); the fully materialized `server.js`
+has no diff at all. What *did* need cleanup: two pre-existing test
+files (`test/v22-production-polish-retirement.test.js`, and one test block
+inside `test/v22-production-polish.test.js`) asserted on the *script's own*
+before/after execution rather than on canonical-file outcomes; both
+necessarily went away with the script file they read, per the same
+"delete what the deleted script's own tests exercise, leave outcome-only
+tests alone" rule already applied to `test/frame-shop-polish.test.js`
+surviving the previous retirement untouched.
 
 Ran the existing conservative audit tool as of this writing
 (`npm run audit:runtime-retirement`, canonical phase):
@@ -119,7 +139,7 @@ Conservative retirement candidates: 0
 Startup side-effect review required: 1 (scripts/repair-telegram-runtime.mjs — external network call)
 ```
 
-**The remaining 11 scripts are still classified as required**
+**The remaining 10 scripts are still classified as required**
 (`materialized-release-step` or `keep-database-step`) by the tool's own
 conservative criteria. This means the easy part of "kill the patch chain" is
 already done (there's history of `retirement-materialize-once.yml` /
@@ -140,24 +160,26 @@ Scripts, in prestart order, and what each one touches (from
 1. `repair-telegram-runtime.mjs` — Telegram bot menu API call; no file writes.
 2. `apply-v22-runtime.mjs` — `achievements.js`, `app.js`, `index.html`, `server.js`,
    `universal-server.js`; triggers steps 2b/2c below.
-3. `apply-v22-production-polish.mjs` — gateway profile metadata.
-4. `apply-red-cosmos-v2-shell-final.mjs` — `app.js`, `index.html`.
-5. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
-6. `apply-red-cosmos-v2-client-final.mjs` — `app.js`.
-7. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
-8. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
-9. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
+3. `apply-red-cosmos-v2-shell-final.mjs` — `app.js`, `index.html`.
+4. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
+5. `apply-red-cosmos-v2-client-final.mjs` — `app.js`.
+6. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
+7. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
+8. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
    `platform-core.js`, `red-cosmos-v2.css`/`.js`, `universal-server.js`,
    `vk-platform.js`, plus two DB/audit scripts. Ships as a gzip+base64 blob
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
-10. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
-11. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
+9. `apply-vk-production-hotfix-20260831.mjs` — `app.js`, `red-cosmos-v2.css`, `vk-platform.js`.
+10. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
 
 ~~`apply-frame-shop-polish.mjs`~~ — retired 2026-09-28, folded into `server.js`,
-`universal-server.js`, `red-cosmos-v2.css` directly. **11 scripts remain.**
+`universal-server.js`, `red-cosmos-v2.css` directly.
+
+~~`apply-v22-production-polish.mjs`~~ — retired 2026-09-28, folded into
+`universal-server.js` directly. **10 scripts remain.**
 
 ### Hidden dependencies this second retirement surfaced
 
@@ -282,8 +304,13 @@ Two adjustments to the plan as written:
    end.
 3. **Retirement of `apply-frame-shop-polish.mjs`** (done, 2026-09-28) — same
    process, this time surfacing and fixing two real hidden inter-script
-   dependencies rather than zero (see above). **11 scripts remain.**
-4. **Next candidate**: not chosen yet. Take it only after this one is
+   dependencies rather than zero (see above).
+4. **Retirement of `apply-v22-production-polish.mjs`** (done, 2026-09-28) —
+   same process; touched only `universal-server.js`'s auth/account-link
+   `COALESCE` guards, no new hidden inter-script dependency in the runtime
+   files, but two pre-existing tests bound to the script's own execution
+   had to go with it (see above). **10 scripts remain.**
+5. **Next candidate**: not chosen yet. Take it only after this one is
    reviewed and merged — one script at a time, per the original instruction,
    not several in a row. Prefer another small, isolated one over
    `apply-working-updates.mjs` (the biggest, blob-based one) until more of
