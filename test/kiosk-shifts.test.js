@@ -6,7 +6,7 @@ import http from 'node:http';
 import { PGlite } from '@electric-sql/pglite';
 
 import { barLocalParts, isLateStart } from '../kiosk-shifts/time.js';
-import { decideReceipt, decideReport, REPORT_JSON_SCHEMA, RECEIPT_JSON_SCHEMA, REPORT_FIELDS } from '../kiosk-shifts/validation.js';
+import { decideReceipt, decideReport, REPORT_JSON_SCHEMA, RECEIPT_JSON_SCHEMA, REPORT_FIELDS, REPORT_REQUIRED_FIELDS } from '../kiosk-shifts/validation.js';
 import { createKioskShiftService, suggestedPenaltyRub, normalizeEmployeeName } from '../kiosk-shifts/service.js';
 import { createKioskShiftHttpHandler } from '../kiosk-shifts/http.js';
 import { createTelegramNotifier } from '../kiosk-shifts/telegram.js';
@@ -201,6 +201,38 @@ test('missing signature, blur, cropping and wrong document are rejected', () => 
   const modelNo = decideReport(goodReport({ accepted: false, problems: [{ code: 'x', message: 'Переснимите весь лист' }] }));
   assert.equal(modelNo.accepted, false);
   assert.equal(modelNo.problems[0].message, 'Переснимите весь лист');
+});
+
+test('each of the 6 mandatory boxes alone blocks acceptance', () => {
+  assert.deepEqual([...REPORT_REQUIRED_FIELDS], ['cash_open', 'cash_total', 'transfer_total', 'revenue_total', 'cash_close']);
+  const labels = {
+    cash_open: 'НАЛИЧНЫХ В КАССЕ ПРИ ОТКРЫТИИ', cash_total: 'ИТОГО НАЛИЧНЫХ', transfer_total: 'ИТОГО ПЕРЕВОДОВ',
+    revenue_total: 'ОБЩАЯ ВЫРУЧКА', cash_close: 'НАЛИЧНЫХ В КАССЕ ПРИ ЗАКРЫТИИ'
+  };
+  for (const name of REPORT_REQUIRED_FIELDS) {
+    for (const bad of [field('', 'empty', 'high'), field('', 'not_visible', 'low'), field('12 3', 'illegible', 'low'), field('12 350', 'filled_legible', 'medium')]) {
+      const ai = goodReport();
+      ai.fields[name] = bad;
+      const decision = decideReport(ai);
+      assert.equal(decision.accepted, false, `${name} ${bad.status}/${bad.confidence}`);
+      assert.equal(decision.required_fields_complete, false);
+      assert.equal(decision.fields[name], '', 'uncertain value is never recorded');
+      assert.equal(decision.problems.length, 1);
+      assert.equal(decision.problems[0].field, name);
+      assert.ok(decision.problems[0].message.includes(labels[name]));
+    }
+  }
+  for (const status of ['empty', 'not_visible']) {
+    const decision = decideReport(goodReport({ signature: { status } }));
+    assert.equal(decision.accepted, false, `signature ${status}`);
+    assert.equal(decision.signature_present, false);
+    assert.equal(decision.problems[0].field, 'signature');
+    assert.match(decision.problems[0].message, /ПОДПИСЬ/);
+  }
+  // Optional lines (salary, expenses, comment) never block.
+  const optional = goodReport();
+  for (const name of ['salary', 'bar_expenses', 'inspector_comment', 'employee', 'date', 'shift_start_written']) optional.fields[name] = field('', 'empty', 'high');
+  assert.equal(decideReport(optional).accepted, true);
 });
 
 test('AI output that violates the strict schema is refused', () => {
