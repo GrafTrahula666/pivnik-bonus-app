@@ -167,7 +167,8 @@ window.__PIVNIK_GO_BACK__ = () => {
   if (entity.profileFrame === 'beer-mugs') return 'avatar-frame avatar-frame-beer-mugs';
   if (entity.profileFrame === 'beer-bottles') return 'avatar-frame avatar-frame-beer-bottles';
   if (entity.profileFrame === 'lights') return 'avatar-frame avatar-frame-lights';
-  if (entity.profileFrame === 'middle-finger') return 'avatar-frame avatar-frame-middle-finger';`,
+  if (entity.profileFrame === 'middle-finger') return 'avatar-frame avatar-frame-middle-finger';
+  if (entity.profileFrame === 'premium-smiling-fuck') return 'avatar-frame avatar-frame-premium-smiling-fuck';`,
     'CSS-классы новых рамок'
   );
 
@@ -191,7 +192,8 @@ window.__PIVNIK_GO_BACK__ = () => {
     'beer-mugs': '🍺',
     'beer-bottles': '🍾',
     lights: '✦',
-    'middle-finger': '🖕'
+    'middle-finger': '🖕',
+    'premium-smiling-fuck': '🖕'
   };
   if (v22Orbits[entity.profileFrame]) {
     const symbol = v22Orbits[entity.profileFrame];
