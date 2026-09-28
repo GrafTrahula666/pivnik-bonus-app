@@ -164,13 +164,18 @@ window.__PIVNIK_GO_BACK__ = () => {
     'CSS-классы новых рамок'
   );
 
+  // Anchor only on the vladislav block itself, not on what immediately
+  // follows it. Canonical source can have other per-username orbit blocks
+  // (e.g. icecream69a) inserted after vladislav and before the final
+  // `return '';` — this must not stop matching just because something new
+  // now sits between them.
   source = replaceRequired(
     source,
     `  if (entity.profileFrame === 'vladislav') {
     const poops = Array.from({ length: 12 }, () => '💩');
     return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
   }
-  return '';`,
+`,
     `  if (entity.profileFrame === 'vladislav') {
     const poops = Array.from({ length: 12 }, () => '💩');
     return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
@@ -185,7 +190,7 @@ window.__PIVNIK_GO_BACK__ = () => {
     const symbol = v22Orbits[entity.profileFrame];
     return '<span class="avatar-orbit v22-frame-orbit" aria-hidden="true">' + Array.from({ length: 8 }, (_, index) => '<i style="--orbit-index:' + index + '">' + symbol + '</i>').join('') + '</span>';
   }
-  return '';`,
+`,
     'орбиты новых рамок'
   );
 

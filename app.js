@@ -163,6 +163,7 @@ function avatarFallback(entity = {}) {
   return String(entity.firstName || entity.name || 'П').trim().slice(0, 1).toUpperCase() || 'П';
 }
 
+// PIVNIK_ICECREAM69A_FRAME_20260909
 function avatarFrameClass(entity = {}) {
   if (entity.profileFrame === 'money') return 'avatar-frame avatar-frame-money';
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
@@ -170,6 +171,7 @@ function avatarFrameClass(entity = {}) {
   if (entity.profileFrame === 'anna') return 'avatar-frame avatar-frame-anna';
   if (entity.profileFrame === 'olesya') return 'avatar-frame avatar-frame-olesya';
   if (entity.profileFrame === 'vladislav') return 'avatar-frame avatar-frame-vladislav';
+  if (entity.profileFrame === 'icecream69a') return 'avatar-frame avatar-frame-icecream69a';
   return '';
 }
 
@@ -192,6 +194,12 @@ function avatarOrbitHtml(entity = {}) {
     const poops = Array.from({ length: 12 }, () => '💩');
     return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
   }
+  if (entity.profileFrame === 'icecream69a') {
+    const symbols = Array.from({ length: 12 }, (_, index) => index % 2 === 0 ? '🔞' : '😈');
+    return '<span class="avatar-orbit icecream69a-orbit" aria-hidden="true">'
+      + symbols.map((symbol, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + symbol + '</span></i>').join('')
+      + '</span>';
+  }
   return '';
 }
 
@@ -208,6 +216,7 @@ function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
   element.classList.toggle('has-olesya-frame', entity.profileFrame === 'olesya');
   element.classList.toggle('has-vladislav-frame', entity.profileFrame === 'vladislav');
+  element.classList.toggle('has-icecream69a-frame', entity.profileFrame === 'icecream69a');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 

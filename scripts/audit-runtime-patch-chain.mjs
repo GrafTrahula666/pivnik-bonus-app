@@ -17,7 +17,6 @@ const APPROVED_PRESTART_COMMANDS = Object.freeze([
   'node scripts/apply-working-updates.mjs',
   'node scripts/apply-vk-production-hotfix-20260831.mjs',
   'node scripts/red-cosmos-v2-db-prepare.mjs',
-  'node scripts/apply-icecream69a-frame.mjs',
   'node scripts/apply-frame-shop-polish.mjs'
 ]);
 

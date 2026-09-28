@@ -369,7 +369,16 @@ function hasUnlimitedBonus(row) {
 
 // Anna frame entitlement and consent persistence hotfix 2026-08-06. A persisted personal frame remains valid after role changes
 // and Telegram/VK account linking, even when optional identity env vars are absent.
+// PIVNIK_ICECREAM69A_FRAME_20260909
+function isIceCream69ARow(row) {
+  return String(row?.username || '')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase() === 'icecream69a';
+}
+
 function profileFrameFromRow(row) {
+  if (isIceCream69ARow(row)) return 'icecream69a';
   if (isOwnerRow(row)) return 'money';
   if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
@@ -381,6 +390,7 @@ function profileFrameFromRow(row) {
 }
 
 function availableFramesFromRow(row) {
+  if (isIceCream69ARow(row)) return [{ code: 'icecream69a', title: 'Персональная рамка 🔞 😈' }];
   if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
   if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];

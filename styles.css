@@ -9509,3 +9509,92 @@ body,
 @media (max-width:360px) {
   .home-service-actions { grid-template-columns: 1fr; }
 }
+
+/* PIVNIK_ICECREAM69A_FRAME_20260909: isolated personal frame for @IceCream69A */
+.profile-avatar.has-icecream69a-frame,
+.profile-avatar.has-icecream69a-frame .avatar-render-inner,
+.avatar-frame-icecream69a {
+  overflow: visible !important;
+}
+
+.avatar-frame-icecream69a {
+  position: relative;
+  filter: drop-shadow(0 0 8px rgba(153, 74, 255, .42));
+}
+
+.avatar-frame-icecream69a::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  padding: 2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(255,58,58,.92), rgba(151,55,255,.9), rgba(255,58,58,.92));
+  box-shadow: 0 0 12px rgba(154,70,255,.38), 0 0 9px rgba(255,54,54,.24);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.icecream69a-orbit {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: icecream69aOrbitSpin 6s linear infinite;
+}
+
+.icecream69a-orbit i {
+  --angle: calc(var(--orbit-index) * 30deg);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  transform: rotate(var(--angle)) translateY(-38px);
+  transform-origin: center;
+  font-style: normal;
+}
+
+.icecream69a-orbit i span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -10px;
+  font-size: 17px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(210,100,255,.46));
+  animation: icecream69aEmojiCounterSpin 6s linear infinite;
+}
+
+.profile-avatar .icecream69a-orbit {
+  inset: -24px;
+}
+
+.profile-avatar .icecream69a-orbit i {
+  transform: rotate(var(--angle)) translateY(-44px);
+}
+
+.profile-avatar .icecream69a-orbit i span {
+  width: 22px;
+  height: 22px;
+  margin: -11px;
+  font-size: 19px;
+}
+
+@keyframes icecream69aOrbitSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes icecream69aEmojiCounterSpin {
+  from { transform: rotate(var(--counter-angle)); }
+  to { transform: rotate(calc(var(--counter-angle) - 360deg)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icecream69a-orbit,
+  .icecream69a-orbit i span {
+    animation: none !important;
+  }
+}
