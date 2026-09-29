@@ -9603,7 +9603,7 @@ body,
 .wheel-screen .wheel-rim {
   overflow: hidden;
   border: 0;
-  background: #000;
+  background: #fffaf1;
   box-shadow: 0 12px 32px rgba(0, 0, 0, .3);
 }
 .wheel-screen .wheel-rim::after,

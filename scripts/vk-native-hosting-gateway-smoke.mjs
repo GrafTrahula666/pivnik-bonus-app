@@ -223,6 +223,7 @@ try {
 
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
     if (role === 'client') {
+      await page.screenshot({ path: path.join(outDir, 'wheel-client-before.png'), fullPage: true });
       await page.locator('#wheelSpinButton').click();
       await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
       assert.equal(scenario.spinRequests.length, 3);
