@@ -9598,3 +9598,39 @@ body,
     animation: none !important;
   }
 }
+
+/* The approved artwork itself is the spinning disk; keep the home card intact. */
+.wheel-screen .wheel-rim {
+  overflow: hidden;
+  border: 0;
+  background: #fffaf1;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .3);
+}
+.wheel-screen .wheel-rim::after,
+.wheel-screen .wheel-emblem { display: none !important; }
+.wheel-screen .wheel-disk {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: none;
+}
+.wheel-history {
+  margin: 12px 12px 0;
+  padding: 16px;
+  border: 1px solid rgba(190, 128, 24, .28);
+  border-radius: 18px;
+  background: rgba(255, 251, 242, .7);
+}
+.wheel-history h3 { margin: 0 0 10px; font-size: 16px; color: #342615; }
+.wheel-history-list { color: #806d59; font-size: 13px; }
+.wheel-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(190, 128, 24, .17);
+}
+.wheel-history-row span { display: grid; gap: 3px; }
+.wheel-history-row small { color: #857768; }
+.wheel-history-row strong { color: #8b5b11; text-align: right; }

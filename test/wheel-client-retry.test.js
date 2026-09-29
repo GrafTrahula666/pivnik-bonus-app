@@ -36,7 +36,7 @@ function harness({ vk = false, storage = new Map(), userId = '42', status, api, 
     effectiveWheelStatus: () => state.wheel.status,
     loadWheelStatus: async () => { if (loadStatus) await loadStatus(state); },
     api: api || (async () => result),
-    renderWheelStatus() {}, renderProfile() {}, toast(message) { toasts.push(message); }, haptic() {},
+    renderWheelStatus() {}, renderProfile() {}, loadWheelHistory: async () => {}, toast(message) { toasts.push(message); }, haptic() {},
     visualSectorForPrize: () => ({ center: 0 }), waitForWheelStop: async () => {},
     window: { setTimeout() {} }
   });
