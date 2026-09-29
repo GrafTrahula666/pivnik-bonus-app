@@ -71,6 +71,10 @@ const gateway = createServer(async (req, res) => {
   if (pathname === '/api/shift/current') return json(res, { shift: null });
   if (pathname === '/api/promotions') return json(res, { promotions: [] });
   if (pathname === '/api/wheel/status') return json(res, wheelStatus());
+  if (pathname === '/api/wheel/history') return json(res, { spins: scenario.spinKey ? [{
+    id: '1', kind: 'free', chargedBonusCost: 0,
+    prize: { code: 'bonus-5', title: '5 бонусов' }, createdAt: new Date().toISOString()
+  }] : [] });
   if (pathname === '/api/wheel/spin') {
     scenario.spinRequests.push(body.requestKey);
     if (!scenario.spinKey) scenario.spinKey = body.requestKey;
@@ -204,28 +208,18 @@ try {
     const wheelVisual = await page.evaluate(() => {
       const disk = document.querySelector('#wheelDisk');
       return {
-        sectors: disk?.querySelectorAll('.wheel-sector').length || 0,
-        labels: disk?.querySelectorAll('.wheel-label-pill').length || 0,
-        jackpots: disk?.querySelectorAll('.wheel-sector-jackpot').length || 0,
+        tag: disk?.tagName,
+        src: disk?.getAttribute('src'),
+        loaded: disk?.complete && disk?.naturalWidth > 0 && disk?.naturalHeight > 0,
         backgroundImage: disk ? getComputedStyle(disk).backgroundImage : '',
-        labelTexts: [...(disk?.querySelectorAll('.wheel-label-pill text') || [])]
-          .map((node) => node.textContent?.trim() || ''),
-        labelTransforms: [...(disk?.querySelectorAll('.wheel-label-pill') || [])]
-          .map((node) => node.getAttribute('transform') || '')
+        transform: disk ? getComputedStyle(disk).transform : ''
       };
     });
-    assert.equal(wheelVisual.sectors, 28, `expected 28 rendered wheel sectors, got ${wheelVisual.sectors}`);
-    assert.equal(wheelVisual.labels, 27, `expected 27 ordinary wheel labels, got ${wheelVisual.labels}`);
-    assert.equal(wheelVisual.jackpots, 1, 'expected one rendered jackpot sector');
-    assert.match(wheelVisual.backgroundImage, /wheel-luxury-v1\.webp/i, 'luxury wheel background asset must be active');
-    assert.ok(
-      wheelVisual.labelTexts.every((label) => /^(?:5|10|20|50|100) б$|^Пиво$/.test(label)),
-      `unexpected visual wheel label: ${JSON.stringify(wheelVisual.labelTexts)}`
-    );
-    assert.ok(
-      wheelVisual.labelTransforms.every((transform) => /^translate\(/.test(transform) && !/rotate/i.test(transform)),
-      `wheel labels must remain horizontally laid out: ${JSON.stringify(wheelVisual.labelTransforms)}`
-    );
+    assert.equal(wheelVisual.tag, 'IMG', 'the approved image must be the rotating disk');
+    assert.equal(wheelVisual.src, '/assets/home-v2/wheel-approved-20260929.png');
+    assert.equal(wheelVisual.loaded, true, 'the approved image must load in VK hosting');
+    assert.equal(wheelVisual.backgroundImage, 'none', 'old wheel artwork must not cover the approved image');
+    assert.notEqual(wheelVisual.transform, 'none', 'the approved image must be the element that rotates');
 
     assert.equal(await page.locator('#wheelSpinButton').isEnabled(), true);
     if (role === 'client') {
@@ -233,6 +227,8 @@ try {
       await page.waitForFunction(() => document.querySelector('#wheelResultTitle')?.textContent === '5 бонусов');
       assert.equal(scenario.spinRequests.length, 3);
       assert.equal(new Set(scenario.spinRequests).size, 1, 'automatic retries must reuse one idempotency key');
+      await page.waitForFunction(() => document.querySelector('#wheelHistory')?.textContent?.includes('5 бонусов'));
+      await page.screenshot({ path: path.join(outDir, 'wheel-client-after.png'), fullPage: true });
     }
     // Reload must use the stored session, preserve permissions and never replay
     // a financial mutation that already returned its idempotent stored result.
