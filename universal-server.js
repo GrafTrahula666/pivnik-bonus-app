@@ -1717,6 +1717,19 @@ function wheelPrizeResponse(row) {
   };
 }
 
+async function getWheelHistory(userId) {
+  const result = await pool.query(
+    `SELECT id, kind, listed_bonus_cost, charged_bonus_cost, prize_code,
+            bonus_awarded, beer_awarded_ml, created_at
+     FROM wheel_spins
+     WHERE user_id = $1::bigint
+     ORDER BY created_at DESC, id DESC
+     LIMIT 20`,
+    [userId]
+  );
+  return result.rows.map(wheelPrizeResponse);
+}
+
 async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
   const [accountResult, lastFreeResult, nowResult] = await Promise.all([
     db.query(
@@ -3265,6 +3278,14 @@ export const server = http.createServer(async (req, res) => {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
       return sendJson(res, 200, await getTelegramWheelStatus(user.id));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/wheel/history') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, { spins: await getWheelHistory(user.id) });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/wheel/spin') {

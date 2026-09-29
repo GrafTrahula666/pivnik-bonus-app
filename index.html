@@ -7,9 +7,9 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20.9-service-entry-canonical-profile-placement-20260925-league-portrait-20260925-v2-home-cards-20260926" />
+  <link rel="stylesheet" href="styles.css?v=20.9-service-entry-canonical-profile-placement-20260925-league-portrait-20260925-v2-home-cards-20260926-wheel-approved-history-20260929" />
   <link rel="stylesheet" href="/service-white-gold.css?v=20.8-service-white-gold" />
-  <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926"></script>
+  <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926-wheel-approved-history-20260929"></script>
   <script defer src="/red-cosmos-v2.js?v=2.0.0"></script>
 </head>
 <body>
@@ -240,8 +240,7 @@
         <div class="wheel-stage">
           <div class="wheel-pointer" aria-hidden="true"></div>
           <div class="wheel-rim" id="wheelRim">
-            <svg class="wheel-disk" id="wheelDisk" viewBox="0 0 320 320" role="img" aria-label="Колесо с призами"></svg>
-            <div class="wheel-emblem" aria-hidden="true"></div>
+            <img class="wheel-disk" id="wheelDisk" src="/assets/home-v2/wheel-approved-20260929.png" alt="Колесо с призами" decoding="async" />
           </div>
           <div class="wheel-result" id="wheelResult" aria-live="polite" aria-hidden="true">
             <span id="wheelResultKicker">Ваше вращение готово</span>
@@ -254,6 +253,11 @@
           <p id="wheelNextFreeHint">Следующее бесплатное вращение — через 24 часа после этого.</p>
           <small id="wheelBalanceHint">Баланс: 0 бонусов</small>
         </div>
+
+        <section class="wheel-history" aria-labelledby="wheelHistoryTitle">
+          <h3 id="wheelHistoryTitle">Мои вращения</h3>
+          <div id="wheelHistory" class="wheel-history-list" aria-live="polite">Загружаем историю…</div>
+        </section>
 
         <button class="wheel-rules-link" id="openWheelRulesButton" type="button"><span>Документы</span><i aria-hidden="true">›</i></button>
       </section>
