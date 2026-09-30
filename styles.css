@@ -9761,3 +9761,8 @@ html body .spaceverse-business-page-head #spaceverseBusinessBack { margin: 0 !im
 .client-home.home-v2 .spaceverse-hero-wordmark {
   display: none;
 }
+
+/* Hero QR shortcut hidden by owner request (QR stays in the bottom nav). Markup and handler are kept so it can be restored. */
+.client-home.home-v2 .spaceverse-home-hero .hero-qr-button {
+  display: none !important;
+}
