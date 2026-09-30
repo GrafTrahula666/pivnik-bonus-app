@@ -140,7 +140,7 @@
 
         <button class="home-league-card vip-glass-card" id="openLeaderboardButton" type="button">
           <div class="home-league-head">
-            <div><span class="home-card-kicker">Рейтинг по покупкам</span><h2>Лига бара</h2></div>
+            <div><span class="home-card-kicker">Рейтинг по покупкам</span><h2>Лига бара</h2><small class="home-league-prev hidden" id="homeLeaguePrev"></small></div>
             <span>Весь рейтинг ›</span>
           </div>
           <div class="home-league-podium" id="homeLeaderboardPreview" aria-live="polite">
@@ -167,7 +167,7 @@
 
       <section class="screen client-screen spaceverse-business-screen" data-screen="spaceverse-business">
         <div class="spaceverse-business-page-head">
-          <button class="icon-btn" id="spaceverseBusinessBack" type="button" aria-label="Назад">‹</button>
+          <button class="icon-btn service-back" id="spaceverseBusinessBack" type="button" aria-label="Назад">← Назад</button>
           <span>
             <small>SPACEVERSE</small>
             <strong>Для бизнеса</strong>
@@ -264,12 +264,14 @@
       <!-- telegram-wheel:end -->
 
       <section class="screen client-screen" data-screen="actions">
+        <button class="service-back" id="actionsBackButton" type="button" aria-label="Назад">← Назад</button>
         <div class="client-page-title"><span class="muted">Предложения Пивника</span><h2>Акции</h2><p>Все активные предложения, привилегии и будущие награды.</p></div>
         <div class="modal-title-row owner-content-action"><span></span><button class="text-btn admin-write-only" id="editPromosQuick" type="button">Редактировать</button></div>
         <div id="promosCatalog" class="premium-list empty-state">Загрузка акций…</div>
       </section>
 
       <section class="screen client-screen" data-screen="league">
+        <button class="service-back" id="leagueBackButton" type="button" aria-label="Назад">← Назад</button>
         <div class="client-page-title"><span class="muted">Рейтинг по покупкам</span><h2 id="leaderboardModalTitle">Лига Пивника</h2><p>Место зависит только от фактически потраченной суммы за текущий месяц. Литры здесь не учитываются.</p></div>
         <div class="league-summary vip-glass-card">
           <span>Ваше место</span><strong>№<span id="leaguePlaceScreen">—</span></strong><small id="leaderboardMonth">текущий месяц</small>
@@ -279,6 +281,7 @@
           <span><i>1</i><b>Пока свободно</b></span><span><i>2</i><b>Пока свободно</b></span><span><i>3</i><b>Пока свободно</b></span>
         </div>
         <div id="leaderboardList" class="leaderboard-list empty-state">Пока нет участников</div>
+        <section class="league-prev-month vip-glass-card hidden" id="leaguePrevMonth" aria-label="Победители прошлого месяца"></section>
         <div class="leaderboard-prize-note" id="leaderboardPrizeNote">Награды за 1–3 место публикуются в условиях текущего сезона.</div>
       </section>
 

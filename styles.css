@@ -8249,7 +8249,7 @@ body,
 /* Approved liters reference: the artwork supplies the frame, static heading,
    beer mug and 14 empty seats. All changing values remain live DOM elements. */
 .client-home.home-v2 .beer-loyalty-card--compact {
-  background: url('/assets/home-v2/liters-card-reference-20260926.webp?v=1') center / 102% 112% no-repeat !important;
+  background: url('/assets/home-v2/liters-card-reference-20260930-clean.webp?v=1') center / 102% 112% no-repeat !important;
 }
 
 .client-home.home-v2 .beer-compact-main h2 {
@@ -9634,3 +9634,110 @@ body,
 .wheel-history-row span { display: grid; gap: 3px; }
 .wheel-history-row small { color: #857768; }
 .wheel-history-row strong { color: #8b5b11; text-align: right; }
+
+/* Home avatars: frame rings and orbits sit outside the avatar circle, so the
+   containers must not clip them; only the photo itself stays round. */
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar,
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .avatar-render-inner,
+.client-home.home-v2 .home-league-podium .leader-avatar,
+.client-home.home-v2 .home-league-podium .leader-avatar .avatar-render-inner {
+  overflow: visible !important;
+}
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .avatar-fallback,
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar img,
+.client-home.home-v2 .home-league-podium .leader-avatar .avatar-fallback,
+.client-home.home-v2 .home-league-podium .leader-avatar img {
+  border-radius: 50% !important;
+  clip-path: circle(50%);
+}
+
+/* Keep the orbiting frame symbols inside the hero card, clear of the balance. */
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  left: 6.4%;
+  width: min(62px, calc(21.2% - 14px));
+}
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .avatar-orbit {
+  inset: -9px;
+}
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .avatar-orbit i {
+  transform: scale(.78);
+}
+
+/* Visible separator between the profile block and the SPACEVERSE mark. */
+.client-home.home-v2 .spaceverse-home-hero .status-divider {
+  width: 2px;
+  height: auto;
+  border-radius: 2px;
+  background: linear-gradient(180deg, transparent, rgba(183,123,24,.85) 18% 82%, transparent);
+  box-shadow: 0 0 6px rgba(232,187,85,.55);
+}
+
+/* One back-button style everywhere: a left-aligned gold pill with an arrow and the word. */
+html body .modal-sheet > .close.v2-modal-back,
+html body .modal-sheet > .close.v22-modal-back,
+html body #spaceverseBusinessBack,
+html body #wheelBackButton,
+html body #leagueBackButton,
+html body #actionsBackButton,
+html body .screen .service-back {
+  position: static !important;
+  inset: auto !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 42px !important;
+  margin: 0 0 12px !important;
+  padding: 0 15px !important;
+  align-self: flex-start;
+  overflow: visible;
+  white-space: nowrap;
+  border: 1px solid rgba(182,130,38,.42) !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, rgba(255,253,248,.96), rgba(247,236,214,.92)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 4px 12px rgba(89,60,20,.12) !important;
+  color: #8b5b14 !important;
+  font-size: 13px !important;
+  font-weight: 720 !important;
+  line-height: 1 !important;
+  text-indent: 0;
+}
+html body .modal-sheet > .close.v2-modal-back:active,
+html body #spaceverseBusinessBack:active,
+html body .screen .service-back:active {
+  transform: scale(.97);
+}
+html body #wheelBackButton::after { content: none !important; }
+html body .wheel-page-head #wheelBackButton,
+html body .spaceverse-business-page-head #spaceverseBusinessBack { margin: 0 !important; }
+.leaderboard-row .leader-avatar .avatar-orbit { inset: -8px; }
+.leaderboard-row .leader-avatar .avatar-orbit i { transform: scale(.72); }
+
+/* League: previous month's winners. */
+.client-home.home-v2 .home-league-head .home-league-prev {
+  position: absolute;
+  top: 66%;
+  left: 0;
+  right: 30%;
+  overflow: hidden;
+  color: #6f5220;
+  font-size: 7px;
+  font-weight: 760;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.league-prev-month {
+  margin: 14px 0;
+  padding: 16px;
+}
+.league-prev-month h2 {
+  margin: 2px 0 10px;
+  font-size: 16px;
+}
+.league-prev-month { border-radius: 22px; }
+.leaderboard-row .leader-avatar.avatar-frame-money,
+.leaderboard-row .leader-avatar.avatar-frame-anna { margin-right: 12px; }
