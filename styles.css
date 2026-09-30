@@ -9742,7 +9742,7 @@ html body .spaceverse-business-page-head #spaceverseBusinessBack { margin: 0 !im
 .leaderboard-row .leader-avatar.avatar-frame-money,
 .leaderboard-row .leader-avatar.avatar-frame-anna { margin-right: 12px; }
 
-/* SPACEVERSE mark: the supplied artwork (seven glass cubes + wordmark) on its own dark tile. */
+/* SPACEVERSE mark: the supplied artwork (seven glass cubes + wordmark) on a light glass tile. */
 .client-home.home-v2 .spaceverse-hero-brand {
   align-content: center;
 }
@@ -9751,11 +9751,11 @@ html body .spaceverse-business-page-head #spaceverseBusinessBack { margin: 0 !im
   max-width: 96px;
   height: auto;
   aspect-ratio: auto;
-  padding: 3px;
-  border: 1px solid rgba(214,168,82,.7);
+  padding: 4px 3px;
+  border: 1px solid rgba(214,168,82,.55);
   border-radius: 14px;
-  background: #000;
-  box-shadow: 0 6px 16px rgba(60,38,8,.28), 0 0 12px rgba(232,187,85,.35);
+  background: linear-gradient(180deg, rgba(255,253,248,.92), rgba(247,236,214,.85));
+  box-shadow: 0 4px 12px rgba(120,80,20,.18), inset 0 1px 0 rgba(255,255,255,.9);
   filter: none;
 }
 .client-home.home-v2 .spaceverse-hero-wordmark {
