@@ -9781,3 +9781,143 @@ html body .spaceverse-business-page-head #spaceverseBusinessBack { margin: 0 !im
 .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-wordmark {
   display: none !important;
 }
+
+/* Hero layout grid on the artwork: fixed rows, nothing overlaps the frame or the logo.
+   Horizontal in % of the card (art scales with it), vertical in px (card is 156px tall). */
+html body .client-home.home-v2 .spaceverse-home-hero {
+  position: relative !important;
+  height: 156px !important;
+  min-height: 156px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  position: absolute !important;
+  top: 48px !important;
+  left: 11% !important;
+  width: 60px !important;
+  height: 60px !important;
+  transform: none !important;
+  margin: 0 !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .client-identity,
+html body .client-home.home-v2 .spaceverse-home-hero .balance,
+html body .client-home.home-v2 .spaceverse-home-hero .status-button,
+html body .client-home.home-v2 .spaceverse-home-hero .progress,
+html body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  position: absolute !important;
+  left: 29.5% !important;
+  width: 43% !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .client-identity {
+  top: 16px !important;
+  height: 36px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .hero-identity-copy {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .client-name {
+  display: block !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 18px !important;
+  line-height: 22px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  margin: 0 !important;
+  font-size: 10px !important;
+  line-height: 12px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .balance {
+  top: 54px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 5px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  font-size: 24px !important;
+  line-height: 28px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .balance > span {
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .balance small {
+  position: static !important;
+  margin: 0 !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .status-button {
+  top: 86px !important;
+  height: 30px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .status-caption {
+  display: block !important;
+  font-size: 9px !important;
+  line-height: 11px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .status-name {
+  display: block !important;
+  margin-top: 2px !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 14px !important;
+  line-height: 17px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .progress {
+  top: 121px !important;
+  height: 5px !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  top: 129px !important;
+  height: 12px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .max-status-line > span,
+html body .client-home.home-v2 .spaceverse-home-hero .max-status-line > strong {
+  position: static !important;
+  font-size: 9.5px !important;
+  line-height: 12px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .status-divider {
+  position: absolute !important;
+  left: 74.3% !important;
+  top: 16px !important;
+  bottom: 16px !important;
+  height: auto !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand {
+  pointer-events: none !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero .status-button > div {
+  display: block !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+html body .client-home.home-v2 .spaceverse-home-hero #clientBalance.unlimited-balance {
+  font-size: 32px !important;
+  line-height: 28px !important;
+}

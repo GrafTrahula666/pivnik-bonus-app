@@ -1981,7 +1981,7 @@ function renderProfile() {
   } else {
     $('#statusProgress').style.width = '100%';
     $('#statusProgressText').textContent = 'Максимальный статус';
-    $('#nextRewardText').textContent = 'Максимальный статус';
+    $('#nextRewardText').textContent = '';
   }
 
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
