@@ -425,10 +425,11 @@ public class MainActivity extends Activity {
         EditText tg = textField("Telegram deep link", Prefs.getTgUri(this));
         EditText vpn = textField("VPN package (например com.wireguard.android)", Prefs.getVpnPackage(this));
         EditText api = textField("HTTPS сервер Пивника", Prefs.getApiBaseUrl(this));
+        EditText shiftApi = textField("HTTPS сервер смен", Prefs.getShiftApiBaseUrl(this));
         EditText label = textField("Имя устройства", Prefs.getDeviceLabel(this));
         EditText pair = textField("Одноразовый код BAR-XXXX-XXXX", "");
         EditText shiftCode = textField("Код подключения смен (с сервера)", "");
-        box.addView(vk); box.addView(tg); box.addView(vpn); box.addView(api); box.addView(label); box.addView(pair); box.addView(shiftCode);
+        box.addView(vk); box.addView(tg); box.addView(vpn); box.addView(api); box.addView(shiftApi); box.addView(label); box.addView(pair); box.addView(shiftCode);
 
         String[] actions = KioskController.isDeviceOwner(this)
                 ? new String[]{"Сохранить", "Привязать устройство", "Сбросить привязку", "Подключить смены", "Включить Kiosk", "Выйти из Kiosk", "Настроить Always-on VPN", "Системные настройки"}
@@ -438,7 +439,7 @@ public class MainActivity extends Activity {
                 .setTitle("Пивник — администрирование")
                 .setView(box)
                 .setItems(actions, (dialog, which) -> {
-                    saveAdminFields(vk, tg, vpn, api, label);
+                    saveAdminFields(vk, tg, vpn, api, label); Prefs.saveShiftServer(this, shiftApi.getText().toString());
                     String action = actions[which];
                     if (action.equals("Привязать устройство")) pairDevice(pair.getText().toString(), label.getText().toString());
                     else if (action.equals("Подключить смены")) enrollShifts(shiftCode.getText().toString(), label.getText().toString());

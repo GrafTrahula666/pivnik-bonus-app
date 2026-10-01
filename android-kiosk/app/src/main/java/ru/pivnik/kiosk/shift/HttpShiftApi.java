@@ -60,8 +60,8 @@ public final class HttpShiftApi implements ShiftApi {
     }
 
     private HttpURLConnection open(String method, String path, boolean auth, int readTimeoutMs) throws IOException, ApiException {
-        String base = Prefs.getApiBaseUrl(context);
-        if (base.isEmpty()) throw new ApiException(0, "Не задан HTTPS адрес сервера Пивника", "no_server", false);
+        String base = Prefs.getShiftApiBaseUrl(context);
+        if (base.isEmpty()) throw new ApiException(0, "Не задан HTTPS адрес сервера смен", "no_server", false);
         URL url = new URL(base + PREFIX + path);
         if (!"https".equalsIgnoreCase(url.getProtocol())) throw new ApiException(0, "Смены работают только через HTTPS", "no_https", false);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();

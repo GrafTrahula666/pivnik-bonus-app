@@ -14,6 +14,7 @@ public final class Prefs {
     private static final String DEFAULT_VK_URI = "https://vk.ru/app54694987";
     private static final String DEFAULT_TG_URI = "pivnik://open-telegram";
     private static final String DEFAULT_VPN_PACKAGE = "su.happ.proxyutility";
+    private static final String DEFAULT_SHIFT_API_BASE_URL = "https://kiosk-shifts-production.up.railway.app";
     private static final String DEFAULT_API_BASE_URL = "https://pivnik-bonus-app-production-df60.up.railway.app";
     private Prefs() {}
     private static SharedPreferences p(Context c) { return c.getSharedPreferences(FILE, Context.MODE_PRIVATE); }
@@ -37,6 +38,8 @@ public final class Prefs {
     public static String getTgUri(Context c) { return p(c).getString("tg_uri", DEFAULT_TG_URI); }
     public static String getVpnPackage(Context c) { return p(c).getString("vpn_package", DEFAULT_VPN_PACKAGE); }
     public static String getApiBaseUrl(Context c) { return p(c).getString("api_base_url", DEFAULT_API_BASE_URL); }
+    public static String getShiftApiBaseUrl(Context c) { return p(c).getString("shift_api_base_url", DEFAULT_SHIFT_API_BASE_URL); }
+    public static void saveShiftServer(Context c, String base) { p(c).edit().putString("shift_api_base_url", clean(base).replaceAll("/+$", "")).apply(); }
     public static String getDeviceLabel(Context c) { return p(c).getString("device_label", "Пивник • Бар"); }
     public static void saveLinks(Context c, String vkUri, String tgUri, String vpnPackage) {
         p(c).edit().putString("vk_uri", clean(vkUri)).putString("tg_uri", clean(tgUri)).putString("vpn_package", clean(vpnPackage)).apply();
