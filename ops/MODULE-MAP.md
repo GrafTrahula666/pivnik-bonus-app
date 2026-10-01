@@ -411,6 +411,50 @@ this script's blob also touches, the script's marker-matching breaks loudly
 but it is also the clearest sign this script is the most expensive one to keep
 alive long-term.
 
+## Old RED COSMOS theme: where it still lived (audited 2026-10-01)
+
+The canonical client palette is white / milk / cream / gold (SPACEVERSE).
+What actually ships after `npm run materialize` / `prestart`:
+
+- Linked CSS, in order: `styles.css` → `/loader-fix.css` (inserted by
+  `renderAppIndex()` in `universal-server.js`) → `/service-white-gold.css`.
+  The same order goes into the VK Hosting bundle (`build-vk-hosting.mjs`
+  reuses `index.html`). The final `:root` palette in `styles.css` is already
+  white-gold without any JS.
+- **Not linked anywhere** (served by the gateway or present on disk only):
+  `red-cosmos-v2.css`, `v22.css`, `black-frosted-*.css`. `v22.css` is wired
+  into `index.html` by `apply-v22-product-rebuild.mjs` and stripped again in
+  the same run.
+- **The one live burgundy source was the archived `red-cosmos-v2.js` in the
+  `working-updates-runtime-*.txt` blob.** Canonical `red-cosmos-v2.js` has no
+  theme code, but `apply-working-updates.mjs` replaces it wholesale with the
+  blob copy at materialize, and that copy carried `applyPlatformChrome()`,
+  which set the Telegram header/background/bottom bar to `#260718` /
+  `#0d0002` / `#120006`. Telegram showed a burgundy bar and background during
+  load, and kept it whenever no published design record reached
+  `applyDesign()`. VK stubs those Telegram calls, which is why only Telegram
+  showed it.
+  Fixed the same way as PRs #162/#163: the function and its call were removed
+  from the blob's `red-cosmos-v2.js` entry (decode → edit → gzip → base64 →
+  the same 3-file 16000-char split). The canonical file still carries the
+  `EXPECTED_PRIMARY` anchor that the restore loop requires.
+- `app.js` now sets the cream Telegram chrome from `renderCoreProfile()`
+  through `applyTelegramChrome()`, so it no longer depends on a design record.
+  Dark chrome (`#0b0e13` / `#0e0c0a`) is left in place on purpose while the
+  black boot screen is up. The header stays `#0b0e13`, locked by
+  `test/service-entry-canonical.test.js`.
+- Left on purpose: `red-cosmos-v2.css`, which is unlinked, still rewritten
+  from the blob and read by tests; removing it means editing the patch chain.
+  `verifyTheme()` in the blob `red-cosmos-v2.js` has no visual effect: it logs
+  a failing `console.assert` for `--primary-red` and adds an unused
+  `red-cosmos-v2` html class. The semantic danger/error reds and the
+  fire/Anna/Olesya avatar-frame art are product colours, not theme.
+- VK Hosting is a separate static deploy (manual
+  `vk-native-hosting-production.yml`, no runs recorded in Actions; last DEV
+  deploy 2026-09-18, from before white-gold landed on 2026-09-22/23). If
+  `vk.ru/app54694987` is served from VK Hosting, it shows whatever bundle was
+  last uploaded until someone redeploys it.
+
 ## "Do not break" — invariants the test suite already enforces
 
 These are not aspirational; each is a real assertion already running in CI.
