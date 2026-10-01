@@ -984,6 +984,70 @@ function leaderboardName(row) {
   return last ? `${first} ${last.slice(0, 1)}.` : first;
 }
 
+async function getUnifiedPreviousMonthTop(canonical) {
+  const result = await pool.query(
+    `WITH RECURSIVE user_map AS (
+       SELECT id AS source_id, id AS canonical_id
+       FROM users
+       WHERE merged_into_user_id IS NULL
+       UNION ALL
+       SELECT u.id AS source_id, m.canonical_id
+       FROM users u
+       JOIN user_map m ON u.merged_into_user_id = m.source_id
+     ), monthly_spend AS (
+       SELECT um.canonical_id AS user_id,
+              COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
+       FROM user_map um
+       JOIN transactions t ON t.client_id = um.source_id
+         AND t.status = 'completed'
+         AND t.mode IN ('accrue','redeem')
+         AND t.created_at >= ((date_trunc('month', NOW() AT TIME ZONE 'Europe/Moscow') - INTERVAL '1 month') AT TIME ZONE 'Europe/Moscow')
+         AND t.created_at < (date_trunc('month', NOW() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow')
+       GROUP BY um.canonical_id
+     )
+     SELECT u.id, u.first_name, u.last_name, u.photo_url,
+            u.avatar_source, u.avatar_key, u.profile_frame, u.role,
+            u.telegram_id, u.unlimited_bonus,
+            u.profile_public, u.show_name, u.show_avatar, u.show_leaderboard_amount,
+            ms.spend_cents,
+            RANK() OVER (ORDER BY ms.spend_cents DESC, u.id ASC) AS rank
+     FROM monthly_spend ms
+     JOIN users u ON u.id = ms.user_id
+     WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+       AND ms.spend_cents > 0
+     ORDER BY rank, u.id
+     LIMIT 3`,
+    []
+  );
+  if (!result.rows.length) return null;
+  const moscowNow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit' }).format(new Date());
+  const [year, monthNumber] = moscowNow.split('-').map(Number);
+  const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, monthNumber - 2, 15)));
+  return {
+    month,
+    leaders: result.rows.map((row) => {
+      const isMe = String(row.id) === String(canonical);
+      const publicProfile = row.profile_public !== false;
+      const showName = isMe || (publicProfile && row.show_name !== false);
+      const showAvatar = isMe || (publicProfile && row.show_avatar !== false);
+      const showSpend = isMe || (publicProfile && row.show_leaderboard_amount !== false);
+      return {
+        rank: Number(row.rank),
+        name: showName ? leaderboardName(row) : 'Скрытый гость',
+        spend: showSpend ? rubles(row.spend_cents) : null,
+        isMe,
+        avatarSource: showAvatar ? (row.avatar_source || 'preset_male') : null,
+        avatarKey: showAvatar ? (row.avatar_key || null) : null,
+        photoUrl: showAvatar ? (row.photo_url || null) : null,
+        profileFrame: showAvatar ? profileFrameFromRow(row) : 'none',
+        showAvatar
+      };
+    })
+  };
+}
+
 async function getUnifiedMonthlyLeaderboard(currentUserId) {
   const canonical = await canonicalUserId(pool, currentUserId);
   if (!canonical) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
@@ -1028,9 +1092,14 @@ async function getUnifiedMonthlyLeaderboard(currentUserId) {
   const current = rows.find((row) => String(row.id) === String(canonical)) || null;
   const leaders = rows.filter((row) => Number(row.spend_cents || 0) > 0).slice(0, 10);
   const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'Europe/Moscow' }).format(new Date());
+  const previousMonth = await getUnifiedPreviousMonthTop(canonical).catch((error) => {
+    console.warn('Previous month league top skipped:', error?.message || error);
+    return null;
+  });
 
   return {
     month,
+    previousMonth,
     prizeNote: 'После закрытия месяца участник на 1-м месте получает эпическое достижение и бесплатную пинту 0,5 л.',
     scope: 'telegram-vk',
     leaders: leaders.map((row) => {
@@ -1716,6 +1785,19 @@ function wheelPrizeResponse(row) {
     } : null,
     createdAt: row.created_at
   };
+}
+
+async function getWheelHistory(userId) {
+  const result = await pool.query(
+    `SELECT id, kind, listed_bonus_cost, charged_bonus_cost, prize_code,
+            bonus_awarded, beer_awarded_ml, created_at
+     FROM wheel_spins
+     WHERE user_id = $1::bigint
+     ORDER BY created_at DESC, id DESC
+     LIMIT 20`,
+    [userId]
+  );
+  return result.rows.map(wheelPrizeResponse);
 }
 
 async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
@@ -3133,16 +3215,6 @@ export const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(__dirname, 'red-cosmos-v2.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
-    if (req.method === 'GET' && url.pathname === '/black-frosted-glass.css') {
-      return serveFile(res, path.join(__dirname, 'black-frosted-glass.css'), 'text/css; charset=utf-8', 'no-cache');
-    }
-    if (req.method === 'GET' && url.pathname === '/black-frosted-surfaces.css') {
-      return serveFile(res, path.join(__dirname, 'black-frosted-surfaces.css'), 'text/css; charset=utf-8', 'no-cache');
-    }
-    if (req.method === 'GET' && url.pathname === '/black-frosted-controls.css') {
-      return serveFile(res, path.join(__dirname, 'black-frosted-controls.css'), 'text/css; charset=utf-8', 'no-cache');
-    }
-
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
       return serveLegalDocument(res, path.join(__dirname, 'legal', 'privacy.html'));
     }
@@ -3280,6 +3352,14 @@ export const server = http.createServer(async (req, res) => {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
       return sendJson(res, 200, await getTelegramWheelStatus(user.id));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/wheel/history') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, { spins: await getWheelHistory(user.id) });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/wheel/spin') {

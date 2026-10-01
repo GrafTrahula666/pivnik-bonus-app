@@ -12,7 +12,6 @@ const APPROVED_PRESTART_COMMANDS = Object.freeze([
   'node scripts/apply-red-cosmos-v2-tester-claims.mjs',
   'node scripts/apply-release-candidate-fixes.mjs',
   'node scripts/apply-working-updates.mjs',
-  'node scripts/apply-vk-production-hotfix-20260831.mjs',
   'node scripts/red-cosmos-v2-db-prepare.mjs'
 ]);
 

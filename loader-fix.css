@@ -112,3 +112,8 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* VK loading artwork (same file the VK Hosting bundle uses as the boot image src). */
+body.platform-vk .boot-image {
+  content: url('/assets/boot/vk-boot-sky-city-20261001.webp') !important;
+}
