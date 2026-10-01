@@ -30,7 +30,7 @@ import android.widget.ScrollView;
 
 import ru.pivnik.kiosk.shift.Doc;
 import ru.pivnik.kiosk.shift.DocumentActivity;
-import ru.pivnik.kiosk.shift.HttpShiftApi;
+import ru.pivnik.kiosk.shift.TelegramShiftApi;
 import ru.pivnik.kiosk.shift.Shift;
 import ru.pivnik.kiosk.shift.ShiftController;
 import ru.pivnik.kiosk.shift.ShiftCredentialStore;
@@ -312,15 +312,15 @@ public class MainActivity extends Activity {
 
     private void enrollShifts(String code, String label) {
         if (code == null || code.trim().isEmpty()) {
-            Toast.makeText(this, "Введите код подключения смен", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Введите токен бота и chat id через пробел", Toast.LENGTH_LONG).show();
             return;
         }
         Toast.makeText(this, "Подключаю смены…", Toast.LENGTH_SHORT).show();
         ShiftService.get(this).worker.execute(() -> {
             String message;
             try {
-                String token = new HttpShiftApi(this).enroll(code, label).optString("deviceToken", "");
-                if (!token.startsWith("pvkshift_")) throw new IllegalStateException("Сервер не вернул ключ смен");
+                String token = new TelegramShiftApi(this).enroll(code, label).optString("deviceToken", "");
+                if (token.isEmpty()) throw new IllegalStateException("Telegram не подтвердил подключение");
                 ShiftCredentialStore.save(this, token);
                 message = "Смены подключены";
             } catch (Exception e) {
@@ -427,7 +427,7 @@ public class MainActivity extends Activity {
         EditText api = textField("HTTPS сервер Пивника", Prefs.getApiBaseUrl(this));
         EditText label = textField("Имя устройства", Prefs.getDeviceLabel(this));
         EditText pair = textField("Одноразовый код BAR-XXXX-XXXX", "");
-        EditText shiftCode = textField("Код подключения смен (с сервера)", "");
+        EditText shiftCode = textField("Токен бота и chat id через пробел (для смен)", "");
         box.addView(vk); box.addView(tg); box.addView(vpn); box.addView(api); box.addView(label); box.addView(pair); box.addView(shiftCode);
 
         String[] actions = KioskController.isDeviceOwner(this)
