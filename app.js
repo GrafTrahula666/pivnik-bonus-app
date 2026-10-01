@@ -1530,6 +1530,25 @@ function renderLeaderboard() {
       return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i>${avatar}<b>${escapeHtml(leader?.name || 'Пока свободно')}</b><strong>${amount}</strong></span>`;
     }).join('');
   }
+  const previous = data.previousMonth;
+  const previousLeaders = Array.isArray(previous?.leaders) ? previous.leaders : [];
+  const homePrevious = $('#homeLeaguePrev');
+  if (homePrevious) {
+    homePrevious.textContent = previousLeaders.length ? `Топ за ${previous.month}: ${previousLeaders[0].name}` : '';
+    homePrevious.classList.toggle('hidden', !previousLeaders.length);
+  }
+  const previousBox = $('#leaguePrevMonth');
+  if (previousBox) {
+    previousBox.classList.toggle('hidden', !previousLeaders.length);
+    const medals = ['🥇', '🥈', '🥉'];
+    previousBox.innerHTML = previousLeaders.length ? `<span class="home-card-kicker">Кто выигрывал</span><h2>Топ прошлого месяца · ${escapeHtml(previous.month)}</h2>
+      <div class="leaderboard-list league-prev-list">${previousLeaders.map((leader, index) => `<div class="leaderboard-row ${leader.isMe ? 'is-me' : ''} podium">
+        <span class="leader-rank">${medals[index] || leader.rank}</span>
+        ${avatarInlineHtml(leader, 'leader-avatar', true)}
+        <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>${leader.rank} место</small></div>
+        <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
+      </div>`).join('')}</div>` : '';
+  }
   const preview = $('#leaderboardPreview');
   if (preview) {
     preview.innerHTML = [1, 2, 3].map((rank) => {
@@ -1962,7 +1981,7 @@ function renderProfile() {
   } else {
     $('#statusProgress').style.width = '100%';
     $('#statusProgressText').textContent = 'Максимальный статус';
-    $('#nextRewardText').textContent = 'Максимальный статус';
+    $('#nextRewardText').textContent = '';
   }
 
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
@@ -3414,6 +3433,8 @@ $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPa
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#leagueBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#actionsBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
