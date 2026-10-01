@@ -26,10 +26,7 @@ test('RED COSMOS final scripts are wired into materialize and prestart in a dete
 test('canonical shell retires legacy visual layers and preserves only the interaction fallback', async () => {
   const [index, app] = await Promise.all([read('index.html'), read('app.js')]);
   assert.match(index, /styles\.css\?v=20\.9-service-entry-canonical-profile-placement-20260925/);
-  for (const asset of [
-    '/v22.css', '/v22-ui.js', '/red-cosmos-v2.css',
-    '/black-frosted-glass.css', '/black-frosted-surfaces.css', '/black-frosted-controls.css'
-  ]) {
+  for (const asset of ['/v22.css', '/v22-ui.js', '/red-cosmos-v2.css']) {
     assert.equal(index.includes(asset), false, `${asset} must not be wired`);
   }
   assert.match(index, /\/red-cosmos-v2\.js\?v=2\.0\.0/);

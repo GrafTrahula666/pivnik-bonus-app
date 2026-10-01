@@ -44,9 +44,6 @@ on:
       - v22-ui.js
       - red-cosmos-v2.js
       - styles.css
-      - black-frosted-glass.css
-      - black-frosted-surfaces.css
-      - black-frosted-controls.css
       - scripts/materialize-runtime-patches.mjs
       - scripts/apply-v22-runtime.mjs
       - scripts/apply-v22-production-polish.mjs

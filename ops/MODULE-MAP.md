@@ -422,7 +422,9 @@ What actually ships after `npm run materialize` / `prestart`:
   reuses `index.html`). The final `:root` palette in `styles.css` is already
   white-gold without any JS.
 - **Not linked anywhere** (served by the gateway or present on disk only):
-  `red-cosmos-v2.css`, `v22.css`, `black-frosted-*.css`. `v22.css` is wired
+  `red-cosmos-v2.css`, `v22.css`. (`black-frosted-*.css`, the root and
+  `assets/loader-*` images and `assets/backgrounds/pivnik-{loader,sign,boot-person}`
+  were deleted on 2026-10-01: nothing referenced them.) `v22.css` is wired
   into `index.html` by `apply-v22-product-rebuild.mjs` and stripped again in
   the same run.
 - **The one live burgundy source was the archived `red-cosmos-v2.js` in the
