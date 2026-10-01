@@ -4055,7 +4055,7 @@ main,
 
 .vip-hero-card .progress i,
 .beer-progress i {
-  background: linear-gradient(90deg, #752734, #d39b56, #efd5a2);
+  background: linear-gradient(90deg, #a9650a, #d39b56, #efd5a2);
   box-shadow: 0 0 13px rgba(221, 163, 88, .38);
 }
 
@@ -5638,7 +5638,7 @@ body {
 }
 
 .wheel-emblem-pupil {
-  fill: #6f2330;
+  fill: #8a5a14;
   stroke: #d0ae7b;
   stroke-width: 1.2;
 }

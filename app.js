@@ -1105,6 +1105,12 @@ function applyDesign(design) {
     else document.querySelectorAll('[data-config-section="' + key + '"]').forEach((element) => element.classList.toggle('hidden', !visible));
   });
 
+  applyTelegramChrome();
+}
+
+// Telegram chrome follows the white-gold client once a profile is on screen,
+// whether or not the server published a design record.
+function applyTelegramChrome() {
   try {
     tg?.setHeaderColor(TELEGRAM_HEADER_COLOR);
     tg?.setBackgroundColor('#efe7dc');
@@ -2099,6 +2105,7 @@ async function authenticate() {
 }
 
 function renderCoreProfile() {
+  applyTelegramChrome();
   try {
     renderProfile();
     renderStatuses();
