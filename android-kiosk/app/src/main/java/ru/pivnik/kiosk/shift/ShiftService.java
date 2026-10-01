@@ -24,7 +24,7 @@ public final class ShiftService {
             // commit(): the shift must be on disk before we report success to the employee.
             @Override public void put(String key, String value) { prefs.edit().putString(key, value).commit(); }
         });
-        controller = new ShiftController(store, new TelegramShiftApi(app), System::currentTimeMillis);
+        controller = new ShiftController(store, new HttpShiftApi(app), System::currentTimeMillis);
         photoDir = new File(app.getFilesDir(), "shift_photos");
         //noinspection ResultOfMethodCallIgnored
         photoDir.mkdirs();
