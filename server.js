@@ -1,3 +1,4 @@
+import { createPosService } from './pos/service.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -2716,6 +2717,17 @@ app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res,
   }
 });
 
+const posService = createPosService(pool);
+app.get('/api/admin/pos/dashboard', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
+  try { res.json(await posService.dashboard(req.user, req.query)); } catch (error) { next(error); }
+});
+app.post('/api/admin/pos/sync', authRequired, requireRole('admin'), async (req, res, next) => {
+  try { res.json(await posService.sync(req.user)); } catch (error) { next(error); }
+});
+app.post('/api/admin/pos/link', authRequired, requireRole('admin'), async (req, res, next) => {
+  try { res.json(await posService.link(req.user, req.body)); } catch (error) { next(error); }
+});
+
 app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const summaryResult = await pool.query(`
@@ -3394,6 +3406,8 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
 
 app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
 app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
+app.get('/pos-admin.js', (_req, res) => res.set('Cache-Control', 'no-store').type('js').sendFile(path.join(__dirname, 'pos-admin.js')));
+app.get('/pos-admin.css', (_req, res) => res.set('Cache-Control', 'no-store').type('css').sendFile(path.join(__dirname, 'pos-admin.css')));
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));
 app.use((_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
