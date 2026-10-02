@@ -117,15 +117,17 @@ test('owner appearance repair keeps the new selection after startup and reauthen
 test('release issuer binds verification sessions to Telegram IDs and preserves selection on retry', async () => {
   const { signSession, verifySession } = await import('../platform-core.js');
   const { RAILWAY_PRODUCTION } = await import('../scripts/railway-production-config.mjs');
-  const source = (await read('scripts/railway-grant-personal-frames.mjs')).replace(/^import .*;\n/gm, '');
+  const source = (await read('scripts/railway-grant-personal-frames.mjs')).replace(/^import .*;\n/gm, '').replaceAll('import.meta.url', "'file:///test.mjs'");
   const targets = [{ userId: '1', telegramId: '101', frameId: 'gold-bars' }, { userId: '2', telegramId: '202', frameId: 'money' }];
   const release = 'a'.repeat(40);
-  for (const phase of ['initial', 'retry', 'wrong-release']) {
+  for (const phase of ['initial', 'retry', 'wrong-release', 'initial-private']) {
     let grants = 0, verified = 0, connected = false;
     const previous = phase === 'retry' ? targets.map(t => ({ id: t.userId, telegram_id: t.telegramId, frame_id: t.frameId, profile_frame: 'none' })) : [];
     const context = vm.createContext({
       RAILWAY_PRODUCTION, URL, AbortSignal, signSession, PERSONAL_FRAME_GIFT_CODE: 'personal-frame-gift-20261002',
-      process: { env: { RELEASE_COMMIT_SHA: release, RAILWAY_API_TOKEN: 'test-only' } },
+      process: { env: { RELEASE_COMMIT_SHA: release, ...(phase === 'initial-private'
+        ? { PERSONAL_FRAMES_INTERNAL: '1', DATABASE_URL: 'postgres://test:test@postgres.railway.internal/db', OWNER_TELEGRAM_ID: '101', SESSION_SECRET: 'test-secret' }
+        : { RAILWAY_API_TOKEN: 'test-only' }) } },
       console: { log() {} },
       pg: { Client: class {
         async connect() { connected = true; }
@@ -141,6 +143,7 @@ test('release issuer binds verification sessions to Telegram IDs and preserves s
       fetch: async (url, options) => {
         const reply = (data) => ({ ok: true, json: async () => data });
         if (url.includes('backboard.railway.com')) {
+          assert.notEqual(phase, 'initial-private', 'private execution uses the container configuration');
           const service = JSON.parse(options.body).variables.serviceId;
           return reply({ data: { variables: service === RAILWAY_PRODUCTION.services.postgres
             ? { DATABASE_PUBLIC_URL: 'postgres://test:test@public.invalid/db' }

@@ -1,11 +1,14 @@
 import pg from 'pg';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 import { findSevTroutTelegramId, grantPersonalTelegramFrames, PERSONAL_FRAME_GIFT_CODE } from '../personal-profile-frames.js';
 import { signSession } from '../platform-core.js';
 
 const expected = String(process.env.RELEASE_COMMIT_SHA || '');
 const token = String(process.env.RAILWAY_API_TOKEN || '');
-if (!/^[a-f0-9]{40}$/.test(expected) || !token) throw new Error('Exact release SHA and Railway API token are required.');
+const internal = process.env.PERSONAL_FRAMES_INTERNAL === '1';
+if (!/^[a-f0-9]{40}$/.test(expected) || (!internal && !token)) throw new Error('Exact release SHA and Railway API token are required.');
 
 async function variables(serviceId) {
   const response = await fetch('https://backboard.railway.com/graphql/v2', {
@@ -21,9 +24,28 @@ async function variables(serviceId) {
   return data.data.variables;
 }
 
-const [appVars, dbVars] = await Promise.all([
-  variables(RAILWAY_PRODUCTION.services.telegram), variables(RAILWAY_PRODUCTION.services.postgres)
-]);
+const [appVars, dbVars] = internal
+  ? [process.env, { DATABASE_PUBLIC_URL: process.env.DATABASE_URL }]
+  : await Promise.all([variables(RAILWAY_PRODUCTION.services.telegram), variables(RAILWAY_PRODUCTION.services.postgres)]);
+if (!internal && !dbVars.DATABASE_PUBLIC_URL) {
+  // The database may be private-only. Execute the same issuer in the deployed
+  // service using the account's existing Railway access; no public DB port,
+  // deployment configuration change or SSH key registration is needed.
+  const source = readFileSync(new URL(import.meta.url), 'utf8')
+    .replace("from './railway-production-config.mjs'", "from 'file:///app/scripts/railway-production-config.mjs'")
+    .replace("from '../personal-profile-frames.js'", "from 'file:///app/personal-profile-frames.js'")
+    .replace("from '../platform-core.js'", "from 'file:///app/platform-core.js'");
+  const encoded = Buffer.from(source).toString('base64');
+  const remote = `process.env.PERSONAL_FRAMES_INTERNAL="1";process.env.RELEASE_COMMIT_SHA="${expected}";`
+    + `const src=Buffer.from("${encoded}","base64").toString().replace("from 'pg'","from '"+require("node:url").pathToFileURL(require.resolve("pg")).href+"'");`
+    + `import("data:text/javascript;base64,"+Buffer.from(src).toString("base64")).catch(e=>{console.error(e.message);process.exitCode=1;});`;
+  const quoted = "'" + remote.replaceAll("'", "'\"'\"'") + "'";
+  execFileSync('npx', ['--yes', '@railway/cli@4.6.1', 'ssh',
+    '--project', RAILWAY_PRODUCTION.projectId, '--environment', RAILWAY_PRODUCTION.environmentId,
+    '--service', RAILWAY_PRODUCTION.services.telegram, '--', 'node', '-e', quoted],
+    { stdio: 'inherit', timeout: 240000 });
+  process.exit(0);
+}
 if (!dbVars.DATABASE_PUBLIC_URL || !appVars.OWNER_TELEGRAM_ID || !appVars.SESSION_SECRET) {
   throw new Error('Production database connection or owner/session configuration is unavailable.');
 }
@@ -48,7 +70,7 @@ for (const base of Object.values(RAILWAY_PRODUCTION.urls).slice(0, 2)) {
     await assetResponse.arrayBuffer();
   }
 }
-const client = new pg.Client({ connectionString: dbVars.DATABASE_PUBLIC_URL, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
+const client = new pg.Client({ connectionString: dbVars.DATABASE_PUBLIC_URL, ssl: String(dbVars.DATABASE_PUBLIC_URL).includes('railway.internal') ? false : { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
 try {
   await client.connect();
   const previous = await client.query(`SELECT u.id, u.telegram_id, u.session_version, u.profile_frame,
