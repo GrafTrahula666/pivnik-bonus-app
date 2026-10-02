@@ -1,23 +1,25 @@
-name: Verify private personal frames execution
+name: Issue and verify personal frames through private production connection
 on:
   push:
     branches: [ops/private-personal-frames-20261002]
 permissions:
   contents: read
+concurrency:
+  group: personal-frames-20261002
+  cancel-in-progress: false
 jobs:
   private-command:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Verify command execution in the deployed Telegram service
+          cache: npm
+      - run: npm ci
+      - name: Verify exact production release, issue two frames and verify profiles
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-        run: >-
-          npx --yes @railway/cli@4.6.1 ssh
-          --project 20a942f9-3164-484a-a6f1-565439e38705
-          --environment cdd9d26c-2aab-45d9-95ed-ef487fafaa8f
-          --service d8d26f64-9ac1-4a03-9036-1a60f43c0be6
-          -- "node -e 'console.log(JSON.stringify({cwd:process.cwd(),privateDatabase:Boolean(process.env.DATABASE_URL)}))'"
+          RELEASE_COMMIT_SHA: 835bf4730361ec9c730689e6365cfe3253d3ad3a
+        run: node scripts/railway-grant-personal-frames.mjs
