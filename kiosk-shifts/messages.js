@@ -23,21 +23,25 @@ export function shiftClosedText(shift) {
   const f = shift.report_fields || {};
   const date = barLocalParts(shift.opened_at).displayDate;
   const line = (label, value) => `${label}: ${value || '—'}`;
+  const values = [
+    ['Наличных в кассе при открытии', f.cash_open],
+    ['Итого наличных', f.cash_total],
+    ['Итого переводов', f.transfer_total],
+    ['Общая выручка', f.revenue_total],
+    ['Наличных в кассе при закрытии', f.cash_close],
+    ['Зарплата', f.salary],
+    ['Расходы на бар', f.bar_expenses]
+  ];
+  // Without the AI check there are no recognised values: only times, lateness and the photos below.
+  const hasValues = values.some(([, value]) => value);
   return [
     `Смена закрыта — ${shift.employee_name}`,
     `${date} · ${shift.opened_local_time} → ${shift.closed_local_time || '—'}${shift.late ? ' · ОПОЗДАНИЕ' : ''}`,
-    '',
-    line('Наличных в кассе при открытии', f.cash_open),
-    line('Итого наличных', f.cash_total),
-    line('Итого переводов', f.transfer_total),
-    line('Общая выручка', f.revenue_total),
-    line('Наличных в кассе при закрытии', f.cash_close),
-    line('Зарплата', f.salary),
-    line('Расходы на бар', f.bar_expenses),
+    ...(hasValues ? ['', ...values.map(([label, value]) => line(label, value))] : []),
     ...(f.inspector_comment ? [line('Комментарий проверяющего', f.inspector_comment)] : []),
     '',
     `Отчёт: ${DOC_STATUS[shift.report_status] || shift.report_status} · Чек: ${DOC_STATUS[shift.receipt_status] || shift.receipt_status}`,
-    'Значения переписаны с табеля как есть, без пересчёта.'
+    ...(hasValues ? ['Значения переписаны с табеля как есть, без пересчёта.'] : ['Табель и чек — на фото ниже.'])
   ].join('\n');
 }
 
