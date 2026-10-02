@@ -37,11 +37,11 @@ export function shiftClosedText(shift) {
   return [
     `Смена закрыта — ${shift.employee_name}`,
     `${date} · ${shift.opened_local_time} → ${shift.closed_local_time || '—'}${shift.late ? ' · ОПОЗДАНИЕ' : ''}`,
-    ...(hasValues ? ['', ...values.map(([label, value]) => line(label, value))] : []),
+    ...(hasValues ? ['', ...values.filter(([, value]) => value).map(([label, value]) => line(label, value))] : []),
     ...(f.inspector_comment ? [line('Комментарий проверяющего', f.inspector_comment)] : []),
     '',
     `Отчёт: ${DOC_STATUS[shift.report_status] || shift.report_status} · Чек: ${DOC_STATUS[shift.receipt_status] || shift.receipt_status}`,
-    ...(hasValues ? ['Значения переписаны с табеля как есть, без пересчёта.'] : ['Табель и чек — на фото ниже.'])
+    ...(hasValues ? ['Значения приведены как есть, без пересчёта.'] : ['Табель и чек — на фото ниже.'])
   ].join('\n');
 }
 

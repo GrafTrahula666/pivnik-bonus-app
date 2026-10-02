@@ -23,6 +23,9 @@ public final class Doc {
     public boolean errorRetryable = true;
     /** Recognized report values exactly as written (report only). */
     public JSONObject fields = null;
+    /** Report only: values typed by the employee (revenue, cash in the till). */
+    public String manualRevenue = "";
+    public String manualCash = "";
     /** Invoices only: photos already delivered. */
     public int sentCount = 0;
 
@@ -38,6 +41,7 @@ public final class Doc {
                 .put("problems", problemArray).put("error", error)
                 .put("errorRetryable", errorRetryable).put("sentCount", sentCount);
         if (fields != null) json.put("fields", fields);
+        json.put("manualRevenue", manualRevenue).put("manualCash", manualCash);
         return json;
     }
 
@@ -55,7 +59,15 @@ public final class Doc {
         doc.errorRetryable = json.optBoolean("errorRetryable", true);
         doc.fields = json.optJSONObject("fields");
         doc.sentCount = json.optInt("sentCount", 0);
+        doc.manualRevenue = json.optString("manualRevenue", "");
+        doc.manualCash = json.optString("manualCash", "");
         return doc;
+    }
+
+    /** Typed values for the server; null when nothing was entered. */
+    JSONObject manualJson() throws JSONException {
+        if (manualRevenue.isEmpty() && manualCash.isEmpty()) return null;
+        return new JSONObject().put("revenue_total", manualRevenue).put("cash_close", manualCash);
     }
 
     public Photo find(String photoId) {

@@ -10,8 +10,12 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -114,6 +118,22 @@ public class DocumentActivity extends Activity {
             gallery.setEnabled(!checking && doc.photos.size() < max);
             gallery.setOnClickListener(v -> { retakePhotoId = null; openPicker(); });
             root.addView(gallery, Ui.wide(this, 12));
+            if (Shift.KIND_REPORT.equals(kind)) {
+                root.addView(Ui.text(this, "Впишите итоги смены", 18, Color.WHITE, true), Ui.wide(this, 24));
+                EditText revenue = manualField("Общая выручка, ₽", doc.manualRevenue, checking);
+                EditText cash = manualField("Наличных в кассе, ₽", doc.manualCash, checking);
+                TextWatcher watcher = new TextWatcher() {
+                    @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+                    @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+                    @Override public void afterTextChanged(Editable e) {
+                        controller().setManual(revenue.getText().toString(), cash.getText().toString());
+                    }
+                };
+                revenue.addTextChangedListener(watcher);
+                cash.addTextChangedListener(watcher);
+                root.addView(revenue, Ui.wide(this, 8));
+                root.addView(cash, Ui.wide(this, 8));
+            }
             String sendText = Doc.ERROR.equals(doc.status) ? "ПОВТОРИТЬ" : invoice ? "ОТПРАВИТЬ ВЛАДЕЛЬЦАМ" : "ОТПРАВИТЬ НА ПРОВЕРКУ";
             Button send = Ui.button(this, sendText);
             send.setEnabled(!checking && !doc.photos.isEmpty());
@@ -123,6 +143,19 @@ public class DocumentActivity extends Activity {
         Button back = Ui.button(this, "НАЗАД");
         back.setOnClickListener(v -> finish());
         root.addView(back, Ui.wide(this, 24));
+    }
+
+    private EditText manualField(String hint, String value, boolean locked) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setText(value);
+        field.setTextColor(Color.WHITE);
+        field.setHintTextColor(Ui.MUTED);
+        field.setTextSize(20);
+        field.setSingleLine(true);
+        field.setInputType(InputType.TYPE_CLASS_TEXT);
+        field.setEnabled(!locked);
+        return field;
     }
 
     private LinearLayout photoRow(Photo photo, int number, boolean locked) {
@@ -242,6 +275,13 @@ public class DocumentActivity extends Activity {
     }
 
     private void submit() {
+        if (Shift.KIND_REPORT.equals(kind)) {
+            Doc report = controller().current().doc(kind);
+            if (report.manualRevenue.isEmpty() || report.manualCash.isEmpty()) {
+                Toast.makeText(this, "Впишите общую выручку и наличные в кассе", Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
         busy = true;
         render();
         ShiftService.get(this).worker.execute(() -> {

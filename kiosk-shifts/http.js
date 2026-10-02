@@ -92,7 +92,7 @@ export function createKioskShiftHttpHandler({ service, enabled, enforceRateLimit
     if (method === 'POST' && submitMatch) {
       limit(`submit:${device.id}`, 12, 60 * 1000);
       const body = await readJson(req);
-      return send(res, 200, await service.submitDocument(device, shiftId, submitMatch[1], body.photoIds));
+      return send(res, 200, await service.submitDocument(device, shiftId, submitMatch[1], body.photoIds, body.manual));
     }
     throw httpError(404, 'Не найдено.');
   }

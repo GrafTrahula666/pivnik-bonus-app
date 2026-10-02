@@ -460,7 +460,9 @@ test('with the AI check switched off documents are accepted and the shift closes
   const { shiftId } = await openWithPhotos(env, 0);
   const reportId = crypto.randomUUID();
   await env.service.storePhoto(env.device, shiftId, 'report', reportId, jpeg('r'));
-  assert.equal((await env.service.submitDocument(env.device, shiftId, 'report', [reportId])).accepted, true);
+  const report = await env.service.submitDocument(env.device, shiftId, 'report', [reportId], { revenue_total: '45 300', cash_close: '=12 000', extra: 'x' });
+  assert.equal(report.accepted, true);
+  assert.deepEqual(report.shift.reportFields, { revenue_total: '45 300', cash_close: '12 000' });
   const receiptId = crypto.randomUUID();
   await env.service.storePhoto(env.device, shiftId, 'receipt', receiptId, jpeg('c'));
   assert.equal((await env.service.submitDocument(env.device, shiftId, 'receipt', [receiptId])).accepted, true);

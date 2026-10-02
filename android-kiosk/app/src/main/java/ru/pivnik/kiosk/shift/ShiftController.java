@@ -166,6 +166,15 @@ public final class ShiftController {
         return doc;
     }
 
+    /** Remembers what the employee typed on the report screen so it survives redraws and restarts. */
+    public synchronized void setManual(String revenue, String cash) {
+        Shift shift = store.current();
+        if (shift == null) return;
+        shift.report.manualRevenue = revenue == null ? "" : revenue.trim();
+        shift.report.manualCash = cash == null ? "" : cash.trim();
+        store.save(shift);
+    }
+
     private void markError(String kind, String message, boolean retryable) {
         Shift latest = store.current();
         if (latest == null) return;
@@ -186,7 +195,11 @@ public final class ShiftController {
             }
             ids.add(photo.id);
         }
-        return api.submit(shift.id, doc.kind, ids);
+        try {
+            return api.submit(shift.id, doc.kind, ids, doc.manualJson());
+        } catch (org.json.JSONException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private void applyResult(Doc doc, JSONObject result) {

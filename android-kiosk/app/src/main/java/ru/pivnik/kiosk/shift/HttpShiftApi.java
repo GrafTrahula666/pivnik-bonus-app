@@ -45,11 +45,17 @@ public final class HttpShiftApi implements ShiftApi {
     }
 
     @Override public JSONObject submit(String shiftId, String kind, List<String> photoIds) throws IOException, ApiException {
+        return submit(shiftId, kind, photoIds, null);
+    }
+
+    @Override public JSONObject submit(String shiftId, String kind, List<String> photoIds, JSONObject manual) throws IOException, ApiException {
         try {
             JSONArray ids = new JSONArray();
             for (String id : photoIds) ids.put(id);
+            JSONObject body = new JSONObject().put("photoIds", ids);
+            if (manual != null && manual.length() > 0) body.put("manual", manual);
             // AI checks of up to 3 high-resolution photos can take a while.
-            return json("POST", "/shifts/" + shiftId + "/documents/" + kind + "/submit", new JSONObject().put("photoIds", ids), true, 180_000);
+            return json("POST", "/shifts/" + shiftId + "/documents/" + kind + "/submit", body, true, 180_000);
         } catch (org.json.JSONException e) { throw new IllegalStateException(e); }
     }
 

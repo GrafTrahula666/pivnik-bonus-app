@@ -74,6 +74,17 @@ function withDisplayDate(row) {
   return row ? { ...row, opened_local_date_display: barLocalParts(row.opened_at).displayDate } : row;
 }
 
+// Values typed by the employee when the AI check is off; only two known fields, short text, no formulas.
+function manualReportFields(manual) {
+  const clean = (value) => String(value ?? '').replace(/[\u0000-\u001f=+@]/g, '').trim().slice(0, 40);
+  const result = {};
+  const revenue = clean(manual?.revenue_total);
+  const cash = clean(manual?.cash_close);
+  if (revenue) result.revenue_total = revenue;
+  if (cash) result.cash_close = cash;
+  return result;
+}
+
 export function createKioskShiftService({
   pool,
   pepper,
@@ -365,7 +376,7 @@ export function createKioskShiftService({
     return result;
   }
 
-  async function submitDocument(device, shiftPublicId, kind, photoIds) {
+  async function submitDocument(device, shiftPublicId, kind, photoIds, manual) {
     if (kind === 'invoice') return submitInvoices(device, shiftPublicId, photoIds);
     if (kind !== 'report' && kind !== 'receipt') throw httpError(404, 'Неизвестный тип документа.');
     const ids = normalizePhotoIds(photoIds, MAX_PHOTOS_PER_CHECK);
@@ -399,7 +410,7 @@ export function createKioskShiftService({
       if (skipAiCheck) {
         // Owner switched the AI check off: photos are accepted as sent and reach the chat when the shift closes.
         raw = { mode: 'ai_check_skipped' };
-        decision = { accepted: true, fields: {}, signature_present: false, problems: [] };
+        decision = { accepted: true, fields: kind === 'report' ? manualReportFields(manual) : {}, signature_present: false, problems: [] };
       } else {
         if (!ai?.configured) throw new AiUnavailableError('AI validation is not configured', { retryable: false });
         raw = await ai.analyze(kind, photos.map((photo) => ({ data: photo.data, contentType: photo.content_type })));
