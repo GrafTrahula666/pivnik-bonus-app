@@ -9921,3 +9921,55 @@ html body .client-home.home-v2 .spaceverse-home-hero #clientBalance.unlimited-ba
   font-size: 32px !important;
   line-height: 28px !important;
 }
+/* Personal gold frame: only bullion orbits; the supplied base stays still. */
+.avatar-frame-gold-bars,
+.profile-avatar.has-gold-bars-frame,
+.profile-avatar.has-gold-bars-frame .avatar-render-inner { overflow: visible !important; }
+.avatar-frame-gold-bars::before,
+.avatar-frame-gold-bars::after { content: none; animation: none; }
+.avatar-frame-gold-bars > img,
+.avatar-frame-gold-bars > .avatar-fallback { border-radius: 50%; clip-path: circle(50%); }
+.gold-orbital-base {
+  position: absolute;
+  inset: -30%;
+  z-index: 6;
+  pointer-events: none;
+  background: url('/assets/frames/gold-orbital-base.png') center / contain no-repeat;
+  animation: none;
+}
+.gold-bars-orbit {
+  position: absolute;
+  inset: -24%;
+  z-index: 9;
+  pointer-events: none;
+  animation: goldBarsOrbit 12s linear infinite;
+}
+.gold-bars-orbit > i {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--bar-angle));
+}
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .avatar-orbit.gold-bars-orbit { inset: -24%; }
+.client-home.home-v2 .spaceverse-home-hero .profile-avatar .gold-bars-orbit > i { transform: rotate(var(--bar-angle)); }
+/* Make room for this wider decoration without covering the live balance. */
+html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-bars-frame { left: calc(11% - 18px) !important; }
+.gold-ingot {
+  position: absolute;
+  left: 39%;
+  top: -4%;
+  width: 22%;
+  height: 22%;
+  background: url('/assets/frames/gold-ingot.png') center / contain no-repeat;
+  transform: rotate(calc(-1 * var(--bar-angle)));
+  animation: goldIngotUpright 12s linear infinite;
+}
+@keyframes goldBarsOrbit { to { transform: rotate(360deg); } }
+@keyframes goldIngotUpright { to { transform: rotate(calc(-360deg - var(--bar-angle))); } }
+.frame-choice-preview.avatar-frame-gold-bars {
+  background: url('/assets/frames/gold-orbital-base.png') center / contain no-repeat;
+  border-color: transparent;
+  color: #d9a344;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gold-bars-orbit, .gold-ingot { animation: none; }
+}

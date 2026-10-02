@@ -1,0 +1,37 @@
+name: Issue personal Telegram frames after verified release
+
+on:
+  workflow_run:
+    workflows: ['Pivnik release gate']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-frames-20261002
+  cancel-in-progress: false
+
+jobs:
+  issue:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release personal orbital frames and Telegram gifts')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Verify recipients, issue gifts once and verify live profiles
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RELEASE_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/railway-grant-personal-frames.mjs

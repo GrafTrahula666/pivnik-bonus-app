@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import pg from 'pg';
+import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import QRCode from 'qrcode';
 import {
   acknowledgeAchievement,
@@ -216,6 +217,7 @@ function isIceCream69ARow(row) {
 const OWNER_FRAME_CATALOG = Object.freeze([
   { code: 'none', title: 'Без рамки' },
   { code: 'money', title: 'Долларовая рамка' },
+  GOLD_BARS_FRAME,
   { code: 'fire', title: 'Огненная рамка' },
   { code: 'diamond', title: 'Алмазная рамка' },
   { code: 'beer-mugs', title: 'Пивные кружки' },
@@ -239,6 +241,7 @@ function profileFrameFromRow(row) {
   if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
+  if (storedFrame === 'gold-bars') return 'gold-bars';
   if (storedFrame === 'olesya') return 'olesya';
   if (storedFrame === 'vladislav') return 'vladislav';
   if (storedFrame === 'anna') return 'anna';
@@ -281,7 +284,7 @@ function availableFramesFromRow(row) {
   if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
-  const frames = [{ code: 'none', title: 'Без рамки' }];
+  const frames = [{ code: 'none', title: 'Без рамки' }, ...giftedFrameChoices(row)];
   if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
   return frames;
 }
@@ -986,7 +989,7 @@ async function initDatabase() {
     }
     if (ownerTelegramId) {
       await client.query(
-        "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE telegram_id::text = $1",
+        "UPDATE users SET unlimited_bonus = TRUE, profile_frame = CASE WHEN profile_frame = 'gold-bars' THEN profile_frame ELSE 'money' END, updated_at = NOW() WHERE telegram_id::text = $1",
         [ownerTelegramId]
       );
     }
@@ -1075,7 +1078,7 @@ async function getProfile(userId, db = pool) {
     `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance,
             (SELECT COUNT(*)::integer FROM users ux
              WHERE ux.created_at < u.created_at OR (ux.created_at = u.created_at AND ux.id <= u.id)) AS beta_number,
-            EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame
+            EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame, ${PERSONAL_FRAME_OWNERSHIP_SQL}
      FROM users u
      JOIN wallets w ON w.user_id = u.id
      LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
@@ -1669,7 +1672,7 @@ app.post('/api/auth', async (req, res, next) => {
       );
       if (role === 'admin') {
         await client.query(
-          "UPDATE users SET unlimited_bonus = TRUE, profile_frame = 'money', updated_at = NOW() WHERE id = $1",
+          "UPDATE users SET unlimited_bonus = TRUE, profile_frame = CASE WHEN profile_frame = 'gold-bars' THEN profile_frame ELSE 'money' END, updated_at = NOW() WHERE id = $1",
           [userId]
         );
       }
@@ -1839,7 +1842,7 @@ app.put('/api/me/profile', authRequired, async (req, res, next) => {
     const ageGroup = normalizeAgeGroup(req.body?.ageGroup);
     const privacy = req.body?.privacy && typeof req.body.privacy === 'object' ? req.body.privacy : {};
     const accessResult = await pool.query(
-      `SELECT u.*, EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame
+      `SELECT u.*, EXISTS(SELECT 1 FROM beta_grants bg WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond') AS owns_diamond_frame, ${PERSONAL_FRAME_OWNERSHIP_SQL}
        FROM users u WHERE u.id = $1::bigint AND u.merged_into_user_id IS NULL`,
       [req.user.id]
     );
