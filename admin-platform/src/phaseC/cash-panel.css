@@ -2,5 +2,9 @@
 .dashboard-sources{align-self:flex-start;max-width:100%;flex-wrap:wrap}
 .dashboard-sources button{white-space:normal}
 .cash-dashboard .kpi-value{overflow-wrap:anywhere}
+.cash-dashboard .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .cash-dashboard table{min-width:0}
-.cash-dashboard .data-quality-card span{line-height:1.5}
+.cash-dashboard .data-quality-card b{display:block;font-size:12px}
+.cash-dashboard .data-quality-card span,.cash-dashboard .comparison-note{display:block;color:var(--muted);font-size:10px;line-height:1.5;margin:5px 0 0}
+@media(max-width:1180px){.cash-dashboard .kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:860px){.cash-dashboard .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
