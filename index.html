@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="/service-white-gold.css?v=20.8-service-white-gold" />
   <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926-wheel-approved-history-20260929"></script>
   <script defer src="/red-cosmos-v2.js?v=2.0.0"></script>
+  <link rel="stylesheet" href="pos-admin.css?v=1" />
+  <script defer src="pos-admin.js?v=1"></script>
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -424,6 +426,9 @@
           <button type="button" class="admin-write-only" id="openBroadcastAdmin"><span>Рассылка</span><small>сообщение клиентам Telegram и VK</small></button>
         </div>
 
+        <div id="posAdminMount"></div>
+        <h3>Журнал приложения · записи сотрудников</h3>
+        <p class="help-intro">Эти суммы не подтверждены кассой. Кассовые продажи показаны отдельно выше.</p>
         <div class="metric-grid">
           <div class="metric"><span>Клиентов</span><strong id="metricClients">0</strong><small>зарегистрировано</small></div>
           <div class="metric"><span>Бонусов выдано</span><strong id="metricIssued">0</strong><small>за всё время</small></div>

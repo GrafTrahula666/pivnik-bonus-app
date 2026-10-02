@@ -1,3 +1,4 @@
+import { createPosService } from './pos/service.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -3127,6 +3128,8 @@ async function serveStartupProfile(req, res, startup) {
   }
 }
 
+const posService = createPosService(pool);
+
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -3185,6 +3188,13 @@ export const server = http.createServer(async (req, res) => {
         'text/javascript; charset=utf-8',
         'public, max-age=31536000, immutable'
       );
+    }
+
+    if (req.method === 'GET' && url.pathname === '/pos-admin.js') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.js'), 'text/javascript; charset=utf-8', 'no-store');
+    }
+    if (req.method === 'GET' && url.pathname === '/pos-admin.css') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.css'), 'text/css; charset=utf-8', 'no-store');
     }
 
     if (req.method === 'GET' && url.pathname === '/account-link.js') {
@@ -3388,6 +3398,27 @@ export const server = http.createServer(async (req, res) => {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
       return sendJson(res, 200, await getUnifiedMonthlyLeaderboard(user.id));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/admin/pos/dashboard') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      if (!['viewer', 'admin'].includes(user.role)) return sendJson(res, 403, { error: 'Недостаточно прав.' });
+      return sendJson(res, 200, await posService.dashboard(user, Object.fromEntries(url.searchParams)));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/pos/sync') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      if (!['admin'].includes(user.role)) return sendJson(res, 403, { error: 'Недостаточно прав.' });
+      return sendJson(res, 200, await posService.sync(user));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/pos/link') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      if (!['admin'].includes(user.role)) return sendJson(res, 403, { error: 'Недостаточно прав.' });
+      return sendJson(res, 200, await posService.link(user, parseJsonBody(await readRequestBody(req, 8192))));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/admin/users') {

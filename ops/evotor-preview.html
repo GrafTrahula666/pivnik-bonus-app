@@ -1,0 +1,190 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Пивник · предпросмотр аналитики кассы</title><style>body{margin:0;background:#f5efe4;font-family:Arial,sans-serif;color:#382e21}main{max-width:1080px;margin:auto;padding:24px}header{padding:12px 0}h1{font-size:28px;margin:10px 0}.preview-banner{padding:14px;border:1px solid #c0a06b;border-radius:12px;background:#fff8db} .pos-dashboard { margin: 20px 0; padding: 20px; border: 1px solid #dccaa5; border-radius: 22px; background: #fffcf6; color: #382e21; }
+.pos-dashboard h3,.pos-dashboard h4 { margin: 0 0 12px; }
+.pos-dashboard p { line-height: 1.5; }
+.pos-controls,.pos-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+.pos-dashboard button,.pos-dashboard select,.pos-dashboard input { font: inherit; padding: 10px 12px; border: 1px solid #d3bd92; border-radius: 12px; background: #fff; color: #382e21; min-height: 42px; }
+.pos-dashboard button { cursor: pointer; }
+.pos-dashboard button[aria-pressed='true'] { background: #725a2e; color: #fff; }
+.pos-dashboard button:disabled { cursor: default; opacity: .55; }
+.pos-dashboard input { min-width: 0; max-width: 100%; }
+.pos-state { padding: 12px; border-radius: 12px; background: #f3ebdc; line-height: 1.6; }
+.pos-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 16px 0; }
+.pos-metric { padding: 15px; background: #fff; border: 1px solid #e6dccb; border-radius: 16px; }
+.pos-metric span,.pos-metric small { display: block; color: #74644e; font-size: 12px; }
+.pos-metric strong { display: block; margin: 8px 0 4px; font-size: 24px; overflow-wrap: anywhere; }
+.pos-note { font-size: 13px; color: #74644e; }
+.pos-table-wrap { overflow: auto; margin: 12px 0 20px; }
+.pos-dashboard table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.pos-dashboard th,.pos-dashboard td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #e7dece; white-space: nowrap; }
+.pos-dashboard th { font-weight: 600; color: #74644e; }
+.pos-dashboard td:first-child { white-space: normal; min-width: 100px; }
+.pos-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.pos-bars { display: flex; align-items: end; height: 95px; gap: 5px; margin-bottom: 12px; }
+.pos-bar { flex: 1; min-width: 5px; background: #c0a06b; border-radius: 4px 4px 0 0; }
+.pos-error { color: #892b2b; }
+.pos-link-form { border-top: 1px solid #e7dece; padding-top: 15px; }
+.pos-link-form input { flex: 1; }
+@media(max-width:600px) { .pos-dashboard { padding: 14px; } .pos-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .pos-detail-grid { grid-template-columns: 1fr; } .pos-tabs button { flex: 1; font-size: 13px; } .pos-metric strong { font-size: 21px; } }
+</style></head><body><main><header><small>ПИВНИК · АДМИН-ПАНЕЛЬ</small><h1>Аналитика продаж</h1><p class="preview-banner">ПРЕДПРОСМОТР — вымышленные данные. Переключайте разделы и периоды. Подключения к кассе, изменения профилей и базы здесь нет.</p></header><div id="posAdminMount"></div></main><script>
+function moscowPeriod({ period = 'today', from, to } = {}, now = new Date()) {
+  const today = new Date(now.getTime() + 3 * 3600_000).toISOString().slice(0, 10);
+  const day = (date, delta) => new Date(Date.parse(`${date}T00:00:00Z`) + delta * 86400_000).toISOString().slice(0, 10);
+  const valid = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '')
+    && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+    && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  let start = today, end = today;
+  if (period === 'yesterday') start = end = day(today, -1);
+  else if (period === '7days') start = day(today, -6);
+  else if (period === 'month') start = today.slice(0, 8) + '01';
+  else if (period === 'custom') {
+    if (!valid(from) || !valid(to) || from > to) throw Object.assign(new Error('Проверьте даты периода.'), { statusCode: 400 });
+    start = from; end = to;
+  } else if (period !== 'today') throw Object.assign(new Error('Неизвестный период.'), { statusCode: 400 });
+  return { from: `${start}T00:00:00+03:00`, until: `${day(end, 1)}T00:00:00+03:00`, start, end, timeZone: 'Europe/Moscow' };
+}
+function summarizePos(documents) {
+  let sales = 0n, returns = 0n, receipts = 0, unknownReceipts = 0, returnDocs = 0;
+  const buyers = new Map(), days = new Map(), hours = new Map(), products = new Map(), payments = new Map();
+  const add = (map, key, cents) => map.set(key, (map.get(key) || 0n) + cents);
+  const localTime = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+  const salesDocs = documents.filter((d) => d.type === 'SELL');
+  for (const doc of documents) {
+    const refund = doc.type === 'PAYBACK', sign = refund ? -1n : 1n, cents = BigInt(doc.amountCents);
+    if (refund) { returns += cents; returnDocs++; }
+    else {
+      sales += cents;
+      if (doc.receiptCount == null) unknownReceipts++; else receipts += doc.receiptCount;
+      if (doc.clientId) buyers.set(doc.clientId, (buyers.get(doc.clientId) || 0) + 1);
+    }
+    const local = localTime.format(new Date(doc.closedAt));
+    add(days, local.slice(0, 10), sign * cents); add(hours, local.slice(-2), sign * cents);
+    for (const p of doc.positions) {
+      const key = JSON.stringify([p.productId, p.name, p.measure]);
+      const item = products.get(key) || { name: p.name, measure: p.measure, quantityMillis: 0n, salesCents: 0n, returnCents: 0n };
+      item.quantityMillis += sign * BigInt(p.quantityMillis);
+      item[refund ? 'returnCents' : 'salesCents'] += BigInt(p.amountCents); products.set(key, item);
+    }
+    for (const p of doc.payments) add(payments, p.type + (p.method ? ` / ${p.method}` : ''), sign * BigInt(p.amountCents));
+  }
+  const sumRows = (map) => [...map].sort(([a], [b]) => a.localeCompare(b)).map(([label, value]) => ({ label, amountCents: String(value) }));
+  return {
+    salesCents: String(sales), returnsCents: String(returns), netCents: String(sales - returns),
+    saleDocuments: salesDocs.length, returnDocuments: returnDocs, receiptCount: unknownReceipts ? null : receipts,
+    knownReceiptCount: receipts, documentsWithoutReceiptCount: unknownReceipts,
+    averageCents: !unknownReceipts && receipts ? String((sales + BigInt(Math.floor(receipts / 2))) / BigInt(receipts)) : null,
+    activeBuyers: buyers.size, repeatBuyers: [...buyers.values()].filter((n) => n > 1).length,
+    linkedSaleDocuments: salesDocs.filter((d) => d.clientId).length,
+    unlinkedSaleDocuments: salesDocs.filter((d) => !d.clientId).length,
+    days: sumRows(days), hours: sumRows(hours), payments: sumRows(payments),
+    products: [...products.values()].map((p) => ({ name: p.name, measure: p.measure,
+      quantityMillis: String(p.quantityMillis), salesCents: String(p.salesCents), returnCents: String(p.returnCents), netCents: String(p.salesCents - p.returnCents) }))
+  };
+}
+function posDashboards(documents) {
+  const all = summarizePos(documents), app = summarizePos(documents.filter((d) => d.clientId));
+  const total = BigInt(all.salesCents), linked = BigInt(app.salesCents);
+  return { all, app, linkedRevenueSharePercent: total ? Number(linked * 10000n / total) / 100 : null };
+}
+const documents=[{"source":"evotor","storeId":"preview","documentId":"preview-0","type":"SELL","closedAt":"2026-10-02T07:15:00.000Z","number":"420","deviceId":"preview","baseDocumentId":null,"amountCents":25000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":25000}],"payments":[{"type":"CASH","method":"","amountCents":25000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":500,"receiptNumber":420,"fn":null}],"clientId":"100"},{"source":"evotor","storeId":"preview","documentId":"preview-1","type":"SELL","closedAt":"2026-10-02T08:15:00.000Z","number":"421","deviceId":"preview","baseDocumentId":null,"amountCents":50000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":50000}],"payments":[{"type":"ELECTRON","method":"","amountCents":50000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":501,"receiptNumber":421,"fn":null}],"clientId":"101"},{"source":"evotor","storeId":"preview","documentId":"preview-2","type":"SELL","closedAt":"2026-10-02T09:15:00.000Z","number":"422","deviceId":"preview","baseDocumentId":null,"amountCents":75000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":75000}],"payments":[{"type":"ELECTRON","method":"","amountCents":75000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":502,"receiptNumber":422,"fn":null}],"clientId":"102"},{"source":"evotor","storeId":"preview","documentId":"preview-3","type":"SELL","closedAt":"2026-10-02T10:15:00.000Z","number":"423","deviceId":"preview","baseDocumentId":null,"amountCents":100000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":100000}],"payments":[{"type":"CASH","method":"","amountCents":100000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":503,"receiptNumber":423,"fn":null}],"clientId":"103"},{"source":"evotor","storeId":"preview","documentId":"preview-4","type":"SELL","closedAt":"2026-10-02T11:15:00.000Z","number":"424","deviceId":"preview","baseDocumentId":null,"amountCents":25000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":25000}],"payments":[{"type":"ELECTRON","method":"","amountCents":25000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":504,"receiptNumber":424,"fn":null}],"clientId":"104"},{"source":"evotor","storeId":"preview","documentId":"preview-5","type":"SELL","closedAt":"2026-10-02T12:15:00.000Z","number":"425","deviceId":"preview","baseDocumentId":null,"amountCents":50000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":50000}],"payments":[{"type":"ELECTRON","method":"","amountCents":50000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":505,"receiptNumber":425,"fn":null}],"clientId":"100"},{"source":"evotor","storeId":"preview","documentId":"preview-6","type":"SELL","closedAt":"2026-10-02T13:15:00.000Z","number":"426","deviceId":"preview","baseDocumentId":null,"amountCents":75000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":75000}],"payments":[{"type":"CASH","method":"","amountCents":75000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":506,"receiptNumber":426,"fn":null}],"clientId":"101"},{"source":"evotor","storeId":"preview","documentId":"preview-7","type":"SELL","closedAt":"2026-10-02T14:15:00.000Z","number":"427","deviceId":"preview","baseDocumentId":null,"amountCents":100000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":100000}],"payments":[{"type":"ELECTRON","method":"","amountCents":100000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":507,"receiptNumber":427,"fn":null}],"clientId":"102"},{"source":"evotor","storeId":"preview","documentId":"preview-8","type":"SELL","closedAt":"2026-10-02T07:15:00.000Z","number":"428","deviceId":"preview","baseDocumentId":null,"amountCents":25000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":25000}],"payments":[{"type":"ELECTRON","method":"","amountCents":25000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":508,"receiptNumber":428,"fn":null}],"clientId":"103"},{"source":"evotor","storeId":"preview","documentId":"preview-9","type":"SELL","closedAt":"2026-10-02T08:15:00.000Z","number":"429","deviceId":"preview","baseDocumentId":null,"amountCents":50000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":50000}],"payments":[{"type":"CASH","method":"","amountCents":50000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":509,"receiptNumber":429,"fn":null}],"clientId":"104"},{"source":"evotor","storeId":"preview","documentId":"preview-10","type":"SELL","closedAt":"2026-10-02T09:15:00.000Z","number":"430","deviceId":"preview","baseDocumentId":null,"amountCents":75000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":75000}],"payments":[{"type":"ELECTRON","method":"","amountCents":75000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":510,"receiptNumber":430,"fn":null}],"clientId":"100"},{"source":"evotor","storeId":"preview","documentId":"preview-11","type":"SELL","closedAt":"2026-10-02T10:15:00.000Z","number":"431","deviceId":"preview","baseDocumentId":null,"amountCents":100000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":100000}],"payments":[{"type":"ELECTRON","method":"","amountCents":100000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":511,"receiptNumber":431,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-12","type":"SELL","closedAt":"2026-10-02T11:15:00.000Z","number":"432","deviceId":"preview","baseDocumentId":null,"amountCents":25000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":25000}],"payments":[{"type":"CASH","method":"","amountCents":25000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":512,"receiptNumber":432,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-13","type":"SELL","closedAt":"2026-10-02T12:15:00.000Z","number":"433","deviceId":"preview","baseDocumentId":null,"amountCents":50000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":50000}],"payments":[{"type":"ELECTRON","method":"","amountCents":50000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":513,"receiptNumber":433,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-14","type":"SELL","closedAt":"2026-10-02T13:15:00.000Z","number":"434","deviceId":"preview","baseDocumentId":null,"amountCents":75000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":75000}],"payments":[{"type":"ELECTRON","method":"","amountCents":75000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":514,"receiptNumber":434,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-15","type":"SELL","closedAt":"2026-10-02T14:15:00.000Z","number":"435","deviceId":"preview","baseDocumentId":null,"amountCents":100000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":100000}],"payments":[{"type":"CASH","method":"","amountCents":100000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":515,"receiptNumber":435,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-16","type":"SELL","closedAt":"2026-10-02T07:15:00.000Z","number":"436","deviceId":"preview","baseDocumentId":null,"amountCents":25000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":25000}],"payments":[{"type":"ELECTRON","method":"","amountCents":25000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":516,"receiptNumber":436,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-17","type":"SELL","closedAt":"2026-10-02T08:15:00.000Z","number":"437","deviceId":"preview","baseDocumentId":null,"amountCents":50000,"positions":[{"productId":"tincture","name":"Настойка · смородина","measure":"шт","quantityMillis":1000,"amountCents":50000}],"payments":[{"type":"ELECTRON","method":"","amountCents":50000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":517,"receiptNumber":437,"fn":null}],"clientId":null},{"source":"evotor","storeId":"preview","documentId":"preview-return","type":"PAYBACK","closedAt":"2026-10-02T18:30:00+03:00","number":"440","deviceId":"preview","baseDocumentId":null,"amountCents":25000,"positions":[{"productId":"beer","name":"Пиво · Blanche","measure":"л","quantityMillis":500,"amountCents":25000}],"payments":[{"type":"CASH","method":"","amountCents":25000}],"receiptCount":1,"linkable":true,"fiscal":[{"number":500,"receiptNumber":420,"fn":null}],"clientId":"100"}];
+window.__PIVNIK_POS_PREVIEW__={request:async(path,options)=>{
+ if(options?.method==='POST')throw new Error('Предпросмотр: изменение данных отключено');
+ const params=Object.fromEntries(new URL(path,'https://preview.invalid').searchParams);
+ const period=moscowPeriod(params);
+ const selected=documents.filter(d=>Date.parse(d.closedAt)>=Date.parse(period.from)&&Date.parse(d.closedAt)<Date.parse(period.until));
+ return {period,connection:{state:'connected',lastSuccessAt:new Date().toISOString()},...posDashboards(selected),manual:{clients:527,operations:14,checkCents:'890000'},documents:selected};
+}};
+/* A separate, ordinary client module. Reuses the application's session API. */
+(() => {
+  const mount = document.getElementById('posAdminMount');
+  if (!mount) return;
+  const preview = window.__PIVNIK_POS_PREVIEW__;
+  const request = (path, options) => preview ? preview.request(path, options) : api(path, options);
+  const canWrite = () => !preview && typeof state !== 'undefined' && state.profile?.role === 'admin';
+  const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money = (value) => {
+    if (value == null) return '—';
+    const cents = BigInt(value), absolute = cents < 0n ? -cents : cents;
+    return (cents < 0n ? '−' : '') + (absolute / 100n).toLocaleString('ru-RU') + ',' + String(absolute % 100n).padStart(2,'0') + ' ₽';
+  };
+  const date = (value) => value ? new Date(value).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}) : 'ещё не выполнена';
+  const quantity = (v) => { const n=BigInt(v), a=n<0n ? -n : n; return (n<0n ? '−':'')+String(a/1000n)+','+String(a%1000n).padStart(3,'0'); };
+  let tab = 'app', data = null, serial = 0;
+  mount.className = 'pos-dashboard';
+  mount.innerHTML = `<h3>Продажи Пивника</h3><div class="pos-tabs" role="group" aria-label="Раздел аналитики">
+    <button type="button" data-pos-tab="app" aria-pressed="true">Клиенты приложения</button>
+    <button type="button" data-pos-tab="all" aria-pressed="false">Все продажи кассы</button></div>
+    <div class="pos-controls"><label>Период <select id="posPeriod"><option value="today">Сегодня</option><option value="yesterday">Вчера</option><option value="7days">7 дней</option><option value="month">Месяц</option><option value="custom">Свой период</option></select></label>
+    <label hidden id="posFromLabel">С <input id="posFrom" type="date"></label><label hidden id="posToLabel">По <input id="posTo" type="date"></label>
+    <button type="button" id="posRefresh">Обновить</button><button type="button" id="posSync" hidden>Загрузить из кассы</button></div>
+    <div class="pos-state" id="posConnection" role="status">Проверяем подключение…</div><p class="pos-note">Дни и часы — по Москве. Связанные покупки уже входят во все продажи кассы.</p>
+    <div id="posResult"></div><div class="pos-link-form" id="posLinkForm" hidden><h4>Подтвердить клиента выбранного чека</h4>
+    <p class="pos-note">Сверьте чек с покупателем и отсканируйте его QR Пивника. Сумма и время сами по себе не подтверждают личность.</p>
+    <div class="pos-controls"><label>ID документа <input id="posDocument" readonly></label><label>QR клиента <input id="posQr" autocomplete="off" placeholder="PVK-… или данные QR"></label><button type="button" id="posConfirm">Подтвердить связь</button></div></div>`;
+  const find = (id) => mount.querySelector('#'+id);
+  function table(headers, rows) {
+    return `<div class="pos-table-wrap"><table><thead><tr>${headers.map((s)=>`<th>${escape(s)}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map((cells)=>`<tr>${cells.map((s)=>`<td>${s}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}">Данных за период нет</td></tr>`}</tbody></table></div>`;
+  }
+  function metric(label, value, note='') { return `<div class="pos-metric"><span>${escape(label)}</span><strong>${escape(value)}</strong><small>${escape(note)}</small></div>`; }
+  function series(title, rows) {
+    const maximum = rows.reduce((max,r)=> { const n=BigInt(r.amountCents); return n>max?n:max; },1n);
+    return `<section><h4>${title}</h4><div class="pos-bars" aria-hidden="true">${rows.map((r)=>`<div class="pos-bar" title="${escape(r.label+' · '+money(r.amountCents))}" style="height:${BigInt(r.amountCents)>0n ? Number(BigInt(r.amountCents)*100n/maximum) : 1}%"></div>`).join('')}</div>${table(['Период','Итог'],rows.map((r)=>[escape(r.label),escape(money(r.amountCents))]))}</section>`;
+  }
+  function render() {
+    if (!data) return;
+    mount.querySelectorAll('[data-pos-tab]').forEach((b)=>b.setAttribute('aria-pressed',String(b.dataset.posTab===tab)));
+    const states = {not_connected:'Касса не подключена',schema_required:'Подключение ожидает подготовки базы',awaiting_sync:'Ожидаем первую полную синхронизацию',syncing:'Идёт сверка истории — данные могут быть неполными',connected:'Касса подключена',error:'Синхронизация остановлена'};
+    const errors = {token_expired:'Токен истёк или отозван',forbidden:'Нет разрешения на чтение документов',not_installed:'Проверьте установку и оплату приложения',network:'Облако недоступно',rate_limit:'Лимит API: повторите позже',invalid_document:'Документ требует проверки',invalid_cursor:'Курсор сброшен: повторите полную сверку',api_error:'Ошибка API',invalid_response:'Некорректный ответ API'};
+    const status = data.connection;
+    find('posConnection').textContent = `${preview ? 'ПРЕДПРОСМОТР · ВЫМЫШЛЕННЫЕ ДАННЫЕ · ' : ''}${states[status.state] || status.state}. Последняя полная синхронизация: ${date(status.lastSuccessAt)}${status.errorCode ? '. '+(errors[status.errorCode] || 'Ошибка синхронизации') : ''}${status.lastSuccessAt && Date.now()-Date.parse(status.lastSuccessAt)>600000 ? '. Данные не обновлялись больше 10 минут' : ''}`;
+    find('posSync').hidden = !canWrite();
+    const metrics = data[tab];
+    let html = tab==='app' ? `<p class="pos-note">Участников: ${escape(data.manual.clients)}. Журнал приложения: ${escape(data.manual.operations)} операций, ${escape(money(data.manual.checkCents))}. Записи сотрудников не подтверждены кассой и не складываются с кассовой выручкой.</p>` : '';
+    if (!metrics) { find('posResult').innerHTML = html+'<p>Кассовая выручка пока не доступна.</p>'; return; }
+    html += '<div class="pos-metrics">'+metric('Продажи',money(metrics.salesCents))+metric('Возвраты',money(metrics.returnsCents),metrics.returnDocuments+' документов')+metric('Итоговая выручка',money(metrics.netCents))+metric('Чеков продажи',metrics.receiptCount ?? 'неизвестно',metrics.saleDocuments+' документов продажи')+metric('Средний чек',money(metrics.averageCents),'Продажи / подтверждённое число чеков');
+    if (tab==='app') html+=metric('Активных покупателей',metrics.activeBuyers)+metric('Повторных покупателей',metrics.repeatBuyers,'2 и более связанных продаж')+metric('Доля выручки приложения',data.linkedRevenueSharePercent == null ? '—' : data.linkedRevenueSharePercent+'%','От всех продаж кассы');
+    else html+=metric('Связанные продажи',metrics.linkedSaleDocuments)+metric('Остальные продажи',metrics.unlinkedSaleDocuments,'Документы, а не уникальные гости');
+    html+='</div>';
+    if(metrics.documentsWithoutReceiptCount) html+='<p class="pos-note">У части документов нет числа печатных чеков. Количество чеков и средний чек не рассчитаны.</p>';
+    html+=`<div class="pos-detail-grid">${series('По дням',metrics.days)}${series('По часам суток',metrics.hours)}</div><h4>Товары · по позициям Эвотора</h4>`;
+    html+=table(['Товар','Количество с возвратами','Продажи','Возвраты','Итог'],metrics.products.map((p)=>[escape(p.name),escape(quantity(p.quantityMillis)+' '+p.measure),escape(money(p.salesCents)),escape(money(p.returnCents)),escape(money(p.netCents))]));
+    html+='<h4>Оплата · детализация источника</h4>'+table(['Способ','Итог с возвратами'],metrics.payments.map((p)=>[escape(p.label),escape(money(p.amountCents))]));
+    const docs=data.documents.filter((d)=>tab==='all'||d.clientId);
+    html+='<h4>Документы кассы</h4>'+table(['Время','Документ / чек','Сумма','Связь'],docs.map((d)=>[
+      escape(date(d.closedAt)),escape(d.number+' / '+(d.fiscal[0]?.receiptNumber ?? '—')),escape((d.type==='PAYBACK'?'Возврат · ':'')+money(d.amountCents)),
+      d.clientId ? 'Профиль №'+escape(d.clientId) : canWrite() && d.linkable && d.type==='SELL' ? `<button type="button" data-pos-link="${escape(d.documentId)}">Связать с QR</button>` : 'Без связи'
+    ]));
+    if (data.documentsTruncated) html+='<p class="pos-note">Показаны последние 100 документов. Итоги рассчитаны за весь выбранный период.</p>';
+    find('posResult').innerHTML=html;
+  }
+  async function reload() {
+    const current=++serial;
+    const params=new URLSearchParams({period:find('posPeriod').value,from:find('posFrom').value,to:find('posTo').value});
+    try { const result=await request('/api/admin/pos/dashboard?'+params); if(current!==serial)return; data=result; render(); }
+    catch(error){ if(current!==serial)return; data=null; find('posResult').textContent=''; find('posConnection').textContent=error.message; }
+  }
+  mount.addEventListener('click',async (event)=> {
+    const button=event.target.closest('button'); if(!button)return;
+    if(button.dataset.posTab) {tab=button.dataset.posTab;find('posLinkForm').hidden=true;render();return;}
+    if(button.dataset.posLink){find('posDocument').value=button.dataset.posLink;find('posQr').value='';find('posLinkForm').hidden=false;find('posQr').focus();return;}
+    if(button.id==='posRefresh')return reload();
+    if(['posSync','posConfirm'].includes(button.id)) {
+      button.disabled=true;
+      try {
+        if(button.id==='posSync') {
+          const result=await request('/api/admin/pos/sync',{method:'POST',timeoutMs:20000,retries:0});
+          await reload(); if(!result.complete&&!result.busy)find('posConnection').textContent+=' · История ещё загружается: нажмите «Загрузить из кассы» для следующей страницы.';
+        } else {
+          await request('/api/admin/pos/link',{method:'POST',body:JSON.stringify({documentId:find('posDocument').value,qr:find('posQr').value})});
+          find('posLinkForm').hidden=true;await reload();
+        }
+      } catch(error) {find('posConnection').textContent=error.message;} finally {button.disabled=false;}
+    }
+  });
+  find('posPeriod').addEventListener('change',()=> {const custom=find('posPeriod').value==='custom';find('posFromLabel').hidden=find('posToLabel').hidden=!custom;if(!custom)reload();});
+  [find('posFrom'),find('posTo')].forEach((input)=>input.addEventListener('change',()=>{if(find('posFrom').value&&find('posTo').value)reload();}));
+  const screen=mount.closest('[data-screen="admin"]');
+  if(screen) new MutationObserver(()=>{if(screen.classList.contains('active'))reload();else{serial++;data=null;find('posResult').textContent='';find('posLinkForm').hidden=true;}}).observe(screen,{attributes:true,attributeFilter:['class']});
+  if(preview || screen?.classList.contains('active'))reload();
+})();
+
+</script></body></html>

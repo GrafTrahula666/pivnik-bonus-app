@@ -28,7 +28,7 @@ export function createPosService(pool, config = evotorConfig()) {
           closedAt: d.closedAt, amountCents: String(d.amountCents), type: d.type, clientId: d.clientId,
           linkable: d.linkable, receiptCount: d.receiptCount, fiscal: d.fiscal })), documentsTruncated: documents.length > 100 };
     },
-    async sync(user) { assertPosRole(user, true); return syncEvotor({ pool, config }); },
+    async sync(user) { assertPosRole(user, true); return syncEvotor({ pool, config, maxPages: 1 }); },
     async link(user, body) {
       assertPosRole(user, true);
       if (!config.enabled || !config.storeId || !config.token) throw Object.assign(new Error('Касса не подключена.'), { statusCode: 503 });

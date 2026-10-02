@@ -1,0 +1,27 @@
+.pos-dashboard { margin: 20px 0; padding: 20px; border: 1px solid #dccaa5; border-radius: 22px; background: #fffcf6; color: #382e21; }
+.pos-dashboard h3,.pos-dashboard h4 { margin: 0 0 12px; }
+.pos-dashboard p { line-height: 1.5; }
+.pos-controls,.pos-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+.pos-dashboard button,.pos-dashboard select,.pos-dashboard input { font: inherit; padding: 10px 12px; border: 1px solid #d3bd92; border-radius: 12px; background: #fff; color: #382e21; min-height: 42px; }
+.pos-dashboard button { cursor: pointer; }
+.pos-dashboard button[aria-pressed='true'] { background: #725a2e; color: #fff; }
+.pos-dashboard button:disabled { cursor: default; opacity: .55; }
+.pos-dashboard input { min-width: 0; max-width: 100%; }
+.pos-state { padding: 12px; border-radius: 12px; background: #f3ebdc; line-height: 1.6; }
+.pos-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 16px 0; }
+.pos-metric { padding: 15px; background: #fff; border: 1px solid #e6dccb; border-radius: 16px; }
+.pos-metric span,.pos-metric small { display: block; color: #74644e; font-size: 12px; }
+.pos-metric strong { display: block; margin: 8px 0 4px; font-size: 24px; overflow-wrap: anywhere; }
+.pos-note { font-size: 13px; color: #74644e; }
+.pos-table-wrap { overflow: auto; margin: 12px 0 20px; }
+.pos-dashboard table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.pos-dashboard th,.pos-dashboard td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #e7dece; white-space: nowrap; }
+.pos-dashboard th { font-weight: 600; color: #74644e; }
+.pos-dashboard td:first-child { white-space: normal; min-width: 100px; }
+.pos-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.pos-bars { display: flex; align-items: end; height: 95px; gap: 5px; margin-bottom: 12px; }
+.pos-bar { flex: 1; min-width: 5px; background: #c0a06b; border-radius: 4px 4px 0 0; }
+.pos-error { color: #892b2b; }
+.pos-link-form { border-top: 1px solid #e7dece; padding-top: 15px; }
+.pos-link-form input { flex: 1; }
+@media(max-width:600px) { .pos-dashboard { padding: 14px; } .pos-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .pos-detail-grid { grid-template-columns: 1fr; } .pos-tabs button { flex: 1; font-size: 13px; } .pos-metric strong { font-size: 21px; } }
