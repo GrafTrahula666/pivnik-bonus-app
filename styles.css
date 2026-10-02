@@ -8623,14 +8623,14 @@ body,
   --home-v2-bottom-reserve: calc(94px + env(safe-area-inset-bottom));
   box-sizing: border-box;
   height: calc(100dvh - var(--home-v2-topbar-reserve) - var(--home-v2-bottom-reserve));
-  min-height: 636px;
+  min-height: 644px;
   grid-template-rows:
-    minmax(126px, 1.05fr)
+    156px
     minmax(124px, 1.03fr)
     minmax(122px, 1.02fr)
     minmax(84px, .70fr)
-    minmax(132px, 1.10fr)
-    minmax(12px, auto);
+    minmax(132px, 1.10fr);
+  grid-auto-rows: auto;
   align-content: stretch;
   gap: clamp(5px, .72dvh, 8px);
   padding-top: 0;
@@ -9972,4 +9972,39 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 }
 @media (prefers-reduced-motion: reduce) {
   .gold-bars-orbit, .gold-ingot { animation: none; }
+}
+
+/* LEAGUE PAGE · gold frames: every window gets a visible frame so the rating no longer blends into the background */
+.screen[data-screen="league"] .league-summary,
+.screen[data-screen="league"] .league-prev-month {
+  border: 1.5px solid rgba(181, 126, 35, .62);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .78),
+    inset 0 1px 0 rgba(255, 255, 255, .98),
+    0 10px 24px rgba(105, 70, 17, .14);
+}
+.screen[data-screen="league"] .leaderboard-podium-mini > span,
+.screen[data-screen="league"] .leaderboard-row {
+  border: 1.5px solid rgba(181, 126, 35, .52);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .72),
+    0 6px 16px rgba(105, 70, 17, .1);
+}
+.screen[data-screen="league"] .leaderboard-row.podium {
+  border-color: rgba(181, 126, 35, .66);
+  background: linear-gradient(145deg, rgba(255, 253, 248, .97), rgba(250, 241, 224, .95));
+}
+.screen[data-screen="league"] .leaderboard-row.is-me,
+.screen[data-screen="league"] .leaderboard-podium-mini .is-me {
+  border-color: rgba(166, 109, 20, .9);
+}
+.screen[data-screen="league"] .league-prev-month .leaderboard-row {
+  border-color: rgba(181, 126, 35, .42);
+  background: rgba(250, 243, 231, .92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7);
+}
+.screen[data-screen="league"] .leaderboard-prize-note {
+  border: 1.5px dashed rgba(181, 126, 35, .5);
+  background: rgba(255, 252, 247, .8);
+  color: #6b5a43;
 }
