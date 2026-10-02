@@ -556,7 +556,8 @@ export function createKioskShiftService({
            WHERE id = $1`,
           [item.id, String(error?.message || 'unknown').slice(0, 300), delaySeconds, expired]
         );
-        if (!notConfigured) log.error?.('kiosk shift outbox delivery failed:', item.channel, error?.message || 'unknown');
+        if (notConfigured) log.warn?.('kiosk shift outbox channel not configured:', item.channel, error?.message || 'unknown');
+        else log.error?.('kiosk shift outbox delivery failed:', item.channel, error?.message || 'unknown');
       }
     }
     return { processed, claimed: claimed.rowCount };
