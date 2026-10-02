@@ -108,13 +108,13 @@ function recorder(configured = true) {
   };
 }
 
-async function setup({ aiQueue = [], telegram = recorder(), sheets = recorder(), clock = () => at('12:00:00').getTime() } = {}) {
+async function setup({ aiQueue = [], skipAiCheck = false, telegram = recorder(), sheets = recorder(), clock = () => at('12:00:00').getTime() } = {}) {
   const db = new PGlite();
   await db.exec(await fs.readFile(MIGRATION, 'utf8'));
   const pool = pglitePool(db);
   const ai = fakeAi(aiQueue);
   const service = createKioskShiftService({
-    pool, pepper: Buffer.from('pepper-for-tests'), enrollCode: ENROLL_CODE, ai, telegram, sheets, now: clock, log: { error() {} }
+    pool, pepper: Buffer.from('pepper-for-tests'), enrollCode: ENROLL_CODE, ai, skipAiCheck, telegram, sheets, now: clock, log: { error() {} }
   });
   const { deviceToken } = await service.enrollDevice({ code: ENROLL_CODE, label: 'Пивник • Бар' });
   const device = await service.authenticate(deviceToken);
@@ -453,6 +453,21 @@ test('missing AI key fails closed with a configuration error', async () => {
   env.ai.configured = false;
   const { shiftId, ids } = await openWithPhotos(env, 1);
   await assert.rejects(env.service.submitDocument(env.device, shiftId, 'report', ids), (error) => error.statusCode === 503 && error.code === 'ai_not_configured');
+});
+
+test('with the AI check switched off documents are accepted and the shift closes', async () => {
+  const env = await setup({ skipAiCheck: true });
+  const { shiftId } = await openWithPhotos(env, 0);
+  const reportId = crypto.randomUUID();
+  await env.service.storePhoto(env.device, shiftId, 'report', reportId, jpeg('r'));
+  assert.equal((await env.service.submitDocument(env.device, shiftId, 'report', [reportId])).accepted, true);
+  const receiptId = crypto.randomUUID();
+  await env.service.storePhoto(env.device, shiftId, 'receipt', receiptId, jpeg('c'));
+  assert.equal((await env.service.submitDocument(env.device, shiftId, 'receipt', [receiptId])).accepted, true);
+  assert.equal(env.ai.calls.length, 0);
+  const closed = await env.service.closeShift(env.device, shiftId, {});
+  assert.equal(closed.shift.status, 'closed');
+  await settle(env.service);
 });
 
 test('invoices never block closing and are forwarded as an album', async () => {

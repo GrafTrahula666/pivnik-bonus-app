@@ -80,6 +80,7 @@ export function createKioskShiftService({
   enrollCode = '',
   maxDevices = 3,
   ai,
+  skipAiCheck = false,
   telegram,
   sheets,
   now = () => Date.now(),
@@ -395,9 +396,15 @@ export function createKioskShiftService({
     let raw;
     let decision;
     try {
-      if (!ai?.configured) throw new AiUnavailableError('AI validation is not configured', { retryable: false });
-      raw = await ai.analyze(kind, photos.map((photo) => ({ data: photo.data, contentType: photo.content_type })));
-      decision = kind === 'report' ? decideReport(raw) : decideReceipt(raw);
+      if (skipAiCheck) {
+        // Owner switched the AI check off: photos are accepted as sent and reach the chat when the shift closes.
+        raw = { mode: 'ai_check_skipped' };
+        decision = { accepted: true, fields: {}, signature_present: false, problems: [] };
+      } else {
+        if (!ai?.configured) throw new AiUnavailableError('AI validation is not configured', { retryable: false });
+        raw = await ai.analyze(kind, photos.map((photo) => ({ data: photo.data, contentType: photo.content_type })));
+        decision = kind === 'report' ? decideReport(raw) : decideReceipt(raw);
+      }
     } catch (error) {
       await pool.query(
         `UPDATE kiosk_shifts SET ${statusColumn} = $2, ${pendingColumn} = NULL, updated_at = NOW() WHERE id = $1 AND ${statusColumn} = 'pending'`,
@@ -418,7 +425,7 @@ export function createKioskShiftService({
       await db.query(
         `INSERT INTO kiosk_shift_validations (shift_id, kind, photo_ids, model, accepted, decision, raw_result)
          VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb, $7::jsonb)`,
-        [shift.id, kind, JSON.stringify(ids), ai.model || null, decision.accepted, JSON.stringify(decision), JSON.stringify(raw)]
+        [shift.id, kind, JSON.stringify(ids), skipAiCheck ? null : (ai?.model || null), decision.accepted, JSON.stringify(decision), JSON.stringify(raw)]
       );
       await db.query(
         'UPDATE kiosk_shift_photos SET submitted_at = COALESCE(submitted_at, NOW()) WHERE shift_id = $1 AND public_id = ANY($2::text[])',
