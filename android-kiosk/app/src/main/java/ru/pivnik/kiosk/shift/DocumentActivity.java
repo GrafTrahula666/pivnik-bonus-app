@@ -40,6 +40,8 @@ public class DocumentActivity extends Activity {
     private String retakePhotoId;
     private boolean busy;
     private LinearLayout root;
+    private EditText revenueField;
+    private EditText cashField;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -120,8 +122,10 @@ public class DocumentActivity extends Activity {
             root.addView(gallery, Ui.wide(this, 12));
             if (Shift.KIND_REPORT.equals(kind)) {
                 root.addView(Ui.text(this, "Впишите итоги смены", 18, Color.WHITE, true), Ui.wide(this, 24));
-                EditText revenue = manualField("Общая выручка, ₽", doc.manualRevenue, checking);
-                EditText cash = manualField("Наличных в кассе, ₽", doc.manualCash, checking);
+                revenueField = manualField("Общая выручка, ₽", doc.manualRevenue, checking);
+                cashField = manualField("Наличных в кассе, ₽", doc.manualCash, checking);
+                final EditText revenue = revenueField;
+                final EditText cash = cashField;
                 TextWatcher watcher = new TextWatcher() {
                     @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
                     @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
@@ -276,6 +280,9 @@ public class DocumentActivity extends Activity {
 
     private void submit() {
         if (Shift.KIND_REPORT.equals(kind)) {
+            if (revenueField != null && cashField != null) {
+                controller().setManual(revenueField.getText().toString(), cashField.getText().toString());
+            }
             Doc report = controller().current().doc(kind);
             if (report.manualRevenue.isEmpty() || report.manualCash.isEmpty()) {
                 Toast.makeText(this, "Впишите общую выручку и наличные в кассе", Toast.LENGTH_LONG).show();

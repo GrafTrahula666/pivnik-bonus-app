@@ -83,5 +83,7 @@ public final class Shift {
         target.errorRetryable = source.errorRetryable;
         target.fields = source.fields;
         target.sentCount = source.sentCount;
+        target.manualRevenue = source.manualRevenue;
+        target.manualCash = source.manualCash;
     }
 }

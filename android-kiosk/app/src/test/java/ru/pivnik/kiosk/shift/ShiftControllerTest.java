@@ -64,6 +64,14 @@ public class ShiftControllerTest {
         assertEquals(Shift.STATUS_OPEN, restored.status);
     }
 
+    @Test public void typedReportValuesSurviveRestart() {
+        controller().openShift("Анна");
+        controller().setManual(" 11000 ", "5000");
+        Doc report = controller().current().report;
+        assertEquals("11000", report.manualRevenue);
+        assertEquals("5000", report.manualCash);
+    }
+
     @Test public void lateFlagSetAtExactly1100() {
         now = Instant.parse("2026-09-28T08:00:00Z").toEpochMilli();
         assertTrue(controller().openShift("Олег").late);
