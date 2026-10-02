@@ -57,7 +57,7 @@ ORDER BY u.id, uf.frame_id;
 
 ## Проверки
 
-База до изменения: 429 тестов. После изменения: 435 тестов. Проверены настоящие функции обоих серверов, клиентский renderer, выдача и повторная выдача на PostgreSQL-compatible PGlite, ошибочная/VK-only/неоднозначная идентичность, отсутствие изменений баланса и сохранение новой рамки при owner repair. На PGlite подменён только advisory lock, остальные запросы выполняются.
+База до изменения: 429 тестов. После изменения: 436 тестов. Проверены настоящие функции обоих серверов, клиентский renderer, выдача и повторная выдача на PostgreSQL-compatible PGlite, ошибочная/VK-only/неоднозначная идентичность, отсутствие изменений баланса и сохранение новой рамки при owner repair. На PGlite подменён только advisory lock, остальные запросы выполняются.
 
 `materialize` дважды: одинаковые побайтовые diff. `npm run check`, `node --test`, VK startup parity, VK-бандл с `PIVNIK_VK_API_BASE=https://139.100.238.159.nip.io`, `npm pack --dry-run`: успешно. `npm audit --omit=dev --audit-level=high`: успешно, но полный `npm audit` сообщает 3 moderate в qs/body-parser/express; package-lock не менялся. Это отдельная задача зависимостей.
 

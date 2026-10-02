@@ -73,7 +73,7 @@ try {
   }
   for (const target of targets) {
     const row = (await client.query('SELECT session_version FROM users WHERE id = $1::bigint', [target.userId])).rows[0];
-    const session = signSession({ uid: target.userId, platform: 'telegram', sv: Number(row.session_version), exp: Date.now() + 60000 }, appVars.SESSION_SECRET);
+    const session = signSession({ uid: target.userId, platform: 'telegram', pid: target.telegramId, sv: Number(row.session_version), exp: Date.now() + 60000 }, appVars.SESSION_SECRET);
     const response = await fetch(`${RAILWAY_PRODUCTION.urls.telegram}/api/me`, {
       headers: { authorization: `Bearer ${session}`, 'x-pivnik-platform': 'telegram' }, signal: AbortSignal.timeout(15000)
     });

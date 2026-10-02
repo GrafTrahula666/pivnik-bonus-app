@@ -113,3 +113,62 @@ test('owner appearance repair keeps the new selection after startup and reauthen
     }
   } finally { await db.close(); }
 });
+
+test('release issuer binds verification sessions to Telegram IDs and preserves selection on retry', async () => {
+  const { signSession, verifySession } = await import('../platform-core.js');
+  const { RAILWAY_PRODUCTION } = await import('../scripts/railway-production-config.mjs');
+  const source = (await read('scripts/railway-grant-personal-frames.mjs')).replace(/^import .*;\n/gm, '');
+  const targets = [{ userId: '1', telegramId: '101', frameId: 'gold-bars' }, { userId: '2', telegramId: '202', frameId: 'money' }];
+  const release = 'a'.repeat(40);
+  for (const phase of ['initial', 'retry', 'wrong-release']) {
+    let grants = 0, verified = 0, connected = false;
+    const previous = phase === 'retry' ? targets.map(t => ({ id: t.userId, telegram_id: t.telegramId, frame_id: t.frameId, profile_frame: 'none' })) : [];
+    const context = vm.createContext({
+      RAILWAY_PRODUCTION, URL, AbortSignal, signSession, PERSONAL_FRAME_GIFT_CODE: 'personal-frame-gift-20261002',
+      process: { env: { RELEASE_COMMIT_SHA: release, RAILWAY_API_TOKEN: 'test-only' } },
+      console: { log() {} },
+      pg: { Client: class {
+        async connect() { connected = true; }
+        async end() {}
+        async query(sql) {
+          if (sql.includes('FROM beta_grants')) return { rows: previous };
+          if (sql.includes('SELECT session_version')) return { rows: [{ session_version: 4 }] };
+          throw new Error('Unexpected query');
+        }
+      } },
+      findSevTroutTelegramId: async () => '202',
+      grantPersonalTelegramFrames: async (_client, input) => { grants++; assert.equal(input.ownerTelegramId, '101'); return { targets }; },
+      fetch: async (url, options) => {
+        const reply = (data) => ({ ok: true, json: async () => data });
+        if (url.includes('backboard.railway.com')) {
+          const service = JSON.parse(options.body).variables.serviceId;
+          return reply({ data: { variables: service === RAILWAY_PRODUCTION.services.postgres
+            ? { DATABASE_PUBLIC_URL: 'postgres://test:test@public.invalid/db' }
+            : { DATABASE_URL: 'postgres://test:test@internal.invalid/db', OWNER_TELEGRAM_ID: '101', SESSION_SECRET: 'test-secret' } } });
+        }
+        if (url.endsWith('/api/release-readiness')) return reply({ ok: true, releaseCommit: phase === 'wrong-release' ? 'b'.repeat(40) : release });
+        if (url.includes('/assets/frames/')) return { ok: true, headers: { get: () => 'image/png' }, arrayBuffer: async () => new ArrayBuffer(0) };
+        if (url.endsWith('/api/me')) {
+          const payload = verifySession(options.headers.authorization.slice(7), 'test-secret');
+          const target = targets.find(t => t.userId === payload.uid);
+          assert.equal(payload.platform, 'telegram');
+          assert.equal(payload.pid, target.telegramId, 'gateway requires the verified provider identity');
+          assert.equal(payload.sv, 4);
+          verified++;
+          return reply({ id: target.userId, availableFrames: [{ code: target.frameId }], profileFrame: phase === 'retry' ? 'none' : target.frameId });
+        }
+        throw new Error('Unexpected URL');
+      }
+    });
+    const run = vm.runInContext(`(async () => { ${source} })()`, context);
+    if (phase === 'wrong-release') {
+      await assert.rejects(run, /exact verified release/);
+      assert.equal(connected, false);
+      assert.equal(grants, 0);
+    } else {
+      await run;
+      assert.equal(grants, phase === 'retry' ? 0 : 2);
+      assert.equal(verified, 2);
+    }
+  }
+});
