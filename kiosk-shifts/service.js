@@ -155,7 +155,15 @@ export function createKioskShiftService({
     return transaction(async (db) => {
       await db.query("SELECT pg_advisory_xact_lock(hashtext('pivnik-kiosk-shift-enroll'))");
       const active = await db.query('SELECT COUNT(*)::int AS n FROM kiosk_shift_devices WHERE revoked_at IS NULL');
-      if (Number(active.rows[0].n) >= maxDevices) throw httpError(409, 'Достигнут лимит подключённых устройств.');
+      const overflow = Number(active.rows[0].n) - maxDevices + 1;
+      if (overflow > 0) {
+        // Re-installing the app creates a new device record each time; retire the least recently seen ones instead of blocking the phone.
+        await db.query(
+          `UPDATE kiosk_shift_devices SET revoked_at = NOW()
+           WHERE id IN (SELECT id FROM kiosk_shift_devices WHERE revoked_at IS NULL ORDER BY last_seen_at ASC NULLS FIRST, id ASC LIMIT $1)`,
+          [overflow]
+        );
+      }
       const token = `${DEVICE_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`;
       const publicId = crypto.randomUUID();
       await db.query(
