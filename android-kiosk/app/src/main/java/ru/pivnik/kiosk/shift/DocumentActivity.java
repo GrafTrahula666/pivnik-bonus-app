@@ -336,17 +336,21 @@ public class DocumentActivity extends Activity {
         if (checkingDialog != null) return;
         checkingDialog = new ProgressDialog(this);
         checkingDialog.setTitle("CLAUDE CODE");
-        String message = getRandomSarcasticMessage();
-        checkingDialog.setMessage(message);
+        checkingDialog.setMessage("проверяет ваше изображение");
         checkingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
         checkingDialog.setCancelable(false);
         checkingDialog.setIndeterminate(true);
         checkingDialog.show();
+        mainHandler.postDelayed(() -> {
+            if (checkingDialog != null && checkingDialog.isShowing()) {
+                String sarcasticMessage = getRandomSarcasticMessage();
+                checkingDialog.setMessage(sarcasticMessage);
+            }
+        }, 2000);
     }
 
     private String getRandomSarcasticMessage() {
         List<String> messages = new ArrayList<>();
-        messages.add("проверяет ваше изображение");
         messages.add("пишите цифры лучше");
         messages.add("обратите внимание на правописание");
         messages.add("Подарить вам Прописи с цифрами?");
@@ -358,6 +362,7 @@ public class DocumentActivity extends Activity {
         messages.add("Это цифра или клякса?");
         messages.add("Калькулятор бы вам не помешал...");
         messages.add("Чем вы это писали, медведь лапой?");
+        messages.add("Прописи куплю, не сомневайся");
         return messages.get(new Random().nextInt(messages.size()));
     }
 
