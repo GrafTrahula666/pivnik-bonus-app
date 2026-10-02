@@ -165,6 +165,7 @@ function avatarFallback(entity = {}) {
 
 // PIVNIK_ICECREAM69A_FRAME_20260909
 function avatarFrameClass(entity = {}) {
+  if (entity.profileFrame === 'gold-bars') return 'avatar-frame avatar-frame-gold-bars';
   if (entity.profileFrame === 'money') return 'avatar-frame avatar-frame-money';
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
   if (entity.profileFrame === 'diamond') return 'avatar-frame avatar-frame-diamond';
@@ -176,6 +177,12 @@ function avatarFrameClass(entity = {}) {
 }
 
 function avatarOrbitHtml(entity = {}) {
+  if (entity.profileFrame === 'gold-bars') {
+    return '<span class="gold-orbital-base" aria-hidden="true"></span>'
+      + '<span class="avatar-orbit gold-bars-orbit" aria-hidden="true">'
+      + Array.from({ length: 6 }, (_, index) => '<i style="--bar-angle:' + (index * 60) + 'deg"><span class="gold-ingot"></span></i>').join('')
+      + '</span>';
+  }
   if (entity.profileFrame === 'money') {
     return `<span class="avatar-orbit money-orbit" aria-hidden="true">${Array.from({ length: 8 }, (_, index) => `<i style="--orbit-index:${index}">$</i>`).join('')}</span>`;
   }
@@ -212,6 +219,7 @@ function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = fa
 
 function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
+  element.classList.toggle('has-gold-bars-frame', entity.profileFrame === 'gold-bars');
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
   element.classList.toggle('has-olesya-frame', entity.profileFrame === 'olesya');

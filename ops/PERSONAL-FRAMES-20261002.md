@@ -1,0 +1,80 @@
+# Персональные рамки: Кирилл и @SevTrout
+
+Исходная точка: `origin/main` = `115d9ac`. Ветка: `feat/personal-orbital-frames-20261002`.
+
+## Результат кода
+
+- `gold-bars`: основа из приложенного PNG без слитков остаётся неподвижной; шесть отдельных слитков обходят портрет за 12 секунд. Вращение слитков компенсируется, изображение основы не вращается. При reduced motion слитки также неподвижны.
+- Долларовая рамка использует существующий код `money`, восемь символов и прежнюю анимацию.
+- Общие определения и выдача находятся в `personal-profile-frames.js`; обе копии сервера импортируют модуль. Выдача не зависит от никнейма после закрепления за Telegram ID.
+- `user_frames` сохраняет владение: долларовая рамка остаётся доступной после выбора «Без рамки». Выбор `gold-bars` сохраняется после повторного входа владельца и запуска сервера.
+- Не менялись баланс, бонусы, QR, вероятности колеса, kiosk, схема БД, зависимости и существующая patch-chain. Новый скрипт не подключён к запуску и не изменяет исходники.
+
+## Выпуск и автоматическая выдача
+
+После merge с заголовком `Release personal orbital frames and Telegram gifts` существующий Pivnik release gate проверяет и разворачивает точный коммит на обоих production-сервисах. Workflow `personal-frames-release.yml` запускает выдачу только после успешного push-релиза этого изменения в main.
+
+`scripts/railway-grant-personal-frames.mjs` получает действующую конфигурацию через существующий секрет Railway CI, сверяет подключение к БД, точный release SHA обоих сервисов и доступность PNG. Затем устанавливает единственный Telegram ID @SevTrout по активным Telegram-идентичностям, выполняет dry run и выдачу. Финальная проверка читает реальные `/api/me` обоих получателей с короткими подписанными сессиями. Секреты не выводятся.
+
+Выдача записывает нулевую служебную отметку в существующую `beta_grants` с кодом `personal-frame-gift-20261002`. Повтор workflow по этой отметке проверяет владение и сохраняет более поздний выбор рамки пользователя. Бонусы и денежные проводки не создаются. На момент подготовки документа production-результат ещё не подтверждён; его подтверждают логи успешного выпуска и строки `verified: true` шага выдачи.
+
+## Выдача после выпуска проверенного кода
+
+Использовать действующее подключение к рабочей базе и настоящий `OWNER_TELEGRAM_ID` из конфигурации Telegram-сервиса. Секреты не вставлять в GitHub, PR или журналы. Сначала найти @SevTrout в Telegram-идентичностях:
+
+```sql
+SELECT u.id, u.telegram_id, u.username, ui.provider_user_id, ui.provider_username, u.profile_frame
+FROM users u
+LEFT JOIN user_identities ui ON ui.user_id = u.id AND ui.provider = 'telegram'
+WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+  AND (
+    lower(ltrim(btrim(ui.provider_username), '@')) = 'sevtrout'
+    OR (u.telegram_id IS NOT NULL AND lower(ltrim(btrim(u.username), '@')) = 'sevtrout')
+  );
+```
+
+При нескольких кандидатах сначала установить правильный Telegram ID; выбирать пользователя по порядку строк нельзя. В окружении команды должны быть `DATABASE_URL`, `OWNER_TELEGRAM_ID`, `SEVTROUT_TELEGRAM_ID`.
+
+```bash
+# Пробный запуск: только проверка получателей, транзакция откатывается.
+node scripts/grant-personal-telegram-frames.mjs
+
+# Выдача двух рамок в одной транзакции; повтор безопасен.
+node scripts/grant-personal-telegram-frames.mjs --apply
+```
+
+Команда проверяет два различных числовых Telegram ID, ровно одного активного пользователя на каждый ID, Telegram-ник @SevTrout и разные канонические аккаунты. При ошибке обе выдачи откатываются. Меняются владение в `user_frames`, выбранная рамка двух пользователей и нулевая служебная отметка выдачи в `beta_grants`. Предыдущие рамки и ID выводятся в результате для аудита. Денежных транзакций и списаний нет.
+
+После выдачи проверить оба профиля в Telegram, повторный вход и сохранение профиля. У @SevTrout проверить выбор «Без рамки» и возврат долларовой; у владельца — `gold-bars`. Сверить фактические записи:
+
+```sql
+SELECT u.id, u.telegram_id, u.profile_frame, uf.frame_id, uf.acquired_source
+FROM users u JOIN user_frames uf ON uf.user_id = u.id
+WHERE u.id IN (SELECT user_id FROM beta_grants WHERE code = 'personal-frame-gift-20261002')
+  AND uf.frame_id IN ('money', 'gold-bars')
+ORDER BY u.id, uf.frame_id;
+```
+
+## Проверки
+
+База до изменения: 429 тестов. После изменения: 435 тестов. Проверены настоящие функции обоих серверов, клиентский renderer, выдача и повторная выдача на PostgreSQL-compatible PGlite, ошибочная/VK-only/неоднозначная идентичность, отсутствие изменений баланса и сохранение новой рамки при owner repair. На PGlite подменён только advisory lock, остальные запросы выполняются.
+
+`materialize` дважды: одинаковые побайтовые diff. `npm run check`, `node --test`, VK startup parity, VK-бандл с `PIVNIK_VK_API_BASE=https://139.100.238.159.nip.io`, `npm pack --dry-run`: успешно. `npm audit --omit=dev --audit-level=high`: успешно, но полный `npm audit` сообщает 3 moderate в qs/body-parser/express; package-lock не менялся. Это отдельная задача зависимостей.
+
+Браузерный smoke использует настоящие `index.html`, `styles.css` и функции отрисовки из `app.js`, с демонстрационными аватарами. Проверяет неподвижность основы относительно портрета, перемещение слитков, правильный угол каждого слитка, reduced motion и отсутствие пересечения основы с балансом на 375/430 px. Предпросмотры: `personal-frames-preview-375.png`, `personal-frames-preview-430.png`.
+
+```bash
+# При установленном Playwright и Chromium:
+node scripts/personal-frames-browser-smoke.mjs
+```
+
+Можно указать `PLAYWRIGHT_MODULE_PATH` и `CHROMIUM_EXECUTABLE_PATH`, если инструменты установлены отдельно. Предпросмотр — иллюстрация кода, не подтверждение выдачи в production.
+
+## Подготовка изображений
+
+Через встроенный Imagegen из приложенного референса получены два прозрачных слоя:
+
+1. Основа: удалить только все прямоугольные слитки; восстановить металл и орбиты под ними, сохранить кольцо, верхний и нижний декор, планеты, свечение и прозрачный центр.
+2. Слиток: выделить один полированный золотой слиток с освещением референса, полностью прозрачным окружением, без кольца, планет и текста.
+
+Слои сохранены в `assets/frames/gold-orbital-base.png` и `assets/frames/gold-ingot.png`.

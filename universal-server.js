@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
 import {
   createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
@@ -381,6 +382,7 @@ function isIceCream69ARow(row) {
 const OWNER_FRAME_CATALOG = Object.freeze([
   { code: 'none', title: 'Без рамки' },
   { code: 'money', title: 'Долларовая рамка' },
+  GOLD_BARS_FRAME,
   { code: 'fire', title: 'Огненная рамка' },
   { code: 'diamond', title: 'Алмазная рамка' },
   { code: 'beer-mugs', title: 'Пивные кружки' },
@@ -404,6 +406,7 @@ function profileFrameFromRow(row) {
   if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
+  if (storedFrame === 'gold-bars') return 'gold-bars';
   if (storedFrame === 'olesya') return 'olesya';
   if (storedFrame === 'vladislav') return 'vladislav';
   if (storedFrame === 'anna') return 'anna';
@@ -417,7 +420,7 @@ function availableFramesFromRow(row) {
   if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
-  const frames = [{ code: 'none', title: 'Без рамки' }];
+  const frames = [{ code: 'none', title: 'Без рамки' }, ...giftedFrameChoices(row)];
   if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
   return frames;
 }
@@ -881,7 +884,7 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
               WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
             ) AS owns_diamond_frame`;
   const result = await db.query(
-    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance
+    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance, ${PERSONAL_FRAME_OWNERSHIP_SQL}
             ${detailColumns}
      FROM users u
      JOIN wallets w ON w.user_id = u.id
@@ -1153,7 +1156,7 @@ async function updateUnifiedProfile(userId, platform, body) {
       `SELECT u.*, EXISTS(
          SELECT 1 FROM beta_grants bg
          WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
-       ) AS owns_diamond_frame
+       ) AS owns_diamond_frame, ${PERSONAL_FRAME_OWNERSHIP_SQL}
        FROM users u
        WHERE u.id = $1::bigint
          AND u.merged_into_user_id IS NULL
@@ -1608,7 +1611,7 @@ async function resolveProviderUser(provider, externalUser) {
                language_code = $6,
                role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
                unlimited_bonus = CASE WHEN $7 = 'admin' THEN TRUE ELSE unlimited_bonus END,
-               profile_frame = CASE WHEN $7 = 'admin' THEN 'money' ELSE profile_frame END,
+               profile_frame = CASE WHEN $7 = 'admin' AND profile_frame <> 'gold-bars' THEN 'money' ELSE profile_frame END,
                telegram_id = CASE WHEN $8 = 'telegram' THEN COALESCE(telegram_id, $9::bigint) ELSE telegram_id END,
                updated_at = NOW()
            WHERE id = $1::bigint`,
