@@ -30,6 +30,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 
 /** Photograph and submit one document set: report (табель), receipt (чек) or invoices. */
@@ -333,11 +336,29 @@ public class DocumentActivity extends Activity {
         if (checkingDialog != null) return;
         checkingDialog = new ProgressDialog(this);
         checkingDialog.setTitle("CLAUDE CODE");
-        checkingDialog.setMessage("проверяет ваше изображение");
+        String message = getRandomSarcasticMessage();
+        checkingDialog.setMessage(message);
         checkingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
         checkingDialog.setCancelable(false);
         checkingDialog.setIndeterminate(true);
         checkingDialog.show();
+    }
+
+    private String getRandomSarcasticMessage() {
+        List<String> messages = new ArrayList<>();
+        messages.add("проверяет ваше изображение");
+        messages.add("пишите цифры лучше");
+        messages.add("обратите внимание на правописание");
+        messages.add("Подарить вам Прописи с цифрами?");
+        messages.add("Заказал прописи для 1 класса на OZON");
+        messages.add("На этот раз прощаю, потом заставлю переписывать");
+        messages.add("Эх, почерк маме на радость...");
+        messages.add("Палочки-крючочки проверяю...");
+        messages.add("Школу в 6 лет уже рановато?");
+        messages.add("Это цифра или клякса?");
+        messages.add("Калькулятор бы вам не помешал...");
+        messages.add("Чем вы это писали, медведь лапой?");
+        return messages.get(new Random().nextInt(messages.size()));
     }
 
     private void dismissCheckingDialog() {
