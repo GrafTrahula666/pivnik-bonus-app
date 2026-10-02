@@ -1,0 +1,6 @@
+/* Uses the Business dashboard's existing palette, cards and typography. */
+.dashboard-sources{align-self:flex-start;max-width:100%;flex-wrap:wrap}
+.dashboard-sources button{white-space:normal}
+.cash-dashboard .kpi-value{overflow-wrap:anywhere}
+.cash-dashboard table{min-width:0}
+.cash-dashboard .data-quality-card span{line-height:1.5}
