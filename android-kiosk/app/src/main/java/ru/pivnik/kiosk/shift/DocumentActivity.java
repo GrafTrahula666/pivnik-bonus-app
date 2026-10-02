@@ -1,6 +1,7 @@
 package ru.pivnik.kiosk.shift;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -9,6 +10,8 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.InputType;
@@ -42,12 +45,16 @@ public class DocumentActivity extends Activity {
     private LinearLayout root;
     private EditText revenueField;
     private EditText cashField;
+    private ProgressDialog checkingDialog;
+    private Handler mainHandler;
+    private long checkStartTime;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         kind = getIntent().getStringExtra(EXTRA_KIND);
         if (!Shift.KIND_REPORT.equals(kind) && !Shift.KIND_RECEIPT.equals(kind) && !Shift.KIND_INVOICE.equals(kind)) { finish(); return; }
         if (state != null) retakePhotoId = state.getString(STATE_RETAKE);
+        mainHandler = new Handler(Looper.getMainLooper());
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(Ui.BACKGROUND);
@@ -66,6 +73,11 @@ public class DocumentActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         render();
+    }
+
+    @Override protected void onDestroy() {
+        dismissCheckingDialog();
+        super.onDestroy();
     }
 
     private ShiftController controller() { return ShiftService.get(this).controller; }
@@ -290,7 +302,8 @@ public class DocumentActivity extends Activity {
             }
         }
         busy = true;
-        render();
+        checkStartTime = System.currentTimeMillis();
+        showCheckingDialog();
         ShiftService.get(this).worker.execute(() -> {
             String error = null;
             try {
@@ -301,7 +314,10 @@ public class DocumentActivity extends Activity {
                 // Network/server errors are stored on the document and shown with «Повторить».
             }
             final String message = error;
-            runOnUiThread(() -> {
+            long elapsed = System.currentTimeMillis() - checkStartTime;
+            long remainingDelay = Math.max(0, 5000 - elapsed);
+            mainHandler.postDelayed(() -> {
+                dismissCheckingDialog();
                 busy = false;
                 if (message != null) Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 render();
@@ -309,7 +325,27 @@ public class DocumentActivity extends Activity {
                 if (shift != null && !Shift.KIND_INVOICE.equals(kind) && Doc.ACCEPTED.equals(shift.doc(kind).status)) {
                     Toast.makeText(this, Shift.KIND_REPORT.equals(kind) ? "Отчёт принят" : "Чек принят", Toast.LENGTH_LONG).show();
                 }
-            });
+            }, remainingDelay);
         });
+    }
+
+    private void showCheckingDialog() {
+        if (checkingDialog != null) return;
+        checkingDialog = new ProgressDialog(this);
+        checkingDialog.setTitle("CLAUDE CODE");
+        checkingDialog.setMessage("проверяет ваше изображение");
+        checkingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+        checkingDialog.setCancelable(false);
+        checkingDialog.setIndeterminate(true);
+        checkingDialog.show();
+    }
+
+    private void dismissCheckingDialog() {
+        if (checkingDialog != null) {
+            try {
+                checkingDialog.dismiss();
+            } catch (Exception ignored) {}
+            checkingDialog = null;
+        }
     }
 }
