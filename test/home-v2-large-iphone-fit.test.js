@@ -11,8 +11,8 @@ test('Home V2 fills large iPhone mini-app viewports without shrinking approved c
   const block = css.slice(marker, css.indexOf('/* V20.2.1 · ACHIEVEMENTS WHITE-GOLD REPAIR */', marker));
 
   assert.match(block, /height:\s*calc\(100dvh - var\(--home-v2-topbar-reserve\) - var\(--home-v2-bottom-reserve\)\)/);
-  assert.match(block, /min-height:\s*636px/);
-  assert.match(block, /grid-template-rows:[\s\S]*minmax\(126px,\s*1\.05fr\)[\s\S]*minmax\(124px,\s*1\.03fr\)[\s\S]*minmax\(122px,\s*1\.02fr\)[\s\S]*minmax\(84px,\s*\.70fr\)[\s\S]*minmax\(132px,\s*1\.10fr\)/);
+  assert.match(block, /min-height:\s*644px/);
+  assert.match(block, /grid-template-rows:[\s\S]*\b156px\b[\s\S]*minmax\(124px,\s*1\.03fr\)[\s\S]*minmax\(122px,\s*1\.02fr\)[\s\S]*minmax\(84px,\s*\.70fr\)[\s\S]*minmax\(132px,\s*1\.10fr\)/);
   assert.match(block, /\.client-home\.home-v2 > \.spaceverse-home-hero,[\s\S]*height:\s*100%/);
   assert.match(block, /@media \(max-width: 390px\) and \(min-height: 780px\)[\s\S]*\.client-home\.home-v2\.active[\s\S]*--home-v2-topbar-reserve:\s*80px/);
   assert.match(block, /\.platform-telegram \.client-home\.home-v2\.active[\s\S]*--home-v2-topbar-reserve:\s*60px/);
