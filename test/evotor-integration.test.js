@@ -84,6 +84,46 @@ test('API v2 exact headers, cursor-only pagination, auth/network/rate limit erro
   }
   await assert.rejects(fetchEvotorPage({...config,until,fetchImpl:async()=>{throw Error('private');}}),e=>e.code==='network');
 });
+test('PostgreSQL: revoked QR and split receipts cannot link; Moscow boundary and repeat buyers are exact', async () => {
+  const db = await database();
+  try {
+    await db.query("INSERT INTO qr_aliases(qr_short_code,user_id,source_user_id) VALUES('PVK-CCCC-4444',1,1)");
+    const split = sale({id:'split'});
+    split.body.pos_print_results.push(split.body.pos_print_results[0]);
+    await page(db,[sale(),split,sale({id:'second'}),sale({id:'before',close_date:'2026-10-01T20:59:59Z'}),sale({id:'after',close_date:'2026-10-02T21:00:00Z'})]);
+    await assert.rejects(linkEvotorCustomer(db,{storeId:'bar',documentId:'sale-1',qr:'PVK-CCCC-4444',actorId:3}));
+    await assert.rejects(linkEvotorCustomer(db,{storeId:'bar',documentId:'split',qr:'PVK-AAAA-2222',actorId:3}));
+    for (const documentId of ['sale-1','second']) await linkEvotorCustomer(db,{storeId:'bar',documentId,qr:'PVK-AAAA-2222',actorId:3});
+    const docs = await loadPosDocuments(db,'bar',moscowPeriod({period:'custom',from:'2026-10-02',to:'2026-10-02'}));
+    assert.equal(docs.length,3);
+    const metrics = posDashboards(docs);
+    assert.equal(metrics.all.receiptCount,4);
+    assert.equal(metrics.app.activeBuyers,1);
+    assert.equal(metrics.app.repeatBuyers,1);
+    assert.equal(metrics.app.saleDocuments,2);
+  } finally { await db.close(); }
+});
+test('PostgreSQL: expired token preserves successful sync; invalid cursor restarts safely', async () => {
+  const db = await database();
+  try {
+    const pool=poolFor(db);
+    await page(db,[sale()]);
+    const previous=(await db.query('SELECT last_success_at FROM pos_sync_state')).rows[0].last_success_at;
+    await page(db,[], 'stale-cursor');
+    await assert.rejects(syncEvotor({pool,config,fetchPage:async()=>{throw Object.assign(new Error('private'),{code:'token_expired'});}}), /token_expired/);
+    const service=createPosService(pool,config);
+    const dashboard=await service.dashboard({id:'3',role:'viewer'},{period:'custom',from:'2026-10-02',to:'2026-10-02'});
+    assert.equal(dashboard.connection.state,'error');
+    assert.equal(dashboard.connection.errorCode,'token_expired');
+    assert.equal(new Date(dashboard.connection.lastSuccessAt).getTime(),new Date(previous).getTime());
+    assert.equal(dashboard.all.saleDocuments,1);
+    await assert.rejects(syncEvotor({pool,config,fetchPage:async()=>{throw Object.assign(new Error('bad cursor'),{code:'invalid_cursor'});}}), /invalid_cursor/);
+    assert.equal((await db.query('SELECT cursor FROM pos_sync_state')).rows[0].cursor,null);
+    await syncEvotor({pool,config,fetchPage:async ({cursor})=>{assert.equal(cursor,null);return {items:[sale()],paging:{}};}});
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM pos_documents')).rows[0].n,1);
+    assert.equal((await db.query('SELECT last_error_code FROM pos_sync_state')).rows[0].last_error_code,null);
+  } finally { await db.close(); }
+});
 test('RBAC read/admin write only and never zero revenue before first successful sync', async () => {
   for (const role of ['client','staff','terminal']) assert.throws(()=>assertPosRole({id:'1',role}));
   assert.throws(()=>assertPosRole({id:'1',role:'viewer'},true)); assert.throws(()=>assertPosRole(null));

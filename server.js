@@ -3406,6 +3406,8 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
 
 app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
 app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
+app.get('/pos-admin.js', (_req, res) => res.set('Cache-Control', 'no-store').type('js').sendFile(path.join(__dirname, 'pos-admin.js')));
+app.get('/pos-admin.css', (_req, res) => res.set('Cache-Control', 'no-store').type('css').sendFile(path.join(__dirname, 'pos-admin.css')));
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));
 app.use((_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 

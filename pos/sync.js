@@ -31,7 +31,8 @@ export async function syncEvotor({ pool, config = evotorConfig(), fetchPage = fe
       cursor=CASE WHEN $2='invalid_cursor' THEN NULL ELSE pos_sync_state.cursor END`, [config.storeId, code]);
     throw Object.assign(new Error('Синхронизация Эвотора остановлена: ' + code), { statusCode: 502, code });
   } finally {
-    if (locked) await db.query("SELECT pg_advisory_unlock(hashtext('pivnik-evotor'),hashtext($1))", [config.storeId]);
-    db.release();
+    try {
+      if (locked) await db.query("SELECT pg_advisory_unlock(hashtext('pivnik-evotor'),hashtext($1))", [config.storeId]);
+    } finally { db.release(); }
   }
 }

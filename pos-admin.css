@@ -24,4 +24,4 @@
 .pos-error { color: #892b2b; }
 .pos-link-form { border-top: 1px solid #e7dece; padding-top: 15px; }
 .pos-link-form input { flex: 1; }
-@media(max-width:600px) { .pos-dashboard { padding: 14px; } .pos-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .pos-detail-grid { grid-template-columns: 1fr; } .pos-tabs button { flex: 1; font-size: 13px; } .pos-metric strong { font-size: 21px; } }
+@media(max-width:600px) { .pos-dashboard { padding: 14px; } .pos-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .pos-detail-grid { grid-template-columns: 1fr; } .pos-tabs button { flex: 1; font-size: 13px; } .pos-metric { padding: 12px; } .pos-metric strong { font-size: 18px; } }
