@@ -472,6 +472,16 @@ test('with the AI check switched off documents are accepted and the shift closes
   await settle(env.service);
 });
 
+test('an open shift follows the phone after it is enrolled again', async () => {
+  const env = await setup();
+  const { shiftId } = await openWithPhotos(env, 0);
+  const { deviceToken } = await env.service.enrollDevice({ code: ENROLL_CODE, label: 'Пивник • Бар' });
+  const second = await env.service.authenticate(deviceToken);
+  assert.notEqual(second.id, env.device.id);
+  assert.equal((await env.service.getShift(second, shiftId)).shift.id, shiftId);
+  await env.service.storePhoto(second, shiftId, 'report', crypto.randomUUID(), jpeg('r'));
+});
+
 test('invoices never block closing and are forwarded as an album', async () => {
   const env = await setup({ aiQueue: [goodReport(), goodReceipt()] });
   const { shiftId, ids } = await openWithPhotos(env, 3, 'invoice');

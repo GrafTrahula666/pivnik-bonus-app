@@ -185,7 +185,12 @@ export function createKioskShiftService({
     if (!ID_PATTERN.test(String(shiftPublicId || ''))) throw httpError(400, 'Неверный идентификатор смены.');
     const result = await db.query('SELECT * FROM kiosk_shifts WHERE public_id = $1 FOR UPDATE', [shiftPublicId]);
     const shift = result.rows[0];
-    if (!shift || String(shift.device_id) !== String(device.id)) throw httpError(404, 'Смена не найдена.');
+    if (!shift) throw httpError(404, 'Смена не найдена.');
+    // Re-enrolling the same phone makes a new device record: the open shift follows the phone.
+    if (String(shift.device_id) !== String(device.id)) {
+      const adopted = await db.query('UPDATE kiosk_shifts SET device_id = $2, updated_at = NOW() WHERE id = $1 RETURNING *', [shift.id, device.id]);
+      return adopted.rows[0];
+    }
     return shift;
   }
 
@@ -208,7 +213,10 @@ export function createKioskShiftService({
       const existing = await db.query('SELECT * FROM kiosk_shifts WHERE public_id = $1', [shiftPublicId]);
       if (existing.rowCount) {
         const row = existing.rows[0];
-        if (String(row.device_id) !== String(device.id)) throw httpError(409, 'Идентификатор смены уже занят.');
+        if (String(row.device_id) !== String(device.id)) {
+          await db.query('UPDATE kiosk_shifts SET device_id = $2, updated_at = NOW() WHERE id = $1', [row.id, device.id]);
+          row.device_id = device.id;
+        }
         const incidents = await db.query(
           `SELECT previous_shift_public_id, previous_employee_name, previous_opened_at
            FROM kiosk_shift_incidents WHERE new_shift_id = $1 ORDER BY id`,
@@ -288,7 +296,7 @@ export function createKioskShiftService({
 
   async function getShift(device, shiftPublicId) {
     if (!ID_PATTERN.test(String(shiftPublicId || ''))) throw httpError(400, 'Неверный идентификатор смены.');
-    const result = await pool.query('SELECT * FROM kiosk_shifts WHERE public_id = $1 AND device_id = $2', [shiftPublicId, device.id]);
+    const result = await pool.query('SELECT * FROM kiosk_shifts WHERE public_id = $1', [shiftPublicId]);
     if (!result.rowCount) throw httpError(404, 'Смена не найдена.');
     return { shift: publicShift(result.rows[0]) };
   }
