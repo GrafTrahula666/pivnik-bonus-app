@@ -1,0 +1,60 @@
+name: Business tests and build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  business:
+    name: Business Vitest, typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect optional Business package
+        id: package
+        shell: bash
+        run: |
+          if [ ! -d admin-platform ]; then
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo 'Business package is absent in this checkout; no Business suite to run.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            test -f admin-platform/package.json
+            test -f admin-platform/package-lock.json
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+            echo 'Business uses its own Vitest suite and lockfile. PostgreSQL integration tests require a dedicated test database; this job does not provide one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Set up Node.js
+        if: steps.package.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+
+      - name: Install exact Business dependencies
+        if: steps.package.outputs.present == 'true'
+        run: npm ci --prefix admin-platform
+
+      - name: Typecheck Business
+        if: steps.package.outputs.present == 'true'
+        run: npm run typecheck --prefix admin-platform
+
+      - name: Run Business Vitest suite
+        if: steps.package.outputs.present == 'true'
+        run: npm test --prefix admin-platform
+
+      - name: Build Business frontend and backend
+        if: steps.package.outputs.present == 'true'
+        run: npm run build --prefix admin-platform
+
+      - name: Audit Business production dependencies
+        if: steps.package.outputs.present == 'true'
+        run: npm audit --prefix admin-platform --omit=dev --audit-level=high
