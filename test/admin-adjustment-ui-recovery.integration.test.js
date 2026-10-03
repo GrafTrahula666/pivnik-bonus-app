@@ -87,34 +87,57 @@ const clientStart = clientSource.indexOf('const pendingAdminAdjustments =');
 const clientEnd = clientSource.indexOf("\n$('#openProfileSettings')?.addEventListener", clientStart);
 assert.ok(clientStart >= 0 && clientEnd > clientStart);
 
-test('adjustment UI + HTTP + SQL: saved response loss recovers one journal entry and one credit', async t => {
-  const h = await harness(t);
-  const messages = [], commands = [];
-  let keys = 0, loseReply = true, confirmations = 0;
-  const state = { profile: { id: '10', role: 'admin' } };
-  const prompts = ['25', 'Fixture correction'];
-  const run = new Function('state', 'prompt', 'confirm', 'roleCanWrite', 'api', 'requestId', 'toast',
-    'refreshAdminUsersDirectory', 'fmt', '$$', clientSource.slice(clientStart, clientEnd) + '\nreturn adjustAdminBonus;')(
-    state, () => prompts.shift(), () => { confirmations++; return true; }, role => role === 'admin',
-    async (url, options) => {
-      assert.equal(options.retries, 0);
-      const command = JSON.parse(options.body); commands.push(command);
-      const reply = await h.adjust(command.amount, { key: command.requestKey, reason: command.reason });
-      assert.equal(reply.status, 200);
-      if (loseReply) { loseReply = false; throw Error('Simulated lost transport response after server COMMIT'); }
-      return reply.body;
-    }, () => `ui-sql-request-${++keys}`, text => messages.push(text), async () => {}, String, () => []);
-  const button = { dataset: { adjustUser: '20' }, disabled: false, textContent: 'Баланс' };
-  await run(button);
-  assert.equal(button.textContent, 'Повторить');
-  let snapshot = await h.snapshot();
-  assert.equal(Number(snapshot.wallets[0].balance), 125); assert.equal(snapshot.journal.length, 1);
-  await run(button);
-  snapshot = await h.snapshot();
-  assert.equal(Number(snapshot.wallets[0].balance), 125); assert.equal(snapshot.journal.length, 1);
-  assert.deepEqual(commands[0], commands[1]); assert.equal(keys, 1); assert.equal(confirmations, 1);
-  assert.equal(snapshot.journal[0].reason, 'Fixture correction');
-  assert.equal(String(snapshot.journal[0].staff_id), '10');
-  assert.equal(messages.at(-1), 'Баланс изменён: 125 Б');
-  assert.equal(button.textContent, 'Баланс');
-});
+for (const amount of [25, -25]) {
+  for (const denyRecovery of [false, true]) {
+    test(`adjustment UI + HTTP + SQL: ${amount > 0 ? 'credit' : 'debit'} reply loss${denyRecovery ? ' then server denial' : ''} recovers once`, async t => {
+      const h = await harness(t);
+      const messages = [], commands = [];
+      let keys = 0, loseReply = true, confirmations = 0, token = '10';
+      const state = { profile: { id: '10', role: 'admin' } };
+      const prompts = [String(amount), 'Fixture correction'];
+      const run = new Function('state', 'prompt', 'confirm', 'roleCanWrite', 'api', 'requestId', 'toast',
+        'refreshAdminUsersDirectory', 'fmt', '$$', clientSource.slice(clientStart, clientEnd) + '\nreturn adjustAdminBonus;')(
+        state, () => prompts.shift(), () => { confirmations++; return true; }, role => role === 'admin',
+        async (url, options) => {
+          assert.equal(options.retries, 0);
+          const command = JSON.parse(options.body); commands.push(command);
+          const reply = await h.adjust(command.amount, { token, key: command.requestKey, reason: command.reason });
+          if (reply.status !== 200) throw Object.assign(Error(reply.body.error), { status: reply.status });
+          if (loseReply) { loseReply = false; throw Error('Simulated lost transport response after server COMMIT'); }
+          return reply.body;
+        }, () => `ui-sql-request-${++keys}`, text => messages.push(text), async () => {}, String, () => []);
+      const button = { dataset: { adjustUser: '20' }, disabled: false, textContent: 'Баланс' };
+      await run(button);
+      assert.equal(button.textContent, 'Повторить');
+      let snapshot = await h.snapshot();
+      assert.equal(Number(snapshot.wallets[0].balance), 100 + amount); assert.equal(snapshot.journal.length, 1);
+      if (denyRecovery) {
+        token = '12'; // Actual server role middleware rejects a stale owner UI.
+        await run(button);
+        assert.equal(button.textContent, 'Повторить');
+        assert.deepEqual(await h.snapshot(), snapshot);
+        assert.deepEqual(commands[1], commands[0]);
+        token = '10';
+      }
+      await run(button);
+      snapshot = await h.snapshot();
+      assert.equal(Number(snapshot.wallets[0].balance), 100 + amount); assert.equal(snapshot.journal.length, 1);
+      for (const command of commands) assert.deepEqual(command, commands[0]);
+      assert.equal(commands.length, denyRecovery ? 3 : 2);
+      assert.equal(keys, 1); assert.equal(confirmations, denyRecovery ? 2 : 1);
+      assert.equal(snapshot.journal[0].reason, 'Fixture correction');
+      assert.equal(String(snapshot.journal[0].staff_id), '10');
+      assert.equal(messages.at(-1), `Баланс изменён: ${100 + amount} Б`);
+      assert.equal(Number(snapshot.journal[0].bonus_earned), Math.max(0, amount));
+      assert.equal(Number(snapshot.journal[0].bonus_spent), Math.max(0, -amount));
+      assert.equal(snapshot.journal[0].status, 'completed');
+      for (const override of [{ amount: amount + 1 }, { token: '11' }, { id: 21 }, { reason: 'Changed reason' }]) {
+        const conflict = await h.adjust(override.amount ?? amount, { key: commands[0].requestKey, ...override });
+        assert.equal(conflict.status, 409);
+        assert.deepEqual(await h.snapshot(), snapshot);
+      }
+      assert.equal(h.connections, h.releases);
+      assert.equal(button.textContent, 'Баланс');
+    });
+  }
+}
