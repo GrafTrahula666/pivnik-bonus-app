@@ -3193,6 +3193,7 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
   const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
+  let committedTransaction = null;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -3204,12 +3205,22 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
       requestKey
     );
     await client.query('COMMIT');
+    committedTransaction = tx;
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
 Причина: ${reason}
 Текущий баланс: ${profile.balance} бонусов.`);
     res.json({ ok: true, transaction: transactionResponse(tx), client: profile });
   } catch (error) {
+    if (committedTransaction) {
+      console.error('Cancellation response failed after commit:', error?.code || 'internal_error');
+      return res.status(503).json({
+        error: 'Операция уже отменена. Не удалось обновить данные клиента. Обновите список операций.',
+        code: 'cancellation_committed',
+        cancelled: true,
+        transaction: transactionResponse(committedTransaction)
+      });
+    }
     try { await client.query('ROLLBACK'); } catch {}
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     next(error);
