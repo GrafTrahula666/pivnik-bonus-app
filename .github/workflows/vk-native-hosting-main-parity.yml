@@ -28,6 +28,7 @@ on:
       - scripts/vk-tg-black-frosted-parity-smoke.mjs
       - scripts/service-white-gold-browser-smoke.mjs
       - scripts/global-white-gold-browser-smoke.mjs
+      - scripts/league-seasons-browser-smoke.mjs
       - service-white-gold.css
       - test/service-white-gold-runtime.test.js
       - test/global-white-gold-runtime.test.js
@@ -145,6 +146,9 @@ jobs:
         run: node scripts/service-white-gold-browser-smoke.mjs
       - name: Run global VK Telegram visual browser smoke
         run: node scripts/global-white-gold-browser-smoke.mjs
+
+      - name: Run league past seasons navigation and responsive smoke
+        run: node scripts/league-seasons-browser-smoke.mjs
       - name: Upload browser evidence
         if: always()
         continue-on-error: true
@@ -172,5 +176,6 @@ jobs:
             artifacts/vk-tg-black-frosted-parity-smoke
             artifacts/service-white-gold-browser-smoke
             artifacts/global-white-gold-browser-smoke
+            artifacts/league-seasons-browser-smoke
           if-no-files-found: error
           retention-days: 7

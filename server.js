@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import pg from 'pg';
+import { getLeagueSeasons } from './league-seasons.js';
 import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import QRCode from 'qrcode';
 import {
@@ -1919,6 +1920,15 @@ app.get('/api/me/transactions', authRequired, async (req, res, next) => {
       [req.user.id]
     );
     res.json({ transactions: result.rows.map(transactionResponse) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/leaderboard/seasons', authRequired, async (req, res, next) => {
+  if (!req.user.termsAccepted) return res.status(428).json({ error: 'Сначала примите правила программы.' });
+  try {
+    res.json(await getLeagueSeasons(pool, req.user.id, profileFrameFromRow));
   } catch (error) {
     next(error);
   }

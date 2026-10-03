@@ -85,6 +85,9 @@ const state = {
   editingContent: null,
   selectedShopItem: 'frame-beer-mugs',
   leaderboard: null,
+  leagueSeasons: null,
+  leagueSeasonsLoading: false,
+  leagueSeasonsError: '',
   staffRecent: [],
   profileDraft: null,
   profileSetupStep: 1,
@@ -1071,6 +1074,7 @@ function switchScreen(target, navigation = {}) {
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
   if (target === 'actions') renderPromotions();
   if (target === 'league') renderLeaderboard();
+  if (target === 'league-seasons') loadLeagueSeasons();
   if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
 
@@ -1551,18 +1555,6 @@ function renderLeaderboard() {
     homePrevious.textContent = previousLeaders.length ? `Топ за ${previous.month}: ${previousLeaders[0].name}` : '';
     homePrevious.classList.toggle('hidden', !previousLeaders.length);
   }
-  const previousBox = $('#leaguePrevMonth');
-  if (previousBox) {
-    previousBox.classList.toggle('hidden', !previousLeaders.length);
-    const medals = ['🥇', '🥈', '🥉'];
-    previousBox.innerHTML = previousLeaders.length ? `<span class="home-card-kicker">Кто выигрывал</span><h2>Топ прошлого месяца · ${escapeHtml(previous.month)}</h2>
-      <div class="leaderboard-list league-prev-list">${previousLeaders.map((leader, index) => `<div class="leaderboard-row ${leader.isMe ? 'is-me' : ''} podium">
-        <span class="leader-rank">${medals[index] || leader.rank}</span>
-        ${avatarInlineHtml(leader, 'leader-avatar', true)}
-        <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>${leader.rank} место</small></div>
-        <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
-      </div>`).join('')}</div>` : '';
-  }
   const preview = $('#leaderboardPreview');
   if (preview) {
     preview.innerHTML = [1, 2, 3].map((rank) => {
@@ -1582,6 +1574,46 @@ function renderLeaderboard() {
       <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>Покупки за текущий месяц</small></div>
       <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
     </div>`).join('') : 'Пока нет покупок для рейтинга';
+  }
+}
+
+function renderLeagueSeasons() {
+  const list = $('#leagueSeasonsList');
+  if (!list) return;
+  list.setAttribute('aria-busy', String(state.leagueSeasonsLoading));
+  $('#retryLeagueSeasons')?.classList.toggle('hidden', !state.leagueSeasonsError);
+  if (state.leagueSeasonsLoading) {
+    list.innerHTML = '<p class="empty-state">Загружаем чемпионов прошлых сезонов…</p>';
+    return;
+  }
+  if (state.leagueSeasonsError) {
+    list.innerHTML = '<p class="empty-state">Не удалось загрузить прошлые сезоны. Попробуйте ещё раз.</p>';
+    return;
+  }
+  const seasons = state.leagueSeasons?.seasons || [];
+  list.innerHTML = seasons.length ? seasons.map((season) => `<section class="league-season vip-glass-card">
+    <span class="home-card-kicker">Завершённый сезон</span><h2>${escapeHtml(season.month)}</h2>
+    <div class="leaderboard-list">${season.leaders.map((leader) => `<div class="leaderboard-row podium ${leader.isMe ? 'is-me' : ''}">
+      <span class="leader-rank" aria-label="${leader.rank} место">${leader.rank}</span>
+      ${avatarInlineHtml(leader, 'leader-avatar', true)}
+      <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>${leader.rank} место</small></div>
+      <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
+    </div>`).join('')}</div>
+  </section>`).join('') : '<p class="empty-state">Здесь появятся чемпионы после первого завершённого месяца с покупками.</p>';
+}
+
+async function loadLeagueSeasons() {
+  if (state.leagueSeasonsLoading) return;
+  state.leagueSeasonsLoading = true;
+  state.leagueSeasonsError = '';
+  renderLeagueSeasons();
+  try {
+    state.leagueSeasons = await api('/api/leaderboard/seasons');
+  } catch (error) {
+    state.leagueSeasonsError = error.message;
+  } finally {
+    state.leagueSeasonsLoading = false;
+    renderLeagueSeasons();
   }
 }
 
@@ -3449,6 +3481,9 @@ $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#leagueBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#openLeagueSeasons')?.addEventListener('click', () => switchScreen('league-seasons'));
+$('#leagueSeasonsBackButton')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__());
+$('#retryLeagueSeasons')?.addEventListener('click', () => loadLeagueSeasons());
 $('#actionsBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));

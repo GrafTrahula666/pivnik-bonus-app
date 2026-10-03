@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { getLeagueSeasons } from './league-seasons.js';
 import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
 import {
@@ -3383,6 +3384,14 @@ export const server = http.createServer(async (req, res) => {
         200,
         await deletePlatformAccount(user.id, platform, user.payload.pid, body.confirmation)
       );
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/leaderboard/seasons') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, await getLeagueSeasons(pool, user.id, profileFrameFromRow));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/leaderboard/monthly') {
