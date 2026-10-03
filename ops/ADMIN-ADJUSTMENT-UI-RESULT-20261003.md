@@ -46,7 +46,7 @@ This is a browser recovery improvement, not tenant isolation or a new ledger.
 | Cash/Evotor | Draft #174, two dashboards | Existing branch/PR evidence | Real receipt sync unavailable | Verify returns/dedup reconciliation |
 | Dashboard/CRM | Main directory/summary; Business #176 | Regression suite; actual CRM modal fixtures | Business adapter is draft | Read flow after integration |
 | Customer 360 | #115, tenant #96 | Existing branch evidence | Not integrated/enabled | Review scoped reads |
-| Bonus correction | Main route/store; #182–184; UI #193 | 13 function + 4 HTTP/SQL tests; 48 browser fixtures + 8 joint browser/SQL cases | Closing tab/multi-tab coordination not covered | Check real SQL rollback through the same client/gateway chain |
+| Bonus correction | Main route/store; #182–184; UI #193 | 13 function + 4 HTTP/SQL tests; 48 browser fixtures + 16 joint browser/SQL cases | Closing tab/multi-tab coordination not covered | Review pending-operation history resolution |
 | Cancellation | #185–189, joint verifier #191 | Prior SQL/HTTP/browser proofs | Drafts unmerged | Review existing stages |
 | Telegram | Main broadcast store/retry drafts | Existing regression suite | Real provider delivery unverified | Provider fixture retry |
 | Achievements/frames | Main engine/personal frames, Business grants | Existing regression suite | Tenant grant flow unverified | Audited grant scenario |
@@ -86,8 +86,8 @@ node --test. Generated runtime diffs are restored before the commit.
 ## Runtime and limits
 
 Read-only Railway probe during this verification: 16/16, deployed main 18a0fa4.
-#193 prior head 79e209a passed release gate 1687 and VK parity 595. Public
-observation 255 failed; the Selectel gateway/real VK launch remains unverified.
+#193 prior head bd50ba9 passed release gate 1688 and VK parity 596. Public
+observation 256 failed; the Selectel gateway/real VK launch remains unverified.
 No authenticated production sessions or gateway server logs are available.
 
 SQL is sequential isolated PGlite, not independent PostgreSQL concurrency.
@@ -106,8 +106,8 @@ A replay balance can be older than the latest wallet, so directory refresh is
 still necessary. Records store the operation reason until confirmation/tab end.
 
 No production writes, migrations, env/services/dependencies, mass messages,
-merge or deploy. Next small stage: verify journal-write SQL rollback and safe original-key retry
-through this same client API/gateway/browser chain.
+merge or deploy. Next small stage: review a bounded history-based resolution flow for a pending
+correction that remains denied after recovery; preserve server scope and original keys.
 
 
 ## Joint client API / gateway / SQL / reload verification
@@ -148,3 +148,40 @@ follow-up; only the verifier, test fixture URL and report. Session/identity/toke
 canonicalization and directory refresh are fixture boundaries; SQL is sequential
 PGlite. Gateway means the actual universal-server proxy on local HTTP, not the
 unavailable Selectel TLS/Caddy edge or signed VK/TG entry.
+
+
+## Journal write rollback through browser / gateway / SQL — 2026-10-04
+
+Fresh fetch still reports main 18a0fa4. Current open drafts and other worktrees
+were checked again; no foreign work was incorporated. This follow-up changes
+only the joint manual verifier and this report, not application/runtime code.
+
+The verifier now runs sixteen cases: VK/TG x 390/1440px x +25/-25 x two
+fault types. The eight added cases install a CHECK constraint only in the
+isolated in-memory SQL fixture. Wallet UPDATE executes, journal INSERT violates
+the constraint, and the actual route returns HTTP 500 through the actual local
+gateway and browser api. Both wallets and the entire selected journal snapshot
+match the pre-request baseline (100 bonus balance, no journal entries).
+
+After removing the isolated fault, a real page reload restores the original
+command. An intervening staff 403 changes neither wallet nor journal and keeps
+Retry available. Authorized recovery then commits exactly one journal entry
+with the original key, owner ID and reason and yields 125/75. All three browser
+POST bodies match. No new key is generated after reload; confirmed success
+clears tab storage and stays separate from a failing directory refresh. The
+other eight socket-loss cases still prove replay of the already committed entry.
+
+Canonical and double-materialized sources each passed all 16 scenarios and 80
+further API denial/invalid/conflict/external-error checks. All SQL connections
+were released; mobile/desktop reload screenshots inspected and list overflow
+assertions passed. Full materialized node --test: 453/453; check, VK parity,
+script syntax, canonical focused tests and diff-check passed. Both materialize
+runs had identical hashes for every tracked file. npm audit still reports the
+same 3 moderate findings (separate #180); dependencies were unchanged. Fresh
+read-only runtime probe: 16/16, deployed commit remains 18a0fa4.
+
+Limits remain: sequential isolated PGlite, fixture session identity and gateway
+token canonicalization; no production financial operation, concurrent PostgreSQL
+proof, tenant isolation proof or signed VK/TG launch. Existing light service
+theme was inspected as-is; the requested dark redesign is not completed by this
+verification. No production data or schema changed, and no merge/deploy occurred.

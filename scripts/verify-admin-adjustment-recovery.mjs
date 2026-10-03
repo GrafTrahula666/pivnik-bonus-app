@@ -74,9 +74,12 @@ const apiSource = between(client, 'function timeoutError(', 'function openModal(
 const uiSource = between(client, 'function adminCrmActivityMarkup(', "$('#openProfileSettings')");
 const results = [];
 try {
-  for (const width of [390, 1440]) for (const platform of ['vk', 'telegram']) for (const amount of [25, -25]) {
-    await h.db.exec('DELETE FROM transactions; UPDATE wallets SET balance=100');
-    transport.posts = []; transport.drops = 0; transport.savedReplies = []; transport.mode = 'drop';
+  for (const width of [390, 1440]) for (const platform of ['vk', 'telegram']) for (const amount of [25, -25]) for (const failure of ['socket-loss', 'journal-write']) {
+    await h.db.exec('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS fixture_adjust_write_failure; DELETE FROM transactions; UPDATE wallets SET balance=100');
+    const baseline = await h.snapshot();
+    // Isolated database fault: UPDATE succeeds, but journal INSERT must fail.
+    if (failure === 'journal-write') await h.db.exec("ALTER TABLE transactions ADD CONSTRAINT fixture_adjust_write_failure CHECK (mode <> 'adjustment')");
+    transport.posts = []; transport.drops = 0; transport.savedReplies = []; transport.mode = failure === 'socket-loss' ? 'drop' : 'normal';
     const context = await browser.newContext({ viewport: { width, height: 950 } });
     const page = await context.newPage();
     await page.route('**/*', route => {
@@ -85,7 +88,8 @@ try {
       if (url.pathname.endsWith('.js')) return route.fulfill({ status: 200, contentType: 'text/javascript', body: '' });
       return route.continue();
     });
-    let dialogs = 0;
+    let dialogs = 0; const statuses = [];
+    page.on('response', response => { if (response.url().endsWith('/api/admin/users/20/adjust')) statuses.push(response.status()); });
     page.on('dialog', dialog => { dialogs++; return dialog.accept(dialog.type() === 'confirm' ? undefined : dialog.message().startsWith('Изменение') ? String(amount) : 'Fixture correction'); });
     const mount = async () => page.evaluate(({ apiSource, uiSource, platform, amount }) => {
       document.documentElement.classList.add(`platform-${platform}`);
@@ -110,22 +114,35 @@ try {
     await page.locator('[data-adjust-user]').click();
     await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /не подтверждён/);
-    assert.equal(transport.posts.length, 1); assert.equal(transport.drops, 1);
-    assert.equal(transport.savedReplies[0].status, 200); assert.equal(transport.savedReplies[0].body.ok, true);
-    const saved = await h.snapshot(); assert.equal(Number(saved.wallets[0].balance), 100 + amount); assert.equal(saved.journal.length, 1);
+    assert.equal(transport.posts.length, 1);
+    const beforeRecovery = await h.snapshot();
+    if (failure === 'socket-loss') {
+      assert.equal(transport.drops, 1);
+      assert.equal(transport.savedReplies[0].status, 200); assert.equal(transport.savedReplies[0].body.ok, true);
+      assert.equal(Number(beforeRecovery.wallets[0].balance), 100 + amount); assert.equal(beforeRecovery.journal.length, 1);
+    } else {
+      assert.equal(transport.drops, 0); assert.deepEqual(statuses, [500]);
+      assert.deepEqual(beforeRecovery, baseline, 'Journal INSERT failure must roll back the wallet UPDATE');
+      await h.db.exec('ALTER TABLE transactions DROP CONSTRAINT fixture_adjust_write_failure');
+    }
     await page.reload({ waitUntil: 'networkidle' }); await mount();
     assert.equal(await page.locator('[data-adjust-user]').textContent(), 'Повторить');
-    await page.screenshot({ animations: 'disabled', path: path.join(out, `${platform}-${width}-${amount}-reload.png`) });
+    await page.screenshot({ animations: 'disabled', path: path.join(out, `${platform}-${width}-${amount}-${failure}-reload.png`) });
     // A stale owner UI must still be denied by the real role middleware.
     await page.evaluate(() => { fixture.state.token = '12'; fixture.messages = []; });
     await page.locator('[data-adjust-user]').click(); await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /не подтверждён/);
-    assert.deepEqual(await h.snapshot(), saved);
+    assert.deepEqual(await h.snapshot(), beforeRecovery);
     assert.equal(await page.locator('[data-adjust-user]').textContent(), 'Повторить');
     await page.evaluate(() => { fixture.state.token = '10'; fixture.messages = []; });
     await page.locator('[data-adjust-user]').click(); await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /Корректировка сохранена.*Список не обновился/);
-    assert.deepEqual(await h.snapshot(), saved);
+    const recovered = await h.snapshot();
+    assert.equal(Number(recovered.wallets[0].balance), 100 + amount); assert.equal(recovered.journal.length, 1);
+    assert.equal(String(recovered.journal[0].staff_id), '10');
+    assert.equal(recovered.journal[0].reason, 'Fixture correction');
+    assert.equal(recovered.journal[0].request_key, transport.posts[0].body.requestKey);
+    if (failure === 'socket-loss') assert.deepEqual(recovered, beforeRecovery);
     assert.equal(transport.posts.length, 3);
     for (const post of transport.posts) { assert.deepEqual(post.body, transport.posts[0].body); assert.equal(post.platform, platform); }
     assert.equal(await page.evaluate(() => fixture.keys), 0); assert.equal(await page.evaluate(() => sessionStorage.length), 0);
@@ -141,7 +158,7 @@ try {
         try { await fixture.api('/api/admin/users/20/adjust', { method: 'POST', retries: 0, body: JSON.stringify(body) }); return 200; }
         catch (error) { return error.status; }
       }, { token, body });
-      assert.equal(actual, status); assert.deepEqual(await h.snapshot(), saved);
+      assert.equal(actual, status); assert.deepEqual(await h.snapshot(), recovered);
     }
     transport.mode = 'unavailable';
     const external = await page.evaluate(async () => {
@@ -149,10 +166,10 @@ try {
       try { await fixture.api('/api/admin/users/20/adjust', { method: 'POST', retries: 0, body: JSON.stringify({ amount: 1, reason: 'Fixture correction', requestKey: 'external-failure-key' }) }); return 200; }
       catch (error) { return error.status; }
     });
-    assert.equal(external, 502); assert.deepEqual(await h.snapshot(), saved); transport.mode = 'normal';
+    assert.equal(external, 502); assert.deepEqual(await h.snapshot(), recovered); transport.mode = 'normal';
     assert.equal(h.connections, h.releases);
     const box = await page.locator('#allUsersList').boundingBox(); assert.ok(box && box.x >= -1 && box.x + box.width <= width + 1);
-    results.push({ platform, width, amount, savedBalance: 100 + amount, postCommitSocketDrop: true, reloadRecovery: true, journalEntries: 1, denialChecks: 5 });
+    results.push({ platform, width, amount, failure, initialBalance: Number(beforeRecovery.wallets[0].balance), savedBalance: 100 + amount, journalRollback: failure === 'journal-write', postCommitSocketDrop: failure === 'socket-loss', reloadRecovery: true, journalEntries: 1, denialChecks: 5 });
     await context.close();
   }
   console.log(JSON.stringify({ scenarios: results.length, denialChecks: results.length * 5, results }, null, 2));
