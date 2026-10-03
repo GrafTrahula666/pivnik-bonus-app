@@ -2481,10 +2481,70 @@ function staffRecentHtml(transaction, quota) {
   </div>`;
 }
 
+function isConfirmedCancellation(data, id) {
+  return data?.transaction?.status === 'cancelled' && String(data.transaction.id) === String(id);
+}
+
+async function cancelOperation(button, scope, reason) {
+  if (button.disabled) return;
+  const id = scope === 'staff' ? button.dataset.staffCancel : button.dataset.adminCancel;
+  const label = button.textContent;
+  let confirmed = false;
+  button.disabled = true;
+  button.textContent = 'Отмена…';
+  try {
+    let result;
+    try {
+      result = await api(`/api/${scope}/transactions/${id}/cancel`, {
+        method: 'POST', body: JSON.stringify({ reason, requestKey: requestId() })
+      });
+    } catch (error) {
+      if (error.status !== 503 || error.payload?.code !== 'cancellation_committed'
+        || error.payload?.cancelled !== true || !isConfirmedCancellation(error.payload, id)) throw error;
+      result = error.payload;
+    }
+    if (!isConfirmedCancellation(result, id)) throw new Error('Не удалось подтвердить отмену. Обновите историю операций.');
+    confirmed = true;
+    const merge = (items) => items.map((tx) => String(tx.id) === String(id) ? { ...tx, ...result.transaction } : tx);
+    state.staffRecent = merge(state.staffRecent);
+    state.adminTransactions = merge(state.adminTransactions);
+    if (scope === 'staff') {
+      renderStaffRecent({ transactions: state.staffRecent, quota: result.quota, quotaUnavailable: !result.quota });
+      if (state.resolvedClient?.profile) {
+        if (result.client && String(state.resolvedClient.profile.id) === String(result.client.id)) {
+          state.resolvedClient.profile = result.client;
+          if ($('#foundMeta')) $('#foundMeta').textContent = `${fmt(result.client.balance)} бонусов · ${result.client.status.bonusPercent}% начисление`;
+          updateResolvedBeer(result.client);
+        } else if (!result.client) {
+          if ($('#foundMeta')) $('#foundMeta').textContent = 'Баланс после отмены требует обновления профиля';
+        }
+      }
+    } else {
+      renderAdminTransactions(state.adminTransactions.slice(0, 5));
+      if ($('#adminTransactionsModal')?.classList.contains('open')) filterAdminTransactions();
+    }
+    toast('Операция отменена. Обновляем историю…');
+    const refreshes = scope === 'staff'
+      ? [loadStaffRecent(), loadLeaderboard()]
+      : [loadAdmin(), loadLeaderboard()];
+    if (scope === 'admin' && $('#adminTransactionsModal')?.classList.contains('open')) refreshes.push(openAllTransactions());
+    const refreshed = await Promise.allSettled(refreshes);
+    toast(refreshed.some((item) => item.status === 'rejected')
+      ? 'Операция отменена. Часть данных не обновилась. Обновите историю.'
+      : 'Операция отменена');
+  } catch (error) {
+    toast(confirmed ? 'Операция отменена. Не удалось обновить экран. Обновите историю.' : error.message);
+  } finally {
+    if (!confirmed) { button.disabled = false; button.textContent = label; }
+  }
+}
+
 function renderStaffRecent(data) {
   state.staffRecent = data.transactions || [];
   const quota = data.quota || { active: false, limit: 3, used: 0, remaining: 0 };
-  if ($('#staffCancelQuota')) $('#staffCancelQuota').textContent = quota.active
+  if ($('#staffCancelQuota')) $('#staffCancelQuota').textContent = data.quotaUnavailable
+    ? 'Лимит отмен не обновлён. Обновите историю перед следующей отменой.'
+    : quota.active
     ? `Отмены: ${quota.used} из ${quota.limit} · осталось ${quota.remaining}`
     : 'Отмены доступны только в активной смене';
   const list = $('#staffRecentOperations');
@@ -2494,19 +2554,7 @@ function renderStaffRecent(data) {
   list.querySelectorAll('[data-staff-cancel]').forEach((button) => button.addEventListener('click', async () => {
     const reason = prompt('Причина отмены операции:');
     if (!reason?.trim()) return;
-    try {
-      const result = await api(`/api/staff/transactions/${button.dataset.staffCancel}/cancel`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: reason.trim(), requestKey: requestId() })
-      });
-      if (state.resolvedClient?.profile?.id === result.client?.id) {
-        state.resolvedClient.profile = result.client;
-        $('#foundMeta').textContent = `${fmt(result.client.balance)} бонусов · ${result.client.status.bonusPercent}% начисление`;
-        updateResolvedBeer(result.client);
-      }
-      toast('Операция отменена');
-      await Promise.all([loadStaffRecent(), loadLeaderboard()]);
-    } catch (error) { toast(error.message); }
+    await cancelOperation(button, 'staff', reason.trim());
   }));
 }
 
@@ -2732,15 +2780,7 @@ function bindAdminTransactionActions(root) {
   root?.querySelectorAll('[data-admin-cancel]').forEach((button) => button.addEventListener('click', async () => {
     const reason = prompt('Причина отмены операции владельцем:');
     if (!reason?.trim()) return;
-    try {
-      await api(`/api/admin/transactions/${button.dataset.adminCancel}/cancel`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: reason.trim(), requestKey: requestId() })
-      });
-      toast('Операция отменена');
-      await Promise.all([loadAdmin(), loadLeaderboard()]);
-      if ($('#adminTransactionsModal')?.classList.contains('open')) await openAllTransactions();
-    } catch (error) { toast(error.message); }
+    await cancelOperation(button, 'admin', reason.trim());
   }));
 }
 
