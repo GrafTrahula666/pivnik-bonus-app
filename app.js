@@ -3310,23 +3310,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
       toast('Роль обновлена'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
-  root.querySelectorAll('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
-    const amount = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
-    if (amount === null) return;
-    const reason = prompt('Причина корректировки:', 'Корректировка владельца');
-    if (!reason?.trim()) return;
-    try {
-      await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, {
-        method: 'POST',
-        body: JSON.stringify({
-          amount: Number(amount),
-          reason: reason.trim(),
-          requestKey: requestId()
-        })
-      });
-      toast('Баланс изменён'); await refreshAdminUsersDirectory();
-    } catch (error) { toast(error.message); }
-  }));
+  root.querySelectorAll('[data-adjust-user]').forEach((button) => button.addEventListener('click', () => adjustAdminBonus(button)));
   root.querySelectorAll('[data-pin-user]').forEach((button) => button.addEventListener('click', async () => {
     const pin = prompt('Новый PIN сотрудника: 4–6 цифр');
     if (pin === null) return;
@@ -3349,6 +3333,40 @@ function renderUsers(users, target = '#usersList', compact = false) {
     catch (error) { toast(error.message); }
   }));
 }
+
+async function adjustAdminBonus(button) {
+  if (button.disabled) return;
+  const input = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
+  if (input === null) return;
+  const amount = Number(input);
+  if (!Number.isSafeInteger(amount) || amount === 0) return toast('Укажите ненулевое целое количество бонусов.');
+  const reason = prompt('Причина корректировки:', 'Корректировка владельца')?.trim();
+  if (!reason) return;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Сохранение…';
+  try {
+    const result = await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, {
+      method: 'POST', body: JSON.stringify({ amount, reason, requestKey: requestId() })
+    });
+    if (result?.ok !== true || !Number.isSafeInteger(result.balance) || result.balance < 0) {
+      throw new Error('Не удалось подтвердить результат. Обновите историю перед новой корректировкой.');
+    }
+    try {
+      await refreshAdminUsersDirectory();
+      toast(`Баланс изменён: ${fmt(result.balance)} Б`);
+    } catch {
+      toast(`Корректировка сохранена. Баланс после операции: ${fmt(result.balance)} Б. Список не обновился — обновите его перед новой корректировкой.`);
+    }
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
+
 
 $('#openProfileSettings')?.addEventListener('click', () => openProfileSetup(1));
 $('#profileAvatar')?.addEventListener('click', () => openProfileSetup(1));
