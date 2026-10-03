@@ -57,3 +57,44 @@ UI was untouched, so no new desktop/mobile assertion. Sensitive mutations/replay
 provider messaging do not apply to a read-only OPTIONS deadline. No production
 writes, deployment, merge or infrastructure changes. The broad improvement task
 continues; gateway repair requires confirmed server-side evidence.
+
+## Follow-up: isolate the failed hop (2026-10-03)
+
+- [Release gate #1682](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/37128809872)
+  passed for a09f9b9040b91d549d93027866c10d9d6f0a38a6.
+- [Independent GitHub observation #250](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/37128809899),
+  first attempt at 14:12:54 UTC: A resolves to 139.100.238.159, AAAA ENODATA;
+  IPv4 transport PROBE_TIMEOUT after 15001ms, health/ready CONNECT_TIMEOUT
+  after about 10255ms; CORS PROBE_TIMEOUT after 15007ms. The new deadline
+  is therefore observed on an actual failed public connection.
+- Rerun of the same read-only observation on an independent GitHub runner
+  at 15:02:24 UTC confirms the failure persists: A resolves, IPv4 transport
+  times out at 15001ms; health/ready CONNECT_TIMEOUT at 10492ms; OPTIONS
+  PROBE_TIMEOUT at 15008ms. No deploy job was rerun.
+- Direct server-to-server relay GET /api/health at 14:59:57 UTC and
+  /api/platform-health at 15:01:19 UTC both return 200, ok=true,
+  the latter vk=true. Release remains main 18a0fa4. No signed user request.
+- Vercel production log aggregation since 14:00 UTC returned no entries.
+  This is missing observability, not evidence that no requests occurred.
+- Source inspection: gateway /healthz returns local 200 and validated
+  OPTIONS returns local 204 before the upstream fetch. Neither needs
+  Railway, the relay or PostgreSQL. Assuming deployed routing matches the
+  runbook, the combined evidence focuses investigation on public TCP/TLS,
+  Caddy and the gateway process, rather than database mutations. Source
+  inspection cannot prove the deployed gateway matches this source.
+
+Next read-only host checks, when authenticated Selectel access is available:
+check host power/network/security-group state and TCP 443 exposure; inspect
+Caddy/gateway container status and recent error logs; compare local gateway
+health on port 8080 with HTTPS health on 443; only after local health works,
+compare readiness and relay access. Do not restart, alter firewall, redeploy,
+rotate secrets or write production data as part of these checks.
+
+No authenticated Selectel host/log surface is available in this session.
+Billing/power/firewall/certificates/container health and actual Russian
+client reachability remain unconfirmed. No gateway repair is claimed.
+
+Follow-up verification: materialize twice with identical tracked SHA-256;
+440/440 tests, check, VK parity and diff-check pass again. Audit retains the
+same three moderate findings. Generated changes restored; this follow-up
+changes only this report.
