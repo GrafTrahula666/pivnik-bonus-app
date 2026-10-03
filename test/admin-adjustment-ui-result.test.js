@@ -163,3 +163,22 @@ test('adjustment UI reload confirmation can be declined without losing its store
   const confirmed = fixture({ storage }); await confirmed.run(confirmed.button);
   assert.deepEqual(confirmed.calls[0], initial.calls[0]); assert.equal(storage.records.size, 0);
 });
+
+
+test('uncertain correction recovery explains denial without replacing the saved command', async () => {
+  for (const [status, message] of [[401, /Войдите прежним аккаунтом/], [403, /Нет доступа/],
+    [409, /Конфликт команды/], [400, /Команда отклонена/], [404, /Клиент недоступен/]]) {
+    const h = fixture({ responses: [Error('Unknown outcome'), Object.assign(Error('Untrusted provider detail'), { status }), { ok: true, balance: 125, replayed: true }] });
+    await h.run(h.button); await h.run(h.button);
+    assert.match(h.messages.at(-1), message);
+    assert.match(h.messages.at(-1), /Исходный ключ сохранён/);
+    assert.doesNotMatch(h.messages.at(-1), /Untrusted provider detail/);
+    assert.equal(h.button.textContent, 'Повторить');
+    assert.equal(h.refreshes, 0);
+    assert.deepEqual(h.calls[1], h.calls[0]);
+    await h.run(h.button);
+    assert.deepEqual(h.calls[2], h.calls[0]);
+    assert.equal(h.button.textContent, 'Баланс');
+    assert.equal(h.messages.at(-1), 'Баланс изменён: 125 Б');
+  }
+});

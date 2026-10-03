@@ -132,6 +132,8 @@ try {
     await page.evaluate(() => { fixture.state.token = '12'; fixture.messages = []; });
     await page.locator('[data-adjust-user]').click(); await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /не подтверждён/);
+    assert.match(await page.locator('#toast').textContent(), /Нет доступа.*Исходный ключ сохранён/);
+    await page.screenshot({ animations: 'disabled', path: path.join(out, `${platform}-${width}-${amount}-${failure}-denied.png`) });
     assert.deepEqual(await h.snapshot(), beforeRecovery);
     assert.equal(await page.locator('[data-adjust-user]').textContent(), 'Повторить');
     await page.evaluate(() => { fixture.state.token = '10'; fixture.messages = []; });

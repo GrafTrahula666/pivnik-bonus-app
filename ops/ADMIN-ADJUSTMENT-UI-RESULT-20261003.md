@@ -46,7 +46,7 @@ This is a browser recovery improvement, not tenant isolation or a new ledger.
 | Cash/Evotor | Draft #174, two dashboards | Existing branch/PR evidence | Real receipt sync unavailable | Verify returns/dedup reconciliation |
 | Dashboard/CRM | Main directory/summary; Business #176 | Regression suite; actual CRM modal fixtures | Business adapter is draft | Read flow after integration |
 | Customer 360 | #115, tenant #96 | Existing branch evidence | Not integrated/enabled | Review scoped reads |
-| Bonus correction | Main route/store; #182–184; UI #193 | 13 function + 4 HTTP/SQL tests; 48 browser fixtures + 16 joint browser/SQL cases | Closing tab/multi-tab coordination not covered | Review pending-operation history resolution |
+| Bonus correction | Main route/store; #182–184; UI #193 | 14 function + 4 HTTP/SQL tests; 48 prior browser fixtures + 16 joint browser/SQL cases | History omits command key/actor/client IDs; tab-close/multi-tab not covered | Design a scoped read-only command status contract |
 | Cancellation | #185–189, joint verifier #191 | Prior SQL/HTTP/browser proofs | Drafts unmerged | Review existing stages |
 | Telegram | Main broadcast store/retry drafts | Existing regression suite | Real provider delivery unverified | Provider fixture retry |
 | Achievements/frames | Main engine/personal frames, Business grants | Existing regression suite | Tenant grant flow unverified | Audited grant scenario |
@@ -185,3 +185,51 @@ token canonicalization; no production financial operation, concurrent PostgreSQL
 proof, tenant isolation proof or signed VK/TG launch. Existing light service
 theme was inspected as-is; the requested dark redesign is not completed by this
 verification. No production data or schema changed, and no merge/deploy occurred.
+
+
+## Explain recovery denials without discarding the command — 2026-10-04
+
+Fresh main remains 18a0fa4. Existing #193 head 8f74a2c passed release gate
+1689 and VK parity 597; public startup observation 257 failed. Open PRs and
+all worktrees were refreshed; detached business-ci-verify generated changes
+were preserved. No applicable AGENTS.md found; MODULE-MAP read before edits.
+
+Confirmed gap: the existing admin history maps transactionResponse without
+requestKey, clientId or staffId. A finite recent-history list cannot prove that
+a missing command was never committed. Matching names/amounts/reasons is not
+enough to clear uncertain storage. No speculative history matching or new
+unscoped status route is introduced. History-based resolution remains a separate
+server-scope design task.
+
+The bounded selected stage completes the existing recovery error state: after
+an uncertain outcome, HTTP 401, 403, 409, 400 and 404 now explain respectively
+unconfirmed sign-in, absent permission, semantic conflict, rejected command and
+unavailable client. Messages explicitly retain the original tab key; terminal
+rejections direct the owner to operation history while keeping replacement
+blocked. Raw provider error text is not displayed in this branch. The first
+definite rejection behavior and transient/unknown-result retry remain unchanged.
+No pending record is discarded merely because a later request is denied.
+
+The owner can distinguish an access problem from an unknown transport result
+and see why repeatedly pressing Retry cannot settle a conflicting command.
+This does not claim that history can already resolve the command. A successful
+server-confirmed replay still clears storage and returns Balance.
+
+Validation adds a five-status semantic test: unknown first POST, explained denial
+with identical command, then confirmed same-key replay. Browser joint verifier
+additionally asserts the real staff 403 explanation and retained-key message on
+VK/TG desktop/mobile. Runtime/server routes and schema are unchanged.
+
+Final verification: materialized node --test 454/454, focused canonical tests
+18/18, npm run check and VK parity passed. Double materialize yields identical
+SHA-256 for all tracked files. Joint browser verifier on materialized sources
+passed 16 desktop/mobile VK/TG cases and 80 denial/error checks; the actual 403
+message preserves the original key and safe recovery. Mobile wording shortened
+after screenshot review. npm audit retains 3 existing moderate findings (#180).
+Read-only probe at 01:07 Moscow reached VK 8/8 but Telegram timed out 8/8; one
+bounded repeat reached all 16/16 with deployed main 18a0fa4. This does not prove
+stable signed launch or resolve the Selectel edge failure. Production data,
+server routes, dependency declarations and deployment were not changed.
+
+Next small stage: design and verify a scoped read-only command-status contract
+before adding any history-based clearance of pending financial commands.
