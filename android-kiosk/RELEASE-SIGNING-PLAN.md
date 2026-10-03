@@ -1,62 +1,79 @@
-# План постоянного ключа подписи (release gate)
+# План подписи Android kiosk
 
-Ключ ещё НЕ создан. Этот шаг выполняется один раз, отдельно, после подтверждения владельца.
+## Актуальное состояние
 
-## Почему
+Реальное kiosk-устройство уже было успешно обновлено новой версией поверх ранее установленной без удаления приложения и без factory reset. Поэтому прежнее предположение «ключ из CI-кэша утерян и обновление поверх невозможно» больше не считается подтверждённым и не должно блокировать PR #165.
 
-Установленный kiosk (versionCode 1) подписан debug-ключом из кэша GitHub Actions
-(`28EBAE22…F40E`); кэш пуст, ключ, скорее всего, утерян. Android ставит обновление поверх
-только с тем же ключом. Если старый ключ не найдётся — один последний factory reset и
-повторный Device Owner, после чего все будущие версии ставятся поверх с постоянным ключом.
+Критичный факт для следующих релизов: Android принимает обновление только с совместимой подписью. Текущий механизм подписи, которым было выполнено успешное обновление, нужно сохранить до любых изменений signing config.
 
-## 1. Создать ключ (на компьютере владельца, один раз)
+## P0 — зафиксировать и резервировать текущий рабочий ключ
+
+До смены ключа или перевода сборки на новый release-key:
+
+1. Снять SHA-256 сертификата с **установленного** APK и с APK, которым успешно обновили устройство.
+2. Убедиться, что отпечатки совпадают.
+3. Найти фактически использованный keystore и сделать минимум 2 независимые резервные копии вне CI-кэша.
+4. Записать источник ключа и SHA-256 сюда. Секретный файл и пароли в репозиторий не коммитить.
+5. Только после этого менять workflow/signing config.
+
+Пока эти пункты не выполнены, **не генерировать новый ключ и не делать factory reset**: это может разорвать уже работающую цепочку обновлений.
+
+Проверка установленного пакета (только чтение):
 
 ```
-keytool -genkeypair -v -keystore pivnik-kiosk-release.jks -alias pivnik-kiosk ^
-  -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Pivnik Kiosk, O=Pivnik, C=RU"
+adb shell dumpsys package ru.pivnik.kiosk
 ```
-Пароли — длинные случайные (менеджер паролей), не `android`.
 
-## 2. Где хранить (минимум 3 копии)
+Проверка APK:
 
-1. Менеджер паролей владельца (файл `.jks` вложением + оба пароля).
-2. Зашифрованная флешка / офлайн-носитель в сейфе.
-3. GitHub Actions secrets (для CI). Кэш CI для ключей не использовать никогда.
+```
+apksigner verify --print-certs app-debug.apk
+```
 
-## 3. GitHub secrets
+Если доступен keystore:
+
+```
+keytool -list -v -keystore <path-to-keystore> -alias <alias>
+```
+
+## Резервирование
+
+Минимум 3 независимых места:
+
+1. менеджер паролей владельца: keystore + пароли/alias;
+2. зашифрованный офлайн-носитель;
+3. GitHub Actions secrets для CI.
+
+CI-кэш не считается резервной копией.
+
+## Целевая схема CI
+
+Когда рабочий keystore идентифицирован и сохранён, workflow должен получать его только из secrets и проверять ожидаемый сертификат:
 
 | Secret | Значение |
 |---|---|
-| `KIOSK_RELEASE_KEYSTORE_B64` | `base64 -w0 pivnik-kiosk-release.jks` |
+| `KIOSK_RELEASE_KEYSTORE_B64` | base64 рабочего keystore |
 | `KIOSK_RELEASE_STORE_PASSWORD` | пароль хранилища |
-| `KIOSK_RELEASE_KEY_ALIAS` | `pivnik-kiosk` |
+| `KIOSK_RELEASE_KEY_ALIAS` | alias |
 | `KIOSK_RELEASE_KEY_PASSWORD` | пароль ключа |
-| `KIOSK_RELEASE_CERT_SHA256` | ожидаемый SHA-256 сертификата (для проверки) |
+| `KIOSK_RELEASE_CERT_SHA256` | подтверждённый SHA-256 сертификата |
 
-## 4. Подпись в CI
+`app/build.gradle` уже поддерживает `KIOSK_RELEASE_STORE_FILE`, `KIOSK_RELEASE_STORE_PASSWORD`, `KIOSK_RELEASE_KEY_ALIAS`, `KIOSK_RELEASE_KEY_PASSWORD`.
 
-`app/build.gradle` уже читает `KIOSK_RELEASE_STORE_FILE`, `KIOSK_RELEASE_STORE_PASSWORD`,
-`KIOSK_RELEASE_KEY_ALIAS`, `KIOSK_RELEASE_KEY_PASSWORD`; без них release остаётся неподписанным.
-Шаги workflow:
+Пример release-gate после сохранения secrets:
+
 ```
 echo "$KIOSK_RELEASE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
 KIOSK_RELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" gradle :app:testDebugUnitTest :app:assembleRelease
-apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk | grep "SHA-256 digest: $KIOSK_RELEASE_CERT_SHA256" || exit 1
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk | grep "$KIOSK_RELEASE_CERT_SHA256" || exit 1
 rm -f "$RUNNER_TEMP/release.jks"
 ```
 
-## 5. Проверка SHA-256
+## Инварианты
 
-```
-apksigner verify --print-certs app-release.apk
-keytool -list -v -keystore pivnik-kiosk-release.jks -alias pivnik-kiosk
-```
-Отпечаток записать в этот файл и в `KIOSK_RELEASE_CERT_SHA256`. Перед каждой установкой
-сверять: `adb shell dumpsys package ru.pivnik.kiosk | findstr signatures` (только чтение).
-
-## 6. Чтобы больше не потерять
-
-- Ключ никогда не генерируется в CI и не хранится в кэше CI.
-- CI падает, если отпечаток не совпал.
-- Раз в квартал — проверка, что копии 1 и 2 открываются и отпечаток совпадает.
-- versionCode только растёт.
+- Не менять signing key, пока не подтверждён сертификат текущей рабочей цепочки обновлений.
+- Ключ не генерируется автоматически в CI.
+- Ключ не хранится только в CI-кэше.
+- CI падает при несовпадении ожидаемого сертификата.
+- `versionCode` только растёт.
+- Раз в квартал проверять, что минимум две внешние резервные копии открываются и дают тот же SHA-256.
