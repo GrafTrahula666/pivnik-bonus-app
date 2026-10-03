@@ -3292,7 +3292,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
             <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Бармен</option>
             <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Партнёрский обзор</option>
           </select>
-          <button class="text-btn" data-adjust-user="${user.id}" type="button">Баланс</button>
+          <button class="text-btn" data-adjust-user="${user.id}" type="button" ${pendingAdminAdjustments.get(adminAdjustmentKey(user.id))?.inFlight ? 'disabled' : ''}>${pendingAdminAdjustments.has(adminAdjustmentKey(user.id)) ? 'Повторить' : 'Баланс'}</button>
           ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button><button class="text-btn" data-reset-cancel-user="${user.id}" type="button">Сбросить отмены</button>` : ''}
           <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
         </div>`
@@ -3334,24 +3334,41 @@ function renderUsers(users, target = '#usersList', compact = false) {
   }));
 }
 
+const pendingAdminAdjustments = new Map();
+function adminAdjustmentKey(clientId) {
+  return `${state.profile?.id || ''}:${clientId}`;
+}
 async function adjustAdminBonus(button) {
-  if (button.disabled) return;
-  const input = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
-  if (input === null) return;
-  const amount = Number(input);
-  if (!Number.isSafeInteger(amount) || amount === 0) return toast('Укажите ненулевое целое количество бонусов.');
-  const reason = prompt('Причина корректировки:', 'Корректировка владельца')?.trim();
-  if (!reason) return;
-  const originalLabel = button.textContent;
+  const clientId = String(button.dataset.adjustUser);
+  const key = adminAdjustmentKey(clientId);
+  let command = pendingAdminAdjustments.get(key);
+  if (button.disabled || command?.inFlight) return;
+  if (!state.profile?.id || !roleCanWrite(state.profile.role)) return toast('Нет доступа к корректировке.');
+  const recovering = Boolean(command);
+  if (recovering) {
+    if (!confirm(`Повторить проверку корректировки ${command.amount} Б для клиента ${clientId}? Причина: ${command.reason}. Новая операция не создаётся.`)) return;
+  } else {
+    const input = prompt('Изменение бонусов. Плюс — начислить, минус — списать:', '100');
+    if (input === null) return;
+    const amount = Number(input);
+    if (!Number.isSafeInteger(amount) || amount === 0) return toast('Укажите ненулевое целое количество бонусов.');
+    const reason = prompt('Причина корректировки:', 'Корректировка владельца')?.trim();
+    if (!reason) return;
+    command = { amount, reason, requestKey: requestId() };
+    pendingAdminAdjustments.set(key, command);
+  }
+  command.inFlight = true;
   button.disabled = true;
   button.textContent = 'Сохранение…';
   try {
-    const result = await api(`/api/admin/users/${button.dataset.adjustUser}/adjust`, {
-      method: 'POST', body: JSON.stringify({ amount, reason, requestKey: requestId() })
+    const result = await api(`/api/admin/users/${clientId}/adjust`, {
+      method: 'POST', retries: 0,
+      body: JSON.stringify({ amount: command.amount, reason: command.reason, requestKey: command.requestKey })
     });
     if (result?.ok !== true || !Number.isSafeInteger(result.balance) || result.balance < 0) {
-      throw new Error('Не удалось подтвердить результат. Обновите историю перед новой корректировкой.');
+      throw new Error('Не удалось подтвердить результат.');
     }
+    pendingAdminAdjustments.delete(key);
     try {
       await refreshAdminUsersDirectory();
       toast(`Баланс изменён: ${fmt(result.balance)} Б`);
@@ -3359,13 +3376,25 @@ async function adjustAdminBonus(button) {
       toast(`Корректировка сохранена. Баланс после операции: ${fmt(result.balance)} Б. Список не обновился — обновите его перед новой корректировкой.`);
     }
   } catch (error) {
-    toast(error.message);
+    // A first, non-retried 4xx is a definite rejection. After an uncertain
+    // request, even a later denial must not discard its original command.
+    if (!recovering && error.status >= 400 && error.status < 500) {
+      pendingAdminAdjustments.delete(key);
+      toast(error.message);
+    } else {
+      toast('Результат корректировки не подтверждён. Нажмите «Повторить» для проверки той же операции. Не обновляйте страницу до подтверждения.');
+    }
   } finally {
+    command.inFlight = false;
     button.disabled = false;
-    button.textContent = originalLabel;
+    button.textContent = pendingAdminAdjustments.has(key) ? 'Повторить' : 'Баланс';
+    if (key === adminAdjustmentKey(clientId)) {
+      $$('[data-adjust-user]').filter(control => String(control.dataset.adjustUser) === clientId).forEach(control => {
+        control.disabled = false; control.textContent = button.textContent;
+      });
+    }
   }
 }
-
 
 
 $('#openProfileSettings')?.addEventListener('click', () => openProfileSetup(1));
