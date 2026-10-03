@@ -46,7 +46,7 @@ This is a browser recovery improvement, not tenant isolation or a new ledger.
 | Cash/Evotor | Draft #174, two dashboards | Existing branch/PR evidence | Real receipt sync unavailable | Verify returns/dedup reconciliation |
 | Dashboard/CRM | Main directory/summary; Business #176 | Regression suite; actual CRM modal fixtures | Business adapter is draft | Read flow after integration |
 | Customer 360 | #115, tenant #96 | Existing branch evidence | Not integrated/enabled | Review scoped reads |
-| Bonus correction | Main route/store; #182–184; UI #193 | 13 function + 4 HTTP/SQL tests; 48 browser cases | Closing tab/multi-tab coordination not covered | Review request transport and recovery together |
+| Bonus correction | Main route/store; #182–184; UI #193 | 13 function + 4 HTTP/SQL tests; 48 browser fixtures + 8 joint browser/SQL cases | Closing tab/multi-tab coordination not covered | Check real SQL rollback through the same client/gateway chain |
 | Cancellation | #185–189, joint verifier #191 | Prior SQL/HTTP/browser proofs | Drafts unmerged | Review existing stages |
 | Telegram | Main broadcast store/retry drafts | Existing regression suite | Real provider delivery unverified | Provider fixture retry |
 | Achievements/frames | Main engine/personal frames, Business grants | Existing regression suite | Tenant grant flow unverified | Audited grant scenario |
@@ -86,14 +86,16 @@ node --test. Generated runtime diffs are restored before the commit.
 ## Runtime and limits
 
 Read-only Railway probe during this verification: 16/16, deployed main 18a0fa4.
-#193 prior head 7de14a5 passed release gate 1686 and VK parity 594. Public
-observation 254 failed; the Selectel gateway/real VK launch remains unverified.
+#193 prior head 79e209a passed release gate 1687 and VK parity 595. Public
+observation 255 failed; the Selectel gateway/real VK launch remains unverified.
 No authenticated production sessions or gateway server logs are available.
 
 SQL is sequential isolated PGlite, not independent PostgreSQL concurrency.
 Identity/session/profile validation boundaries are fixtures. No claim of server
-tenant isolation. Transport loss is injected after server SQL/HTTP succeeds;
-it is not a real network socket failure in the full production app bootstrap.
+tenant isolation. The four automatic SQL tests inject adapter loss after SQL/HTTP succeeds. The
+new joint manual verifier closes a real browser HTTP response after headers and
+a partial JSON body, after the actual proxy has consumed a committed SQL reply.
+The full signed production app bootstrap is still outside this isolated test.
 
 sessionStorage covers reload of the same tab while its storage remains intact.
 Closing the tab, clearing storage, separate tabs/origins and session handoff are
@@ -104,5 +106,45 @@ A replay balance can be older than the latest wallet, so directory refresh is
 still necessary. Records store the operation reason until confirmation/tab end.
 
 No production writes, migrations, env/services/dependencies, mass messages,
-merge or deploy. Next small stage: verify reload recovery through actual client
-api() and gateway with controlled transport failures on an isolated SQL fixture.
+merge or deploy. Next small stage: verify journal-write SQL rollback and safe original-key retry
+through this same client API/gateway/browser chain.
+
+
+## Joint client API / gateway / SQL / reload verification
+
+Added scripts/verify-admin-adjustment-recovery.mjs. Reuses the existing isolated
+SQL test harness (without importing/registering its tests), exposes its local
+base URL, and extracts the actual universal-server.js proxyRequest plus client
+api()/fetchWithTimeout and current CRM/recovery handlers. No full application
+startup, archived patch scripts, production services or foreign draft code run.
+
+Eight cases: VK/TG x 390/1440px x +25/-25. The real gateway proxy consumes an
+HTTP 200 committed reply; a Writable transport fixture sends its headers and a
+partial JSON body, then destroys the browser socket. Native browser fetch sees
+an unreadable result. There is one initial POST; manual reload restores Retry.
+A stale owner UI with a staff token receives server role denial and keeps its
+original command; restoring the authorized fixture token confirms its replay.
+All three command bodies match, with platform headers forwarded. No new key is
+generated after reload. Wallets remain 125/75 and journal entries stay at one,
+with complete snapshots unchanged. Directory read outage is separated from the
+saved financial result. Forty further API checks (401, 403, amount zero 400,
+semantic conflict 409, pre-upstream 502) preserve the same SQL snapshots.
+
+The first experimental full-socket close before any response bytes was retried
+transparently by this Chromium build, despite api retries=0; it received the
+same-key replay success. The verifier therefore sends headers/partial JSON to
+produce a deterministic unknown result. Browser-internal retry behavior is not
+controlled by the app's retry loop; do not claim exactly one network attempt
+for every browser. Server semantic idempotency remains essential.
+
+Run with caller-provided Playwright and Chromium:
+`node scripts/verify-admin-adjustment-recovery.mjs /path/to/chromium`.
+The manual verifier ran on canonical and materialized sources; all 8 cases and
+40 denial/error checks passed. Screenshots of the restored Retry control were
+inspected on mobile/desktop. Existing full regression remains 453/453; check,
+manual-script syntax, double materialize hash equality and VK parity passed.
+Audit retains the same three moderate findings. No product code changed in this
+follow-up; only the verifier, test fixture URL and report. Session/identity/token
+canonicalization and directory refresh are fixture boundaries; SQL is sequential
+PGlite. Gateway means the actual universal-server proxy on local HTTP, not the
+unavailable Selectel TLS/Caddy edge or signed VK/TG entry.

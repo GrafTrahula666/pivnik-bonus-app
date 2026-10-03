@@ -62,6 +62,7 @@ async function harness(t) {
   await once(server, 'listening');
   t.after(() => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
   return {
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
     db,
     async snapshot() {
       return {
