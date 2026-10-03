@@ -2544,6 +2544,24 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
   if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
   // V21 · owner unlimited cancellation
   const ownerUnlimitedCancel = actingStaff.role === 'admin';
+  const respondWithCancellation = async (tx, notify = false) => {
+    try {
+      const profile = await getProfile(tx.client_id);
+      if (notify) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
+Причина: ${reason}
+Текущий баланс: ${profile.balance} бонусов.`);
+      const quota = ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id);
+      return res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota });
+    } catch (error) {
+      console.error('Staff cancellation response failed after saved reversal:', error?.code || 'internal_error');
+      return res.status(503).json({
+        error: 'Операция уже отменена. Не удалось обновить данные клиента или лимит отмен. Обновите список операций.',
+        code: 'cancellation_committed',
+        cancelled: true,
+        transaction: transactionResponse(tx)
+      });
+    }
+  };
   const replay = await pool.query(
     'SELECT * FROM transactions WHERE cancel_request_key = $1',
     [requestKey]
@@ -2556,12 +2574,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
     ) {
       return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
     }
-    return res.json({
-      ok: true,
-      transaction: transactionResponse(replay.rows[0]),
-      client: await getProfile(replay.rows[0].client_id),
-      quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id)
-    });
+    return respondWithCancellation(replay.rows[0]);
   }
   const client = await pool.connect();
   try {
@@ -2590,11 +2603,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       ownerUnlimitedCancel ? {} : { staffId: actingStaff.id, notBefore: quota.countFrom }
     );
     await client.query('COMMIT');
-    const profile = await getProfile(tx.client_id);
-    if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
-Причина: ${reason}
-Текущий баланс: ${profile.balance} бонусов.`);
-    res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id) });
+    return await respondWithCancellation(tx, !tx.__idempotentReplay);
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch {}
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
