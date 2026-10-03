@@ -2540,31 +2540,32 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
   const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
-  const actingStaff = await resolveActingStaff(req);
-  if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
-  // V21 · owner unlimited cancellation
-  const ownerUnlimitedCancel = actingStaff.role === 'admin';
-  const replay = await pool.query(
-    'SELECT * FROM transactions WHERE cancel_request_key = $1',
-    [requestKey]
-  );
-  if (replay.rowCount) {
-    if (
-      String(replay.rows[0].id) !== String(req.params.id)
-      || String(replay.rows[0].cancelled_by || '') !== String(actingStaff.id)
-      || String(replay.rows[0].cancel_reason || '') !== reason
-    ) {
-      return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
-    }
-    return res.json({
-      ok: true,
-      transaction: transactionResponse(replay.rows[0]),
-      client: await getProfile(replay.rows[0].client_id),
-      quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id)
-    });
-  }
-  const client = await pool.connect();
+  let client;
   try {
+    const actingStaff = await resolveActingStaff(req);
+    if (!actingStaff) return res.status(401).json({ error: 'Сессия сотрудника истекла. Введите PIN снова.' });
+    // V21 · owner unlimited cancellation
+    const ownerUnlimitedCancel = actingStaff.role === 'admin';
+    const replay = await pool.query(
+      'SELECT * FROM transactions WHERE cancel_request_key = $1',
+      [requestKey]
+    );
+    if (replay.rowCount) {
+      if (
+        String(replay.rows[0].id) !== String(req.params.id)
+        || String(replay.rows[0].cancelled_by || '') !== String(actingStaff.id)
+        || String(replay.rows[0].cancel_reason || '') !== reason
+      ) {
+        return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
+      }
+      return res.json({
+        ok: true,
+        transaction: transactionResponse(replay.rows[0]),
+        client: await getProfile(replay.rows[0].client_id),
+        quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id)
+      });
+    }
+    client = await pool.connect();
     await client.query('BEGIN');
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
@@ -2596,11 +2597,13 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
 Текущий баланс: ${profile.balance} бонусов.`);
     res.json({ ok: true, transaction: transactionResponse(tx), client: profile, quota: ownerUnlimitedCancel ? unlimitedCancellationQuota() : await getCancellationQuota(actingStaff.id) });
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch {}
+    }
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     next(error);
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
@@ -3193,8 +3196,9 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
   const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (reason.length < 3) return res.status(400).json({ error: 'Укажите причину отмены.' });
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey отмены.' });
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     const tx = await cancelCompletedTransaction(
       client,
@@ -3210,11 +3214,13 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
 Текущий баланс: ${profile.balance} бонусов.`);
     res.json({ ok: true, transaction: transactionResponse(tx), client: profile });
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch {}
+    }
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     next(error);
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
