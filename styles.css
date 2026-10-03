@@ -10037,3 +10037,9 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 .league-season .leaderboard-row > div { min-width: 0; }
 .league-season .leaderboard-row b { display: block; overflow-wrap: anywhere; }
 .league-season .leaderboard-row strong { max-width: 100px; white-space: normal; overflow-wrap: anywhere; text-align: right; }
+@media (max-width: 360px) {
+  .league-season .leaderboard-row { grid-template-columns: 20px 38px minmax(0, 1fr); column-gap: 14px; row-gap: 4px; }
+  .league-season .leader-rank, .league-season .leader-avatar { grid-row: 1 / 3; }
+  .league-season .leaderboard-row > div, .league-season .leaderboard-row strong { grid-column: 3; }
+  .league-season .leaderboard-row strong { justify-self: start; text-align: left; }
+}
