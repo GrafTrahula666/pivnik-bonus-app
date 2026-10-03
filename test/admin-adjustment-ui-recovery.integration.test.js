@@ -95,8 +95,10 @@ for (const amount of [25, -25]) {
       let keys = 0, loseReply = true, confirmations = 0, token = '10';
       const state = { profile: { id: '10', role: 'admin' } };
       const prompts = [String(amount), 'Fixture correction'];
-      const run = new Function('state', 'prompt', 'confirm', 'roleCanWrite', 'api', 'requestId', 'toast',
-        'refreshAdminUsersDirectory', 'fmt', '$$', clientSource.slice(clientStart, clientEnd) + '\nreturn adjustAdminBonus;')(
+      const records = new Map();
+      const storage = { getItem: key => records.get(key) ?? null, setItem: (key, value) => records.set(key, value), removeItem: key => records.delete(key) };
+      const loadUi = () => new Function('state', 'prompt', 'confirm', 'roleCanWrite', 'api', 'requestId', 'toast',
+        'refreshAdminUsersDirectory', 'fmt', '$$', 'sessionStorage', clientSource.slice(clientStart, clientEnd) + '\nreturn adjustAdminBonus;')(
         state, () => prompts.shift(), () => { confirmations++; return true; }, role => role === 'admin',
         async (url, options) => {
           assert.equal(options.retries, 0);
@@ -105,12 +107,15 @@ for (const amount of [25, -25]) {
           if (reply.status !== 200) throw Object.assign(Error(reply.body.error), { status: reply.status });
           if (loseReply) { loseReply = false; throw Error('Simulated lost transport response after server COMMIT'); }
           return reply.body;
-        }, () => `ui-sql-request-${++keys}`, text => messages.push(text), async () => {}, String, () => []);
+        }, () => `ui-sql-request-${++keys}`, text => messages.push(text), async () => {}, String, () => [], storage);
+      let run = loadUi();
       const button = { dataset: { adjustUser: '20' }, disabled: false, textContent: 'Баланс' };
       await run(button);
       assert.equal(button.textContent, 'Повторить');
       let snapshot = await h.snapshot();
       assert.equal(Number(snapshot.wallets[0].balance), 100 + amount); assert.equal(snapshot.journal.length, 1);
+      run = loadUi(); // Fresh UI map after reload, same tab session storage.
+      assert.equal(records.size, 1);
       if (denyRecovery) {
         token = '12'; // Actual server role middleware rejects a stale owner UI.
         await run(button);
@@ -138,6 +143,7 @@ for (const amount of [25, -25]) {
       }
       assert.equal(h.connections, h.releases);
       assert.equal(button.textContent, 'Баланс');
+      assert.equal(records.size, 0);
     });
   }
 }

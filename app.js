@@ -3292,7 +3292,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
             <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Бармен</option>
             <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Партнёрский обзор</option>
           </select>
-          <button class="text-btn" data-adjust-user="${user.id}" type="button" ${pendingAdminAdjustments.get(adminAdjustmentKey(user.id))?.inFlight ? 'disabled' : ''}>${pendingAdminAdjustments.has(adminAdjustmentKey(user.id)) ? 'Повторить' : 'Баланс'}</button>
+          <button class="text-btn" data-adjust-user="${user.id}" type="button" ${getPendingAdminAdjustment(user.id)?.inFlight ? 'disabled' : ''}>${Boolean(getPendingAdminAdjustment(user.id)) ? 'Повторить' : 'Баланс'}</button>
           ${user.role === 'staff' ? `<button class="text-btn" data-pin-user="${user.id}" type="button">${user.pinConfigured ? 'Сменить PIN' : 'Задать PIN'}</button><button class="text-btn" data-reset-cancel-user="${user.id}" type="button">Сбросить отмены</button>` : ''}
           <button class="text-btn danger-text" data-reissue-user="${user.id}" type="button">Новый QR</button>
         </div>`
@@ -3336,14 +3336,54 @@ function renderUsers(users, target = '#usersList', compact = false) {
 
 const pendingAdminAdjustments = new Map();
 function adminAdjustmentKey(clientId) {
-  return `${state.profile?.id || ''}:${clientId}`;
+  return `${typeof IS_VK !== 'undefined' && IS_VK ? 'vk' : 'telegram'}:${state.profile?.id || ''}:${clientId}`;
+}
+function adminAdjustmentStorageKey(clientId) {
+  return `spaceverse:pending-adjustment:v1:${adminAdjustmentKey(clientId)}`;
+}
+function getPendingAdminAdjustment(clientId) {
+  const scope = adminAdjustmentKey(clientId);
+  if (pendingAdminAdjustments.has(scope)) return pendingAdminAdjustments.get(scope);
+  try {
+    const raw = sessionStorage.getItem(adminAdjustmentStorageKey(clientId));
+    if (raw === null) return null;
+    if (raw.length > 8192) throw new Error('Invalid pending adjustment');
+    const record = JSON.parse(raw);
+    if (record?.version !== 1 || record.scope !== scope ||
+        !Number.isSafeInteger(record.amount) || record.amount === 0 ||
+        typeof record.reason !== 'string' || !record.reason.trim() ||
+        typeof record.requestKey !== 'string' || !record.requestKey.trim() || record.requestKey.length > 160) {
+      throw new Error('Invalid pending adjustment');
+    }
+    const command = { amount: record.amount, reason: record.reason, requestKey: record.requestKey };
+    pendingAdminAdjustments.set(scope, command);
+    return command;
+  } catch {
+    // Never replace an unreadable or corrupt uncertain command with a new key.
+    return { blocked: true };
+  }
+}
+function persistAdminAdjustment(clientId, command) {
+  const storageKey = adminAdjustmentStorageKey(clientId);
+  const raw = JSON.stringify({ version: 1, scope: adminAdjustmentKey(clientId),
+    amount: command.amount, reason: command.reason, requestKey: command.requestKey });
+  if (raw.length > 8192) throw new Error('Pending adjustment is too large');
+  sessionStorage.setItem(storageKey, raw);
+  if (sessionStorage.getItem(storageKey) !== raw) throw new Error('Pending adjustment was not stored');
+}
+function clearPendingAdminAdjustment(scope) {
+  // A confirmed result is authoritative even if storage removal fails. A stale
+  // record after reload can only replay the same server-checked command.
+  pendingAdminAdjustments.set(scope, null);
+  try { sessionStorage.removeItem(`spaceverse:pending-adjustment:v1:${scope}`); } catch {}
 }
 async function adjustAdminBonus(button) {
   const clientId = String(button.dataset.adjustUser);
   const key = adminAdjustmentKey(clientId);
-  let command = pendingAdminAdjustments.get(key);
+  let command = getPendingAdminAdjustment(clientId);
   if (button.disabled || command?.inFlight) return;
   if (!state.profile?.id || !roleCanWrite(state.profile.role)) return toast('Нет доступа к корректировке.');
+  if (command?.blocked) return toast('Не удалось прочитать сохранённую корректировку. Новая операция заблокирована — проверьте историю операций.');
   const recovering = Boolean(command);
   if (recovering) {
     if (!confirm(`Повторить проверку корректировки ${command.amount} Б для клиента ${clientId}? Причина: ${command.reason}. Новая операция не создаётся.`)) return;
@@ -3355,6 +3395,8 @@ async function adjustAdminBonus(button) {
     const reason = prompt('Причина корректировки:', 'Корректировка владельца')?.trim();
     if (!reason) return;
     command = { amount, reason, requestKey: requestId() };
+    try { persistAdminAdjustment(clientId, command); }
+    catch { return toast('Не удалось сохранить ключ корректировки в этой вкладке. Операция не отправлена. Сократите причину или проверьте доступность хранилища.'); }
     pendingAdminAdjustments.set(key, command);
   }
   command.inFlight = true;
@@ -3368,7 +3410,7 @@ async function adjustAdminBonus(button) {
     if (result?.ok !== true || !Number.isSafeInteger(result.balance) || result.balance < 0) {
       throw new Error('Не удалось подтвердить результат.');
     }
-    pendingAdminAdjustments.delete(key);
+    clearPendingAdminAdjustment(key);
     try {
       await refreshAdminUsersDirectory();
       toast(`Баланс изменён: ${fmt(result.balance)} Б`);
@@ -3379,15 +3421,15 @@ async function adjustAdminBonus(button) {
     // A first, non-retried 4xx is a definite rejection. After an uncertain
     // request, even a later denial must not discard its original command.
     if (!recovering && error.status >= 400 && error.status < 500) {
-      pendingAdminAdjustments.delete(key);
+      clearPendingAdminAdjustment(key);
       toast(error.message);
     } else {
-      toast('Результат корректировки не подтверждён. Нажмите «Повторить» для проверки той же операции. Не обновляйте страницу до подтверждения.');
+      toast('Результат не подтверждён. Нажмите «Повторить». Ключ сохранён для перезагрузки этой вкладки. Не закрывайте её.');
     }
   } finally {
     command.inFlight = false;
     button.disabled = false;
-    button.textContent = pendingAdminAdjustments.has(key) ? 'Повторить' : 'Баланс';
+    button.textContent = pendingAdminAdjustments.get(key) ? 'Повторить' : 'Баланс';
     if (key === adminAdjustmentKey(clientId)) {
       $$('[data-adjust-user]').filter(control => String(control.dataset.adjustUser) === clientId).forEach(control => {
         control.disabled = false; control.textContent = button.textContent;

@@ -1,108 +1,108 @@
-# Owner bonus adjustment: confirmed save vs refresh failure — 2026-10-03
+# Owner bonus adjustment: confirmed result and reload recovery — 2026-10-03
 
 Base: fetched origin/main 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5.
-Existing clean worktrees/history/remotes and origin adjustment/CRM/Customer 360
-branches were inspected and preserved. Starter pack, knowledge base and
-ops/MODULE-MAP previously read; no applicable AGENTS.md found. No draft copied.
-Latest #192 release gate 1683 passed; public observation still fails.
+Branch derives from that verified main; existing own draft #193 is extended as
+one related correction scenario. Fresh remotes/history/origin branches/open PRs
+inspected. Other worktrees preserved: detached business-ci-verify has generated
+runtime modifications; other worktrees were clean. Starter pack, knowledge base
+and ops/MODULE-MAP previously read; no applicable AGENTS.md found. No foreign
+unmerged production implementation included. #182/#184 server fixes remain
+separate drafts. No patch retirement or standalone dependent script execution.
 
-## Selected stage
+## Selected stage and resulting behavior
 
-Confirmed problems: a saved adjustment could be masked by a directory read
-failure; after an uncertain POST result, another click generated a new request
-key and could apply the same adjustment twice.
+Confirmed problems: a saved adjustment was masked by a directory refresh error;
+another click after an unknown POST outcome generated a new request key. Earlier
+same-page recovery lost its command when the owner reloaded the page.
 
-Separate confirmed POST success from directory refresh. Validate a nonzero safe
-integer; require ok=true and a nonnegative safe integer response balance. Keep
-an in-memory command per authenticated owner/client until confirmed: amount,
-reason, requestKey and in-flight status. The same-page Retry control confirms
-and reuses that exact command; it does not prompt for a new amount or key.
-Rerendered controls share the pending guard and become available when the
-request settles. A first non-retried 4xx clears a definite rejection; 5xx,
-transport failure or malformed success retains uncertainty. After an uncertain
-request, a later denial also retains the original command.
+The Balance control validates a nonzero safe integer and reason, disables
+pending clicks and requires {ok:true,balance:nonnegativeSafeInteger} from the
+server. Directory refresh failure is reported separately from a confirmed save.
+No local wallet arithmetic or arbitrary database field editing.
 
-This selected UI explicitly sets retries=0; recovery is an owner-confirmed
-manual retry using the existing server's semantic idempotency checks. The
-shared api() behavior for all other operations is unchanged. No local wallet
-arithmetic or arbitrary field editing. No persistent browser storage added.
+Before POST, write and read back a versioned sessionStorage record containing
+only scope, amount, reason and requestKey. Scope includes platform, authenticated
+actor and client. No auth token is stored. Each record is limited to 8192
+characters; storage quota/write/read failures prevent a new POST. Corrupt,
+unsupported or mismatched records block replacement rather than silently
+inventing another key. Records are not automatically expired or evicted.
 
-The owner can distinguish a saved correction from a read outage and retry an
-uncertain result safely within the same open page. Server input hardening #182
-and connection handling #184 remain separate unmerged drafts. Current server
-response contract {ok:true,balance,replayed?} is preserved. No CSS changes.
+The same-tab reload restores the pending command and renders Retry. An explicit
+confirmation shows its amount, client and reason; retry sends the same command
+with retries=0. A later denial after uncertainty retains it. A first non-retried
+4xx clears a definite rejection. Success clears the record; if deletion fails,
+the current page still recognizes confirmed success and a later reload can only
+replay the same server-checked key. Rendering replacement buttons shares the
+in-flight guard. Clearing uses the original captured scope, not a later actor.
+
+The owner can now reload the same tab after losing an adjustment reply and
+explicitly recover its result without generating another financial command.
+This is a browser recovery improvement, not tenant isolation or a new ledger.
 
 ## Inventory
 
 | Function | Found implementation | Verification | Concrete gap | Next step |
 |---|---|---|---|---|
-| Cash/Evotor | Draft #174, two dashboards | Existing branch/PR evidence | Real receipt synchronization unavailable | Verify return/dedup reconciliation |
-| Dashboard/CRM | Main directory/summary; Business #176 | Regression suite; CRM modal fixture here | Business adapter is draft | Verify read flow after integration |
-| Customer 360 | #115, tenant #96 | Existing evidence | Not integrated/enabled | Review scoped reads |
-| Bonus correction | Main route/store; #182–184 | 8 UI tests + 4 HTTP/SQL tests + 40 browser cases | Reload/multiple-tab recovery unavailable | Recover pending key across reload safely |
+| Cash/Evotor | Draft #174, two dashboards | Existing branch/PR evidence | Real receipt sync unavailable | Verify returns/dedup reconciliation |
+| Dashboard/CRM | Main directory/summary; Business #176 | Regression suite; actual CRM modal fixtures | Business adapter is draft | Read flow after integration |
+| Customer 360 | #115, tenant #96 | Existing branch evidence | Not integrated/enabled | Review scoped reads |
+| Bonus correction | Main route/store; #182–184; UI #193 | 13 function + 4 HTTP/SQL tests; 48 browser cases | Closing tab/multi-tab coordination not covered | Review request transport and recovery together |
 | Cancellation | #185–189, joint verifier #191 | Prior SQL/HTTP/browser proofs | Drafts unmerged | Review existing stages |
-| Telegram | Main broadcast store/retry drafts | Existing regression suite only | Real provider delivery unverified | Provider fixture retry |
-| Achievements/frames | Main engine/personal frames, Business grants | Existing regression suite only | Tenant grant flow unverified | Audited grant scenario |
-| Rights/audit | Main roles/journal; #96 | Viewer UI hidden; 401/403 fixtures | Production tenant isolation not proven | Scoped cross-tenant tests |
+| Telegram | Main broadcast store/retry drafts | Existing regression suite | Real provider delivery unverified | Provider fixture retry |
+| Achievements/frames | Main engine/personal frames, Business grants | Existing regression suite | Tenant grant flow unverified | Audited grant scenario |
+| Rights/audit | Main roles/journal; #96 | Viewer controls; actual middleware with session fixture | Production tenant isolation not proven | Scoped cross-tenant checks |
 
 ## Verification
 
-- 8 function tests: credit/debit/replay and refresh failure; invalid/cancelled
-  input; 401/403/400/409/500 and malformed success; pending repeated click;
-  lost result retry with identical semantic body/key; replacement button guard;
-  later denial retains the uncertain command.
-- 4 combined UI + actual HTTP + SQL tests: actual main adjustment route, auth/role
-  middleware, replay helpers and persistence on isolated PGlite. Transport
-  adapter drops the response after HTTP confirms COMMIT; UI retries manually.
-  Credit/debit wallets stay 125/75, journal count stays one, original actor/reason/key preserved,
-  requestId called once. A server-side staff denial after the saved response loss retains the same UI command; an authorized retry resolves it without another correction. Sixteen semantic-conflict checks (amount, actor, client, reason) return 409 and preserve complete wallet/journal snapshots. Every acquired SQL connection is released. Harness reuses our prior #183 fixture construction,
-  not any unmerged production route changes. Session/profile boundaries mocked.
-- Materialize twice; all tracked SHA-256 equal. Helper/map/click binding survive
-  the complete chain. No standalone dependent patch.
-- Full materialized node --test: 448/448; check, VK parity and diff-check pass.
-- npm audit: existing 3 moderate; separate #180. Dependencies unchanged.
-- Manual browser: actual CRM modal render/click/prompt on existing HTML/CSS,
-  VK/TG x 390/1440px, 10 cases each (40 total). Includes uncertain 500/lost reply
-  followed by original-command recovery, directory rerender while pending,
-  viewer controls and no horizontal list overflow. API/session/refresh are
-  fixtures. Mobile/desktop screenshots inspected; existing toast styles.
-- Generated changes restored; focused tests pass again on canonical source.
+- 13 function tests: saved/read separation; credit/debit/replay; invalid inputs;
+  401/403/400/409/500 and malformed success; repeated pending clicks and replaced
+  DOM controls; uncertain retry/later denial; fresh-page storage recovery;
+  unavailable/quota/non-writing/corrupt/oversize storage prevents POST;
+  actor/client/platform separation; deletion failure replays old key safely;
+  declining recovery confirmation retains the original command.
+- 4 UI + actual HTTP + SQL tests using main route/auth/role/replay/persistence
+  and real legacy schema/startup upgrades in isolated PGlite. Client adapter
+  loses the response after actual COMMIT. Recreate UI map with shared tab storage,
+  then retry credit/debit with/without an intervening actual staff 403. Wallets
+  remain 125/75, journal count remains one, actor/reason/key remain unchanged.
+  Sixteen semantic conflicts (amount, actor, client, reason) return 409 and
+  preserve full wallet/journal snapshots. SQL connections are released.
+- Full materialized node --test: 453/453. Double materialize with identical
+  tracked SHA-256; complete chain preserves helper/storage/button wiring.
+  npm run check, VK parity, canonical focused tests and diff-check pass.
+- npm audit: existing 3 moderate; separate draft #180. No dependency changes.
+- Browser: actual CRM modal render/click/prompt on existing HTML/CSS, VK/TG x
+  390/1440px, 12 scenarios each (48). Includes actual page.reload(), restored
+  Retry button, identical command body and zero regenerated keys. Prior success,
+  denial, malformed/unknown outcome, pending rerender and viewer cases retained.
+  Mobile/desktop screenshots inspected; no horizontal list overflow. CSS/theme
+  unchanged. API/session/refresh boundaries are fixtures.
 
-Manual reproduction (requires caller-provided Playwright and Chromium):
+Manual reproduction requires caller-provided Playwright and Chromium:
 `node scripts/admin-adjustment-ui-browser-smoke.mjs /path/to/chromium`.
-Playwright is not a project dependency and this script is not auto-discovered
-by node --test. It writes temporary artifacts locally.
+No browser dependency added to the project; script is not auto-discovered by
+node --test. Generated runtime diffs are restored before the commit.
 
-## Runtime / boundaries
+## Runtime and limits
 
-Read-only Railway probe at 2026-10-03T17:11:44Z: 16/16, deployed main 18a0fa4.
-This does not validate the Selectel hop. On head 31c0130, release gate 1685 and VK parity 593 passed. Public observation 253 (run 37139952877) failed: at 2026-10-03T17:19:49Z IPv4 transport timed out after 15002ms, /healthz and /readyz timed out at connection after about 10.4s. Its unmodified main-based OPTIONS probe took 133813ms; the independent deadline fix #192 remains unmerged.
-No gateway server logs/authenticated production UI available.
+Read-only Railway probe during this verification: 16/16, deployed main 18a0fa4.
+#193 prior head 7de14a5 passed release gate 1686 and VK parity 594. Public
+observation 254 failed; the Selectel gateway/real VK launch remains unverified.
+No authenticated production sessions or gateway server logs are available.
 
-Browser API/profile/refresh are fixtures; no claim of production signed launch
-or server tenant isolation. SQL is sequential isolated PGlite, not independent
-PostgreSQL concurrency. Same-page recovery is verified; reload/closing the page
-loses the in-memory command, other tabs are independent. UI explicitly warns
-not to reload an uncertain operation. No automatic command expiry/discard.
-Unknown outcomes with later permanent denial can therefore require separate
-history/support resolution; do not replace the key speculatively. An operation's
-replay balance can be older than the latest wallet; refresh remains necessary.
-No production writes/env/dependencies/migrations, merge or deploy.
+SQL is sequential isolated PGlite, not independent PostgreSQL concurrency.
+Identity/session/profile validation boundaries are fixtures. No claim of server
+tenant isolation. Transport loss is injected after server SQL/HTTP succeeds;
+it is not a real network socket failure in the full production app bootstrap.
 
-Next small stage: safe pending-key recovery across reload, scoped to the actor
-and client, with bounded storage, explicit recovery UI and SQL/browser proof.
+sessionStorage covers reload of the same tab while its storage remains intact.
+Closing the tab, clearing storage, separate tabs/origins and session handoff are
+not a durable recovery guarantee. Browser recovery never resends automatically.
+A permanent denial or corrupt command can require history/support resolution;
+no speculative key replacement or manual arbitrary storage editor is provided.
+A replay balance can be older than the latest wallet, so directory refresh is
+still necessary. Records store the operation reason until confirmation/tab end.
 
-## Follow-up verification
-
-Fresh origin/main remains 18a0fa4; #193 remains draft and no existing feature was
-reimplemented. All origin branches/open PRs were inspected again. The detached
-business-ci-verify worktree contains generated runtime modifications and was
-left untouched; other worktrees were clean before this stage. This follow-up
-changes only this report and the existing SQL recovery test, not production
-handlers/UI. The branch still derives from the verified main base. The browser
-verifier was rerun unchanged: all 40 desktop/mobile cases pass.
-
-The SQL proof extends the near-complete same-page correction scenario before
-adding persistence. It covers debit as well as credit, and real HTTP authorization
-denial following a COMMIT whose reply is lost at the client adapter. No new
-production capability or tenant guarantee is claimed.
+No production writes, migrations, env/services/dependencies, mass messages,
+merge or deploy. Next small stage: verify reload recovery through actual client
+api() and gateway with controlled transport failures on an isolated SQL fixture.

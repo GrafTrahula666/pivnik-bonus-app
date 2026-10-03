@@ -34,7 +34,8 @@ try {
     let input = '25';
     page.on('dialog', dialog => dialog.accept(dialog.type() === 'confirm' ? undefined : dialog.message().startsWith('Изменение') ? input : 'Fixture reason'));
     await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'networkidle' });
-    await page.evaluate(({ client, platform }) => {
+    const mount = async () => page.evaluate(({ client, platform }) => {
+      window.IS_VK = platform === 'vk';
       document.documentElement.classList.add(`platform-${platform}`);
       document.querySelector('#bootScreen')?.classList.add('hidden');
       const modal = document.querySelector('#adminUsersModal'); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false');
@@ -60,6 +61,7 @@ try {
       };
       fixture.handlers = handlers; window.fixture = fixture; fixture.seed();
     }, { client, platform });
+    await mount();
     for (const outcome of ['success', 'refresh-error', 'denied', 'error', 'replay', 'lost', 'recover']) {
       await page.evaluate(outcome => { fixture.outcome = outcome; fixture.messages = []; fixture.seed(); }, outcome);
       await page.locator('[data-adjust-user]').click();
@@ -92,10 +94,25 @@ try {
     await page.evaluate(() => fixture.seed('viewer'));
     assert.equal(await page.locator('[data-adjust-user]').count(), 0);
     await page.evaluate(() => fixture.seed());
+    // Exercise a real page reload, not a reset of the fixture's in-memory map.
+    await page.evaluate(() => { fixture.messages = []; fixture.outcome = 'lost'; });
+    await page.locator('[data-adjust-user]').click();
+    await page.waitForFunction(() => fixture.messages.length > 0);
+    const savedCommand = await page.evaluate(() => fixture.commands.at(-1));
+    await page.reload({ waitUntil: 'networkidle' });
+    await mount();
+    assert.equal(await page.locator('[data-adjust-user]').textContent(), 'Повторить');
+    await page.evaluate(() => { fixture.messages = []; fixture.outcome = 'recover'; });
+    await page.locator('[data-adjust-user]').click();
+    await page.waitForFunction(() => fixture.messages.length > 0);
+    assert.deepEqual(await page.evaluate(() => fixture.commands[0]), savedCommand);
+    assert.equal(await page.evaluate(() => fixture.keys), 0);
+    assert.equal(await page.evaluate(() => sessionStorage.length), 0);
+    assert.equal(await page.locator('[data-adjust-user]').textContent(), 'Баланс');
     const box = await page.locator('#allUsersList').boundingBox();
     assert.ok(box && box.x >= -1 && box.x + box.width <= width + 1);
     await page.screenshot({ path: path.join(out, `${platform}-${width}.png`) });
-    results.push({ platform, width, scenarios: 10, posts: 8, noHorizontalOverflow: true });
+    results.push({ platform, width, scenarios: 12, postsBeforeReload: 9, postsAfterReload: 1, noHorizontalOverflow: true });
     await context.close();
   }
   console.log(JSON.stringify(results));
