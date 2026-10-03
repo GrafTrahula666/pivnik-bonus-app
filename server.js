@@ -3111,10 +3111,13 @@ app.post('/api/admin/users/:id/reissue-qr', authRequired, requireRole('admin'), 
 });
 
 app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), async (req, res, next) => {
-  const amount = Math.trunc(Number(req.body?.amount || 0));
+  const rawAmount = req.body?.amount;
+  const amount = typeof rawAmount === 'number'
+    || (typeof rawAmount === 'string' && /^[+-]?\d+$/.test(rawAmount.trim()))
+    ? Number(rawAmount) : NaN;
   const reason = String(req.body?.reason || '').trim();
   const requestKey = normalizeRequestKey(req.body?.requestKey);
-  if (!amount || !reason) return res.status(400).json({ error: 'Укажите сумму и причину.' });
+  if (!Number.isSafeInteger(amount) || !amount || !reason) return res.status(400).json({ error: 'Укажите сумму и причину.' });
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey корректировки.' });
   const client = await pool.connect();
   try {
@@ -3156,7 +3159,15 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
       return res.status(400).json({ error: 'У этого профиля включён постоянный безлимит бонусов.' });
     }
     const oldBalance = Number(walletResult.rows[0].balance || 0);
+    if (!Number.isSafeInteger(oldBalance)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Некорректный бонусный баланс клиента.' });
+    }
     const newBalance = oldBalance + amount;
+    if (!Number.isSafeInteger(newBalance)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Результирующий бонусный баланс выходит за безопасный диапазон.' });
+    }
     if (newBalance < 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Баланс не может стать отрицательным.' });
