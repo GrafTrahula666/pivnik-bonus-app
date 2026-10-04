@@ -307,3 +307,65 @@ initial 15/16 (VK /api/health timeout); bounded
 repeat 16/16, both DB health OK/release18a0fa4. This observation does not test
 Selectel or the signed production owner workflow. No live financial requests.
 Generated server files restored and byte-identical to main before commit.
+
+
+## Attribution / membership preflight — 2026-10-04 follow-up
+
+Fresh origin/main remains 18a0fa4. All worktrees/status/history/remotes/remote
+branches/open PRs reviewed; detached generated work preserved. MODULE-MAP read,
+no applicable AGENTS.md found. Prior #194 c06b088 passed release gate 1695.
+No foreign draft imported. Existing read-only inventory scripts were found, but
+no status-specific attribution diagnostic or approved membership migration.
+
+| Prerequisite | Found implementation | Evidence | Concrete gap | Next action |
+|---|---|---|---|---|
+| Transaction scope | Actual additive migration 009 | Source + isolated real SQL | Nullable historical rows remain unattributed; startup does not apply 009 | Verify an approved source mapping, never infer/backfill |
+| Memberships | Existing SQL repository/resolver | Existing HTTP fixture checks | No approved production schema/provisioning in main | Define schema/provisioning separately before activation |
+| Identity | Disabled read-only status auth | Signed HTTP/SQL proof | No mounted live status endpoint | Keep off until prerequisites verified |
+| Platform admin | Optional trusted-context contract | Explicit role not inferred | Assignment/provisioning absent | No legacy admin substitution |
+
+Added admin-adjustment-status-preflight.js, an injected manual read-only diagnostic.
+It checks current-schema attribution columns and membership repository columns/
+types through information_schema. Missing or incompatible columns return a
+schemaCompatible=false report without attempting data reads. Compatible attribution
+schema permits one aggregate SELECT: total adjustments, fully populated scope,
+incomplete attribution, location without tenant, active memberships and malformed
+active memberships. Counts stay decimal strings, reject unsafe/malformed/inconsistent
+driver evidence, and reveal no IDs, names, reasons, balances or transaction rows.
+Only SELECT statements; no migrations, repairs, backfill or enablement. The report
+always says activationApproved=false: schema shape and non-empty scope cannot
+prove business provenance or approve membership provisioning. This is a diagnostic
+of the attribution foundation, not proof of the complete runtime schema/security.
+
+Five tests use actual legacy DDL/migration 009 on disposable PGlite. Explicit
+membership fixture DDL is not proposed as a production migration. Missing schemas
+and wrong types stop before counts. A mixed dataset distinguishes fully scoped,
+legacy unknown, tenant-only, location-only and whitespace scope; owner/staff/invalid
+and revoked membership samples are counted. Repeated diagnostics preserve full
+users/journal/membership snapshots. Empty compatible schema still grants no
+activation approval. SQL outages, malformed result rows and invalid/inconsistent
+counts fail rather than reporting readiness. Preflight was not run against live
+production DB: no approved membership schema/mapping or live SQL access established in this stage.
+
+This completes the diagnostic part of the planned prerequisite review. The panel
+still has no status UI/endpoint; production enablement remains blocked by approved
+membership provisioning and verified attribution. No production writes/migrations,
+dependencies/env/services, merge/deploy or retirement. UI unchanged. Next useful
+small stage: review the existing correction write-attribution contract against
+status reads on isolated SQL, so a future scoped write and read cannot disagree.
+
+Pinned prerequisite SHA-256 at this review:
+
+- `migrations/009_spaceverse_tenant_attribution.sql`: `b06367a3dfe591a83d6c02bafce8efad785906d610ddcf440f8822df247e6b71`
+- `authorization-membership-repository.js`: `5a4d738bdfd09c6da994251272c89c2ae985c14bf360035f26b66df28b14a4dd`
+- `authorization-membership.js`: `0156af4a2c7ef60d51e36365c9e6b1492208202dddbee1d4c6c0dc5554263868`
+- `admin-adjustment-persistence.js`: `3938378e4fb0e3ce6dc49799dfac7faf5f58fa42686ac71a4030d43217f427dd`
+
+Validation: full materialized node --test 477/477 (436 main + 41 status cases);
+canonical focused rerun 41/41 after restoring generated output. Double materialize
+tracked/new-source hashes identical; check, VK startup parity, explicit syntax
+and diff-check pass. npm audit: unchanged 3 moderate HTTP findings (#180).
+Fresh public read-only probe 2026-10-04T04:05Z (07:05 Moscow): 16/16,
+both DB health OK/deployed release18a0fa4.
+Selectel/signed production owner workflow/concurrent PostgreSQL not newly checked.
+Both server files restored, unchanged relative to main. UI unchanged.
