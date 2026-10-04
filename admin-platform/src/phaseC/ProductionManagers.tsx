@@ -212,7 +212,7 @@ export function BrandingManager({venue,session}:{venue:ApiVenue;session:AdminSes
   const [draft,setDraft]=useState<BrandingData|null>(null),[save,setSave]=useState(initialSave)
   useEffect(()=>{if(data)setDraft(structuredClone(data))},[data])
   if(loading&&!draft)return <LoadingCard/>;if(error&&!draft)return <ErrorCard error={error} onRetry={reload}/>;if(!draft)return null
-  const primary=String(draft.branding.primaryAccent||'#B9FF66'),secondary=String(draft.branding.secondaryAccent||'#22262B')
+  const primary=String(draft.branding.primaryAccent||'#73bcd9'),secondary=String(draft.branding.secondaryAccent||'#172c36')
   const persist=async()=>{const current=draft;setSave({busy:true,error:'',ok:''});try{const saved=await apiPut<BrandingData>(path,{brandingEnabled:current.brandingEnabled===true,branding:current.branding,phone:current.phone,links:current.links,venueName:current.venue.name,address:current.venue.address});setData(saved);setDraft(structuredClone(saved));setSave({busy:false,error:'',ok:'Оформление сохранено.'})}catch(e){setSave({busy:false,error:e instanceof Error?e.message:'Не удалось сохранить.',ok:''})}}
   return <div className="page"><PageHead eyebrow="ФИРМЕННЫЙ СТИЛЬ" title="Оформление" sub={`${venue.companyName} → ${venue.name}`}
     actions={<><WriteGatePill enabled={session.capabilities.writes}/><button className="btn" disabled={!session.capabilities.writes||save.busy} onClick={()=>void persist()}><Save/>Сохранить</button></>}/>
