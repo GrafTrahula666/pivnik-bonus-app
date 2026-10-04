@@ -3049,6 +3049,13 @@ app.post('/api/admin/users/:id/role', authRequired, requireRole('admin'), async 
     );
     if (!target.rowCount) return res.status(404).json({ error: 'Пользователь не найден.' });
     if (String(target.rows[0].telegram_id) === ownerTelegramId) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
+    if (ownerVkId) {
+      const ownerVk = await pool.query(
+        `SELECT 1 FROM user_identities WHERE user_id = $1::bigint AND provider = 'vk' AND provider_user_id::text = $2 LIMIT 1`,
+        [req.params.id, ownerVkId]
+      );
+      if (ownerVk.rowCount) return res.status(400).json({ error: 'Роль владельца менять нельзя.' });
+    }
     await pool.query(
       `UPDATE users SET
          role = $1,
@@ -3354,7 +3361,9 @@ app.delete('/api/admin/shop-items/:id', authRequired, requireRole('admin'), asyn
 app.put('/api/admin/design/draft', authRequired, requireRole('admin'), async (req, res, next) => {
   try {
     const design = req.body?.design;
-    if (!design || typeof design !== 'object') return res.status(400).json({ error: 'Некорректные настройки дизайна.' });
+    if (!design || typeof design !== 'object' || Array.isArray(design) || JSON.stringify(design).length > 50_000) {
+      return res.status(400).json({ error: 'Некорректные настройки дизайна.' });
+    }
     await pool.query(
       'UPDATE app_settings SET draft = $1::jsonb, updated_by = $2, updated_at = NOW() WHERE id = 1',
       [JSON.stringify(design), req.user.id]

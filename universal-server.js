@@ -209,7 +209,7 @@ async function refreshDatabaseFingerprint() {
 }
 
 function requestAddress(req) {
-  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').pop().trim();
   return forwarded || String(req.socket?.remoteAddress || 'unknown');
 }
 
