@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 21 isolated return/replay/period cases here | Real provider document and concurrency absent | Unknown receipt count |
+| Cash/Evotor | #174 import/repository/analytics | 26 isolated import/receipt cases here | Real provider document and concurrency absent | Split fiscal sale identity |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -116,3 +116,38 @@ and independent PostgreSQL locking remain unverified as above.
 
 Next bounded evidence stage: unknown fiscal receipt count must keep average null
 instead of showing a fabricated zero or dividing by a partial receipt count.
+
+## Missing fiscal receipt evidence follow-up
+
+Fresh origin/main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5;
+previous #201 release gate 1714 passed. Remotes, history, origin branches,
+open PRs and worktrees rechecked. Foreign dirty gold-orbital image in
+admin-cancel-committed and six Business files preserved; not imported.
+MODULE-MAP read/unchanged; no applicable AGENTS found. Prior attached knowledge
+sources remain the basis; no product implementation restarted.
+
+Five additional checks use the actual pinned importer, repository and analytics:
+missing prints preserve 1000 kopecks of sales but receiptCount/averageCents are
+null and customer linking returns 409 without a link row; empty prints remain
+unknown on replay; mixing that sale with a known 2000-kopeck linked sale keeps
+all-cash count/average null, knownReceiptCount=1, while the loyalty cohort has
+one known receipt and average 2000; mixed replay preserves financial projection;
+later fiscal evidence for the same document yields two receipts and average 1500
+without a duplicate sale or inferred customer. Only a subsequent explicit QR link
+adds the formerly unknown sale to loyalty (one active, one repeat buyer).
+
+26/26 manual cases pass before and after materialization; all synthetic wallet
+and legacy journal snapshots remain unchanged. 436/436 node tests, npm check,
+manual syntax and diff-check pass. Two materializations have identical SHA256 for
+395 tracked files; generated files restored. npm audit retains three moderate
+existing findings. Read-only public probe responds 16/16 on 2026-10-04.
+
+No regression reproduced. Only verifier/report changed: the owner gains evidence
+against a misleading average, not an activated production feature. Real fiscal
+shape/count uniqueness, signed tenant authorization and concurrent PostgreSQL
+remain unverified. UI unchanged; desktop/mobile scenario not claimed.
+
+Next small scenario: split fiscal sales contribute their known print count but
+must not be attributed to one customer; explicit link must be refused. Real
+provider onboarding still requires verified anonymized documents and authorized
+configuration. No merge, deploy, real DB/data/config change or new dependencies.
