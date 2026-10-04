@@ -1,5 +1,54 @@
 # Scoped correction status evidence — 2026-10-04
 
+## Scoped writer / status compatibility follow-up
+
+Fresh origin/main remains 18a0fa4; remote branches/open PRs and worktrees checked.
+MODULE-MAP reread, no AGENTS.md found. Existing detached business generated changes
+preserved. Prior remote 41cafa1 passed release gate 1696. No foreign draft imported.
+
+Added six isolated SQL tests using the existing main createAdminAdjustmentPersistence
+and this branch's status reader, actual legacy users/wallets/transactions DDL and
+additive migration 009. No production code, route, UI or schema changes.
+
+Credit/debit scoped journal entries preserve tenant/location/actor/client/key/reason
+and produce exact historical balance evidence. Repeated status reads preserve full
+users/wallets/journal snapshots. Current wallet deliberately remains 999: the writer
+is journal persistence, not a wallet executor. Duplicate INSERT raises actual unique
+constraint 23505 and preserves one row; the status read still confirms exact evidence.
+Different command returns conflict, different actor/location unknown. This does NOT
+prove writer replay semantics: persistence does not implement idempotent replay.
+
+Foreign tenant, invalid location, injected transaction scope columns and disabled
+write gate fail before INSERT. Missing migration raises 42703; SQL outage propagates
+without a legacy fallback. Invalid input coverage is the existing persistence
+allowlist/scope contract, not amount/reason validation by an admin executor.
+
+Additional integration prerequisite confirmed: shared scoped persistence accepts
+staff location authorization and caller-provided staff_id; the status reader denies
+staff. This is a generic persistence boundary, not an admin authorization boundary.
+A future scoped admin executor must independently authorize owner/platform rights,
+bind staff_id to its trusted session and verify client tenant ownership before wallet
+mutation and journal insertion. This test uses deliberately injected contexts and
+does not establish client ownership or authenticated write provenance.
+
+The current production admin route still uses legacy persistence, global admin
+authorization, wallet locking and request-key replay matching. Its financial executor
+is not exercised here and no enablement is added. Approved membership provisioning,
+verified client/location attribution and scoped write authorization remain blockers.
+Next bounded stage: review the existing admin executor's trusted actor, client scope
+and same-key replay boundaries before designing disabled scoped integration.
+
+Validation: materialize twice with identical SHA256 for tracked and new files;
+materialized full node --test --test-concurrency=1 passes 483/483 (436 main + 47
+status cases); canonical focused status tests 47/47. Initial bare node --test
+exited 0 without a final suite summary after 50 case lines, so it is not counted
+as a complete pass. Sequential execution obtained the complete explicit totals.
+Check, VK startup parity, new test syntax and diff-check pass. Audit retains the
+same 3 moderate findings, separate #180. Generated runtime changes restored.
+Public read-only probe 2026-10-04T05:05Z (08:05 Moscow): 16/16, both DB health OK,
+deployed main18a0fa4. Signed production workflow, Selectel, production SQL and
+independent concurrent PostgreSQL not tested. No UI change; no new browser claim.
+
 Base: freshly fetched origin/main 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5.
 Branch: feat/admin-adjustment-status-contract-20261004, created from that main.
 Remotes, history, worktrees, origin branches and open PRs reviewed. Detached
