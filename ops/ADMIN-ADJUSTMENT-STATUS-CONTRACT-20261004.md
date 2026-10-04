@@ -249,3 +249,61 @@ both DB health reports OK, deployed release remains 18a0fa4. Previous VK
 Railway timeouts are not reproduced in this observation; Selectel and signed
 live owner workflow remain unverified. UI unchanged, no desktop/mobile claim.
 No production data/schema/routes changed; no merge/deploy or patch retirement.
+
+
+## Read-only status identity boundary — 2026-10-04 follow-up
+
+Fresh origin/main still 18a0fa4. Worktrees/status/history/remotes/remote branches
+and open PRs reviewed; detached generated changes preserved. MODULE-MAP read;
+no AGENTS.md found. Previous #194 c532f5a passed release gate 1694. Same bounded
+status PR continues; no foreign draft implementation copied.
+
+Added admin-adjustment-status-auth.js, unmounted/default-disabled. Its factory
+requires a trusted session verifier and query function plus explicit boolean
+enablement. It clears any pre-existing req.user/session and forbids caching.
+Only a bounded Bearer user session with known VK/TG platform, canonical bigint
+string uid, positive safe integer session version and no staff/other kind passes.
+Staff-session headers are rejected rather than resolved into a different actor.
+The actual platform-core verifier checks HMAC/expiry in the isolated integration.
+
+One parameterized SELECT reads id/session_version of the active, unmerged user;
+it checks driver evidence and version before publishing frozen {id} and a minimal
+session. It does not call getProfile, SELECT a wallet, calculate rewards, load
+appearance or issue a gift. Signed payload/body/header legacy or platform roles
+are not copied. Tenant authorization remains the existing fresh membership SQL
+resolver; this boundary does not grant platform-admin access. Missing/stale
+identity returns 401; malformed driver evidence/SQL failures propagate to the
+caller error handler without an identity. Disabled gate does no verification/SQL.
+
+Three unit cases cover configuration/default gate, invalid/out-of-scope driver
+rows/duplicates/outages, parameterized read and minimal immutable identity. Five
+HTTP cases add both VK/TG repeat confirmation with a gift-eligible actor name,
+no profile/reward queries, no wallet dependency for authentication, signed role
+spoofing rejection, invalid subjects/staff/unknown platform, fresh session-version
+revocation and renewed version, fresh membership revocation, SQL outage and
+default-disabled behavior. Full users/wallet/journal/membership snapshots stay
+unchanged outside fixture setup and explicit revocations. A signed bigint beyond
+PostgreSQL's range fails in the existing gateway's earlier SQL as fixture 503,
+before this middleware can issue 401; it never reaches membership/status SQL.
+That existing gateway behavior is recorded, not changed in this stage.
+
+This removes the profile-mutator dependency from the isolated recovery chain.
+No actual route is mounted in either server; production status/UI remains
+unavailable. Membership migration/provisioning, attribution and an approved
+platform-admin assignment are still missing. Sequential PGlite is not concurrent
+PostgreSQL; real signed launch/top-level gateway startup remain unverified.
+UI unchanged, no new desktop/mobile claim. No production data/schema changes,
+dependencies/services/env variables, paid resources, merge/deploy or retirement.
+Next bounded stage: pin and review the tenant attribution/membership activation
+prerequisites before any production mounting; do not silently supply them from
+fixture DDL or infer them from legacy global roles.
+
+Validation: full materialized node --test 472/472 (436 main + 36 status cases),
+canonical focused rerun 36/36 after restoring generated output. Double materialize
+tracked/new-source hashes identical; check, VK startup parity, explicit syntax
+and diff-check pass. npm audit: same existing 3 moderate HTTP findings (#180).
+Fresh read-only public probe at 2026-10-04T03:02–03:03Z (06:02–06:03 Moscow):
+initial 15/16 (VK /api/health timeout); bounded
+repeat 16/16, both DB health OK/release18a0fa4. This observation does not test
+Selectel or the signed production owner workflow. No live financial requests.
+Generated server files restored and byte-identical to main before commit.

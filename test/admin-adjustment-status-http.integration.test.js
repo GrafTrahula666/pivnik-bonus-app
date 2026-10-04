@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import express from 'express';
 import http from 'node:http';
+import { createAdminAdjustmentStatusAuth } from '../admin-adjustment-status-auth.js';
 import { PERSONAL_FRAME_OWNERSHIP_SQL } from '../personal-profile-frames.js';
 import { PGlite } from '@electric-sql/pglite';
 import { signSession, verifySession, effectiveRoleForAuthenticatedIdentity } from '../platform-core.js';
@@ -14,7 +15,7 @@ import { createAdminAdjustmentStatusHandler } from '../admin-adjustment-status-h
 
 const command = { amount: 25, reason: 'HTTP fixture', requestKey: 'http-status-key' };
 const secret = 'isolated-test-secret-never-production';
-async function fixture(t, { enabled = true, gateway = false, mainProfileProjection = false, owners = {} } = {}) {
+async function fixture(t, { enabled = true, gateway = false, mainProfileProjection = false, owners = {}, readOnlyIdentity = false, identityEnabled = true } = {}) {
   const db = new PGlite(); t.after(() => db.close());
   const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   for (const table of ['users', 'wallets', 'transactions']) {
@@ -79,7 +80,7 @@ async function fixture(t, { enabled = true, gateway = false, mainProfileProjecti
   const auth = new Function('pool','verifySession','getProfile','effectiveRoleForAuthenticatedIdentity','ownerTelegramId','ownerVkId',
     source.slice(start,end) + '\nreturn authRequired;')({ query }, token => verifySession(token,secret),
     loadProfile, effectiveRoleForAuthenticatedIdentity, owners.telegram || null, owners.vk || null);
-  app.post('/fixtures/tenants/:tenantId/locations/:locationId/clients/:clientId/status', auth,
+  app.post('/fixtures/tenants/:tenantId/locations/:locationId/clients/:clientId/status', readOnlyIdentity ? createAdminAdjustmentStatusAuth({query, verifySession:token=>verifySession(token,secret), readOnlyIdentityEnabled:identityEnabled}) : auth,
     createAdminAdjustmentStatusHandler({ resolveAuthorization: resolver,
       readStatus: createAdminAdjustmentStatusReader({ query, scopedReadsEnabled: true }), scopedStatusEnabled: enabled }));
   app.use((error,req,res,next) => res.status(503).set('Cache-Control','private, no-store').json({ error: 'Fixture service unavailable' }));
@@ -306,3 +307,52 @@ for (const platform of ['telegram','vk']) {
     assert.equal(h.calls.filter(c=>/FROM spaceverse_memberships|LIMIT 2/.test(c.sql)).length,0);
   });
 }
+
+for (const platform of ['telegram','vk']) {
+  test(`Read-only identity ${platform}: member status avoids all profile/reward writes and ignores signed role claims`, async t => {
+    const h=await fixture(t,{gateway:true,readOnlyIdentity:true});
+    await h.db.exec("UPDATE users SET first_name='Олеся',role='client' WHERE id=10");
+    const before=await h.snapshot(), usersBefore=(await h.db.query('SELECT * FROM users ORDER BY id')).rows;
+    for (let n=0;n<2;n++) {
+      const token=signSession({uid:'10',sv:1,platform,role:'admin',platformRole:'platform_admin',exp:Date.now()+60000},secret);
+      const r=await h.check({token}); assert.equal(r.status,200); assert.equal(r.body.state,'confirmed');
+      assert.equal(r.body.canClearPending,true); assert.equal(r.cache,'private, no-store');
+    }
+    assert.equal(h.profiles.length,0); assert.equal(h.ancillaryCalls.length,0);
+    assert.equal(h.calls.filter(c=>/JOIN wallets|beta_grants|user_frames|reward_grants|INSERT|UPDATE|DELETE/.test(c.sql)).length,0);
+    const token=signSession({uid:'13',sv:1,platform,role:'admin',platformRole:'platform_admin',exp:Date.now()+60000},secret);
+    assert.equal((await h.check({token,body:{...command,authenticatedActorId:'10'}})).status,403);
+    assert.deepEqual(await h.snapshot(),before);
+    assert.deepEqual((await h.db.query('SELECT * FROM users ORDER BY id')).rows,usersBefore);
+  });
+
+  test(`Read-only identity ${platform}: invalid subjects, fresh revocation and SQL errors fail closed`, async t => {
+    const h=await fixture(t,{gateway:true,readOnlyIdentity:true});
+    for (const claims of [{uid:'10',sv:0},{uid:'10',sv:'1'},{uid:'010',sv:1},{uid:'9223372036854775808',sv:1},
+      {uid:'10',sv:1,kind:'staff'},{uid:'10',sv:1,platform:'unknown'}]) {
+      h.calls.length=0;
+      const token=signSession({platform,exp:Date.now()+60000,...claims},secret);
+      // Existing gateway queries the signed subject first; an out-of-range
+      // bigint fails there as 503, before the new middleware can return 401.
+      assert.equal((await h.check({token})).status,claims.uid==='9223372036854775808'?503:401);
+      assert.equal(h.calls.filter(c=>/FROM spaceverse_memberships|LIMIT 2/.test(c.sql)).length,0);
+    }
+    assert.equal((await h.check({platform})).body.state,'confirmed');
+    await h.db.exec('UPDATE users SET session_version=2 WHERE id=10');
+    h.calls.length=0; assert.equal((await h.check({platform})).status,401);
+    assert.equal(h.calls.filter(c=>/FROM spaceverse_memberships|LIMIT 2/.test(c.sql)).length,0);
+    const token=signSession({uid:'10',sv:2,platform,exp:Date.now()+60000},secret);
+    assert.equal((await h.check({token})).body.state,'confirmed');
+    await h.db.exec('UPDATE spaceverse_memberships SET revoked_at=NOW() WHERE user_id=10');
+    assert.equal((await h.check({token})).status,403);
+    const before=await h.snapshot(); h.sessionOutage=true;
+    const r=await h.check({token}); assert.equal(r.status,503); assert.equal(r.body.canClearPending,undefined);
+    assert.deepEqual(await h.snapshot(),before);
+  });
+}
+
+test('Read-only identity default-disabled gate skips identity/membership/journal SQL', async t => {
+  const h=await fixture(t,{readOnlyIdentity:true,identityEnabled:false});
+  const r=await h.check(); assert.equal(r.status,503); assert.equal(r.cache,'private, no-store');
+  assert.equal(h.calls.length,0); assert.equal(h.profiles.length,0);
+});
