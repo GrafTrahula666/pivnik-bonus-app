@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 40 isolated import/receipt/status cases here | Real provider document and concurrency absent | Sync UI/service composition |
+| Cash/Evotor | #174 import/repository/analytics | 40 SQL + 16 local HTTP/browser cases here | Real provider document, signed tenant and concurrency absent | QR link via local HTTP |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -306,3 +306,53 @@ merge, deploy, route/UI change or patch retirement.
 Next bounded stage: compose the existing POS service and owner click handler
 through a local HTTP fixture with controlled provider responses, so the UI result
 is tied to actual import/status SQL rather than independently invented responses.
+
+
+## Local HTTP composition follow-up
+
+Fresh origin/main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5.
+Previous #201 commit 1041932 release gate 1719 passed. Open PRs, remotes,
+worktrees, history and pinned foreign branches checked; foreign dirty images and
+six Business files preserved. MODULE-MAP remains unchanged; no AGENTS found.
+
+Added manual scripts/verify-evotor-http-ui.mjs. It reads twelve exact pinned
+source files, emits SHA256 hashes, executes them in disposable temporary modules
+and removes them afterwards. It serves the original POS JS/CSS over loopback HTTP.
+The actual createPosService dashboard/sync, Evotor client response decoding,
+normalizer, import transactions, status SQL and analytics produce the browser
+response. Only provider URLs for the exact fixture store are redirected to a
+controlled local HTTP provider; no real provider calls or credentials. Fixture
+sale closes at run time, using the real Moscow today period. Native fetch wrapper
+and minimal HTML/session/API transport are diagnostic adapters, not production
+app.js/gateway authentication or retry/timeout implementations.
+
+16 composition cases pass, eight each at 390 and 1440 px: initial awaiting state
+without invented zero; owner click through provider/import/SQL displays 10 rubles;
+anonymous sale remains zero in loyalty; repeated sync retains one document and
+1000 kopecks; provider HTTP 401 retains cash and stores token_expired, with refresh
+showing the actual error state; viewer POST returns 403 before provider access;
+unauthenticated GET returns 401 and impossible calendar date returns 400;
+disabled connection hides cached metrics. Pending native second click sends one
+POST. Wallet snapshot and empty journal remain unchanged; no page JavaScript
+errors or viewport overflow. Each width gets a fresh in-memory DB.
+
+No product regression reproduced. The initial harness lacked an HTML content type
+and then an explicit UTF-8 charset; those diagnostic setup failures were corrected
+before the successful run. They are not production regressions. Actual migration
+012 runs only in disposable PGlite. Advisory lock/unlock are stubbed; synthetic
+legacy admin/viewer actor is not proof of signed owner or SaaS tenant isolation.
+
+Validation: canonical and materialized composition 16/16; existing isolated SQL
+40/40 and browser fixture 54/54; node --test 436/436; npm run check, explicit
+script syntax and git diff --check pass. Two materializations have identical
+SHA256 for 397 tracked/new files. npm audit still reports three moderate existing
+findings. Public read-only probe 16/16. Generated runtime files restored before
+commit. No production code, UI, routes, data, schema or configuration changed;
+no dependency, deployment, merge, sends or patch retirement.
+
+Owner benefit is verified separation of imported cash and anonymous loyalty totals
+in the existing draft, not a newly enabled production feature. Real provider
+format/configuration, signed full startup, independent PostgreSQL concurrency,
+keyboard/screen-reader use and premium-dark full shell remain unverified.
+Next bounded stage: original QR confirmation handler plus actual service.link via
+local HTTP, covering explicit identity, repeated link, conflict and role denial.
