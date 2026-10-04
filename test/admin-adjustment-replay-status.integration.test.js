@@ -25,6 +25,10 @@ async function fixture(t, { gateway = false, platform = 'telegram' } = {}) {
     ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1;
     ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN unlimited_bonus BOOLEAN DEFAULT false;
+    ALTER TABLE transactions ADD COLUMN cancel_request_key TEXT;
+    ALTER TABLE transactions ADD COLUMN cancel_reason TEXT;
+    ALTER TABLE transactions ADD COLUMN cancelled_by BIGINT REFERENCES users(id);
+    ALTER TABLE transactions ADD COLUMN cancelled_at TIMESTAMPTZ;
     INSERT INTO users(id,first_name,role) VALUES(10,'Owner','admin'),(11,'Other','admin'),(12,'Staff','staff'),(20,'Client','client');
     INSERT INTO wallets(user_id,balance) VALUES(20,100)`);
   let connections=0;
@@ -35,16 +39,21 @@ async function fixture(t, { gateway = false, platform = 'telegram' } = {}) {
   const app=express();app.use(express.json());
   const wire = new Function('app','pool','verifySession','getProfile','effectiveRoleForAuthenticatedIdentity',
     'ownerTelegramId','ownerVkId','normalizeRequestKey','hasUnlimitedBonus','createAdminAdjustmentPersistence',
+    'sendTelegramMessage','transactionResponse',
     fragment('async function authRequired(', 'async function resolveActingStaff(')+
     fragment('async function lockRequestKey(', 'function signSession(')+
-    fragment("app.post('/api/admin/users/:id/adjust'", "app.post('/api/admin/transactions/:id/cancel'"));
+    fragment("app.post('/api/admin/users/:id/adjust'", "app.post('/api/admin/transactions/:id/cancel'")+
+    fragment('async function cancelCompletedTransaction(', "app.get('/api/health'")+
+    fragment("app.post('/api/admin/transactions/:id/cancel'", "app.post('/api/admin/users/:id/cancel-limit/reset'"));
   // Authentication boundary is a fixture; SQL, route, role middleware and replay helpers are actual source.
   wire(app,pool,token=>{
     const match=String(token).match(/^(?:(telegram|vk):)?(1[012])$/);
     return match?{uid:match[2],sv:1,platform:match[1]||platform}:null;
   },
     async id=>(await query('SELECT id,role FROM users WHERE id=$1',[id])).rows[0],
-    role=>role,null,null,normalizeRequestKey,row=>row.unlimited_bonus===true,createAdminAdjustmentPersistence);
+    role=>role,null,null,normalizeRequestKey,row=>row.unlimited_bonus===true,createAdminAdjustmentPersistence,
+    async()=>{throw Error('Unexpected notification for denied cancellation');},
+    ()=>{throw Error('Unexpected successful cancellation serialization');});
   app.use((error,req,res,next)=>res.status(error.statusCode||500).json({error:error.message}));
   const http=app.listen(0,'127.0.0.1');await once(http,'listening');
   t.after(()=>new Promise(resolve=>http.close(resolve)));
@@ -73,7 +82,14 @@ async function fixture(t, { gateway = false, platform = 'telegram' } = {}) {
     server.listen(0,'127.0.0.1');await once(server,'listening');port=server.address().port;
     t.after(()=>new Promise(resolve=>server.close(resolve)));
   }
-  return {db,state,canonicalized,stopUpstream:()=>new Promise(resolve=>http.close(resolve)),get connections(){return connections;},
+  const request=async(path,body,token)=>{
+    const res=await fetch(`http://127.0.0.1:${port}${path}`,{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    return {status:res.status,body:await res.json()};
+  };
+  const ownerToken=gateway?`${platform}:${platform==='vk'?'11':'10'}`:'10';
+  return {db,state,canonicalized,cancel:(id,patch={},token=ownerToken)=>request(`/api/admin/transactions/${id}/cancel`,
+    {reason:'Cancel correction fixture',requestKey:'cancel-correction-key',...patch},token),stopUpstream:()=>new Promise(resolve=>http.close(resolve)),get connections(){return connections;},
     snapshot:async()=>({wallets:(await query('SELECT * FROM wallets ORDER BY user_id')).rows,
       journal:(await query('SELECT * FROM transactions ORDER BY id')).rows}),
     adjust:async(patch={},token=gateway?`${platform}:${platform==='vk'?'11':'10'}`:'10')=>{
@@ -157,5 +173,32 @@ for(const platform of ['telegram','vk']) {
     assert.equal(h.connections,0);assert.deepEqual(await h.snapshot(),before);
     h.state.ready=true;await h.stopUpstream();const failed=await h.adjust();assert.equal(failed.status,502);
     assert.equal(failed.body.ok,undefined);assert.equal(h.connections,0);assert.deepEqual(await h.snapshot(),before);
+  });
+}
+
+for(const platform of ['telegram','vk']) {
+  test(`${platform} correction cancellation is unsupported and original replay remains confirmed without data changes`,async t=>{
+    const h=await fixture(t,{gateway:true,platform});
+    for(const [amount,key] of [[25,'correction-credit-key'],[-10,'correction-debit-key']]) {
+      const patch={amount,requestKey:key};assert.equal((await h.adjust(patch)).status,200);
+      const before=await h.snapshot(),row=before.journal.find(r=>r.request_key===key);
+      const denied=await h.cancel(String(row.id),{requestKey:`cancel-${key}`});
+      assert.equal(denied.status,400);assert.match(denied.body.error,/нельзя отменить/);
+      assert.equal(denied.body.ok,undefined);assert.deepEqual(await h.snapshot(),before);
+      assert.equal((await h.cancel(String(row.id),{requestKey:`cancel-${key}`})).status,400);
+      const replay=await h.adjust(patch);assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);
+      assert.equal(replay.body.balance,Number(row.balance_after));assert.deepEqual(await h.snapshot(),before);
+      assert.equal(row.status,'completed');assert.equal(row.cancel_request_key,null);assert.equal(row.cancelled_by,null);
+      assert.equal(row.cancel_reason,null);assert.equal(row.cancelled_at,null);
+    }
+  });
+  test(`${platform} unsupported correction cancellation preserves access and input rejection`,async t=>{
+    const h=await fixture(t,{gateway:true,platform});await h.adjust();const before=await h.snapshot(),id=String(before.journal[0].id);
+    for(const [patch,token,status] of [[{},'',401],[{},`${platform}:12`,403],[{reason:'x'},undefined,400],
+      [{requestKey:''},undefined,400]]) {
+      const count=h.connections;assert.equal((await h.cancel(id,patch,token)).status,status);
+      assert.equal(h.connections,count);assert.deepEqual(await h.snapshot(),before);
+    }
+    assert.equal((await h.cancel('999')).status,404);assert.deepEqual(await h.snapshot(),before);
   });
 }

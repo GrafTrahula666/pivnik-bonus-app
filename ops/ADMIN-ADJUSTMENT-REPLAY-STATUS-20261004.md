@@ -93,6 +93,45 @@ Scope: this is the actual proxy transport, not the full public request dispatche
 consent checks, HMAC canonicalization or signed production authorization. Cancellation
 reversal remains a seeded fixture; independent concurrent PostgreSQL unverified.
 
-Next small stage: verify an actual cancel followed by repeat of the original
-correction through the same isolated gateway, with audit and wallet reversal checks.
+The proposed actual-cancel stage was checked below; main rejects adjustment mode,
+so that successful cancellation chain is not supported.
 Tenant-wallet activation remains blocked by authoritative ownership/actor provisioning.
+
+## Actual cancellation API boundary (2026-10-04)
+
+Fresh main remains 18a0fa4. Previous #199 release gate 1706 and VK hosting parity
+603 passed. No foreign draft imported; MODULE-MAP unchanged and no AGENTS found.
+
+New finding: cancelCompletedTransaction only permits accrue/redeem/beer_gift/shop.
+A manual adjustment cannot be cancelled through the existing API. Therefore the
+previous cancelled-adjustment regression proves a defensive stored-state invariant,
+not an adjustment-cancellation workflow currently offered by main. Do not report
+that seeded reversal as successful API cancellation, or enable a new cancel mode
+inside this narrowly scoped PR.
+
+Extended the same fixture with the actual checked-out cancellation helper and
+/api/admin/transactions/:id/cancel handler. Four new cases (two per VK/TG) test
+credit and debit -> actual cancellation request -> original correction replay.
+Cancellation returns 400 (unsupported operation); balance and full journal snapshot
+stay unchanged, including cancelled_by/at/reason/key being null. Repeating the
+cancel request remains denied. Original correction replay remains completed and
+returns its historical balance without reapplying money. Additional 401/403,
+invalid reason/key before connection and unknown transaction 404 preserve data.
+
+Notification and success-serialization callbacks fail the test if unexpectedly
+called: no simulated provider sends or fake successful cancellation responses.
+Authorization remains fixture-based. Actual successful cancellation of other modes,
+public dispatcher/consent/HMAC, signed production identities and independent
+PostgreSQL contention are not verified by this follow-up.
+
+Canonical focused 14/14; materialized full node --test 450/450. Materialize twice
+SHA256 equality across 395 tracked/new files, check, syntax, VK startup parity and
+diff-check passed. Audit unchanged: three old moderate findings. Public read-only
+probe 16/16; log completed 2026-10-04T12:07:25+00:00.
+Only tests/report extended; original seven-line defensive route fix unchanged.
+No new cancellation capability, UI, dependencies, production writes/config,
+merge or deploy. Foreign/Business work untouched.
+
+Next small stage: verify how the existing owner UI handles an unsupported adjustment
+cancellation and a non-completed replay, on desktop/mobile. Keep tenant-wallet
+activation blocked pending authoritative ownership and actor provisioning.
