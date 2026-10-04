@@ -12,7 +12,7 @@ Starter pack and SaaS knowledge base read earlier; no new requirements inferred.
 |---|---|---|---|---|
 | Cash/Evotor | #174, Business #176 | Branch inventory, prior fixtures | Live provider flow unavailable | Provider reconciliation fixture |
 | CRM/Customer 360 | Main directory, #115/#96 | #196/#197 isolated SQL evidence | History is not wallet ownership | Authoritative binding before activation |
-| Bonus corrections | Main HTTP handler; #182–195 drafts | Actual main replay HTTP/SQL in this PR | Cancelled correction returned success | This completed-state check |
+| Bonus corrections | Main HTTP handler; #182–195 drafts | Main HTTP/SQL and gateway transport in this PR | Cancelled correction returned success | Completed-state check + proxy proof |
 | Telegram | Main store/retry drafts | Existing regression tests | Live campaign not tested | Isolated provider retry |
 | Achievements/frames | Main engine, Business grants | Existing regression tests | Scoped grants not established | Audited grant scenario |
 | Rights/audit | Legacy roles + disabled membership foundation | Existing tests and fixture role middleware | Production tenant/actor provisioning unverified | Approved binding/membership evidence |
@@ -54,7 +54,7 @@ retirement. All generated runtime changes restored, retaining only the 7-line fi
 
 Gateway parity: universal-server.js has no direct adjustment handler; this POST
 passes consent checking and proxyRequest to the patched Express route. Existing
-startup parity passed; new direct gateway HTTP integration not run here.
+startup parity passed; the follow-up below also tests actual proxy HTTP transport.
 
 npm audit retains three pre-existing moderate findings, tracked separately by #180.
 Public read-only probe 16/16; log completed 2026-10-04T10:02:36+00:00.
@@ -62,7 +62,37 @@ No signed production admin workflow, independent concurrent PostgreSQL, real
 provider flow or production SQL inspection. UI unchanged, so desktop/mobile not
 retested. Production data/schema/config, dependencies, services, merge/deploy untouched.
 
-Next small stage: verify cancelled-correction response through the actual local
-VK/TG gateway proxy. Tenant wallet composition remains disabled pending authoritative
-ownership and actor provisioning; do not wire the main HTTP handler into a guard's
-transaction runner without extracting its transaction ownership first.
+## Gateway transport follow-up (2026-10-04)
+
+Fresh origin/main still 18a0fa4. Previous #199 release gate 1703 and VK native
+hosting parity 600 passed. Open PR #198 contains unrelated changes; not imported.
+Worktrees rechecked; detached Business modifications preserved.
+
+Extended the same fixture with two local HTTP servers: real checked-out gateway
+readRequestBody/sendJson/proxyRequest forwards to the real Express adjustment
+handler. Wrapper controls readiness/port; token canonicalizer, session verification
+and profile lookup remain explicit fixtures. VK actor 11 and Telegram actor 10
+are preserved into the actual SQL journal. Proxy method, path, body and response
+status/code are exercised with real HTTP, not a mocked fetch/SQL journal.
+
+Six new cases (three per platform) prove completed credit/debit replay and historical
+result, 409 with ADJUSTMENT_NOT_COMPLETED for cancelled/pending/declined/expired,
+full wallet/journal snapshots unchanged on rejection, 401/403 and invalid input
+before financial connection, SQL journal failure rollback and original-key recovery,
+changed-command conflict, readiness 503 and closed upstream 502 without execution.
+
+Canonical focused 10/10; materialized full node --test 446/446. Materialize twice
+SHA256 identical across 395 tracked/new files; check, syntax, VK startup parity and
+diff-check passed. Audit remains three old moderate findings (#180).
+Public read-only probe: 16/16; log completed 2026-10-04T11:06:42+00:00.
+
+Only tests/report extended; original 7-line route fix unchanged. Generated runtime
+files restored. No UI, dependencies, production data/config, merge or deploy.
+
+Scope: this is the actual proxy transport, not the full public request dispatcher,
+consent checks, HMAC canonicalization or signed production authorization. Cancellation
+reversal remains a seeded fixture; independent concurrent PostgreSQL unverified.
+
+Next small stage: verify an actual cancel followed by repeat of the original
+correction through the same isolated gateway, with audit and wallet reversal checks.
+Tenant-wallet activation remains blocked by authoritative ownership/actor provisioning.
