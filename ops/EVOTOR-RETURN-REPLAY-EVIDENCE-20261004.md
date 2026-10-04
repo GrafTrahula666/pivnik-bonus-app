@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 16 isolated return/replay cases here | Real provider document and concurrency absent | Cross-period linked return |
+| Cash/Evotor | #174 import/repository/analytics | 21 isolated return/replay/period cases here | Real provider document and concurrency absent | Unknown receipt count |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -85,3 +85,34 @@ Next small stage: linked sale and return on different Moscow dates, proving the
 return period uses its close date while client attribution can use an out-of-period
 base sale. Real provider onboarding remains blocked by verified anonymized receipts
 and authorized token/store configuration.
+
+## Cross-period follow-up
+
+Fresh origin/main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5; prior
+#201 release gate 1713 passed. No AGENTS found; MODULE-MAP unchanged/read.
+Five additional cases execute actual pinned SQL and analytics in a separate
+synthetic store: return arrives before its out-of-period sale; sale at
+2026-10-02T20:59:59.999Z belongs to October 2 Moscow; return at
+2026-10-02T21:00:00.000Z belongs to October 3 Moscow; later explicit QR link
+attributes that return even though its base is outside the selected period;
+combined interval reconciles both days; repeated import preserves each day's
+metrics and financial document projection. (The boundary and attribution
+assertions are grouped into five checks.) All 21 checks pass on canonical and
+materialized trees; every check preserves synthetic wallets and legacy journal.
+
+October 2: sales/net 1000 kopecks, returns 0, one receipt, average 1000.
+October 3: sales 0, returns 300, net -300, no sale receipts, average null,
+active buyers 0 and linked revenue share null. Combined October 2–3: net 700,
+one active buyer, no repeat buyer. Return identity does not imply a new purchase.
+
+Follow-up validation: 436/436 node tests, npm check and manual syntax passed.
+Two materializations produced identical SHA256 for 395 tracked files. The first
+hash inventory attempt failed because git quoted non-ASCII filenames; rerun used
+NUL-delimited paths and completed successfully. No code regression caused by this
+verification helper. npm audit still reports three existing moderate findings.
+Production routes and UI unchanged; no desktop/mobile claim. No new regression
+reproduced; production readiness, provider fiscal shape, signed tenant authorization
+and independent PostgreSQL locking remain unverified as above.
+
+Next bounded evidence stage: unknown fiscal receipt count must keep average null
+instead of showing a fabricated zero or dividing by a partial receipt count.
