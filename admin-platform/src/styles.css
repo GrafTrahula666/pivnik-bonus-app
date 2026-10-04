@@ -53,10 +53,7 @@
 @media(max-width:860px){.data-quality-list,.metric-definition-list{grid-template-columns:1fr}.capability-grid{grid-template-columns:1fr}.demo-watermark{top:62px;margin:-18px -14px 10px;padding:7px 14px}.phase-level-row{grid-template-columns:20px 25px 1fr}.phase-level-row>label{grid-column:auto}.tenant-confirm-strip{line-height:1.45}}
 @media(max-width:560px){.live-source-pill,.write-live-pill,.read-only-button{font-size:7px;padding:0 7px}.login-card{padding:20px}.demo-watermark{margin:-15px -10px 10px;padding:6px 10px;font-size:6.5px}.phase-level-row{display:grid;grid-template-columns:20px 1fr}.phase-level-row>*:not(svg):not(.level-index){grid-column:1/3}.tri-state button{padding:5px}.drawer-actions{display:grid;grid-template-columns:1fr 1fr}.drawer-actions .btn{width:100%}}
 
-/* THEME VARIANTS (preview): html[data-theme] */
-html[data-theme=glass] .app-shell{background:radial-gradient(circle at 50% -10%,rgba(115,188,217,.22),transparent 36%),linear-gradient(180deg,#032b3d 0%,#021f2d 48%,#01131c 100%)!important}
-html[data-theme=glass] .card,html[data-theme=glass] .toolbar{background:linear-gradient(145deg,rgba(51,133,166,.20),rgba(4,65,89,.30) 55%,rgba(2,31,45,.55));border:1px solid rgba(115,188,217,.22);box-shadow:inset 0 1px 0 rgba(160,219,242,.10),0 8px 24px rgba(0,0,0,.28);backdrop-filter:blur(6px)}
-html[data-theme=glass] .sidebar,html[data-theme=glass] .topbar{background:rgba(2,31,45,.72)!important;border-color:rgba(115,188,217,.16)!important}
-html[data-theme=soft]{--accent:#3385a6;--accent-ink:#f2f2f2}
-html[data-theme=soft] .btn,html[data-theme=soft] .brand-mark{background:linear-gradient(180deg,#3385a6,#2a6f8c);color:#f2f2f2}
-html[data-theme=soft] .app-shell{background:linear-gradient(180deg,#05202c,#04141c)!important}
+/* Dark-blue palette: #044159 #3385A6 #73BCD9 #A0DBF2 #F2F2F2 (soft accent) */
+:root{--accent:#3385a6;--accent-ink:#f2f2f2}
+.btn,.brand-mark{background:linear-gradient(180deg,#3385a6,#2a6f8c);color:#f2f2f2}
+.app-shell{background:linear-gradient(180deg,#05202c,#04141c)!important}
