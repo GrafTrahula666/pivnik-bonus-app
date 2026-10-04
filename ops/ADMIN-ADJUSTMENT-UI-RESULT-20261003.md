@@ -51,6 +51,7 @@ This is a browser recovery improvement, not tenant isolation or a new ledger.
 | Telegram | Main broadcast store/retry drafts | Existing regression suite | Real provider delivery unverified | Provider fixture retry |
 | Achievements/frames | Main engine/personal frames, Business grants | Existing regression suite | Tenant grant flow unverified | Audited grant scenario |
 | Rights/audit | Main roles/journal; #96 | Viewer controls; actual middleware with session fixture | Production tenant isolation not proven | Scoped cross-tenant checks |
+| Separate SaaS admin | admin-platform/production-pilot at 6b97192, including #200 | Remote history/inventory only | Its live workflow not independently verified here | Review existing implementation before any new feature |
 
 ## Verification
 
@@ -233,3 +234,49 @@ server routes, dependency declarations and deployment were not changed.
 
 Next small stage: design and verify a scoped read-only command-status contract
 before adding any history-based clearance of pending financial commands.
+
+
+## Actual recovery notification evidence — 2026-10-04
+
+Fresh origin/main remains 18a0fa4; this existing branch still derives directly
+from that base. Remotes, worktrees, history, open PRs and CI refreshed. #193 prior
+release gate 1690 and VK parity 598 passed; public startup observation 258 failed
+(previous recorded edge limitations remain unresolved). #199 latest release gate
+1711 and VK parity 606 passed. No #199/server or foreign implementation imported.
+New separate admin-platform/production-pilot head 6b97192 inventoried only. Dirty
+detached Business work preserved; unchanged MODULE-MAP already read, no AGENTS.
+
+The existing joint recovery verifier previously simulated toast DOM updates.
+It now delegates its recording wrapper to the actual checked-out toast() function,
+with its real CSS animation and timer. Real timeoutError/fetchWithTimeout/api,
+native prompts, same-tab sessionStorage, Express route, gateway proxy and SQL
+fixture were already exercised and remain unchanged. No product code changed.
+
+Canonical and materialized each pass 16 scenarios: VK/TG x 390/1440 px x credit/
+debit x post-commit partial-reply loss/journal-constraint rollback. Each uncertain
+request produces a visible warning; reload restores Retry; actual role-middleware
+403 keeps the original command; authorized same-key recovery yields one journal
+entry and separates saved balance from directory refresh failure. All three
+financial request bodies match, no new key is generated after reload, and snapshots
+remain unchanged on denials. 80 direct API denial/invalid/conflict/outage checks pass.
+
+48 actual toast presentations per run (uncertain, denied, saved): full opacity,
+solid background, contrast 13.51:1, viewport containment without text overflow,
+z-index above the modal. Actual timer clears show and fades to zero in all 16
+scenarios. Mobile/desktop warning/saved screenshots inspected after animation.
+This proves component presentation and same-tab recovery, not that 2800 ms is
+sufficient for human reading, complete app startup, premium-dark UX or signed
+production actor/tenant authorization. Fixture actor 10 is used on both platforms;
+headers are verified but real platform identity separation is not established here.
+
+Full materialized node --test 454/454; materialize twice SHA256 identical across
+398 tracked/new files; npm run check, script syntax, VK startup parity and diff-check
+passed. Audit unchanged: three existing moderate findings (#180). Public read-only
+probe 16/16 at 2026-10-04T15:06:38+00:00, not a proof of stable signed startup.
+Generated files restored; only verifier/report extended. No production data/schema/
+config, dependency changes, real provider sends, merge or deploy. Full production
+authorization, independent PostgreSQL contention, tab-close and multiple-tab
+recovery remain outside this evidence. Approved scoped bindings remain blockers.
+
+Next bounded stage: check return plus repeated receipt delivery in the already
+existing Evotor importer #174, before planning any new cash/dashboard implementation.

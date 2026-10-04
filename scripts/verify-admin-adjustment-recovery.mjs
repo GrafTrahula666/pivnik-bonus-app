@@ -70,9 +70,27 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
 const browser = await chromium.launch({ headless: true, ...(process.argv[2] ? { executablePath: process.argv[2] } : {}) });
+const toastSource = between(client, 'function toast(', 'function haptic(');
 const apiSource = between(client, 'function timeoutError(', 'function openModal(');
 const uiSource = between(client, 'function adminCrmActivityMarkup(', "$('#openProfileSettings')");
 const results = [];
+let toastPresentations = 0;
+async function verifyToast(page, width) {
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#toast')).opacity === '1');
+  const actual = await page.locator('#toast').evaluate(node => {
+    const style = getComputedStyle(node), rect = node.getBoundingClientRect();
+    const values = color => color.match(/[\d.]+/g).map(Number);
+    const luminance = color => { const rgb = values(color).slice(0,3).map(v => { v/=255; return v<=.04045 ? v/12.92 : ((v+.055)/1.055)**2.4; }); return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722; };
+    const a=luminance(style.color),b=luminance(style.backgroundColor);
+    return { alpha:values(style.backgroundColor)[3]??1, contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),
+      left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,
+      noOverflow:node.scrollWidth<=node.clientWidth&&node.scrollHeight<=node.clientHeight,
+      aboveModal:Number(style.zIndex)>Number(getComputedStyle(document.querySelector('#adminUsersModal')).zIndex) };
+  });
+  assert.equal(actual.alpha,1); assert.ok(actual.contrast>=4.5);
+  assert.ok(actual.left>=0&&actual.right<=width&&actual.top>=0&&actual.bottom<=950&&actual.noOverflow);
+  assert.equal(actual.aboveModal,true); toastPresentations++; return actual;
+}
 try {
   for (const width of [390, 1440]) for (const platform of ['vk', 'telegram']) for (const amount of [25, -25]) for (const failure of ['socket-loss', 'journal-write']) {
     await h.db.exec('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS fixture_adjust_write_failure; DELETE FROM transactions; UPDATE wallets SET balance=100');
@@ -91,7 +109,7 @@ try {
     let dialogs = 0; const statuses = [];
     page.on('response', response => { if (response.url().endsWith('/api/admin/users/20/adjust')) statuses.push(response.status()); });
     page.on('dialog', dialog => { dialogs++; return dialog.accept(dialog.type() === 'confirm' ? undefined : dialog.message().startsWith('Изменение') ? String(amount) : 'Fixture correction'); });
-    const mount = async () => page.evaluate(({ apiSource, uiSource, platform, amount }) => {
+    const mount = async () => page.evaluate(({ apiSource, uiSource, toastSource, platform, amount }) => {
       document.documentElement.classList.add(`platform-${platform}`);
       document.querySelector('#bootScreen')?.classList.add('hidden');
       const modal = document.querySelector('#adminUsersModal'); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false');
@@ -99,22 +117,25 @@ try {
       const api = new Function('state', 'APP_VERSION', 'IS_VK', 'API_TIMEOUT_MS', 'delay', apiSource + '\nreturn api;')(
         state, 'isolated-recovery', platform === 'vk', 3000, ms => new Promise(resolve => setTimeout(resolve, ms)));
       const fixture = { state, api, messages: [], keys: 0 };
+      const actualToast = new Function('$', toastSource + '\nreturn toast;')(selector => document.querySelector(selector));
       const wire = new Function('state', '$', '$$', 'api', 'IS_VK', 'prompt', 'requestId', 'toast', 'refreshAdminUsersDirectory',
         'fmt', 'fmtLiters', 'escapeHtml', 'compactBonus', 'roleCanWrite', 'ADMIN_CRM_STATUS_LABELS', uiSource + '\nreturn {renderUsers,adjustAdminBonus};');
       const handlers = wire(state, selector => document.querySelector(selector), selector => [...document.querySelectorAll(selector)], api,
         platform === 'vk', window.prompt.bind(window), () => `contract-${platform}-${amount}-${++fixture.keys}`, text => {
-          fixture.messages.push(text); const node = document.querySelector('#toast'); node.textContent = text; node.classList.add('show');
+          fixture.messages.push(text); actualToast(text);
         }, async () => { throw Error('Isolated directory read outage'); }, String, String,
         value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]),
         String, role => role === 'admin', {});
       handlers.renderUsers([{ id: '20', name: 'Тестовый клиент', role: 'client', balance: 100, crmStatus: 'active', telegramId: '123', beerPaidLitersTotal: 0, beerGiftLitersBalance: 0 }], '#allUsersList');
       window.fixture = fixture;
-    }, { apiSource, uiSource, platform, amount });
+    }, { apiSource, uiSource, toastSource, platform, amount });
     await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'networkidle' }); await mount();
     await page.locator('[data-adjust-user]').click();
     await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /не подтверждён/);
     assert.equal(transport.posts.length, 1);
+    await verifyToast(page, width);
+    await page.screenshot({ path: path.join(out, `${platform}-${width}-${amount}-${failure}-uncertain.png`) });
     const beforeRecovery = await h.snapshot();
     if (failure === 'socket-loss') {
       assert.equal(transport.drops, 1);
@@ -133,12 +154,17 @@ try {
     await page.locator('[data-adjust-user]').click(); await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /не подтверждён/);
     assert.match(await page.locator('#toast').textContent(), /Нет доступа.*Исходный ключ сохранён/);
-    await page.screenshot({ animations: 'disabled', path: path.join(out, `${platform}-${width}-${amount}-${failure}-denied.png`) });
+    await verifyToast(page, width);
+    await page.screenshot({ path: path.join(out, `${platform}-${width}-${amount}-${failure}-denied.png`) });
     assert.deepEqual(await h.snapshot(), beforeRecovery);
     assert.equal(await page.locator('[data-adjust-user]').textContent(), 'Повторить');
     await page.evaluate(() => { fixture.state.token = '10'; fixture.messages = []; });
     await page.locator('[data-adjust-user]').click(); await page.waitForFunction(() => fixture.messages.length > 0);
     assert.match(await page.locator('#toast').textContent(), /Корректировка сохранена.*Список не обновился/);
+    const savedToast = await verifyToast(page, width);
+    await page.screenshot({ path: path.join(out, `${platform}-${width}-${amount}-${failure}-saved.png`) });
+    await page.waitForFunction(() => !document.querySelector('#toast').classList.contains('show'));
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#toast')).opacity === '0');
     const recovered = await h.snapshot();
     assert.equal(Number(recovered.wallets[0].balance), 100 + amount); assert.equal(recovered.journal.length, 1);
     assert.equal(String(recovered.journal[0].staff_id), '10');
@@ -171,10 +197,10 @@ try {
     assert.equal(external, 502); assert.deepEqual(await h.snapshot(), recovered); transport.mode = 'normal';
     assert.equal(h.connections, h.releases);
     const box = await page.locator('#allUsersList').boundingBox(); assert.ok(box && box.x >= -1 && box.x + box.width <= width + 1);
-    results.push({ platform, width, amount, failure, initialBalance: Number(beforeRecovery.wallets[0].balance), savedBalance: 100 + amount, journalRollback: failure === 'journal-write', postCommitSocketDrop: failure === 'socket-loss', reloadRecovery: true, journalEntries: 1, denialChecks: 5 });
+    results.push({ platform, width, amount, failure, initialBalance: Number(beforeRecovery.wallets[0].balance), savedBalance: 100 + amount, journalRollback: failure === 'journal-write', postCommitSocketDrop: failure === 'socket-loss', reloadRecovery: true, journalEntries: 1, denialChecks: 5, realToastPresentations: 3, toastContrast: savedToast.contrast, toastAutoHide: true });
     await context.close();
   }
-  console.log(JSON.stringify({ scenarios: results.length, denialChecks: results.length * 5, results }, null, 2));
+  console.log(JSON.stringify({ scenarios: results.length, denialChecks: results.length * 5, realToastPresentations: toastPresentations, signedProductionAuthorizationVerified: false, fullApplicationBootVerified: false, results }, null, 2));
   await fs.writeFile(path.join(out, 'results.json'), JSON.stringify(results, null, 2));
 } finally {
   await browser.close(); await new Promise(resolve => server.close(resolve));
