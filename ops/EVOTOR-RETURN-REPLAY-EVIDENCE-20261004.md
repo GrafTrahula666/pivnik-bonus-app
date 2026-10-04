@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 26 isolated import/receipt cases here | Real provider document and concurrency absent | Split fiscal sale identity |
+| Cash/Evotor | #174 import/repository/analytics | 31 isolated import/receipt cases here | Real provider document and concurrency absent | Connection-state contract |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -151,3 +151,44 @@ Next small scenario: split fiscal sales contribute their known print count but
 must not be attributed to one customer; explicit link must be refused. Real
 provider onboarding still requires verified anonymized documents and authorized
 configuration. No merge, deploy, real DB/data/config change or new dependencies.
+
+## Split fiscal sale follow-up
+
+Fresh origin/main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5;
+previous #201 release gate 1715 passed. Origin branches/open PRs/history/remotes
+and worktrees checked again; foreign dirty frame image and six Business files
+preserved. MODULE-MAP read/unchanged, no AGENTS found; previously read starter
+and knowledge base retained. Existing #174 implementation is still pinned,
+not copied into production or startup.
+
+Five new isolated checks execute actual normalization/import/customer-link/SQL/
+analytics functions: one 1000-kopeck sale with two fiscal print records gives
+one sale document, two receipts and average 500, while QR linking returns 409
+without inserting a customer link; its 300-kopeck return gives cash net 700,
+retains sale average 500 and never inherits a customer from the split base;
+one print with two print groups likewise refuses linking; page replay and
+repeated refusal preserve financial document projection, links and metrics;
+a previously linked one-print sale later updated to two prints disappears
+from loyalty while its recorded confirming actor/time/link remain intact.
+Combined synthetic sales: gross 4000, returns 300, net 3700, five sale receipts,
+average 800. No wallet or legacy journal changes after any check.
+
+31/31 manual cases pass on canonical/materialized trees; 436/436 node tests,
+npm check, manual syntax and diff-check pass. Two materializations have identical
+SHA256 for 395 tracked files. npm audit retains three existing moderate findings.
+Public read-only probe initially 8/16: all VK requests timed out; one retry
+passed 16/16. This does not prove the cause or absence of intermittent VK issues.
+
+Verification completed 2026-10-04T19:01:38.879355+00:00.
+
+No regression reproduced; only verifier/report changed. Evidence protects the
+owner from attributing an entire split sale to a single customer; no new panel
+feature activated. Fiscal print uniqueness and actual provider format still
+need verified anonymized real documents. Signed production tenant authorization
+and independent PostgreSQL concurrency remain unverified. UI/routes untouched,
+no desktop/mobile claim, no patch retirement, merge, deploy, real DB/data/config
+change or new dependency.
+
+Next small stage: existing connection-state contract (not connected, schema
+required, awaiting sync, syncing, connected, error) so missing setup cannot be
+presented as confirmed zero sales. Keep provider onboarding blockers explicit.
