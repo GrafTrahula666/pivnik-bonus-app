@@ -193,3 +193,59 @@ time out from this execution network. This is a new reachability observation,
 not proof of a global outage or of its cause, and does not test Selectel itself.
 Server/network logs are unavailable. It is independent of these unpublished,
 unmounted test changes; no live financial calls or data mutations were made.
+
+
+## Main profile SQL / rights projection — 2026-10-04 follow-up
+
+Freshly fetched main remains 18a0fa4. Remote branches, open PRs, remotes/history
+and worktrees rechecked; detached generated work preserved. MODULE-MAP read,
+no applicable AGENTS.md found. Prior #194 c75c612 passed release gate 1693.
+No foreign draft code incorporated. Only test fixture and report changed.
+
+Added an opt-in fixture that extracts actual server.js getProfile SQL and return
+projection and runs it through actual authRequired, gateway and scoped status
+adapter. It uses actual personal-frame ownership SQL and legacy beer_loyalty /
+beta_grants DDL. user_frames / reward_grants read columns and memberships are
+explicit fixture DDL. Personal gift/frame mutators, achievement/spend/status and
+appearance dependencies are explicit stubs; this is not full live getProfile.
+Older fixture-only platform-admin mapping is not used by the new four cases.
+
+Both VK and Telegram confirm repeated owner status using an actual SQL profile
+whose legacy role is client but whose SQL tenant membership is owner. The
+profile has no platformRole field. A legacy admin formerly given artificial
+platform rights by the older fixture is denied with actual main projection,
+even when body claims platform_admin. A signed configured owner identity is
+promoted by actual authRequired only to legacy admin and still receives 403
+without membership. Removing that actor's wallet makes the actual profile JOIN
+return no row and authentication returns 401 before membership/journal reads,
+even after adding an active membership. Successful/denied reads preserve fixture
+wallet, journal and membership snapshots. No global role-to-tenant inference.
+
+Concrete activation gaps discovered by source inspection:
+- Main getProfile does not provide trusted platformRole: explicit platform-admin
+  provisioning/resolution is unimplemented, not supplied by this test fixture.
+- Main authRequired invokes getProfile, which calls applyOlesyaGift and
+  applyVladislavFrame before SELECT. Eligible personal gift code can update the
+  wallet/journal and frame code can update users. This existing behavior was
+  not changed; full production authentication cannot be called read-only based
+  on these tests with explicit mutator stubs. The new status route must have a
+  read-only identity boundary before activation.
+- Approved membership schema/provisioning and verified attribution remain
+  prerequisites. No production endpoint/UI is mounted by this PR.
+
+Initial canonical tests passed, but the first materialized run failed four new
+cases because its getProfile additionally SELECTs reward_grants. Adding the
+explicit fixture read schema repaired the test harness; product code unchanged.
+Next bounded stage: isolated read-only session/identity boundary for this status
+adapter, without changing legacy auth or implicitly granting platform rights.
+
+Final checks: materialized node --test 464/464 (436 main + 28 status cases);
+canonical reader/HTTP/gateway/profile rerun 28/28 after restoring generated
+runtime files. Final double materialize tracked SHA-256 identical. npm run
+check, VK startup parity, explicit syntax and diff-check pass. npm audit still
+reports the same 3 moderate findings (#180); no dependencies changed.
+Fresh read-only public probe 2026-10-04T01:59Z (04:59 Moscow) responds 16/16,
+both DB health reports OK, deployed release remains 18a0fa4. Previous VK
+Railway timeouts are not reproduced in this observation; Selectel and signed
+live owner workflow remain unverified. UI unchanged, no desktop/mobile claim.
+No production data/schema/routes changed; no merge/deploy or patch retirement.

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import express from 'express';
 import http from 'node:http';
+import { PERSONAL_FRAME_OWNERSHIP_SQL } from '../personal-profile-frames.js';
 import { PGlite } from '@electric-sql/pglite';
 import { signSession, verifySession, effectiveRoleForAuthenticatedIdentity } from '../platform-core.js';
 import { createSqlMembershipRepository } from '../authorization-membership-repository.js';
@@ -13,7 +14,7 @@ import { createAdminAdjustmentStatusHandler } from '../admin-adjustment-status-h
 
 const command = { amount: 25, reason: 'HTTP fixture', requestKey: 'http-status-key' };
 const secret = 'isolated-test-secret-never-production';
-async function fixture(t, { enabled = true, gateway = false } = {}) {
+async function fixture(t, { enabled = true, gateway = false, mainProfileProjection = false, owners = {} } = {}) {
   const db = new PGlite(); t.after(() => db.close());
   const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   for (const table of ['users', 'wallets', 'transactions']) {
@@ -33,6 +34,15 @@ async function fixture(t, { enabled = true, gateway = false } = {}) {
       (12,'tenant-a','loc-a','staff',NULL),(15,'tenant-a',NULL,'owner',NOW());
     INSERT INTO transactions(request_key,client_id,staff_id,mode,status,bonus_earned,balance_after,reason,tenant_id,location_id)
     VALUES('http-status-key',20,10,'adjustment','completed',25,125,'HTTP fixture','tenant-a','loc-a');`);
+  if (mainProfileProjection) {
+    for (const table of ['beer_loyalty','beta_grants']) {
+      const schema = source.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\([\\s\\S]*?\\n      \\)`));
+      assert.ok(schema); await db.exec(schema[0]);
+    }
+    // Only ownership columns read by getProfile; fixture DDL is not a migration.
+    await db.exec("CREATE TABLE user_frames(user_id BIGINT REFERENCES users(id), frame_id TEXT); CREATE TABLE reward_grants(user_id BIGINT REFERENCES users(id), source TEXT, achievement_code TEXT, created_at TIMESTAMPTZ); INSERT INTO wallets(user_id,balance) SELECT id,0 FROM users WHERE id<>20");
+  }
+  const profiles = [], ancillaryCalls = [];
   const calls = [], gatewayCalls = []; let outage = false, sessionOutage = false;
   const query = async (sql, params) => {
     calls.push({ sql, params });
@@ -44,12 +54,31 @@ async function fixture(t, { enabled = true, gateway = false } = {}) {
   const app = express(); app.use(express.json());
   const start = source.indexOf('async function authRequired('), end = source.indexOf('async function resolveActingStaff(', start);
   assert.ok(start >= 0 && end > start);
+  let loadProfile = async id => {
+    const r = await db.query('SELECT id,role FROM users WHERE id=$1', [id]);
+    return r.rows[0] ? {...r.rows[0],id:String(r.rows[0].id),platformRole:String(id)==='14'?'platform_admin':null} : null;
+  };
+  if (mainProfileProjection) {
+    const profileStart=source.indexOf('async function getProfile('), profileEnd=source.indexOf('async function deleteAccountData(',profileStart);
+    assert.ok(profileStart>=0 && profileEnd>profileStart);
+    // Execute the actual SQL and return projection. Unrelated profile rewards,
+    // appearance, achievements/spend/status are explicit fixture dependencies.
+    const helpers = {
+      applyOlesyaGift:async (...args)=>ancillaryCalls.push(['gift',String(args[1])]),
+      applyVladislavFrame:async (...args)=>ancillaryCalls.push(['frame',String(args[1])]),
+      PERSONAL_FRAME_OWNERSHIP_SQL, getRollingSpend:async()=>0,
+      getUserEarnedAchievementState:async()=>({earned:[],unannounced:[]}),
+      hasUnlimitedBonus:()=>false, getEffectiveStatus:()=>({name:'Fixture',bonusPercent:5,discountPercent:0,minCents:0}),
+      profileFrameFromRow:row=>row.profile_frame, availableFramesFromRow:()=>[], achievementsFromRow:()=>[],
+      UNLIMITED_BONUS_BALANCE:0, TERMS_VERSION:'fixture', rubles:cents=>Number(cents)/100,
+      litersFromMl:ml=>Number(ml||0)/1000, BEER_PAID_TARGET_ML:15000
+    };
+    const actualProfile = new Function('pool',...Object.keys(helpers),source.slice(profileStart,profileEnd)+'\nreturn getProfile;')({query},...Object.values(helpers));
+    loadProfile = async id => {const profile=await actualProfile(id); profiles.push(profile); return profile;};
+  }
   const auth = new Function('pool','verifySession','getProfile','effectiveRoleForAuthenticatedIdentity','ownerTelegramId','ownerVkId',
     source.slice(start,end) + '\nreturn authRequired;')({ query }, token => verifySession(token,secret),
-    async id => {
-      const r = await db.query('SELECT id,role FROM users WHERE id=$1', [id]);
-      return r.rows[0] ? { ...r.rows[0], id: String(r.rows[0].id), platformRole: String(id) === '14' ? 'platform_admin' : null } : null;
-    }, effectiveRoleForAuthenticatedIdentity, null, null);
+    loadProfile, effectiveRoleForAuthenticatedIdentity, owners.telegram || null, owners.vk || null);
   app.post('/fixtures/tenants/:tenantId/locations/:locationId/clients/:clientId/status', auth,
     createAdminAdjustmentStatusHandler({ resolveAuthorization: resolver,
       readStatus: createAdminAdjustmentStatusReader({ query, scopedReadsEnabled: true }), scopedStatusEnabled: enabled }));
@@ -81,7 +110,7 @@ async function fixture(t, { enabled = true, gateway = false } = {}) {
     t.after(() => new Promise(resolve => gatewayServer.close(resolve)));
     endpointPort = gatewayServer.address().port;
   }
-  return { db, calls, gatewayCalls,
+  return { db, calls, gatewayCalls, profiles, ancillaryCalls,
     set outage(value) { outage = value; }, set sessionOutage(value) { sessionOutage = value; },
     closeBackend: () => new Promise(resolve => server.close(resolve)),
     async snapshot() { return { wallets:(await db.query('SELECT * FROM wallets')).rows,
@@ -242,3 +271,38 @@ test('Gateway upstream connection failure returns 502 without confirming or writ
   assert.equal(h.calls.filter(c=>/FROM spaceverse_memberships|LIMIT 2/.test(c.sql)).length,0);
   assert.deepEqual(await h.snapshot(),before);
 });
+
+for (const platform of ['telegram','vk']) {
+  test(`Profile ${platform}: actual SQL/projection authenticates member without fixture platform privileges`, async t => {
+    const h=await fixture(t,{gateway:true,mainProfileProjection:true});
+    await h.db.exec("UPDATE users SET role='client' WHERE id=10");
+    const before=await h.snapshot();
+    for (let n=0;n<2;n++) assert.equal((await h.check({platform})).body.state,'confirmed');
+    assert.equal(h.profiles.length,2);
+    for (const p of h.profiles) {assert.equal(p.id,'10'); assert.equal(p.role,'client'); assert.equal(Object.hasOwn(p,'platformRole'),false);}
+    assert.deepEqual(h.ancillaryCalls,[['gift','10'],['frame','10'],['gift','10'],['frame','10']]);
+    // User 14 only has artificial platform rights in the older projection fixture.
+    const denied=await h.check({platform,user:'14',body:{...command,platformRole:'platform_admin'}});
+    assert.equal(denied.status,403);
+    assert.equal(Object.hasOwn(h.profiles.at(-1),'platformRole'),false);
+    assert.deepEqual(await h.snapshot(),before);
+  });
+
+  test(`Profile ${platform}: configured legacy owner identity does not imply tenant or platform membership`, async t => {
+    const h=await fixture(t,{gateway:true,mainProfileProjection:true,owners:{[platform]:'700'}});
+    await h.db.exec("UPDATE users SET role='client' WHERE id=13");
+    const before=await h.snapshot();
+    const token=signSession({uid:'13',sv:1,platform,pid:'700',exp:Date.now()+60000},secret);
+    const r=await h.check({token,body:{...command,platformRole:'platform_admin',tenantId:'tenant-a'}});
+    assert.equal(r.status,403); assert.equal(r.body.canClearPending,undefined);
+    // Actual authRequired promotes only the legacy role from a configured identity.
+    assert.equal(h.profiles[0].role,'admin'); assert.equal(Object.hasOwn(h.profiles[0],'platformRole'),false);
+    assert.equal(h.calls.filter(c=>/LIMIT 2/.test(c.sql)).length,0);
+    assert.deepEqual(await h.snapshot(),before);
+    // Change to an active owner SQL membership, then remove the authentication
+    // prerequisite wallet: no prior context can survive a missing SQL profile.
+    await h.db.exec("INSERT INTO spaceverse_memberships VALUES(13,'tenant-a',NULL,'owner',NULL); DELETE FROM wallets WHERE user_id=13");
+    h.calls.length=0; assert.equal((await h.check({token})).status,401);
+    assert.equal(h.calls.filter(c=>/FROM spaceverse_memberships|LIMIT 2/.test(c.sql)).length,0);
+  });
+}
