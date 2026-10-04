@@ -3144,6 +3144,13 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
         adjustmentAmount: amount,
         reason
       });
+      if (existing.rows[0].status !== 'completed') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          code: 'ADJUSTMENT_NOT_COMPLETED',
+          error: 'Корректировка больше не подтверждена. Проверьте историю операций.'
+        });
+      }
       await client.query('COMMIT');
       return res.json({
         ok: true,
