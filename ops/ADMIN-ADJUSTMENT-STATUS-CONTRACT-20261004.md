@@ -141,3 +141,55 @@ Next bounded verification: forward this isolated HTTP status adapter through the
 actual local gateway proxy and verify session identity/error parity. Production
 activation still requires an approved membership schema/provisioning and verified
 attribution; those are not silently supplied by the test fixture.
+
+
+## Local gateway verification — 2026-10-04 follow-up
+
+Fresh origin/main remains 18a0fa4; all remote branches/open PRs/worktrees and
+history reviewed. Existing detached generated changes preserved; no AGENTS.md
+found. Previous #194 head 99828f7 passed release gate 1692. Continue the same
+bounded status scenario, without incorporating #193 or other draft code.
+
+Changed only the HTTP integration test and this report. The optional gateway
+fixture executes actual canonicalizeSessionToken, readRequestBody, sendJson and
+proxyRequest extracted from universal-server.js, actual HMAC verification and
+SQL users/session-version reads. A real loopback HTTP gateway forwards to the
+existing Express/auth/membership/status fixture. Top-level dispatch, process
+startup and the exception-to-503 wrapper remain fixture wiring; this does not
+claim coverage of the entire deployed gateway. Production getProfile/platform
+role binding and approved membership storage remain outside the fixture proof.
+
+Five new cases exercise both VK and Telegram signed sessions. Repeated credit
+and debit reads preserve complete wallet/journal/membership snapshots and return
+historical balances. Gateway SQL validates the signed actor; forged body/query/
+header claims, foreign owner, staff, revoked owner and legacy global admin cannot
+confirm. Foreign tenant fails; wrong location remains unknown. Invalid command
+and changed reason fail or conflict. Empty, tampered, expired and stale sessions
+are rejected without membership/journal reads; an invalid staff-session header
+is rejected by the real proxy. Revocation is loaded afresh. Membership/session
+SQL outages and an actually closed upstream listener cannot confirm; upstream
+failure returns the real proxy's 502 response. No SQL writes occur outside setup
+and explicit fixture revocation.
+
+Full materialized node --test: 460/460 (436 main + 24 status tests). Double
+materialize hashes identical; npm run check, VK startup parity and diff-check
+pass. npm audit: unchanged 3 moderate findings, separate #180. Generated runtime
+files restored; server.js and universal-server.js unchanged relative to main.
+UI unchanged; desktop/mobile is not newly exercised. Sequential PGlite is not
+independent concurrent PostgreSQL. No production writes/schema changes, new
+services/dependencies/env variables, merge, deployment or patch retirement.
+
+The panel itself still has no status endpoint or UI: this verifies a prerequisite
+for safe owner recovery, not a completed user-facing feature. Activation remains
+blocked on approved membership migration/provisioning, verified tenant attribution
+and trusted production profile/context binding. Next bounded stage: verify that
+profile/platform rights binding on isolated SQL before considering route mounting.
+
+Canonical focused rerun after restoring generated files: 24/24. Read-only
+production observation at 2026-10-04T01:01–01:02Z (04:01–04:02 Moscow): both
+initial and bounded repeat reach 8/16 responses. Telegram's eight public URLs
+respond, DB health is OK, release remains 18a0fa4. All eight VK Railway URLs
+time out from this execution network. This is a new reachability observation,
+not proof of a global outage or of its cause, and does not test Selectel itself.
+Server/network logs are unavailable. It is independent of these unpublished,
+unmounted test changes; no live financial calls or data mutations were made.
