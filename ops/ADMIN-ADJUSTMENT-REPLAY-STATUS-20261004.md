@@ -16,6 +16,7 @@ Starter pack and SaaS knowledge base read earlier; no new requirements inferred.
 | Telegram | Main store/retry drafts | Existing regression tests | Live campaign not tested | Isolated provider retry |
 | Achievements/frames | Main engine, Business grants | Existing regression tests | Scoped grants not established | Audited grant scenario |
 | Rights/audit | Legacy roles + disabled membership foundation | Existing tests and fixture role middleware | Production tenant/actor provisioning unverified | Approved binding/membership evidence |
+| Separate admin platform | Newly fetched claude/admin-platform-fixes, head 6a4a39b; admin-platform/README.md | Inventory/README only; its QA not independently rerun | Separate React/Admin API staging implementation, not main | Review existing branch before planning any replacement |
 
 ## Reproduced regression and fix
 
@@ -132,6 +133,51 @@ Only tests/report extended; original seven-line defensive route fix unchanged.
 No new cancellation capability, UI, dependencies, production writes/config,
 merge or deploy. Foreign/Business work untouched.
 
-Next small stage: verify how the existing owner UI handles an unsupported adjustment
-cancellation and a non-completed replay, on desktop/mobile. Keep tenant-wallet
-activation blocked pending authoritative ownership and actor provisioning.
+The isolated owner UI handling was checked below. Tenant-wallet activation stays
+blocked pending authoritative ownership and actor provisioning.
+
+
+## Owner UI error handling (2026-10-04)
+
+Fresh main remains 18a0fa4; prior #199 release gate 1707 and VK hosting parity 604
+passed. Final fetch also found claude/admin-platform-fixes (143 files); README
+describes separate React/Admin API, tenant authorization and audit. Not run or
+imported; no deployment/QA claim inferred from its docs. Main already hides the cancellation button for
+adjustment rows while exposing it for eligible completed purchases; no UI/source
+feature change was needed for this boundary.
+
+Added scripts/verify-admin-adjustment-replay-ui.mjs as a manual verifier using
+external Playwright/Chromium, without adding project dependencies. It loads actual
+index/CSS and checked-out renderUsers, adminTransactionHtml and api functions,
+opens native amount/reason prompts and sends real HTTP through the actual proxy
+to the existing actual Express/PGlite fixture. Runs VK/TG at 390/1440 px.
+
+28 assertions pass on both canonical and materialized runtime: adjustment cancel
+hidden, eligible purchase cancel available, 409 non-completed replay error, 403
+stale owner rights error, no success refresh, unchanged wallet/full journal
+snapshots and adjustment button contained within viewport. Exactly one POST for
+the 409 prevents API retry from executing the rejected operation; original request
+key is explicit fixture data. Screenshots inspected for button containment only.
+
+This is an isolated component check, not the complete application boot. Auth/token
+canonicalization, user directory data, toast adapter, refresh callback and request-key
+generation are fixtures; real api error handling and native prompts are exercised.
+The fetch adapter performs actual HTTP but does not test the production timeout
+implementation. The modal loader and theme are not driven by full startup; toast
+text is checked in DOM, not visual contrast/readability. No claim of premium-dark
+UX readiness, full-screen loading/empty/error states, pending-key recovery or
+signed production authorization. Other drafts, including #193 recovery, untouched.
+
+Materialize twice SHA256 identical across 396 tracked/new files; full materialized
+node --test 450/450, canonical focused 14/14, npm run check, manual script syntax,
+VK startup parity and diff-check passed. No patch retirement. Eight generated
+runtime files restored, original seven-line server fix retained. npm audit exits 1
+for the same three pre-existing moderate findings tracked by #180.
+
+Initial public read-only probe timed out at 0/16; bounded retry returned 16/16
+at 2026-10-04T13:08:12+00:00. Cause of initial timeouts not established. Production
+DB/user/config unchanged; no messages, migrations, merge or deploy.
+
+Next small step: verify the complete owner modal/error-toast flow with realistic
+startup context and the already-existing request-key recovery in draft #193,
+without copying or restarting that implementation.
