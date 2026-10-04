@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 40 isolated import/receipt/status cases here | Real provider document and concurrency absent | Connection-state UI proof |
+| Cash/Evotor | #174 import/repository/analytics | 40 isolated import/receipt/status cases here | Real provider document and concurrency absent | Owner sync controls |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -229,3 +229,42 @@ route/UI change or patch retirement.
 
 Next small stage: verify the existing pos-admin.js state labels, unavailable
 metrics and cached-data freshness on desktop/mobile using isolated responses.
+
+## Existing POS UI follow-up
+
+Fresh main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5; previous #201
+release gate 1717 passed. Clean own starting worktree, history/remotes/origin refs
+and worktrees checked; foreign dirty frame image/six Business files preserved.
+MODULE-MAP read/unchanged, no applicable AGENTS found. Previously read attached
+knowledge sources retained; implementations listed above not restarted/imported.
+
+New manual scripts/verify-evotor-status-ui.mjs reads exact pinned pos-admin.js and
+pos-admin.css into a real headless browser, records their SHA256 hashes and runs
+38 scenarios across 390/1440 px and both loyalty/all-cash tabs. External existing
+Playwright module and Chromium are explicit CLI arguments; no install, dependency,
+environment variable or automatic fallback. Minimal active admin container uses
+actual module/CSS, a synthetic viewer role and controlled API promise/responses.
+It does not launch the app, authenticate, contact a provider or write real data.
+
+Checks: initial pending loading label; all six connection labels; absent metrics
+show unavailable text and no zero-valued cards; cached sync/error data show amount
+and >10-minute freshness warning; token error explanation; connected empty period
+has legitimate zero metrics; both tabs preserve state; manual staff journal stays
+labelled unconfirmed; viewer sync control hidden; permission/network refusal clears
+previous metrics and displays error; no page overflow or uncaught browser error.
+40 SQL/import/service cases and 38 browser scenarios pass before/after
+materialization. 436/436 node tests, npm check, manual syntax and diff-check pass.
+Two materializations identical SHA256 across 396 tracked/new files. npm audit:
+three existing moderate findings. Public read-only probe: 16/16.
+
+Verification completed 2026-10-04T21:03:37.823984+00:00.
+
+No UI regression reproduced. Only manual verifier/report added; actual production
+UI/module/style unchanged. This proves fixture-state presentation, not full app
+boot, signed owner entry, keyboard/screen-reader usability, owner write controls
+or real receipt loading. Service/UI are checked separately, not a single signed
+HTTP end-to-end scenario. Prior provider/fiscal/concurrent PostgreSQL limitations
+remain. No production data/schema/config, merge, deploy or patch retirement.
+
+Next small stage: existing owner sync control, pending/double-click protection and
+provider refusal on the isolated UI fixture, without real provider requests.
