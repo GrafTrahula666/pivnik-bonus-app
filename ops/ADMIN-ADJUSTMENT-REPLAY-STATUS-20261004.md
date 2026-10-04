@@ -16,7 +16,7 @@ Starter pack and SaaS knowledge base read earlier; no new requirements inferred.
 | Telegram | Main store/retry drafts | Existing regression tests | Live campaign not tested | Isolated provider retry |
 | Achievements/frames | Main engine, Business grants | Existing regression tests | Scoped grants not established | Audited grant scenario |
 | Rights/audit | Legacy roles + disabled membership foundation | Existing tests and fixture role middleware | Production tenant/actor provisioning unverified | Approved binding/membership evidence |
-| Separate admin platform | Newly fetched claude/admin-platform-fixes, head 6a4a39b; admin-platform/README.md | Inventory/README only; its QA not independently rerun | Separate React/Admin API staging implementation, not main | Review existing branch before planning any replacement |
+| Separate admin platform | claude/admin-platform-fixes / #200; admin-platform/README.md | Inventory/README only; its QA not independently rerun | Separate React/Admin API staging implementation, not main | Review existing branch before planning any replacement |
 
 ## Reproduced regression and fix
 
@@ -181,3 +181,41 @@ DB/user/config unchanged; no messages, migrations, merge or deploy.
 Next small step: verify the complete owner modal/error-toast flow with realistic
 startup context and the already-existing request-key recovery in draft #193,
 without copying or restarting that implementation.
+
+
+## Actual toast and fetch component follow-up (2026-10-04)
+
+Fresh origin/main still 18a0fa4. #199 release gate 1710 and VK hosting parity 605
+both passed. Open PR #200 is the existing separate admin-platform implementation;
+its security/theme claims were inventoried, not independently validated or imported.
+All worktrees/remotes/history checked; dirty detached Business copy preserved.
+
+Replaced the manual verifier's toast and fetch-timeout adapters with the actual
+checked-out toast(), timeoutError(), fetchWithTimeout() and api() functions.
+A recording wrapper delegates browser fetch unchanged; no mocked response.
+Real native prompts, gateway/Express SQL and real shell CSS remain in the harness.
+
+52 named criteria pass on VK/TG at 390/1440 px before and after materialization.
+The 409 and 403 toasts reach full opacity; long 409 text has no overflow and stays
+inside the viewport, with solid background and measured text contrast 13.51:1.
+The toast z-index is higher than the owner modal; mobile/desktop screenshots were
+visually inspected after the animation, instead of at its low-opacity first frame.
+Actual toast timer removes the show class and returns opacity to zero. Error
+requests preserve wallet/journal snapshots and never show a success refresh.
+
+This closes the previous missing component-level toast/fetch evidence, not full
+application boot or a signed production workflow. Directory/identity/token
+canonicalization, formatting, refresh and request-key generation remain fixtures.
+Timeout expiry/retry and whether 2800 ms is sufficient human reading time are not
+verified. Legacy light theme is unchanged; no premium-dark/full-screen UX verdict.
+Existing #193 pending-command recovery was reviewed but not copied or restarted.
+
+Full materialized node --test 450/450; double materialize identical SHA256 across
+396 files; npm run check, script syntax, VK startup parity and diff-check passed.
+Audit remains the same three moderate findings. Read-only public probe 16/16
+at 2026-10-04T14:03:25+00:00. Generated runtime files restored; only manual verifier
+and report extended. No production data/config, dependencies, sends, merge/deploy.
+
+Next bounded stage: verify the existing #193 recovery component with the same
+real toast/fetch functions, from its pinned source in an isolated test; retain
+full startup and production identity as explicit outstanding checks.
