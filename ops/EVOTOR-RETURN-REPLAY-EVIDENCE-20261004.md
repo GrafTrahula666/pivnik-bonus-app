@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 40 isolated import/receipt/status cases here | Real provider document and concurrency absent | Owner sync controls |
+| Cash/Evotor | #174 import/repository/analytics | 40 isolated import/receipt/status cases here | Real provider document and concurrency absent | Sync UI/service composition |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -268,3 +268,41 @@ remain. No production data/schema/config, merge, deploy or patch retirement.
 
 Next small stage: existing owner sync control, pending/double-click protection and
 provider refusal on the isolated UI fixture, without real provider requests.
+
+## Owner sync control follow-up
+
+Verified main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5; previous
+#201 release gate 1718 passed. Origin fetch, history/refs/remotes, open PRs and
+worktrees checked. Foreign dirty work in adjust-status/admin-cancel-committed and
+six Business files preserved. MODULE-MAP read, no applicable AGENTS found; prior
+starter/knowledge sources retained. No foreign implementation copied into branch.
+
+Browser diagnostic now switches its synthetic viewer to admin and executes the
+actual pinned module click handlers at 390/1440 px. Eight additional scenarios per
+width: owner sync control visible; complete response; partial response next-page
+hint; busy response without false next-page/completion hint; provider refusal;
+permission refusal; network refusal; accepted sync followed by dashboard refresh
+failure. Each sync scenario checks one POST despite a second native click while
+disabled, timeoutMs=20000/retries=0 request options and button re-enabled after
+settlement. Refusals retain already-visible fixture metrics and display their
+error; refresh failure clears metrics and displays failure without success claim.
+
+54 browser cases pass before/after materialization, plus 40 isolated SQL cases.
+436/436 node tests, npm check, syntax and diff-check pass; two materializations
+identical SHA256 for 396 tracked files. npm audit retains three moderate findings.
+Public read-only probe initially 8/16 (Telegram timeouts); one retry 16/16.
+Cause unestablished; local fixture checks do not prove production availability.
+Verification completed 2026-10-04T21:59:13.000859+00:00.
+
+No regression reproduced. Only verifier/report updated; production panel unchanged.
+Second-click proof covers native disabled controls in one browser document only;
+it does not prove cross-tab/concurrent PostgreSQL locks or server idempotency.
+API promises/responses are synthetic and server/SQL evidence remains separately
+exercised. Busy fixture checks no extra next-page hint, not real provider progress.
+Real provider loading, signed production owner entry and full app boot remain
+unverified. No provider requests, production data/config/schema writes, dependency,
+merge, deploy, route/UI change or patch retirement.
+
+Next bounded stage: compose the existing POS service and owner click handler
+through a local HTTP fixture with controlled provider responses, so the UI result
+is tied to actual import/status SQL rather than independently invented responses.

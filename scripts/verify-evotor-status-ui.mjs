@@ -43,6 +43,44 @@ try {
    }
   }
   for(const error of ['Недостаточно прав.','Облако недоступно']){await page.evaluate(error=>fixture.error=error,error);await page.locator('#posRefresh').click();await page.waitForFunction(error=>document.querySelector('#posConnection').textContent===error,error);assert.equal(await page.locator('#posResult').innerText(),'');cases.push({width,state:error});}
+  await page.evaluate(value=>{
+    state.profile.role='admin';fixture.error=null;fixture.response=value;fixture.posts=[];
+    window.api=async(path,options)=>{
+      if(path==='/api/admin/pos/sync'){
+        fixture.posts.push({path,options});
+        await new Promise(r=>fixture.syncResolve=r);
+        if(fixture.syncError)throw Error(fixture.syncError);
+        return fixture.syncResult;
+      }
+      if(fixture.error)throw Error(fixture.error);
+      return fixture.response;
+    };
+  },response('connected',{...empty,salesCents:'1000',netCents:'1000'}));
+  await page.locator('#posRefresh').click();await page.waitForFunction(()=>!document.querySelector('#posSync').hidden);assert.equal(await page.locator('#posSync').isVisible(),true);cases.push({width,state:'owner-sync-visible'});
+  const syncScenario=async(name,result,error=null,refreshError=null)=>{
+    await page.evaluate(({result,error})=>{fixture.error=null;fixture.syncResult=result;fixture.syncError=error;fixture.syncResolve=null;},{result,error});
+    const before=await page.evaluate(()=>fixture.posts.length);
+    await page.locator('#posSync').click();await page.waitForFunction(()=>typeof fixture.syncResolve==='function');
+    assert.equal(await page.locator('#posSync').isDisabled(),true);
+    await page.evaluate(()=>document.querySelector('#posSync').click());
+    assert.equal(await page.evaluate(()=>fixture.posts.length),before+1);
+    const post=await page.evaluate(()=>fixture.posts.at(-1));assert.equal(post.options.method,'POST');assert.equal(post.options.retries,0);assert.equal(post.options.timeoutMs,20000);
+    await page.evaluate(refreshError=>{fixture.error=refreshError;fixture.syncResolve();},refreshError);
+    await page.waitForFunction(()=>!document.querySelector('#posSync').disabled);
+    const text=await page.locator('#posConnection').innerText();
+    if(error)assert.equal(text,error);else if(refreshError){assert.equal(text,refreshError);assert.equal(await page.locator('#posResult').innerText(),'');}
+    else if(!result.complete&&!result.busy)assert.match(text,/История ещё загружается/);
+    else assert.ok(!text.includes('История ещё загружается'));
+    if(!refreshError)assert.match(await page.locator('#posResult').innerText(),/10,00 ₽/);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));cases.push({width,state:name});
+  };
+  await syncScenario('complete-sync-one-post',{complete:true,busy:false});
+  await syncScenario('partial-sync-next-page-hint',{complete:false,busy:false});
+  await syncScenario('busy-sync-no-completion-claim',{complete:false,busy:true});
+  await syncScenario('provider-refusal-reenables-button',null,'Токен истёк или отозван');
+  await syncScenario('permission-refusal-reenables-button',null,'Недостаточно прав.');
+  await syncScenario('network-refusal-reenables-button',null,'Облако недоступно');
+  await syncScenario('sync-accepted-but-refresh-failed',{complete:true,busy:false},null,'Не удалось загрузить дашборд');
   assert.deepEqual(errors,[]);if(out)await page.screenshot({path:path.join(out,`error-${width}.png`),fullPage:true});await page.close();
  }
  console.log(JSON.stringify({pin,sourceSha256:hashes,browserCases:cases.length,cases,fullAppBootVerified:false,productionAuthorizationVerified:false,responseFixtures:true},null,2));
