@@ -3426,6 +3426,13 @@ export const server = http.createServer(async (req, res) => {
       }
       enforceRateLimit(`pin:${user.id}:${requestAddress(req)}`, 8, 15 * 60 * 1000);
       const bodyBuffer = await readRequestBody(req);
+      let targetStaffId = '';
+      try {
+        targetStaffId = String(parseJsonBody(bodyBuffer)?.userId || '').slice(0, 20);
+      } catch {}
+      if (/^\d+$/.test(targetStaffId)) {
+        enforceRateLimit(`pin-target:${targetStaffId}`, 10, 15 * 60 * 1000);
+      }
       return await proxyRequest(req, res, bodyBuffer);
     }
 
