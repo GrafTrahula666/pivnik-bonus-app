@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 31 isolated import/receipt cases here | Real provider document and concurrency absent | Connection-state contract |
+| Cash/Evotor | #174 import/repository/analytics | 40 isolated import/receipt/status cases here | Real provider document and concurrency absent | Connection-state UI proof |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -192,3 +192,40 @@ change or new dependency.
 Next small stage: existing connection-state contract (not connected, schema
 required, awaiting sync, syncing, connected, error) so missing setup cannot be
 presented as confirmed zero sales. Keep provider onboarding blockers explicit.
+
+## Connection-state follow-up
+
+Fresh origin/main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5;
+previous #201 release gate 1716 passed. History/remotes/origin branches/open PRs
+and worktrees inspected; foreign dirty gold frame and six Business files preserved.
+MODULE-MAP read/unchanged; no applicable AGENTS found. Prior starter/knowledge
+base context retained. No unmerged implementation imported into branch/startup.
+
+Nine additional checks execute actual pinned createPosService.dashboard and
+posConnectionStatus with SQL in disposable PGlite: missing enable/token/store
+returns not_connected plus null metrics; a separate empty DB returns
+schema_required without applying any migration; configured/no sync returns
+awaiting_sync plus null metrics; first partial scan returns syncing/incomplete
+with null metrics; completed import exposes 1000-kopeck confirmed cash metrics,
+lastSuccessAt and complete history; later partial scan retains those metrics but
+marks history incomplete; token_expired error retains previous data and freshness
+and repeated dashboard reads leave documents/sync state unchanged; 401/403 and
+invalid calendar date 400 occur before dashboard SQL; status DB failure propagates
+instead of producing a successful zero-sales result. Manual app-journal metrics
+remain explicitly labelled as unconfirmed staff records.
+
+40/40 diagnostic cases pass before/after materialization. 436/436 node tests,
+npm check, manual syntax and diff-check pass. Two materializations identical
+SHA256 across 395 tracked files. npm audit: same three moderate findings.
+Public read-only probe: 16/16. Verification completed 2026-10-04T20:05:16.912590+00:00.
+
+No regression reproduced. Only diagnostic/report changed, no new working panel
+function enabled. Missing setup cannot be confused with confirmed zero sales at
+service level on this fixture. Actual pos-admin.js visual states exist in #174;
+they were located but not browser-verified here. Real provider/fiscal schema,
+signed tenant authorization, production entry and concurrent PostgreSQL remain
+unverified. No production SQL/data/config/schema changes, deps, merge, deploy,
+route/UI change or patch retirement.
+
+Next small stage: verify the existing pos-admin.js state labels, unavailable
+metrics and cached-data freshness on desktop/mobile using isolated responses.
