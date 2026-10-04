@@ -45,7 +45,7 @@ export function clearSessionCookie(res:ServerResponse) {
   const f=[`${config.sessionCookie}=`,'Path=/','HttpOnly','SameSite=Strict','Max-Age=0']; if(config.secureCookies)f.push('Secure');res.setHeader('Set-Cookie',f.join('; '))
 }
 export function requestIp(req:IncomingMessage):string {
-  if(config.trustProxy){const v=String(req.headers['x-forwarded-for']||'').split(',')[0]?.trim();if(v)return v}
+  if(config.trustProxy){const v=String(req.headers['x-forwarded-for']||'').split(',').pop()?.trim();if(v)return v}
   return String(req.socket.remoteAddress||'unknown')
 }
 export const hashIp=(req:IncomingMessage)=>sha256(requestIp(req)).slice(0,24)
@@ -67,6 +67,7 @@ export function enforceRateLimit(key:string,limit:number,windowMs:number) {
   const now=Date.now(), current=(buckets.get(key)||[]).filter(t=>now-t<windowMs)
   if(current.length>=limit)throw new HttpError(429,'RATE_LIMITED','Слишком много попыток. Повторите позже.')
   current.push(now);buckets.set(key,current)
+  if(buckets.size>5000){for(const [k,v] of buckets){if(!v.some(t=>now-t<windowMs))buckets.delete(k)}}
 }
 export function securityHeaders(res:ServerResponse){
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','no-referrer')

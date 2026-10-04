@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { login, loadSession, logout, requireCsrf } from './auth.js'
-import { pool, readPool, writePool } from './db.js'
+import { pool, readPool } from './db.js'
 import { config } from './config.js'
 import {
   getAchievementAnalytics,
@@ -71,20 +71,14 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
 
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/health'){
     try{
-      const [db,readDb,schema]=await Promise.all([
+      const [db,,schema]=await Promise.all([
         pool.query<{now:string}>('SELECT NOW()::text AS now'),
         readPool.query<{default_transaction_read_only:string}>('SHOW default_transaction_read_only'),
         pool.query<{exists:boolean}>(`SELECT to_regclass('public.admin_accounts') IS NOT NULL AS exists`),
       ])
-      json(res,schema.rows[0]?.exists?200:503,{
-        ok:Boolean(schema.rows[0]?.exists),
-        adminSchema:Boolean(schema.rows[0]?.exists),
-        productionReadPool:readDb.rows[0]?.default_transaction_read_only==='on'?'read-only':'unexpected-mode',
-        writesEnabled:config.enableWrites,
-        productionBonusWritesEnabled:config.enableProductionBonusWrites,
-        productionAchievementWritesEnabled:config.enableProductionAchievementWrites,
-        productionWriterConfigured:Boolean(writePool),
-        demoEnabled:config.demoEnabled,
+      const healthy=Boolean(schema.rows[0]?.exists)
+      json(res,healthy?200:503,{
+        ok:healthy,
         time:db.rows[0]?.now,
       })
     }catch{

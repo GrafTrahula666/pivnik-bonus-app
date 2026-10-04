@@ -64,3 +64,12 @@ describe('promotion server state',()=>{
   it('ACTIVE inside period',()=>expect(promotionState({enabled:true,starts_at:'2026-08-28T00:00:00Z',ends_at:'2026-08-30T00:00:00Z'},now)).toBe('ACTIVE'))
   it('FINISHED after end',()=>expect(promotionState({enabled:true,ends_at:'2026-08-29T09:00:00Z'},now)).toBe('FINISHED'))
 })
+
+describe('Bonus pilot writer gate',()=>{
+  it('refuses when ADMIN_ENABLE_WRITES is off',async()=>{
+    const { config }=await import('../config.js')
+    const { adjustPivnikBonusPilot }=await import('../bonus-pilot-writer.js')
+    expect(config.enableWrites).toBe(false)
+    await expect((adjustPivnikBonusPilot as any)({} as any,{} as any)).rejects.toMatchObject({code:'WRITES_DISABLED'})
+  })
+})

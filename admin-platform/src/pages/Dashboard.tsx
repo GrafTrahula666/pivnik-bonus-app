@@ -123,20 +123,20 @@ export function VenueOverview({
               <AreaChart data={series} margin={{ left: 0, right: 4, top: 12, bottom: 0 }}>
                 <defs>
                   <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#b9ff66" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#b9ff66" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#73bcd9" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#73bcd9" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="#22262b" strokeDasharray="4 4" />
+                <CartesianGrid vertical={false} stroke="#172c36" strokeDasharray="4 4" />
                 <XAxis
                   dataKey="day"
-                  tick={{ fill: '#777e88', fontSize: 11 }}
+                  tick={{ fill: '#6e8591', fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
                 />
                 <YAxis
-                  tick={{ fill: '#777e88', fontSize: 11 }}
+                  tick={{ fill: '#6e8591', fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={48}
@@ -147,13 +147,13 @@ export function VenueOverview({
                   <Area
                     type="monotone"
                     dataKey={metric === 'revenue' ? 'previous' : metric}
-                    stroke="#515862"
+                    stroke="#46606d"
                     strokeWidth={1.5}
                     fill="none"
                     strokeDasharray="5 5"
                   />
                 )}
-                <Area type="monotone" dataKey={metric} stroke="#b9ff66" strokeWidth={2} fill="url(#chartFill)" />
+                <Area type="monotone" dataKey={metric} stroke="#73bcd9" strokeWidth={2} fill="url(#chartFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -315,11 +315,11 @@ export function AnalyticsPage() {
           <div className="chart">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data}>
-                <CartesianGrid vertical={false} stroke="#22262b" />
-                <XAxis dataKey="day" tick={{ fill: '#777e88', fontSize: 11 }} axisLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: '#777e88', fontSize: 11 }} axisLine={false} />
+                <CartesianGrid vertical={false} stroke="#172c36" />
+                <XAxis dataKey="day" tick={{ fill: '#6e8591', fontSize: 11 }} axisLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#6e8591', fontSize: 11 }} axisLine={false} />
                 <Tooltip />
-                <Area type="monotone" dataKey="customers" stroke="#b9ff66" fillOpacity={0.08} />
+                <Area type="monotone" dataKey="customers" stroke="#73bcd9" fillOpacity={0.08} />
                 <Area type="monotone" dataKey="visits" stroke="#8ca0ff" fillOpacity={0.03} />
               </AreaChart>
             </ResponsiveContainer>

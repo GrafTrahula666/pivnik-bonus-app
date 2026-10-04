@@ -21,6 +21,9 @@ function requestHash(value:unknown):string {
 }
 
 function requireBonusPilot(scope:VenueScope):void {
+  if(!config.enableWrites){
+    throw new HttpError(405,'WRITES_DISABLED','Изменения отключены на этом окружении.')
+  }
   if(!config.enableProductionBonusWrites){
     throw new HttpError(405,'PRODUCTION_BONUS_WRITES_DISABLED','Изменение бонусов отключено для production pilot.')
   }

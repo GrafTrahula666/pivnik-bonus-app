@@ -1,5 +1,6 @@
 import { describe,expect,it } from 'vitest'
-import { csrfTokenFor,hashPassword,normalizeEmail,verifyPassword } from '../security.js'
+import type { IncomingMessage } from 'node:http'
+import { csrfTokenFor,enforceRateLimit,hashPassword,normalizeEmail,requestIp,verifyPassword } from '../security.js'
 
 describe('Admin authentication primitives',()=>{
   it('normalizes email',()=>expect(normalizeEmail('  OWNER@Example.COM ')).toBe('owner@example.com'))
@@ -14,5 +15,17 @@ describe('Admin authentication primitives',()=>{
   it('binds CSRF to the opaque session token',()=>{
     expect(csrfTokenFor('a')).toBe(csrfTokenFor('a'))
     expect(csrfTokenFor('a')).not.toBe(csrfTokenFor('b'))
+  })
+})
+
+describe('Client IP and rate limiting',()=>{
+  const req=(xff:string)=>({headers:{'x-forwarded-for':xff},socket:{remoteAddress:'10.0.0.1'}}) as unknown as IncomingMessage
+  it('uses the last forwarded hop so a spoofed first hop is ignored',()=>{
+    expect(requestIp(req('6.6.6.6, 203.0.113.9'))).toBe('203.0.113.9')
+  })
+  it('blocks after the limit within the window',()=>{
+    const key=`test:${Math.random()}`
+    enforceRateLimit(key,2,60_000);enforceRateLimit(key,2,60_000)
+    expect(()=>enforceRateLimit(key,2,60_000)).toThrow()
   })
 })
