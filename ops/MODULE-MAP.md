@@ -324,13 +324,12 @@ Scripts, in prestart order, and what each one touches (from
 2. `apply-v22-runtime.mjs` — `achievements.js`, `app.js`, `index.html`, `server.js`,
    `universal-server.js`; triggers steps 2b/2c below.
 3. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
-4. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
-5. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
-6. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
+4. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
+5. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
    `platform-core.js`, `red-cosmos-v2.css`/`.js`, `universal-server.js`,
    `vk-platform.js`, plus two DB/audit scripts. Ships as a gzip+base64 blob
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
-7. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
+6. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
@@ -354,6 +353,16 @@ into `app.js` and `red-cosmos-v2.css` directly; the
 `working-updates-runtime-*.txt` blob was regenerated so its
 `red-cosmos-v2.css` snapshot carries the VK background CSS too (see below).
 **7 scripts remain.**
+
+~~`apply-red-cosmos-v2-tester-claims.mjs`~~ — retired 2026-10-04, folded into
+`universal-server.js` directly (`claimPendingSpecialAchievement` helper before
+`authenticateVk`, and its call right after the session token is created). The
+script's anchors exist in committed source, so a standalone run gave the true
+diff. Verified by materializing before and after in two clean copies: the
+resulting `universal-server.js` is byte-identical except the dead
+`// RED_COSMOS_V2_PENDING_TESTER_CLAIMS` marker, which nothing reads. No other
+file differs. Removed from `prestart`, `materialize`, `check` and the
+`APPROVED_PRESTART_COMMANDS` allowlist. **6 scripts remain.**
 
 ### Hidden dependencies this second retirement surfaced
 

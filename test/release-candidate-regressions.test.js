@@ -9,7 +9,7 @@ test('release candidate: final repair is wired into materialize and prestart', a
   const pkg = JSON.parse(await read('package.json'));
   for (const key of ['prestart', 'materialize']) {
     assert.match(pkg.scripts[key], /apply-release-candidate-fixes\.mjs/);
-    assert.ok(pkg.scripts[key].indexOf('apply-release-candidate-fixes.mjs') > pkg.scripts[key].indexOf('apply-red-cosmos-v2-tester-claims.mjs'));
+    assert.ok(pkg.scripts[key].indexOf('apply-release-candidate-fixes.mjs') > pkg.scripts[key].indexOf('apply-red-cosmos-v2-backend-final.mjs'));
   }
 });
 
