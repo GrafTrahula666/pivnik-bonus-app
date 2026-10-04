@@ -88,3 +88,56 @@ retains the existing 3 moderate HTTP dependency findings, addressed separately
 in draft #180. Fresh read-only runtime probe: 16/16 responses; deployed commit
 remains 18a0fa4. Generated runtime files restored; server.js/universal-server.js
 have no changes relative to main. UI unchanged, so no new browser claim.
+
+## HTTP session and membership adapter — 2026-10-04 follow-up
+
+Fresh main still 18a0fa4. Open PRs/origin branches, remotes/history and all
+worktrees reviewed again. Detached business-ci-verify generated modifications
+preserved; no AGENTS.md found; MODULE-MAP read. Prior #194 head 8e4d1dc passed
+release gate 1691. The same branch/PR continues one related status scenario.
+
+Added unmounted admin-adjustment-status-handler.js, default disabled. It obtains
+actor and optional platform role exclusively from authenticated req.user. Route
+parameters specify the requested tenant/location/client; the actual existing
+membership resolver evaluates fresh SQL memberships for that actor. Only its
+context is forwarded to the scoped status reader. Body/query/header authorization
+claims are ignored. Existing compatibility middleware's legacy-capability path
+is deliberately not used for this new scoped adapter. Responses forbid caching.
+No real route is registered in server.js or universal-server.js.
+
+HTTP integration tests use actual main authRequired, platform-core HMAC session
+signing/verification and effective identity role logic, plus actual membership
+SQL repository/resolver, status reader and new handler. They run over real local
+HTTP and sequential PGlite. Main legacy DDL and migration 009 are used in the
+isolated fixture. The membership table is explicitly test DDL matching the
+existing repository contract; there is no approved production migration for it.
+getProfile is a small SQL fixture projection, with a fixture-only platform-admin
+mapping, not proof of live platform-role assignment or complete production auth.
+
+Tests demonstrate exact confirmation/repeated read with wallet/journal unchanged;
+forged actor/context/role/tenant claims cannot turn staff, foreign owner, revoked
+owner or global legacy admin into tenant owner. Platform admin cannot impersonate
+the operation's actor. Wrong location/client reveals only unknown. Empty, bad
+signature, expired and stale-version sessions fail before membership/status SQL.
+Invalid input, semantic conflict, membership outage and missing membership table
+cannot confirm. Membership revocation after a successful read is respected on
+the next HTTP request. Default-disabled adapter avoids membership/journal reads.
+
+This is preparation for safe owner recovery, not a completed panel feature.
+Production mounting, verified membership migration/provisioning, trusted live
+profile/context binding, gateway handling and UI status integration remain
+unverified. No production data, schema, routes, dependencies or deployment changed.
+UI unchanged; no desktop/mobile claim added. No merge/deploy or patch retirement.
+
+Follow-up checks: 8/8 HTTP cases plus 11/11 reader cases on canonical sources;
+full materialized node --test 455/455 (436 main + 19 isolated status tests).
+Double materialize tracked/new-source hashes identical; npm run check, explicit
+adapter/test syntax, diff-check and VK startup parity pass. npm audit remains
+3 existing moderate findings (#180). Fresh read-only production probe: 16/16;
+deployed commit remains 18a0fa4. Generated server/runtime changes restored before
+commit, with no server.js/universal-server.js changes relative to main.
+
+Next bounded verification: forward this isolated HTTP status adapter through the
+actual local gateway proxy and verify session identity/error parity. Production
+activation still requires an approved membership schema/provisioning and verified
+attribution; those are not silently supplied by the test fixture.
