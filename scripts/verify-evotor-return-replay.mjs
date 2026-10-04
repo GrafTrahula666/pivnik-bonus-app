@@ -1,0 +1,67 @@
+// Manual diagnostic: reads pinned draft source into a disposable directory.
+// No production app, credentials, provider requests, schema or startup imports.
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
+import {PGlite} from '@electric-sql/pglite';
+const pin='776c70d691540b01bbc56a1496203e6cc918eea6';
+const files=['pos/analytics.js','pos/evotor-client.js','pos/evotor-document.js','pos/repository.js','pos/service.js','pos/sync.js','qr-resolver.js','platform-core.js','migrations/012_evotor_sales.sql','test/fixtures/evotor.js'];
+const root=path.resolve(new URL('../',import.meta.url).pathname), scratch=await mkdtemp(path.join(tmpdir(),'evotor-return-'));
+const hashes={}, checks=[]; let db;
+try {
+  await writeFile(path.join(scratch,'package.json'),JSON.stringify({type:'module'}));
+  for(const file of files){const bytes=execFileSync('git',['show',`${pin}:${file}`],{cwd:root,maxBuffer:2e6});hashes[file]=createHash('sha256').update(bytes).digest('hex');await mkdir(path.dirname(path.join(scratch,file)),{recursive:true});await writeFile(path.join(scratch,file),bytes);}
+  const module=async file=>import(pathToFileURL(path.join(scratch,file)).href);
+  const {importEvotorPage,loadPosDocuments,linkEvotorCustomer}=await module('pos/repository.js');
+  const {posDashboards}=await module('pos/analytics.js');
+  const {moscowPeriod}=await module('pos/evotor-document.js');
+  const {assertPosRole}=await module('pos/service.js');
+  const {syncEvotor}=await module('pos/sync.js');
+  const {sale}=await module('test/fixtures/evotor.js');
+  db=new PGlite();
+  await db.exec(`CREATE TABLE users(id BIGSERIAL PRIMARY KEY,qr_token TEXT,qr_short_code TEXT,merged_into_user_id BIGINT,deleted_at TIMESTAMPTZ);
+    CREATE TABLE qr_aliases(qr_token TEXT,qr_short_code TEXT,user_id BIGINT,source_user_id BIGINT);
+    CREATE TABLE wallets(user_id BIGINT PRIMARY KEY,balance BIGINT);
+    CREATE TABLE transactions(client_id BIGINT,status TEXT,check_amount_cents BIGINT,created_at TIMESTAMPTZ);
+    INSERT INTO users(id,qr_token,qr_short_code) VALUES(1,'ClientToken_123456789','PVK-AAAA-2222'),(2,'OtherToken_123456789','PVK-BBBB-3333'),(3,NULL,NULL);
+    INSERT INTO wallets VALUES(1,1000),(2,2000);`);
+  await db.exec(await readFile(path.join(scratch,'migrations/012_evotor_sales.sql'),'utf8'));
+  const financial=async()=>({wallets:(await db.query('SELECT * FROM wallets ORDER BY user_id')).rows,journal:(await db.query('SELECT * FROM transactions')).rows});
+  const baseline=await financial();
+  const documents=async()=> (await db.query('SELECT source,store_id,document_id,type,closed_at,amount_cents,snapshot FROM pos_documents ORDER BY store_id,document_id')).rows;
+  const page=async(items,store='bar')=>{await db.query('BEGIN');try{await importEvotorPage(db,store,{items,paging:{}},{until:'2026-10-03T00:00:00Z'});await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}};
+  const receipt=(id,type,amount,base,store='bar')=>{const r=sale({id,type,store_id:store});r.body.result_sum=amount;r.body.positions[0].result_sum=amount;r.body.payments[0].payment.sum=amount;if(base)r.body.base_document_id=base;return r;};
+  const period=moscowPeriod({period:'custom',from:'2026-10-02',to:'2026-10-02'});
+  const metrics=async()=>posDashboards(await loadPosDocuments(db,'bar',period));
+  const check=async(name,fn)=>{await fn();assert.deepEqual(await financial(),baseline);checks.push(name);};
+  const refund=receipt('refund-before','PAYBACK','3.00','late-sale'), sell=receipt('late-sale','SELL','10.00');
+  await check('refund before base sale is negative and anonymous',async()=>{await page([refund]);const m=await metrics();assert.equal(m.all.netCents,'-300');assert.equal(m.app.returnDocuments,0);});
+  await check('replayed early refund is counted once',async()=>{await page([refund,refund]);assert.equal((await documents()).length,1);assert.equal((await metrics()).all.returnsCents,'300');});
+  await check('late sale settles cash without inferring customer',async()=>{await page([sell]);const m=await metrics();assert.equal(m.all.netCents,'700');assert.equal(m.app.saleDocuments,0);assert.equal(m.all.receiptCount,1);assert.equal(m.all.averageCents,'1000');});
+  await check('explicit QR link attributes prior return by base ID',async()=>{await linkEvotorCustomer(db,{storeId:'bar',documentId:'late-sale',qr:'PVK-AAAA-2222',actorId:3});const m=await metrics();assert.equal(m.app.netCents,'700');assert.equal(m.app.returnDocuments,1);assert.equal(m.app.activeBuyers,1);});
+  await check('both documents repeated retain totals and link',async()=>{await page([refund,sell,refund,sell]);const m=await metrics();assert.equal(m.all.saleDocuments,1);assert.equal(m.all.returnDocuments,1);assert.equal(m.app.netCents,'700');assert.equal(m.app.repeatBuyers,0);});
+  const anonymous=receipt('anonymous','SELL','10.00');anonymous.customer_phone='same phone';
+  await check('anonymous matching amount is not attributed',async()=>{await page([anonymous]);const m=await metrics();assert.equal(m.all.netCents,'1700');assert.equal(m.app.netCents,'700');assert.equal(m.all.unlinkedSaleDocuments,1);});
+  const orphan=receipt('orphan','PAYBACK','2.00');
+  await check('return without explicit base stays outside loyalty',async()=>{await page([orphan]);const m=await metrics();assert.equal(m.all.netCents,'1500');assert.equal(m.app.netCents,'700');});
+  const other=receipt('other-sale','SELL','10.00',null,'other');
+  const foreign=receipt('foreign-return','PAYBACK','1.00','other-sale');
+  await check('foreign store base never attributes local return',async()=>{await page([other],'other');await linkEvotorCustomer(db,{storeId:'other',documentId:'other-sale',qr:'PVK-AAAA-2222',actorId:3});await page([foreign]);const m=await metrics();assert.equal(m.all.netCents,'1400');assert.equal(m.app.netCents,'700');});
+  const remaining=receipt('remaining','PAYBACK','7.00','late-sale');
+  await check('partial plus remaining refund nets linked sale to zero',async()=>{await page([remaining]);const m=await metrics();assert.equal(m.app.netCents,'0');assert.equal(m.app.returnsCents,'1000');assert.equal(m.all.netCents,'700');assert.equal(m.all.receiptCount,2);});
+  await check('full replay preserves financial document projection',async()=>{const before=await documents();await page([sell,anonymous,refund,orphan,foreign,remaining]);assert.deepEqual(await documents(),before);assert.equal((await metrics()).all.netCents,'700');});
+  await check('deleted customer removes attribution, not cash return',async()=>{await db.exec('UPDATE users SET deleted_at=NOW() WHERE id=1');const m=await metrics();assert.equal(m.app.returnDocuments,0);assert.equal(m.all.netCents,'700');await db.exec('UPDATE users SET deleted_at=NULL WHERE id=1');});
+  await check('invalid document rolls back whole page and cursor',async()=>{const before=await documents(),sync=(await db.query('SELECT * FROM pos_sync_state ORDER BY store_id')).rows;await assert.rejects(page([receipt('should-rollback','SELL','1.00'),sale({id:'wrong-store',store_id:'alien'})]),/другого магазина/);assert.deepEqual(await documents(),before);assert.deepEqual((await db.query('SELECT * FROM pos_sync_state ORDER BY store_id')).rows,sync);});
+  await check('invalid decimal amount is rejected without rows',async()=>{const before=await documents();await assert.rejects(page([receipt('invalid-cents','SELL','1.001')]),/Некорректная сумма/);assert.deepEqual(await documents(),before);});
+  await check('client/staff cannot read, viewer cannot write',async()=>{for(const role of ['client','staff','terminal'])assert.throws(()=>assertPosRole({id:'3',role}));assert.throws(()=>assertPosRole(null));assert.throws(()=>assertPosRole({id:'3',role:'viewer'},true));assertPosRole({id:'3',role:'viewer'});assertPosRole({id:'3',role:'admin'},true);});
+  await check('conflicting QR relink rejected without changed attribution',async()=>{await assert.rejects(linkEvotorCustomer(db,{storeId:'bar',documentId:'late-sale',qr:'PVK-BBBB-3333',actorId:3}),/другим клиентом/);assert.equal((await metrics()).app.returnDocuments,2);});
+  await check('provider outage retains imported totals and last success',async()=>{const before=await documents(),previous=(await db.query("SELECT last_success_at FROM pos_sync_state WHERE store_id='bar'")).rows[0].last_success_at;
+    const client={query:async(sql,args)=>sql.includes('pg_try_advisory_lock')?{rows:[{locked:true}]}:sql.includes('pg_advisory_unlock')?{rows:[]}:db.query(sql,args),release(){}};
+    await assert.rejects(syncEvotor({pool:{query:db.query.bind(db),connect:async()=>client},config:{enabled:true,token:'fixture',storeId:'bar'},fetchPage:async()=>{throw Object.assign(new Error('fixture'),{code:'token_expired'});}}),/token_expired/);
+    assert.deepEqual(await documents(),before);const row=(await db.query("SELECT * FROM pos_sync_state WHERE store_id='bar'")).rows[0];assert.equal(row.last_error_code,'token_expired');assert.equal(new Date(row.last_success_at).getTime(),new Date(previous).getTime());assert.equal((await metrics()).all.netCents,'700');});
+  console.log(JSON.stringify({pin,sourceSha256:hashes,checks:checks.length,passed:checks,productionDataChanged:false,signedAuthorizationVerified:false,concurrentPostgresVerified:false,advisoryLocksStubbed:true},null,2));
+}finally{if(db)await db.close();await rm(scratch,{recursive:true,force:true});}
