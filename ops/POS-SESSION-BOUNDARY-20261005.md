@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 137 auth/startup profile/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 153 auth/startup/detail/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,7 +59,7 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-137/137 checks on canonical and materialized gateway sources; equal boundary/module
+153/153 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
@@ -107,7 +107,7 @@ retirement. #201/#202 and foreign dirty work remain separate. Recovery at the pr
 adapter boundary is now checked; non-startup detailed profile remains outside this stage. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
 
-Prior #203 release gate 1728 passed. MODULE-MAP and open PRs rechecked; current
+Prior #203 release gate 1732 passed. MODULE-MAP and open PRs rechecked; current
 main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
 
 ## Actual auth route and rate limiter, current extension
@@ -197,3 +197,49 @@ Current public read-only observation: 8/16 responses on both initial probe and o
 bounded retry; all eight VK requests timed out, while Telegram returned responses.
 Cause is not established. Previous successful 16/16 observation is historical and
 does not override this current result. No live authenticated workflow conclusion.
+
+
+## Detailed profile reads after signed entry, current extension
+
+16 additional named HTTP cases, eight per platform. Original getRollingSpend,
+getIdentitySummary, imported getUserEarnedAchievementState, getAppPayload/getProfile,
+platformFromRequest and serveStartupProfile now execute for /api/me and /api/bootstrap.
+No copied/reimplemented detail read model. Fixture DDL adds required detail columns,
+beta/reward grants and published settings. Full boot schema is still not claimed.
+
+Disposable journal samples have 10000 cents completed accrual and 2500 redemption;
+cancelled, manual adjustment and 13-month-old samples are excluded. Original detailed
+profile returns 125 rubles rolling spend, zero wallet, persisted identity, earned
+first-purchase and unannounced grant plus published fixture design. Repeated read
+returns the same projection. Startup remains lightweight: spend zero, achievements
+empty, design null. This proves those fields are deferred, not missing sales data.
+
+Missing/forged tokens return 401; a platform header conflicting with the signed
+session returns 403. Injected design-table SQL failure rejects detail load; the
+same session recovers after removing the diagnostic fault. Original handler throws;
+503 is the diagnostic outer error adapter's status, not a verified production HTTP
+error contract. Initial 500 expectation failed and was corrected to this adapter.
+
+Every read compares complete users/identities/wallets/beer/POS/journal plus
+reward/frame/beta/settings snapshots. Seed journal/grants are deleted only in the
+isolated fixture after these comparisons; final original wallets and empty journal
+checks remain. No production data, sends, dependencies, migrations, runtime/UI/routes,
+merge/deploy or patch retirement changed. No confirmed implementation regression.
+
+153/153 cases pass on canonical and materialized sources; profile route hashes match.
+Original profile/achievement module hashes may differ after materialization and are
+reported separately. Detailed profile projection is verified, not a full startup,
+tenant isolation, true multi-platform identity binding or browser UX proof.
+Acknowledgement, full reward catalogue, concurrent PostgreSQL and real fiscal samples
+remain unverified. Next bounded step: signed-session profile recovery in the actual
+client transport without activating disabled POS routes.
+
+Current checks: 436/436 node tests; npm check and diff-check pass; two materializations
+have equal SHA256 across 395 tracked files. Audit retains three existing moderate
+findings. Public observation: initial 8/16 with all VK requests timed out; one retry
+8/16 with all Telegram requests timed out instead. Each platform responded in one
+probe, but neither probe passed overall. Cause unknown; do not infer service outage
+or production readiness. Generated runtime outputs restored before committing.
+Fresh origin/main remains 18a0fa4; prior CI 1732 success. New #204 theme draft and
+other origin branches were reviewed without importing them. Foreign dirty work
+preserved; no applicable AGENTS; MODULE-MAP reread, starter/KB context retained.
