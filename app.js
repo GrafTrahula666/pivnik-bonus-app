@@ -2074,11 +2074,28 @@ function renderTransaction(transaction) {
   </div>`;
 }
 
+function setProfileRefreshState(kind) {
+  const notice = $('#profileRefreshNotice');
+  if (!notice) return;
+  notice.dataset.state = kind;
+  notice.textContent = kind === 'loading' ? 'Обновляем профиль…' : kind === 'denied'
+    ? 'Не удалось подтвердить доступ. Показаны ранее загруженные данные. Откройте приложение заново.'
+    : kind === 'error' ? 'Профиль не обновлён. Показаны ранее загруженные данные. Повторите обновление.' : '';
+  notice.classList.toggle('hidden', kind === 'ready');
+}
+
 async function refreshMe() {
-  const data = await api('/api/me');
-  applyProfilePayload(data);
-  void loadSecondaryData();
-  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
+  setProfileRefreshState('loading');
+  try {
+    const data = await api('/api/me');
+    applyProfilePayload(data);
+    setProfileRefreshState('ready');
+    void loadSecondaryData();
+    void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
+  } catch (error) {
+    setProfileRefreshState(error?.status === 401 || error?.status === 403 ? 'denied' : 'error');
+    throw error;
+  }
 }
 
 async function waitForTelegramInitData(maxWaitMs = 2800) {
@@ -2157,11 +2174,17 @@ async function loadSecondaryData() {
 }
 
 async function hydrateAfterBoot() {
+  setProfileRefreshState('loading');
   try {
     const data = await api('/api/me', { retries: 0, timeoutMs: 9000 });
     applyProfilePayload(data);
+    setProfileRefreshState('ready');
   } catch (error) {
     console.warn('Full profile hydration skipped:', error);
+    setProfileRefreshState(error?.status === 401 || error?.status === 403 ? 'denied' : 'error');
+    toast(error?.status === 401 || error?.status === 403
+      ? 'Не удалось подтвердить доступ. Показаны ранее загруженные данные. Откройте приложение заново.'
+      : 'Профиль не обновлён. Показаны ранее загруженные данные. Повторите обновление.');
   }
   if (state.profile?.termsAccepted) void loadSecondaryData();
 }
