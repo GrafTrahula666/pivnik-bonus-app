@@ -10,7 +10,7 @@ test('Halloween skin is behind design.theme and every rule is scoped to html.the
 
   const marker = css.indexOf('Halloween "Midnight" theme');
   assert.ok(marker > 0, 'Halloween block is missing');
-  const block = css.slice(marker).replace(/\/\*[\s\S]*?\*\//g, '');
+  const block = css.slice(css.lastIndexOf('/*', marker)).replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = block.split('{').slice(0, -1).map((chunk) => chunk.split('}').pop().trim()).filter(Boolean);
   assert.ok(selectors.length > 10);
   for (const selector of selectors) {
