@@ -10165,3 +10165,55 @@ html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse
 html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
   display: none !important;
 }
+
+/* Block 2: SPACEVERSE business card. Art 2059x764 (stored 1092x405) with one baked button pill; static copy is live text.
+   Geometry measured from the art at 364x135: pill x31-166 y92.5-117.5. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-card {
+  height: 135px !important;
+  min-height: 135px !important;
+  background: url('/assets/halloween/business-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  box-shadow: 0 10px 24px rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-card::after {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::before {
+  content: 'SPACEVERSE';
+  position: absolute;
+  top: 15px;
+  left: 8.5%;
+  color: #ffdca8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .24em;
+  text-shadow: 0 0 6px rgba(255,150,40,.6);
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > strong {
+  top: 34px !important;
+  left: 8.5% !important;
+  width: 45% !important;
+  color: #fff1dc !important;
+  font-size: 16px !important;
+  line-height: 20px !important;
+  text-shadow: 0 0 10px rgba(255,138,31,.35) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > em {
+  top: 58px !important;
+  left: 8.5% !important;
+  width: 45% !important;
+  color: #ffcf9a !important;
+  font-size: 9px !important;
+  line-height: 12px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta {
+  top: 92.5px !important;
+  bottom: auto !important;
+  left: 8.5% !important;
+  width: 135px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 !important;
+  color: #ffe2b0 !important;
+  font-size: 10px !important;
+  text-shadow: 0 0 6px rgba(255,150,40,.5) !important;
+}
