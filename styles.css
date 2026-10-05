@@ -10252,3 +10252,57 @@ html.theme-halloween body .client-home.home-v2 .home-wheel-cta {
 html.theme-halloween body .client-home.home-v2 .home-wheel-cta > i {
   display: none !important;
 }
+
+/* Block 4: liters card. Art 2508x627 (stored 1456x364) with the heading, mug and gift baked in and three empty slots
+   (text line, number badge, long progress track); all changing values stay live. Geometry measured from the art at 364x91. */
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact {
+  height: 91px !important;
+  min-height: 91px !important;
+  background: url('/assets/halloween/liters-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  box-shadow: 0 10px 24px rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head {
+  top: 40.3px !important;
+  right: calc(46.7% + 6px) !important;
+  left: calc(20.1% + 6px) !important;
+  height: 13.6px !important;
+  color: #ffe2b0 !important;
+  font-size: 8.5px !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head b {
+  color: #ffcf9a !important;
+  font-size: 8.5px !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter {
+  top: 29.7px !important;
+  right: auto !important;
+  left: 71.8% !important;
+  width: 10.6% !important;
+  height: 29.5px !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter strong {
+  color: #ffe2b0 !important;
+  font-size: 14px !important;
+  text-shadow: 0 0 8px rgba(255,138,31,.5) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter small {
+  color: #ffcf9a !important;
+  font-size: 6px !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments {
+  top: 64.1px !important;
+  right: auto !important;
+  left: calc(17.4% + 2px) !important;
+  width: calc(64.8% - 4px) !important;
+  height: 8px !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment {
+  background: rgba(255,226,176,.08) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment > span {
+  background: linear-gradient(90deg, #ff8a1f, #ffc266 70%, #ff9a3c) !important;
+  box-shadow: 0 0 6px rgba(255,138,31,.55) !important;
+  opacity: 1 !important;
+}
