@@ -26,7 +26,7 @@ const fixtures = {
 };
 const sdk = `window.Telegram={WebApp:{initData:'fixture-launch',initDataUnsafe:{user:{id:123}},ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){},setBottomBarColor(){},onEvent(){},BackButton:{show(){},hide(){},onClick(){},offClick(){}},MainButton:{hide(){}},HapticFeedback:{impactOccurred(){}}}};`;
 const vkSdk = `window.vkBridge={send:async(name)=>name==='VKWebAppGetLaunchParams'?{vk_user_id:'123',vk_app_id:'123',sign:'fixture'}:name==='VKWebAppGetUserInfo'?{id:123,first_name:'Fixture',last_name:'Profile'}:{result:true},subscribe(){},supports(){return true}};`;
-let platform = 'telegram', phase = 'success', requests = [], violations = [];
+let platform = 'telegram', phase = 'success', secondaryFailure = false, requests = [], violations = [];
 function payload(spend) {
   return { profile: { id: 'fixture', firstName: 'Fixture', lastName: 'Profile', platform,
     role: 'client', balance: 17, spend12m: spend, termsAccepted: true,
@@ -57,6 +57,9 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify(phase === 'invalid' ? { profile: null } : payload(125)));
       }
       assert.ok(Object.hasOwn(fixtures, pathname), 'Unexpected fixture endpoint ' + pathname);
+      if (secondaryFailure && pathname === '/api/promotions') {
+        res.statusCode = 503; return res.end(JSON.stringify({ error: 'fixture secondary outage' }));
+      }
       return res.end(JSON.stringify(fixtures[pathname]));
     }
     if (pathname === '/' || pathname === '/vk') {
@@ -98,12 +101,16 @@ try {
           return nativeFetch(...args);
         };
       });
-      for (const scenario of ['success', '401', '403', '503', 'invalid', 'network']) {
-        phase = scenario; requests = []; violations = [];
+      for (const scenario of ['success', '401', '403', '503', 'invalid', 'network', 'secondary', '503-secondary']) {
+        phase = scenario === 'secondary' ? 'success' : scenario === '503-secondary' ? '503' : scenario;
+        secondaryFailure = scenario.includes('secondary');
+        const primarySuccess = phase === 'success';
+        requests = []; violations = [];
         process.stderr.write(`Checking ${platform}/${width}/${scenario}\n`);
-        const errors = [], coreErrors = [];
+        const errors = [], coreErrors = [], optionalErrors = [];
         const onError = error => errors.push(error.message);
         const onConsole = message => {
+          if (message.text().startsWith('Optional startup data skipped:')) optionalErrors.push(message.text());
           if (/Core profile render skipped:|Boot failed:|Unhandled promise rejection:|Client error:/.test(message.text())) coreErrors.push(message.text());
         };
         page.on('pageerror', onError); page.on('console', onConsole);
@@ -113,10 +120,16 @@ try {
         await page.waitForFunction(() => state.achievementsLoaded && state.leaderboard && state.walletConfig && state.wheel.status);
         assert.equal(await page.evaluate(() => state.token), 'fixture-session');
         assert.equal(await page.evaluate(() => state.profile.balance), 17);
-        assert.equal(await page.evaluate(() => state.profile.spend12m), scenario === 'success' ? 125 : 0);
+        assert.equal(await page.evaluate(() => state.profile.spend12m), primarySuccess ? 125 : 0);
         assert.equal(await page.evaluate(() => window.__fixtureMeFetches), 1);
         for (const endpoint of Object.keys(fixtures)) assert.ok(requests.some(r => r.path === endpoint), endpoint);
-        if (scenario !== 'success') {
+        if (secondaryFailure) {
+          await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Часть разделов обновится при следующем открытии');
+          assert.equal(optionalErrors.length, 1);
+          assert.equal(requests.filter(r => r.path === '/api/promotions').length, 2, 'existing optional GET retry policy');
+          assert.equal(await page.evaluate(() => state.promotions.length), 0);
+        }
+        if (!primarySuccess) {
           await page.waitForFunction(() => getComputedStyle(document.querySelector('#toast')).opacity === '0');
           const banner = page.locator('#profileRefreshNotice');
           assert.equal(await banner.isVisible(), true); assert.match(await banner.textContent(), /ранее загруженные данные/);
@@ -130,10 +143,21 @@ try {
         assert.equal(await page.locator('#profileRefreshNotice').isVisible(), false);
         assert.equal(await page.evaluate(() => window.__fixtureMeFetches), 2);
         assert.equal(await page.evaluate(() => state.token), 'fixture-session');
+        if (secondaryFailure) {
+          assert.equal(requests.filter(r => r.path === '/api/promotions').length, 2, 'manual profile refresh does not restart boot-only secondary jobs');
+          secondaryFailure = false;
+          const beforeReload = requests.filter(r => r.path === '/api/promotions').length;
+          await page.reload();
+          await page.waitForFunction(() => bootCompleted && state.profile?.spend12m === 125 && state.leaderboard && state.achievementsLoaded && state.wheel.status);
+          assert.equal(requests.filter(r => r.path === '/api/promotions').length - beforeReload, 1, 'reopening retries the original secondary job');
+          assert.equal(await page.locator('#profileRefreshNotice').isVisible(), false);
+          assert.equal(await page.evaluate(() => state.token), 'fixture-session');
+          assert.equal(optionalErrors.length, 1, 'reopening does not produce another optional error');
+        }
         assert.deepEqual(violations, []); assert.deepEqual(errors, []); assert.deepEqual(coreErrors, []);
         assert.ok(requests.every(r => r.method === 'GET' || r.path === '/api/diagnostics/vk-startup'));
         page.removeListener('pageerror', onError); page.removeListener('console', onConsole);
-        results.push(`${platform}/${width}: full scripts ${scenario} -> secondary reads -> manual recovery`);
+        results.push(`${platform}/${width}: full scripts ${scenario} -> secondary reads -> manual recovery${scenario.includes('secondary') ? ' -> reopen' : ''}`);
       }
     } finally { await browser.close(); browser = null; }
   }

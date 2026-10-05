@@ -15,7 +15,7 @@ no unmerged implementation imported, including #198/#202/#203/#204/#205.
 | Telegram | Main campaign store | Existing suite | Live retry behavior unverified | Isolated provider failure |
 | Achievements/frames | Main and Business grants | Existing suite | Scoped manual grant not fully proved | Audited grant scenario |
 | Rights/audit | Gateway plus #174 draft | #203 signed-session evidence | Tenant isolation unproven | Store/tenant binding review |
-| Profile refresh UX | Main plus #206 failure banner | Original linked-script fixture startup and recovery | Live identity/tenant scope unproven | Secondary failure and recovery |
+| Profile refresh UX | Main plus #206 failure banner | Original linked-script startup, secondary outage, manual recovery and reopen | Live scope unproven; manual refresh does not retry optional reads | Review explicit retry of failed optional reads |
 
 ## Caller review and selected fix
 
@@ -142,5 +142,55 @@ Audit: three existing moderate findings, no dependencies/configuration added.
 Current public read-only probes: 0/16, then 8/16 (VK reachable, all Telegram requests
 timed out). Cause remains unknown; authenticated production behavior is unverified.
 
-Next bounded stage: inject secondary-section failure during complete linked-client
-startup and verify it does not hide a profile warning or block manual recovery.
+Secondary-section failure composition is covered by the follow-up below.
+
+
+## Secondary-section failure composition
+
+2026-10-05: freshly fetched main remains 18a0fa4; #206 prior head 0fefc6f passed
+all three CI jobs (release gate 1748, public observation 277, VK parity 622).
+Open PRs/worktrees/remotes/history reviewed. New foreign Halloween navigation work
+on origin/claude/project-thread-nthfpr (8a82e31, #204) remains separate; foreign
+dirty assets/runtime files are untouched. This stage changes only the existing
+complete-client verifier and this report, not runtime/UI or server routes.
+
+The loopback fixture now fails promotions with HTTP 503 for two composed cases:
+successful profile plus failed promotions, and failed profile plus failed promotions.
+Both use the complete original linked-client startup. The original GET retry policy
+makes two promotions attempts before the optional-job warning. Other secondary
+loaders finish normally. The optional warning may replace the transient profile
+toast, but the persistent profile banner remains visible after both toasts fade.
+A successful profile does not acquire a false profile warning from the optional
+failure. Balance/session remain unchanged; the actual refresh button restores the
+confirmed profile and clears its banner even while promotions remain unavailable.
+
+### Separate existing limitation
+
+Manual profile refresh does not restart promotions: loadSecondaryData returns when
+state.bootSecondaryStarted is already true. The existing optional warning explicitly
+says those sections will update on the next opening. The verifier asserts no extra
+promotions requests on manual profile refresh, then restores the fixture provider and
+reloads the real page. Reopening makes one successful promotions GET and finishes
+without another optional error. No behavior change or automatic write/retry is
+introduced to address this separate limitation. A future retry change needs its own
+bounded UI/data-refresh contract.
+
+Validation: 32/32 complete-client cases on canonical files and 32/32 on the full
+materialized chain (24 retained plus 8 new combinations across TG/VK, 390/1440 px).
+448/448 node tests, npm run check and diagnostic syntax/diff checks pass. Two full
+materializations are byte-identical across 397 tracked files. No scripts retired;
+generated runtime differences are restored. npm audit retains three existing
+moderate findings; no dependencies, services or product environment variables added.
+Current public read-only probes: 8/16 (VK timed out), then 16/16 after repeating.
+This is availability evidence only; no authenticated production flow is checked.
+
+Owner benefit established on fixtures: an optional-section outage does not silently
+remove the stale-profile warning or block profile recovery. No new owner workflow
+was implemented in this diagnostic follow-up. Payload/SDK adapters, warm accepted-
+consent client, empty secondary datasets, no server/auth/SQL composition and the
+previous live-identity/tenant/concurrent-refresh/native-hosting limitations remain.
+VK diagnostic POST is captured locally only; all other writes/off-origin traffic
+are forbidden. No production data changes, sends, migrations, merge or deploy.
+
+Next small stage: review the existing UI contract for explicitly retrying failed
+optional reads, keeping profile confirmation separate from optional-section status.
