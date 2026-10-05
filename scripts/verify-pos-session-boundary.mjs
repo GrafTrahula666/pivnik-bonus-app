@@ -25,6 +25,17 @@ function section(source, start, end) {
   return source.slice(from, to);
 }
 const transportSource = section(clientSource, 'function timeoutError(', 'function openModal(');
+function loaderFunction(start) {
+  // Only the original function: materialization can insert browser event wiring
+  // between declarations. Top-level closing braces are unindented in app.js.
+  return `${section(clientSource, start, '\n}\n')}\n}`;
+}
+const loaderSource = [
+  loaderFunction('async function refreshMe('),
+  loaderFunction('function renderCoreProfile('),
+  loaderFunction('function applyProfilePayload('),
+  loaderFunction('async function hydrateAfterBoot(')
+].join('\n');
 const boundary = section(local, 'async function canonicalizeSessionToken(', 'async function ensurePersonalQr(');
 assert.equal(boundary, section(draft, 'async function canonicalizeSessionToken(', 'async function ensurePersonalQr('));
 const routes = section(draft, "    if (req.method === 'GET' && url.pathname === '/api/admin/pos/dashboard')", "    if (req.method === 'GET' && url.pathname === '/api/admin/users')");
@@ -464,6 +475,58 @@ try {
     transportState.token = client.token;
     await transportCheck('client platform mismatch denial is not retried', 1, 403,
       { headers: { 'x-pivnik-platform': platform === 'vk' ? 'telegram' : 'vk' } });
+    const loaderCalls = { render: 0, statuses: 0, chrome: 0, design: 0, secondary: 0, wheel: 0 };
+    const loaderWarnings = [];
+    let failDesignApply = false;
+    Object.assign(transportState, { profile: detailed.profile, statuses: detailed.statuses });
+    Object.assign(transportContext, {
+      applyTelegramChrome: () => loaderCalls.chrome++, renderProfile: () => loaderCalls.render++,
+      renderStatuses: () => loaderCalls.statuses++,
+      applyDesign: () => { loaderCalls.design++; if (failDesignApply) throw new Error('fixture design render failure'); },
+      loadSecondaryData: async () => { loaderCalls.secondary++; },
+      loadWheelStatus: async () => { loaderCalls.wheel++; },
+      console: { warn: message => loaderWarnings.push(message), error: message => loaderWarnings.push(message) }
+    });
+    vm.runInContext(`${loaderSource}\nglobalThis.hydrateProfile=hydrateAfterBoot;globalThis.refreshProfile=refreshMe;`, transportContext);
+    const profileState = () => JSON.stringify({ token: transportState.token, profile: transportState.profile, statuses: transportState.statuses });
+    const stableState = profileState();
+    const loaderCheck = async (name, mode, expectedRequests, failureStatus) => {
+      const before = transportCalls.length;
+      if (failureStatus) await assert.rejects(transportContext[mode](), error => error.status === failureStatus);
+      else await transportContext[mode]();
+      assert.equal(transportCalls.length - before, expectedRequests, `${name}: loader API request count`);
+      assert.equal(await profileSnapshot(), detailBefore, `${name}: loader changes no fixture data`);
+      assert.equal(profileState(), stableState, `${name}: same signed token/profile/statuses`);
+      cases.push(`${platform}: ${name}`);
+    };
+    // A distinct stale fixture proves replacement by the confirmed response.
+    transportState.profile = { id: -1, fixture: 'stale profile' };
+    transportState.statuses = [{ fixture: 'stale status' }];
+    await loaderCheck('original hydration applies confirmed profile and renders', 'hydrateProfile', 1);
+    assert.equal(loaderCalls.render, 1); assert.equal(loaderCalls.statuses, 1);
+    assert.equal(loaderCalls.secondary, 0); // Existing consent guard, not a rewritten policy.
+    failDesignReads = 1;
+    await loaderCheck('hydration SQL failure keeps prior profile and warns without retry', 'hydrateProfile', 1);
+    assert.equal(loaderCalls.render, 1); assert.equal(loaderWarnings.at(-1), 'Full profile hydration skipped:');
+    await loaderCheck('manual hydration repeat restores confirmed rendering', 'hydrateProfile', 1);
+    assert.equal(loaderCalls.render, 2);
+    failDesignReads = 2;
+    await loaderCheck('explicit refresh rejects exhausted SQL retries without applying', 'refreshProfile', 2, 503);
+    assert.equal(loaderCalls.render, 2); assert.equal(loaderCalls.secondary, 0);
+    await loaderCheck('explicit refresh recovery applies once and starts secondary adapters', 'refreshProfile', 1);
+    assert.equal(loaderCalls.render, 3); assert.equal(loaderCalls.secondary, 1); assert.equal(loaderCalls.wheel, 1);
+    transportState.token = client.token + 'x';
+    const rejectedState = profileState();
+    const beforeDenied = transportCalls.length;
+    await transportContext.hydrateProfile();
+    assert.equal(transportCalls.length - beforeDenied, 1); assert.equal(profileState(), rejectedState);
+    assert.equal(loaderCalls.render, 3); assert.equal(loaderWarnings.at(-1), 'Full profile hydration skipped:');
+    assert.equal(await profileSnapshot(), detailBefore);
+    cases.push(`${platform}: hydration auth denial keeps prior state and only warns`);
+    transportState.token = client.token;
+    failDesignApply = true;
+    await loaderCheck('optional design adapter failure preserves profile rendering', 'hydrateProfile', 1);
+    assert.equal(loaderCalls.render, 4); assert.equal(loaderWarnings.at(-1), 'Design update skipped:');
     await db.query('DELETE FROM transactions WHERE client_id=$1', [clientPayload.uid]);
     await db.query('DELETE FROM reward_grants WHERE user_id=$1', [clientPayload.uid]);
 
@@ -548,6 +611,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::int AS n FROM wallets WHERE user_id >= 10 AND balance <> 0')).rows[0].n, 0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM transactions')).rows[0].n, 0);
   process.stdout.write(JSON.stringify({ pinned, boundaryHash: createHash('sha256').update(boundary).digest('hex'),
+    loaderHash: createHash('sha256').update(loaderSource).digest('hex'),
     transportHash: createHash('sha256').update(transportSource).digest('hex'),
     profileRouteHash: createHash('sha256').update(profileRouteSource).digest('hex'),
     achievementModuleHash: createHash('sha256').update(await readFile(new URL('../achievements.js', import.meta.url))).digest('hex'),
@@ -556,7 +620,7 @@ try {
     limiterHash: createHash('sha256').update(limiterSource).digest('hex'),
     authRouteHash: createHash('sha256').update(authRoute).digest('hex'),
     routesHash: createHash('sha256').update(routes).digest('hex'), passed: cases.length, cases,
-    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Original client API/fetch, startup/detailed profile SQL/helpers and profile route execute in VM. Fixture DDL/secrets/clock/HTTP/body/provider, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup proof.' }, null, 2) + '\n');
+    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Original client loader/API/fetch, startup/detailed profile SQL/helpers and profile route execute in VM. Fixture DDL/secrets/clock/HTTP/body/provider, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup proof.' }, null, 2) + '\n');
 } finally {
   globalThis.fetch = nativeFetch;
   server.closeAllConnections();

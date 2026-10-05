@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 165 auth/profile/client API/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 179 auth/profile/client loader/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,7 +59,7 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-165/165 checks on canonical and materialized gateway sources; equal boundary/module
+179/179 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
@@ -107,7 +107,7 @@ retirement. #201/#202 and foreign dirty work remain separate. Recovery at the pr
 adapter boundary is now checked; non-startup detailed profile remains outside this stage. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
 
-Prior #203 release gate 1736 passed. MODULE-MAP and open PRs rechecked; current
+Prior #203 release gate 1738 passed. MODULE-MAP and open PRs rechecked; current
 main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
 
 ## Actual auth route and rate limiter, current extension
@@ -281,3 +281,52 @@ with VK timeouts; one bounded retry 0/16 with all requests timed out. Cause unkn
 no production outage diagnosis or authenticated workflow claim. Runtime files restored.
 Fresh main remains 18a0fa4, prior CI 1736 passed; open PRs/worktrees/remotes/history
 reviewed without importing foreign work. MODULE-MAP reread; no applicable AGENTS.
+
+
+## Original profile-loader state and recovery, current extension
+
+14 additional cases, seven per platform. Exact refreshMe, applyProfilePayload,
+renderCoreProfile and hydrateAfterBoot are extracted from current app.js and run
+around the signed original API/profile SQL in the existing VM. Render/chrome/design,
+secondary reads and wheel functions are diagnostic adapters with call counters.
+This verifies loader orchestration and state assignment, not pixels or DOM behavior.
+
+Confirmed hydration applies profile/statuses and invokes render adapters once.
+One SQL failure produces one request (hydrateAfterBoot sets retries=0), retains the
+same token/profile/statuses and logs its original warning. Explicit repeat restores
+rendering. refreshMe rejects after its two default failed attempts without applying
+or starting secondary jobs; a successful repeat applies once and calls secondary/
+wheel adapters. Failed signed token in background hydration retains prior state,
+makes one request and only warns. Optional design adapter failure is caught by
+original applyProfilePayload, so confirmed profile still reaches render adapters.
+All profile/financial/grant/settings snapshots remain unchanged.
+
+Specific observed gap: hydrateAfterBoot catches auth/database errors with console.warn
+and keeps prior profile; no user-visible error call occurs inside that function.
+This does not establish full application's visible state, callers or browser UX.
+No production defect fix or new owner-facing feature is claimed. The owner recovery
+scenario now has verified client state evidence; runtime remains unchanged.
+
+179 cases pass on canonical/materialized variants; original loader hash emitted.
+Remaining limits: actual render/secondary behavior, DOM/loading/error visibility,
+full boot, timeout/abort/reload/navigation, live identity, tenant binding and PostgreSQL
+contention. Next bounded stage: inspect the same failure/retained-profile behavior in
+an isolated browser before choosing a narrowly scoped visible-error change.
+
+Current validation: 179/179 diagnostic cases on canonical and materialized sources,
+436/436 node tests, npm check and diff-check pass. Two full materializations are
+byte-identical across 395 tracked files. Loader and transport hashes match between
+variants. Successful hydration starts from a distinct stale fixture to prove server
+profile/status replacement, rather than merely rendering already matching state.
+The first materialized diagnostic attempt included neighboring VK browser event
+wiring and failed because the VM has no window. Extraction now ends at each original
+function's unindented closing brace; event wiring is excluded and remains untested.
+No production code was changed to make this fixture pass. Generated runtime files
+were restored after validation; no patch script retired.
+
+Audit: three existing moderate dependency findings (qs, body-parser, express), no new
+dependencies. Public read-only probe and one bounded retry both returned 0/16 due to
+timeouts; cause unknown, production status is unverified. Fresh main remains 18a0fa4;
+previous published head 04e432f has successful release gate 1738. PR #203 is extended
+without importing other open PRs or touching foreign worktrees. UI desktop/mobile,
+full startup and live provider/database behavior remain unverified.
