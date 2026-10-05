@@ -14,7 +14,7 @@ function section(start, end) {
 }
 function original(start) { return section(start, '\n}\n') + '\n}'; }
 const functions = ['async function boot(', 'async function finishBoot(', 'function showBootActions(',
-  'function clearBootError(', 'async function refreshMe(', 'async function hydrateAfterBoot(',
+  'function setProfileRefreshState(', 'function clearBootError(', 'async function refreshMe(', 'async function hydrateAfterBoot(',
   'function schedulePostBootHydration(', 'function renderCoreProfile(', 'function applyProfilePayload(',
   'function renderProfile(', 'function renderStatuses(', 'function currentLevelIndex(', 'function toast(',
   'function closeModal('].map(original).join('\n');
@@ -38,6 +38,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       if (pathname === '/api/bootstrap') return res.end(JSON.stringify(payload(0)));
       assert.equal(pathname, '/api/me');
+      await new Promise(resolve => setTimeout(resolve, 150));
       if (phase === 'network') return req.socket.destroy();
       if (['401', '403', '503'].includes(phase)) {
         res.statusCode = Number(phase); return res.end(JSON.stringify({ error: 'private fixture provider/SQL details' }));
@@ -101,21 +102,35 @@ try {
         // still calls fetch once for hydration (retries=0), and no write exists.
         if (scenario === 'network') assert.ok(requests.length >= 2);
         else assert.equal(requests.length, 2);
-        if (scenario === 'success') assert.equal(view.shown, false);
+        if (scenario === 'success') { assert.equal(view.shown, false); assert.equal(await page.locator('#profileRefreshNotice').isVisible(), false); }
         else {
           assert.match(view.toast, /ранее загруженные данные/); assert.equal(view.toast.includes('private'), false);
           assert.equal(view.toast.includes('Откройте приложение заново'), ['401', '403'].includes(scenario));
           assert.equal(await page.locator('#toast').isVisible(), true);
-          const rect = await page.locator('#toast').boundingBox();
+          await page.waitForFunction(() => !document.querySelector('#toast').classList.contains('show'));
+          assert.equal(await page.locator('#profileRefreshNotice').isVisible(), true);
+          assert.match(await page.locator('#profileRefreshNotice').textContent(), /ранее загруженные данные/);
+          await page.waitForFunction(() => getComputedStyle(document.querySelector('#toast')).opacity === '0');
+          assert.equal(await page.locator('#profileRefreshNotice').evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), true, 'notice is above shell background');
+          if (scenario === '503' && platform === 'telegram') await page.screenshot({ path: path.join(root, '..', 'profile-persistent-validation', `notice-${width}.png`) });
+          const rect = await page.locator('#profileRefreshNotice').boundingBox();
           assert.ok(rect && rect.x >= 0 && rect.x + rect.width <= width + 1 && rect.y >= 0 && rect.y + rect.height <= 900);
+        }
+        if (scenario !== 'success') {
+          await page.locator('#refreshButton').click();
+          await page.waitForFunction(() => ['error', 'denied'].includes(document.querySelector('#profileRefreshNotice').dataset.state));
+          assert.equal(await page.evaluate(() => fixture.state.profile.spend12m), 0);
+          assert.equal(await page.evaluate(() => fixture.fetchCount()), ['503', 'network'].includes(scenario) ? 4 : 3, 'existing manual GET retry policy');
         }
         const beforeManual = requests.length;
         phase = 'success';
         await page.locator('#refreshButton').click();
+        await page.waitForFunction(() => document.querySelector('#profileRefreshNotice').dataset.state === 'loading');
         await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Данные обновлены');
         assert.equal(await page.evaluate(() => fixture.state.profile.spend12m), 125);
+        assert.equal(await page.locator('#profileRefreshNotice').isVisible(), false);
         assert.equal(requests.length - beforeManual, 1, 'existing manual refresh uses one successful GET');
-        assert.equal(await page.evaluate(() => fixture.fetchCount()), 3);
+        assert.equal(await page.evaluate(() => fixture.fetchCount()), scenario === 'success' ? 3 : ['503', 'network'].includes(scenario) ? 5 : 4);
         assert.deepEqual(errors, []); assert.deepEqual(renderErrors, []);
         page.removeListener('pageerror', onError); page.removeListener('console', onConsole);
         results.push(`${platform}/${width}: ${scenario} boot -> scheduled hydration -> manual refresh`);

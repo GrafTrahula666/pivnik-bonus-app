@@ -10008,3 +10008,18 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   background: rgba(255, 252, 247, .8);
   color: #6b5a43;
 }
+
+/* Keep retained-profile errors visible after the transient toast closes. */
+.profile-refresh-notice {
+  position: relative;
+  z-index: 2;
+  margin: 0 14px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--card);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
