@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 40 SQL + 30 local HTTP/browser cases here | Real provider document, signed tenant and concurrency absent | Lost confirmed-link response/retry |
+| Cash/Evotor | #174 import/repository/analytics | 40 SQL + 36 local HTTP/browser cases here | Real provider document, signed tenant and concurrency absent | Original app API transport composition |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -409,3 +409,47 @@ activation remains unperformed. Real QR entry, signed owner/store binding, live
 provider fiscal samples, full app boot and concurrent PostgreSQL remain unverified.
 Next bounded stage: lost HTTP response after confirmed QR link, then repeat the
 same original document/QR and verify one persisted confirmation and recovered UI.
+
+
+## Uncertain QR result recovery follow-up — 2026-10-05
+
+Verified fresh origin/main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5.
+Previous #201 aa9fa24 release gate 1721 passed. Open PRs, remotes, git history,
+origin branches and worktrees checked; unchanged MODULE-MAP read, no AGENTS found.
+Existing disabled #174 source and separate Business/SaaS work remain separate;
+foreign dirty images and six Business files preserved. Prior starter/knowledge
+sources remain the task context.
+
+Extended only manual HTTP composition verifier/report. The local adapter runs
+actual service.link to COMMIT, then returns HTTP 200 with a truncated JSON body.
+This deliberately tests an unreadable post-commit response, not TCP timeout/lost
+connection or the real application's api()/timeout/retry implementation.
+
+Three additional checks per width, 36 total HTTP/browser cases at 390/1440 px:
+committed link plus JSON parse failure retains visible retry form and unchanged
+original document/QR, with parser error rather than a success view; subsequent
+viewer refusal returns 403 without changing the persisted link or hiding the form;
+admin retry submits the same original document/QR and recovers the visible profile.
+All three captured request bodies match. Full confirmation row remains exactly
+unchanged after the first commit, including actor and timestamp; only one link.
+Overall cash remains 1000 kopecks and loyalty is attributed after confirmed reload.
+Wallet/journal unchanged. Pending disabled-button second-click and original role,
+unknown QR, conflict, invalid input, foreign-store and SQL-error checks retained.
+
+Validation: 36 cases on canonical and materialized sources; node --test 436/436;
+double materialize SHA256-identical for 397 files; npm check, explicit verifier
+syntax and diff-check pass. npm audit retains three pre-existing moderate findings.
+Public read-only probe result recorded below. Existing 40 isolated SQL and 54
+response-fixture UI checks unchanged. Generated runtime files restored.
+
+No product regression reproduced and no production feature enabled. Recovery proof
+covers manual repeat in the same live component; it does not establish recovery
+across reload/tab close, browser retries, real provider/session entry or independent
+PostgreSQL concurrency. Synthetic legacy actor and configured store do not prove
+SaaS tenant ownership. No production UI/routes/data/config/schema changes,
+dependencies, merge/deploy, provider sends or patch retirement.
+Next bounded step: compose the original application API/fetch functions with this
+same isolated HTTP scenario to remove the simplified browser transport assumption.
+
+Current public read-only probe: 16/16 reachable responses. Canonical final verifier
+with explicit parser-error assertion: 36/36, no JavaScript page errors.

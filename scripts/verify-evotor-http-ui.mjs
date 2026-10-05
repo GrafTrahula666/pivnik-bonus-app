@@ -13,7 +13,7 @@ import {PGlite} from '@electric-sql/pglite';
 const pin='776c70d691540b01bbc56a1496203e6cc918eea6';
 const files=['pos/analytics.js','pos/evotor-client.js','pos/evotor-document.js','pos/repository.js','pos/service.js','pos/sync.js','qr-resolver.js','platform-core.js','migrations/012_evotor_sales.sql','test/fixtures/evotor.js','pos-admin.js','pos-admin.css'];
 const root=path.resolve(new URL('../',import.meta.url).pathname),scratch=await mkdtemp(path.join(tmpdir(),'evotor-http-'));
-const nativeFetch=globalThis.fetch,hashes={},cases=[];let browser,server,db,service,origin,actor,providerStatus=200,providerCalls=0,posts=0,releaseProvider,holdProvider=false,linkPosts=0,holdLink=false,releaseLink,failLinkInsert=false;
+const nativeFetch=globalThis.fetch,hashes={},cases=[];let browser,server,db,service,origin,actor,providerStatus=200,providerCalls=0,posts=0,releaseProvider,holdProvider=false,linkPosts=0,holdLink=false,releaseLink,failLinkInsert=false,truncateLinkReply=false;const linkBodies=[],recoveryEvidence=[];
 const config={enabled:true,token:'local-fixture-only',storeId:'bar'};
 const listen=server=>new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 try{
@@ -40,7 +40,9 @@ try{
    if(url.pathname==='/api/admin/pos/link'&&req.method==='POST'){
     linkPosts++;let body='';for await(const chunk of req){body+=chunk;assert.ok(body.length<=4096,'Fixture payload limit');}
     if(holdLink)await new Promise(resolve=>releaseLink=resolve);
-    return json(200,await service.link(actor,JSON.parse(body)));
+    const command=JSON.parse(body);linkBodies.push(command);const result=await service.link(actor,command);
+    if(truncateLinkReply){truncateLinkReply=false;res.writeHead(200,{'Content-Type':'application/json'});return res.end('{"ok":');}
+    return json(200,result);
    }
    return json(404,{error:'Unknown fixture route'});
   }catch(error){json(error.statusCode||500,{error:error.message,code:error.code});}
@@ -81,11 +83,22 @@ try{
   await confirmFailure('PVK-ZZZZ-9999','QR клиента не найден');cases.push({width,scenario:'unknown-qr-ui-error-no-attribution'});
   failLinkInsert=true;await confirmFailure('PVK-AAAA-2222','Fixture link SQL outage');cases.push({width,scenario:'link-sql-outage-rolls-back-and-ui-retains-form'});
   actor={id:'3',role:'viewer'};await confirmFailure('PVK-AAAA-2222','Недостаточно прав');actor={id:'3',role:'admin'};cases.push({width,scenario:'revoked-write-role-rejected-through-confirm-ui'});
-  await page.locator('#posQr').fill('PVK-AAAA-2222');holdLink=true;releaseLink=null;const linksBefore=linkPosts;
+  await page.locator('#posQr').fill('PVK-AAAA-2222');truncateLinkReply=true;const bodyStart=linkBodies.length;holdLink=true;releaseLink=null;const linksBefore=linkPosts;
   await page.locator('#posConfirm').click();for(let attempts=0;!releaseLink&&attempts<1000;attempts++)await new Promise(resolve=>setTimeout(resolve,10));assert.ok(releaseLink,'Local link request reached within 10 seconds');
   assert.equal(await page.locator('#posConfirm').isDisabled(),true);await page.evaluate(()=>document.querySelector('#posConfirm').click());assert.equal(linkPosts,linksBefore+1);holdLink=false;releaseLink();
+  await page.waitForFunction(()=>!document.querySelector('#posConfirm').disabled&&document.querySelector('#posLinkForm').hidden===false);
+  const persistedAfterLostReply=await links();assert.equal(persistedAfterLostReply.length,1);assert.equal(String(persistedAfterLostReply[0].client_id),'1');
+  assert.equal(await page.locator('#posDocument').inputValue(),'http-sale');assert.equal(await page.locator('#posQr').inputValue(),'PVK-AAAA-2222');
+  assert.ok(!(await page.locator('#posResult').innerText()).includes('Профиль №1'),'UI has not received a confirmed link result');
+  assert.match(await page.locator('#posResult').innerText(),/10,00 ₽/);assert.match(await page.locator('#posConnection').innerText(),/JSON/);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  cases.push({width,scenario:'committed-link-truncated-http-reply-retains-retry-form'});
+  actor={id:'3',role:'viewer'};await page.locator('#posConfirm').click();
+  await page.waitForFunction(()=>!document.querySelector('#posConfirm').disabled&&document.querySelector('#posConnection').textContent.includes('Недостаточно прав'));
+  assert.deepEqual(await links(),persistedAfterLostReply);assert.equal(await page.locator('#posLinkForm').isVisible(),true);
+  assert.equal(await page.locator('#posQr').inputValue(),'PVK-AAAA-2222');cases.push({width,scenario:'permission-refusal-after-uncertain-result-preserves-confirmation'});
+  actor={id:'3',role:'admin'};await page.locator('#posConfirm').click();
   await page.waitForFunction(()=>!document.querySelector('#posConfirm').disabled&&document.querySelector('#posLinkForm').hidden&&document.querySelector('#posResult').textContent.includes('Профиль №1'));
-  const confirmed=await links();assert.equal(confirmed.length,1);assert.equal(String(confirmed[0].client_id),'1');assert.equal(String(confirmed[0].confirmed_by),'3');assert.ok(confirmed[0].confirmed_at);
+  const confirmed=await links();assert.deepEqual(confirmed,persistedAfterLostReply);assert.deepEqual(linkBodies.slice(bodyStart),Array.from({length:3},()=>({documentId:'http-sale',qr:'PVK-AAAA-2222'})));recoveryEvidence.push({width,bodies:linkBodies.slice(bodyStart),confirmation:confirmed});cases.push({width,scenario:'original-command-ui-retry-recovers-one-persisted-confirmation'});assert.equal(confirmed.length,1);assert.equal(String(confirmed[0].client_id),'1');assert.equal(String(confirmed[0].confirmed_by),'3');assert.ok(confirmed[0].confirmed_at);
   await page.locator('[data-pos-tab="app"]').click();assert.match(await page.locator('#posResult').innerText(),/10,00 ₽/);assert.equal((await service.dashboard(actor,{period:'today'})).all.netCents,'1000');cases.push({width,scenario:'explicit-qr-confirm-ui-http-sql-audit-and-loyalty'});
   const linkRequest=body=>nativeFetch(origin+'/api/admin/pos/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const replay=await linkRequest({documentId:'http-sale',qr:'PVK-AAAA-2222'});assert.equal(replay.status,200);assert.equal((await replay.json()).clientId,'1');assert.deepEqual(await links(),confirmed);cases.push({width,scenario:'same-qr-replay-retains-one-original-confirmation'});
@@ -102,7 +115,7 @@ try{
   config.enabled=false;await page.locator('#posRefresh').click();await page.waitForFunction(()=>document.querySelector('#posConnection').textContent.includes('Касса не подключена'));assert.equal(await page.locator('.pos-metric').count(),0);cases.push({width,scenario:'disabled-connection-hides-cached-metrics'});
   assert.deepEqual((await db.query('SELECT * FROM wallets')).rows,[{user_id:3,balance:1000}]);assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n,0);assert.deepEqual(errors,[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.close();await db.close();db=null;
  }
- console.log(JSON.stringify({pin,sourceSha256:hashes,httpBrowserCases:cases.length,cases,providerCalls,syntheticActor:true,advisoryLocksStubbed:true,fullAppBootVerified:false,productionAuthorizationVerified:false},null,2));
+ console.log(JSON.stringify({pin,sourceSha256:hashes,httpBrowserCases:cases.length,cases,providerCalls,recoveryEvidence,syntheticActor:true,advisoryLocksStubbed:true,fullAppBootVerified:false,productionAuthorizationVerified:false},null,2));
 }finally{
  globalThis.fetch=nativeFetch;if(releaseProvider)releaseProvider();if(releaseLink)releaseLink();if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));if(db)await db.close();await rm(scratch,{recursive:true,force:true});
 }
