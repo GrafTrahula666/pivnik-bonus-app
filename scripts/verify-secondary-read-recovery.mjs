@@ -8,6 +8,8 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const bundleMode = process.argv.includes('--vk-hosting');
+const runtimeRoot = bundleMode ? path.join(root, 'vk-hosting-build') : root;
 const gateway = await readFile(path.join(root, 'universal-server.js'), 'utf8');
 const from = gateway.indexOf('export async function renderAppIndex(');
 const to = gateway.indexOf('\n}\n', from);
@@ -16,6 +18,11 @@ const indexRenderer = gateway.slice(from, to + 3).replace('export ', '');
 const context = vm.createContext({ fs: { readFile }, path, __dirname: root });
 vm.runInContext(indexRenderer + '\nglobalThis.render=renderAppIndex;', context);
 const shells = { telegram: await context.render('telegram'), vk: await context.render('vk') };
+if (bundleMode) {
+  shells.vk = await readFile(path.join(runtimeRoot, 'index.html'), 'utf8');
+  assert.ok(shells.vk.includes('https://vk-gateway.invalid'), 'Build with the existing CI fixture API base');
+  assert.ok(!shells.vk.includes('telegram.org/js/telegram-web-app.js'));
+}
 const fixtures = {
   '/api/shift/current': { shift: null }, '/api/promotions': { promotions: [] },
   '/api/shop/catalog': { items: [] }, '/api/leaderboard/monthly': { month: '2026-10', leaders: [], me: null },
@@ -26,7 +33,7 @@ const fixtures = {
 };
 const sdk = `window.Telegram={WebApp:{initData:'fixture-launch',initDataUnsafe:{user:{id:123}},ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){},setBottomBarColor(){},onEvent(){},BackButton:{show(){},hide(){},onClick(){},offClick(){}},MainButton:{hide(){}},HapticFeedback:{impactOccurred(){}}}};`;
 const vkSdk = `window.vkBridge={send:async(name)=>name==='VKWebAppGetLaunchParams'?{vk_user_id:'123',vk_app_id:'123',sign:'fixture'}:name==='VKWebAppGetUserInfo'?{id:123,first_name:'Fixture',last_name:'Profile'}:{result:true},subscribe(){},supports(){return true}};`;
-let platform = 'telegram', phase = 'success', secondaryFailure = false, secondaryStatus = '503', requests = [], violations = [];
+let platform = 'telegram', phase = 'success', secondaryFailure = false, secondaryStatus = '503', requests = [], violations = [], gatewayRequests = [];
 function payload(spend) {
   return { profile: { id: 'fixture', firstName: 'Fixture', lastName: 'Profile', platform,
     role: 'client', balance: 17, spend12m: spend, termsAccepted: true,
@@ -67,8 +74,8 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'text/html'); return res.end(shells[platform]);
     }
     if (pathname === '/vendor/vk-bridge.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(vkSdk); }
-    const file = path.resolve(root, '.' + pathname);
-    assert.ok(file.startsWith(root + path.sep));
+    const file = path.resolve(runtimeRoot, '.' + pathname);
+    assert.ok(file.startsWith(runtimeRoot + path.sep));
     res.setHeader('Content-Type', pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.css') ? 'text/css' :
       pathname.endsWith('.png') ? 'image/png' : pathname.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream');
     res.end(await readFile(file));
@@ -82,16 +89,34 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const results = [];
 let browser;
 try {
-  for (platform of ['telegram', 'vk']) for (const width of [390, 1440]) {
+  for (platform of (bundleMode ? ['vk'] : ['telegram', 'vk'])) for (const width of [390, 1440]) {
     browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE_PATH ? {
       executablePath: process.env.CHROMIUM_EXECUTABLE_PATH, args: ['--no-sandbox', '--disable-dev-shm-usage',
         '--single-process', '--no-zygote', '--disable-gpu', '--disable-software-rasterizer', '--use-gl=disabled']
     } : {}) });
     try {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
-      await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() :
-        route.request().url().startsWith('https://telegram.org/js/telegram-web-app.js') ?
-          route.fulfill({ contentType: 'text/javascript', body: sdk }) : route.abort());
+      await page.route('**/*', async route => {
+        const request = route.request(), url = new URL(request.url());
+        if (url.origin === origin) return route.continue();
+        if (bundleMode && url.origin === 'https://vk-gateway.invalid') {
+          gatewayRequests.push({ path: url.pathname, method: request.method() });
+          const headers = { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true',
+            'access-control-allow-methods': 'GET, POST, OPTIONS',
+            'access-control-allow-headers': request.headers()['access-control-request-headers'] || '*' };
+          if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+          try {
+            // Redirect the built wrapper's gateway request to loopback. No external
+            // provider request or actual hosted gateway is used by this fixture.
+            const response = await route.fetch({ url: origin + url.pathname + url.search, maxRetries: 0 });
+            return route.fulfill({ response, headers: { ...response.headers(), ...headers } });
+          } catch { return route.abort('connectionfailed'); }
+        }
+        if (request.url().startsWith('https://telegram.org/js/telegram-web-app.js')) {
+          return route.fulfill({ contentType: 'text/javascript', body: sdk });
+        }
+        return route.abort();
+      });
       await page.addInitScript(() => {
         localStorage.setItem('pivnik_tg_session', 'fixture-session');
         localStorage.setItem('pivnik_vk_123_session', 'fixture-session');
@@ -109,7 +134,7 @@ try {
       for (const scenario of ['success', '503', '403', 'network']) {
         phase = 'success'; secondaryStatus = scenario; secondaryFailure = scenario !== 'success';
         fixtures['/api/promotions'] = { promotions: [] };
-        requests = []; violations = [];
+        requests = []; violations = []; gatewayRequests = [];
         process.stderr.write(`Checking ${platform}/${width}/${scenario}\n`);
         const errors = [], coreErrors = [];
         const onError = error => errors.push(error.message);
@@ -161,6 +186,12 @@ try {
         await page.waitForFunction(expected => window.__fixtureWheelFetches === expected && !state.bootSecondaryPending, scenario === 'success' ? 3 : 4);
         assert.equal(count('/api/promotions'), recovered, 'recovered read leaves the retry queue');
         assert.equal(await page.evaluate(() => state.token), 'fixture-session');
+        if (bundleMode) {
+          for (const endpoint of ['/api/bootstrap', '/api/me', '/api/promotions', '/api/wheel/status']) {
+            assert.ok(gatewayRequests.some(r => r.path === endpoint && r.method === 'GET'), 'Built wrapper did not reach fixture gateway: ' + endpoint);
+          }
+          assert.ok(gatewayRequests.every(r => ['GET', 'OPTIONS'].includes(r.method) || r.path === '/api/diagnostics/vk-startup'));
+        }
         assert.deepEqual(violations, []); assert.deepEqual(errors, []); assert.deepEqual(coreErrors, []);
         page.removeListener('pageerror', onError); page.removeListener('console', onConsole);
         results.push(`${platform}/${width}: ${scenario} -> explicit retry -> visible recovery -> no repeat`);
@@ -169,10 +200,10 @@ try {
   }
   const hashes = {};
   for (const file of ['app.js', 'account-link.js', 'vk-platform.js', 'red-cosmos-v2.js', 'index.html', 'styles.css']) {
-    hashes[file] = createHash('sha256').update(await readFile(path.join(root, file))).digest('hex');
+    hashes[file] = createHash('sha256').update(await readFile(path.join(runtimeRoot, file))).digest('hex');
   }
-  console.log(JSON.stringify({ passed: results.length, cases: results, hashes,
-    limits: 'Original renderAppIndex and complete linked client scripts with local HTTP payload fixtures and SDK adapters. Warm fixture token; no cold signed auth, DB/server route composition, native VK hosting, real tenants or provider proof. VK diagnostic POST captured locally only.' }, null, 2));
+  console.log(JSON.stringify({ mode: bundleMode ? 'vk-hosting-build' : 'gateway-shell', passed: results.length, cases: results, hashes,
+    limits: 'Complete linked client scripts from original renderAppIndex or the actual local VK Hosting build; SDKs and HTTP responses are fixtures. Built cross-origin gateway calls are redirected to loopback with fixture CORS. Warm token; no cold signed auth, live native hosting, DB/server route composition, real tenants or provider proof. VK diagnostic POST captured locally only.' }, null, 2));
 } finally {
   if (browser) await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
 }

@@ -92,3 +92,49 @@ No auth/staff/admin/leaderboard server route edits; no server parity change need
 No patch retirement, destructive migration, production data change, resource,
 real message, merge or deploy. Next small stage: investigate the existing hidden
 promotions entry and decide its intended navigation, separately from this retry fix.
+
+
+## 2026-10-06: local VK Hosting build recovery proof
+
+Fresh origin/main remains 18a0fa4. Existing inventory/drafts and foreign changes
+were reviewed again; no new feature or foreign branch imported. The proposed
+promotions navigation work was deferred when all three #207 CI runs reported
+failure: their jobs were cancelled without any steps, and release-job logs returned
+404. Cause is unconfirmed; this is not evidence that a test failed. Each existing
+verification run was requested once again; no deploy workflow was invoked.
+
+Added only a --vk-hosting mode to the existing diagnostic and this report. It loads
+the exact index, app, CSS and patched VK wrapper emitted by build-vk-hosting.mjs.
+Both app.js and vk-platform.js are the built versions: the existing builder adds
+VK 401 session recovery to app.js and gateway/launch handling to vk-platform.js.
+These generated transforms are not committed or changed here; the new cases test
+403 denial and do not claim to prove the builder's separate 401 reauthentication.
+The existing CI-only API base https://vk-gateway.invalid is used for the local build.
+Requests to that gateway are intercepted before external transport, forwarded to
+loopback, and given fixture CORS headers. Assertions require the built wrapper to
+actually request bootstrap, detailed profile, promotions and wheel through that
+configured cross-origin gateway. Only fixture VK diagnostics may POST locally;
+all other fixture API traffic must remain GET (or a mocked CORS preflight).
+
+The eight cases cover VK 390/1440 px, success/empty, 403, 503 and disconnected socket,
+failed explicit retry, recovery to a nonempty rendered promotion, unchanged token
+and balance, and no refetch after recovery. Original screen renderer is still used
+because main's promotions entry remains hidden; no navigation availability claim.
+No new owner feature is implemented by this follow-up; it strengthens evidence
+that the existing retry fix survives the separate static VK packaging boundary.
+
+Local checks: existing startup-parity verifier passes complete prestart, prestart,
+materialize, prestart chains in its credential-free disposable copy. Static VK build
+passes; 10 focused VK bundle tests pass. Full materialized Node suite 447/447 and
+check pass. Two successful materializations are byte-identical across 396 tracked
+files. npm audit again reports three existing moderate findings and exits 1. Public
+read-only probe is 16/16 reachable. The default linked-script diagnostic is also
+rechecked after changing its fixture routing: 16/16 gateway-shell cases pass.
+This follow-up runs 24 browser cases total (16 gateway + 8 actual VK build).
+
+Limits: the actual build runs locally, not inside deployed VK Hosting. SDK identity,
+HTTP payloads and CORS are fixtures. No live signed auth, native WebView, provider
+CORS/network, tenant or server/SQL composition proof. Original source/runtime/DB/UI
+behavior is unchanged in this follow-up; no production data, resources, sends, merge
+or deploy. CI cancellation reason and successful replacement CI remain unconfirmed
+at reporting time. Next small stage remains the separate promotions entry review.
