@@ -255,7 +255,8 @@ app = replaceRequired(
 
 const hydrationBlock = `function applyVkProfileHydration(data) {\n  if (!IS_VK || !data?.profile) return;\n  if (state.profile?.id && String(state.profile.id) !== String(data.profile.id)) return;\n  applyProfilePayload(data);\n}\n\nwindow.addEventListener('pivnik:vk-profile-hydrated', (event) => {\n  applyVkProfileHydration(event.detail);\n});\n\nif (window.__PIVNIK_VK_PROFILE_HYDRATION__) {\n  applyVkProfileHydration(window.__PIVNIK_VK_PROFILE_HYDRATION__);\n}\n\n`;
 if (!app.includes(hydrationBlock)) {
-  const marker = `async function loadSecondaryData() {`;
+  const recoveryMarker = `async function loadSecondaryData({ refreshWheel = false } = {}) {`;
+  const marker = app.includes(recoveryMarker) ? recoveryMarker : `async function loadSecondaryData() {`;
   if (!app.includes(marker)) throw new Error('working updates: missing VK hydration insertion point');
   app = app.replace(marker, () => hydrationBlock + marker);
 }

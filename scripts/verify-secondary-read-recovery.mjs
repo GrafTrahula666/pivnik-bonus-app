@@ -1,0 +1,178 @@
+// Secondary read recovery diagnostic, adapted from the profile full-startup fixture. Complete original client scripts; local HTTP and SDKs only.
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import http from 'node:http';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const gateway = await readFile(path.join(root, 'universal-server.js'), 'utf8');
+const from = gateway.indexOf('export async function renderAppIndex(');
+const to = gateway.indexOf('\n}\n', from);
+assert.ok(from >= 0 && to > from);
+const indexRenderer = gateway.slice(from, to + 3).replace('export ', '');
+const context = vm.createContext({ fs: { readFile }, path, __dirname: root });
+vm.runInContext(indexRenderer + '\nglobalThis.render=renderAppIndex;', context);
+const shells = { telegram: await context.render('telegram'), vk: await context.render('vk') };
+const fixtures = {
+  '/api/shift/current': { shift: null }, '/api/promotions': { promotions: [] },
+  '/api/shop/catalog': { items: [] }, '/api/leaderboard/monthly': { month: '2026-10', leaders: [], me: null },
+  '/api/achievements': { achievements: [], profileAchievements: [], unannouncedAchievements: [] },
+  '/api/shop/contact': { ownerName: 'Fixture', ownerUsername: null },
+  '/api/wallet/config': { appleAvailable: false, googleAvailable: false, fallbackAvailable: true },
+  '/api/wheel/status': { available: false, nextSpinAt: null, prizes: [] }
+};
+const sdk = `window.Telegram={WebApp:{initData:'fixture-launch',initDataUnsafe:{user:{id:123}},ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){},setBottomBarColor(){},onEvent(){},BackButton:{show(){},hide(){},onClick(){},offClick(){}},MainButton:{hide(){}},HapticFeedback:{impactOccurred(){}}}};`;
+const vkSdk = `window.vkBridge={send:async(name)=>name==='VKWebAppGetLaunchParams'?{vk_user_id:'123',vk_app_id:'123',sign:'fixture'}:name==='VKWebAppGetUserInfo'?{id:123,first_name:'Fixture',last_name:'Profile'}:{result:true},subscribe(){},supports(){return true}};`;
+let platform = 'telegram', phase = 'success', secondaryFailure = false, secondaryStatus = '503', requests = [], violations = [];
+function payload(spend) {
+  return { profile: { id: 'fixture', firstName: 'Fixture', lastName: 'Profile', platform,
+    role: 'client', balance: 17, spend12m: spend, termsAccepted: true,
+    status: { name: 'Путник', bonusPercent: 1, minSpend: 0, nextSpend: 100 }, beer: {},
+    achievements: [], unannouncedAchievements: [] }, statuses: [{ name: 'Путник', min: 0, bonusPercent: 1 }] };
+}
+const server = http.createServer(async (req, res) => {
+  try {
+    const pathname = new URL(req.url, 'http://localhost').pathname;
+    if (pathname.startsWith('/api/')) {
+      requests.push({ path: pathname, method: req.method });
+      res.setHeader('Content-Type', 'application/json');
+      // The original VK wrapper emits diagnostic telemetry. Capture locally only.
+      if (pathname === '/api/diagnostics/vk-startup' && req.method === 'POST') {
+        for await (const chunk of req) void chunk;
+        return res.end(JSON.stringify({ ok: true }));
+      }
+      assert.equal(req.method, 'GET');
+      assert.equal(req.headers.authorization, 'Bearer fixture-session');
+      assert.equal(req.headers['x-pivnik-platform'], platform);
+      if (pathname === '/api/bootstrap') return res.end(JSON.stringify(payload(0)));
+      if (pathname === '/api/me') {
+        await new Promise(resolve => setTimeout(resolve, 180));
+        if (phase === 'network') return req.socket.destroy();
+        if (['401', '403', '503'].includes(phase)) {
+          res.statusCode = Number(phase); return res.end(JSON.stringify({ error: 'fixture detail' }));
+        }
+        return res.end(JSON.stringify(phase === 'invalid' ? { profile: null } : payload(125)));
+      }
+      assert.ok(Object.hasOwn(fixtures, pathname), 'Unexpected fixture endpoint ' + pathname);
+      if (secondaryFailure && pathname === '/api/promotions') {
+        if (secondaryStatus === 'network') return req.socket.destroy();
+        res.statusCode = Number(secondaryStatus); return res.end(JSON.stringify({ error: 'fixture secondary outage' }));
+      }
+      return res.end(JSON.stringify(fixtures[pathname]));
+    }
+    if (pathname === '/' || pathname === '/vk') {
+      res.setHeader('Content-Type', 'text/html'); return res.end(shells[platform]);
+    }
+    if (pathname === '/vendor/vk-bridge.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(vkSdk); }
+    const file = path.resolve(root, '.' + pathname);
+    assert.ok(file.startsWith(root + path.sep));
+    res.setHeader('Content-Type', pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.css') ? 'text/css' :
+      pathname.endsWith('.png') ? 'image/png' : pathname.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream');
+    res.end(await readFile(file));
+  } catch (error) {
+    if (req.url.startsWith('/api/')) violations.push(error.message);
+    res.writeHead(500); res.end('Fixture failure');
+  }
+});
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const origin = `http://127.0.0.1:${server.address().port}`;
+const results = [];
+let browser;
+try {
+  for (platform of ['telegram', 'vk']) for (const width of [390, 1440]) {
+    browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE_PATH ? {
+      executablePath: process.env.CHROMIUM_EXECUTABLE_PATH, args: ['--no-sandbox', '--disable-dev-shm-usage',
+        '--single-process', '--no-zygote', '--disable-gpu', '--disable-software-rasterizer', '--use-gl=disabled']
+    } : {}) });
+    try {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() :
+        route.request().url().startsWith('https://telegram.org/js/telegram-web-app.js') ?
+          route.fulfill({ contentType: 'text/javascript', body: sdk }) : route.abort());
+      await page.addInitScript(() => {
+        localStorage.setItem('pivnik_tg_session', 'fixture-session');
+        localStorage.setItem('pivnik_vk_123_session', 'fixture-session');
+        window.__fixtureMeFetches = 0;
+        window.__fixtureWheelFetches = 0;
+        window.__fixturePromoFetches = 0;
+        const nativeFetch = window.fetch.bind(window);
+        window.fetch = (...args) => {
+          if (new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname === '/api/me') window.__fixtureMeFetches++;
+          if (new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname === '/api/wheel/status') window.__fixtureWheelFetches++;
+          if (new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname === '/api/promotions') window.__fixturePromoFetches++;
+          return nativeFetch(...args);
+        };
+      });
+      for (const scenario of ['success', '503', '403', 'network']) {
+        phase = 'success'; secondaryStatus = scenario; secondaryFailure = scenario !== 'success';
+        fixtures['/api/promotions'] = { promotions: [] };
+        requests = []; violations = [];
+        process.stderr.write(`Checking ${platform}/${width}/${scenario}\n`);
+        const errors = [], coreErrors = [];
+        const onError = error => errors.push(error.message);
+        const onConsole = message => {
+          if (/Core profile render skipped:|Boot failed:|Unhandled promise rejection:|Client error:/.test(message.text())) coreErrors.push(message.text());
+        };
+        page.on('pageerror', onError); page.on('console', onConsole);
+        await page.goto(origin + (platform === 'vk' ? '/vk?vk_user_id=123&vk_app_id=123&sign=fixture' : '/'));
+        await page.waitForFunction(() => bootCompleted && state.profile?.spend12m === 125 && state.bootSecondaryStarted && !state.bootSecondaryPending);
+        assert.equal(await page.evaluate(() => state.token), 'fixture-session');
+        assert.equal(await page.evaluate(() => state.profile.balance), 17);
+        assert.equal(await page.evaluate(() => state.promotions.length), 0);
+        if (scenario === 'success') assert.equal(await page.locator('#homePromoTitle').textContent(), 'Новые предложения скоро');
+        const count = endpoint => requests.filter(r => r.path === endpoint).length;
+        const initialAttempts = scenario === 'success' || scenario === '403' ? 1 : 2;
+        assert.equal(await page.evaluate(() => window.__fixturePromoFetches), initialAttempts);
+        assert.ok(count('/api/promotions') >= initialAttempts, 'browser may transparently repeat socket-closed GET');
+        const stableCounts = Object.fromEntries(Object.keys(fixtures).filter(p => !['/api/promotions', '/api/wheel/status'].includes(p)).map(p => [p, count(p)]));
+        if (secondaryFailure) {
+          assert.equal(await page.evaluate(() => state.bootSecondaryFailedJobs.length), 1);
+          assert.match(await page.locator('#toast').textContent(), /Повторите обновление/);
+          await page.locator('#refreshButton').click();
+          await page.waitForFunction(() => window.__fixtureWheelFetches === 2 && !state.bootSecondaryPending);
+          assert.equal(await page.evaluate(() => window.__fixturePromoFetches), initialAttempts * 2, 'explicit failed retry retains normal GET policy');
+          assert.equal(await page.evaluate(() => state.bootSecondaryFailedJobs.length), 1);
+          assert.equal(await page.evaluate(() => state.promotions.length), 0);
+          secondaryFailure = false;
+          fixtures['/api/promotions'] = { promotions: [{ code: 'fixture-recovery', title: 'Акция восстановлена', description: 'Fixture', active: true }] };
+        }
+        const before = count('/api/promotions');
+        await page.locator('#refreshButton').click();
+        await page.waitForFunction(expected => window.__fixtureWheelFetches === expected && !state.bootSecondaryPending && state.bootSecondaryFailedJobs.length === 0, scenario === 'success' ? 2 : 3);
+        if (scenario !== 'success') {
+          await page.waitForFunction(() => state.promotions[0]?.code === 'fixture-recovery');
+          assert.equal(count('/api/promotions') - before, 1);
+          assert.equal(await page.locator('#homePromoTitle').textContent(), 'Акция восстановлена');
+          assert.match(await page.locator('#promosCatalog').textContent(), /Акция восстановлена/);
+          // Main keeps the promotions entry in a hidden legacy block. Exercise its
+          // existing screen renderer without claiming a visible navigation entry.
+          await page.evaluate(() => switchScreen('actions'));
+          const title = page.locator('#promosCatalog');
+          assert.equal(await title.isVisible(), true);
+          const rect = await title.boundingBox(); assert.ok(rect && rect.x >= 0 && rect.x + rect.width <= width + 1);
+        } else assert.equal(count('/api/promotions'), before, 'successful sections are not reloaded');
+        await page.waitForFunction(() => !state.bootSecondaryPending);
+        for (const [endpoint, expected] of Object.entries(stableCounts)) assert.equal(count(endpoint), expected, endpoint);
+        const recovered = count('/api/promotions');
+        await page.locator('#refreshButton').click();
+        await page.waitForFunction(expected => window.__fixtureWheelFetches === expected && !state.bootSecondaryPending, scenario === 'success' ? 3 : 4);
+        assert.equal(count('/api/promotions'), recovered, 'recovered read leaves the retry queue');
+        assert.equal(await page.evaluate(() => state.token), 'fixture-session');
+        assert.deepEqual(violations, []); assert.deepEqual(errors, []); assert.deepEqual(coreErrors, []);
+        page.removeListener('pageerror', onError); page.removeListener('console', onConsole);
+        results.push(`${platform}/${width}: ${scenario} -> explicit retry -> visible recovery -> no repeat`);
+      }
+    } finally { await browser.close(); browser = null; }
+  }
+  const hashes = {};
+  for (const file of ['app.js', 'account-link.js', 'vk-platform.js', 'red-cosmos-v2.js', 'index.html', 'styles.css']) {
+    hashes[file] = createHash('sha256').update(await readFile(path.join(root, file))).digest('hex');
+  }
+  console.log(JSON.stringify({ passed: results.length, cases: results, hashes,
+    limits: 'Original renderAppIndex and complete linked client scripts with local HTTP payload fixtures and SDK adapters. Warm fixture token; no cold signed auth, DB/server route composition, native VK hosting, real tenants or provider proof. VK diagnostic POST captured locally only.' }, null, 2));
+} finally {
+  if (browser) await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+}
