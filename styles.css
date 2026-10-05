@@ -10189,21 +10189,22 @@ html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::before
   text-shadow: 0 0 6px rgba(255,150,40,.6);
 }
 html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > strong {
-  top: 34px !important;
+  top: 31px !important;
   left: 8.5% !important;
   width: 45% !important;
   color: #fff1dc !important;
-  font-size: 16px !important;
-  line-height: 20px !important;
+  font-size: 14px !important;
+  line-height: 17px !important;
   text-shadow: 0 0 10px rgba(255,138,31,.35) !important;
 }
 html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > em {
-  top: 58px !important;
+  top: 70px !important;
   left: 8.5% !important;
   width: 45% !important;
   color: #ffcf9a !important;
-  font-size: 9px !important;
-  line-height: 12px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  line-height: 13px !important;
 }
 html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta {
   top: 92.5px !important;

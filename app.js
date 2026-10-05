@@ -1086,6 +1086,20 @@ function currentLevelIndex() {
   return Math.max(0, state.statuses.findIndex((level) => level.name === state.profile?.status?.name));
 }
 
+// Halloween copy for the home SPACEVERSE card; the original text is kept so the flag can be turned off again.
+const HALLOWEEN_BUSINESS_COPY = { title: 'Выполняйте задания, получайте билеты', sub: 'Розыгрыш 31 октября' };
+function applyHalloweenCopy(on) {
+  const title = document.querySelector('.spaceverse-business-copy > strong');
+  const sub = document.querySelector('.spaceverse-business-copy > em');
+  if (!title || !sub) return;
+  if (title.dataset.originalText === undefined) {
+    title.dataset.originalText = title.textContent;
+    sub.dataset.originalText = sub.textContent;
+  }
+  title.textContent = on ? HALLOWEEN_BUSINESS_COPY.title : title.dataset.originalText;
+  sub.textContent = on ? HALLOWEEN_BUSINESS_COPY.sub : sub.dataset.originalText;
+}
+
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
@@ -1103,6 +1117,7 @@ function applyDesign(design) {
   root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
   // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
   root.classList.toggle('theme-halloween', design.theme === 'halloween');
+  applyHalloweenCopy(design.theme === 'halloween');
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
