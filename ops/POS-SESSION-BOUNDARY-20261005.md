@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 121 auth/session/limiter/service/SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 133 auth/recovery/limiter/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,7 +59,7 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-121/121 checks on canonical and materialized gateway sources; equal boundary/module
+133/133 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
@@ -103,11 +103,11 @@ no independent PostgreSQL contention, tenant/business/store ownership proof or
 real fiscal samples. Existing link audit has actor/time/object/client but no reason.
 
 No production data, config, schema, dependencies, sends, merge/deploy or patch
-retirement. #201/#202 and foreign dirty work remain separate. Next bounded stage: verify profile-assembly failure after committed auth and safe
-re-authentication without duplicated actor/wallet records. Production enablement still requires approved store/
+retirement. #201/#202 and foreign dirty work remain separate. Recovery at the profile
+adapter boundary is now checked; full original profile assembly remains the next stage. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
 
-Prior #203 release gate 1726 passed. MODULE-MAP and open PRs rechecked; current
+Prior #203 release gate 1727 passed. MODULE-MAP and open PRs rechecked; current
 main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
 
 ## Actual auth route and rate limiter, current extension
@@ -133,3 +133,29 @@ already has separate unmerged hardening in #198, reviewed and not imported here.
 No trusted proxy/spoofed-address verdict from the loopback test. Existing live
 identity/store ownership, tenant, full profile/deferred setup and PostgreSQL
 concurrency limits remain. No UI change, browser testing not applicable.
+
+## Post-commit profile failure and safe re-authentication
+
+12 additional named checks, six per platform. A deliberate missing-relation SQL
+query in the diagnostic profile adapter fails after actual resolveProviderUser
+has committed actor/identity/zero-wallet/loyalty rows. Actual /api/auth returns
+500 with its generic login error and no token. Repeated failure uses the same
+actor; forged retry returns 401 before SQL and changes nothing. Once the adapter
+recovers, the same signed launch produces a session for that original actor,
+without another user, wallet or loyalty row. Consent is still required; after
+fixture consent the recovered owner accesses POS without financial changes.
+
+Whole financial snapshots verify that provisioning adds only the new zero wallet;
+all prior wallets, POS documents/links/status and journal remain unchanged. Actual
+account SQL/session/auth route execute; getAppPayload remains a minimal adapter.
+This proves recovery from an injected error at its boundary, not full real profile
+assembly, client loading/error UX, deferred QR setup or concurrent auth. No production
+regression confirmed; no owner-facing feature was activated.
+
+Current public read-only probe initially returned 8/16 responses, with eight VK
+timeouts; one bounded retry returned 16/16. Cause of the initial timeouts is unknown.
+Reachability does not verify authenticated production workflows.
+
+Next bounded stage: replace the minimal profile adapter with the original startup
+profile assembly against complete disposable schema and verify its failure/recovery.
+Do not expand this evidence into a production readiness or tenant-isolation claim.

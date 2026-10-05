@@ -45,7 +45,7 @@ const secret = 'disposable-session-secret';
 const terms = 'fixture-terms';
 const calls = [];
 const cases = [];
-let unavailable = false, queryCalls = 0;
+let unavailable = false, queryCalls = 0, failProfile = false, failedProfileActor = null;
 const pool = { query: async (...args) => {
   queryCalls++;
   if (unavailable) throw new Error('fixture database unavailable');
@@ -112,7 +112,13 @@ Object.assign(context, { signCoreSession: signSession, verifyCoreSession: verify
   validateCoreTelegramInitData: validateTelegramInitData, vkAppId: '54694987', vkAppSecret: 'fixture-vk-secret',
   telegramBotToken: 'fixture-bot-token', VK_AUTH_MAX_AGE_SECONDS: 86400, allowDemo: false,
   isConfiguredOwnerIdentity, traceVkStage() {}, setImmediate() {},
-  getAppPayload: async id => ({ profile: (await db.query('SELECT id,role FROM users WHERE id=$1', [id])).rows[0] }) });
+  getAppPayload: async id => {
+    if (failProfile) {
+      failProfile = false; failedProfileActor = String(id);
+      await db.query('SELECT * FROM fixture_missing_profile_relation');
+    }
+    return { profile: (await db.query('SELECT id,role FROM users WHERE id=$1', [id])).rows[0] };
+  } });
 vm.runInContext(`${authSource}\nglobalThis.login=body=>body.platform==='vk'?authenticateVk(body):authenticateTelegram(body);`, context);
 const limiterSource = section(local, 'function requestAddress(', 'function configuredMutationOrigins(');
 const authRoute = section(local, "    if (req.method === 'POST' && url.pathname === '/api/auth')", "    if (req.method === 'GET' && url.pathname === '/api/bootstrap')");
@@ -206,12 +212,12 @@ async function authSnapshot() {
     'pos_documents', 'pos_customer_links', 'pos_sync_state'].map(async table =>
     (await db.query(`SELECT to_jsonb(t) AS row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows)));
 }
-async function loginCheck(name, body, expected, preDatabase = false) {
+async function loginCheck(name, body, expected, preDatabase = false, committed = false) {
   const before = await authSnapshot(), queryBefore = queryCalls;
   const response = await fetch(origin + '/api/auth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const data = await response.json();
   assert.equal(response.status, expected, `${name}: ${data.error || ""}`);
-  if (expected !== 200) assert.equal(await authSnapshot(), before, `${name}: rollback/no writes`);
+  if (expected !== 200 && !committed) assert.equal(await authSnapshot(), before, `${name}: rollback/no writes`);
   if (preDatabase) assert.equal(queryCalls, queryBefore, `${name}: reject before DB`);
   cases.push(`${body.platform}: ${name}`);
   return data;
@@ -342,6 +348,46 @@ try {
     await access(client.token, 403, 'issued client session denied POS');
   }
   assert.notEqual(issuedIds[0], issuedIds[1], 'new provider owners have separate canonical actors');
+  for (const platform of ['telegram', 'vk']) {
+    const providerId = platform === 'vk' ? '9002' : '9001', valid = launch(platform, providerId);
+    context[platform === 'vk' ? 'ownerVkId' : 'ownerTelegramId'] = providerId;
+    const financialBefore = await financialSnapshot();
+    failProfile = true;
+    const failed = await loginCheck('profile SQL failure after account commit', valid, 500, false, true);
+    assert.equal(failed.token, undefined); assert.match(failed.error, /Не удалось войти/);
+    const actorId = failedProfileActor;
+    const stored = async () => (await db.query(`SELECT u.id,u.role,u.session_version,w.balance,
+      (SELECT count(*)::int FROM user_identities WHERE provider=$2 AND provider_user_id=$3) AS identities,
+      (SELECT count(*)::int FROM beer_loyalty WHERE user_id=u.id) AS loyalty
+      FROM users u JOIN wallets w ON w.user_id=u.id WHERE u.id=$1`, [actorId, platform, providerId])).rows;
+    const original = await stored();
+    assert.equal(original.length, 1); assert.equal(original[0].role, 'admin');
+    assert.equal(original[0].balance, 0); assert.equal(original[0].identities, 1); assert.equal(original[0].loyalty, 1);
+    const usersBefore = (await db.query('SELECT count(*)::int AS n FROM users')).rows[0].n;
+    const committedFinancial = await financialSnapshot();
+    failProfile = true;
+    const failedAgain = await loginCheck('repeated profile failure reuses committed account', valid, 500, false, true);
+    assert.equal(failedAgain.token, undefined); assert.equal(failedProfileActor, actorId);
+    assert.deepEqual(await stored(), original); assert.equal(await financialSnapshot(), committedFinancial);
+    const key = platform === 'vk' ? 'launchParams' : 'initData';
+    await loginCheck('forged repeat after committed account denied', { ...valid, [key]: valid[key] + 'x' }, 401, true);
+    const recovered = await loginCheck('reauth recovers committed account without duplicate wallet', valid, 200);
+    assert.equal(verifySession(recovered.token, secret).uid, actorId);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM users')).rows[0].n, usersBefore);
+    assert.deepEqual(await stored(), original); assert.equal(await financialSnapshot(), committedFinancial);
+    const access = async expected => {
+      const response = await fetch(origin + '/api/admin/pos/dashboard', { headers: { authorization: `Bearer ${recovered.token}` } });
+      await response.json(); assert.equal(response.status, expected);
+      assert.equal(await financialSnapshot(), committedFinancial);
+    };
+    await access(428); cases.push(`${platform}: recovered session still requires consent`);
+    await db.query('UPDATE users SET terms_accepted_at=NOW(),terms_version=$1 WHERE id=$2', [terms, actorId]);
+    await access(200); cases.push(`${platform}: recovered owner session admits POS without financial changes`);
+    // Provisioning adds one zero wallet; existing balances and POS/journal remain unchanged.
+    const after = JSON.parse(await financialSnapshot());
+    after[3] = after[3].filter(({ row }) => String(row.user_id) !== actorId);
+    assert.deepEqual(after, JSON.parse(financialBefore));
+  }
   fixtureNow = Date.now();
   for (const platform of ['telegram', 'vk']) {
     context.clearFixtureLimits();
