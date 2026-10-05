@@ -11,7 +11,7 @@ and public observer 243. Separate admin-platform/production-pilot preserved.
 
 | Function | Existing implementation | Verified | Specific gap | Next small step |
 |---|---|---|---|---|
-| Cash/Evotor | #174 import/repository/analytics | 40 SQL + 16 local HTTP/browser cases here | Real provider document, signed tenant and concurrency absent | QR link via local HTTP |
+| Cash/Evotor | #174 import/repository/analytics | 40 SQL + 30 local HTTP/browser cases here | Real provider document, signed tenant and concurrency absent | Lost confirmed-link response/retry |
 | Dashboards | #174 miniapp; #176 Business cash UI | Prior UI evidence; analytics SQL here | Business venue/store adapter missing | Review existing adapter before wiring |
 | CRM/Customer 360 | Main directory; #115/#96 | Prior #196/#197 SQL evidence | History is not wallet ownership | Confirm authoritative binding |
 | Bonus corrections | Main route; #193/#199 drafts | Prior actual route/proxy/component proofs | Production scoped actor unverified | Complete trusted identity integration |
@@ -356,3 +356,56 @@ format/configuration, signed full startup, independent PostgreSQL concurrency,
 keyboard/screen-reader use and premium-dark full shell remain unverified.
 Next bounded stage: original QR confirmation handler plus actual service.link via
 local HTTP, covering explicit identity, repeated link, conflict and role denial.
+
+
+## QR confirmation HTTP follow-up — 2026-10-05
+
+Fresh main remains 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5; previous
+#201 release gate 1720 passed. Origin branches/open PRs/remotes/history and
+worktrees reviewed. Existing #174 and separate SaaS/Business drafts retained;
+foreign dirty images and six Business files preserved. No applicable AGENTS;
+unchanged MODULE-MAP read. Prior starter/knowledge context retained.
+
+Extended the same manual HTTP verifier, not the production POS module. Browser
+fixture API now forwards the original confirmation handler's JSON body, and the
+local adapter invokes actual createPosService.link. Test QR profiles are synthetic.
+Seven additional cases per width, 30 total at 390/1440 px:
+
+- Unknown personal QR: actual resolver returns 404, UI error/form retained,
+  no customer link and loyalty remains zero.
+- Insert adapter throws a controlled SQL outage: actual service BEGIN/ROLLBACK
+  path runs, link absent, form remains retryable. This is an injected database
+  adapter failure, not a real PostgreSQL network outage.
+- Synthetic actor downgraded to viewer while UI remains stale admin: confirmation
+  returns actual 403 before insert, no link, error visible.
+- Valid QR confirmation: pending second native click yields one POST, actual SQL
+  stores client 1, actor 3 and timestamp; UI hides form, shows Profile 1, loyalty
+  becomes 1000 kopecks and overall cash stays 1000. Form fits mobile viewport.
+- Exact original QR replay through HTTP returns the original client and leaves
+  the full one-row confirmation snapshot, including actor/time, unchanged.
+- Different valid client's QR returns 409; original attribution remains intact.
+- Numeric document ID returns 400; absent document and an actually seeded document
+  under another store return 404. Full existing link snapshot unchanged.
+
+Wallet and legacy transaction journal remain unchanged. Source hashes/pin remain
+identical to prior evidence. Role is a fixture legacy role; configured-store
+lookup is not evidence of signed tenant ownership or approved venue authorization.
+Original link table records who/when/object/client, without an operation reason;
+this verifier does not introduce an audited SaaS action API or enable the draft.
+Native disabled control proof is limited to one document; no cross-tab contention
+or independent PostgreSQL lock proof.
+
+Validation: 30 HTTP/browser cases pass with canonical and materialized sources;
+node --test 436/436, npm check, explicit verifier syntax and diff-check pass.
+Two materializations have identical SHA256 across 397 tracked files; npm audit
+retains three existing moderate findings. Public read-only probe 16/16. Earlier
+40 SQL and 54 browser-response fixture proofs remain unchanged. Generated runtime
+files restored; only diagnostic script/report changed. No production data/config/
+schema/UI/routes, dependencies, merge, deploy, sends or patch retirement.
+
+No regression reproduced. Owner benefit is evidence that explicit receipt identity
+changes loyalty reporting without adding cash or crediting bonuses; production
+activation remains unperformed. Real QR entry, signed owner/store binding, live
+provider fiscal samples, full app boot and concurrent PostgreSQL remain unverified.
+Next bounded stage: lost HTTP response after confirmed QR link, then repeat the
+same original document/QR and verify one persisted confirmation and recovered UI.

@@ -13,7 +13,7 @@ import {PGlite} from '@electric-sql/pglite';
 const pin='776c70d691540b01bbc56a1496203e6cc918eea6';
 const files=['pos/analytics.js','pos/evotor-client.js','pos/evotor-document.js','pos/repository.js','pos/service.js','pos/sync.js','qr-resolver.js','platform-core.js','migrations/012_evotor_sales.sql','test/fixtures/evotor.js','pos-admin.js','pos-admin.css'];
 const root=path.resolve(new URL('../',import.meta.url).pathname),scratch=await mkdtemp(path.join(tmpdir(),'evotor-http-'));
-const nativeFetch=globalThis.fetch,hashes={},cases=[];let browser,server,db,service,origin,actor,providerStatus=200,providerCalls=0,posts=0,releaseProvider,holdProvider=false;
+const nativeFetch=globalThis.fetch,hashes={},cases=[];let browser,server,db,service,origin,actor,providerStatus=200,providerCalls=0,posts=0,releaseProvider,holdProvider=false,linkPosts=0,holdLink=false,releaseLink,failLinkInsert=false;
 const config={enabled:true,token:'local-fixture-only',storeId:'bar'};
 const listen=server=>new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 try{
@@ -34,9 +34,14 @@ try{
    }
    if(url.pathname==='/pos.js'){res.setHeader('Content-Type','text/javascript; charset=utf-8');return res.end(js);}
    if(url.pathname==='/pos.css'){res.setHeader('Content-Type','text/css; charset=utf-8');return res.end(css);}
-   if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end('<link rel="stylesheet" href="/pos.css"><style>body{margin:8px;font:16px sans-serif}*{box-sizing:border-box}</style><div data-screen="admin" class="active"><div id="posAdminMount"></div></div><script>window.state={profile:{role:"admin"}};window.api=async(path,options={})=>{const r=await fetch(path,{method:options.method||"GET"});const value=await r.json();if(!r.ok)throw Error(value.error);return value;};</script><script src="/pos.js"></script>');}
+   if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end('<link rel="stylesheet" href="/pos.css"><style>body{margin:8px;font:16px sans-serif}*{box-sizing:border-box}</style><div data-screen="admin" class="active"><div id="posAdminMount"></div></div><script>window.state={profile:{role:"admin"}};window.api=async(path,options={})=>{const r=await fetch(path,{method:options.method||"GET",body:options.body,headers:{"Content-Type":"application/json"}});const value=await r.json();if(!r.ok)throw Error(value.error);return value;};</script><script src="/pos.js"></script>');}
    if(url.pathname==='/api/admin/pos/dashboard'&&req.method==='GET')return json(200,await service.dashboard(actor,Object.fromEntries(url.searchParams)));
    if(url.pathname==='/api/admin/pos/sync'&&req.method==='POST'){posts++;return json(200,await service.sync(actor));}
+   if(url.pathname==='/api/admin/pos/link'&&req.method==='POST'){
+    linkPosts++;let body='';for await(const chunk of req){body+=chunk;assert.ok(body.length<=4096,'Fixture payload limit');}
+    if(holdLink)await new Promise(resolve=>releaseLink=resolve);
+    return json(200,await service.link(actor,JSON.parse(body)));
+   }
    return json(404,{error:'Unknown fixture route'});
   }catch(error){json(error.statusCode||500,{error:error.message,code:error.code});}
  });
@@ -48,9 +53,9 @@ try{
  };
  browser=await createRequire(import.meta.url)(process.argv[2]).chromium.launch({headless:true,executablePath:process.argv[3]});
  for(const width of [390,1440]){
-  db=new PGlite();await db.exec(`CREATE TABLE users(id BIGSERIAL PRIMARY KEY,qr_token TEXT,qr_short_code TEXT,merged_into_user_id BIGINT,deleted_at TIMESTAMPTZ);CREATE TABLE qr_aliases(qr_token TEXT,qr_short_code TEXT,user_id BIGINT,source_user_id BIGINT);CREATE TABLE wallets(user_id BIGINT PRIMARY KEY,balance BIGINT);CREATE TABLE transactions(client_id BIGINT,status TEXT,check_amount_cents BIGINT,created_at TIMESTAMPTZ);INSERT INTO users(id) VALUES(3);INSERT INTO wallets VALUES(3,1000);`);
+  db=new PGlite();await db.exec(`CREATE TABLE users(id BIGSERIAL PRIMARY KEY,qr_token TEXT,qr_short_code TEXT,merged_into_user_id BIGINT,deleted_at TIMESTAMPTZ);CREATE TABLE qr_aliases(qr_token TEXT,qr_short_code TEXT,user_id BIGINT,source_user_id BIGINT);CREATE TABLE wallets(user_id BIGINT PRIMARY KEY,balance BIGINT);CREATE TABLE transactions(client_id BIGINT,status TEXT,check_amount_cents BIGINT,created_at TIMESTAMPTZ);INSERT INTO users(id,qr_token,qr_short_code) VALUES(1,'ClientToken_123456789','PVK-AAAA-2222'),(2,'OtherToken_123456789','PVK-BBBB-3333'),(3,NULL,NULL);INSERT INTO wallets VALUES(3,1000);`);
   await db.exec(await readFile(path.join(scratch,'migrations/012_evotor_sales.sql'),'utf8'));
-  const query=(sql,args)=>sql.includes('pg_try_advisory_lock')?Promise.resolve({rows:[{locked:true}]}):sql.includes('pg_advisory_unlock')?Promise.resolve({rows:[]}):db.query(sql,args);
+  const query=(sql,args)=>{if(failLinkInsert&&sql.includes('INSERT INTO pos_customer_links')){failLinkInsert=false;return Promise.reject(new Error('Fixture link SQL outage'));}return sql.includes('pg_try_advisory_lock')?Promise.resolve({rows:[{locked:true}]}):sql.includes('pg_advisory_unlock')?Promise.resolve({rows:[]}):db.query(sql,args);};
   service=createPosService({query,connect:async()=>({query,release(){}})},config);actor={id:'3',role:'admin'};providerStatus=200;config.enabled=true;
   const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin);await page.waitForFunction(()=>document.querySelector('#posConnection')?.textContent.includes('Ожидаем первую'));
@@ -64,6 +69,30 @@ try{
   await page.locator('[data-pos-tab="app"]').click();assert.match(await page.locator('#posResult').innerText(),/0,00 ₽/);cases.push({width,scenario:'anonymous-sale-not-attributed'});
   await page.locator('#posSync').click();await page.waitForFunction(()=>!document.querySelector('#posSync').disabled);
   assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM pos_documents')).rows[0].n,1);assert.equal((await service.dashboard(actor,{period:'today'})).all.netCents,'1000');cases.push({width,scenario:'repeat-http-sync-counted-once'});
+  await page.locator('[data-pos-tab="all"]').click();await page.locator('[data-pos-link="http-sale"]').click();
+  assert.equal(await page.locator('#posDocument').inputValue(),'http-sale');
+  const links=async()=>(await db.query('SELECT * FROM pos_customer_links ORDER BY document_id')).rows;
+  const confirmFailure=async(qr,message)=>{
+   await page.locator('#posQr').fill(qr);await page.locator('#posConfirm').click();
+   await page.waitForFunction(message=>!document.querySelector('#posConfirm').disabled&&document.querySelector('#posConnection').textContent.includes(message),message);
+   assert.equal(await page.locator('#posLinkForm').isVisible(),true);assert.deepEqual(await links(),[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'QR form fits viewport');
+   assert.equal((await service.dashboard({id:'3',role:'admin'},{period:'today'})).app.netCents,'0');
+  };
+  await confirmFailure('PVK-ZZZZ-9999','QR клиента не найден');cases.push({width,scenario:'unknown-qr-ui-error-no-attribution'});
+  failLinkInsert=true;await confirmFailure('PVK-AAAA-2222','Fixture link SQL outage');cases.push({width,scenario:'link-sql-outage-rolls-back-and-ui-retains-form'});
+  actor={id:'3',role:'viewer'};await confirmFailure('PVK-AAAA-2222','Недостаточно прав');actor={id:'3',role:'admin'};cases.push({width,scenario:'revoked-write-role-rejected-through-confirm-ui'});
+  await page.locator('#posQr').fill('PVK-AAAA-2222');holdLink=true;releaseLink=null;const linksBefore=linkPosts;
+  await page.locator('#posConfirm').click();for(let attempts=0;!releaseLink&&attempts<1000;attempts++)await new Promise(resolve=>setTimeout(resolve,10));assert.ok(releaseLink,'Local link request reached within 10 seconds');
+  assert.equal(await page.locator('#posConfirm').isDisabled(),true);await page.evaluate(()=>document.querySelector('#posConfirm').click());assert.equal(linkPosts,linksBefore+1);holdLink=false;releaseLink();
+  await page.waitForFunction(()=>!document.querySelector('#posConfirm').disabled&&document.querySelector('#posLinkForm').hidden&&document.querySelector('#posResult').textContent.includes('Профиль №1'));
+  const confirmed=await links();assert.equal(confirmed.length,1);assert.equal(String(confirmed[0].client_id),'1');assert.equal(String(confirmed[0].confirmed_by),'3');assert.ok(confirmed[0].confirmed_at);
+  await page.locator('[data-pos-tab="app"]').click();assert.match(await page.locator('#posResult').innerText(),/10,00 ₽/);assert.equal((await service.dashboard(actor,{period:'today'})).all.netCents,'1000');cases.push({width,scenario:'explicit-qr-confirm-ui-http-sql-audit-and-loyalty'});
+  const linkRequest=body=>nativeFetch(origin+'/api/admin/pos/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const replay=await linkRequest({documentId:'http-sale',qr:'PVK-AAAA-2222'});assert.equal(replay.status,200);assert.equal((await replay.json()).clientId,'1');assert.deepEqual(await links(),confirmed);cases.push({width,scenario:'same-qr-replay-retains-one-original-confirmation'});
+  assert.equal((await linkRequest({documentId:'http-sale',qr:'PVK-BBBB-3333'})).status,409);assert.deepEqual(await links(),confirmed);cases.push({width,scenario:'other-client-conflict-does-not-reassign'});
+  await db.query("INSERT INTO pos_documents(source,store_id,document_id,type,closed_at,amount_cents,snapshot) SELECT source,'other','foreign-sale',type,closed_at,amount_cents,snapshot FROM pos_documents WHERE store_id='bar' AND document_id='http-sale'");
+  assert.equal((await linkRequest({documentId:'foreign-sale',qr:'PVK-AAAA-2222'})).status,404);
+  assert.equal((await linkRequest({documentId:7,qr:'PVK-AAAA-2222'})).status,400);assert.equal((await linkRequest({documentId:'absent',qr:'PVK-AAAA-2222'})).status,404);assert.deepEqual(await links(),confirmed);cases.push({width,scenario:'malformed-missing-and-foreign-store-document-no-link-change'});
   providerStatus=401;await page.locator('#posSync').click();await page.waitForFunction(()=>!document.querySelector('#posSync').disabled&&document.querySelector('#posConnection').textContent.includes('token_expired'));
   await page.locator('#posRefresh').click();await page.waitForFunction(()=>document.querySelector('#posConnection').textContent.includes('Токен истёк'));
   await page.locator('[data-pos-tab="all"]').click();assert.match(await page.locator('#posResult').innerText(),/10,00 ₽/);assert.equal((await service.dashboard(actor,{period:'today'})).connection.state,'error');cases.push({width,scenario:'provider-401-retains-sql-cash-and-error'});
@@ -75,5 +104,5 @@ try{
  }
  console.log(JSON.stringify({pin,sourceSha256:hashes,httpBrowserCases:cases.length,cases,providerCalls,syntheticActor:true,advisoryLocksStubbed:true,fullAppBootVerified:false,productionAuthorizationVerified:false},null,2));
 }finally{
- globalThis.fetch=nativeFetch;if(releaseProvider)releaseProvider();if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));if(db)await db.close();await rm(scratch,{recursive:true,force:true});
+ globalThis.fetch=nativeFetch;if(releaseProvider)releaseProvider();if(releaseLink)releaseLink();if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));if(db)await db.close();await rm(scratch,{recursive:true,force:true});
 }
