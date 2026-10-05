@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 179 auth/profile/client loader/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 179 Node + 24 original-renderer browser checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,7 +59,7 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-179/179 checks on canonical and materialized gateway sources; equal boundary/module
+179/179 Node checks (203/203 with optional browser mode) on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
@@ -330,3 +330,56 @@ timeouts; cause unknown, production status is unverified. Fresh main remains 18a
 previous published head 04e432f has successful release gate 1738. PR #203 is extended
 without importing other open PRs or touching foreign worktrees. UI desktop/mobile,
 full startup and live provider/database behavior remain unverified.
+
+## Original browser profile rendering and error visibility, current extension
+
+Selected continuation: close the renderer-adapter gap in the existing signed-session
+diagnostic before choosing a user-facing error fix. Adds optional `--browser` mode,
+using the same disposable SQL fixture and issued sessions. No runtime/UI changes.
+Reuses the project's existing optional PLAYWRIGHT_MODULE_PATH and
+CHROMIUM_EXECUTABLE_PATH settings; no dependency or production environment added.
+
+24 additional browser checks, six for each Telegram/VK and 390/1440 px combination.
+The original api/fetch, refreshMe/hydrateAfterBoot/applyProfilePayload/renderCoreProfile,
+renderProfile/renderStatuses/currentLevelIndex/toast and utility declarations execute
+in Chromium. Current index.html/CSS are served only over loopback; scripts are removed
+from the shell to prevent full boot, external bridge loading, jobs and live network.
+External browser requests are blocked. Bridge/design/avatar/achievement/beer/shift/
+secondary render jobs are explicitly adapted. Actual original name/balance/spend DOM,
+status rendering and role-entry class changes execute; unexpected renderer errors or
+page script errors fail the diagnostic. This is not full-app end-to-end evidence.
+
+Successful hydration replaces startup spend 0 with confirmed detailed spend 125 ₽
+and assigns the exact server profile. SQL failure makes one GET, retains the entire
+profile/status/token and checked DOM, logs the original warning and shows no toast.
+A manual repeat repairs a deliberately stale name node. Forged-token denial makes
+one GET and retains the same checked DOM with no toast. Explicit refresh exhausts
+two failing GET attempts, rejects with 503 and retains DOM; the next manual refresh
+recovers. Every browser action preserves complete fixture identity/financial/grant/
+frame/settings snapshots. No profile writes or real provider requests are introduced.
+
+Confirmed narrow UX gap: hydrateAfterBoot's 401/SQL failure leaves prior displayed
+data and does not invoke the original toast in this isolated browser composition.
+No full-screen warning/loading/caller claim: boot scheduling, consent UI, red-cosmos
+scripts, navigation, live VK/TG hosts and secondary jobs are excluded. A future fix
+must preserve the profile while making its freshness/error state clear, after checking
+the existing full-boot/caller contract. No new owner-facing capability delivered here.
+
+Validation: 203/203 with browser mode on canonical/materialized sources (179 baseline
+plus 24 browser cases), 436/436 node tests, check/diff-check pass. Two materializations
+are byte-identical across 395 tracked files. Loader/transport hashes equal; original
+renderer hash is emitted separately, so materialized renderer differences remain
+traceable. Existing isolated Chromium initially failed GL startup, then closing its
+only page ended the single-process instance; documented runner flags and a separate
+process per viewport resolve fixture startup/lifecycle without runtime changes.
+
+Audit retains three existing moderate findings. Current public read-only probe: 0/16
+timeouts, cause unknown. Production status, tenant ownership, full boot and independent
+PostgreSQL remain unverified. Fresh main 18a0fa4 and prior head a717fa8 release gate
+1742 passed. Open PRs/remotes/history/worktree status rechecked; foreign dirty files
+preserved, foreign branch claude/project-thread-nthfpr advanced to 343349d but was not
+imported. MODULE-MAP reread; no AGENTS present; starter/KB context retained.
+
+Next bounded stage: inspect actual boot/foreground callers and existing error controls
+before a narrowly scoped, validated hydration-error UI change. No merge/deploy or
+patch retirement performed; materialized runtime files restored after validation.

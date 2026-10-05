@@ -5,7 +5,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { readFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import http from 'node:http';
 import vm from 'node:vm';
 import { PGlite } from '@electric-sql/pglite';
@@ -36,6 +36,15 @@ const loaderSource = [
   loaderFunction('function applyProfilePayload('),
   loaderFunction('async function hydrateAfterBoot(')
 ].join('\n');
+const browserMode = process.argv.includes('--browser');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const browserRenderer = [loaderFunction('function renderProfile('), loaderFunction('function renderStatuses('),
+  loaderFunction('function currentLevelIndex('), loaderFunction('function toast(')].join('\n');
+const browserUtilities = section(clientSource, 'const $ =', 'const AVATAR_OPTIONS =');
+const browserShell = browserMode ? (await readFile(path.join(root, 'index.html'), 'utf8'))
+  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '') : '';
+let browser = null;
+let profileRequests = 0;
 const boundary = section(local, 'async function canonicalizeSessionToken(', 'async function ensurePersonalQr(');
 assert.equal(boundary, section(draft, 'async function canonicalizeSessionToken(', 'async function ensurePersonalQr('));
 const routes = section(draft, "    if (req.method === 'GET' && url.pathname === '/api/admin/pos/dashboard')", "    if (req.method === 'GET' && url.pathname === '/api/admin/users')");
@@ -171,10 +180,20 @@ const profileRouteSource = [
 vm.runInContext(profileRouteSource, context);
 const server = http.createServer(async (req, res) => {
   try {
+    if (browserMode && !req.url.startsWith('/api/') && !req.url.startsWith('/provider')) {
+      const pathname = new URL(req.url, 'http://localhost').pathname;
+      const file = path.resolve(root, '.' + pathname);
+      if (pathname !== '/' && !file.startsWith(root + path.sep)) throw new Error('fixture path denied');
+      const body = pathname === '/' ? browserShell : await readFile(file);
+      res.setHeader('Content-Type', pathname === '/' ? 'text/html' : pathname.endsWith('.css') ? 'text/css' :
+        pathname.endsWith('.png') ? 'image/png' : pathname.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream');
+      return res.end(body);
+    }
     if (req.url === '/api/auth') {
       return await context.dispatchAuth(req, res, new URL(req.url, 'http://localhost'));
     }
     if (req.url === '/api/me' || req.url === '/api/bootstrap') {
+      profileRequests++;
       return await context.serveStartupProfile(req, res, req.url === '/api/bootstrap');
     }
     if (req.url.startsWith('/provider')) {
@@ -527,6 +546,80 @@ try {
     failDesignApply = true;
     await loaderCheck('optional design adapter failure preserves profile rendering', 'hydrateProfile', 1);
     assert.equal(loaderCalls.render, 4); assert.equal(loaderWarnings.at(-1), 'Design update skipped:');
+    if (browserMode) {
+      for (const width of [390, 1440]) {
+        const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
+        // A separate process per viewport also supports single-process Chromium.
+        browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE_PATH ? {
+          executablePath: process.env.CHROMIUM_EXECUTABLE_PATH,
+          args: ['--no-sandbox', '--disable-dev-shm-usage', '--single-process', '--no-zygote', '--disable-gpu',
+            '--disable-software-rasterizer', '--use-gl=disabled']
+        } : {}) });
+        const page = await browser.newPage({ viewport: { width, height: 900 } });
+        const warnings = [], pageErrors = [];
+        page.on('console', message => { if (['warning', 'error'].includes(message.type())) warnings.push(message.text()); });
+        page.on('pageerror', error => pageErrors.push(error.message));
+        await page.route('**/*', route => new URL(route.request().url()).origin === origin
+          ? route.continue() : route.abort());
+        try {
+          await page.goto(origin + '/');
+          await page.addScriptTag({ content: `const state=${JSON.stringify({ token: client.token, profile: boot.profile, statuses: boot.statuses })};
+            const IS_VK=${platform === 'vk'}, APP_VERSION='fixture-browser', API_TIMEOUT_MS=3000;
+            ${browserUtilities}\n${transportSource}\n${loaderSource}\n${browserRenderer}
+            function applyTelegramChrome() {} function applyDesign() {}
+            function renderAvatarInto() {} function renderAchievements() {} function renderBeer() {}
+            function renderCurrentShift() {} function activeStaffName() { return 'Fixture'; }
+            function switchScreen() { throw new Error('Unexpected fixture screen switch'); }
+            async function loadSecondaryData() {} async function loadWheelStatus() {}
+            window.fixture={state,hydrateAfterBoot,refreshMe,renderCoreProfile};
+            document.querySelector('#bootScreen')?.classList.add('hidden');
+            document.querySelector('#appShell')?.classList.remove('hidden');
+            renderCoreProfile();` });
+          const view = () => page.evaluate(() => ({
+            name: document.querySelector('#clientName').textContent,
+            balance: document.querySelector('#clientBalance').textContent,
+            spend: document.querySelector('#statsSpend12m').textContent,
+            toast: document.querySelector('#toast').textContent,
+            toastShown: document.querySelector('#toast').classList.contains('show'),
+            token: fixture.state.token, profile: fixture.state.profile, statuses: fixture.state.statuses
+          }));
+          const browserCheck = async (name, mode, requests, status) => {
+            const count = profileRequests;
+            const result = await page.evaluate(async mode => {
+              try { await fixture[mode](); return null; } catch (error) { return error.status; }
+            }, mode);
+            assert.equal(result, status ?? null, name);
+            assert.equal(profileRequests - count, requests, name);
+            assert.equal(await profileSnapshot(), detailBefore, `${name}: browser reads preserve all fixture data`);
+            assert.deepEqual(pageErrors, [], 'no browser script errors');
+            assert.ok(!warnings.some(message => message.startsWith('Core profile render skipped:')), 'original renderer completes');
+            cases.push(`${platform}/${width}: browser ${name}`);
+          };
+          assert.equal((await view()).spend, '0 ₽');
+          await browserCheck('hydration replaces startup DOM with confirmed detailed spend', 'hydrateAfterBoot', 1);
+          const confirmed = await view();
+          assert.equal(confirmed.spend, '125 ₽'); assert.deepEqual(confirmed.profile, detailed.profile);
+          assert.equal(await page.locator('#clientName').isVisible(), true);
+          failDesignReads = 1;
+          await browserCheck('SQL failure retains DOM without toast', 'hydrateAfterBoot', 1);
+          assert.deepEqual(await view(), confirmed); assert.equal(confirmed.toastShown, false);
+          assert.ok(warnings.some(message => message.startsWith('Full profile hydration skipped:')));
+          await page.locator('#clientName').evaluate(element => { element.textContent = 'Fixture stale DOM'; });
+          await browserCheck('manual hydration repeat repairs stale DOM', 'hydrateAfterBoot', 1);
+          assert.deepEqual(await view(), confirmed);
+          await page.evaluate(() => { fixture.state.token += 'x'; });
+          const forged = await view();
+          await browserCheck('auth denial retains profile DOM without toast or retry', 'hydrateAfterBoot', 1);
+          assert.deepEqual(await view(), forged); assert.equal((await view()).toastShown, false);
+          await page.evaluate(token => { fixture.state.token = token; }, client.token);
+          failDesignReads = 2;
+          await browserCheck('explicit refresh exhaustion rejects without changing DOM', 'refreshMe', 2, 503);
+          assert.deepEqual(await view(), confirmed);
+          await browserCheck('explicit refresh repeat recovers confirmed DOM', 'refreshMe', 1);
+          assert.deepEqual(await view(), confirmed);
+        } finally { await browser.close(); browser = null; }
+      }
+    }
     await db.query('DELETE FROM transactions WHERE client_id=$1', [clientPayload.uid]);
     await db.query('DELETE FROM reward_grants WHERE user_id=$1', [clientPayload.uid]);
 
@@ -611,6 +704,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::int AS n FROM wallets WHERE user_id >= 10 AND balance <> 0')).rows[0].n, 0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM transactions')).rows[0].n, 0);
   process.stdout.write(JSON.stringify({ pinned, boundaryHash: createHash('sha256').update(boundary).digest('hex'),
+    browserMode, browserRendererHash: createHash('sha256').update(browserRenderer + browserUtilities).digest('hex'),
     loaderHash: createHash('sha256').update(loaderSource).digest('hex'),
     transportHash: createHash('sha256').update(transportSource).digest('hex'),
     profileRouteHash: createHash('sha256').update(profileRouteSource).digest('hex'),
@@ -620,8 +714,9 @@ try {
     limiterHash: createHash('sha256').update(limiterSource).digest('hex'),
     authRouteHash: createHash('sha256').update(authRoute).digest('hex'),
     routesHash: createHash('sha256').update(routes).digest('hex'), passed: cases.length, cases,
-    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Original client loader/API/fetch, startup/detailed profile SQL/helpers and profile route execute in VM. Fixture DDL/secrets/clock/HTTP/body/provider, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup proof.' }, null, 2) + '\n');
+    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Original client loader/API/fetch, startup/detailed profile SQL/helpers and profile route execute in VM. Optional browser mode executes original profile/status renderer with stripped-script shell and loopback HTTP; bridge/design/avatar/achievements/beer/shift/secondary jobs are adapters. Fixture DDL/secrets/clock/HTTP/body/provider, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup/full screen error visibility proof.' }, null, 2) + '\n');
 } finally {
+  if (browser) await browser.close();
   globalThis.fetch = nativeFetch;
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));
