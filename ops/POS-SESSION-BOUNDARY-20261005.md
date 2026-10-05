@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 76 signed-session/service/SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 107 auth/session/service/SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,26 +59,52 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-76/76 checks on canonical and materialized gateway sources; equal boundary/module
+107/107 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
 No server route implementation change: server.js/universal-server.js final diff empty.
 No UI change, therefore desktop/mobile testing not applicable to this extension.
-Fresh public read-only probe passed 16/16 Telegram/VK responses without retry.
+Fresh public probe initially had eight Telegram timeouts; one bounded repeat
+passed 16/16. Cause not established.
 Authenticated production operations and business data were not queried.
 
-Fixture application sessions use a disposable secret; provider launch authentication,
-full startup, consent issuance and real actor provisioning are not exercised. Fixture
-users/identities/wallet/journal DDL contains only columns used by actual queries;
-manual migration 012 executes only in disposable PGlite. node-pg rowCount mapping,
-HTTP/body/error adapters, provider payload, and advisory lock/unlock stubs remain
-explicit adapters. Real fiscal samples, independent PostgreSQL locking and tenant
-or approved business/store binding remain unverified. Link audit has actor/time/object/
-client but no reason. Sequential replay does not establish concurrent idempotency.
+Provider authentication now runs original local authenticateVk/authenticateTelegram,
+validate wrappers, resolveProviderUser, canonicalUserId, ensureAuthRecords and
+createSession, with real platform-core HMAC validators and account SQL. A minimal
+/fixture/auth HTTP adapter calls those functions directly; it is not the complete
+production auth dispatcher. Original 76 checks retained; 31 new auth/issuance checks.
+
+Signed fixture launches create independent TG/VK owner actors, canonical repeated
+login does not duplicate actors, issued sessions require consent then admit POS,
+version revocation rejects the old token and re-auth issues current version.
+Signed non-owners remain clients and receive POS refusal after fixture consent.
+Missing/forged/expired/demo-disabled inputs reject before DB; VK unsigned profile
+ID mismatch rejects. DB outage and actual wallet CHECK constraint failure leave
+actor/identity/wallet/loyalty/journal/POS snapshots unchanged after rollback.
+Existing wallet balances stay unchanged; newly provisioned wallets are zero and
+application journal remains empty. Fixture consent is a direct disposable SQL
+change; real consent endpoint not tested.
+
+Materialized authentication invokes the existing optional tester-gift claim, unlike
+canonical auth. The original function SQL from migration 008 and original table
+DDL from 007 execute against an empty recipient table, without seeding actual
+handles/gifts. Initial materialized harness failed on the missing function; adding
+this required isolated schema resolved it. This was a fixture gap, not a confirmed
+production regression. Auth source hashes intentionally differ canonical/materialized
+and are emitted separately. Gift-recipient/award path remains untested.
+
+Fixture base DDL/secrets, rowCount mapping, HTTP/body/error adapters and local
+provider remain. Profile assembly returns only actual DB id/role; deferred setup,
+trace and rate-limit helpers are adapters. Thus complete startup, throttling, QR
+setup and live identity provisioning are not verified. Advisory locks stubbed;
+no independent PostgreSQL contention, tenant/business/store ownership proof or
+real fiscal samples. Existing link audit has actor/time/object/client but no reason.
 
 No production data, config, schema, dependencies, sends, merge/deploy or patch
-retirement. #201/#202 and foreign dirty work remain separate. Next bounded stage:
-verify actual authentication issuance from signed provider fixtures through the
-existing gateway session path. Production enablement still requires approved store/
+retirement. #201/#202 and foreign dirty work remain separate. Next bounded stage: replace the auth rate-limit adapter with the existing real
+limiter and verify repeated invalid launch requests fail before account writes. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
+
+Prior #203 release gate 1725 passed. MODULE-MAP and open PRs rechecked; current
+main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
