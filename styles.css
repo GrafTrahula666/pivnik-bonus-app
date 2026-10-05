@@ -10360,3 +10360,75 @@ html.theme-halloween body .client-home.home-v2 .home-league-podium strong {
   line-height: 11.5px !important;
   color: #ffcf9a !important;
 }
+
+/* Halloween Block 6: bottom navigation (art 390x99 css px, crop of the generated bar) */
+html.theme-halloween .bottom-nav {
+  display: block !important;
+  height: calc(99px + env(safe-area-inset-bottom)) !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: #0b0a24 url("/assets/halloween/nav-midnight.webp?v=1") top center / 100% 99px no-repeat !important;
+  box-shadow: 0 -8px 24px rgba(11,10,36,.6) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.theme-halloween .bottom-nav button {
+  position: absolute !important;
+  top: 18px;
+  width: 64px;
+  height: 72px;
+  min-height: 0 !important;
+  display: block !important;
+  transform: translateX(-50%);
+  background: transparent !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween .bottom-nav button > span,
+html.theme-halloween .bottom-nav button:not(.qr-nav-button) > span {
+  display: grid !important;
+  width: 48px !important;
+  height: 48px !important;
+  margin: -5px auto 0 !important;
+  place-items: center;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffe2b0;
+  font-size: 20px;
+}
+html.theme-halloween .bottom-nav button > small {
+  position: absolute;
+  left: 3px;
+  top: 58px;
+  width: 58px;
+  height: 14px;
+  line-height: 14px;
+  font-size: 8px;
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: 0 !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween .bottom-nav button.active > span,
+html.theme-halloween .bottom-nav button.active:not(.qr-nav-button) > span {
+  color: #ffd27a;
+  text-shadow: 0 0 10px rgba(255,190,80,.9);
+  background: radial-gradient(circle, rgba(233,168,59,.28), transparent 70%) !important;
+}
+html.theme-halloween .bottom-nav button.active > small { color: #ffd27a !important; }
+html.theme-halloween .bottom-nav button:nth-child(1) { left: 13.33%; }
+html.theme-halloween .bottom-nav button:nth-child(2) { left: 30.64%; }
+html.theme-halloween .bottom-nav button:nth-child(3) { left: 50%; top: 11px; }
+html.theme-halloween .bottom-nav button:nth-child(4) { left: 69.3%; }
+html.theme-halloween .bottom-nav button:nth-child(5) { left: 86.6%; }
+html.theme-halloween .bottom-nav .qr-nav-button > span {
+  width: 54px !important;
+  height: 54px !important;
+  margin: -6px auto 0 !important;
+  border: 1px solid rgba(255,214,140,.7) !important;
+  background: linear-gradient(145deg, #f4cf82, #b97916) !important;
+  box-shadow: 0 0 14px rgba(233,168,59,.55) !important;
+  color: #2e210f;
+}
+html.theme-halloween .bottom-nav .qr-nav-button > small { top: 65px; }
