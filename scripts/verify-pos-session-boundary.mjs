@@ -111,13 +111,21 @@ Object.assign(context, { signCoreSession: signSession, verifyCoreSession: verify
   SESSION_TTL_MS: 60000, Date, validateCoreVkLaunchParams: validateVkLaunchParams,
   validateCoreTelegramInitData: validateTelegramInitData, vkAppId: '54694987', vkAppSecret: 'fixture-vk-secret',
   telegramBotToken: 'fixture-bot-token', VK_AUTH_MAX_AGE_SECONDS: 86400, allowDemo: false,
-  isConfiguredOwnerIdentity, traceVkStage() {}, enforceRateLimit() {}, setImmediate() {},
+  isConfiguredOwnerIdentity, traceVkStage() {}, setImmediate() {},
   getAppPayload: async id => ({ profile: (await db.query('SELECT id,role FROM users WHERE id=$1', [id])).rows[0] }) });
 vm.runInContext(`${authSource}\nglobalThis.login=body=>body.platform==='vk'?authenticateVk(body):authenticateTelegram(body);`, context);
+const limiterSource = section(local, 'function requestAddress(', 'function configuredMutationOrigins(');
+const authRoute = section(local, "    if (req.method === 'POST' && url.pathname === '/api/auth')", "    if (req.method === 'GET' && url.pathname === '/api/bootstrap')");
+let fixtureNow = null;
+class FixtureDate extends Date { static now() { return fixtureNow ?? Date.now(); } }
+Object.assign(context, { Date: FixtureDate, platformReady: true, releaseCommit: 'fixture',
+  validBootId: () => null, createVkStartupTrace: () => () => {}, withVkStartupTrace: (_trace, fn) => fn(),
+  safeStartupCode: error => error.code || 'fixture-error', console: { error() {}, log() {}, warn() {} } });
+vm.runInContext(`const rateLimitBuckets=new Map();${limiterSource}\nasync function dispatchAuth(req,res,url){${authRoute}}\nglobalThis.dispatchAuth=dispatchAuth;globalThis.clearFixtureLimits=()=>rateLimitBuckets.clear();`, context);
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === '/fixture/auth') {
-      return context.sendJson(res, 200, await context.login(context.parseJsonBody(await context.readRequestBody(req, 8192))));
+    if (req.url === '/api/auth') {
+      return await context.dispatchAuth(req, res, new URL(req.url, 'http://localhost'));
     }
     if (req.url.startsWith('/provider')) {
       assert.equal(req.headers.authorization, 'Bearer fixture-provider-token'); providerCalls++;
@@ -200,7 +208,7 @@ async function authSnapshot() {
 }
 async function loginCheck(name, body, expected, preDatabase = false) {
   const before = await authSnapshot(), queryBefore = queryCalls;
-  const response = await fetch(origin + '/fixture/auth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const response = await fetch(origin + '/api/auth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const data = await response.json();
   assert.equal(response.status, expected, `${name}: ${data.error || ""}`);
   if (expected !== 200) assert.equal(await authSnapshot(), before, `${name}: rollback/no writes`);
@@ -300,9 +308,9 @@ try {
     await loginCheck('forged launch signature', { ...valid, [key]: valid[key] + 'x' }, 401, true);
     await loginCheck('expired launch data', launch(platform, id, Math.floor(Date.now() / 1000) - 86401), 401, true);
     if (platform === 'vk') await loginCheck('unsigned profile cannot switch signed VK user', { ...valid, user: { id: '999' } }, 401, true);
-    unavailable = true; await loginCheck('auth identity database outage', valid, 503); unavailable = false;
+    unavailable = true; await loginCheck('auth identity database outage', valid, 500); unavailable = false;
     await db.exec('ALTER TABLE wallets ADD CONSTRAINT fixture_auth_refusal CHECK (balance > 0) NOT VALID');
-    await loginCheck('auth wallet SQL refusal rolls back identity and actor', valid, 503);
+    await loginCheck('auth wallet SQL refusal rolls back identity and actor', valid, 500);
     await db.exec('ALTER TABLE wallets DROP CONSTRAINT fixture_auth_refusal');
     const result = await loginCheck('signed provider creates owner and session', valid, 200);
     const payload = verifySession(result.token, secret);
@@ -334,14 +342,48 @@ try {
     await access(client.token, 403, 'issued client session denied POS');
   }
   assert.notEqual(issuedIds[0], issuedIds[1], 'new provider owners have separate canonical actors');
+  fixtureNow = Date.now();
+  for (const platform of ['telegram', 'vk']) {
+    context.clearFixtureLimits();
+    const invalid = { platform }, valid = launch(platform, platform === 'vk' ? '888' : '777');
+    const post = async body => {
+      const response = await fetch(origin + '/api/auth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      return { status: response.status, body: await response.json() };
+    };
+    const stateBefore = await authSnapshot(), queriesBefore = queryCalls;
+    for (let i = 0; i < 60; i++) assert.equal((await post(invalid)).status, 401);
+    assert.equal(await authSnapshot(), stateBefore); assert.equal(queryCalls, queriesBefore);
+    cases.push(`${platform}: first 60 invalid attempts reject before DB`);
+    assert.equal((await post(invalid)).status, 429);
+    assert.equal(await authSnapshot(), stateBefore); assert.equal(queryCalls, queriesBefore);
+    cases.push(`${platform}: 61st invalid attempt rate limited without writes`);
+    const other = platform === 'vk' ? 'telegram' : 'vk';
+    assert.equal((await post({ platform: other })).status, 401);
+    cases.push(`${platform}: invalid bucket independent from other platform`);
+    // Invalid attempts do not consume the signed identity bucket.
+    for (let i = 0; i < 60; i++) assert.equal((await post(valid)).status, 200);
+    cases.push(`${platform}: 60 signed identity attempts remain admitted`);
+    const signedBefore = await authSnapshot(), signedQueries = queryCalls;
+    assert.equal((await post(valid)).status, 429);
+    assert.equal(await authSnapshot(), signedBefore); assert.equal(queryCalls, signedQueries);
+    cases.push(`${platform}: 61st signed identity attempt rejected before DB`);
+    fixtureNow += 600000;
+    assert.equal((await post(invalid)).status, 401);
+    cases.push(`${platform}: invalid limit expires at exact ten-minute boundary`);
+    assert.equal((await post(valid)).status, 200);
+    cases.push(`${platform}: identity limit expires at exact ten-minute boundary`);
+  }
+  fixtureNow = null;
   assert.deepEqual((await db.query('SELECT * FROM wallets WHERE user_id < 10 ORDER BY user_id')).rows,
     [{ user_id: 1, balance: 1000 }, { user_id: 2, balance: 2000 }, { user_id: 3, balance: 3000 }]);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM wallets WHERE user_id >= 10 AND balance <> 0')).rows[0].n, 0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM transactions')).rows[0].n, 0);
   process.stdout.write(JSON.stringify({ pinned, boundaryHash: createHash('sha256').update(boundary).digest('hex'),
     authHash: createHash('sha256').update(authSource).digest('hex'),
+    limiterHash: createHash('sha256').update(limiterSource).digest('hex'),
+    authRouteHash: createHash('sha256').update(authRoute).digest('hex'),
     routesHash: createHash('sha256').update(routes).digest('hex'), passed: cases.length, cases,
-    sourceHashes: hashes, providerCalls, limits: 'Actual provider validators, gateway authentication/account SQL/session issuance, pinned POS routes/service. Fixture DDL/secrets/HTTP/body/provider, profile assembly, deferred setup, rate limit and advisory lock adapters. No full startup, live identity, tenant, real fiscal sample or concurrent PostgreSQL proof.' }, null, 2) + '\n');
+    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Fixture DDL/secrets/clock/HTTP/body/provider, profile assembly, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup proof.' }, null, 2) + '\n');
 } finally {
   globalThis.fetch = nativeFetch;
   server.closeAllConnections();

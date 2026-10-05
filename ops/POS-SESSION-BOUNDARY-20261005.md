@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 107 auth/session/service/SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 121 auth/session/limiter/service/SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,21 +59,22 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-107/107 checks on canonical and materialized gateway sources; equal boundary/module
+121/121 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
 No server route implementation change: server.js/universal-server.js final diff empty.
 No UI change, therefore desktop/mobile testing not applicable to this extension.
-Fresh public probe initially had eight Telegram timeouts; one bounded repeat
-passed 16/16. Cause not established.
+Earlier auth-stage public probe had Telegram timeouts then passed 16/16.
+Current limiter-stage probe initially had eight VK timeouts; one repeat passed 16/16.
+Cause not established.
 Authenticated production operations and business data were not queried.
 
 Provider authentication now runs original local authenticateVk/authenticateTelegram,
 validate wrappers, resolveProviderUser, canonicalUserId, ensureAuthRecords and
-createSession, with real platform-core HMAC validators and account SQL. A minimal
-/fixture/auth HTTP adapter calls those functions directly; it is not the complete
-production auth dispatcher. Original 76 checks retained; 31 new auth/issuance checks.
+createSession, with real platform-core HMAC validators and account SQL. The actual /api/auth route block is now extracted verbatim and executed, including
+its 401 catch limiter. Trace/readiness/profile/body/server scaffolding remains
+fixture composition, not a full production boot. Original 76 checks retained; 31 new auth/issuance checks.
 
 Signed fixture launches create independent TG/VK owner actors, canonical repeated
 login does not duplicate actors, issued sessions require consent then admit POS,
@@ -96,15 +97,39 @@ and are emitted separately. Gift-recipient/award path remains untested.
 
 Fixture base DDL/secrets, rowCount mapping, HTTP/body/error adapters and local
 provider remain. Profile assembly returns only actual DB id/role; deferred setup,
-trace and rate-limit helpers are adapters. Thus complete startup, throttling, QR
+trace helpers are adapters; the actual request limiter now executes. Thus complete startup, proxy/multi-process throttling, QR
 setup and live identity provisioning are not verified. Advisory locks stubbed;
 no independent PostgreSQL contention, tenant/business/store ownership proof or
 real fiscal samples. Existing link audit has actor/time/object/client but no reason.
 
 No production data, config, schema, dependencies, sends, merge/deploy or patch
-retirement. #201/#202 and foreign dirty work remain separate. Next bounded stage: replace the auth rate-limit adapter with the existing real
-limiter and verify repeated invalid launch requests fail before account writes. Production enablement still requires approved store/
+retirement. #201/#202 and foreign dirty work remain separate. Next bounded stage: verify profile-assembly failure after committed auth and safe
+re-authentication without duplicated actor/wallet records. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
 
-Prior #203 release gate 1725 passed. MODULE-MAP and open PRs rechecked; current
+Prior #203 release gate 1726 passed. MODULE-MAP and open PRs rechecked; current
 main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
+
+## Actual auth route and rate limiter, current extension
+
+Removed the rate-limit adapter. Exact current requestAddress/enforceRateLimit and
+/api/auth route block run in the VM/loopback composition. 14 new named checks:
+for each platform, 60 invalid attempts return 401 without any DB query/write;
+61st returns 429. Other platform remains independent. Invalid attempts do not
+consume signed identity quota: 60 valid signed requests pass, 61st returns 429
+before any query/write. Both buckets expire at exactly ten minutes using a fixture
+clock, without sleeping. Snapshots include actor/identity, wallets/loyalty, journal,
+POS documents/links/status. This verifies denial under repeated entry attempts;
+production behavior is unchanged, no new protection was enabled.
+
+Real auth route maps generic DB/SQL failures to 500 and its generic Russian login
+message; previous simplified HTTP adapter returned 503. Updated fixture assertions
+to the actual route contract, no production regression found. Output includes
+hashes for limiter and auth route. In-memory buckets are process-local and reset
+on restart; persistence/multi-process limiting is not established.
+
+Current requestAddress trusts the first X-Forwarded-For entry. This existing issue
+already has separate unmerged hardening in #198, reviewed and not imported here.
+No trusted proxy/spoofed-address verdict from the loopback test. Existing live
+identity/store ownership, tenant, full profile/deferred setup and PostgreSQL
+concurrency limits remain. No UI change, browser testing not applicable.
