@@ -10142,43 +10142,26 @@ html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse
   position: absolute !important;
   top: 0 !important;
   bottom: 0 !important;
-  left: 75.5% !important;
-  width: 20.5% !important;
+  left: 74.8% !important;
+  width: 22.2% !important;
   display: grid !important;
   place-items: center !important;
 }
 html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand::before {
   display: none !important;
 }
-html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-logo-full {
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-logo-full,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-wordmark {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand::after {
+  content: '' !important;
   display: block !important;
-  width: 100% !important;
-  max-width: 74px !important;
-  padding: 0 !important;
-  border: 0 !important;
-  background: none !important;
-  box-shadow: none !important;
-  filter: drop-shadow(0 0 5px rgba(255,190,90,.45)) drop-shadow(0 0 1px rgba(255,235,200,.9)) !important;
+  width: 80px !important;
+  height: 65px !important;
+  background: url('/assets/halloween/spaceverse-logo.webp?v=1') center / contain no-repeat !important;
+  filter: drop-shadow(0 0 6px rgba(255,170,60,.35)) !important;
 }
 html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
   display: none !important;
-}
-/* The supplied logo carries a dark wordmark that disappears on the night art: keep the cubes, draw the lettering as light text. */
-html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand {
-  align-content: center !important;
-  gap: 1px !important;
-}
-html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-logo-full {
-  max-width: 70px !important;
-  clip-path: inset(0 0 26% 0) !important;
-  margin-bottom: -18px !important;
-}
-html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-wordmark {
-  display: block !important;
-  color: #ffdca8 !important;
-  font-size: 8px !important;
-  font-weight: 800 !important;
-  letter-spacing: .2em !important;
-  text-indent: .2em !important;
-  text-shadow: 0 0 6px rgba(255,150,40,.6) !important;
 }
