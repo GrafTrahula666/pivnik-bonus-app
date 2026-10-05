@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 153 auth/startup/detail/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 165 auth/profile/client API/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,7 +59,7 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-153/153 checks on canonical and materialized gateway sources; equal boundary/module
+165/165 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
@@ -107,7 +107,7 @@ retirement. #201/#202 and foreign dirty work remain separate. Recovery at the pr
 adapter boundary is now checked; non-startup detailed profile remains outside this stage. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
 
-Prior #203 release gate 1732 passed. MODULE-MAP and open PRs rechecked; current
+Prior #203 release gate 1736 passed. MODULE-MAP and open PRs rechecked; current
 main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
 
 ## Actual auth route and rate limiter, current extension
@@ -243,3 +243,41 @@ or production readiness. Generated runtime outputs restored before committing.
 Fresh origin/main remains 18a0fa4; prior CI 1732 success. New #204 theme draft and
 other origin branches were reviewed without importing them. Foreign dirty work
 preserved; no applicable AGENTS; MODULE-MAP reread, starter/KB context retained.
+
+
+## Original client API/fetch profile recovery, current extension
+
+12 additional cases, six per platform. Extract the exact timeoutError,
+fetchWithTimeout and api functions from current app.js into a VM with fixture state,
+version/platform constants and real timers/AbortController. Fetch adapts relative
+paths to the loopback origin and checks the signed session/version headers. Original
+API retry policy and 450 ms delay execute; no rewritten retry/transport logic.
+This is Node fetch composition, not browser-network or screen-state evidence.
+
+Default successful signed GET makes one request. One injected design SQL failure
+recovers automatically with two requests and the same detail projection. Two
+failures reject with 503 after exactly two requests; an explicit manual repeat
+returns the same profile. Forged-session 401 and conflicting-platform 403 each
+make one request without retry. Complete profile/financial/grant/settings snapshots
+remain identical after every transport scenario. Profile projection uses the same
+actual SQL and signed account/session from the preceding stage.
+
+165 cases pass on canonical and materialized sources. Transport source hash is
+emitted alongside route/profile/module hashes. Main's damaged-successful-JSON
+behavior is already addressed separately in unmerged #202; that fix is not imported
+and unreadable-success handling is not claimed here. No production bug confirmed
+in this extension. No runtime/UI/routes/config/schema/dependencies, sends, merge,
+deploy or patch retirement changed.
+
+Still unverified: browser fetch/navigation, timeout/AbortController failure scenarios,
+full client loader state/error visibility, reloading/tab closing, live identity,
+tenant ownership, full startup and independent PostgreSQL. Next bounded step:
+original profile-loader success/error state around this signed local transport.
+
+Current validation: 436/436 node tests; check/diff-check pass; materialize twice
+identical across 395 tracked files; API/fetch hashes equal across both variants.
+Audit retains three existing moderate findings. Initial public read-only probe 8/16
+with VK timeouts; one bounded retry 0/16 with all requests timed out. Cause unknown;
+no production outage diagnosis or authenticated workflow claim. Runtime files restored.
+Fresh main remains 18a0fa4, prior CI 1736 passed; open PRs/worktrees/remotes/history
+reviewed without importing foreign work. MODULE-MAP reread; no applicable AGENTS.

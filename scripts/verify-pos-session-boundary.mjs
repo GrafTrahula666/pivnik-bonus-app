@@ -16,6 +16,7 @@ import { signSession, verifySession, effectiveRoleForAuthenticatedIdentity, isCo
 
 const pinned = '776c70d691540b01bbc56a1496203e6cc918eea6';
 const draft = execFileSync('git', ['show', `${pinned}:universal-server.js`], { encoding: 'utf8' });
+const clientSource = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const local = await readFile(new URL('../universal-server.js', import.meta.url), 'utf8');
 function section(source, start, end) {
   const from = source.indexOf(start);
@@ -23,6 +24,7 @@ function section(source, start, end) {
   assert.ok(from >= 0 && to > from, `Missing anchors: ${start}`);
   return source.slice(from, to);
 }
+const transportSource = section(clientSource, 'function timeoutError(', 'function openModal(');
 const boundary = section(local, 'async function canonicalizeSessionToken(', 'async function ensurePersonalQr(');
 assert.equal(boundary, section(draft, 'async function canonicalizeSessionToken(', 'async function ensurePersonalQr('));
 const routes = section(draft, "    if (req.method === 'GET' && url.pathname === '/api/admin/pos/dashboard')", "    if (req.method === 'GET' && url.pathname === '/api/admin/users')");
@@ -47,7 +49,7 @@ const secret = 'disposable-session-secret';
 const terms = 'fixture-terms';
 const calls = [];
 const cases = [];
-let unavailable = false, queryCalls = 0, failProfile = false, failedProfileActor = null, failDetailDesign = false;
+let unavailable = false, queryCalls = 0, failProfile = false, failedProfileActor = null, failDetailDesign = false, failDesignReads = 0;
 const pool = { query: async (...args) => {
   queryCalls++;
   if (unavailable) throw new Error('fixture database unavailable');
@@ -56,8 +58,8 @@ const pool = { query: async (...args) => {
     // Fail the actual profile SELECT, after account provisioning has committed.
     return db.query(args[0].replace('FROM users u', 'FROM fixture_missing_profile_relation u'), args[1]);
   }
-  if (failDetailDesign && sqlIncludes(args, 'SELECT published FROM app_settings')) {
-    failDetailDesign = false;
+  if ((failDetailDesign || failDesignReads > 0) && sqlIncludes(args, 'SELECT published FROM app_settings')) {
+    failDetailDesign = false; failDesignReads = Math.max(0, failDesignReads - 1);
     return db.query('SELECT published FROM fixture_missing_design_relation');
   }
   if (sqlIncludes(args, 'pg_try_advisory_lock')) return { rows: [{ locked: true }], rowCount: 1 };
@@ -423,6 +425,45 @@ try {
     await readProfile('detailed design SQL failure preserves all data', 503);
     const recoveredDetail = await readProfile('detailed profile recovers after SQL failure', 200);
     assert.deepEqual(recoveredDetail, detailed);
+    const transportCalls = [];
+    const transportState = { token: client.token };
+    const transportContext = vm.createContext({ state: transportState, APP_VERSION: 'fixture-client',
+      IS_VK: platform === 'vk', API_TIMEOUT_MS: 3000, AbortController, setTimeout, clearTimeout,
+      delay: ms => new Promise(resolve => setTimeout(resolve, ms)),
+      fetch: async (requestPath, options) => {
+        assert.equal(requestPath, '/api/me');
+        assert.equal(options.headers['x-pivnik-version'], 'fixture-client');
+        assert.ok(['vk', 'telegram'].includes(options.headers['x-pivnik-platform']));
+        assert.equal(options.headers.authorization, `Bearer ${transportState.token}`);
+        transportCalls.push({ path: requestPath, method: options.method || 'GET' });
+        return nativeFetch(origin + requestPath, options);
+      }
+    });
+    vm.runInContext(`${transportSource}\nglobalThis.callProfile=options=>api('/api/me',options);`, transportContext);
+    const transportCheck = async (name, expectedCalls, status = 200, options) => {
+      const before = transportCalls.length;
+      let result;
+      if (status === 200) {
+        result = await transportContext.callProfile(options);
+        assert.deepEqual(result, detailed);
+      } else {
+        await assert.rejects(transportContext.callProfile(options), error => error.status === status);
+      }
+      assert.equal(transportCalls.length - before, expectedCalls, `${name}: actual API retry count`);
+      assert.equal(await profileSnapshot(), detailBefore, `${name}: transport changes no fixture data`);
+      cases.push(`${platform}: ${name}`); return result;
+    };
+    await transportCheck('original client API reads signed profile', 1);
+    failDesignReads = 1;
+    await transportCheck('client GET automatically recovers one transient SQL failure', 2);
+    failDesignReads = 2;
+    await transportCheck('client GET stops after two SQL failures', 2, 503);
+    await transportCheck('client manual repeat recovers same profile', 1);
+    transportState.token = client.token + 'x';
+    await transportCheck('client forged session denial is not retried', 1, 401);
+    transportState.token = client.token;
+    await transportCheck('client platform mismatch denial is not retried', 1, 403,
+      { headers: { 'x-pivnik-platform': platform === 'vk' ? 'telegram' : 'vk' } });
     await db.query('DELETE FROM transactions WHERE client_id=$1', [clientPayload.uid]);
     await db.query('DELETE FROM reward_grants WHERE user_id=$1', [clientPayload.uid]);
 
@@ -507,6 +548,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::int AS n FROM wallets WHERE user_id >= 10 AND balance <> 0')).rows[0].n, 0);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM transactions')).rows[0].n, 0);
   process.stdout.write(JSON.stringify({ pinned, boundaryHash: createHash('sha256').update(boundary).digest('hex'),
+    transportHash: createHash('sha256').update(transportSource).digest('hex'),
     profileRouteHash: createHash('sha256').update(profileRouteSource).digest('hex'),
     achievementModuleHash: createHash('sha256').update(await readFile(new URL('../achievements.js', import.meta.url))).digest('hex'),
     profileHash: createHash('sha256').update(profileSource).digest('hex'),
@@ -514,7 +556,7 @@ try {
     limiterHash: createHash('sha256').update(limiterSource).digest('hex'),
     authRouteHash: createHash('sha256').update(authRoute).digest('hex'),
     routesHash: createHash('sha256').update(routes).digest('hex'), passed: cases.length, cases,
-    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Original startup/detailed profile SQL/helpers and profile route execute. Fixture DDL/secrets/clock/HTTP/body/provider, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup proof.' }, null, 2) + '\n');
+    sourceHashes: hashes, providerCalls, limits: 'Actual auth route/limiter/validators/account SQL/session issuance and pinned POS service. Original client API/fetch, startup/detailed profile SQL/helpers and profile route execute in VM. Fixture DDL/secrets/clock/HTTP/body/provider, tracing/deferred setup and advisory lock adapters. No trusted proxy/live identity/tenant/fiscal samples/concurrent PostgreSQL/full startup proof.' }, null, 2) + '\n');
 } finally {
   globalThis.fetch = nativeFetch;
   server.closeAllConnections();
