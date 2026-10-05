@@ -10163,3 +10163,22 @@ html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse
 html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
   display: none !important;
 }
+/* The supplied logo carries a dark wordmark that disappears on the night art: keep the cubes, draw the lettering as light text. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand {
+  align-content: center !important;
+  gap: 1px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-logo-full {
+  max-width: 70px !important;
+  clip-path: inset(0 0 26% 0) !important;
+  margin-bottom: -18px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-wordmark {
+  display: block !important;
+  color: #ffdca8 !important;
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  letter-spacing: .2em !important;
+  text-indent: .2em !important;
+  text-shadow: 0 0 6px rgba(255,150,40,.6) !important;
+}
