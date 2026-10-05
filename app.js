@@ -2162,6 +2162,9 @@ async function hydrateAfterBoot() {
     applyProfilePayload(data);
   } catch (error) {
     console.warn('Full profile hydration skipped:', error);
+    toast(error?.status === 401 || error?.status === 403
+      ? 'Не удалось подтвердить доступ. Показаны ранее загруженные данные. Откройте приложение заново.'
+      : 'Профиль не обновлён. Показаны ранее загруженные данные. Повторите обновление.');
   }
   if (state.profile?.termsAccepted) void loadSecondaryData();
 }
