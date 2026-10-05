@@ -10008,3 +10008,158 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   background: rgba(255, 252, 247, .8);
   color: #6b5a43;
 }
+
+/* ============================================================
+   Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
+   app.js applyDesign() toggles html.theme-halloween. Every rule below is
+   scoped to that class, so with the flag off nothing changes.
+   Assets live in /assets/halloween/. Blocks are added one at a time.
+   ============================================================ */
+
+/* Background: castle night sky */
+html.theme-halloween body {
+  background: #0b0716 !important;
+}
+html.theme-halloween .app-shell::before {
+  background: url('/assets/halloween/night-bg.webp?v=1') center top / cover no-repeat !important;
+}
+html.theme-halloween .app-shell::after {
+  background: linear-gradient(180deg, rgba(8,4,20,.10), rgba(8,4,20,.18) 60%, rgba(8,4,20,.30)) !important;
+}
+
+/* Block 1: hero card. Art 1916x821 (stored 1092x468) with empty slots; live data is placed over the drawn slots.
+   Horizontal in % of the card, vertical in px (card is 156px tall). Slot geometry measured from the art at 364px width. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero {
+  background: url('/assets/halloween/hero-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  border-color: transparent !important;
+  box-shadow: 0 10px 24px rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  top: 47px !important;
+  left: 10.5% !important;
+  width: 56px !important;
+  height: 56px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-identity,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  left: 31.4% !important;
+  width: 37.4% !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-identity {
+  top: 21px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .hero-identity-copy {
+  flex-direction: row !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-name {
+  color: #fff1dc !important;
+  font-size: 16px !important;
+  line-height: 20px !important;
+  text-shadow: 0 0 10px rgba(255,138,31,.35) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  flex: 0 0 auto !important;
+  color: #c9b8e6 !important;
+  font-size: 9px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance {
+  top: 52px !important;
+  height: 26px !important;
+  align-items: center !important;
+  font-size: 22px !important;
+  line-height: 26px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance > span {
+  background: linear-gradient(110deg, #ffb347, #ff8a1f 60%, #ffd08a) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance small {
+  color: #d8c8f0 !important;
+  font-size: 11px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button {
+  top: 82px !important;
+  height: 22px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button > div {
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-caption {
+  color: #b9a6dc !important;
+  font-size: 9px !important;
+  line-height: 22px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-name {
+  margin: 0 !important;
+  color: #ffe2b0 !important;
+  font-size: 13px !important;
+  line-height: 22px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .progress {
+  top: 108.7px !important;
+  left: 30.1% !important;
+  width: 39.9% !important;
+  height: 5px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .progress i {
+  background: linear-gradient(90deg, #ff8a1f, #ffc266 70%, #ff9a3c) !important;
+  box-shadow: 0 0 8px rgba(255,138,31,.55) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  top: 119px !important;
+  height: 13px !important;
+  color: #c9b8e6 !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line > span,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line > strong {
+  color: #c9b8e6 !important;
+  font-size: 9px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .hero-name-row {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-name {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+/* SPACEVERSE mark in the free right zone of the art */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 75.5% !important;
+  width: 20.5% !important;
+  display: grid !important;
+  place-items: center !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand::before {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-logo-full {
+  display: block !important;
+  width: 100% !important;
+  max-width: 74px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 5px rgba(255,190,90,.45)) drop-shadow(0 0 1px rgba(255,235,200,.9)) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  display: none !important;
+}

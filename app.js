@@ -1101,6 +1101,8 @@ function applyDesign(design) {
   root.style.setProperty('--gold', '#b77917');
   root.style.setProperty('--gold2', '#e4b357');
   root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
+  // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
+  root.classList.toggle('theme-halloween', design.theme === 'halloween');
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
