@@ -14,7 +14,7 @@ all passed. #201/#202 remain separate drafts; their implementation is not includ
 | Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
 | Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
 | Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
-| Rights/audit | Main gateway + disabled #174 routes | 133 auth/recovery/limiter/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+| Rights/audit | Main gateway + disabled #174 routes | 137 auth/startup profile/recovery/POS SQL checks | Tenant/store isolation unproven | Review approved store/tenant binding |
 
 ## Selected stage and updated composition
 
@@ -59,7 +59,7 @@ not establish real identity/account separation.
 
 ## Validation and boundaries
 
-133/133 checks on canonical and materialized gateway sources; equal boundary/module
+137/137 checks on canonical and materialized gateway sources; equal boundary/module
 hashes. Full materialized node --test: 436/436. Two materializations identical across
 395 tracked files; npm run check and diff-check pass. npm audit retains three existing
 moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
@@ -96,7 +96,7 @@ production regression. Auth source hashes intentionally differ canonical/materia
 and are emitted separately. Gift-recipient/award path remains untested.
 
 Fixture base DDL/secrets, rowCount mapping, HTTP/body/error adapters and local
-provider remain. Profile assembly returns only actual DB id/role; deferred setup,
+provider remain. The original startup profile assembly now executes; deferred setup,
 trace helpers are adapters; the actual request limiter now executes. Thus complete startup, proxy/multi-process throttling, QR
 setup and live identity provisioning are not verified. Advisory locks stubbed;
 no independent PostgreSQL contention, tenant/business/store ownership proof or
@@ -104,10 +104,10 @@ real fiscal samples. Existing link audit has actor/time/object/client but no rea
 
 No production data, config, schema, dependencies, sends, merge/deploy or patch
 retirement. #201/#202 and foreign dirty work remain separate. Recovery at the profile
-adapter boundary is now checked; full original profile assembly remains the next stage. Production enablement still requires approved store/
+adapter boundary is now checked; non-startup detailed profile remains outside this stage. Production enablement still requires approved store/
 business ownership and real fiscal samples; do not invent that mapping.
 
-Prior #203 release gate 1727 passed. MODULE-MAP and open PRs rechecked; current
+Prior #203 release gate 1728 passed. MODULE-MAP and open PRs rechecked; current
 main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
 
 ## Actual auth route and rate limiter, current extension
@@ -147,7 +147,7 @@ fixture consent the recovered owner accesses POS without financial changes.
 
 Whole financial snapshots verify that provisioning adds only the new zero wallet;
 all prior wallets, POS documents/links/status and journal remain unchanged. Actual
-account SQL/session/auth route execute; getAppPayload remains a minimal adapter.
+account SQL/session/auth route execute; getAppPayload used a minimal adapter at this earlier stage; superseded below.
 This proves recovery from an injected error at its boundary, not full real profile
 assembly, client loading/error UX, deferred QR setup or concurrent auth. No production
 regression confirmed; no owner-facing feature was activated.
@@ -159,3 +159,41 @@ Reachability does not verify authenticated production workflows.
 Next bounded stage: replace the minimal profile adapter with the original startup
 profile assembly against complete disposable schema and verify its failure/recovery.
 Do not expand this evidence into a production readiness or tenant-isolation claim.
+
+
+## Original startup profile assembly, current stage
+
+The minimal getAppPayload adapter was replaced by source excerpts of the current
+getAppPayload and getProfile, their original status/role/frame helpers and constants,
+and the imported personal-profile-frames module. No rewritten profile assembly.
+Disposable schema now includes paid/gift beer columns and user_frames, covering
+the original startup SELECT, including the persisted frame-ownership EXISTS clauses.
+This is sufficient schema for the executed startup query, not the full production schema.
+
+137 checks pass on canonical and materialized sources. Four new named checks
+(two per platform) assert the startup owner/client projections: identity/platform,
+consent, startup/design, empty achievements/linked platform, status and beer fields.
+The existing owner display policy returns an unlimited displayed balance; snapshots
+prove actual newly provisioned wallets remain zero and no journal is written.
+
+The twelve post-COMMIT failure/recovery cases now fail the real profile SELECT by
+substituting its relation in the diagnostic pool adapter. The original profile
+functions execute unchanged, reject SQL failure, and recover on repeated signed
+auth for the same actor/wallet/identity/loyalty records. No production regression
+confirmed. The injected fault is diagnostic SQL substitution, not a live DB outage.
+
+Profile hashes intentionally differ because materialization changes original frame
+helpers and adds raise-shields handling. Both exact variants pass; boundary/module
+hashes remain equal. Node tests 436/436; materialize twice gives identical hashes
+for 395 tracked files; npm check passes. Audit retains three existing moderate
+findings. No production/UI/routes/dependencies/schema or patch-retirement change.
+
+Not verified: non-startup spend/achievements/design/identity assembly, full process
+boot/deferred setup, live auth, browser error UX, tenant/store ownership, real fiscal
+samples or PostgreSQL advisory-lock contention. Next bounded step: detailed profile
+reads on isolated schema, preserving the startup-versus-detail distinction.
+
+Current public read-only observation: 8/16 responses on both initial probe and one
+bounded retry; all eight VK requests timed out, while Telegram returned responses.
+Cause is not established. Previous successful 16/16 observation is historical and
+does not override this current result. No live authenticated workflow conclusion.
