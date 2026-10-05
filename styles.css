@@ -10306,3 +10306,57 @@ html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer
   box-shadow: 0 0 6px rgba(255,138,31,.55) !important;
   opacity: 1 !important;
 }
+
+/* Block 5: league card. Art 1994x789 (stored 1456x576) with title, caption, button and three empty rings baked in;
+   avatars, names and amounts are live and sit in the drawn rings and slots. Geometry measured from the art at 364x144.
+   Ring centres x 72 / 180 / 290, y 74.8; name slots y 102.5-114; amount slots y 116.8-128.3. */
+html.theme-halloween body .client-home.home-v2 .home-league-card {
+  height: 144px !important;
+  min-height: 144px !important;
+  background: url('/assets/halloween/league-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  box-shadow: 0 10px 24px rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-card::before,
+html.theme-halloween body .client-home.home-v2 .home-league-card::after {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-head .home-card-kicker,
+html.theme-halloween body .client-home.home-v2 .home-league-head h2 {
+  visibility: hidden !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-head .home-league-prev {
+  color: #ffcf9a !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-head > span {
+  position: absolute !important;
+  top: 13.5px !important;
+  left: 69.8% !important;
+  right: auto !important;
+  width: 85.5px !important;
+  height: 20.3px !important;
+  color: transparent !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-podium > span:nth-child(1) { left: 5.77% !important; }
+html.theme-halloween body .client-home.home-v2 .home-league-podium > span:nth-child(2) { left: 35.4% !important; }
+html.theme-halloween body .client-home.home-v2 .home-league-podium > span:nth-child(3) { left: 65.7% !important; }
+html.theme-halloween body .client-home.home-v2 .home-league-podium .leader-avatar {
+  top: 51.9% !important;
+  width: 42% !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-podium b {
+  top: 102.5px !important;
+  line-height: 11.4px !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-podium strong {
+  top: 116.8px !important;
+  line-height: 11.5px !important;
+  color: #ffcf9a !important;
+}
