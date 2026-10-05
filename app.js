@@ -979,7 +979,13 @@ async function fetchWithTimeout(path, options, timeoutMs) {
       ...options,
       ...(controller ? { signal: controller.signal } : {})
     });
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => {
+      if (!response.ok) return {};
+      const error = new Error('Некорректный ответ сервера. Проверьте результат операции и повторите.');
+      error.code = 'INVALID_RESPONSE';
+      error.status = response.status;
+      throw error;
+    });
     return { response, data };
   });
   const timeout = new Promise((_, reject) => {
