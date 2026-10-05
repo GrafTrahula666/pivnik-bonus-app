@@ -15,7 +15,7 @@ no unmerged implementation imported, including #198/#202/#203/#204/#205.
 | Telegram | Main campaign store | Existing suite | Live retry behavior unverified | Isolated provider failure |
 | Achievements/frames | Main and Business grants | Existing suite | Scoped manual grant not fully proved | Audited grant scenario |
 | Rights/audit | Gateway plus #174 draft | #203 signed-session evidence | Tenant isolation unproven | Store/tenant binding review |
-| Profile refresh UX | Main boot/hydration/manual refresh | #203 found retained DOM without toast | Background failure was silent | This bounded fix |
+| Profile refresh UX | Main plus #206 failure banner | Original linked-script fixture startup and recovery | Live identity/tenant scope unproven | Secondary failure and recovery |
 
 ## Caller review and selected fix
 
@@ -90,8 +90,57 @@ dependency. Public read-only probe: 16/16 reachable. This establishes public end
 only, not authenticated production flows. No production data, migration, service,
 send, resource, merge or deploy performed. Server routes remain unchanged.
 
-Still unverified: full cold boot with live provider identity, complete secondary
-jobs/consent/navigation, tenant isolation, real fiscal data and concurrent PostgreSQL.
-Concurrent refresh completion ordering and full app-script integration remain
-unverified. Next small stage: exercise this notice through the complete shell
-initialization with fixture provider/secondary responses, retaining the same scope.
+Still unverified: cold boot with live provider identity, consent changes, complete
+navigation/staff/admin flows, nonempty secondary data, tenant isolation, real fiscal
+data, concurrent refresh ordering and concurrent PostgreSQL.
+
+
+## Complete linked-client startup evidence
+
+Follow-up on 2026-10-05, current main still 18a0fa4; #206 head 5b4fab9 passed all
+three CI jobs (release gate 1747, public observation 276, VK parity 621). Open PRs,
+remotes, history and worktree states reviewed again; foreign changes preserved.
+Only this diagnostic and report change in this follow-up, no runtime/UI changes.
+
+`scripts/verify-profile-full-startup.mjs` now evaluates the exact renderAppIndex
+function on local files and serves its HTML without stripping scripts. Chromium
+loads complete app.js, account-link.js, red-cosmos-v2.js and, for VK, vk-platform.js.
+No extraction/replacement of client loaders, renderers, event wiring, transport or
+secondary jobs. Existing isolated verifier remains for repeated-failure coverage.
+
+The fixture seeds a returning session into the original Telegram and VK user-123
+storage keys. Provider SDK methods and HTTP payloads are explicit adapters. Original
+SDK integration, profile rendering, DOM enhancement, consent gate, fetch wrappers,
+secondary loaders and refresh-button listener run as shipped. Accepted-consent client
+profiles receive empty achievements/catalog/promotions/shift/leaderboard and disabled
+wallet/wheel fixtures; every secondary endpoint must actually be requested. No
+staff/admin workflow or nonempty business-data correctness claim follows from that.
+
+24 cases on canonical files and 24 on the full materialized chain: Telegram/VK,
+390/1440 px, success, 401, 403, 503, missing profile and disconnected socket. One
+application background GET is counted before wrappers; low-level Chromium GET retries
+on closed sockets are distinct. Retained balance/spend/session, loaded secondary
+state, persistent warning after toast opacity reaches zero, viewport bounds and
+actual elementFromPoint visibility are asserted. Native refresh click shows loading,
+then applies the confirmed profile and hides the banner. No page errors, boot errors,
+core-render errors or unhandled rejections. The old RED COSMOS palette console.assert
+is unrelated to this change and is not a boot-error assertion.
+
+All HTTP traffic is loopback and off-origin requests are blocked, apart from locally
+fulfilled Telegram SDK content. Financial/auth writes are forbidden by the fixture;
+original VK diagnostic telemetry POST is captured locally and acknowledged only.
+No server/auth/SQL composition or real provider session is involved. No native VK
+hosting or production CSP/header proof: the original HTML renderer is used in a
+fixture HTTP server. Full client startup with a warm fixture session is the exact
+boundary established, not full production startup.
+
+Validation: 448/448 node tests; npm run check and diagnostic syntax/diff checks pass.
+Two full materialize executions identical across 397 tracked files. Full-file hashes
+for all linked client scripts and shell/styles are emitted by the verifier for both
+variants. No patch scripts retired; generated runtime differences are restored.
+Audit: three existing moderate findings, no dependencies/configuration added.
+Current public read-only probes: 0/16, then 8/16 (VK reachable, all Telegram requests
+timed out). Cause remains unknown; authenticated production behavior is unverified.
+
+Next bounded stage: inject secondary-section failure during complete linked-client
+startup and verify it does not hide a profile warning or block manual recovery.
