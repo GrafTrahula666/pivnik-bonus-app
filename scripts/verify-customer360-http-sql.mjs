@@ -54,6 +54,7 @@ try {
   const tables = ['users','user_identities','spaceverse_memberships','transactions','wallets','audit_log'];
   const snapshot = async () => JSON.stringify(await Promise.all(tables.map(async table =>
     (await db.query(`SELECT row_to_json(t)::text AS row FROM ${table} t ORDER BY row_to_json(t)::text`)).rows)));
+  await db.query('UPDATE users SET terms_accepted_at=$1 WHERE id=101',[new Date(0)]);
   const before = await snapshot();
   const cardQueries = [];
   const readOnly = async (sql, params) => {
@@ -91,16 +92,17 @@ try {
   const proxy = Function('childReady','sendJson','readRequestBody','canonicalizeSessionToken','internalPort','http',
     extract(gateway, 'async function proxyRequest(', '\nexport async function renderAppIndex(') + ';return proxyRequest;')(
       true,sendJson,() => { throw new Error('GET-only proof'); },canonicalize,child.address().port,http);
-  // Recreated final auth/consent gate for this route; not the full gateway routing callback.
-  const front = http.createServer(async (req,res) => {
-    try {
-      if (req.headers.authorization?.startsWith('Bearer ')) {
-        const user = await requireUser(req);
-        if (!user.termsAccepted) return sendJson(res,428,{error:'terms required'});
-      }
-      await proxy(req,res);
-    } catch(error) { sendJson(res,error.statusCode || 500,{error:'fixture gateway failure'}); }
-  });
+  // The complete pinned gateway request callback, including original branch order.
+  const mutationGuard = Function('mutationOriginAllowed', extract(gateway, 'function enforceMutationOrigin(', '\nfunction safeText(') + ';return enforceMutationOrigin;')(() => { throw new Error('Unexpected mutation'); });
+  const documentSelector = Function('configuredDocumentPlatform','EXPECTED_VK_APP_ID','hasVkEmbedSource',extract(gateway, 'export function platformForDocumentRequest(', '\nasync function serveFile(').replace('export function','function') + ';return platformForDocumentRequest;')('telegram','fixture',() => { throw new Error('Unexpected document route'); });
+  const consentExempt = Function(extract(gateway, 'function isConsentExempt(', '\nconst child =') + ';return isConsentExempt;')();
+  const callback = extract(gateway, 'export const server = http.createServer(', '\nif (!isTestImport) {').slice('export const server = http.createServer('.length).trim().replace(/\);$/, '');
+  let unavailable = false;
+  const unavailableProxy = Function('childReady','sendJson','readRequestBody','canonicalizeSessionToken','internalPort','http',
+    extract(gateway, 'async function proxyRequest(', '\nexport async function renderAppIndex(') + ';return proxyRequest;')(false,sendJson,() => {throw new Error('GET-only');},canonicalize,child.address().port,http);
+  const router = Function('enforceMutationOrigin','platformForDocumentRequest','isConsentExempt','requireGatewayUser','proxyRequest','sendJson','console', 'return ('+callback+');')(
+    mutationGuard, documentSelector, consentExempt, requireUser, (...args) => (unavailable?unavailableProxy:proxy)(...args),sendJson,{error:()=>{}});
+  const front = http.createServer(router);
   await new Promise(resolve => front.listen(0,'127.0.0.1',resolve)); servers.push(front);
   const token = (id,platform='telegram',exp=Date.now()+60000) => signSession({uid:String(id),sv:1,pid:String(id),platform,exp},secret);
   const cases = [
@@ -111,11 +113,12 @@ try {
     ['foreign-customer',101,'a',2,'',404],['invalid-id',101,'a','bad','',400],
     ['invalid-page',101,'a',1,'?limit=0',400],['page-one',101,'a',1,'?limit=1&offset=0',200],
     ['page-two',101,'a',1,'?limit=1&offset=1',200],['no-token',null,'a',1,'',401],
-    ['invalid-signature',101,'a',1,'',401],['expired',101,'a',1,'',401],['db-error',101,'a',1,'',500]
+    ['invalid-signature',101,'a',1,'',401],['expired',101,'a',1,'',401],['db-error',101,'a',1,'',500],['terms-denied',101,'a',1,'',428],['child-unavailable',101,'a',1,'',503]
   ];
   const pageIds = [];
   for (const [name,id,tenant,customerId,query,expected,platform] of cases) {
-    cardQueries.length=0; failCardDb=name==='db-error';
+    cardQueries.length=0; failCardDb=name==='db-error'; unavailable=name==='child-unavailable';
+    await db.query('UPDATE users SET terms_accepted_at=$1 WHERE id=101',[name==='terms-denied'?null:new Date(0)]);
     let bearer=id===null?'':token(id,platform,name==='expired'?Date.now()-1:undefined);
     if(name==='invalid-signature') bearer+='x';
     const response=await fetch(`http://127.0.0.1:${front.address().port}/api/spaceverse/tenants/${tenant}/customers/${customerId}${query}`,
@@ -127,12 +130,12 @@ try {
       assert.equal(body.customer.timeline.rows.length,name==='owner-location'||name.startsWith('page-')?1:2);
       if(name.startsWith('page-')) pageIds.push(body.customer.timeline.rows[0].id);
     }
-    if(expected===401||expected===403||name==='invalid-id') assert.equal(cardQueries.length,0,name);
+    if([401,403,428,503].includes(expected)||name==='invalid-id') assert.equal(cardQueries.length,0,name);
     if(name==='foreign-customer') { assert.equal(cardQueries.length,1); assert.doesNotMatch(cardQueries[0],/FROM users/); }
   }
   assert.notEqual(pageIds[0],pageIds[1]); assert.equal(await snapshot(),before);
   console.log(JSON.stringify({mainPin:MAIN,draftPin:DRAFT,httpCasesPassed:cases.length,allFixtureTablesUnchanged:true,
-    engine:'PGlite',limits:'Extracted auth/proxy, recreated gateway gate, actual fixture Express endpoint and SQL repositories; synthetic tokens; minimal schema; injected SELECT profile; no full production router/provider/browser/PostgreSQL service proof.'},null,2));
+    engine:'PGlite',limits:'Complete extracted gateway request callback and its reachable original helpers; extracted auth/proxy, fixture Express endpoint and SQL repositories; synthetic tokens; minimal schema; injected SELECT profile; no complete internal Express app, process startup, provider, browser or production PostgreSQL proof.'},null,2));
 } finally {
   for(const server of servers.reverse()) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await db.close(); await rm(temp,{recursive:true,force:true});
