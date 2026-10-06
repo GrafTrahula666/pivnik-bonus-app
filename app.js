@@ -1119,10 +1119,15 @@ function halloweenTimerText(closesAt) {
   const minutes = Math.floor((left % 3600000) / 60000);
   return days > 0 ? `${days}д ${hours}ч` : `${hours}ч ${minutes}м`;
 }
+let halloweenInvite = null;
 function renderHalloween(summary) {
   const tickets = $('#halloweenTickets');
   const timer = $('#halloweenTimer');
+  const invites = $('#halloweenInviteCount');
   if (tickets) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  if (summary?.invite) halloweenInvite = summary.invite;
+  const limit = Number(halloweenInvite?.weekLimit) || 3;
+  if (invites) invites.textContent = `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}`;
   const closesAt = summary?.closesAt || HALLOWEEN_DRAW_AT;
   const tick = () => { if (timer) timer.textContent = halloweenTimerText(closesAt); };
   tick();
@@ -1140,6 +1145,47 @@ async function openHalloweenPage() {
   } catch {
     // The raffle API is optional until its migration is applied; the screen keeps working with zero tickets.
   }
+}
+
+// "Пригласи друга": share a personal deep link; the friend's first purchase gives the inviter 1 ticket (max 3 a week, checked on the server).
+const HALLOWEEN_INVITE_TEXT = 'Заходи в Пивник: копим тыквенные билеты на Ночь Котлов 31 октября';
+async function shareHalloweenInvite() {
+  if (!halloweenInvite?.links) {
+    try { renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 })); } catch (_) {}
+  }
+  const link = IS_VK ? halloweenInvite?.links?.vk : halloweenInvite?.links?.telegram;
+  if (!link) { toast('Приглашения откроются совсем скоро'); return; }
+  if (IS_VK && window.vkBridge?.send) {
+    try { await window.vkBridge.send('VKWebAppShare', { link }); return; } catch (_) {}
+  }
+  if (!IS_VK && tg?.openTelegramLink) {
+    try {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(HALLOWEEN_INVITE_TEXT)}`);
+      return;
+    } catch (_) {}
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Ночь Котлов', text: HALLOWEEN_INVITE_TEXT, url: link }); return; } catch (_) {}
+  }
+  try { await navigator.clipboard.writeText(link); toast('Ссылка скопирована, отправьте её другу'); } catch (_) { toast(link); }
+}
+
+// A friend who opened an invite link is attached to the inviter once, right after login. The server ignores old accounts and self-invites.
+function pendingHalloweenInviteCode() {
+  const sources = [!IS_VK ? tg?.initDataUnsafe?.start_param : '', location.hash, location.search];
+  for (const source of sources) {
+    const match = String(source || '').match(/inv_([A-Za-z0-9]{4,32})/);
+    if (match) return match[1];
+  }
+  return '';
+}
+async function claimHalloweenInvite() {
+  const code = pendingHalloweenInviteCode();
+  if (!code || safeStorage.get('pivnik_invite_claimed') === code) return;
+  try {
+    await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    safeStorage.set('pivnik_invite_claimed', code);
+  } catch (_) {}
 }
 
 function applyDesign(design) {
@@ -2230,6 +2276,7 @@ async function hydrateAfterBoot() {
 function schedulePostBootHydration() {
   window.setTimeout(() => {
     void hydrateAfterBoot();
+    void claimHalloweenInvite();
   }, 0);
 }
 
@@ -3513,6 +3560,7 @@ $('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
 });
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#halloweenInvite')?.addEventListener('click', () => { void shareHalloweenInvite(); });
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
