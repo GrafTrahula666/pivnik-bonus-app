@@ -69,6 +69,12 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
             evotor-bridge/app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Show package and app_uuid baked into the manifest
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump xmltree --file AndroidManifest.xml \
+            evotor-bridge/app/build/outputs/apk/debug/app-debug.apk \
+            | grep -A2 -E 'package=|app_uuid' | grep -E 'package=|android:value'
+
       - uses: actions/upload-artifact@v4
         with:
           name: pivnik-evotor-bridge-debug-apk

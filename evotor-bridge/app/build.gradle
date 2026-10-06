@@ -13,12 +13,12 @@ android {
         targetSdk 30
         versionCode 1
         versionName '0.1.0-prototype'
-        // app_uuid is issued in the Evotor developer account. Placeholder zeros keep the build
-        // reproducible; pass -PevotorAppUuid=... or EVOTOR_APP_UUID for a real terminal build.
+        // app_uuid issued for "PIVNIK для Эвотора" in the Evotor developer account (not a secret:
+        // it ships in the manifest). Override with -PevotorAppUuid=... or EVOTOR_APP_UUID.
         manifestPlaceholders = [
                 evotorAppUuid: (project.findProperty('evotorAppUuid')
                         ?: System.getenv('EVOTOR_APP_UUID')
-                        ?: '00000000-0000-0000-0000-000000000000')
+                        ?: '70110ab9-7265-4a13-8320-fa164642b321')
         ]
     }
 
