@@ -10783,17 +10783,13 @@ html.theme-halloween .promo-banner {
 html.theme-halloween .promo-banner.open { display: flex; }
 html.theme-halloween .promo-banner-card {
   position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  width: min(100%, 480px);
-  max-height: 100%;
+  width: min(100%, 480px, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px) * 1080 / 2149));
+  aspect-ratio: 1080 / 2149;
 }
 html.theme-halloween .promo-banner-image {
   display: block;
   width: 100%;
-  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 96px);
-  object-fit: contain;
+  height: 100%;
   border-radius: 18px;
   box-shadow: 0 0 30px rgba(255,138,31,.35);
 }
@@ -10812,18 +10808,20 @@ html.theme-halloween .promo-banner-close {
   font-size: 26px;
   line-height: 1;
 }
+/* The "Войти в сезон" button is drawn in the art; this is a transparent tap area over it. */
 html.theme-halloween .promo-banner-cta {
-  width: 100%;
-  min-height: 52px;
+  position: absolute;
+  left: 22%;
+  top: 91.3%;
+  width: 56%;
+  height: 8.2%;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ffd98a 0%, #f7a02a 48%, #c9600c 100%);
-  box-shadow: inset 0 0 0 1.5px rgba(255,236,190,.85), 0 0 18px rgba(255,138,31,.7);
-  color: #2b1405;
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: .04em;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
 }
+html.theme-halloween .promo-banner-cta:focus-visible { outline: 2px solid #ffe2b0; outline-offset: 2px; }
 html.theme-halloween .halloween-invite-sheet :is(#halloweenShareCode, #halloweenApplyCode) {
   border: 0;
   background: linear-gradient(180deg, #f4cf82, #b97916);
