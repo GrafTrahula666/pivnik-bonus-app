@@ -1100,6 +1100,41 @@ function applyHalloweenCopy(on) {
   sub.textContent = on ? HALLOWEEN_BUSINESS_COPY.sub : sub.dataset.originalText;
 }
 
+// Halloween tab: live ticket count and timer over the drawn "Night of Cauldrons" header.
+const HALLOWEEN_DRAW_AT = '2026-10-31T20:00:00+03:00';
+let halloweenTimerId = 0;
+function halloweenTimerText(closesAt) {
+  const left = new Date(closesAt).getTime() - Date.now();
+  if (!Number.isFinite(left)) return '—';
+  if (left <= 0) return 'Розыгрыш идёт';
+  const days = Math.floor(left / 86400000);
+  const hours = Math.floor((left % 86400000) / 3600000);
+  const minutes = Math.floor((left % 3600000) / 60000);
+  return days > 0 ? `${days}д ${hours}ч` : `${hours}ч ${minutes}м`;
+}
+function renderHalloween(summary) {
+  const tickets = $('#halloweenTickets');
+  const timer = $('#halloweenTimer');
+  if (tickets) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  const closesAt = summary?.closesAt || HALLOWEEN_DRAW_AT;
+  const tick = () => { if (timer) timer.textContent = halloweenTimerText(closesAt); };
+  tick();
+  clearInterval(halloweenTimerId);
+  halloweenTimerId = setInterval(() => {
+    if ($('.screen.active')?.dataset.screen !== 'halloween') { clearInterval(halloweenTimerId); return; }
+    tick();
+  }, 30000);
+}
+async function openHalloweenPage() {
+  switchScreen('halloween');
+  renderHalloween(null);
+  try {
+    renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }));
+  } catch {
+    // The raffle API is optional until its migration is applied; the screen keeps working with zero tickets.
+  }
+}
+
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
@@ -3461,7 +3496,15 @@ $('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => to
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
+// Registered before the original handler: with the Halloween theme on, the card opens the Halloween tab instead.
+$('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
+  if (!document.documentElement.classList.contains('theme-halloween')) return;
+  event.stopImmediatePropagation();
+  openHalloweenPage();
+});
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#halloweenBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
+$('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));

@@ -10455,3 +10455,68 @@ html.theme-halloween .icon-btn {
   color: #ffe2b0 !important;
 }
 html.theme-halloween .topbar .brand-lockup { position: relative; top: -10px; }
+
+/* Halloween Block 8: "Night of Cauldrons" tab (art 364 css px wide; tickets and timer are live in the empty ovals) */
+html.theme-halloween .halloween-screen { color: #ffe2b0; padding-bottom: 34px; }
+html.theme-halloween .halloween-screen.active { display: grid; gap: 10px; }
+html.theme-halloween .halloween-screen .spaceverse-business-page-head strong { color: #ffe2b0; }
+html.theme-halloween .halloween-screen .spaceverse-business-page-head small { color: #e9a83b; }
+html.theme-halloween .halloween-hero,
+html.theme-halloween .halloween-card,
+html.theme-halloween .halloween-more {
+  position: relative;
+  width: 100%;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  border-radius: 12px;
+}
+html.theme-halloween .halloween-hero { aspect-ratio: 1092 / 330; background-image: url('/assets/halloween/halloween-head.webp?v=1'); }
+html.theme-halloween .halloween-card { aspect-ratio: 1092 / 450; }
+html.theme-halloween .halloween-card--1 { background-image: url('/assets/halloween/halloween-place1.webp?v=1'); }
+html.theme-halloween .halloween-card--2 { background-image: url('/assets/halloween/halloween-place2.webp?v=1'); }
+html.theme-halloween .halloween-card--3 { background-image: url('/assets/halloween/halloween-place3.webp?v=1'); }
+html.theme-halloween .halloween-more { aspect-ratio: 1092 / 174; background-image: url('/assets/halloween/halloween-more.webp?v=1'); }
+html.theme-halloween .halloween-tickets,
+html.theme-halloween .halloween-timer {
+  position: absolute;
+  top: 70.3%;
+  height: 17.6%;
+  display: grid;
+  place-items: center;
+  color: #ffe2b0;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(233,168,59,.6);
+}
+html.theme-halloween .halloween-tickets { left: 7.2%; width: 41.6%; }
+html.theme-halloween .halloween-timer { left: 56.6%; width: 41.6%; }
+html.theme-halloween .halloween-ways {
+  display: grid;
+  gap: 5px;
+  padding: 11px 13px;
+  border: 1px solid rgba(233,168,59,.55);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(27,18,64,.92), rgba(11,10,36,.94));
+  box-shadow: 0 0 14px rgba(233,168,59,.18);
+  font-size: 11px;
+  line-height: 1.35;
+}
+html.theme-halloween .halloween-ways strong { color: #e9a83b; font-size: 12px; letter-spacing: .04em; }
+html.theme-halloween .halloween-business-link {
+  justify-self: center;
+  padding: 8px 16px;
+  border: 1px solid rgba(233,168,59,.55);
+  border-radius: 999px;
+  background: rgba(11,10,36,.8);
+  color: #ffe2b0;
+  font-size: 11px;
+  font-weight: 800;
+}
+html.theme-halloween .halloween-screen { padding-bottom: 116px; }
+html.theme-halloween .halloween-screen #halloweenBack {
+  border: 1px solid rgba(233,168,59,.6) !important;
+  background: rgba(11,10,36,.82) !important;
+  color: #ffe2b0 !important;
+  box-shadow: 0 0 10px rgba(233,168,59,.25) !important;
+}
