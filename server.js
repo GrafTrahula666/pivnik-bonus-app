@@ -1,3 +1,4 @@
+import { createPosHttp } from './pos/http.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -2719,6 +2720,26 @@ app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res,
   }
 });
 
+const posHttp = createPosHttp(pool);
+app.use('/api/device/pos', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,
+      pathname: req.originalUrl.split('?')[0], authorization: req.headers.authorization,
+      body: req.body, address: req.socket.remoteAddress }));
+  } catch (error) { next(error); }
+});
+app.use('/api/admin/pos', authRequired, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await posHttp.admin({ method: req.method,
+      pathname: req.originalUrl.split('?')[0], user: req.user, params: req.query, body: req.body }));
+  } catch (error) { next(error); }
+});
+// POS errors keep their HTTP meaning in standalone Express as in the gateway.
+app.use(['/api/device/pos', '/api/admin/pos'], (error, _req, res, next) => {
+  if (!error.statusCode) return next(error);
+  res.status(error.statusCode).set('Cache-Control', 'no-store').json({ error: error.message });
+});
+
 app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const summaryResult = await pool.query(`
@@ -3395,6 +3416,8 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
   }
 });
 
+app.get('/pos-admin.js', (_req, res) => res.set('Cache-Control', 'no-store').type('js').sendFile(path.join(__dirname, 'pos-admin.js')));
+app.get('/pos-admin.css', (_req, res) => res.set('Cache-Control', 'no-store').type('css').sendFile(path.join(__dirname, 'pos-admin.css')));
 app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
 app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));

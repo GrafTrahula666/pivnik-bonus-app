@@ -1,3 +1,4 @@
+import { createPosHttp } from './pos/http.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -3130,10 +3131,22 @@ async function serveStartupProfile(req, res, startup) {
   }
 }
 
+const posHttp = createPosHttp(pool);
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+    if (url.pathname === '/api/device/pos' || url.pathname.startsWith('/api/device/pos/')) {
+      const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
+      return sendJson(res, 200, await posHttp.device({ method: req.method, pathname: url.pathname,
+        authorization: req.headers.authorization, body, address: req.socket.remoteAddress }));
+    }
+    if (url.pathname === '/api/admin/pos' || url.pathname.startsWith('/api/admin/pos/')) {
+      const user = await requireGatewayUser(req);
+      const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
+      return sendJson(res, 200, await posHttp.admin({ method: req.method, pathname: url.pathname,
+        user, params: Object.fromEntries(url.searchParams), body }));
+    }
 
     // Available even during DB startup; no session, identity or database access.
     if (req.method === 'POST' && url.pathname === '/api/diagnostics/vk-startup') {
@@ -3190,6 +3203,12 @@ export const server = http.createServer(async (req, res) => {
       );
     }
 
+    if (req.method === 'GET' && url.pathname === '/pos-admin.js') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.js'), 'text/javascript; charset=utf-8', 'no-store');
+    }
+    if (req.method === 'GET' && url.pathname === '/pos-admin.css') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.css'), 'text/css; charset=utf-8', 'no-store');
+    }
     if (req.method === 'GET' && url.pathname === '/account-link.js') {
       return serveFile(res, path.join(__dirname, 'account-link.js'), 'text/javascript; charset=utf-8', 'no-cache');
     }

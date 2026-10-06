@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Every action and permission string below is taken from the constants in
+  evotor/integration-library v0.6.40 (see evotor-bridge/README.md for the source of each).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- SellIntegrationService.PERMISSION -->
+    <uses-permission android:name="ru.evotor.permission.SELL_INTEGRATION_SERVICE" />
+    <!-- ReceiptDiscountRequiredEvent.NAME_PERMISSION -->
+    <uses-permission android:name="ru.evotor.permission.RECEIPT_DISCOUNT_REQUIRED_EVENT" />
+    <!-- TriggerReceiptDiscountEventRequestedEvent.NAME_PERMISSION -->
+    <uses-permission android:name="ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT" />
+
+    <queries>
+        <!-- ReceiptApi.AUTHORITY / AUTHORITY_V2: read the open and closed sell receipt -->
+        <provider android:authorities="ru.evotor.evotorpos.receipt" />
+        <provider android:authorities="ru.evotor.evotorpos.v2.receipt" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="PIVNIK для Эвотора"
+        android:usesCleartextTraffic="false">
+
+        <!-- Issued for the application in the Evotor developer account; injected at build time. -->
+        <meta-data
+            android:name="app_uuid"
+            android:value="${evotorAppUuid}" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
+        <service
+            android:name=".PivnikSellService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- ReceiptDiscountEvent / ReceiptDiscountRequiredEvent / BeforePositionsEditedEvent .NAME_SELL_RECEIPT -->
+        <service
+            android:name=".PivnikReceiptService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="evo.v2.receipt.sell.receiptDiscount" />
+                <action android:name="evo.v2.receipt.sell.receiptDiscountRequiredEvent" />
+                <action android:name="evo.v2.receipt.sell.beforePositionsEdited" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- SellReceiptBroadcastReceiver.ACTION_RECEIPT_CREATED / _DELETED / _COMPLETED -->
+        <receiver
+            android:name=".PivnikReceiptReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="evotor.intent.action.receipt.sell.OPENED" />
+                <action android:name="evotor.intent.action.receipt.sell.CLEARED" />
+                <action android:name="evotor.intent.action.receipt.sell.RECEIPT_CLOSED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

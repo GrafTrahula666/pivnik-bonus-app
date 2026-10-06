@@ -1,0 +1,39 @@
+name: Evotor integration draft checks
+on:
+  pull_request:
+    paths: ['evotor-bridge/**', 'pos/**', 'migrations/013_evotor_pos_scope_devices.sql', '.github/workflows/evotor-integration.yml']
+  push:
+    branches: ['feat/evotor-scoped-integration-20261006']
+permissions:
+  contents: read
+concurrency:
+  group: evotor-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bridge:
+    name: JVM tests and unsigned release compile only
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Test and compile without generating or replacing any APK signing key
+        working-directory: evotor-bridge
+        run: gradle :app:testReleaseUnitTest :app:assembleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evotor-jvm-reports
+          path: evotor-bridge/app/build/reports/tests/
+          if-no-files-found: ignore
+# No APK is published, no signing secrets, no device install or production action.
