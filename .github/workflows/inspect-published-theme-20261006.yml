@@ -1,0 +1,33 @@
+name: Inspect published seasonal theme
+on:
+  push:
+    branches: [ops/check-seasonal-theme-20261006]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c04bccef04c40556e22a0404b9b4c8babf647231
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect published theme through existing signed production canaries
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RELEASE_COMMIT_SHA: c04bccef04c40556e22a0404b9b4c8babf647231
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const file = 'scripts/railway-production-auth-smoke.mjs';
+          let source = fs.readFileSync(file, 'utf8');
+          const marker = 'authenticated: true,';
+          if (!source.includes(marker)) throw new Error('Smoke source marker changed');
+          source = source.replace(marker, "publishedTheme: secondProfile.design?.theme ?? null, publishedDesignPresent: Boolean(secondProfile.design), authenticated: true,");
+          fs.writeFileSync(file, source);
+          await import('./' + file);
+          NODE
