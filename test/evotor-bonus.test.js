@@ -9,7 +9,7 @@ import { processPosBonuses, posBonusConfig } from '../pos/bonus.js';
 import { isAutomaticStartupMigration } from '../migration-startup-policy.js';
 import { sale } from './fixtures/evotor.js';
 
-const config = { enabled: true, token: 'fixture-provider-only', storeId: 'bar' };
+const config = { enabled: true, bonusEnabled: true, token: 'fixture-provider-only', storeId: 'bar' };
 const owner = { id: '3', role: 'admin', termsAccepted: true };
 const denied = (status) => (error) => error.statusCode === status;
 const RECEIPT = '0f8fad5b-d9cb-469f-a165-70867728950e';
@@ -94,6 +94,29 @@ test('till bind records who was scanned into which receipt and never touches mon
       assert.equal(await balance(f.db, 1), 100);
       assert.equal(await balance(f.db, 2), 200);
       assert.equal((await f.db.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n, 0);
+      const claimedAt = async () => (await f.db.query('SELECT claimed_at FROM pos_receipt_claims')).rows[0].claimed_at.toISOString();
+      await f.db.query("UPDATE pos_receipt_claims SET claimed_at='2026-01-01T00:00:00Z'");
+      await bind({ receiptUuid: RECEIPT, payload: 'PVK-BBBB-3333' });
+      assert.equal(await claimedAt(), '2026-01-01T00:00:00.000Z', 'a repeat scan of the same guest keeps its time');
+      await bind({ receiptUuid: RECEIPT, payload: 'PVK-AAAA-2222' });
+      assert.notEqual(await claimedAt(), '2026-01-01T00:00:00.000Z', 'moving the receipt to another guest is a new claim');
+    });
+    await t.test('bad keys are limited per address and never use up the till budget', async () => {
+      const fresh = createPosHttp(f.pool, config);
+      const till = () => fresh.device({ method: 'POST', pathname: '/api/device/pos/receipts/bind', authorization: f.auth,
+        body: { receiptUuid: RECEIPT, payload: 'PVK-BBBB-3333' }, address: 'proxy' });
+      const shared = (authorization) => fresh.device({ method: 'POST', pathname: '/api/device/pos/receipts/bind', authorization,
+        body: { receiptUuid: RECEIPT, payload: 'PVK-BBBB-3333' }, address: 'proxy' });
+      for (let i = 0; i < 30; i++) await assert.rejects(shared('Device pvpos_' + 'B'.repeat(43)), denied(401));
+      await assert.rejects(shared('Device pvpos_' + 'B'.repeat(43)), denied(429));
+      for (let i = 0; i < 120; i++) await till();
+      await assert.rejects(till(), denied(429));
+    });
+    await t.test('no claim is taken while automatic accrual is off', async () => {
+      const off = createPosHttp(f.pool, { ...config, bonusEnabled: false });
+      await assert.rejects(off.device({ method: 'POST', pathname: '/api/device/pos/receipts/bind', authorization: f.auth,
+        body: { receiptUuid: '7c9e6679-7425-40de-944b-e07fc1f90ae7', payload: 'PVK-AAAA-2222' }, address: 'till' }), denied(503));
+      assert.equal((await f.db.query('SELECT COUNT(*)::int AS n FROM pos_receipt_claims')).rows[0].n, 1);
     });
   } finally { await f.close(); }
 });
@@ -156,6 +179,8 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
       const [result] = await run(f);
       assert.equal(result.removed, 25);
       assert.equal(await balance(f.db, 1), 175);
+      const sale = (await f.db.query("SELECT cash_paid_cents FROM transactions WHERE request_key='evotor:bar:sale-a'")).rows[0];
+      assert.equal(Number(sale.cash_paid_cents), 150_000, 'the returned part leaves the 12-month spend');
     });
     await t.test('later returns never take back more than was earned', async () => {
       await f.importDocs([payback('ret-a2', 'sale-a', 2000)]);
@@ -184,6 +209,19 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
       assert.equal(result.removed, 50);
       assert.equal(result.shortfall, 150);
       assert.equal(await balance(f.db, 2), 0);
+    });
+    await t.test('a return after an admin cancelled the bonus takes nothing and does not retry', async () => {
+      await f.devices.bind(f.auth, { receiptUuid: 'sale-d', payload: 'PVK-AAAA-2222' });
+      await f.importDocs([sell('sale-d', 1000)]);
+      await run(f);
+      await f.db.query("UPDATE transactions SET status='cancelled' WHERE request_key='evotor:bar:sale-d'");
+      await f.db.query('UPDATE wallets SET balance=balance-50 WHERE user_id=1');
+      const before = await balance(f.db, 1);
+      await f.importDocs([payback('ret-d1', 'sale-d', 500), payback('ret-d2', 'sale-d', 1000)]);
+      const results = await run(f);
+      assert.deepEqual(results.map((r) => r.reason), ['base_cancelled', 'base_cancelled']);
+      assert.equal(await balance(f.db, 1), before);
+      assert.deepEqual(await run(f), []);
     });
     await t.test('a return of an unclaimed sale is ignored', async () => {
       await f.importDocs([sell('anon', 300), payback('ret-anon', 'anon', 300)]);

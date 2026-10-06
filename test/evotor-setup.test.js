@@ -23,7 +23,10 @@ async function fixture() {
 test('setup refuses to run before migrations 012-014 and they can be applied twice', async () => {
   const f = await fixture();
   try {
-    await assert.rejects(setupEvotorStore(f.pool, { storeId: 'store-1', adminUserId: '3' }), failsWith('schema_required'));
+    const before = await setupEvotorStore(f.pool, { storeId: 'store-1', adminUserId: '3' });
+    assert.equal(before.missingTables.length, 9, 'check-only reports missing migrations instead of failing');
+    await assert.rejects(setupEvotorStore(f.pool, { storeId: 'store-1', adminUserId: '3', apply: true }), failsWith('schema_required'));
+    await assert.rejects(setupEvotorStore(f.pool, { storeId: 'store-1', adminUserId: '1' }), failsWith('admin_required'));
     await f.migrate();
     await f.migrate();
     const plan = await setupEvotorStore(f.pool, { storeId: 'store-1', adminUserId: '3' });

@@ -98,6 +98,12 @@ Redeem/spending at the till is deliberately out of scope.
 5. Every decided document gets one `pos_bonus_accruals` row (applied or skipped
    with a reason), so repeats, restarts and two workers cannot pay twice.
 
+Bind is refused (503) while `PIVNIK_POS_BONUS_ENABLED` is off, so no backlog of
+claims builds up. A return on a sale whose accrual an admin already cancelled is
+skipped as `base_cancelled`. Tills are rate-limited per device key (120/min) after
+the key is checked; failed keys are limited per forwarded client address and never
+count against a till.
+
 Bartenders must not also accrue manually in the app for a receipt they scanned.
 
 Unverified until the first real receipt: that the Evotor cloud document `id`

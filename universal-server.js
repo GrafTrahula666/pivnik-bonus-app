@@ -3171,7 +3171,7 @@ export const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/device/pos' || url.pathname.startsWith('/api/device/pos/')) {
       const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
       return sendJson(res, 200, await posHttp.device({ method: req.method, pathname: url.pathname,
-        authorization: req.headers.authorization, body, address: req.socket.remoteAddress }));
+        authorization: req.headers.authorization, body, address: requestAddress(req) }));
     }
     if (url.pathname === '/api/admin/pos' || url.pathname.startsWith('/api/admin/pos/')) {
       const user = await requireGatewayUser(req);

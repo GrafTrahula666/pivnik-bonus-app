@@ -113,8 +113,9 @@ test('device issue audit failure rolls back both device and credential; feature/
     assert.equal(isAutomaticStartupMigration('013_evotor_pos_scope_devices.sql'),false);
     await assert.rejects(createPosDeviceService(f.pool,{enabled:false}).resolve('',{}),denied(503));
     const http=createPosHttp(f.pool,config,()=>1000);
-    for(let i=0;i<120;i++)await assert.rejects(http.device({method:'POST',pathname:'/api/device/pos/qr/resolve',authorization:'bad',body:{},address:'ip'}),denied(401));
+    for(let i=0;i<30;i++)await assert.rejects(http.device({method:'POST',pathname:'/api/device/pos/qr/resolve',authorization:'bad',body:{},address:'ip'}),denied(401));
     await assert.rejects(http.device({method:'POST',pathname:'/api/device/pos/qr/resolve',authorization:'bad',body:{},address:'ip'}),denied(429));
+    await assert.rejects(http.device({method:'POST',pathname:'/api/device/pos/qr/resolve',authorization:'bad',body:{},address:'other'}),denied(401));
   }finally{await f.close();}
 });
 

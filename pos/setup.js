@@ -39,8 +39,12 @@ export async function setupEvotorStore(pool, options) {
   const externalDeviceId = posIdentifier(options.externalDeviceId || 'kassa-1', 'externalDeviceId');
   const label = posIdentifier(options.label || 'Касса Пивник', 'label');
   const missing = await missingTables(pool);
-  if (missing.length) throw posError(503, 'schema_required', `Не применены миграции 012–014 (нет таблиц: ${missing.join(', ')}).`);
   const admin = await findAdmin(pool, options);
+  if (missing.length) {
+    if (options.apply) throw posError(503, 'schema_required', `Не применены миграции 012–014 (нет таблиц: ${missing.join(', ')}).`);
+    // Check-only before the first --migrate: the store and key do not exist yet.
+    return { storeId, externalDeviceId, adminUserId: admin.id, missingTables: missing, apply: false };
+  }
   const existing = (await pool.query('SELECT tenant_id,location_id,enabled FROM pos_store_bindings WHERE store_id=$1', [storeId])).rows[0];
   const tenantId = posIdentifier(existing?.tenant_id || options.tenantId || 'pivnik', 'tenantId');
   const locationId = posIdentifier(existing?.location_id || options.locationId || storeId, 'locationId');
