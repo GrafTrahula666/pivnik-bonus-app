@@ -598,6 +598,8 @@ isolation.
   off unless `PIVNIK_POS_BONUS_ENABLED=true`) settle closed SELL/PAYBACK documents
   once each through `pos_bonus_accruals`. Its ledger hooks sit just above
   `createPosHttp` in `server.js`, outside the slice `evotor-http-boundary` evals.
+- `pos/setup.js` + `scripts/evotor-setup.mjs`: the owner's one-off store setup
+  (migrations 012–014, binding, operator access, till key). Never on startup.
 - `test/evotor-http-boundary.test.js` mounts actual auth/route source on loopback
   with explicit fixture adapters; it does not claim complete production startup.
 - See `EVOTOR-INTEGRATION.md` and `EVOTOR-VERIFICATION.md` for the separate Business

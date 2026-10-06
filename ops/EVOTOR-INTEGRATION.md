@@ -140,6 +140,13 @@ Do not execute this checklist against production as part of this PR.
    read. Review startup parity/static VK bundle and repeat the production release
    gate before agreeing any merge/deploy.
 
+Shortcut for steps 1, 2 and 4 on a single store, after the backup:
+`node scripts/evotor-setup.mjs --store <EVOTOR_STORE_ID> --admin <users.id>` checks
+and writes nothing; adding `--migrate --apply` applies 012–014, enables the
+binding (an existing tenant/location mapping is kept), grants that admin
+`can_manage` and prints the till key once. `--reissue` revokes the old key
+first. `--admin` can be omitted when `OWNER_TELEGRAM_ID` is set.
+
 Compensation/rollback: disable POS flag and mapping, revoke issued device keys,
 stop the import worker and revert the integration application commit. Preserve
 POS documents, links and audit records; do not drop tables to roll back. A DB
