@@ -1195,6 +1195,9 @@ async function openHalloweenInvite() {
 async function copyHalloweenCode() {
   const code = halloweenInvite?.code;
   if (!code) { toast('Код появится через пару секунд'); return; }
+  if (IS_VK && window.vkBridge?.send) {
+    try { await window.vkBridge.send('VKWebAppCopyText', { text: code }); toast('Код скопирован'); return; } catch (_) {}
+  }
   try { await navigator.clipboard.writeText(code); toast('Код скопирован'); } catch (_) { toast(`Твой код: ${code}`); }
 }
 async function shareHalloweenInvite() {
@@ -1204,7 +1207,9 @@ async function shareHalloweenInvite() {
   const text = `${HALLOWEEN_INVITE_TEXT}: ${code}`;
   const link = IS_VK ? halloweenInvite?.links?.vk : halloweenInvite?.links?.telegram;
   if (link && IS_VK && window.vkBridge?.send) {
-    try { await window.vkBridge.send('VKWebAppShare', { link }); return; } catch (_) {}
+    try { await window.vkBridge.send('VKWebAppShare', { link }); return; } catch (error) {
+      if (Number(error?.error_data?.error_code) === 4) return; // the user closed the share sheet
+    }
   }
   if (link && !IS_VK && tg?.openTelegramLink) {
     try {
@@ -1244,11 +1249,12 @@ async function applyHalloweenCode() {
 
 // Full-screen promo banner: shown on every app open at most once an hour, only after the app has fully loaded, the terms are accepted and no other
 // window is open. The art is set in HALLOWEEN_BANNER.src; its drawn "Войти в сезон" button opens the cauldrons tab.
-const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=1', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=2', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
 let promoBannerTimer = 0;
 function promoBannerDue() {
   if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
   if (!state.profile?.termsAccepted) return false;
+  if ($('#appShell')?.classList.contains('service-mode')) return false;
   const last = Number(safeStorage.get(`pivnik_banner_${HALLOWEEN_BANNER.key}`)) || 0;
   return Date.now() - last >= HALLOWEEN_BANNER.everyMs;
 }
@@ -1260,20 +1266,30 @@ function schedulePromoBanner(delayMs = 1200) {
     const image = $('#promoBannerImage');
     if (!image) return;
     const show = () => {
+      image.onload = null;
+      image.onerror = null;
+      // The image may take a moment; never open over a window the user opened meanwhile.
+      if (!promoBannerDue()) return;
+      if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
       safeStorage.set(`pivnik_banner_${HALLOWEEN_BANNER.key}`, String(Date.now()));
       const banner = $('#promoBanner');
-      banner?.classList.add('open');
-      banner?.setAttribute('aria-hidden', 'false');
+      if (!banner) return;
+      banner.hidden = false;
+      banner.classList.add('open');
+      banner.setAttribute('aria-hidden', 'false');
     };
-    if (image.getAttribute('src') === HALLOWEEN_BANNER.src && image.complete) { show(); return; }
+    if (image.getAttribute('src') === HALLOWEEN_BANNER.src && image.complete && image.naturalWidth) { show(); return; }
     image.onload = show;
+    image.onerror = () => { image.onload = null; image.onerror = null; };
     image.src = HALLOWEEN_BANNER.src;
   }, delayMs);
 }
 function closePromoBanner() {
   const banner = $('#promoBanner');
-  banner?.classList.remove('open');
-  banner?.setAttribute('aria-hidden', 'true');
+  if (!banner) return;
+  banner.classList.remove('open');
+  banner.setAttribute('aria-hidden', 'true');
+  banner.hidden = true;
 }
 window.addEventListener('pivnik:boot-complete', () => {
   if (document.readyState === 'complete') schedulePromoBanner();
@@ -1295,8 +1311,9 @@ async function claimHalloweenInvite() {
   const code = pendingHalloweenInviteCode();
   if (!code || safeStorage.get('pivnik_invite_claimed') === code) return;
   try {
-    await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
-    safeStorage.set('pivnik_invite_claimed', code);
+    const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    // "unavailable" means the raffle tables are not ready yet, so the next visit tries again.
+    if (result?.attached || (result?.reason && !['unavailable', 'user_not_found'].includes(result.reason))) safeStorage.set('pivnik_invite_claimed', code);
   } catch (_) {}
 }
 
@@ -1318,6 +1335,7 @@ function applyDesign(design) {
   // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
   root.classList.toggle('theme-halloween', design.theme === 'halloween');
   applyHalloweenCopy(design.theme === 'halloween');
+  if (design.theme === 'halloween' && bootCompleted && document.readyState === 'complete') schedulePromoBanner();
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
@@ -2395,7 +2413,7 @@ function schedulePostBootHydration() {
 function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
   const consentSafeTarget = event.target?.closest?.(
-    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, .spaceverse-business-screen'
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, #halloweenToBusiness, .spaceverse-business-screen'
   );
   if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
@@ -2897,6 +2915,7 @@ function fillDesignForm(design) {
   $$('[data-design-color]').forEach((input) => input.value = design.colors?.[input.dataset.designColor] || '#000000');
   $$('[data-design-text]').forEach((input) => input.value = design.texts?.[input.dataset.designText] || '');
   $$('[data-design-section]').forEach((input) => input.checked = Boolean(design.sections?.[input.dataset.designSection]));
+  $$('[data-design-theme]').forEach((input) => input.checked = design.theme === input.dataset.designTheme);
   $('[data-design-radius]').value = String(design.radius || 20);
   $('#radiusValue').textContent = String(design.radius || 20);
 }
@@ -2909,6 +2928,12 @@ function readDesignForm() {
   $$('[data-design-color]').forEach((input) => design.colors[input.dataset.designColor] = input.value);
   $$('[data-design-text]').forEach((input) => design.texts[input.dataset.designText] = input.value.trim());
   $$('[data-design-section]').forEach((input) => design.sections[input.dataset.designSection] = input.checked);
+  const themeInputs = $$('[data-design-theme]');
+  if (themeInputs.length) {
+    const seasonalTheme = themeInputs.find((input) => input.checked);
+    if (seasonalTheme) design.theme = seasonalTheme.dataset.designTheme;
+    else delete design.theme;
+  }
   design.radius = Number($('[data-design-radius]').value || 20);
   return design;
 }
