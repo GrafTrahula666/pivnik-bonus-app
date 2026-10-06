@@ -1,6 +1,5 @@
 package ru.pivnik.evotor;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,9 +9,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import ru.evotor.framework.receipt.Receipt;
 import ru.evotor.framework.receipt.ReceiptApi;
-import ru.evotor.framework.receipt.formation.api.SellApi;
-import ru.evotor.framework.receipt.formation.api.trigger_receipt_discount_event.TriggerReceiptDiscountEventCallback;
-import ru.evotor.framework.receipt.formation.api.trigger_receipt_discount_event.TriggerReceiptDiscountEventException;
 import ru.pivnik.evotor.core.BindingPolicy;
 import ru.pivnik.evotor.core.IndicatorText;
 import ru.pivnik.evotor.core.ReceiptBinding;
@@ -79,46 +75,20 @@ final class Bridge {
         ReceiptBinding previous = policy.storedBinding();
         BindingPolicy.Outcome outcome = policy.onCustomerResolved(
                 scanned.getUuid(), current == null ? null : current.getUuid(), result.client, System.currentTimeMillis());
-        settings.recordStatus("bind " + outcome + " receipt " + scanned.getUuid());
-        notifyBartender(IndicatorText.forBinding(outcome, result.client, previous == null ? "" : previous.displayName));
-        if (outcome == BindingPolicy.Outcome.BOUND || outcome == BindingPolicy.Outcome.REPLACED) {
-            requestExtraWrite();
+        if (outcome == BindingPolicy.Outcome.BOUND || outcome == BindingPolicy.Outcome.REPLACED
+                || outcome == BindingPolicy.Outcome.ALREADY_BOUND) {
+            // The server accrues only for receipts it was told about, so the bind must land.
+            ResolveResult bound = PivnikApi.bind(settings, scanned.getUuid(), payload);
+            settings.recordStatus("bind " + outcome + " " + bound.kind + " receipt " + scanned.getUuid());
+            if (bound.kind != ResolveResult.Kind.FOUND) {
+                policy.onReceiptFinished(scanned.getUuid());
+                notifyBartender(IndicatorText.bindFailed(bound.kind));
+                return;
+            }
+        } else {
+            settings.recordStatus("bind " + outcome + " receipt " + scanned.getUuid());
         }
-    }
-
-    /**
-     * Asks the till to call our ReceiptDiscountEvent handler for the current sell receipt right
-     * now (SellApi.triggerReceiptDiscountEvent), so the extra is set immediately after the scan.
-     * If this POS build lacks the trigger, the same handler still runs at the payment step via
-     * ReceiptDiscountRequiredEvent, and BeforePositionsEditedEvent writes it on later edits.
-     */
-    private void requestExtraWrite() {
-        requestExtraWrite(true);
-    }
-
-    private void requestExtraWrite(final boolean retryIfBusy) {
-        SellApi.triggerReceiptDiscountEvent(app, new ComponentName(app, PivnikReceiptService.class),
-                new TriggerReceiptDiscountEventCallback() {
-                    @Override public void onSuccess() {
-                        Log.i(TAG, "receipt extra write triggered");
-                    }
-
-                    @Override public void onError(TriggerReceiptDiscountEventException error) {
-                        Log.w(TAG, "trigger refused (code " + error.getCode() + "); extra will be written at payment step");
-                        settings.recordStatus("trigger error " + error.getCode());
-                        if (retryIfBusy && error.getCode() == TriggerReceiptDiscountEventException.ERROR_CODE_KKM_IS_BUSY) {
-                            main.postDelayed(new Runnable() {
-                                @Override public void run() {
-                                    worker.execute(new Runnable() {
-                                        @Override public void run() {
-                                            requestExtraWrite(false);
-                                        }
-                                    });
-                                }
-                            }, 800);
-                        }
-                    }
-                }, null);
+        notifyBartender(IndicatorText.forBinding(outcome, result.client, previous == null ? "" : previous.displayName));
     }
 
     void notifyBartender(final String text) {

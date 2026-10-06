@@ -8,8 +8,8 @@ import ru.pivnik.evotor.core.PivnikQr;
 
 /**
  * Receives every barcode scanned while a SELL receipt is being formed
- * (action ru.evotor.event.sell.BARCODE_RECEIVED). Its Result can only add positions —
- * the SDK offers no SetExtra here — so the extra is written later by PivnikReceiptService.
+ * (action ru.evotor.event.sell.BARCODE_RECEIVED). A PIVNIK code is consumed without adding
+ * anything to the receipt; the client is reported to the server against the open receipt UUID.
  *
  * <p>Payback receipts never reach this service, so a refund is never attributed to a customer.
  */

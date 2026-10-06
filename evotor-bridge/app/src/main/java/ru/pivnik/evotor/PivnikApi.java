@@ -13,9 +13,10 @@ import org.json.JSONObject;
 import ru.pivnik.evotor.core.ResolveResult;
 
 /**
- * Calls the POS-only resolver, POST /api/device/pos/qr/resolve, which
- * runs the canonical qr-resolver.js lookup (revoked aliases excluded). Read-only for the till:
- * it does not accrue or spend anything. Always runs off the Evotor binder thread.
+ * Device-key calls: POST /api/device/pos/qr/resolve (who is this QR) and
+ * POST /api/device/pos/receipts/bind (this client was scanned into this open receipt).
+ * The till never sends an amount: the server accrues from the closed cloud document.
+ * Always runs off the Evotor binder thread.
  */
 final class PivnikApi {
     private static final int TIMEOUT_MS = 3000;
@@ -24,9 +25,26 @@ final class PivnikApi {
     private PivnikApi() {}
 
     static ResolveResult resolve(BridgeSettings settings, String payload) {
+        try {
+            return post(settings, "/api/device/pos/qr/resolve", new JSONObject().put("payload", payload));
+        } catch (JSONException error) {
+            return ResolveResult.unavailable();
+        }
+    }
+
+    static ResolveResult bind(BridgeSettings settings, String receiptUuid, String payload) {
+        try {
+            return post(settings, "/api/device/pos/receipts/bind",
+                    new JSONObject().put("receiptUuid", receiptUuid).put("payload", payload));
+        } catch (JSONException error) {
+            return ResolveResult.unavailable();
+        }
+    }
+
+    private static ResolveResult post(BridgeSettings settings, String path, JSONObject json) {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
+            URL url = new URL(settings.apiBaseUrl() + path);
             if (!"https".equalsIgnoreCase(url.getProtocol())) return ResolveResult.unavailable();
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
@@ -37,7 +55,7 @@ final class PivnikApi {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Device " + settings.deviceToken());
-            byte[] body = new JSONObject().put("payload", payload).toString().getBytes(StandardCharsets.UTF_8);
+            byte[] body = json.toString().getBytes(StandardCharsets.UTF_8);
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);
             try (OutputStream out = connection.getOutputStream()) {
@@ -46,7 +64,7 @@ final class PivnikApi {
             int status = connection.getResponseCode();
             InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
             return ResolveResult.fromHttp(status, read(stream));
-        } catch (IOException | JSONException | RuntimeException error) {
+        } catch (IOException | RuntimeException error) {
             return ResolveResult.unavailable();
         } finally {
             if (connection != null) connection.disconnect();

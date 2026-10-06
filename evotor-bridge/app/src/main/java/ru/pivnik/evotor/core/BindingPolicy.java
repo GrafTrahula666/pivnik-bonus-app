@@ -68,24 +68,13 @@ public final class BindingPolicy {
         return Outcome.REPLACE_NEEDS_CONFIRMATION;
     }
 
-    /** The customer to write into this receipt's extra, or null. Never answers for another receipt. */
+    /** The customer bound to this receipt, or null. Never answers for another receipt. */
     public synchronized ReceiptBinding bindingFor(String receiptUuid, long nowMillis) {
         if (receiptUuid == null) return null;
         return activeBinding(receiptUuid, nowMillis);
     }
 
-    /** Whether any unexpired binding exists (used where the SDK event carries no receipt UUID). */
-    public synchronized boolean hasActiveBinding(long nowMillis) {
-        ReceiptBinding binding = store.loadBinding();
-        if (binding == null) return false;
-        if (isExpired(binding, nowMillis)) {
-            clearAll();
-            return false;
-        }
-        return true;
-    }
-
-    /** The bound customer currently stored, regardless of receipt (for closed-receipt verification). */
+    /** The bound customer currently stored, regardless of receipt. */
     public synchronized ReceiptBinding storedBinding() {
         return store.loadBinding();
     }

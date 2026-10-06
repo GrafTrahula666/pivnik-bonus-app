@@ -1,10 +1,8 @@
 package ru.pivnik.evotor.core;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -78,7 +76,7 @@ public class BindingPolicyTest {
         assertNull(policy.bindingFor(RECEIPT_A, 2_000));
         policy.onReceiptOpened(RECEIPT_B);
         assertNull(policy.bindingFor(RECEIPT_B, 2_000));
-        assertFalse(policy.hasActiveBinding(2_000));
+        assertNull(policy.storedBinding());
     }
 
     @Test
@@ -88,7 +86,7 @@ public class BindingPolicyTest {
         assertNotNull(policy.bindingFor(RECEIPT_A, 1_500));
         policy.onReceiptFinished(RECEIPT_A);
         assertNull(policy.bindingFor(RECEIPT_B, 2_000));
-        assertFalse(policy.hasActiveBinding(2_000));
+        assertNull(policy.storedBinding());
     }
 
     @Test
@@ -111,9 +109,7 @@ public class BindingPolicyTest {
         policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, KIRILL, 1_000);
         BindingPolicy afterRestart = new BindingPolicy(store);
         assertNotNull(afterRestart.bindingFor(RECEIPT_A, 1_000 + BindingPolicy.TTL_MS));
-        assertTrue(afterRestart.hasActiveBinding(1_000 + BindingPolicy.TTL_MS));
         assertNull(afterRestart.bindingFor(RECEIPT_A, 1_001 + BindingPolicy.TTL_MS));
-        assertFalse(afterRestart.hasActiveBinding(1_001 + BindingPolicy.TTL_MS));
         assertNull(store.loadBinding());
     }
 

@@ -14,6 +14,8 @@ public final class ResolveResult {
         UNAUTHORIZED,
         /** Rate limited (429). */
         RATE_LIMITED,
+        /** The receipt was already settled for another client (409). */
+        CONFLICT,
         /** No connection, timeout, 5xx or an unreadable answer. Sale continues without PIVNIK. */
         UNAVAILABLE
     }
@@ -31,13 +33,14 @@ public final class ResolveResult {
     }
 
     /**
-     * Interprets the existing {@code POST /api/staff/qr/resolve} answer:
+     * Interprets the device resolve/bind answer:
      * {@code {"qrToken","shortCode","client":{"id","firstName",...}}} on 200, {@code {"error"}} otherwise.
      */
     public static ResolveResult fromHttp(int status, String body) {
         if (status == 404) return new ResolveResult(Kind.NOT_FOUND, null);
         if (status == 401 || status == 403 || status == 428) return new ResolveResult(Kind.UNAUTHORIZED, null);
         if (status == 429) return new ResolveResult(Kind.RATE_LIMITED, null);
+        if (status == 409) return new ResolveResult(Kind.CONFLICT, null);
         if (status != 200 || body == null) return unavailable();
         try {
             JSONObject client = new JSONObject(body).optJSONObject("client");

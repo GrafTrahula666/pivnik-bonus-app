@@ -8,10 +8,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- SellIntegrationService.PERMISSION -->
     <uses-permission android:name="ru.evotor.permission.SELL_INTEGRATION_SERVICE" />
-    <!-- ReceiptDiscountRequiredEvent.NAME_PERMISSION -->
-    <uses-permission android:name="ru.evotor.permission.RECEIPT_DISCOUNT_REQUIRED_EVENT" />
-    <!-- TriggerReceiptDiscountEventRequestedEvent.NAME_PERMISSION -->
-    <uses-permission android:name="ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT" />
 
     <queries>
         <!-- ReceiptApi.AUTHORITY / AUTHORITY_V2: read the open and closed sell receipt -->
@@ -36,6 +32,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Evotor's own launcher hides LAUNCHER-only apps; this puts the setup screen on the terminal. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.EVOTOR" />
+            </intent-filter>
         </activity>
 
         <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
@@ -44,18 +45,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </service>
-
-        <!-- ReceiptDiscountEvent / ReceiptDiscountRequiredEvent / BeforePositionsEditedEvent .NAME_SELL_RECEIPT -->
-        <service
-            android:name=".PivnikReceiptService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="evo.v2.receipt.sell.receiptDiscount" />
-                <action android:name="evo.v2.receipt.sell.receiptDiscountRequiredEvent" />
-                <action android:name="evo.v2.receipt.sell.beforePositionsEdited" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>

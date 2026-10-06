@@ -27,6 +27,8 @@ public final class IndicatorText {
                 return "PIVNIK: касса не авторизована — продажа без привязки";
             case RATE_LIMITED:
                 return "PIVNIK: слишком часто — повторите позже";
+            case CONFLICT:
+                return "PIVNIK: бонусы за этот чек уже начислены другому клиенту";
             case UNAVAILABLE:
             default:
                 return "PIVNIK: нет связи — продажа без привязки";
@@ -35,6 +37,11 @@ public final class IndicatorText {
 
     public static String noOpenReceipt() {
         return "PIVNIK: сначала добавьте товар в чек";
+    }
+
+    public static String bindFailed(ResolveResult.Kind kind) {
+        if (kind == ResolveResult.Kind.CONFLICT) return forFailure(kind);
+        return "PIVNIK: бонусы за этот чек не начислятся — отсканируйте QR ещё раз";
     }
 
     public static String notConfigured() {
