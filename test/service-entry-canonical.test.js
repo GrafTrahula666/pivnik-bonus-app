@@ -29,7 +29,7 @@ test('Telegram header color has one canonical runtime source', async () => {
   assert.match(index, /meta name="theme-color" content="#0b0e13"/);
   assert.match(app, /const TELEGRAM_HEADER_COLOR = '#0b0e13'/);
   assert.match(app, /tg\.setHeaderColor\(TELEGRAM_HEADER_COLOR\)/);
-  assert.match(app, /tg\?\.setHeaderColor\(TELEGRAM_HEADER_COLOR\)/);
+  assert.match(app, /tg\?\.setHeaderColor\(night \? TELEGRAM_HEADER_COLOR : '#fbf6ef'\)/);
   assert.doesNotMatch(app, /setHeaderColor\('#f8f3eb'\)/);
 });
 

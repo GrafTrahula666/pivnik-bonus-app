@@ -324,13 +324,12 @@ Scripts, in prestart order, and what each one touches (from
 2. `apply-v22-runtime.mjs` — `achievements.js`, `app.js`, `index.html`, `server.js`,
    `universal-server.js`; triggers steps 2b/2c below.
 3. `apply-red-cosmos-v2-backend-final.mjs` — `server.js`, `universal-server.js`.
-4. `apply-red-cosmos-v2-tester-claims.mjs` — `universal-server.js` (`authenticateVk`, token anchors).
-5. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
-6. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
+4. `apply-release-candidate-fixes.mjs` — `app.js`, `index.html`, `red-cosmos-v2.css`, `universal-server.js`.
+5. `apply-working-updates.mjs` — the biggest one: `app.js`, `index.html`,
    `platform-core.js`, `red-cosmos-v2.css`/`.js`, `universal-server.js`,
    `vk-platform.js`, plus two DB/audit scripts. Ships as a gzip+base64 blob
    (`scripts/working-updates-runtime-*.txt`) decompressed at apply time.
-7. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
+6. `red-cosmos-v2-db-prepare.mjs` — DB backup + frame-ownership reconciliation (guarded by `DATABASE_URL`/production checks).
 
 ~~`apply-icecream69a-frame.mjs`~~ — retired 2026-09-28, folded into `app.js`,
 `server.js`, `styles.css`, `universal-server.js` directly.
@@ -354,6 +353,15 @@ into `app.js` and `red-cosmos-v2.css` directly; the
 `working-updates-runtime-*.txt` blob was regenerated so its
 `red-cosmos-v2.css` snapshot carries the VK background CSS too (see below).
 **7 scripts remain.**
+
+~~`apply-red-cosmos-v2-tester-claims.mjs`~~ — retired 2026-10-02, folded into
+`universal-server.js` directly: the `claimPendingSpecialAchievement()` helper
+(calls `pivnik_claim_pending_special_achievement`) and its one call right after
+`createSession()` in the shared provider login path (VK and Telegram). The true
+diff was taken in real chain order (after `apply-red-cosmos-v2-backend-final.mjs`);
+no other script reads its marker or helper. Fully materialized files before/after
+are byte-identical except the dead `// RED_COSMOS_V2_PENDING_TESTER_CLAIMS` marker
+comment, and materialize stays idempotent. **6 scripts remain.**
 
 ### Hidden dependencies this second retirement surfaced
 

@@ -1670,6 +1670,7 @@ async function resolveProviderUser(provider, externalUser) {
     Number(sessionResult.rows[0]?.session_version || 1),
     { pid: String(externalUser.id) }
   );
+  await claimPendingSpecialAchievement(userId, provider, externalUser);
   setImmediate(() => {
     void ensureSupplementalRecords(userId).catch((error) => {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
@@ -1687,6 +1688,23 @@ async function resolveProviderUser(provider, externalUser) {
     );
   }
   return { token, ...authPayload };
+}
+
+async function claimPendingSpecialAchievement(userId, provider, externalUser) {
+  const result = await pool.query(
+    'SELECT * FROM pivnik_claim_pending_special_achievement($1::bigint,$2::text,$3::text,$4::text)',
+    [userId, provider, String(externalUser?.id || ''), externalUser?.username || null]
+  );
+  const claim = result.rows[0] || null;
+  if (claim?.claimed) {
+    console.log(JSON.stringify({
+      specialAchievementClaimed: true,
+      handle: claim.recipient_handle,
+      awardedBonus: Number(claim.awarded_bonus || 0),
+      userId: String(userId)
+    }));
+  }
+  return claim;
 }
 
 async function authenticateVk(body) {
