@@ -29,6 +29,7 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
 import {
   WHEEL_PRIZES,
   drawWheelPrize,
@@ -1751,7 +1752,20 @@ async function authenticateTelegram(body) {
     throw Object.assign(new Error('Откройте приложение через Telegram.'), { statusCode: 401 });
   }
   enforceRateLimit(`auth-identity:telegram:${user.id}`, 60, 10 * 60 * 1000);
-  return resolveProviderUser('telegram', user);
+  const data = await resolveProviderUser('telegram', user);
+  // Halloween invite from the signed start_param (inv_<code>); best-effort, never breaks login.
+  try {
+    const inviteCode = initData ? inviteCodeFromStartParam(initData) : null;
+    const inviteeId = inviteCode ? verifySession(data?.token)?.uid : null;
+    if (inviteeId) {
+      await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
+        inviteeId, code: inviteCode, channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret
+      }));
+    }
+  } catch (error) {
+    console.warn('Halloween invite start_param skipped:', error?.code || error?.message || 'unknown');
+  }
+  return data;
 }
 
 async function grantReward(db, userId, code, amount, source, reason, mode = 'adjustment') {

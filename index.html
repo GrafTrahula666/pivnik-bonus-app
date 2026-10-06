@@ -165,6 +165,26 @@
         <div class="byline hidden" id="byline">by Kirill Gamilton △</div>
       </section>
 
+      <section class="screen client-screen halloween-screen" data-screen="halloween">
+        <div class="halloween-board">
+          <b class="halloween-tickets" id="halloweenTickets" aria-label="Тыквенные билеты">0</b>
+          <b class="halloween-timer" id="halloweenTimer" aria-label="До Ночи Котлов">—</b>
+          <button class="halloween-invite" id="halloweenInvite" type="button" aria-label="Пригласить друга: 1 друг — 1 тыквенный билет, до 3 друзей в неделю"><b id="halloweenInviteCount">0/3</b></button>
+          <div class="halloween-board-text">
+            <h2>Ночь Котлов, 31 октября</h2>
+            <h3>Еженедельные задания: пригласи друга</h3>
+            <p>1 друг — 1 тыквенный билет, до 3 друзей в неделю. Билет начисляется после первой покупки друга.</p>
+            <h3>Призы</h3>
+            <p>1 место, Чёрный котёл: легендарная рамка, 5 000 ₽ на депозит и особая награда: фото победителя на доске почёта Пивника. Впиши себя в историю бара. 2 место, Котёл ведьмы: фирменная кружка, эпическая рамка и 1 000 ₽ на депозит. 3 место, Котелок новичка: редкая рамка, 250 бонусов и 500 ₽ на депозит. Ещё 5 участников получат хэллоуинскую рамку.</p>
+            <h3>Как получить тыквенные билеты</h3>
+            <p>Колесо Пивника: билет может выпасть при вращении. Задания SpaceVerse: до 3 билетов в неделю. Покупки: 1 билет за каждые 1 000 ₽ в чеке.</p>
+            <h3>Как пройдёт Ночь Котлов</h3>
+            <p>31 октября в 20:00, один общий розыгрыш. Каждый билет — это ещё один шанс. Один гость может выиграть только одно место.</p>
+          </div>
+        </div>
+        <button class="halloween-business-link" id="halloweenToBusiness" type="button">SpaceVerse для бизнеса ›</button>
+      </section>
+
       <section class="screen client-screen spaceverse-business-screen" data-screen="spaceverse-business">
         <div class="spaceverse-business-page-head">
           <button class="icon-btn service-back" id="spaceverseBusinessBack" type="button" aria-label="Назад">← Назад</button>
@@ -465,6 +485,7 @@
             <label><input type="checkbox" data-design-section="featured" /> Новинка</label>
             <label><input type="checkbox" data-design-section="team" /> Сотрудники</label>
             <label><input type="checkbox" data-design-section="byline" /> Подпись автора</label>
+            <label><input type="checkbox" data-design-theme="halloween" /> Хэллоуин «Ночь Котлов»</label>
           </div>
           <div class="two-buttons admin-write-only">
             <button class="secondary" id="saveDraft">Сохранить черновик</button>
@@ -602,6 +623,41 @@
       <span class="muted">Система лояльности</span>
       <h2>Ранги Пивника</h2>
       <div class="status-levels" id="statusLevelsList"></div>
+    </div>
+  </div>
+
+  <div class="modal halloween-invite-modal" id="halloweenInviteModal" aria-hidden="true">
+    <div class="modal-sheet halloween-invite-sheet">
+      <button class="close" data-close="halloweenInviteModal" type="button" aria-label="Закрыть">×</button>
+      <span class="muted">Еженедельное задание</span>
+      <h2>Пригласи друга</h2>
+      <p>Отдай другу свой код. Он вводит его в первые сутки после регистрации, а после его первой покупки тебе придут тыквенный билет и <span id="halloweenInviteBonus">100</span> бонусов. До 3 друзей в неделю.</p>
+      <div class="halloween-code-box">
+        <small>Твой код</small>
+        <b id="halloweenMyCode">—</b>
+      </div>
+      <div class="halloween-code-actions">
+        <button class="secondary" id="halloweenCopyCode" type="button">Скопировать</button>
+        <button class="primary" id="halloweenShareCode" type="button">Отправить другу</button>
+      </div>
+      <p class="halloween-invite-progress" id="halloweenInviteProgress">Друзей на этой неделе: 0 из 3</p>
+      <div class="halloween-enter-code" id="halloweenEnterBlock" hidden>
+        <small id="halloweenEnterTitle">Есть код от друга? Его можно ввести в первые сутки</small>
+        <div class="halloween-enter-row">
+          <input id="halloweenCodeInput" type="text" inputmode="text" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Код друга" aria-label="Код друга">
+          <button class="primary" id="halloweenApplyCode" type="button">Применить</button>
+        </div>
+        <small class="halloween-enter-hint" id="halloweenEnterHint" aria-live="polite"></small>
+      </div>
+      <p class="halloween-invited-note" id="halloweenInvitedNote" hidden>Код друга уже применён</p>
+    </div>
+  </div>
+
+  <div class="promo-banner" id="promoBanner" hidden aria-hidden="true" role="dialog" aria-label="Хэллоуин в SpaceVerse">
+    <div class="promo-banner-card">
+      <img class="promo-banner-image" id="promoBannerImage" alt="Осенний сезон в Пивнике: Ночь Котлов 31 октября в 20:00" decoding="async">
+      <button class="promo-banner-close" id="promoBannerClose" type="button" aria-label="Закрыть">×</button>
+      <button class="promo-banner-cta" id="promoBannerCta" type="button" aria-label="Войти в сезон">Войти в сезон</button>
     </div>
   </div>
 
