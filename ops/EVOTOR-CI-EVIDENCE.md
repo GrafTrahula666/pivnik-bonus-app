@@ -1,4 +1,8 @@
-# Evotor integration: exact CI evidence, 2026-10-06
+# Evotor integration: initial CI evidence, 2026-10-06
+
+These are historical results before the release-gate fixes in
+`EVOTOR-RELEASE-FIXES.md`. The audit/test-runner blockers below were subsequently
+fixed; hardware and actual cloud Extras remain unresolved.
 
 These results supplement the local-only `EVOTOR-VERIFICATION.md`. They apply to
 the tested source commits below. Later documentation-only commits do not change
