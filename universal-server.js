@@ -30,6 +30,7 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
 import {
   WHEEL_PRIZES,
   drawWheelPrize,
@@ -1670,6 +1671,7 @@ async function resolveProviderUser(provider, externalUser) {
     Number(sessionResult.rows[0]?.session_version || 1),
     { pid: String(externalUser.id) }
   );
+  await claimPendingSpecialAchievement(userId, provider, externalUser);
   setImmediate(() => {
     void ensureSupplementalRecords(userId).catch((error) => {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
@@ -1687,6 +1689,23 @@ async function resolveProviderUser(provider, externalUser) {
     );
   }
   return { token, ...authPayload };
+}
+
+async function claimPendingSpecialAchievement(userId, provider, externalUser) {
+  const result = await pool.query(
+    'SELECT * FROM pivnik_claim_pending_special_achievement($1::bigint,$2::text,$3::text,$4::text)',
+    [userId, provider, String(externalUser?.id || ''), externalUser?.username || null]
+  );
+  const claim = result.rows[0] || null;
+  if (claim?.claimed) {
+    console.log(JSON.stringify({
+      specialAchievementClaimed: true,
+      handle: claim.recipient_handle,
+      awardedBonus: Number(claim.awarded_bonus || 0),
+      userId: String(userId)
+    }));
+  }
+  return claim;
 }
 
 async function authenticateVk(body) {
@@ -1734,7 +1753,20 @@ async function authenticateTelegram(body) {
     throw Object.assign(new Error('Откройте приложение через Telegram.'), { statusCode: 401 });
   }
   enforceRateLimit(`auth-identity:telegram:${user.id}`, 60, 10 * 60 * 1000);
-  return resolveProviderUser('telegram', user);
+  const data = await resolveProviderUser('telegram', user);
+  // Halloween invite from the signed start_param (inv_<code>); best-effort, never breaks login.
+  try {
+    const inviteCode = initData ? inviteCodeFromStartParam(initData) : null;
+    const inviteeId = inviteCode ? verifySession(data?.token)?.uid : null;
+    if (inviteeId) {
+      await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
+        inviteeId, code: inviteCode, channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret
+      }));
+    }
+  } catch (error) {
+    console.warn('Halloween invite start_param skipped:', error?.code || error?.message || 'unknown');
+  }
+  return data;
 }
 
 async function grantReward(db, userId, code, amount, source, reason, mode = 'adjustment') {
