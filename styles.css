@@ -10717,3 +10717,122 @@ html.theme-halloween body .client-home.home-v2.active {
 html.theme-halloween .app-shell:not(.service-mode):not(.wheel-mode) {
   padding-bottom: calc(var(--hal-nu) * 97 + env(safe-area-inset-bottom) + 12px) !important;
 }
+
+/* Halloween Block 11: "Пригласи друга" sheet (white-gold modal like the others) and the full-screen promo banner. */
+html.theme-halloween .halloween-invite-sheet { text-align: left; }
+html.theme-halloween .halloween-invite-sheet h2 { margin: 4px 0 8px; }
+html.theme-halloween .halloween-invite-sheet p { margin: 0 0 12px; font-size: 13px; line-height: 1.45; }
+html.theme-halloween .halloween-code-box {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 4px 0 12px;
+  padding: 14px 12px;
+  border: 1px dashed rgba(185,121,22,.6);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(255,247,230,.9), rgba(246,231,200,.9));
+}
+html.theme-halloween .halloween-code-box small { color: #8a6a3a; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+html.theme-halloween .halloween-code-box b {
+  color: #2e210f;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 26px;
+  letter-spacing: .14em;
+  user-select: all;
+}
+html.theme-halloween .halloween-code-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+html.theme-halloween .halloween-code-actions button,
+html.theme-halloween .halloween-enter-row button { min-height: 42px; border-radius: 14px; font-weight: 800; }
+html.theme-halloween .halloween-invite-progress { color: #6b5536; font-weight: 700; }
+html.theme-halloween .halloween-enter-code {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(185,121,22,.25);
+}
+html.theme-halloween .halloween-enter-code[hidden] { display: none; }
+html.theme-halloween .halloween-enter-code > small { color: #6b5536; font-size: 12px; font-weight: 700; }
+html.theme-halloween .halloween-enter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+html.theme-halloween .halloween-enter-row input {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(185,121,22,.45);
+  border-radius: 14px;
+  background: #fffaf2;
+  color: #2e210f;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+html.theme-halloween .halloween-enter-hint { min-height: 16px; color: #b0461c; font-size: 12px; font-weight: 700; }
+html.theme-halloween .halloween-invited-note { color: #2f7a3a; font-weight: 800; }
+html.theme-halloween .halloween-invited-note[hidden] { display: none; }
+
+html.theme-halloween .promo-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  background: rgba(6, 3, 16, .86);
+}
+html.theme-halloween .promo-banner.open { display: flex; }
+html.theme-halloween .promo-banner-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(100%, 480px);
+  max-height: 100%;
+}
+html.theme-halloween .promo-banner-image {
+  display: block;
+  width: 100%;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 96px);
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 0 30px rgba(255,138,31,.35);
+}
+html.theme-halloween .promo-banner-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,226,176,.7);
+  border-radius: 50%;
+  background: rgba(11,7,22,.78);
+  color: #ffe2b0;
+  font-size: 26px;
+  line-height: 1;
+}
+html.theme-halloween .promo-banner-cta {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd98a 0%, #f7a02a 48%, #c9600c 100%);
+  box-shadow: inset 0 0 0 1.5px rgba(255,236,190,.85), 0 0 18px rgba(255,138,31,.7);
+  color: #2b1405;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+html.theme-halloween .halloween-invite-sheet :is(#halloweenShareCode, #halloweenApplyCode) {
+  border: 0;
+  background: linear-gradient(180deg, #f4cf82, #b97916);
+  color: #2e210f;
+  box-shadow: 0 4px 12px rgba(185,121,22,.3);
+}
+html.theme-halloween .halloween-invite-sheet #halloweenApplyCode { padding: 0 16px; }
+html.theme-halloween .halloween-invite-sheet #halloweenCopyCode {
+  border: 1px solid rgba(185,121,22,.55);
+  background: #fffaf2;
+  color: #2e210f;
+}

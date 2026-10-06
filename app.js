@@ -1147,28 +1147,138 @@ async function openHalloweenPage() {
   }
 }
 
-// "Пригласи друга": share a personal deep link; the friend's first purchase gives the inviter 1 ticket (max 3 a week, checked on the server).
-const HALLOWEEN_INVITE_TEXT = 'Заходи в Пивник: копим тыквенные билеты на Ночь Котлов 31 октября';
-async function shareHalloweenInvite() {
-  if (!halloweenInvite?.links) {
-    try { renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 })); } catch (_) {}
+// "Пригласи друга": the card opens a sheet with the user's own code (to give to a friend) and, during the user's own first
+// 24 hours, a field to enter a friend's code. Every rule (new accounts only, first purchase, 3 a week) is checked on the server.
+const HALLOWEEN_INVITE_TEXT = 'Заходи в Пивник и введи мой код в первые сутки после регистрации';
+const HALLOWEEN_CLAIM_MESSAGES = {
+  invalid_code: 'Такого кода нет, проверь буквы',
+  unknown_code: 'Такого кода нет, проверь буквы',
+  self_invite: 'Свой код ввести нельзя',
+  already_attached: 'Код друга уже применён',
+  mutual_invite: 'Этот друг уже пришёл по твоему коду, взаимно нельзя',
+  window_expired: 'Код можно ввести только в первые сутки после регистрации',
+  not_new_account: 'Код можно ввести только в первые сутки после регистрации',
+  has_purchase: 'Код вводится до первой покупки',
+  draw_closed: 'Ночь Котлов уже прошла'
+};
+async function refreshHalloweenSummary() {
+  try { renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 })); } catch (_) {}
+}
+function renderHalloweenInviteSheet() {
+  const invite = halloweenInvite || {};
+  const limit = Number(invite.weekLimit) || 3;
+  const count = Math.min(limit, Math.max(0, Number(invite.weekCount) || 0));
+  const code = $('#halloweenMyCode');
+  if (code) code.textContent = invite.code || '—';
+  const bonus = $('#halloweenInviteBonus');
+  if (bonus && Number(invite.bonusPerFriend) > 0) bonus.textContent = String(invite.bonusPerFriend);
+  const progress = $('#halloweenInviteProgress');
+  if (progress) progress.textContent = `Друзей на этой неделе: ${count} из ${limit}`;
+  const enter = $('#halloweenEnterBlock');
+  if (enter) enter.hidden = !invite.canEnterCode;
+  const title = $('#halloweenEnterTitle');
+  if (title && invite.enterUntil) {
+    const until = new Date(invite.enterUntil);
+    if (Number.isFinite(until.getTime())) {
+      title.textContent = `Есть код от друга? Ввести можно до ${until.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+    }
   }
+  const note = $('#halloweenInvitedNote');
+  if (note) note.hidden = !invite.invitedBy;
+}
+async function openHalloweenInvite() {
+  renderHalloweenInviteSheet();
+  openModal('halloweenInviteModal');
+  await refreshHalloweenSummary();
+  renderHalloweenInviteSheet();
+}
+async function copyHalloweenCode() {
+  const code = halloweenInvite?.code;
+  if (!code) { toast('Код появится через пару секунд'); return; }
+  try { await navigator.clipboard.writeText(code); toast('Код скопирован'); } catch (_) { toast(`Твой код: ${code}`); }
+}
+async function shareHalloweenInvite() {
+  if (!halloweenInvite?.code) await refreshHalloweenSummary();
+  const code = halloweenInvite?.code;
+  if (!code) { toast('Код появится через пару секунд'); return; }
+  const text = `${HALLOWEEN_INVITE_TEXT}: ${code}`;
   const link = IS_VK ? halloweenInvite?.links?.vk : halloweenInvite?.links?.telegram;
-  if (!link) { toast('Приглашения откроются совсем скоро'); return; }
-  if (IS_VK && window.vkBridge?.send) {
+  if (link && IS_VK && window.vkBridge?.send) {
     try { await window.vkBridge.send('VKWebAppShare', { link }); return; } catch (_) {}
   }
-  if (!IS_VK && tg?.openTelegramLink) {
+  if (link && !IS_VK && tg?.openTelegramLink) {
     try {
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(HALLOWEEN_INVITE_TEXT)}`);
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
       return;
     } catch (_) {}
   }
   if (navigator.share) {
-    try { await navigator.share({ title: 'Ночь Котлов', text: HALLOWEEN_INVITE_TEXT, url: link }); return; } catch (_) {}
+    try { await navigator.share({ title: 'Ночь Котлов', text, ...(link ? { url: link } : {}) }); return; } catch (_) {}
   }
-  try { await navigator.clipboard.writeText(link); toast('Ссылка скопирована, отправьте её другу'); } catch (_) { toast(link); }
+  try { await navigator.clipboard.writeText(link ? `${text}\n${link}` : text); toast('Приглашение скопировано, отправь его другу'); } catch (_) { toast(`Твой код: ${code}`); }
 }
+async function applyHalloweenCode() {
+  const input = $('#halloweenCodeInput');
+  const hint = $('#halloweenEnterHint');
+  const button = $('#halloweenApplyCode');
+  const code = String(input?.value || '').trim();
+  if (!code) { if (hint) hint.textContent = 'Введи код друга'; return; }
+  if (button) button.disabled = true;
+  try {
+    const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    if (result?.attached) {
+      if (hint) hint.textContent = '';
+      toast('Код принят! После первой покупки другу придёт билет');
+      if (input) input.value = '';
+    } else if (hint) {
+      hint.textContent = HALLOWEEN_CLAIM_MESSAGES[result?.reason] || 'Не получилось, попробуй чуть позже';
+    }
+  } catch (_) {
+    if (hint) hint.textContent = 'Не получилось, попробуй чуть позже';
+  } finally {
+    if (button) button.disabled = false;
+  }
+  await refreshHalloweenSummary();
+  renderHalloweenInviteSheet();
+}
+
+// Full-screen promo banner: shown once a day, only after the app has fully loaded, the terms are accepted and no other
+// window is open. The art is set in HALLOWEEN_BANNER.src; with no art the banner never shows.
+const HALLOWEEN_BANNER = { src: '', key: 'halloween-2026', everyMs: 24 * 60 * 60 * 1000 };
+let promoBannerTimer = 0;
+function promoBannerDue() {
+  if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
+  if (!state.profile?.termsAccepted) return false;
+  const last = Number(safeStorage.get(`pivnik_banner_${HALLOWEEN_BANNER.key}`)) || 0;
+  return Date.now() - last >= HALLOWEEN_BANNER.everyMs;
+}
+function schedulePromoBanner(delayMs = 1200) {
+  clearTimeout(promoBannerTimer);
+  promoBannerTimer = setTimeout(() => {
+    if (!promoBannerDue()) return;
+    if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
+    const image = $('#promoBannerImage');
+    if (!image) return;
+    const show = () => {
+      safeStorage.set(`pivnik_banner_${HALLOWEEN_BANNER.key}`, String(Date.now()));
+      const banner = $('#promoBanner');
+      banner?.classList.add('open');
+      banner?.setAttribute('aria-hidden', 'false');
+    };
+    if (image.getAttribute('src') === HALLOWEEN_BANNER.src && image.complete) { show(); return; }
+    image.onload = show;
+    image.src = HALLOWEEN_BANNER.src;
+  }, delayMs);
+}
+function closePromoBanner() {
+  const banner = $('#promoBanner');
+  banner?.classList.remove('open');
+  banner?.setAttribute('aria-hidden', 'true');
+}
+window.addEventListener('pivnik:boot-complete', () => {
+  if (document.readyState === 'complete') schedulePromoBanner();
+  else window.addEventListener('load', () => schedulePromoBanner(), { once: true });
+});
 
 // A friend who opened an invite link is attached to the inviter once, right after login. The server ignores old accounts and self-invites.
 function pendingHalloweenInviteCode() {
@@ -2360,6 +2470,7 @@ async function acceptTerms() {
     toast('Правила приняты');
     void loadSecondaryData();
     void claimHalloweenInvite();
+    schedulePromoBanner();
   } finally {
     if (button) button.disabled = false;
   }
@@ -3561,7 +3672,13 @@ $('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
 });
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
-$('#halloweenInvite')?.addEventListener('click', () => { void shareHalloweenInvite(); });
+$('#halloweenInvite')?.addEventListener('click', () => { void openHalloweenInvite(); });
+$('#halloweenCopyCode')?.addEventListener('click', () => { void copyHalloweenCode(); });
+$('#halloweenShareCode')?.addEventListener('click', () => { void shareHalloweenInvite(); });
+$('#halloweenApplyCode')?.addEventListener('click', () => { void applyHalloweenCode(); });
+$('#halloweenCodeInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void applyHalloweenCode(); });
+$('#promoBannerClose')?.addEventListener('click', closePromoBanner);
+$('#promoBannerCta')?.addEventListener('click', () => { closePromoBanner(); void openHalloweenPage(); });
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
