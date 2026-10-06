@@ -592,7 +592,12 @@ isolation.
   `sync.js` isolate explicit store access, device identity and cash projections.
 - `pos-admin.js` / `pos-admin.css` are served by both runtimes and copied by the
   existing VK Hosting builder. Existing staff transactions stay in app operations.
-- Migrations 012/013 are opt-in manual migrations, never part of startup policy.
+- Migrations 012/013/014 are opt-in manual migrations, never part of startup policy.
+- `pos/bonus.js` is the only POS code that writes wallets/transactions: device
+  `receipts/bind` claims plus the `server.js` worker (`startPosBonusWorker`,
+  off unless `PIVNIK_POS_BONUS_ENABLED=true`) settle closed SELL/PAYBACK documents
+  once each through `pos_bonus_accruals`. Its ledger hooks sit just above
+  `createPosHttp` in `server.js`, outside the slice `evotor-http-boundary` evals.
 - `test/evotor-http-boundary.test.js` mounts actual auth/route source on loopback
   with explicit fixture adapters; it does not claim complete production startup.
 - See `EVOTOR-INTEGRATION.md` and `EVOTOR-VERIFICATION.md` for the separate Business

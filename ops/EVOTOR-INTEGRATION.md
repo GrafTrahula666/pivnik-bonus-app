@@ -69,15 +69,49 @@ identity, fiscal count, base receipt, payment/products) conflicts and rolls back
 the page/cursor; it is not silently overwritten. This deliberately prefers
 review over automatic changes to closed cash data. Manual same-client link retry
 preserves original actor/time; another client returns 409. Import/link/device
-endpoints never write wallets, bonus transactions or app journal.
+endpoints never write wallets, bonus transactions or app journal; only the
+accrual worker below does, and only from closed cloud documents.
+
+## Automatic bonuses from the till (migration 014)
+
+Redeem/spending at the till is deliberately out of scope.
+
+1. Bartender scans the guest QR into an open sell receipt. Bridge 0.2.0 resolves
+   it, then `POST /api/device/pos/receipts/bind` `{receiptUuid, payload}` with the
+   device key. The server stores `pos_receipt_claims` (latest scan wins; 409
+   `receipt_already_settled` once the receipt was decided for another client).
+   The till never sends an amount and writes nothing into the receipt.
+2. The worker in `server.js` (child process) runs `syncEvotor` and then
+   `processPosBonuses` every `PIVNIK_POS_SYNC_SECONDS` (default 120, min 30).
+   It starts only with `PIVNIK_POS_ENABLED=true`, `PIVNIK_POS_BONUS_ENABLED=true`,
+   `EVOTOR_API_TOKEN` and `EVOTOR_STORE_ID`, so no separate sync schedule is needed.
+3. A closed SELL whose cloud `id` equals a claimed `receiptUuid` accrues once:
+   `floor(amountCents × bonusPercent / 10000)` from the guest's current status,
+   no status discount (the till charged the full amount). It is a normal
+   `accrue` transaction (`staff_id NULL`, request key `evotor:<store>:<doc>`), so
+   12-month spend, achievements, Halloween tickets and the Telegram message work
+   as for a staff accrual. A claim made more than 15 minutes after close is skipped.
+4. A PAYBACK whose `baseDocumentId` is an accrued SELL reverses
+   `ceil(earned × returned / sold)`, capped by what that sale earned. A full first
+   return cancels the original transaction; otherwise an `adjustment` removes what
+   is still on the balance and records the rest as `shortfall`.
+5. Every decided document gets one `pos_bonus_accruals` row (applied or skipped
+   with a reason), so repeats, restarts and two workers cannot pay twice.
+
+Bartenders must not also accrue manually in the app for a receipt they scanned.
+
+Unverified until the first real receipt: that the Evotor cloud document `id`
+equals the SDK receipt UUID the bridge sends. If it does not, nothing accrues
+(claims stay unmatched); check `pos_receipt_claims.receipt_uuid` against
+`pos_documents.document_id` for that receipt before changing anything.
 
 ## Setup — only after separate staging/production authorization
 
 Do not execute this checklist against production as part of this PR.
 
-1. Take and verify the existing PostgreSQL backup/restore procedure. Review 012
-   and additive 013 against the actual target schema. Neither is a startup
-   migration. Apply manually to an authorized test DB first; no drop/truncate.
+1. Take and verify the existing PostgreSQL backup/restore procedure. Review 012,
+   additive 013 and additive 014 against the actual target schema. None is a
+   startup migration. Apply manually in that order; no drop/truncate.
 2. Confirm real Evotor API store ID and Business company/venue IDs. Insert one
    explicit `pos_store_bindings` mapping (initially disabled). Do not infer IDs.
    Grant root operators individually in `pos_operator_access`; Business still
@@ -87,8 +121,9 @@ Do not execute this checklist against production as part of this PR.
    `PIVNIK_POS_ENABLED` for the intended runtime/store. No browser/device provider
    token. Additional stores use explicit per-worker config via `syncEvotor`, not
    a shared env credential guessed from tenant names. Ingestion is polling, not
-   a fabricated webhook; schedule `node scripts/sync-evotor.mjs` separately after
-   approval. Sync resumes pages and repeats a full history scan for late delivery.
+   a fabricated webhook. With `PIVNIK_POS_BONUS_ENABLED=true` the server's own
+   worker polls; otherwise schedule `node scripts/sync-evotor.mjs` separately.
+   Sync resumes pages and repeats a full history scan for late delivery.
 4. As consented native admin with scope: POST `/api/admin/pos/devices` with
    `{storeId, externalDeviceId, label}` and existing signed Bearer session.
    Transfer the once-revealed `deviceToken` through an approved private channel
@@ -96,10 +131,11 @@ Do not execute this checklist against production as part of this PR.
    GET `/api/admin/pos/devices?storeId=…` lists identifiers without hashes/secrets.
    POST `/api/admin/pos/devices/revoke` with `{id,storeId}` revokes. Lost issue
    response: list→revoke→new issue, never blindly accumulate live credentials.
-5. Validate installed app package/version/signing certificate and durable key
-   backup before any separately approved APK update. This draft retains prototype
-   versionCode 1; no upgrade APK was signed or installed. Keystore device-token
-   encryption is independent from the existing APK signing identity.
+5. Bridge 0.2.0 (versionCode 2) is built by `.github/workflows/evotor-bridge-apk.yml`
+   with a throwaway debug key, so it cannot update the installed 0.1.0 prototype
+   in place: uninstall the prototype, install 0.2.0, then enter the URL and key.
+   It drops the discount/SetExtra services and adds an Evotor launcher icon for
+   the setup screen. A permanent release key is a separate step.
 6. Authorize tenant A/B test receipts and prove no cross-company or cross-venue
    read. Review startup parity/static VK bundle and repeat the production release
    gate before agreeing any merge/deploy.
@@ -118,6 +154,9 @@ key, `pivnik_user_id` value, closed state and fiscal print semantics. Validate S
 zero-discount behaviour, callback UX, permissions and Keystore on test hardware.
 Only then adapt the Extras normalizer and add those exact regression fixtures.
 Java writer/SetExtra alone is not evidence of the REST namespace.
+
+Bonus accrual (section above) does not depend on Extras: it matches the till's
+receipt UUID to the cloud document id, which still needs one real receipt to confirm.
 
 Until these samples exist, automatic scan→closed cloud document→app cohort is
 NOT finished and the Definition of Done is NOT met. Confirmed manual fallback
