@@ -1,3 +1,7 @@
+import { createPosHttp } from './pos/http.js';
+import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
+import { evotorConfig } from './pos/evotor-client.js';
+import { syncEvotor } from './pos/sync.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -2773,6 +2777,92 @@ app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res,
   }
 });
 
+// Evotor accruals reuse the bar's own status, unlimited-balance and cancel rules.
+const posBonusLedger = {
+  unlimitedBalance: UNLIMITED_BONUS_BALANCE,
+  suspiciousThresholdCents: SUSPICIOUS_THRESHOLD_CENTS,
+  isUnlimited: hasUnlimitedBonus,
+  async status(db, user) {
+    return getEffectiveStatus(user, await getRollingSpend(db, user.id));
+  },
+  async cancel(db, transactionId, reason, requestKey) {
+    const tx = (await db.query('SELECT client_id FROM transactions WHERE id = $1', [transactionId])).rows[0];
+    if (tx) await db.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [tx.client_id]);
+    return cancelCompletedTransaction(db, transactionId, null, reason, requestKey);
+  },
+  async afterCommit(result) {
+    await syncUserAchievements(pool, result.user.id);
+    if (result.kind === 'accrue') {
+      await halloweenAfterPurchase(result.transaction.id);
+      await sendTelegramMessage(result.user.telegram_id, `Покупка в баре «Пивник»
+
+Чек: ${rubles(result.amountCents).toFixed(2)} ₽
+Начислено: ${result.bonus} бонусов
+Баланс: ${result.balanceAfter} бонусов
+
+Если вы не совершали эту покупку, обратитесь к администратору.`);
+      return;
+    }
+    if (result.cancelledTransactionId) await halloweenAfterCancel(result.cancelledTransactionId);
+    if (result.removed > 0) {
+      await sendTelegramMessage(result.user.telegram_id, `Возврат в баре «Пивник»
+
+Списано начисленных за покупку бонусов: ${result.removed}
+Баланс: ${result.balanceAfter} бонусов`);
+    }
+  }
+};
+
+async function runPosBonusCycle(config, storeId) {
+  try {
+    await syncEvotor({ pool, config, maxPages: 5 });
+  } catch (error) {
+    console.warn('Evotor sync skipped:', error.code || error.message);
+  }
+  try {
+    const results = await processPosBonuses(pool, { storeId, ledger: posBonusLedger });
+    for (const item of results) {
+      if (item.status !== 'applied') console.warn('Evotor bonus', item.status, item.documentId, item.reason || item.error || '');
+    }
+  } catch (error) {
+    console.warn('Evotor bonus processing skipped:', error.code || error.message);
+  }
+}
+
+function startPosBonusWorker() {
+  const config = evotorConfig();
+  const bonus = posBonusConfig();
+  if (!config.enabled || !bonus.enabled || !config.token || !config.storeId) return;
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try { await runPosBonusCycle(config, config.storeId); } finally { running = false; }
+  };
+  setInterval(tick, bonus.syncSeconds * 1000).unref();
+  setTimeout(tick, 5000).unref();
+  console.log(`Evotor bonus worker: every ${bonus.syncSeconds}s for store ${config.storeId}`);
+}
+const posHttp = createPosHttp(pool);
+app.use('/api/device/pos', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,
+      pathname: req.originalUrl.split('?')[0], authorization: req.headers.authorization,
+      body: req.body, address: req.socket.remoteAddress }));
+  } catch (error) { next(error); }
+});
+app.use('/api/admin/pos', authRequired, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await posHttp.admin({ method: req.method,
+      pathname: req.originalUrl.split('?')[0], user: req.user, params: req.query, body: req.body }));
+  } catch (error) { next(error); }
+});
+// POS errors keep their HTTP meaning in standalone Express as in the gateway.
+app.use(['/api/device/pos', '/api/admin/pos'], (error, _req, res, next) => {
+  if (!error.statusCode) return next(error);
+  res.status(error.statusCode).set('Cache-Control', 'no-store').json({ error: error.message });
+});
+
 app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const summaryResult = await pool.query(`
@@ -3450,6 +3540,8 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
   }
 });
 
+app.get('/pos-admin.js', (_req, res) => res.set('Cache-Control', 'no-store').type('js').sendFile(path.join(__dirname, 'pos-admin.js')));
+app.get('/pos-admin.css', (_req, res) => res.set('Cache-Control', 'no-store').type('css').sendFile(path.join(__dirname, 'pos-admin.css')));
 app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
 app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));
@@ -3467,6 +3559,7 @@ app.use((error, _req, res, _next) => {
 await initDatabase();
 const server = app.listen(port, isChildServer ? '127.0.0.1' : '0.0.0.0', () => {
   console.log(`Pivnik app is running on port ${port}`);
+  startPosBonusWorker();
 });
 
 async function shutdown(signal) {

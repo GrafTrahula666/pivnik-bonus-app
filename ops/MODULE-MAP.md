@@ -586,3 +586,25 @@ domain) should wait until the
 patch-chain retirement process is proven, since both change the same two huge
 files and doing them interleaved would make each harder to review in
 isolation.
+
+
+### Evotor integration draft (2026-10-06)
+
+- `pos/http.js` is the shared dispatcher for native POS device and scoped POS admin
+  routes in `server.js` and `universal-server.js`; preserve both mounts on changes.
+- `pos/scope.js`, `devices.js`, `repository.js`, `analytics.js`, `service.js` and
+  `sync.js` isolate explicit store access, device identity and cash projections.
+- `pos-admin.js` / `pos-admin.css` are served by both runtimes and copied by the
+  existing VK Hosting builder. Existing staff transactions stay in app operations.
+- Migrations 012/013/014 are opt-in manual migrations, never part of startup policy.
+- `pos/bonus.js` is the only POS code that writes wallets/transactions: device
+  `receipts/bind` claims plus the `server.js` worker (`startPosBonusWorker`,
+  off unless `PIVNIK_POS_BONUS_ENABLED=true`) settle closed SELL/PAYBACK documents
+  once each through `pos_bonus_accruals`. Its ledger hooks sit just above
+  `createPosHttp` in `server.js`, outside the slice `evotor-http-boundary` evals.
+- `pos/setup.js` + `scripts/evotor-setup.mjs`: the owner's one-off store setup
+  (migrations 012–014, binding, operator access, till key). Never on startup.
+- `test/evotor-http-boundary.test.js` mounts actual auth/route source on loopback
+  with explicit fixture adapters; it does not claim complete production startup.
+- See `EVOTOR-INTEGRATION.md` and `EVOTOR-VERIFICATION.md` for the separate Business
+  branch, rollback, unresolved real Extras and production approval boundaries.

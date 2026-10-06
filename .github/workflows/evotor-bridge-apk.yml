@@ -1,0 +1,45 @@
+name: Evotor bridge test APK
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/project-thread-gd8js6']
+    paths: ['evotor-bridge/**', '.github/workflows/evotor-bridge-apk.yml']
+permissions:
+  contents: read
+concurrency:
+  group: evotor-bridge-apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apk:
+    name: JVM tests and debug APK for a test install
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      # Signed with a throwaway debug key generated for this run: installing it over an
+      # older build needs the old app removed first. A permanent release key is a separate step.
+      - name: Test and build debug APK
+        working-directory: evotor-bridge
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-evotor-debug-apk
+          path: evotor-bridge/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evotor-bridge-test-reports
+          path: evotor-bridge/app/build/reports/tests/
+          if-no-files-found: ignore
