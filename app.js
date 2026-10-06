@@ -1242,9 +1242,9 @@ async function applyHalloweenCode() {
   renderHalloweenInviteSheet();
 }
 
-// Full-screen promo banner: shown once a day, only after the app has fully loaded, the terms are accepted and no other
+// Full-screen promo banner: shown on every app open at most once an hour, only after the app has fully loaded, the terms are accepted and no other
 // window is open. The art is set in HALLOWEEN_BANNER.src; its drawn "Войти в сезон" button opens the cauldrons tab.
-const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=1', key: 'halloween-2026', everyMs: 24 * 60 * 60 * 1000 };
+const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=1', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
 let promoBannerTimer = 0;
 function promoBannerDue() {
   if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
@@ -1278,6 +1278,8 @@ function closePromoBanner() {
 window.addEventListener('pivnik:boot-complete', () => {
   if (document.readyState === 'complete') schedulePromoBanner();
   else window.addEventListener('load', () => schedulePromoBanner(), { once: true });
+  // A mini app reopened from the background counts as a new visit too.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schedulePromoBanner(); });
 });
 
 // A friend who opened an invite link is attached to the inviter once, right after login. The server ignores old accounts and self-invites.
