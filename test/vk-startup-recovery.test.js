@@ -3,8 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 
-const root = process.env.PIVNIK_STARTUP_SOURCE_ROOT || new URL('../', import.meta.url).pathname;
+const root = process.env.PIVNIK_STARTUP_SOURCE_ROOT || fileURLToPath(new URL('../', import.meta.url));
 const source = await fs.readFile(path.join(root, 'app.js'), 'utf8');
 const bootSource = source.slice(source.indexOf('async function boot()'), source.indexOf('async function acceptTerms()'));
 
