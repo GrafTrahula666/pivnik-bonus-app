@@ -51,7 +51,7 @@ async function mount(kind,pool){
    app.use((error,_req,res,_next)=>res.status(error.statusCode||500).json({error:error.message}));server=http.createServer(app);
  }else{
    const text=await source('universal-server.js');
-   const functions=between(text,'async function canonicalizeSessionToken(', '\nasync function ensurePersonalQr(')+between(text,'async function readRequestBody(', '\nasync function proxyRequest(')+between(text,'function enforceMutationOrigin(', '\nfunction ');
+   const functions=between(text,'async function canonicalizeSessionToken(', '\nasync function ensurePersonalQr(')+between(text,'async function readRequestBody(', '\nasync function proxyRequest(')+between(text,'function enforceMutationOrigin(', '\nfunction ')+between(text,'function requestAddress(', '\nfunction enforceRateLimit(');
    const routes=between(text,"    if (url.pathname === '/api/device/pos'",'\n    // Available even during DB startup;');
    const context=vm.createContext({...globals,mutationOriginAllowed:()=>false});
    vm.runInContext(functions+'\nthis.originalSendJson=sendJson; this.requireUser=requireGatewayUser;',context);

@@ -45,10 +45,12 @@ export async function claimReceipt(pool, device, body) {
     }
     if (!decided) {
       // The bridge only re-binds after its own double-scan confirmation, so the latest bind wins.
+      // Moving the receipt to another client counts as a new claim for the after-close check.
       await db.query(`INSERT INTO pos_receipt_claims(store_id,receipt_uuid,client_id,device_id)
         VALUES($1,$2,$3,$4)
         ON CONFLICT(source,store_id,receipt_uuid) DO UPDATE
-        SET client_id=EXCLUDED.client_id,device_id=EXCLUDED.device_id,updated_at=NOW()`,
+        SET claimed_at=CASE WHEN pos_receipt_claims.client_id=EXCLUDED.client_id THEN pos_receipt_claims.claimed_at ELSE NOW() END,
+          client_id=EXCLUDED.client_id,device_id=EXCLUDED.device_id,updated_at=NOW()`,
       [device.store_id, body.receiptUuid, user.id, device.id]);
     }
     await db.query('COMMIT');
@@ -116,17 +118,27 @@ async function accrueSale(db, doc, ledger) {
 
 async function reverseReturn(db, doc, ledger) {
   const baseId = doc.snapshot?.baseDocumentId;
-  const base = (await db.query(`SELECT a.client_id,a.transaction_id,a.bonus_delta,d.amount_cents
+  // Locks the sale's transaction so an admin cancel cannot run between this check and the reversal.
+  const base = (await db.query(`SELECT a.client_id,a.transaction_id,a.bonus_delta,d.amount_cents,t.status AS sale_status
     FROM pos_bonus_accruals a JOIN pos_documents d ON d.source=a.source AND d.store_id=a.store_id AND d.document_id=a.document_id
-    WHERE a.source='evotor' AND a.store_id=$1 AND a.document_id=$2 AND a.kind='accrue' AND a.status='applied'`,
-  [doc.store_id, baseId])).rows[0];
+    JOIN transactions t ON t.id=a.transaction_id
+    WHERE a.source='evotor' AND a.store_id=$1 AND a.document_id=$2 AND a.kind='accrue' AND a.status='applied'
+    FOR UPDATE OF t`, [doc.store_id, baseId])).rows[0];
+  // An admin already cancelled the sale's bonus: there is nothing left to take back.
+  if (base.sale_status !== 'completed') return skip(db, doc, 'reverse', base.client_id, 'base_cancelled', baseId);
   const earned = Number(base.bonus_delta);
   const baseAmount = Number(base.amount_cents);
   const returned = Number(doc.amount_cents);
   const settled = Number((await db.query(`SELECT COALESCE(SUM(shortfall - bonus_delta),0)::bigint AS n FROM pos_bonus_accruals
     WHERE source='evotor' AND store_id=$1 AND base_document_id=$2 AND kind='reverse'`, [doc.store_id, baseId])).rows[0].n);
   const due = Math.min(earned - settled, baseAmount > 0 ? Math.ceil((earned * returned) / baseAmount) : earned);
-  if (!(due > 0)) return skip(db, doc, 'reverse', base.client_id, 'nothing_to_reverse', baseId);
+  // A partial return also leaves the 12-month spend that sets the guest's status.
+  const reduceSpend = () => db.query(`UPDATE transactions SET cash_paid_cents=GREATEST(0,cash_paid_cents-$1)
+    WHERE id=$2 AND status='completed'`, [returned, base.transaction_id]);
+  if (!(due > 0)) {
+    await reduceSpend();
+    return skip(db, doc, 'reverse', base.client_id, 'nothing_to_reverse', baseId);
+  }
   const { user, wallet } = await lockedClient(db, base.client_id);
   if (!user || !wallet) return skip(db, doc, 'reverse', base.client_id, 'client_unavailable', baseId);
   const number = doc.snapshot?.number ? ` №${String(doc.snapshot.number).slice(0, 40)}` : '';
@@ -146,6 +158,7 @@ async function reverseReturn(db, doc, ledger) {
     }
   }
 
+  await reduceSpend();
   const unlimited = ledger.isUnlimited(user);
   const balance = unlimited ? ledger.unlimitedBalance : Number(wallet.balance || 0);
   const removed = unlimited ? due : Math.min(due, Math.max(0, balance));

@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
 import { posError, posIdentifier, requirePosSchema, resolveOperatorStore } from './scope.js';
-import { claimReceipt } from './bonus.js';
+import { claimReceipt, posBonusConfig } from './bonus.js';
 
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 export function createPosDeviceService(pool, config) {
+  const bonusEnabled = () => config.bonusEnabled ?? posBonusConfig().enabled;
   const ready = async () => {
     if (!config.enabled) throw posError(503, 'pos_disabled', 'POS-подключение выключено.');
     await requirePosSchema(pool);
@@ -20,9 +21,12 @@ export function createPosDeviceService(pool, config) {
     return result.rows[0];
   };
   return {
-    async resolve(header, body) {
+    /** Checks the device key once; the HTTP layer rate-limits by the returned device id. */
+    async authenticate(header) {
       await ready();
-      await authorize(pool, header);
+      return authorize(pool, header);
+    },
+    async resolveFor(device, body) {
       if (!body || typeof body.payload !== 'string' || !body.payload || body.payload.length > 2048) {
         throw posError(400, 'invalid_qr', 'Нужен QR клиента.');
       }
@@ -35,10 +39,17 @@ export function createPosDeviceService(pool, config) {
       // QR tokens, contact details, social identity or staff/admin session returned.
       return { client: { id: String(result.rows[0].id), firstName: result.rows[0].first_name || '' } };
     },
-    async bind(header, body) {
-      await ready();
-      const device = await authorize(pool, header);
+    async bindFor(device, body) {
+      // A claim is a promise to accrue: refuse it while accrual is off, so the till never
+      // shows a bonus that will not come and re-enabling cannot pay out a backlog.
+      if (!bonusEnabled()) throw posError(503, 'pos_bonus_disabled', 'Начисление бонусов по кассе выключено.');
       return claimReceipt(pool, device, body);
+    },
+    async resolve(header, body) {
+      return this.resolveFor(await this.authenticate(header), body);
+    },
+    async bind(header, body) {
+      return this.bindFor(await this.authenticate(header), body);
     },
     async list(user, params = {}) {
       await ready();

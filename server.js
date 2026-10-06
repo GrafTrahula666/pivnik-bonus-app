@@ -2791,7 +2791,8 @@ const posBonusLedger = {
     return cancelCompletedTransaction(db, transactionId, null, reason, requestKey);
   },
   async afterCommit(result) {
-    await syncUserAchievements(pool, result.user.id);
+    // A failed achievement sync must not drop the Halloween hook or the guest's message.
+    await syncUserAchievements(pool, result.user.id).catch((error) => console.warn('POS achievements sync failed:', error.message));
     if (result.kind === 'accrue') {
       await halloweenAfterPurchase(result.transaction.id);
       await sendTelegramMessage(result.user.telegram_id, `Покупка в баре «Пивник»
@@ -2848,7 +2849,7 @@ app.use('/api/device/pos', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,
       pathname: req.originalUrl.split('?')[0], authorization: req.headers.authorization,
-      body: req.body, address: req.socket.remoteAddress }));
+      body: req.body, address: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress }));
   } catch (error) { next(error); }
 });
 app.use('/api/admin/pos', authRequired, async (req, res, next) => {

@@ -30,7 +30,9 @@ try {
   });
   const { deviceToken, ...report } = result;
   console.log(JSON.stringify(report, null, 2));
-  if (!values.apply) console.log('Проверка пройдена. Для подключения запустите ту же команду с --apply.');
+  if (!values.apply && report.missingTables) {
+    console.log('Проверка пройдена. Таблиц кассы ещё нет: запустите ту же команду с --migrate --apply.');
+  } else if (!values.apply) console.log('Проверка пройдена. Для подключения запустите ту же команду с --apply.');
   else console.log(`\nКлюч кассы (показывается один раз, введите его в приложении PIVNIK на кассе):\n${deviceToken}`);
 } catch (error) {
   console.error(error.code ? `${error.code}: ${error.message}` : error.message);
