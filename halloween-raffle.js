@@ -13,7 +13,9 @@ export const DRAW_ID = 'night-of-cauldrons';
 export const WEEKLY_QUEST_TICKET_LIMIT = 3;
 export const PARTICIPATION_WINNERS = 5;
 export const PLACES = Object.freeze(['first', 'second', 'third']);
-export const TICKET_REASONS = Object.freeze(['wheel', 'quest', 'purchase', 'purchase_revoke', 'entry', 'admin']);
+export const TICKET_REASONS = Object.freeze([
+  'wheel', 'quest', 'purchase', 'purchase_revoke', 'invite', 'invite_revoke', 'entry', 'admin'
+]);
 const BAR_UTC_OFFSET_HOURS = 3;
 
 export class RaffleError extends Error {
@@ -44,7 +46,8 @@ export function weekKey(date = new Date()) {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-async function lockBalance(client, userId) {
+/** Lock (and create) the user's balance row; returns the current balance. Call inside a transaction. */
+export async function lockBalance(client, userId) {
   await client.query(
     'INSERT INTO halloween_ticket_balance (user_id, balance) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING',
     [userId]

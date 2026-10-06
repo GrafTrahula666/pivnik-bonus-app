@@ -2359,6 +2359,7 @@ async function acceptTerms() {
     renderProfile();
     toast('Правила приняты');
     void loadSecondaryData();
+    void claimHalloweenInvite();
   } finally {
     if (button) button.disabled = false;
   }
