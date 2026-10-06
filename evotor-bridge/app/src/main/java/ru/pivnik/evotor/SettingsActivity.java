@@ -33,7 +33,7 @@ public final class SettingsActivity extends Activity {
 
         TextView note = new TextView(this);
         note.setText("HTTPS-адрес сервера PIVNIK и отдельный ключ кассы pvpos_… от администратора. "
-                + "Ключ позволяет только распознавать QR. Сессия сотрудника не подходит.");
+                + "Ключ позволяет только узнать клиента по QR и отметить его в чеке. Сессия сотрудника не подходит.");
         root.addView(note);
 
         apiBase = new EditText(this);
