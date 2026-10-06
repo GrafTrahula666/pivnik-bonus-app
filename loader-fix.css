@@ -3,7 +3,6 @@ html,
 body {
   width: 100%;
   min-height: 100%;
-  background: #000 !important;
 }
 
 .boot-screen {
@@ -15,7 +14,7 @@ body {
   padding: 0 !important;
   overflow: hidden !important;
   display: grid !important;
-  place-items: center !important;
+  place-items: start center !important;
   background: #000 !important;
 }
 
@@ -50,13 +49,17 @@ body {
   height: 100% !important;
   max-width: none !important;
   object-fit: contain !important;
-  object-position: center !important;
+  object-position: center top !important;
   transform: none !important;
 }
 
 .boot-copy {
   position: absolute !important;
   inset: 0 !important;
+}
+
+.boot-copy h1 {
+  color: #fff !important;
 }
 
 

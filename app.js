@@ -1358,7 +1358,7 @@ function applyTelegramChrome() {
   // Halloween night skin: Telegram's own background and bottom bar go dark too, so no cream strip shows on overscroll.
   const night = document.documentElement.classList.contains('theme-halloween');
   try {
-    tg?.setHeaderColor(TELEGRAM_HEADER_COLOR);
+    tg?.setHeaderColor(night ? TELEGRAM_HEADER_COLOR : '#fbf6ef');
     tg?.setBackgroundColor(night ? '#0b0716' : '#efe7dc');
     tg?.setBottomBarColor(night ? '#0b0a24' : '#f8f3eb');
   } catch (_) {}
