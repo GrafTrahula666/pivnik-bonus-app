@@ -10493,16 +10493,42 @@ html.theme-halloween .halloween-tickets { left: 7.2%; width: 41.6%; }
 html.theme-halloween .halloween-timer { left: 56.6%; width: 41.6%; }
 html.theme-halloween .halloween-ways {
   display: grid;
-  gap: 5px;
-  padding: 11px 13px;
+  gap: 12px;
+  padding: 14px 14px 12px;
   border: 1px solid rgba(233,168,59,.55);
   border-radius: 12px;
-  background: linear-gradient(145deg, rgba(27,18,64,.92), rgba(11,10,36,.94));
-  box-shadow: 0 0 14px rgba(233,168,59,.18);
-  font-size: 11px;
+  background: linear-gradient(145deg, rgba(27,18,64,.94), rgba(11,10,36,.96));
+  box-shadow: 0 0 14px rgba(233,168,59,.18), inset 0 1px 0 rgba(255,226,176,.12);
+}
+html.theme-halloween .halloween-ways section { display: grid; gap: 6px; }
+html.theme-halloween .halloween-ways section + section { padding-top: 12px; border-top: 1px solid rgba(233,168,59,.28); }
+html.theme-halloween .halloween-ways strong {
+  margin-bottom: 2px;
+  color: #f0b54a;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-shadow: 0 0 8px rgba(233,168,59,.45);
+}
+html.theme-halloween .halloween-ways span {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  column-gap: 8px;
+  color: #d9c6a2;
+  font-size: 12px;
   line-height: 1.35;
 }
-html.theme-halloween .halloween-ways strong { color: #e9a83b; font-size: 12px; letter-spacing: .04em; }
+html.theme-halloween .halloween-ways span::before {
+  content: '';
+  grid-row: span 2;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #ff8a1f;
+  box-shadow: 0 0 6px rgba(255,138,31,.8);
+}
+html.theme-halloween .halloween-ways span b { color: #fff1dc; font-size: 12.5px; font-weight: 800; }
 html.theme-halloween .halloween-business-link {
   justify-self: center;
   padding: 8px 16px;
@@ -10514,12 +10540,6 @@ html.theme-halloween .halloween-business-link {
   font-weight: 800;
 }
 html.theme-halloween .halloween-screen { padding-bottom: 116px; }
-html.theme-halloween .halloween-screen #halloweenBack {
-  border: 1px solid rgba(233,168,59,.6) !important;
-  background: rgba(11,10,36,.82) !important;
-  color: #ffe2b0 !important;
-  box-shadow: 0 0 10px rgba(233,168,59,.25) !important;
-}
 
 /* Halloween Block 9: the rest of the client (Лига, Профиль, Колесо, Акции, SpaceVerse для бизнеса).
    Light white-gold cards become night glass with an amber edge and every text on them turns light,
@@ -10584,3 +10604,106 @@ html.theme-halloween body .screen[data-screen="profile"] :is(#profileAvatarMirro
 html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"]) :is(.client-page-title, .client-page-title *, .wheel-page-head, .wheel-page-head *, #wheelAvailability, #wheelNextFreeHint, #wheelBalanceHint, .section-title h2) {
   text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 12px rgba(8, 4, 20, .85) !important;
 }
+
+/* Halloween Block 10: hero and SPACEVERSE cards keep the art's proportions on every phone width, so the drawn
+   avatar ring stays a circle and the avatar sits exactly in it. Vertical slots are now in % of the card height
+   (same geometry as Block 1 at 364x156). The SPACEVERSE card becomes the event entry with one big button. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero {
+  height: auto !important;
+  min-height: 0 !important;
+  aspect-ratio: 1092 / 468;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  top: 30.77% !important;
+  left: 10.3% !important;
+  width: 15.4% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+  margin: 0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-identity { top: 13.46% !important; height: 17.95% !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance { top: 33.33% !important; height: 16.67% !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button {
+  top: 52.56% !important;
+  height: 14.1% !important;
+  display: flex !important;
+  align-items: center !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button > div { flex: 1 1 auto !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .progress { top: 69.68% !important; height: 3.2% !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  top: 76.28% !important;
+  height: 8.33% !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-card {
+  height: auto !important;
+  min-height: 0 !important;
+  aspect-ratio: 1092 / 405;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::before {
+  content: 'SPACEVERSE ДЛЯ БИЗНЕСА';
+  top: 9.5%;
+  letter-spacing: .18em;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::after {
+  content: '';
+  position: absolute;
+  top: 20.5%;
+  left: 8.5%;
+  width: 40%;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255,170,60,.9), rgba(255,170,60,0));
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > strong {
+  top: 24.5% !important;
+  width: 47% !important;
+  font-size: 14px !important;
+  line-height: 18px !important;
+  white-space: nowrap !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > em {
+  top: 39% !important;
+  width: 46% !important;
+  color: #e9d4b4 !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 12.5px !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta {
+  top: 62% !important;
+  left: 6% !important;
+  width: 50% !important;
+  height: 30% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #ffd98a 0%, #f7a02a 48%, #c9600c 100%) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(255,236,190,.85), inset 0 -3px 6px rgba(120,40,0,.35), 0 0 18px rgba(255,138,31,.75), 0 0 36px rgba(255,110,20,.35) !important;
+  color: #2b1405 !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 1px 0 rgba(255,230,180,.6) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta::before {
+  content: '🎃';
+  font-size: 17px;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta i {
+  color: #2b1405 !important;
+  font-size: 18px !important;
+  font-style: normal !important;
+}
+
+/* Night of Cauldrons tab sits right under the header: no back button and no page title row */
+html.theme-halloween .halloween-screen { padding-top: 4px !important; }

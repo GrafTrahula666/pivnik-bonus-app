@@ -23,7 +23,8 @@ test('Halloween skin is behind design.theme and every rule is scoped to html.the
   assert.match(app, /classList\.toggle\('theme-halloween', design\.theme === 'halloween'\)/);
 
   assert.match(app, /applyHalloweenCopy\(design\.theme === 'halloween'\)/);
-  assert.match(app, /Выполняйте задания, получайте билеты/);
+  assert.match(app, /Хэллоуин в SpaceVerse/);
+  assert.match(app, /cta: 'К котлам'/);
 
   const marker = css.indexOf('Halloween "Midnight" theme');
   assert.ok(marker > 0, 'Halloween block is missing');

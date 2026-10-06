@@ -1087,17 +1087,24 @@ function currentLevelIndex() {
 }
 
 // Halloween copy for the home SPACEVERSE card; the original text is kept so the flag can be turned off again.
-const HALLOWEEN_BUSINESS_COPY = { title: 'Выполняйте задания, получайте билеты', sub: 'Розыгрыш 31 октября' };
+const HALLOWEEN_BUSINESS_COPY = {
+  title: 'Хэллоуин в SpaceVerse',
+  sub: 'Ночь Котлов 31 октября. Копите тыквенные билеты',
+  cta: 'К котлам',
+};
 function applyHalloweenCopy(on) {
   const title = document.querySelector('.spaceverse-business-copy > strong');
   const sub = document.querySelector('.spaceverse-business-copy > em');
+  const cta = document.querySelector('.spaceverse-business-cta');
   if (!title || !sub) return;
   if (title.dataset.originalText === undefined) {
     title.dataset.originalText = title.textContent;
     sub.dataset.originalText = sub.textContent;
+    if (cta) cta.dataset.originalHtml = cta.innerHTML;
   }
   title.textContent = on ? HALLOWEEN_BUSINESS_COPY.title : title.dataset.originalText;
   sub.textContent = on ? HALLOWEEN_BUSINESS_COPY.sub : sub.dataset.originalText;
+  if (cta) cta.innerHTML = on ? `${HALLOWEEN_BUSINESS_COPY.cta} <i aria-hidden="true">›</i>` : cta.dataset.originalHtml;
 }
 
 // Halloween tab: live ticket count and timer over the drawn "Night of Cauldrons" header.
@@ -3505,7 +3512,6 @@ $('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
   openHalloweenPage();
 });
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
-$('#halloweenBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
