@@ -10410,3 +10410,48 @@ html.theme-halloween .bottom-nav button:nth-child(3) { left: 50%; top: 14px; }
 html.theme-halloween .bottom-nav button:nth-child(3)::after { top: 28px; width: 56px; height: 56px; }
 html.theme-halloween .bottom-nav button:nth-child(4) { left: 69.65%; }
 html.theme-halloween .bottom-nav button:nth-child(5) { left: 86.85%; }
+
+/* Halloween Block 7: top header (art 390x60 css px; title, status chip and refresh button stay live) */
+html.theme-halloween .topbar {
+  box-sizing: border-box;
+  height: calc(60px + env(safe-area-inset-top)) !important;
+  padding: env(safe-area-inset-top) 14px 0 !important;
+  border: 0 !important;
+  background: #0b0a24 url('/assets/halloween/header-midnight.webp?v=1') bottom center / 100% 60px no-repeat !important;
+  box-shadow: none !important;
+  color: #ffe2b0;
+}
+html.theme-halloween .topbar h1 { color: #ffe2b0 !important; text-shadow: 0 0 12px rgba(233,168,59,.45); }
+html.theme-halloween .topbar-actions { position: static !important; }
+html.theme-halloween .network-badge {
+  position: absolute !important;
+  left: 55.1%;
+  top: calc(env(safe-area-inset-top) + 11.3px);
+  width: 22.9%;
+  height: 35.5px;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffe2b0 !important;
+  font-size: 11px;
+}
+html.theme-halloween .icon-btn {
+  position: absolute !important;
+  left: 86.4%;
+  top: calc(env(safe-area-inset-top) + 8.9px);
+  width: 43px;
+  height: 43px;
+  margin-left: -21.5px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween .topbar .brand-lockup { position: relative; top: -10px; }
