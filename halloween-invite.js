@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
-import { DRAW_ID, getHalloweenSummary, grantTickets, lockBalance, ticketsForPurchase, weekKey } from './halloween-raffle.js';
+import {
+  DRAW_ID, dropVoidedFromSnapshot, getHalloweenSummary, grantTickets, lockBalance, ticketsForPurchase, weekKey
+} from './halloween-raffle.js';
 
 /**
  * Halloween "Night of Cauldrons": invite a friend + purchase tickets.
@@ -10,7 +12,8 @@ import { DRAW_ID, getHalloweenSummary, grantTickets, lockBalance, ticketsForPurc
  *   changes later; the stored table is also how a code is resolved back to its owner. On the (very unlikely)
  *   collision with another user's code the next longer prefix (12, then 16 chars) is used.
  * - Attribution: one inviter per invitee forever; the friend can enter a code only during the first 24 hours after
- *   registration, before any completed purchase, while the draw is open; never yourself, never mutually.
+ *   registration, before any completed purchase, while the draw is open; never yourself, never mutually (nor in a
+ *   longer circle A -> B -> C -> A), never from an account re-created after a deletion (deleted_identity_tombstones).
  * - The inviter gets 1 ticket (reason 'invite', source key invite:<inviteeId>) and INVITE_BONUS bonuses (an
  *   'adjustment' transaction «Бонус за друга», request_key halloween-invite-bonus:<inviteeId>, once per friend
  *   ever) on the invitee's first completed staff purchase, at most 3 per ISO week (bar clock, week of that
@@ -81,6 +84,34 @@ export function inviteCodeFromStartParam(initData) {
   } catch {
     return null;
   }
+}
+
+/** The gateway's identityTombstoneSecret (universal-server.js), derived from the environment the same way. */
+export function identityTombstoneSecretFromEnv(env = process.env) {
+  const configured = String(env.IDENTITY_TOMBSTONE_SECRET || '');
+  const fallback = `pivnik-tombstone-development:${String(env.SESSION_SECRET || '') || String(env.TELEGRAM_BOT_TOKEN || '') || 'local'}`;
+  return crypto.createHash('sha256').update(configured || fallback).digest();
+}
+
+/** Same keyed hash as the gateway's deletedIdentityHash (deleted_identity_tombstones.identity_hash). */
+export function deletedIdentityHash(tombstoneSecret, provider, providerUserId) {
+  return crypto.createHmac('sha256', tombstoneSecret).update(`deleted-identity:${provider}:${providerUserId}`).digest('hex');
+}
+
+/** Same check as the gateway's hasDeletedIdentity: one of the user's identities was deleted before (a returning person). */
+async function hasDeletedIdentity(client, userId, tombstoneSecret) {
+  const identities = await client.query(
+    'SELECT provider, provider_user_id FROM user_identities WHERE user_id = $1::bigint',
+    [userId]
+  );
+  for (const identity of identities.rows) {
+    const tombstone = await client.query(
+      'SELECT 1 FROM deleted_identity_tombstones WHERE provider = $1 AND identity_hash = $2 LIMIT 1',
+      [identity.provider, deletedIdentityHash(tombstoneSecret, identity.provider, identity.provider_user_id)]
+    );
+    if (tombstone.rows.length) return true;
+  }
+  return false;
 }
 
 export function inviteLinkConfigFromEnv(env = process.env) {
@@ -183,9 +214,12 @@ export async function getInviteSummary(client, { userId, secret, links = inviteL
   }
 }
 
+/** Every Halloween write runs after the main operation and is awaited by its route: never wait long on a lock. */
 async function inTransaction(client, fn) {
   await client.query('BEGIN');
   try {
+    await client.query("SET LOCAL lock_timeout = '1s'");
+    await client.query("SET LOCAL statement_timeout = '3s'");
     const result = await fn();
     await client.query('COMMIT');
     return result;
@@ -199,17 +233,20 @@ async function inTransaction(client, fn) {
  * Attach the invitee to the code's owner. `client` must be one connection (it runs its own transaction).
  * Never throws for a bad code: returns { attached: false, reason }.
  * Codes are matched case-insensitively, with or without the inv_ prefix.
- * Reasons: invalid_code, unknown_code, self_invite, user_not_found, already_attached, mutual_invite,
- * window_expired (more than 24 hours since the invitee registered), has_purchase (the invitee already bought),
- * draw_closed, unavailable (migration not applied).
+ * Reasons: invalid_code, unknown_code, self_invite, user_not_found, already_attached, mutual_invite (the inviter
+ * came, directly or through a chain, by the invitee's code), returning_user (the account was re-created after a
+ * deletion; checked when `tombstoneSecret` is given), window_expired (more than 24 hours since the invitee
+ * registered), has_purchase (the invitee already bought), draw_closed, unavailable (migration not applied).
  */
-export async function claimInvite(client, { inviteeId, code, channel = 'claim', now = new Date() }) {
+export async function claimInvite(client, { inviteeId, code, channel = 'claim', now = new Date(), tombstoneSecret = null }) {
   const uid = assertId(inviteeId, 'inviteeId');
   const normalized = normalizeInviteCode(code);
   if (!normalized) return { attached: false, reason: 'invalid_code' };
   const at = new Date(now).toISOString();
   try {
     return await inTransaction(client, async () => {
+      // The draw row first, like the purchase and cancel hooks (lock order: draw, users, balances).
+      const drawOpen = await drawIsOpen(client, now, { lock: true });
       const owner = await client.query(
         `SELECT ic.user_id FROM halloween_invite_code ic
          JOIN users u ON u.id = ic.user_id
@@ -228,14 +265,21 @@ export async function claimInvite(client, { inviteeId, code, channel = 'claim', 
       const existing = await client.query('SELECT inviter_id FROM halloween_invite WHERE invitee_id = $1', [uid]);
       if (existing.rows.length) return { attached: false, reason: 'already_attached' };
       const mutual = await client.query(
-        'SELECT 1 FROM halloween_invite WHERE invitee_id = $1 AND inviter_id = $2',
+        `WITH RECURSIVE chain(id) AS (
+           SELECT inviter_id FROM halloween_invite WHERE invitee_id = $1
+           UNION
+           SELECT hi.inviter_id FROM halloween_invite hi JOIN chain c ON hi.invitee_id = c.id
+         ) SELECT 1 FROM chain WHERE id = $2 LIMIT 1`,
         [inviterId, uid]
       );
       if (mutual.rows.length) return { attached: false, reason: 'mutual_invite' };
+      if (tombstoneSecret && (await hasDeletedIdentity(client, uid, tombstoneSecret))) {
+        return { attached: false, reason: 'returning_user' };
+      }
       if (!invitee.rows[0].fresh) return { attached: false, reason: 'window_expired' };
       const bought = await client.query(`SELECT 1 FROM transactions WHERE client_id = $1 AND ${PURCHASE_SQL} LIMIT 1`, [uid]);
       if (bought.rows.length) return { attached: false, reason: 'has_purchase' };
-      if (!(await drawIsOpen(client, now, { lock: true }))) return { attached: false, reason: 'draw_closed' };
+      if (!drawOpen) return { attached: false, reason: 'draw_closed' };
       const inserted = await client.query(
         `INSERT INTO halloween_invite (invitee_id, inviter_id, code, channel, created_at)
          VALUES ($1, $2, $3, $4, $5::timestamptz) ON CONFLICT (invitee_id) DO NOTHING RETURNING invitee_id`,
@@ -282,6 +326,15 @@ async function moveInviteBonus(client, { userId, amount, requestKey, reason }) {
 }
 
 /**
+ * Lock the ticket balances a purchase hook will touch (buyer, pending inviter) in ascending user id order before
+ * anything else, so two purchase hooks whose invites form a circle (A -> B -> C -> A) never wait on each other.
+ */
+async function lockBalancesInOrder(client, userIds) {
+  const ids = [...new Set(userIds.filter(Boolean))].sort((a, b) => a - b);
+  for (const id of ids) await lockBalance(client, id);
+}
+
+/**
  * After a staff purchase is committed: purchase tickets for the buyer and, on the invitee's first purchase,
  * the inviter's ticket and INVITE_BONUS bonuses (same transaction, so both or neither). Idempotent (safe to run again for the same transaction). Runs its own transaction.
  */
@@ -299,6 +352,10 @@ export async function recordPurchase(client, { transactionId, now = new Date() }
     const result = { purchaseTickets: 0, invite: null };
 
     const tickets = ticketsForPurchase(Number(tx.check_amount_cents) / 100);
+    const pendingInviter = (await client.query(
+      `SELECT inviter_id FROM halloween_invite WHERE invitee_id = $1 AND status = 'pending'`, [buyerId]
+    )).rows[0]?.inviter_id;
+    await lockBalancesInOrder(client, [tickets > 0 ? buyerId : null, pendingInviter ? Number(pendingInviter) : null]);
     if (tickets > 0) {
       const grant = await grantTickets(client, {
         userId: buyerId, delta: tickets, reason: 'purchase', sourceKey: `purchase:${txId}`
@@ -319,7 +376,7 @@ export async function recordPurchase(client, { transactionId, now = new Date() }
     )).rows[0];
     const inviterId = Number(invite.inviter_id);
     const week = weekKey(new Date(first.created_at));
-    await lockBalance(client, inviterId); // serialises the weekly count per inviter
+    await lockBalance(client, inviterId); // serialises the weekly count per inviter (already held: lockBalancesInOrder)
     if ((await inviteWeekCount(client, inviterId, week)) >= INVITE_WEEK_LIMIT) {
       await client.query(
         `UPDATE halloween_invite SET status = 'capped', qualifying_tx_id = $2, week_key = $3, qualified_at = $4::timestamptz
@@ -362,6 +419,11 @@ async function revokeGrant(client, { grantKey, revokeKey, reason }) {
 export async function recordCancellation(client, { transactionId, now = new Date() }) {
   const txId = assertId(transactionId, 'transactionId');
   return inTransaction(client, async () => {
+    // Exclusive lock first (purchase hooks and claims take it shared, also first): cancels never deadlock with them,
+    // closeDraw cannot freeze the list half-way through, and a closed draw's list can be fixed below.
+    const drawStatus = (await client.query(
+      'SELECT status FROM halloween_draw WHERE id = $1 FOR UPDATE', [DRAW_ID]
+    )).rows[0]?.status;
     const tx = (await client.query(
       `SELECT id, client_id FROM transactions WHERE id = $1 AND status = 'cancelled'`,
       [txId]
@@ -395,6 +457,11 @@ export async function recordCancellation(client, { transactionId, now = new Date
         `UPDATE halloween_invite SET status = 'revoked', revoked_at = $2::timestamptz WHERE invitee_id = $1`,
         [inviteeId, new Date(now).toISOString()]
       );
+    }
+    // Cancelled after close but before the draw: those tickets leave the frozen list too. A drawn result is final.
+    if (drawStatus === 'closed' && (purchaseRevoked || inviteRevoked)) {
+      const snapshotRemoved = await dropVoidedFromSnapshot(client, [`purchase-cancel:${txId}`, `invite-cancel:${inviteeId}`]);
+      return { purchaseRevoked, inviteRevoked, inviteBonusRevoked, snapshotRemoved };
     }
     return { purchaseRevoked, inviteRevoked, inviteBonusRevoked };
   });

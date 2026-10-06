@@ -187,6 +187,23 @@ async function readSnapshot(client) {
   return rows.map((r) => ({ number: Number(r.number), userId: Number(r.user_id) }));
 }
 
+/**
+ * A cancel after close: drop the tickets it voided (void_source_key in `voidSourceKeys`) from the frozen list and
+ * store the new hash. Call inside the caller's transaction, with the draw row locked FOR UPDATE and status 'closed'.
+ */
+export async function dropVoidedFromSnapshot(client, voidSourceKeys) {
+  const removed = await client.query(
+    `DELETE FROM halloween_draw_snapshot_ticket s USING halloween_ticket t
+     WHERE t.number = s.number AND t.status = 'void' AND t.void_source_key = ANY($1::text[])
+     RETURNING s.number`,
+    [voidSourceKeys]
+  );
+  if (!removed.rows.length) return 0;
+  const hash = snapshotHash(await readSnapshot(client));
+  await client.query('UPDATE halloween_draw SET snapshot_hash = $2 WHERE id = $1', [DRAW_ID, hash]);
+  return removed.rows.length;
+}
+
 /** After closes_at (or with force) freeze every active ticket number with its owner. */
 export async function closeDraw(client, { force = false } = {}) {
   return transaction(client, async () => {
@@ -213,6 +230,9 @@ export async function closeDraw(client, { force = false } = {}) {
 
 /** Deterministic randomInt(min, max) from a hex seed (HMAC counter, rejection sampling): the draw can be re-run and checked. */
 export function createSeededRandomInt(seedHex) {
+  // Buffer.from(x, 'hex') silently drops everything from the first non-hex character, so "0x..." or a phrase
+  // would all collapse to one (empty) key: only 32 bytes of plain hex are accepted.
+  if (typeof seedHex !== 'string' || !/^[0-9a-f]{64}$/i.test(seedHex)) throw new RangeError('seed must be 64 hex characters');
   let counter = 0;
   const next32 = () => {
     const mac = crypto.createHmac('sha256', Buffer.from(seedHex, 'hex')).update(String(counter++)).digest();

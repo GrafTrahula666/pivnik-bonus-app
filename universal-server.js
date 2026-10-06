@@ -1741,7 +1741,7 @@ async function authenticateTelegram(body) {
     const inviteeId = inviteCode ? verifySession(data?.token)?.uid : null;
     if (inviteeId) {
       await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
-        inviteeId, code: inviteCode, channel: 'telegram_start_param'
+        inviteeId, code: inviteCode, channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret
       }));
     }
   } catch (error) {

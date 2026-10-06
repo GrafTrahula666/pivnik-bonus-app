@@ -1159,6 +1159,7 @@ const HALLOWEEN_CLAIM_MESSAGES = {
   window_expired: 'Код можно ввести только в первые сутки после регистрации',
   not_new_account: 'Код можно ввести только в первые сутки после регистрации',
   has_purchase: 'Код вводится до первой покупки',
+  returning_user: 'Код можно ввести только при первой регистрации',
   draw_closed: 'Ночь Котлов уже прошла'
 };
 async function refreshHalloweenSummary() {

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { auditBalances, getHalloweenSummary, grantTickets } from '../halloween-raffle.js';
+import { auditBalances, closeDraw, drawNight, getHalloweenSummary, grantTickets, snapshotHash } from '../halloween-raffle.js';
 import {
-  claimInvite, deriveInviteCode, ensureInviteCode, getInviteSummary, INVITE_BONUS, INVITE_NEW_ACCOUNT_HOURS,
-  inviteCodeFromStartParam, inviteLinkConfigFromEnv, inviteLinks, normalizeInviteCode, recordCancellation,
-  recordPurchase, runHalloweenHook
+  claimInvite, deletedIdentityHash, deriveInviteCode, ensureInviteCode, getInviteSummary, identityTombstoneSecretFromEnv,
+  INVITE_BONUS, INVITE_NEW_ACCOUNT_HOURS, inviteCodeFromStartParam, inviteLinkConfigFromEnv, inviteLinks,
+  normalizeInviteCode, recordCancellation, recordPurchase, runHalloweenHook
 } from '../halloween-invite.js';
 
 const SECRET = Buffer.from('test-secret-test-secret-test-sec');
@@ -396,4 +397,138 @@ test('hook runner never throws and logs unexpected errors', async () => {
   assert.deepEqual(warnings, ['Halloween purchase skipped: boom']);
   const failingPool = { connect: async () => { throw Object.assign(new Error('down'), { code: 'ECONNREFUSED' }); } };
   assert.equal(await runHalloweenHook(failingPool, 'cancel', async () => 1, { warn: () => {} }), null);
+});
+
+test('a re-created account (deleted identity tombstone) cannot enter a code: returning_user', async () => {
+  const db = await freshDb();
+  await db.exec(`
+    CREATE TABLE user_identities (user_id BIGINT NOT NULL REFERENCES users(id), provider TEXT NOT NULL, provider_user_id TEXT NOT NULL);
+    CREATE TABLE deleted_identity_tombstones (provider TEXT NOT NULL, identity_hash TEXT NOT NULL, PRIMARY KEY (provider, identity_hash));
+  `);
+  const tombstoneSecret = identityTombstoneSecretFromEnv({ IDENTITY_TOMBSTONE_SECRET: 'tombstone-secret-tombstone-secret-0' });
+  const inviter = await addUser(db, { hoursOld: 500 });
+  const { invite } = await summary(db, inviter);
+  const returning = await addUser(db);
+  await db.query(`INSERT INTO user_identities VALUES ($1, 'telegram', '8102')`, [returning]);
+  await db.query(`INSERT INTO deleted_identity_tombstones VALUES ('telegram', $1)`, [deletedIdentityHash(tombstoneSecret, 'telegram', '8102')]);
+  const fresh = await addUser(db);
+  await db.query(`INSERT INTO user_identities VALUES ($1, 'telegram', '8103')`, [fresh]);
+  for (const channel of ['claim', 'telegram_start_param']) {
+    assert.deepEqual(await claimInvite(db, { inviteeId: returning, code: invite.code, channel, now: NOW, tombstoneSecret }),
+      { attached: false, reason: 'returning_user' });
+  }
+  assert.deepEqual(await claimInvite(db, { inviteeId: fresh, code: invite.code, now: NOW, tombstoneSecret }), { attached: true });
+  assert.equal((await db.query('SELECT COUNT(*)::int n FROM halloween_invite')).rows[0].n, 1);
+  await db.close();
+});
+
+test('tombstone secret matches the gateway derivation, and both claim paths pass it', async () => {
+  const sha = (text) => crypto.createHash('sha256').update(text).digest();
+  assert.deepEqual(identityTombstoneSecretFromEnv({ IDENTITY_TOMBSTONE_SECRET: 'x'.repeat(40), SESSION_SECRET: 's' }), sha('x'.repeat(40)));
+  assert.deepEqual(identityTombstoneSecretFromEnv({ SESSION_SECRET: 's', TELEGRAM_BOT_TOKEN: 't' }), sha('pivnik-tombstone-development:s'));
+  assert.deepEqual(identityTombstoneSecretFromEnv({ TELEGRAM_BOT_TOKEN: 't' }), sha('pivnik-tombstone-development:t'));
+  assert.deepEqual(identityTombstoneSecretFromEnv({}), sha('pivnik-tombstone-development:local'));
+  const [gateway, server] = await Promise.all(['universal-server.js', 'server.js'].map((f) => readFile(new URL(`../${f}`, import.meta.url), 'utf8')));
+  assert.match(gateway, /configuredIdentityTombstoneSecret\s*\|\| `pivnik-tombstone-development:\$\{configuredSessionSecret \|\| telegramBotToken \|\| 'local'\}`/);
+  assert.match(gateway, /channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret/);
+  assert.equal(server.match(/tombstoneSecret: halloweenTombstoneSecret/g)?.length, 2);
+});
+
+test('hook transactions never wait long: lock_timeout 1s and statement_timeout 3s right after BEGIN', async () => {
+  const db = await freshDb();
+  const inviter = await addUser(db, { hoursOld: 500 });
+  const { invite } = await summary(db, inviter);
+  const friend = await addUser(db);
+  const seen = [];
+  const recording = { query: (sql, params) => { seen.push(String(sql).trim()); return db.query(sql, params); } };
+  const tx = await purchase(db, friend, 1000);
+  await claimInvite(recording, { inviteeId: friend, code: invite.code, now: NOW });
+  await recordPurchase(recording, { transactionId: tx, now: NOW });
+  await cancel(db, tx);
+  await recordCancellation(recording, { transactionId: tx, now: NOW });
+  const begins = seen.flatMap((sql, i) => (sql === 'BEGIN' ? [seen.slice(i + 1, i + 3)] : []));
+  assert.equal(begins.length, 3);
+  for (const next of begins) assert.deepEqual(next, ["SET LOCAL lock_timeout = '1s'", "SET LOCAL statement_timeout = '3s'"]);
+  await db.close();
+});
+
+test('no invite circles: a claim whose inviter chain leads back to the invitee is mutual_invite', async () => {
+  const db = await freshDb();
+  const [a, b, c, d] = [await addUser(db), await addUser(db), await addUser(db), await addUser(db)];
+  const code = async (u) => (await summary(db, u)).invite.code;
+  assert.deepEqual(await claim(db, b, await code(a)), { attached: true }); // a -> b
+  assert.deepEqual(await claim(db, c, await code(b)), { attached: true }); // b -> c
+  assert.deepEqual(await claim(db, d, await code(c)), { attached: true }); // c -> d
+  assert.deepEqual(await claim(db, a, await code(b)), { attached: false, reason: 'mutual_invite' }); // direct
+  assert.deepEqual(await claim(db, a, await code(d)), { attached: false, reason: 'mutual_invite' }); // a -> b -> c -> d -> a
+  const e = await addUser(db);
+  assert.deepEqual(await claim(db, a, await code(e)), { attached: true }); // an unrelated inviter is fine
+  await db.close();
+});
+
+test('purchase hook locks the buyer and inviter balances in ascending user id order', async () => {
+  const db = await freshDb();
+  const friend = await addUser(db); // lower id than the inviter: the inviter's lock must still come second
+  const inviter = await addUser(db, { hoursOld: 500 });
+  const { invite } = await summary(db, inviter);
+  await claim(db, friend, invite.code);
+  const locked = [];
+  const recording = { query: (sql, params) => {
+    if (/FROM halloween_ticket_balance WHERE user_id = \$1 FOR UPDATE/.test(sql)) locked.push(Number(params[0]));
+    return db.query(sql, params);
+  } };
+  const tx = await purchase(db, friend, 2000);
+  const r = await recordPurchase(recording, { transactionId: tx, now: NOW });
+  assert.deepEqual([r.purchaseTickets, r.invite.granted], [2, true]);
+  assert.deepEqual(locked.slice(0, 2), [friend, inviter]);
+  const other = await addUser(db, { hoursOld: 500 });
+  const late = await addUser(db); // higher id than its inviter
+  await claim(db, late, (await summary(db, other)).invite.code);
+  locked.length = 0;
+  await recordPurchase(recording, { transactionId: await purchase(db, late, 1000), now: NOW });
+  assert.deepEqual(locked.slice(0, 2), [other, late]);
+  assert.deepEqual(await auditBalances(db), []);
+  await db.close();
+});
+
+test('cancel after closeDraw removes the voided numbers from the frozen list and re-hashes it; a drawn result is final', async () => {
+  const db = await freshDb();
+  const inviter = await addUser(db, { hoursOld: 500 });
+  const { invite } = await summary(db, inviter);
+  const friend = await addUser(db);
+  await claim(db, friend, invite.code);
+  const other = await addUser(db, { hoursOld: 500 });
+  const t1 = await purchase(db, friend, 3000);
+  const t2 = await purchase(db, other, 2000);
+  const t3 = await purchase(db, other, 1000);
+  for (const tx of [t1, t2, t3]) await recordPurchase(db, { transactionId: tx, now: NOW });
+  const closed = await closeDraw(db, { force: true });
+  assert.equal(closed.tickets, 7); // friend 3, inviter 1, other 3
+
+  await cancel(db, t1);
+  const r = await recordCancellation(db, { transactionId: t1, now: NOW });
+  assert.deepEqual(r, { purchaseRevoked: 3, inviteRevoked: 1, inviteBonusRevoked: 100, snapshotRemoved: 4 });
+  const frozen = (await db.query('SELECT number, user_id FROM halloween_draw_snapshot_ticket ORDER BY number')).rows
+    .map((row) => ({ number: Number(row.number), userId: Number(row.user_id) }));
+  assert.deepEqual([...new Set(frozen.map((t) => t.userId))], [other]);
+  assert.equal((await db.query('SELECT snapshot_hash FROM halloween_draw')).rows[0].snapshot_hash, snapshotHash(frozen));
+  assert.deepEqual(await recordCancellation(db, { transactionId: t1, now: NOW }), { purchaseRevoked: 0, inviteRevoked: 0, inviteBonusRevoked: 0 });
+
+  const night = await drawNight(db, { seed: '5a'.repeat(32) });
+  assert.equal(night.results.first.userId, other);
+  await cancel(db, t2);
+  assert.deepEqual(await recordCancellation(db, { transactionId: t2, now: NOW }), { purchaseRevoked: 2, inviteRevoked: 0, inviteBonusRevoked: 0 });
+  const after = await db.query('SELECT status, snapshot_hash, results FROM halloween_draw');
+  assert.deepEqual([after.rows[0].status, after.rows[0].snapshot_hash, after.rows[0].results], ['drawn', snapshotHash(frozen), night.results]);
+  assert.equal((await db.query('SELECT COUNT(*)::int n FROM halloween_draw_snapshot_ticket')).rows[0].n, frozen.length);
+  await db.close();
+});
+
+test('staff cancel replay runs the cancel hook too, so a failed hook is repaired on retry', async () => {
+  const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const start = server.indexOf("app.post('/api/staff/transactions/:id/cancel'");
+  const replay = server.slice(server.indexOf('if (replay.rowCount) {', start), server.indexOf('const client = await pool.connect();', start));
+  assert.ok(start >= 0 && replay.length > 0);
+  assert.ok(replay.indexOf('await halloweenAfterCancel(replay.rows[0].id);') > replay.indexOf("status(409)"));
+  assert.ok(replay.indexOf('await halloweenAfterCancel(replay.rows[0].id);') < replay.indexOf('return res.json({'));
 });

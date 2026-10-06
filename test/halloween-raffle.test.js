@@ -248,3 +248,17 @@ test('draw refuses a snapshot that changed after close', async () => {
   assert.equal((await db.query('SELECT status FROM halloween_draw')).rows[0].status, 'closed');
   await db.close();
 });
+
+test('a seed must be 64 hex characters: "0x...", phrases and short seeds are refused, the draw stays closed', async () => {
+  for (const bad of ['0x' + 'ab'.repeat(31), 'zz-not-hex', '', 'ab'.repeat(31), 'ab'.repeat(33), 'g'.repeat(64), null]) {
+    assert.throws(() => createSeededRandomInt(bad), RangeError, String(bad));
+  }
+  assert.doesNotThrow(() => createSeededRandomInt('AB'.repeat(32)));
+  const db = await freshDb();
+  await grantTickets(db, { userId: 1, delta: 2, reason: 'admin', sourceKey: 'admin:1' });
+  await closeDraw(db, { force: true });
+  await assert.rejects(drawNight(db, { seed: 'halloween-2026' }), RangeError);
+  assert.deepEqual((await db.query('SELECT status, seed FROM halloween_draw')).rows[0], { status: 'closed', seed: null });
+  assert.equal((await drawNight(db)).results.first.userId, 1); // the default seed is valid hex
+  await db.close();
+});

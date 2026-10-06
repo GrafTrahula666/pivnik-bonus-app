@@ -29,6 +29,7 @@ import { createBroadcastCampaignStore } from './broadcast-campaign-store.js';
 import {
   claimInvite as claimHalloweenInvite,
   getInviteSummary as getHalloweenInviteSummary,
+  identityTombstoneSecretFromEnv,
   inviteCodeFromStartParam,
   recordCancellation as recordHalloweenCancellation,
   recordPurchase as recordHalloweenPurchase,
@@ -1608,11 +1609,14 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, re
 // Halloween "Night of Cauldrons" hooks (halloween-invite.js). Each runs on its own connection after the main
 // operation has committed and never throws, so a missing manual migration 011 or a ticket error can never
 // break login, a staff purchase or a cancel.
+// Same secret as the gateway's deleted_identity_tombstones hash: a re-created account cannot be invited again.
+const halloweenTombstoneSecret = identityTombstoneSecretFromEnv();
+
 async function claimHalloweenInviteFromStartParam(initData, userId) {
   const code = initData ? inviteCodeFromStartParam(initData) : null;
   if (!code) return;
   await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
-    inviteeId: userId, code, channel: 'telegram_start_param'
+    inviteeId: userId, code, channel: 'telegram_start_param', tombstoneSecret: halloweenTombstoneSecret
   }));
 }
 
@@ -2106,7 +2110,7 @@ app.get('/api/halloween/summary', authRequired, async (req, res, next) => {
 app.post('/api/halloween/invite/claim', authRequired, async (req, res) => {
   // A bad, foreign or stale code is never an error for the client: it just does not attach.
   const result = await runHalloweenHook(pool, 'invite claim', (db) => claimHalloweenInvite(db, {
-    inviteeId: req.user.id, code: req.body?.code, channel: 'claim'
+    inviteeId: req.user.id, code: req.body?.code, channel: 'claim', tombstoneSecret: halloweenTombstoneSecret
   }));
   res.json({ ok: true, ...(result || { attached: false, reason: 'unavailable' }) });
 });
@@ -2604,6 +2608,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
     ) {
       return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
     }
+    await halloweenAfterCancel(replay.rows[0].id); // repairs a cancel hook that failed the first time
     return res.json({
       ok: true,
       transaction: transactionResponse(replay.rows[0]),
