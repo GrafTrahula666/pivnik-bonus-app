@@ -1,0 +1,44 @@
+name: Evotor Business draft checks
+on:
+  push:
+    branches: ['feat/evotor-business-integration-20261006']
+  pull_request:
+    paths: ['admin-platform/**', 'pos/**', '.github/workflows/evotor-business-integration.yml']
+permissions:
+  contents: read
+concurrency:
+  group: evotor-business-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  business:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            admin-platform/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci
+        working-directory: admin-platform
+      - run: npm test && npm run build && npm run lint
+        working-directory: admin-platform
+      - run: npx playwright install --with-deps chromium
+        working-directory: admin-platform
+      - name: Isolated desktop/mobile dashboard; fixtures only, no production APIs
+        run: npx playwright test --config playwright.evotor.config.ts
+        working-directory: admin-platform
+      - name: Dependency audit (existing findings remain a gate)
+        run: npm audit --audit-level=high
+        working-directory: admin-platform
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evotor-business-browser-evidence
+          path: admin-platform/test-results/
+          if-no-files-found: ignore
+# No deploy, migrations, write pool, production credentials or device actions.

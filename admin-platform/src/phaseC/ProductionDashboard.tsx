@@ -6,12 +6,11 @@ import type { ApiVenue } from '../api'
 import type { Period } from './Layout'
 import { PageHead,cn,pct,rub } from '../ui'
 import { ErrorCard,LivePill,LoadingCard,SourceNote,useResource } from './common'
-import { CashDashboard,type CashReport } from './CashDashboard'
+import { SalesDashboard } from './SalesDashboard'
 import './cash-panel.css'
 
 type Metric={value:number|null;available:boolean;reason?:string;source?:string}
 interface Dashboard {
-  pos?:CashReport
   metrics:Record<string,Metric>
   previousMetrics:Record<string,number|null>
   trend:Array<{day:string;revenue:number;checks:number;customers:number;bonusEarned:number;bonusRedeemed:number}>
@@ -40,20 +39,19 @@ function LiveKpi({label,metric,kind,previous}:{label:string;metric:Metric;kind:'
     </div>:<div className="kpi-reason">{metric.reason||'Пока недостаточно данных'}</div>}
   </div>
 }
-export function ProductionDashboard({venue,period,compare,onNavigate}:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void}){
+function ApplicationOperationsDashboard({venue,period,compare,onNavigate}:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void}){
   const path=`/api/admin/venues/${venue.id}/dashboard?days=${days(period)}`
   const {data,error,loading,reload}=useResource<Dashboard>(path)
   const [metric,setMetric]=useState<'revenue'|'customers'|'bonuses'|'visits'>('revenue')
-  const [source,setSource]=useState<'app'|'cash'>('app')
   const chart=useMemo(()=>data?.trend.map(x=>({day:x.day.slice(5),revenue:x.revenue,customers:x.customers,bonuses:x.bonusEarned-x.bonusRedeemed}))||[],[data])
   if(loading&&!data)return <><PageHead eyebrow="ПОКАЗАТЕЛИ ЗАВЕДЕНИЯ" title={venue.name} sub="Загрузка данных"/><LoadingCard/></>
   if(error&&!data)return <ErrorCard error={error} onRetry={reload}/>
   if(!data)return null
   const m=data.metrics,p=data.previousMetrics
   const kpis=[
-    ['Выручка',m.trackedRevenue,'money',p.trackedRevenue],
-    ['Чеков',m.checkCount,'number',p.checkCount],
-    ['Средний чек',m.averageCheck,'money',p.averageCheck],
+    ['Сумма операций приложения',m.trackedRevenue,'money',p.trackedRevenue],
+    ['Записей о покупках',m.checkCount,'number',p.checkCount],
+    ['Средняя сумма записи',m.averageCheck,'money',p.averageCheck],
     ['Клиентов всего',m.totalCustomers,'number',p.totalCustomers],
     ['Новых клиентов',m.newCustomers,'number',p.newCustomers],
     ['Активных по операциям',m.activeCustomers,'number',p.transactionActiveCustomers],
@@ -67,17 +65,13 @@ export function ProductionDashboard({venue,period,compare,onNavigate}:{venue:Api
   return <div className="page">
     <PageHead eyebrow="ПОКАЗАТЕЛИ ЗАВЕДЕНИЯ" title={venue.name}
       sub={`${period} · ${venue.companyName}`}
-      actions={source==='app'?<LivePill/>:<span className="read-only-button"><Database/>ЭВОТОР</span>}/>
-    <div className="segmented dashboard-sources" role="group" aria-label="Источник показателей">
-      <button className={source==='app'?'active':''} aria-pressed={source==='app'} onClick={()=>setSource('app')}>Программа лояльности</button>
-      <button className={source==='cash'?'active':''} aria-pressed={source==='cash'} onClick={()=>setSource('cash')}>Все продажи кассы</button>
-    </div>
-    {source==='cash'?<CashDashboard report={loading||error?undefined:data.pos}/>:<>
+      actions={<LivePill/>}/>
+    <SourceNote>Операции приложения. Не являются подтверждённой кассовой выручкой и не складываются с Эвотором.</SourceNote>
     <div className="kpi-grid">{kpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
     <div className="grid-main">
       <section className="card chart-card">
         <div className="card-head"><div><span className="eyebrow">ДИНАМИКА</span><h3>{format(m.trackedRevenue,'money')}</h3></div>
-          <div className="segmented">{[['revenue','Выручка'],['customers','Клиенты'],['bonuses','Бонусы'],['visits','Посещения']].map(([id,label])=>
+          <div className="segmented">{[['revenue','Суммы журнала'],['customers','Клиенты'],['bonuses','Бонусы'],['visits','Посещения']].map(([id,label])=>
             <button key={id} className={metric===id?'active':''} onClick={()=>setMetric(id as typeof metric)}>{label}</button>)}</div>
         </div>
         <div className="chart">
@@ -108,6 +102,18 @@ export function ProductionDashboard({venue,period,compare,onNavigate}:{venue:Api
     <section className="card data-quality-card"><div><Database/><div><b>Честная аналитика</b><span>Показатели отображаются только при наличии достоверных данных.</span></div></div>
       <div className="data-quality-list">{data.unavailableMetrics.map(x=><div key={x.key}><span>{x.key}</span><b>Пока недостаточно данных</b><small>История показателя ещё накапливается</small></div>)}</div>
     </section>
-    </>}
+  </div>
+}
+
+export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void}){
+  const [source,setSource]=useState<'all'|'app'|'operations'>('all')
+  return <div className="page">
+    <div className="segmented dashboard-sources" role="group" aria-label="Продажи">
+      <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи кассы</button>
+      <button className={source==='app'?'active':''} aria-pressed={source==='app'} onClick={()=>setSource('app')}>Клиенты приложения</button>
+      <button className={source==='operations'?'active':''} aria-pressed={source==='operations'} onClick={()=>setSource('operations')}>Операции приложения</button>
+    </div>
+    {source==='operations'?<ApplicationOperationsDashboard key={props.venue.id} {...props}/>:
+      <SalesDashboard key={props.venue.id+':'+props.period} venue={props.venue} days={days(props.period)} mode={source}/>}
   </div>
 }
