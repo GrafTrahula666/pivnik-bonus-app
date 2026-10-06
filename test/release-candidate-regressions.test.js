@@ -32,9 +32,8 @@ test('release candidate: navigation uses NodeLists and profile shop is wired', a
   assert.match(app, /\$\('#openProfileShop'\)\?\.addEventListener\('click'/);
 });
 
-test('release candidate: VK hides technical QR token/copy control without deleting QR logic', async () => {
-  const [css, html, app] = await Promise.all([read('red-cosmos-v2.css'), read('index.html'), read('app.js')]);
-  assert.match(css, /\.platform-vk #qrToken,\.platform-vk #copyQrCode\{display:none!important\}/);
+test('release candidate: QR token logic stays intact', async () => {
+  const [html, app] = await Promise.all([read('index.html'), read('app.js')]);
   assert.match(html, /id="qrToken"/);
   assert.match(app, /\$\('#qrToken'\)\.textContent = data\.shortCode/);
 });

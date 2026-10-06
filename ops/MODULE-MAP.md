@@ -429,12 +429,17 @@ What actually ships after `npm run materialize` / `prestart`:
   The same order goes into the VK Hosting bundle (`build-vk-hosting.mjs`
   reuses `index.html`). The final `:root` palette in `styles.css` is already
   white-gold without any JS.
-- **Not linked anywhere** (served by the gateway or present on disk only):
-  `red-cosmos-v2.css`, `v22.css`. (`black-frosted-*.css`, the root and
-  `assets/loader-*` images and `assets/backgrounds/pivnik-{loader,sign,boot-person}`
-  were deleted on 2026-10-01: nothing referenced them.) `v22.css` is wired
-  into `index.html` by `apply-v22-product-rebuild.mjs` and stripped again in
-  the same run.
+- **Deleted, never linked:** `red-cosmos-v2.css` and `v22.css` (2026-10-06),
+  `black-frosted-*.css`, the root and `assets/loader-*` images and
+  `assets/backgrounds/pivnik-{loader,sign,boot-person}` (2026-10-01). No page,
+  the VK bundle included, ever loaded them. For the two CSS files the patch
+  chain was edited too: `apply-working-updates.mjs` drops the blob's
+  `red-cosmos-v2.css` entry instead of restoring it and no longer patches it,
+  `apply-release-candidate-fixes.mjs` no longer patches it,
+  `apply-v22-product-rebuild.mjs` no longer wires and strips `/v22.css`, and
+  the gateway's `/red-cosmos-v2.css` route is gone. Materialized
+  `app.js`/`index.html`/`server.js`/`universal-server.js` are byte-identical
+  apart from that route.
 - **The one live burgundy source was the archived `red-cosmos-v2.js` in the
   `working-updates-runtime-*.txt` blob.** Canonical `red-cosmos-v2.js` has no
   theme code, but `apply-working-updates.mjs` replaces it wholesale with the
@@ -451,11 +456,10 @@ What actually ships after `npm run materialize` / `prestart`:
 - `app.js` now sets the cream Telegram chrome from `renderCoreProfile()`
   through `applyTelegramChrome()`, so it no longer depends on a design record.
   Dark chrome (`#0b0e13` / `#0e0c0a`) is left in place on purpose while the
-  black boot screen is up. The header stays `#0b0e13`, locked by
+  boot screen is up. After that the header is cream `#fbf6ef` (dark
+  `#0b0e13` only in the Halloween night theme), locked by
   `test/service-entry-canonical.test.js`.
-- Left on purpose: `red-cosmos-v2.css`, which is unlinked, still rewritten
-  from the blob and read by tests; removing it means editing the patch chain.
-  `verifyTheme()` in the blob `red-cosmos-v2.js` has no visual effect: it logs
+- Left on purpose: `verifyTheme()` in the blob `red-cosmos-v2.js` has no visual effect: it logs
   a failing `console.assert` for `--primary-red` and adds an unused
   `red-cosmos-v2` html class. The semantic danger/error reds and the
   fire/Anna/Olesya avatar-frame art are product colours, not theme.

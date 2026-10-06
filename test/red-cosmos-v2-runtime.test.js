@@ -57,13 +57,3 @@ test('RED COSMOS client removes all VK-only wheel guards and renders premium fra
   assert.match(fragment, /Рамка куплена и сохранена в профиле/);
 });
 
-test('RED COSMOS UI reserves visible layout space for back controls and modal stacking', async () => {
-  const css = await read('red-cosmos-v2.css');
-  assert.match(css, /\.v2-back-button/);
-  assert.match(css, /position:\s*static\s*!important/);
-  assert.match(css, /min-height:\s*46px/);
-  assert.match(css, /\.modal\.open/);
-  assert.match(css, /z-index:\s*10000/);
-  assert.match(css, /\.bottom-nav/);
-  assert.match(css, /grid-template-columns:\s*repeat\(5/);
-});

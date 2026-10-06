@@ -22,8 +22,8 @@ test('canonical SPACEVERSE shell replaces obsolete visual layers without losing 
 });
 
 test('RED COSMOS client shop is exactly four permanent frame products with artwork', async () => {
-  const [server, client, css] = await Promise.all([
-    text('server.js'), text('app.js'), text('red-cosmos-v2.css')
+  const [server, client] = await Promise.all([
+    text('server.js'), text('app.js')
   ]);
   const codes = [
     'frame-beer-mugs',
@@ -40,7 +40,6 @@ test('RED COSMOS client shop is exactly four permanent frame products with artwo
   assert.match(client, /RED_COSMOS_SHOP_FRAMES/);
   assert.match(client, /✓ Куплено/);
   assert.match(client, /data-shop-buy/);
-  assert.match(css, /avatar-frame-premium-smiling-fuck/);
   for (const asset of [
     'assets/shop/frame-beer-mugs.svg',
     'assets/shop/frame-beer-bottles.svg',
@@ -53,8 +52,8 @@ test('RED COSMOS client shop is exactly four permanent frame products with artwo
 });
 
 test('achievements remain deterministic and the tester award stays outside the countable catalog', async () => {
-  const [achievements, server, gateway, css] = await Promise.all([
-    text('achievements.js'), text('server.js'), text('universal-server.js'), text('red-cosmos-v2.css')
+  const [achievements, server, gateway] = await Promise.all([
+    text('achievements.js'), text('server.js'), text('universal-server.js')
   ]);
   assert.doesNotMatch(achievements, /code: 'raise-shields'/);
   assert.match(achievements, /Math\.min\(normalizedCurrent, target\)/);
@@ -64,8 +63,6 @@ test('achievements remain deterministic and the tester award stays outside the c
   assert.match(server, /achievement_code = 'raise-shields'/);
   assert.match(gateway, /code: 'raise-shields'/);
   assert.match(gateway, /achievement_code = 'raise-shields'/);
-  assert.match(css, /\.achievement-tile\.locked/);
-  assert.match(css, /\.achievement-tile\.earned/);
 });
 
 test('one wheel backend is enabled for VK and Telegram', async () => {
