@@ -23,10 +23,11 @@ export function createPosHttp(pool, config = evotorConfig(), clock = Date.now) {
   };
   return {
     async device({ method, pathname, authorization, body, address }) {
-      if (method !== 'POST' || pathname !== '/api/device/pos/qr/resolve') throw posError(404, 'pos_route_not_found', 'POS API не найден.');
+      const routes = { '/api/device/pos/qr/resolve': devices.resolve, '/api/device/pos/receipts/bind': devices.bind };
+      if (method !== 'POST' || !Object.hasOwn(routes, pathname)) throw posError(404, 'pos_route_not_found', 'POS API не найден.');
       rateLimit(address);
       boundedBody(body);
-      return devices.resolve(authorization, body);
+      return routes[pathname](authorization, body);
     },
     async admin({ method, pathname, user, params = {}, body }) {
       if (!user?.id) throw posError(401, 'unauthorized', 'Требуется авторизация.');

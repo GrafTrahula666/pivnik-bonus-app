@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
 import { posError, posIdentifier, requirePosSchema, resolveOperatorStore } from './scope.js';
+import { claimReceipt } from './bonus.js';
 
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
@@ -33,6 +34,11 @@ export function createPosDeviceService(pool, config) {
       // Same small client envelope the existing bridge parser expects; no wallet,
       // QR tokens, contact details, social identity or staff/admin session returned.
       return { client: { id: String(result.rows[0].id), firstName: result.rows[0].first_name || '' } };
+    },
+    async bind(header, body) {
+      await ready();
+      const device = await authorize(pool, header);
+      return claimReceipt(pool, device, body);
     },
     async list(user, params = {}) {
       await ready();
