@@ -10471,8 +10471,8 @@ html.theme-halloween .halloween-screen.active { display: grid; gap: 12px; }
 html.theme-halloween .halloween-board {
   position: relative;
   width: 100%;
-  aspect-ratio: 764 / 2057;
-  background: url('/assets/halloween/halloween-tab.webp?v=1') center / 100% 100% no-repeat;
+  aspect-ratio: 764 / 2056;
+  background: url('/assets/halloween/halloween-tab.webp?v=2') center / 100% 100% no-repeat;
 }
 html.theme-halloween .halloween-tickets,
 html.theme-halloween .halloween-timer {
@@ -10494,7 +10494,7 @@ html.theme-halloween .halloween-timer { left: 55.1%; width: 39.1%; }
 html.theme-halloween .halloween-invite {
   position: absolute;
   left: 7.2%;
-  top: 89.94%;
+  top: 15.42%;
   width: 85.7%;
   height: 5.59%;
   margin: 0;
