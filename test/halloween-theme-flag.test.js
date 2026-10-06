@@ -4,6 +4,20 @@ import test from 'node:test';
 
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
+// Split a selector list on top-level commas only, so :is(a, b) stays one part.
+function selectorParts(selector) {
+  const parts = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of selector) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) { parts.push(current); current = ''; } else current += ch;
+  }
+  parts.push(current);
+  return parts;
+}
+
 test('Halloween skin is behind design.theme and every rule is scoped to html.theme-halloween', async () => {
   const [app, css] = await Promise.all([read('app.js'), read('styles.css')]);
   assert.match(app, /classList\.toggle\('theme-halloween', design\.theme === 'halloween'\)/);
@@ -17,7 +31,7 @@ test('Halloween skin is behind design.theme and every rule is scoped to html.the
   const selectors = block.split('{').slice(0, -1).map((chunk) => chunk.split('}').pop().trim()).filter(Boolean);
   assert.ok(selectors.length > 10);
   for (const selector of selectors) {
-    for (const part of selector.split(',')) {
+    for (const part of selectorParts(selector)) {
       assert.match(part.trim(), /^html\.theme-halloween\b/, `unscoped Halloween selector: ${part.trim()}`);
     }
   }

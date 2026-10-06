@@ -10520,3 +10520,67 @@ html.theme-halloween .halloween-screen #halloweenBack {
   color: #ffe2b0 !important;
   box-shadow: 0 0 10px rgba(233,168,59,.25) !important;
 }
+
+/* Halloween Block 9: the rest of the client (Лига, Профиль, Колесо, Акции, SpaceVerse для бизнеса).
+   Light white-gold cards become night glass with an amber edge and every text on them turns light,
+   so nothing dark is left on the night background. Modal sheets stay white-gold; only their backdrop darkens. */
+html.theme-halloween { background: #0b0716 !important; }
+html.theme-halloween .app-shell { background-color: #0b0716 !important; }
+html.theme-halloween body .modal { background: rgba(8, 4, 20, .72) !important; }
+
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) {
+  color: #f6e7c8 !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(h1, h2, h3, h4, b, strong, em, label, summary, li, span, div, a, button, input, textarea) {
+  color: #f6e7c8 !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(p, small, .muted, .kicker, input::placeholder, textarea::placeholder) {
+  color: #cdb68f !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(.client-page-title .muted, .spaceverse-business-page-head small, .spaceverse-business-page-kicker, .spaceverse-business-section-kicker) {
+  color: #f0b54a !important;
+}
+
+/* Cards and rows: night glass */
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(
+  .vip-glass-card, .league-summary, #leaderboardPreview > span, #leaderboardPrizeNote, .leaderboard-row,
+  .history-tabs, .operation-list > *, #currentShiftTeam, .wheel-history, .premium-offer,
+  .spaceverse-business-page-card, .spaceverse-business-benefits > span, .spaceverse-business-trial, .spaceverse-lead-card,
+  #openProfileAvatar, #openProfileFrames, #openProfileAchievements, #openProfileStatistics, #openProfileSettings,
+  .profile-menu button > span:first-child, .spaceverse-business-benefits > span > i
+) {
+  background: linear-gradient(145deg, rgba(34, 22, 74, .94), rgba(12, 10, 36, .95)) !important;
+  border: 1px solid rgba(233, 168, 59, .45) !important;
+  box-shadow: 0 0 14px rgba(233, 168, 59, .12), inset 0 1px 0 rgba(255, 226, 176, .06) !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="actions"]) :is(.leaderboard-row.is-me, .premium-offer.active-offer) {
+  border-color: rgba(240, 181, 74, .85) !important;
+}
+html.theme-halloween body .screen:is([data-screen="profile"], [data-screen="spaceverse-business"]) :is(input, textarea) {
+  background: rgba(8, 6, 26, .9) !important;
+  border: 1px solid rgba(233, 168, 59, .45) !important;
+}
+
+/* Back buttons, here and in sheets */
+html.theme-halloween body :is(.service-back, #leagueBackButton, #wheelBackButton, #actionsBackButton, .v2-modal-back) {
+  border: 1px solid rgba(233, 168, 59, .6) !important;
+  background: rgba(11, 10, 36, .86) !important;
+  color: #ffe2b0 !important;
+  box-shadow: 0 0 10px rgba(233, 168, 59, .25) !important;
+}
+
+/* Primary actions: amber with dark text */
+html.theme-halloween body .screen:is([data-screen="profile"], [data-screen="wheel"], [data-screen="spaceverse-business"]) :is(#wheelSpinButton, #spaceverseLeadSubmit, .history-tabs button.active) {
+  border: 1px solid rgba(255, 214, 140, .7) !important;
+  background: linear-gradient(145deg, #f4cf82, #b97916) !important;
+  box-shadow: 0 0 16px rgba(233, 168, 59, .45) !important;
+  color: #2e210f !important;
+}
+html.theme-halloween body .screen:is([data-screen="profile"], [data-screen="wheel"], [data-screen="spaceverse-business"]) :is(#wheelSpinButton, #spaceverseLeadSubmit, .history-tabs button.active) * {
+  color: #2e210f !important;
+}
+html.theme-halloween body .screen[data-screen="profile"] .history-tabs button:not(.active) { background: transparent !important; }
+html.theme-halloween body .screen[data-screen="profile"] :is(#profileAvatarMirror, #profileAvatarMirror *, .person .avatar) { color: #2e210f !important; }
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"]) :is(.client-page-title, .client-page-title *, .wheel-page-head, .wheel-page-head *, #wheelAvailability, #wheelNextFreeHint, #wheelBalanceHint, .section-title h2) {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 12px rgba(8, 4, 20, .85) !important;
+}
