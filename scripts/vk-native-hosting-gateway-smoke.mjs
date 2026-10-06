@@ -11,7 +11,7 @@ const allowedHeaders = 'authorization,content-type,x-pivnik-version,x-pivnik-pla
 const root = process.cwd();
 const outDir = path.join(root, 'artifacts/vk-native-hosting-gateway-smoke');
 const signed = 'vk_app_id=54694987&vk_user_id=4242&vk_ts=123456&vk_platform=mobile_iphone&sign=fixture-sign';
-const bootImageUrl = 'https://cdn.creativeclaw.co/u/0ec82469/images/7097b68a-c43a-4cc1-bd8b-5fc28778a7e8.png';
+const bootImageUrl = '/assets/boot/pivnik-halloween-20261006.webp';
 const fixtureBootImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=';
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
 let scenario;

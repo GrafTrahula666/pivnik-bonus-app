@@ -116,7 +116,7 @@ body {
   }
 }
 
-/* VK loading artwork (same file the VK Hosting bundle uses as the boot image src). */
+/* Shared Telegram/VK Halloween artwork, also bundled by VK Hosting. */
 body.platform-vk .boot-image {
-  content: url('/assets/boot/vk-boot-sky-city-20261001.webp') !important;
+  content: url('/assets/boot/pivnik-halloween-20261006.webp') !important;
 }
