@@ -33,8 +33,9 @@ delete runtimeFiles['index.html'];
 delete runtimeFiles['vk-platform.js'];
 // DB prepare is canonical source too. Its startup safety/logging fixes must survive materialization.
 delete runtimeFiles['scripts/red-cosmos-v2-db-prepare.mjs'];
+// red-cosmos-v2.css was never linked by any page; it is deleted, not restored.
+delete runtimeFiles['red-cosmos-v2.css'];
 const runtimeAnchors = {
-  'red-cosmos-v2.css': '--primary-red: #c41e3a',
   'red-cosmos-v2.js': "const EXPECTED_PRIMARY = '#c41e3a';",
   'scripts/red-cosmos-v2-db-prepare.mjs': "const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';",
   'scripts/v22-data-audit-and-repair.mjs': "const ACHIEVEMENT_CODE = 'raise-shields';"
@@ -174,45 +175,6 @@ gateway = replaceRequired(
 );
 await writeText('universal-server.js', gateway);
 
-// Keep the current release-candidate QR invariant even though the working CSS
-// already hides both controls with a multiline selector.
-let redCss = await readText('red-cosmos-v2.css');
-const releaseQrGuard = '.platform-vk #qrToken,.platform-vk #copyQrCode{display:none!important}';
-if (!redCss.includes(releaseQrGuard)) {
-  redCss += `\n${releaseQrGuard}\n`;
-  await writeText('red-cosmos-v2.css', redCss);
-}
-
-const vkBottomNavFix = `
-/* PIVNIK_VK_BOTTOM_NAV_SAFE_AREA_20260831 */
-.platform-vk .bottom-nav {
-  box-sizing:border-box!important;
-  height:auto!important;
-  min-height:calc(72px + env(safe-area-inset-bottom))!important;
-  padding:7px 7px max(7px, env(safe-area-inset-bottom))!important;
-  align-items:center!important;
-}
-.platform-vk .bottom-nav::before {
-  content:none!important;
-  display:none!important;
-}
-.platform-vk .bottom-nav .qr-nav-button {
-  min-height:56px!important;
-  justify-content:center!important;
-  gap:2px!important;
-}
-.platform-vk .bottom-nav .qr-nav-button > span {
-  width:50px!important;
-  height:50px!important;
-  margin-top:0!important;
-  box-shadow:0 5px 20px rgba(196,30,58,.28),inset 0 1px 1px rgba(255,255,255,.34)!important;
-}
-`;
-if (!redCss.includes('PIVNIK_VK_BOTTOM_NAV_SAFE_AREA_20260831')) {
-  redCss += vkBottomNavFix;
-  await writeText('red-cosmos-v2.css', redCss);
-}
-
 let app = await readText('app.js');
 const vkClientTipStart = `  const hero = $('.hero-card');\n  if (IS_VK && hero && !$('.client-tip')) {\n`;
 const vkClientTipEnd = `\n\n  const scan = $('#scanClient');`;
@@ -302,8 +264,6 @@ if (!gateway.includes('Authorization is independent from profile-metadata owners
 if (!index.includes('<meta name="theme-color" content="#0b0e13" />')) failures.push('theme color');
 if (index.includes('<div class="boot-badge">Пивник | Бонусы</div>')) failures.push('boot badge');
 if (index.includes(escapedProfileHistorySeparator)) failures.push('profile literal newline escape');
-const finalCss = await readText('red-cosmos-v2.css');
-if (!finalCss.includes(releaseQrGuard)) failures.push('release QR guard');
 if (failures.length) throw new Error(`working updates verification failed: ${failures.join(', ')}`);
 
 console.log('Working updates overlay is applied and verified.');

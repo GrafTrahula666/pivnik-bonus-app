@@ -70,13 +70,6 @@ async function patchIndex() {
   let source = await read('index.html');
   source = replacePatternRequired(
     source,
-    /(<link rel="stylesheet" href="styles\.css[^"]*"\s*\/>)/,
-    `$1\n  <link rel="stylesheet" href="/v22.css?v=22.0.0" />`,
-    '/v22.css?v=22.0.0',
-    'v22 stylesheet'
-  );
-  source = replacePatternRequired(
-    source,
     /(<script defer src="app\.js[^"]*"><\/script>)/,
     `$1\n  <script defer src="/v22-ui.js?v=22.0.0"></script>`,
     '/v22-ui.js?v=22.0.0',
@@ -598,13 +591,12 @@ async function patchUniversalServer() {
 }
 
 async function verify() {
-  const [index, app, achievements, server, gateway, css, ui] = await Promise.all([
+  const [index, app, achievements, server, gateway, ui] = await Promise.all([
     read('index.html'),
     read('app.js'),
     read('achievements.js'),
     read('server.js'),
     read('universal-server.js'),
-    read('v22.css'),
     read('v22-ui.js')
   ]);
   const failures = [];
@@ -619,7 +611,6 @@ async function verify() {
   if (!gateway.includes("spinTelegramWheel(user.id, body.requestKey, platform)")) failures.push('VK wheel backend');
   if (gateway.includes('Колесо доступно только в Telegram.')) failures.push('Telegram-only wheel guard');
   if (!gateway.includes("return 'VK · Telegram'")) failures.push('league platform labels');
-  if (!css.includes('PIVNIK v22 — red cosmos')) failures.push('red cosmos css');
   if (!ui.includes('v22-admin-tabs')) failures.push('admin tabs ui');
   if (failures.length) throw new Error(`v22 verification failed: ${failures.join(', ')}`);
 }
