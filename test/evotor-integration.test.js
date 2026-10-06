@@ -94,6 +94,53 @@ test('API v2 exact headers, cursor-only pagination, auth/network/rate limit erro
   }
   await assert.rejects(fetchEvotorPage({...config,until,fetchImpl:async()=>{throw Error('private');}}),e=>e.code==='network');
 });
+test('API rejects malformed response envelopes with a safe provider error', async () => {
+  for (const payload of [null, [], true, 'private', 42, {},
+    {items:[],paging:[]}, {items:[],paging:'private'}, {items:[],paging:false},
+    {items:[],paging:{next_cursor:42}}, {items:new Array(1001).fill(null)}]) {
+    await assert.rejects(fetchEvotorPage({...config,until,
+      fetchImpl:async()=>new Response(JSON.stringify(payload))}),
+    error=>error.code==='invalid_response' && !error.message.includes('private'));
+  }
+  for (const paging of [undefined, null, {}, {next_cursor:null}, {next_cursor:'next'}]) {
+    const payload={items:[],...(paging===undefined?{}:{paging})};
+    assert.deepEqual(await fetchEvotorPage({...config,until,
+      fetchImpl:async()=>new Response(JSON.stringify(payload))}),payload);
+  }
+  await assert.rejects(fetchEvotorPage({...config,until,
+    fetchImpl:async()=>new Response('{"private":')}),error=>error.code==='invalid_response');
+});
+test('malformed provider page preserves sales and cursor; recovery and replay do not duplicate sales', async () => {
+  const db=await database();
+  try {
+    const pool=poolFor(db);
+    await page(db,[sale()]);
+    await page(db,[],'resume-page');
+    const documents=(await db.query('SELECT * FROM pos_documents')).rows;
+    const before=(await db.query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows;
+    for(const payload of [null,{items:[],paging:[]}]) {
+      await assert.rejects(syncEvotor({pool,config,fetchPage:args=>fetchEvotorPage({...args,
+        fetchImpl:async()=>new Response(JSON.stringify(payload))})}),error=>error.code==='invalid_response' && error.statusCode===502);
+      assert.deepEqual((await db.query('SELECT * FROM pos_documents')).rows,documents);
+      assert.deepEqual((await db.query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows,before);
+      const dashboard=await createPosService(pool,config).dashboard({id:'3',role:'viewer'},
+        {period:'custom',from:'2026-10-02',to:'2026-10-02'});
+      assert.equal(dashboard.connection.state,'error');
+      assert.equal(dashboard.connection.errorCode,'invalid_response');
+      assert.equal(dashboard.all.saleDocuments,1);
+    }
+    const fetchPage=args=>fetchEvotorPage({...args,fetchImpl:async()=>{
+      assert.equal(args.cursor,'resume-page');
+      return new Response(JSON.stringify({items:[sale()],paging:{}}));
+    }});
+    assert.deepEqual(await syncEvotor({pool,config,fetchPage}),{imported:1,complete:true});
+    await syncEvotor({pool,config,fetchPage:args=>fetchEvotorPage({...args,
+      fetchImpl:async()=>new Response(JSON.stringify({items:[sale()],paging:{}}))})});
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM pos_documents')).rows[0].n,1);
+    assert.equal((await db.query('SELECT last_error_code FROM pos_sync_state')).rows[0].last_error_code,null);
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n,0);
+  } finally {await db.close();}
+});
 test('PostgreSQL: revoked QR and split receipts cannot link; Moscow boundary and repeat buyers are exact', async () => {
   const db = await database();
   try {
