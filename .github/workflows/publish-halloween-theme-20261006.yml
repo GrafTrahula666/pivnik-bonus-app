@@ -1,0 +1,43 @@
+name: Publish Halloween seasonal design
+on:
+  push:
+    branches: [ops/activate-halloween-theme-20261006]
+permissions:
+  contents: read
+concurrency:
+  group: publish-seasonal-theme
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c04bccef04c40556e22a0404b9b4c8babf647231
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Publish only seasonal theme through existing administrator API
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RELEASE_COMMIT_SHA: c04bccef04c40556e22a0404b9b4c8babf647231
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const source = fs.readFileSync('scripts/railway-production-auth-smoke.mjs','utf8');
+          const marker = 'const [telegramVariables, vkVariables] = await Promise.all([';
+          const split = source.indexOf(marker);
+          if (split < 0) throw new Error('Unexpected smoke source');
+          fs.writeFileSync('scripts/seasonal-theme-operation.mjs', source.slice(0,split) + "\nimport fs from 'node:fs/promises';\nimport assert from 'node:assert/strict';\nconst [tgVariables, vkVariables] = await Promise.all([\n  serviceVariables(RAILWAY_PRODUCTION.services.telegram),\n  serviceVariables(RAILWAY_PRODUCTION.services.vk)\n]);\nconst tgUrl = productionUrl('telegram', tgVariables.TELEGRAM_APP_URL);\nconst vkUrl = productionUrl('vk', vkVariables.VK_APP_URL);\nconst readiness = await Promise.all([fetchJson(tgUrl+'/api/release-readiness'), fetchJson(vkUrl+'/api/release-readiness')]);\nassert.ok(readiness.every(r => r.releaseCommit === EXPECTED_COMMIT && r.childReady && r.platformReady));\nassert.equal(readiness[0].databaseFingerprint, readiness[1].databaseFingerprint);\nassert.match(String(tgVariables.OWNER_TELEGRAM_ID || ''), /^\\d+$/);\nconst owner = await fetchJson(tgUrl+'/api/auth', {method:'POST', body:JSON.stringify({initData: telegramInitData(tgVariables.TELEGRAM_BOT_TOKEN, {\n  provider_user_id: tgVariables.OWNER_TELEGRAM_ID, username: tgVariables.OWNER_TELEGRAM_USERNAME, first_name: 'Kirill', last_name:''\n})})});\nassert.equal(owner.profile?.role, 'admin');\nconst headers = {authorization:'Bearer '+owner.token};\nconst settings = (await fetchJson(tgUrl+'/api/admin/summary', {headers})).settings;\nassert.ok(settings?.published && settings?.draft);\nconst priorTheme = settings.published.theme ?? null;\nassert.ok(priorTheme === null || priorTheme === 'halloween', 'Unexpected currently published theme');\nassert.deepEqual(settings.draft, settings.published, 'Unpublished design changes exist; stopping before mutation');\nawait fs.mkdir('artifacts/seasonal-theme', {recursive:true});\nawait fs.writeFile('artifacts/seasonal-theme/design-before.json', JSON.stringify({releaseCommit:EXPECTED_COMMIT,settings},null,2));\nconst design = {...settings.published, theme:'halloween'};\nif (priorTheme !== 'halloween') {\n  await fetchJson(tgUrl+'/api/admin/design/draft', {method:'PUT',headers,body:JSON.stringify({design})});\n  const published = await fetchJson(tgUrl+'/api/admin/design/publish', {method:'POST',headers,body:'{}'});\n  assert.deepEqual(published.design, design);\n}\nconst after = (await fetchJson(tgUrl+'/api/admin/summary', {headers})).settings;\nassert.deepEqual(after.published, design);\nassert.deepEqual(after.draft, design);\nconst [tgSession, vkSession] = await Promise.all([\n  authenticateTwice({platform:'telegram',baseUrl:tgUrl,body:()=>({initData:telegramInitData(tgVariables.TELEGRAM_BOT_TOKEN,CANARIES.telegram)})}),\n  authenticateTwice({platform:'vk',baseUrl:vkUrl,body:()=>({\n    platform:'vk',launchParams:vkLaunchParams(vkVariables.VK_APP_ID,vkVariables.VK_APP_SECRET,CANARIES.vk.provider_user_id),\n    user:{id:Number(CANARIES.vk.provider_user_id),screen_name:CANARIES.vk.username,first_name:CANARIES.vk.first_name,last_name:''}\n  })})\n]);\nconst [tgMe,vkMe] = await Promise.all([\n  fetchJson(tgUrl+'/api/me',{headers:{authorization:'Bearer '+tgSession.token}}),\n  fetchJson(vkUrl+'/api/me',{headers:{authorization:'Bearer '+vkSession.token}})\n]);\nassert.deepEqual(tgMe.design,design);\nassert.deepEqual(vkMe.design,design);\nconst native = 'https://prod-app54694987-db4c98ef801a.pages-ac.vk-apps.ru';\nconst assets = ['night-bg.webp','hero-card-midnight.webp','business-card-midnight.webp','wheel-card-midnight.webp','liters-card-midnight.webp','league-card-midnight.webp','nav-midnight.webp','header-midnight.webp','halloween-tab.webp','spaceverse-logo.webp'];\nfor (const base of [tgUrl,vkUrl,native]) {\n  for (const asset of assets) await assertStaticAsset(base+'/assets/halloween/'+asset);\n}\nconsole.log(JSON.stringify({ok:true,previousTheme:priorTheme,publishedTheme:design.theme,onlyThemeChanged:true,telegramVerified:true,vkVerified:true,nativeAssetsVerified:assets.length,balancesStable:true,releaseCommit:EXPECTED_COMMIT},null,2));\n");
+          await import('./scripts/seasonal-theme-operation.mjs');
+          NODE
+      - name: Preserve prior design for rollback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seasonal-design-before-20261006
+          path: artifacts/seasonal-theme/design-before.json
+          if-no-files-found: warn
+          retention-days: 30
