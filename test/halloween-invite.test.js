@@ -4,8 +4,9 @@ import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { auditBalances, getHalloweenSummary, grantTickets } from '../halloween-raffle.js';
 import {
-  claimInvite, deriveInviteCode, ensureInviteCode, getInviteSummary, inviteCodeFromStartParam, inviteLinkConfigFromEnv,
-  inviteLinks, normalizeInviteCode, recordCancellation, recordPurchase, runHalloweenHook
+  claimInvite, deriveInviteCode, ensureInviteCode, getInviteSummary, INVITE_BONUS, INVITE_NEW_ACCOUNT_HOURS,
+  inviteCodeFromStartParam, inviteLinkConfigFromEnv, inviteLinks, normalizeInviteCode, recordCancellation,
+  recordPurchase, runHalloweenHook
 } from '../halloween-invite.js';
 
 const SECRET = Buffer.from('test-secret-test-secret-test-sec');
@@ -20,9 +21,14 @@ async function baseDb() {
       deleted_at TIMESTAMPTZ, merged_into_user_id BIGINT
     );
     CREATE TABLE transactions (
-      id BIGSERIAL PRIMARY KEY, client_id BIGINT NOT NULL REFERENCES users(id), staff_id BIGINT,
+      id BIGSERIAL PRIMARY KEY, request_key TEXT UNIQUE, client_id BIGINT NOT NULL REFERENCES users(id), staff_id BIGINT,
       mode TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', check_amount_cents BIGINT NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      bonus_spent BIGINT NOT NULL DEFAULT 0, bonus_earned BIGINT NOT NULL DEFAULT 0, balance_after BIGINT, reason TEXT,
+      completed_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE wallets (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
   return db;
@@ -35,8 +41,9 @@ async function freshDb() {
 }
 
 async function addUser(db, { hoursOld = 1 } = {}) {
+  // hoursOld may be fractional (make_interval takes double precision seconds)
   const { rows } = await db.query(
-    `INSERT INTO users (name, created_at) VALUES ('u', $1::timestamptz - make_interval(hours => $2)) RETURNING id`,
+    `INSERT INTO users (name, created_at) VALUES ('u', $1::timestamptz - make_interval(secs => $2::float8 * 3600)) RETURNING id`,
     [NOW.toISOString(), hoursOld]
   );
   return Number(rows[0].id);
@@ -56,6 +63,11 @@ async function cancel(db, txId) {
 }
 
 const tickets = async (db, userId) => (await getHalloweenSummary(db, userId)).tickets;
+const wallet = async (db, userId) => Number((await db.query('SELECT balance FROM wallets WHERE user_id = $1', [userId])).rows[0]?.balance ?? 0);
+const bonusRows = async (db, userId) => (await db.query(
+  `SELECT request_key, mode, status, staff_id, bonus_earned, bonus_spent, balance_after, reason
+   FROM transactions WHERE client_id = $1 AND mode = 'adjustment' ORDER BY id`, [userId]
+)).rows.map((r) => ({ ...r, bonus_earned: Number(r.bonus_earned), bonus_spent: Number(r.bonus_spent), balance_after: Number(r.balance_after) }));
 const summary = (db, userId, now = NOW) => getInviteSummary(db, { userId, secret: SECRET, links: LINKS, now });
 const claim = (db, inviteeId, code) => claimInvite(db, { inviteeId, code, now: NOW });
 
@@ -111,7 +123,10 @@ test('summary falls back without the migration: 200-style payload, zero tickets,
   const s = await summary(db, u);
   assert.deepEqual(s, {
     tickets: 0, status: 'open', closesAt: '2026-10-31T20:00:00+03:00',
-    invite: { code: deriveInviteCode(SECRET, u), weekCount: 0, weekLimit: 3, links: inviteLinks(deriveInviteCode(SECRET, u), LINKS) }
+    invite: {
+      code: deriveInviteCode(SECRET, u), weekCount: 0, weekLimit: 3, bonusPerFriend: 100,
+      links: inviteLinks(deriveInviteCode(SECRET, u), LINKS), canEnterCode: false, enterUntil: null, invitedBy: false
+    }
   });
   assert.deepEqual(await claim(db, u, 'ABCDEFGH'), { attached: false, reason: 'unavailable' });
   const tx = await purchase(db, u, 5000);
@@ -121,7 +136,7 @@ test('summary falls back without the migration: 200-style payload, zero tickets,
   await db.close();
 });
 
-test('claim: self-invite, unknown code, old account and buyer are rejected; one inviter forever', async () => {
+test('claim: self-invite, unknown code, expired 24h window and buyer are rejected; one inviter forever', async () => {
   const db = await freshDb();
   const inviter = await addUser(db, { hoursOld: 500 });
   const other = await addUser(db, { hoursOld: 500 });
@@ -132,14 +147,18 @@ test('claim: self-invite, unknown code, old account and buyer are rejected; one 
   assert.deepEqual(await claim(db, inviter, 'zzzz'), { attached: false, reason: 'invalid_code' });
   assert.deepEqual(await claim(db, inviter, 'AAAAAAAA'), { attached: false, reason: 'unknown_code' });
 
-  const old = await addUser(db, { hoursOld: 49 });
-  assert.deepEqual(await claim(db, old, invite.code), { attached: false, reason: 'not_new_account' });
+  assert.equal(INVITE_NEW_ACCOUNT_HOURS, 24);
+  const old = await addUser(db, { hoursOld: 24.01 });
+  assert.deepEqual(await claim(db, old, invite.code), { attached: false, reason: 'window_expired' });
+  const oldBuyer = await addUser(db, { hoursOld: 30 });
+  await purchase(db, oldBuyer, 300);
+  assert.deepEqual(await claim(db, oldBuyer, invite.code), { attached: false, reason: 'window_expired' });
 
   const buyer = await addUser(db, { hoursOld: 2 });
   await purchase(db, buyer, 300);
   assert.deepEqual(await claim(db, buyer, invite.code), { attached: false, reason: 'has_purchase' });
 
-  const friend = await addUser(db, { hoursOld: 47 });
+  const friend = await addUser(db, { hoursOld: 23.9 });
   assert.deepEqual(await claim(db, friend, `inv_${invite.code.toLowerCase()}`), { attached: true });
   assert.deepEqual(await claim(db, friend, invite.code), { attached: false, reason: 'already_attached' });
   assert.deepEqual(await claim(db, friend, otherInvite.code), { attached: false, reason: 'already_attached' });
@@ -233,8 +252,8 @@ test('cancel revokes the purchase tickets and the inviter ticket, never below ze
 
   assert.deepEqual(await recordCancellation(db, { transactionId: t1, now: NOW }), { skipped: 'not_cancelled' });
   await cancel(db, t1);
-  assert.deepEqual(await recordCancellation(db, { transactionId: t1, now: NOW }), { purchaseRevoked: 3, inviteRevoked: 1 });
-  assert.deepEqual(await recordCancellation(db, { transactionId: t1, now: NOW }), { purchaseRevoked: 0, inviteRevoked: 0 });
+  assert.deepEqual(await recordCancellation(db, { transactionId: t1, now: NOW }), { purchaseRevoked: 3, inviteRevoked: 1, inviteBonusRevoked: 100 });
+  assert.deepEqual(await recordCancellation(db, { transactionId: t1, now: NOW }), { purchaseRevoked: 0, inviteRevoked: 0, inviteBonusRevoked: 0 });
   assert.deepEqual([await tickets(db, friend), await tickets(db, inviter)], [0, 0]);
   assert.equal((await summary(db, inviter)).invite.weekCount, 0);
   // the friend's next purchase does not re-qualify a revoked invite
@@ -266,9 +285,106 @@ test('cancelling a later purchase keeps the inviter ticket of the first one', as
   const t2 = await purchase(db, friend, 1000);
   await recordPurchase(db, { transactionId: t2, now: NOW });
   await cancel(db, t2);
-  assert.deepEqual(await recordCancellation(db, { transactionId: t2, now: NOW }), { purchaseRevoked: 1, inviteRevoked: 0 });
+  assert.deepEqual(await recordCancellation(db, { transactionId: t2, now: NOW }), { purchaseRevoked: 1, inviteRevoked: 0, inviteBonusRevoked: 0 });
+  assert.equal(await wallet(db, inviter), INVITE_BONUS);
   assert.equal(await tickets(db, inviter), 1);
   assert.equal((await summary(db, inviter)).invite.weekCount, 1);
+  await db.close();
+});
+
+test('summary: a friend can enter a code only in the first 24 hours, before buying, once', async () => {
+  const db = await freshDb();
+  const inviter = await addUser(db, { hoursOld: 500 });
+  const { invite } = await summary(db, inviter);
+  assert.deepEqual([invite.canEnterCode, invite.enterUntil, invite.invitedBy, invite.bonusPerFriend], [false, null, false, 100]);
+
+  const friend = await addUser(db, { hoursOld: 2 });
+  const before = (await summary(db, friend)).invite;
+  assert.deepEqual([before.canEnterCode, before.enterUntil, before.invitedBy], [true, '2026-10-15T10:00:00.000Z', false]);
+  // the window closes exactly 24 hours after registration
+  const atEnd = (await summary(db, friend, new Date('2026-10-15T10:00:00Z'))).invite;
+  assert.deepEqual([atEnd.canEnterCode, atEnd.enterUntil], [false, null]);
+  assert.deepEqual(await claimInvite(db, { inviteeId: friend, code: invite.code, now: new Date('2026-10-15T10:00:00Z') }),
+    { attached: false, reason: 'window_expired' });
+
+  assert.deepEqual(await claim(db, friend, invite.code.toLowerCase()), { attached: true });
+  const after = (await summary(db, friend)).invite;
+  assert.deepEqual([after.canEnterCode, after.enterUntil, after.invitedBy], [false, null, true]);
+
+  const buyer = await addUser(db, { hoursOld: 1 });
+  await purchase(db, buyer, 100);
+  assert.deepEqual([(await summary(db, buyer)).invite.canEnterCode, (await summary(db, buyer)).invite.invitedBy], [false, false]);
+
+  const late = await addUser(db, { hoursOld: 1 });
+  assert.equal((await summary(db, late)).invite.canEnterCode, true);
+  await db.query(`UPDATE halloween_draw SET status = 'closed'`);
+  assert.deepEqual([(await summary(db, late)).invite.canEnterCode, (await summary(db, late)).invite.enterUntil], [false, null]);
+  assert.doesNotMatch(JSON.stringify(await summary(db, late)), /percent|chance|odds/i);
+  await db.close();
+});
+
+test('inviter bonus: 100 once per friend through the wallet and an adjustment row, within the weekly cap', async () => {
+  const db = await freshDb();
+  const inviter = await addUser(db, { hoursOld: 500 });
+  await db.query('INSERT INTO wallets (user_id, balance) VALUES ($1, 40)', [inviter]);
+  const { invite } = await summary(db, inviter);
+  const friends = [];
+  const bonuses = [];
+  for (let i = 0; i < 4; i += 1) {
+    const friend = await addUser(db);
+    friends.push(friend);
+    await claim(db, friend, invite.code);
+    const tx = await purchase(db, friend, 100);
+    bonuses.push((await recordPurchase(db, { transactionId: tx, now: NOW })).invite.bonus ?? 0);
+    await recordPurchase(db, { transactionId: tx, now: NOW }); // retry: nothing new
+    const tx2 = await purchase(db, friend, 100);
+    await recordPurchase(db, { transactionId: tx2, now: NOW }); // later purchase: nothing new
+  }
+  assert.deepEqual(bonuses, [100, 100, 100, 0]); // 4th friend: weekly cap, no ticket and no bonus
+  assert.equal(await wallet(db, inviter), 40 + 3 * INVITE_BONUS);
+  const rows = await bonusRows(db, inviter);
+  assert.deepEqual(rows.map((r) => r.request_key), friends.slice(0, 3).map((f) => `halloween-invite-bonus:${f}`));
+  assert.deepEqual(rows[0], {
+    request_key: `halloween-invite-bonus:${friends[0]}`, mode: 'adjustment', status: 'completed', staff_id: null,
+    bonus_earned: 100, bonus_spent: 0, balance_after: 140, reason: 'Бонус за друга'
+  });
+  assert.deepEqual(rows.map((r) => r.balance_after), [140, 240, 340]);
+  for (const f of friends) assert.equal(await wallet(db, f), 0);
+  await db.close();
+});
+
+test('inviter bonus is taken back when the qualifying purchase is cancelled, never below zero', async () => {
+  const db = await freshDb();
+  const inviter = await addUser(db, { hoursOld: 500 });
+  const { invite } = await summary(db, inviter);
+  const friendA = await addUser(db);
+  const friendB = await addUser(db);
+  await claim(db, friendA, invite.code);
+  await claim(db, friendB, invite.code);
+  const ta = await purchase(db, friendA, 1000);
+  const tb = await purchase(db, friendB, 1000);
+  await recordPurchase(db, { transactionId: ta, now: NOW });
+  await recordPurchase(db, { transactionId: tb, now: NOW });
+  assert.equal(await wallet(db, inviter), 200);
+
+  await cancel(db, ta);
+  assert.equal((await recordCancellation(db, { transactionId: ta, now: NOW })).inviteBonusRevoked, 100);
+  assert.equal((await recordCancellation(db, { transactionId: ta, now: NOW })).inviteBonusRevoked, 0);
+  assert.equal(await wallet(db, inviter), 100);
+  const revoke = (await bonusRows(db, inviter)).at(-1);
+  assert.deepEqual([revoke.request_key, revoke.bonus_spent, revoke.bonus_earned, revoke.balance_after, revoke.reason],
+    [`halloween-invite-bonus-cancel:${friendA}`, 100, 0, 100, 'Отмена бонуса за друга']);
+
+  // the inviter already spent most of the bonus: only what is left is taken back
+  await db.query('UPDATE wallets SET balance = 30 WHERE user_id = $1', [inviter]);
+  await cancel(db, tb);
+  assert.deepEqual(await recordCancellation(db, { transactionId: tb, now: NOW }), { purchaseRevoked: 1, inviteRevoked: 1, inviteBonusRevoked: 30 });
+  assert.equal(await wallet(db, inviter), 0);
+  // a revoked friend never earns the bonus again
+  const tb2 = await purchase(db, friendB, 1000);
+  assert.equal((await recordPurchase(db, { transactionId: tb2, now: NOW })).invite, null);
+  assert.equal(await wallet(db, inviter), 0);
+  assert.deepEqual(await auditBalances(db), []);
   await db.close();
 });
 
