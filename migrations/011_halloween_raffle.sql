@@ -1,12 +1,12 @@
--- Halloween "Night of Cauldrons" raffle: pumpkin-ticket ledger, balances, cauldrons (raffles),
--- candles (entries) and recorded draws. MANUAL migration: it is intentionally NOT in
+-- Halloween "Night of Cauldrons" raffle: pumpkin-ticket ledger, balances, one draw with a frozen
+-- snapshot of everyone's tickets and the recorded result (1st, 2nd, 3rd place and 5 participation frames). MANUAL migration: it is intentionally NOT in
 -- migration-startup-policy.js. Apply it with the reviewed operator procedure before the
 -- theme flag and the raffle API are switched on.
 --
 -- Invariants (enforced in halloween-raffle.js, all inside one transaction per operation):
 --   * halloween_ticket_ledger is append-only; source_key is UNIQUE so an event can never apply twice.
 --   * halloween_ticket_balance is a cache equal to SUM(ledger.delta) per user.
---   * a candle purchase locks the balance row, the cauldron row and writes ledger + candles together.
+--   * tickets are never spent: every ticket a person holds when the draw closes is one chance.
 
 CREATE TABLE IF NOT EXISTS halloween_ticket_ledger (
   id BIGSERIAL PRIMARY KEY,
@@ -29,42 +29,21 @@ CREATE TABLE IF NOT EXISTS halloween_ticket_balance (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS halloween_raffles (
-  id TEXT PRIMARY KEY CHECK (id IN ('light', 'medium', 'super')),
-  title TEXT NOT NULL,
-  price INTEGER NOT NULL CHECK (price > 0),
-  winners_count INTEGER NOT NULL CHECK (winners_count > 0),
+CREATE TABLE IF NOT EXISTS halloween_draw (
+  id TEXT PRIMARY KEY CHECK (id = 'night-of-cauldrons'),
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'drawn')),
   closes_at TIMESTAMPTZ NOT NULL,
-  entries_count INTEGER NOT NULL DEFAULT 0 CHECK (entries_count >= 0),
-  entries_hash TEXT
+  snapshot_hash TEXT,
+  seed TEXT,
+  results JSONB,
+  drawn_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS halloween_raffle_entries (
-  id BIGSERIAL PRIMARY KEY,
-  raffle_id TEXT NOT NULL REFERENCES halloween_raffles(id),
-  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  request_id TEXT NOT NULL,
-  ledger_id BIGINT NOT NULL REFERENCES halloween_ticket_ledger(id),
-  entry_no INTEGER NOT NULL CHECK (entry_no > 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (raffle_id, entry_no)
-);
-
-CREATE INDEX IF NOT EXISTS idx_halloween_entries_user
-  ON halloween_raffle_entries(raffle_id, user_id);
-
-CREATE TABLE IF NOT EXISTS halloween_raffle_draws (
-  raffle_id TEXT PRIMARY KEY REFERENCES halloween_raffles(id),
-  seed TEXT NOT NULL,
-  winners JSONB NOT NULL,
-  reserves JSONB NOT NULL DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS halloween_draw_snapshot (
+  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  tickets INTEGER NOT NULL CHECK (tickets > 0)
 );
 
 -- closes_at is an ASSUMPTION (31 Oct 2026, 20:00 Moscow) until the owner confirms the draw time.
-INSERT INTO halloween_raffles (id, title, price, winners_count, closes_at) VALUES
-  ('light',  'Котелок Новичка', 1, 3, '2026-10-31T20:00:00+03:00'),
-  ('medium', 'Котёл Ведьмы',    2, 2, '2026-10-31T20:00:00+03:00'),
-  ('super',  'Чёрный Котёл',    3, 1, '2026-10-31T20:00:00+03:00')
+INSERT INTO halloween_draw (id, closes_at) VALUES ('night-of-cauldrons', '2026-10-31T20:00:00+03:00')
 ON CONFLICT (id) DO NOTHING;

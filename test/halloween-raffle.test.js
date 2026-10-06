@@ -3,9 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import {
-  MAX_CANDLES_PER_REQUEST, auditBalances, closeRaffle, createSeededRandomInt, drawNightOfCauldrons,
-  drawRaffle, enterRaffle, getHalloweenSummary, grantQuestTicket, grantTickets, pickWinners,
-  ticketsForPurchase, weekKey
+  auditBalances, closeDraw, createSeededRandomInt, drawNight, getHalloweenSummary, grantQuestTicket,
+  grantTickets, pickResults, ticketsForPurchase, weekKey
 } from '../halloween-raffle.js';
 import { isAutomaticStartupMigration } from '../migration-startup-policy.js';
 
@@ -22,7 +21,7 @@ test('migration 011 is manual and repeatable', async () => {
   assert.equal(isAutomaticStartupMigration('011_halloween_raffle.sql'), false);
   const db = await freshDb();
   await db.exec(await readFile(new URL('../migrations/011_halloween_raffle.sql', import.meta.url), 'utf8'));
-  assert.equal((await db.query('SELECT COUNT(*)::int n FROM halloween_raffles')).rows[0].n, 3);
+  assert.equal((await db.query('SELECT COUNT(*)::int n FROM halloween_draw')).rows[0].n, 1);
   await db.close();
 });
 
@@ -62,69 +61,63 @@ test('quest tickets: once per quest per week, three per week', async () => {
   await db.close();
 });
 
-test('candle purchase is atomic, replay-safe and cannot overspend', async () => {
+test('summary has only counts and time, never odds', async () => {
   const db = await freshDb();
-  await grantTickets(db, { userId: 1, delta: 5, reason: 'admin', sourceKey: 'admin:1' });
-  const buy = await enterRaffle(db, { userId: 1, raffleId: 'medium', quantity: 2, requestId: 'req-00000001' });
-  assert.deepEqual([buy.candles, buy.spent, buy.balance, buy.replayed], [[1, 2], 4, 1, false]);
-  const replay = await enterRaffle(db, { userId: 1, raffleId: 'medium', quantity: 2, requestId: 'req-00000001' });
-  assert.deepEqual([replay.candles, replay.balance, replay.replayed], [[1, 2], 1, true]);
-  await rejects(enterRaffle(db, { userId: 1, raffleId: 'super', quantity: 1, requestId: 'req-00000002' }), 'insufficient_tickets');
-  await rejects(enterRaffle(db, { userId: 1, raffleId: 'nope', quantity: 1, requestId: 'req-00000003' }), 'unknown_raffle');
-  await rejects(enterRaffle(db, { userId: 1, raffleId: 'light', quantity: 0, requestId: 'req-00000004' }), 'bad_quantity');
-  await rejects(enterRaffle(db, { userId: 1, raffleId: 'light', quantity: MAX_CANDLES_PER_REQUEST + 1, requestId: 'req-00000005' }), 'bad_quantity');
+  await grantTickets(db, { userId: 1, delta: 4, reason: 'admin', sourceKey: 'admin:1' });
   const s = await getHalloweenSummary(db, 1);
-  const medium = s.raffles.find((x) => x.id === 'medium');
-  assert.deepEqual([s.tickets, medium.myCandles, medium.totalCandles], [1, 2, 2]);
+  assert.deepEqual([s.tickets, s.status], [4, 'open']);
+  assert.match(s.closesAt, /^2026-10-31T17:00:00/);
   assert.doesNotMatch(JSON.stringify(s), /percent|chance|odds/i);
-  assert.deepEqual(await auditBalances(db), []);
+  assert.equal((await getHalloweenSummary(db, 3)).tickets, 0);
   await db.close();
 });
 
-test('closed or expired cauldron refuses candles', async () => {
-  const db = await freshDb();
-  await grantTickets(db, { userId: 1, delta: 3, reason: 'admin', sourceKey: 'admin:1' });
-  await db.query(`UPDATE halloween_raffles SET closes_at = NOW() - INTERVAL '1 minute' WHERE id = 'light'`);
-  await rejects(enterRaffle(db, { userId: 1, raffleId: 'light', quantity: 1, requestId: 'req-00000010' }), 'raffle_closed');
-  await db.query(`UPDATE halloween_raffles SET status = 'closed' WHERE id = 'medium'`);
-  await rejects(enterRaffle(db, { userId: 1, raffleId: 'medium', quantity: 1, requestId: 'req-00000011' }), 'raffle_closed');
-  assert.equal((await getHalloweenSummary(db, 1)).tickets, 3);
-  await db.close();
-});
-
-test('seeded draw is reproducible and weighted candles belong to distinct winners', () => {
+test('seeded randomness is reproducible', () => {
   const a = createSeededRandomInt('ab'.repeat(32));
   const b = createSeededRandomInt('ab'.repeat(32));
   assert.deepEqual([a(0, 1000), a(0, 1000), a(0, 7)], [b(0, 1000), b(0, 1000), b(0, 7)]);
-  const entries = [1, 1, 1, 2, 3].map((userId, i) => ({ userId, entryNo: i + 1 }));
-  const { winners, reserves } = pickWinners(entries, 2, 5, createSeededRandomInt('01'.repeat(32)));
-  const ids = [...winners, ...reserves].map((w) => w.userId);
-  assert.equal(new Set(ids).size, ids.length);
-  assert.equal(winners.length, 2);
-  assert.equal(ids.length, 3);
 });
 
-test('close freezes the candle hash, draw runs once, one prize per person', async () => {
+test('every ticket is a chance, one place per person, then participation frames', () => {
+  const entries = [{ userId: 1, tickets: 50 }, { userId: 2, tickets: 1 }, { userId: 3, tickets: 1 },
+    { userId: 4, tickets: 1 }, { userId: 5, tickets: 1 }, { userId: 6, tickets: 1 }, { userId: 7, tickets: 1 },
+    { userId: 8, tickets: 1 }, { userId: 9, tickets: 1 }, { userId: 10, tickets: 0 }];
+  const r = pickResults(entries, createSeededRandomInt('01'.repeat(32)));
+  const ids = [r.first, r.second, r.third, ...r.participation].map((w) => w.userId);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(ids.length, 8);
+  assert.ok(!ids.includes(10));
+  // user 1 holds 50 of 58 tickets: wins first place for most seeds
+  let firsts = 0;
+  for (let i = 0; i < 200; i += 1) {
+    if (pickResults(entries, createSeededRandomInt(i.toString(16).padStart(64, '0'))).first.userId === 1) firsts += 1;
+  }
+  assert.ok(firsts > 150);
+  assert.deepEqual(pickResults([{ userId: 1, tickets: 2 }], createSeededRandomInt('02'.repeat(32))),
+    { first: { userId: 1, tickets: 2 }, participation: [] });
+});
+
+test('close freezes tickets and hash, draw runs once and is reproducible', async () => {
   const db = await freshDb();
-  for (const u of [1, 2, 3, 4]) await grantTickets(db, { userId: u, delta: 10, reason: 'admin', sourceKey: `admin:${u}` });
-  let n = 0;
-  for (const raffleId of ['super', 'medium', 'light']) {
-    for (const u of [1, 2, 3, 4]) await enterRaffle(db, { userId: u, raffleId, quantity: 1, requestId: `req-${raffleId}-${u}-${++n}` });
-  }
-  await db.query(`UPDATE halloween_raffles SET closes_at = NOW() - INTERVAL '1 second'`);
-  await rejects(drawRaffle(db, 'super'), 'not_closed');
-  for (const id of ['super', 'medium', 'light']) {
-    const closed = await closeRaffle(db, id);
-    assert.match(closed.entriesHash, /^[0-9a-f]{64}$/);
-    assert.equal((await closeRaffle(db, id)).closed, false);
-  }
-  const seeds = { super: '11'.repeat(32), medium: '22'.repeat(32), light: '33'.repeat(32) };
-  const night = await drawNightOfCauldrons(db, { seeds });
-  const prizeWinners = ['super', 'medium', 'light'].flatMap((id) => night[id].winners.map((w) => w.userId));
-  assert.equal(new Set(prizeWinners).size, prizeWinners.length);
-  assert.deepEqual([night.super.winners.length, night.medium.winners.length], [1, 2]);
-  await rejects(drawRaffle(db, 'super'), 'not_closed');
-  const stored = await db.query(`SELECT seed FROM halloween_raffle_draws WHERE raffle_id = 'super'`);
-  assert.equal(stored.rows[0].seed, seeds.super);
+  const give = { 1: 5, 2: 3, 3: 1, 4: 2 };
+  for (const [u, n] of Object.entries(give)) await grantTickets(db, { userId: Number(u), delta: n, reason: 'admin', sourceKey: `admin:${u}` });
+  await rejects(drawNight(db), 'not_closed');
+  await rejects(closeDraw(db), 'not_due');
+  await db.query(`UPDATE halloween_draw SET closes_at = NOW() - INTERVAL '1 second'`);
+  const closed = await closeDraw(db);
+  assert.match(closed.snapshotHash, /^[0-9a-f]{64}$/);
+  assert.deepEqual([closed.participants, closed.tickets], [4, 11]);
+  assert.equal((await closeDraw(db)).closed, false);
+  await grantTickets(db, { userId: 3, delta: 100, reason: 'admin', sourceKey: 'admin:late' });
+  const seed = '77'.repeat(32);
+  const night = await drawNight(db, { seed });
+  assert.equal(night.results.participation.length, 1);
+  const ids = [night.results.first, night.results.second, night.results.third, ...night.results.participation].map((w) => w.userId);
+  assert.equal(new Set(ids).size, 4);
+  await rejects(drawNight(db), 'not_closed');
+  const stored = await db.query('SELECT seed, results FROM halloween_draw');
+  assert.equal(stored.rows[0].seed, seed);
+  const again = pickResults([{ userId: 1, tickets: 5 }, { userId: 2, tickets: 3 }, { userId: 3, tickets: 1 }, { userId: 4, tickets: 2 }], createSeededRandomInt(seed));
+  assert.deepEqual(again, night.results);
   await db.close();
 });

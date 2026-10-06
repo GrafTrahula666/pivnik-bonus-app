@@ -1,18 +1,20 @@
 import crypto from 'node:crypto';
 
 /**
- * Halloween "Night of Cauldrons": pumpkin tickets and candle purchases.
- * Every function takes `client` with `query(sql, params) => { rows }` (a pg client or PGlite).
+ * Halloween "Night of Cauldrons": pumpkin tickets and one prize draw.
+ * Tickets are never spent. Everyone keeps all tickets; when the draw closes, each ticket is one chance.
+ * Places: 1st (Black Cauldron), 2nd (Witch Cauldron), 3rd (Novice Cauldron), then 5 participation frames.
+ * One person can win only one place. Every function takes `client` with `query(sql, params) => { rows }`.
  * grantTickets/grantQuestTicket run inside the caller's transaction (wheel spin, purchase);
- * enterRaffle/closeRaffle/drawRaffle open and finish their own transaction.
- * Needs migration 011, which is manual and not part of the startup policy.
+ * closeDraw/drawNight open and finish their own transaction. Needs migration 011 (manual, not in the startup policy).
  */
 
+export const DRAW_ID = 'night-of-cauldrons';
 export const WEEKLY_QUEST_TICKET_LIMIT = 3;
-export const MAX_CANDLES_PER_REQUEST = 50;
+export const PARTICIPATION_WINNERS = 5;
+export const PLACES = Object.freeze(['first', 'second', 'third']);
 export const TICKET_REASONS = Object.freeze(['wheel', 'quest', 'purchase', 'purchase_revoke', 'entry', 'admin']);
 const BAR_UTC_OFFSET_HOURS = 3;
-const DRAW_ORDER = Object.freeze(['super', 'medium', 'light']);
 
 export class RaffleError extends Error {
   constructor(code, message) {
@@ -60,12 +62,12 @@ async function applyLedger(client, { userId, delta, reason, sourceKey, note = nu
      VALUES ($1,$2,$3,$4,$5) ON CONFLICT (source_key) DO NOTHING RETURNING id`,
     [userId, delta, reason, sourceKey, note]
   );
-  if (!inserted.rows.length) return { applied: false, ledgerId: null };
+  if (!inserted.rows.length) return { applied: false };
   await client.query(
     'UPDATE halloween_ticket_balance SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1',
     [userId, delta]
   );
-  return { applied: true, ledgerId: Number(inserted.rows[0].id) };
+  return { applied: true };
 }
 
 /** Idempotent grant or revoke. Call inside the transaction of the event that causes it. */
@@ -111,105 +113,44 @@ async function transaction(client, fn) {
   }
 }
 
-/** Buy `quantity` candles in one cauldron. Replaying the same requestId returns the first result. */
-export async function enterRaffle(client, { userId, raffleId, quantity, requestId }) {
-  const uid = assertId(userId, 'userId');
-  const qty = Number(quantity);
-  if (!Number.isInteger(qty) || qty < 1 || qty > MAX_CANDLES_PER_REQUEST) {
-    throw new RaffleError('bad_quantity', `quantity must be 1..${MAX_CANDLES_PER_REQUEST}`);
-  }
-  if (typeof requestId !== 'string' || requestId.length < 8 || requestId.length > 80) {
-    throw new RaffleError('bad_request_id', 'requestId is required');
-  }
-  const sourceKey = `entry:${requestId}`;
-  return transaction(client, async () => {
-    const balance = await lockBalance(client, uid);
-    const prior = await client.query(
-      `SELECT l.id, l.delta, e.raffle_id, e.entry_no
-       FROM halloween_ticket_ledger l
-       LEFT JOIN halloween_raffle_entries e ON e.ledger_id = l.id
-       WHERE l.source_key = $1 ORDER BY e.entry_no`,
-      [sourceKey]
-    );
-    if (prior.rows.length) {
-      return {
-        replayed: true,
-        raffleId: prior.rows[0].raffle_id,
-        candles: prior.rows.map((r) => Number(r.entry_no)),
-        spent: -Number(prior.rows[0].delta),
-        balance
-      };
-    }
-    const raffle = await client.query(
-      `SELECT id, price, status, entries_count, (closes_at > NOW()) AS is_open
-       FROM halloween_raffles WHERE id = $1 FOR UPDATE`,
-      [raffleId]
-    );
-    if (!raffle.rows.length) throw new RaffleError('unknown_raffle');
-    const r = raffle.rows[0];
-    if (r.status !== 'open' || !r.is_open) throw new RaffleError('raffle_closed');
-    const cost = Number(r.price) * qty;
-    if (balance < cost) throw new RaffleError('insufficient_tickets');
-    const { ledgerId } = await applyLedger(client, {
-      userId: uid, delta: -cost, reason: 'entry', sourceKey
-    });
-    const first = Number(r.entries_count) + 1;
-    const candles = [];
-    for (let i = 0; i < qty; i += 1) {
-      candles.push(first + i);
-      await client.query(
-        `INSERT INTO halloween_raffle_entries (raffle_id, user_id, request_id, ledger_id, entry_no)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [r.id, uid, requestId, ledgerId, first + i]
-      );
-    }
-    await client.query('UPDATE halloween_raffles SET entries_count = $2 WHERE id = $1', [r.id, first + qty - 1]);
-    return { replayed: false, raffleId: r.id, candles, spent: cost, balance: balance - cost };
-  });
-}
-
-/** Screen data. No odds or percentages on purpose: only counts. */
+/** Screen data: only counts and the time, never odds or percentages. */
 export async function getHalloweenSummary(client, userId) {
   const uid = assertId(userId, 'userId');
   const bal = await client.query('SELECT balance FROM halloween_ticket_balance WHERE user_id = $1', [uid]);
-  const raffles = await client.query(
-    `SELECT r.id, r.title, r.price, r.winners_count, r.status, r.closes_at, r.entries_count,
-            (SELECT COUNT(*)::int FROM halloween_raffle_entries e WHERE e.raffle_id = r.id AND e.user_id = $1) AS mine
-     FROM halloween_raffles r ORDER BY r.price`,
-    [uid]
-  );
+  const draw = await client.query('SELECT status, closes_at FROM halloween_draw WHERE id = $1', [DRAW_ID]);
   return {
-    tickets: Number(bal.rows[0]?.balance ?? 0),
-    raffles: raffles.rows.map((r) => ({
-      id: r.id, title: r.title, price: Number(r.price), winners: Number(r.winners_count),
-      status: r.status, closesAt: new Date(r.closes_at).toISOString(),
-      totalCandles: Number(r.entries_count), myCandles: Number(r.mine)
-    }))
+    tickets: Math.max(0, Number(bal.rows[0]?.balance ?? 0)),
+    status: draw.rows[0]?.status ?? 'open',
+    closesAt: draw.rows[0] ? new Date(draw.rows[0].closes_at).toISOString() : null
   };
 }
 
-export function entriesHash(entryIds) {
-  return crypto.createHash('sha256').update(entryIds.join(',')).digest('hex');
+export function snapshotHash(rows) {
+  const text = [...rows].sort((a, b) => a.userId - b.userId).map((r) => `${r.userId}:${r.tickets}`).join(',');
+  return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-/** Close one cauldron after its time (or at once with force) and freeze the hash of all candles. */
-export async function closeRaffle(client, raffleId, { force = false } = {}) {
+/** After closes_at (or with force) freeze everyone's tickets. Negative or zero balances do not take part. */
+export async function closeDraw(client, { force = false } = {}) {
   return transaction(client, async () => {
     const { rows } = await client.query(
-      `SELECT id, status, (closes_at <= NOW()) AS due FROM halloween_raffles WHERE id = $1 FOR UPDATE`,
-      [raffleId]
+      `SELECT status, (closes_at <= NOW()) AS due FROM halloween_draw WHERE id = $1 FOR UPDATE`, [DRAW_ID]
     );
-    if (!rows.length) throw new RaffleError('unknown_raffle');
+    if (!rows.length) throw new RaffleError('unknown_draw');
     if (rows[0].status !== 'open') return { closed: false, status: rows[0].status };
     if (!rows[0].due && !force) throw new RaffleError('not_due');
-    const entries = await client.query(
-      'SELECT id FROM halloween_raffle_entries WHERE raffle_id = $1 ORDER BY entry_no', [raffleId]
-    );
-    const hash = entriesHash(entries.rows.map((e) => e.id));
     await client.query(
-      `UPDATE halloween_raffles SET status = 'closed', entries_hash = $2 WHERE id = $1`, [raffleId, hash]
+      `INSERT INTO halloween_draw_snapshot (user_id, tickets)
+       SELECT user_id, balance FROM halloween_ticket_balance WHERE balance > 0`
     );
-    return { closed: true, status: 'closed', entriesHash: hash, candles: entries.rows.length };
+    const snap = await client.query('SELECT user_id, tickets FROM halloween_draw_snapshot');
+    const entries = snap.rows.map((r) => ({ userId: Number(r.user_id), tickets: Number(r.tickets) }));
+    const hash = snapshotHash(entries);
+    await client.query(`UPDATE halloween_draw SET status = 'closed', snapshot_hash = $2 WHERE id = $1`, [DRAW_ID, hash]);
+    return {
+      closed: true, status: 'closed', snapshotHash: hash,
+      participants: entries.length, tickets: entries.reduce((s, e) => s + e.tickets, 0)
+    };
   });
 }
 
@@ -230,55 +171,47 @@ export function createSeededRandomInt(seedHex) {
   };
 }
 
-/** Pick `count` winners then `reserves`: a random candle wins, every candle of that user leaves the pool. */
-export function pickWinners(entries, count, reserves, randomInt, excludeUserIds = []) {
-  let pool = entries.filter((e) => !excludeUserIds.includes(e.userId));
-  const take = (n) => {
-    const out = [];
-    while (out.length < n && pool.length) {
-      const hit = pool[randomInt(0, pool.length)];
-      out.push({ userId: hit.userId, entryNo: hit.entryNo });
-      pool = pool.filter((e) => e.userId !== hit.userId);
-    }
-    return out;
-  };
-  const winners = take(count);
-  return { winners, reserves: take(reserves) };
-}
-
-/** Draw one closed cauldron exactly once and store seed and result. */
-export async function drawRaffle(client, raffleId, { seed = crypto.randomBytes(32).toString('hex'), excludeUserIds = [], reserves = 2 } = {}) {
-  return transaction(client, async () => {
-    const { rows } = await client.query(
-      'SELECT id, status, winners_count FROM halloween_raffles WHERE id = $1 FOR UPDATE', [raffleId]
-    );
-    if (!rows.length) throw new RaffleError('unknown_raffle');
-    if (rows[0].status !== 'closed') throw new RaffleError('not_closed');
-    const entries = await client.query(
-      'SELECT user_id, entry_no FROM halloween_raffle_entries WHERE raffle_id = $1 ORDER BY entry_no', [raffleId]
-    );
-    const picked = pickWinners(
-      entries.rows.map((e) => ({ userId: Number(e.user_id), entryNo: Number(e.entry_no) })),
-      Number(rows[0].winners_count), reserves, createSeededRandomInt(seed), excludeUserIds
-    );
-    await client.query(
-      'INSERT INTO halloween_raffle_draws (raffle_id, seed, winners, reserves) VALUES ($1,$2,$3::jsonb,$4::jsonb)',
-      [raffleId, seed, JSON.stringify(picked.winners), JSON.stringify(picked.reserves)]
-    );
-    await client.query(`UPDATE halloween_raffles SET status = 'drawn' WHERE id = $1`, [raffleId]);
-    return { raffleId, seed, ...picked };
-  });
-}
-
-/** Whole night: super first, then medium, then light; one prize per person unless disabled. */
-export async function drawNightOfCauldrons(client, { onePrizePerPerson = true, seeds = {} } = {}) {
+/**
+ * 1st, 2nd, 3rd place weighted by tickets (each ticket is one chance, the winner leaves the pool),
+ * then `participation` more people chosen with equal chance from everyone who is left.
+ */
+export function pickResults(entries, randomInt, participation = PARTICIPATION_WINNERS) {
+  let pool = entries.filter((e) => e.tickets > 0);
   const results = {};
-  const won = [];
-  for (const id of DRAW_ORDER) {
-    results[id] = await drawRaffle(client, id, { seed: seeds[id], excludeUserIds: onePrizePerPerson ? won : [] });
-    won.push(...results[id].winners.map((w) => w.userId));
+  for (const place of PLACES) {
+    const total = pool.reduce((s, e) => s + e.tickets, 0);
+    if (!total) break;
+    let ticket = randomInt(0, total);
+    const hit = pool.find((e) => (ticket -= e.tickets) < 0);
+    results[place] = { userId: hit.userId, tickets: hit.tickets };
+    pool = pool.filter((e) => e.userId !== hit.userId);
+  }
+  results.participation = [];
+  while (results.participation.length < participation && pool.length) {
+    const hit = pool[randomInt(0, pool.length)];
+    results.participation.push({ userId: hit.userId, tickets: hit.tickets });
+    pool = pool.filter((e) => e.userId !== hit.userId);
   }
   return results;
+}
+
+/** Run the draw once on the frozen snapshot and store seed and result. */
+export async function drawNight(client, { seed = crypto.randomBytes(32).toString('hex') } = {}) {
+  return transaction(client, async () => {
+    const { rows } = await client.query('SELECT status FROM halloween_draw WHERE id = $1 FOR UPDATE', [DRAW_ID]);
+    if (!rows.length) throw new RaffleError('unknown_draw');
+    if (rows[0].status !== 'closed') throw new RaffleError('not_closed');
+    const snap = await client.query('SELECT user_id, tickets FROM halloween_draw_snapshot ORDER BY user_id');
+    const results = pickResults(
+      snap.rows.map((r) => ({ userId: Number(r.user_id), tickets: Number(r.tickets) })),
+      createSeededRandomInt(seed)
+    );
+    await client.query(
+      `UPDATE halloween_draw SET status = 'drawn', seed = $2, results = $3::jsonb, drawn_at = NOW() WHERE id = $1`,
+      [DRAW_ID, seed, JSON.stringify(results)]
+    );
+    return { seed, results };
+  });
 }
 
 /** Cached balance must equal the ledger sum. Returns the mismatching users (empty array means healthy). */
