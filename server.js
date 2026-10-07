@@ -1392,8 +1392,8 @@ async function sendVkCommunityMessage(vkId, text) {
       status: response.status,
       messageId: payload?.response ?? null
     };
-  } catch (error) {
-    console.error('VK messages.send error:', error.message);
+  } catch {
+    console.error('VK messages.send error:', 'vk_network_error');
     return { ok: false, status: 0, error: 'vk_network_error' };
   }
 }
