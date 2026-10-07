@@ -82,3 +82,26 @@ in this follow-up; test coverage and evidence were extended for the same fix.
 Follow-up checks: materialize twice, 471 tracked files byte-identical; node --test
 514/514; npm run check passed; npm audit zero vulnerabilities. Materialization-only
 changes restored before commit. UI and HTTP route implementations unchanged.
+
+## Follow-up: malformed second page after a committed first page
+
+One additional integration test covers two malformed provider envelopes (JSON
+null and array paging) after the first page has committed a new sale and a
+second-page cursor. It uses the actual shared reader, sync and repository with
+the existing isolated PGlite/advisory-lock adapter. The failing response cannot
+change the committed document snapshots, cursor, scan deadline or last completed
+sync timestamp. The dashboard retains 60 cents and reports invalid_response
+with historyComplete false.
+
+Recovery resumes second-page with the original scan deadline, even when the
+current clock has advanced. A repeated document across the page boundary and a
+repeated complete scan leave three sales and exactly 90 cents. The seeded
+application transaction journal remains byte-for-byte equivalent as SQL rows.
+This extends the same envelope fix; no further product code or routes changed.
+
+Checks: 515/515 node tests; npm run check passed; npm audit zero vulnerabilities;
+two materializations byte-identical across 471 tracked files. This test is an
+in-process provider-response/SQL proof, not additional public HTTP, live Evotor,
+network PostgreSQL concurrency or desktop/mobile evidence. Existing browser and
+starter-pack availability limits remain unchanged. No production data, merge or
+deployment was touched.
