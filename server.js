@@ -37,6 +37,7 @@ import {
   inviteCodeFromStartParam,
   recordCancellation as recordHalloweenCancellation,
   recordPurchase as recordHalloweenPurchase,
+  recordPurchaseReturn as recordHalloweenPurchaseReturn,
   runHalloweenHook
 } from './halloween-invite.js';
 import {
@@ -2789,6 +2790,11 @@ const posBonusLedger = {
     const tx = (await db.query('SELECT client_id FROM transactions WHERE id = $1', [transactionId])).rows[0];
     if (tx) await db.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [tx.client_id]);
     return cancelCompletedTransaction(db, transactionId, null, reason, requestKey);
+  },
+  async afterReturn(result) {
+    await runHalloweenHook(pool, 'return', (db) => recordHalloweenPurchaseReturn(db, {
+      transactionId: result.baseTransactionId, returnedCents: result.returnedCents, returnKey: result.returnKey
+    }));
   },
   async afterCommit(result) {
     // A failed achievement sync must not drop the Halloween hook or the guest's message.

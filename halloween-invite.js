@@ -402,17 +402,63 @@ export async function recordPurchase(client, { transactionId, now = new Date() }
   });
 }
 
-/** Void the tickets a grant created (those exact tickets first), at most what the user still holds. */
-async function revokeGrant(client, { grantKey, revokeKey, reason }) {
+/** Tickets a grant still stands for: the grant minus what partial returns (`<grantKey-return>:...`) took back. */
+async function grantHeld(client, grantKey) {
   const granted = (await client.query(
     'SELECT user_id, delta FROM halloween_ticket_ledger WHERE source_key = $1',
     [grantKey]
   )).rows[0];
-  if (!granted || Number(granted.delta) <= 0) return 0;
+  if (!granted || Number(granted.delta) <= 0) return null;
+  const returned = grantKey.startsWith('purchase:')
+    ? Number((await client.query(
+      'SELECT COALESCE(SUM(delta), 0)::int AS n FROM halloween_ticket_ledger WHERE source_key LIKE $1',
+      [`purchase-return:${grantKey.slice('purchase:'.length)}:%`]
+    )).rows[0].n)
+    : 0;
+  return { userId: Number(granted.user_id), held: Number(granted.delta) + returned };
+}
+
+/** Void the tickets a grant created (those exact tickets first), at most what the user still holds. */
+async function revokeGrant(client, { grantKey, revokeKey, reason }) {
+  const grant = await grantHeld(client, grantKey);
+  if (!grant || grant.held <= 0) return 0;
   const { applied, delta } = await grantTickets(client, {
-    userId: Number(granted.user_id), delta: -Number(granted.delta), reason, sourceKey: revokeKey, revokes: grantKey
+    userId: grant.userId, delta: -grant.held, reason, sourceKey: revokeKey, revokes: grantKey
   });
   return applied ? -delta : 0;
+}
+
+/**
+ * After a partial or capped return of a purchase that stays completed (Evotor PAYBACK): the purchase keeps
+ * one ticket per full 1 000 ₽ of what was not returned; the rest is taken back. `returnedCents` is the total
+ * returned so far for this sale, `returnKey` names this return (idempotent per return). Runs its own transaction.
+ */
+export async function recordPurchaseReturn(client, { transactionId, returnedCents, returnKey }) {
+  const txId = assertId(transactionId, 'transactionId');
+  if (!Number.isSafeInteger(returnedCents) || returnedCents < 0) throw new TypeError('returnedCents must be a non-negative integer');
+  if (typeof returnKey !== 'string' || !returnKey) throw new TypeError('returnKey is required');
+  return inTransaction(client, async () => {
+    const drawStatus = (await client.query(
+      'SELECT status FROM halloween_draw WHERE id = $1 FOR UPDATE', [DRAW_ID]
+    )).rows[0]?.status;
+    const tx = (await client.query(
+      `SELECT id, check_amount_cents FROM transactions WHERE id = $1 AND ${PURCHASE_SQL}`, [txId]
+    )).rows[0];
+    if (!tx) return { skipped: 'not_a_purchase' };
+    const grant = await grantHeld(client, `purchase:${txId}`);
+    if (!grant) return { revoked: 0 };
+    const keep = ticketsForPurchase(Math.max(0, Number(tx.check_amount_cents) - returnedCents) / 100);
+    if (grant.held <= keep) return { revoked: 0 };
+    const sourceKey = `purchase-return:${txId}:${returnKey}`;
+    const { applied, delta } = await grantTickets(client, {
+      userId: grant.userId, delta: keep - grant.held, reason: 'purchase_revoke', sourceKey, revokes: `purchase:${txId}`
+    });
+    const revoked = applied ? -delta : 0;
+    if (drawStatus === 'closed' && revoked) {
+      return { revoked, snapshotRemoved: await dropVoidedFromSnapshot(client, [sourceKey]) };
+    }
+    return { revoked };
+  });
 }
 
 /** After a transaction cancel is committed: take back what it granted. Idempotent. Runs its own transaction. */
@@ -467,9 +513,12 @@ export async function recordCancellation(client, { transactionId, now = new Date
   });
 }
 
+const missingSchemaReported = new WeakSet(); // per logger, so once per process for console
+
 /**
  * Run a Halloween hook on its own pooled connection, after the main operation committed.
- * Never throws: a missing migration is skipped silently, anything else is logged and swallowed.
+ * Never throws. A missing migration is reported once per process (nothing is recorded until 011 is applied),
+ * anything else is logged and swallowed.
  */
 export async function runHalloweenHook(pool, label, fn, logger = console) {
   let client;
@@ -479,6 +528,9 @@ export async function runHalloweenHook(pool, label, fn, logger = console) {
   } catch (error) {
     if (!isMissingHalloweenSchema(error)) {
       logger.warn?.(`Halloween ${label} skipped:`, error?.code || error?.message || 'unknown');
+    } else if (!missingSchemaReported.has(logger)) {
+      missingSchemaReported.add(logger);
+      logger.error?.('Halloween tables are missing: apply migrations/011_halloween_raffle.sql. Tickets and invites are not recorded until then.');
     }
     return null;
   } finally {

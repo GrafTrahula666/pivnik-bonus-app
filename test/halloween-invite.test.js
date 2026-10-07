@@ -7,7 +7,7 @@ import { auditBalances, closeDraw, drawNight, getHalloweenSummary, grantTickets,
 import {
   claimInvite, deletedIdentityHash, deriveInviteCode, ensureInviteCode, getInviteSummary, identityTombstoneSecretFromEnv,
   INVITE_BONUS, INVITE_NEW_ACCOUNT_HOURS, inviteCodeFromStartParam, inviteLinkConfigFromEnv, inviteLinks,
-  normalizeInviteCode, recordCancellation, recordPurchase, runHalloweenHook
+  normalizeInviteCode, recordCancellation, recordPurchase, recordPurchaseReturn, runHalloweenHook
 } from '../halloween-invite.js';
 
 const SECRET = Buffer.from('test-secret-test-secret-test-sec');
@@ -531,4 +531,50 @@ test('staff cancel replay runs the cancel hook too, so a failed hook is repaired
   assert.ok(start >= 0 && replay.length > 0);
   assert.ok(replay.indexOf('await halloweenAfterCancel(replay.rows[0].id);') > replay.indexOf("status(409)"));
   assert.ok(replay.indexOf('await halloweenAfterCancel(replay.rows[0].id);') < replay.indexOf('return res.json({'));
+});
+
+test('missing migration 011 is reported once (not silently), and the hook still never throws', async () => {
+  const db = await baseDb();
+  const pool = { connect: async () => ({ query: db.query.bind(db), release() {} }) };
+  const errors = [];
+  const logger = { warn: () => assert.fail('a missing table is not an unexpected error'), error: (m) => errors.push(m) };
+  const user = await addUser(db);
+  const tx = await purchase(db, user, 1001);
+  assert.equal(await runHalloweenHook(pool, 'purchase', (c) => recordPurchase(c, { transactionId: tx, now: NOW }), logger), null);
+  assert.equal(await runHalloweenHook(pool, 'purchase', (c) => recordPurchase(c, { transactionId: tx, now: NOW }), logger), null);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /011_halloween_raffle\.sql/);
+  await db.close();
+});
+
+test('a 1001 rub purchase gives one ticket, and a purchase hook missed earlier can be run later', async () => {
+  const db = await freshDb();
+  const buyer = await addUser(db, { hoursOld: 500 });
+  const tx = await purchase(db, buyer, 1001, { at: new Date(NOW.getTime() - 86_400_000) });
+  assert.equal((await recordPurchase(db, { transactionId: tx, now: NOW })).purchaseTickets, 1);
+  assert.equal((await recordPurchase(db, { transactionId: tx, now: NOW })).purchaseTickets, 0);
+  assert.equal(await tickets(db, buyer), 1);
+  await db.close();
+});
+
+test('partial returns keep one ticket per full 1000 rub not returned; a later cancel takes only the rest', async () => {
+  const db = await freshDb();
+  const buyer = await addUser(db, { hoursOld: 500 });
+  const other = await purchase(db, buyer, 2000);
+  await recordPurchase(db, { transactionId: other, now: NOW });
+  const tx = await purchase(db, buyer, 3200);
+  await recordPurchase(db, { transactionId: tx, now: NOW });
+  assert.equal(await tickets(db, buyer), 5);
+
+  assert.deepEqual(await recordPurchaseReturn(db, { transactionId: tx, returnedCents: 150_000, returnKey: 'bar:r1' }), { revoked: 2 });
+  assert.deepEqual(await recordPurchaseReturn(db, { transactionId: tx, returnedCents: 150_000, returnKey: 'bar:r1' }), { revoked: 0 });
+  assert.equal(await tickets(db, buyer), 3);
+  // 3200 - 1700 = 1500 still keeps one ticket
+  assert.deepEqual(await recordPurchaseReturn(db, { transactionId: tx, returnedCents: 170_000, returnKey: 'bar:r2' }), { revoked: 0 });
+  await cancel(db, tx);
+  assert.equal((await recordCancellation(db, { transactionId: tx, now: NOW })).purchaseRevoked, 1);
+  assert.equal(await tickets(db, buyer), 2, 'the other purchase keeps its two tickets');
+  assert.deepEqual(await recordPurchaseReturn(db, { transactionId: tx, returnedCents: 320_000, returnKey: 'bar:r3' }), { skipped: 'not_a_purchase' });
+  assert.deepEqual(await auditBalances(db), []);
+  await db.close();
 });

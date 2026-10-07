@@ -178,6 +178,9 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
       await f.importDocs([payback('ret-a1', 'sale-a', 500)]);
       const [result] = await run(f);
       assert.equal(result.removed, 25);
+      assert.equal(result.returnedCents, 50_000, 'Halloween tickets are re-counted from everything returned so far');
+      assert.equal(result.returnKey, 'bar:ret-a1');
+      assert.ok(result.baseTransactionId);
       assert.equal(await balance(f.db, 1), 175);
       const sale = (await f.db.query("SELECT cash_paid_cents FROM transactions WHERE request_key='evotor:bar:sale-a'")).rows[0];
       assert.equal(Number(sale.cash_paid_cents), 150_000, 'the returned part leaves the 12-month spend');
@@ -186,15 +189,18 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
       await f.importDocs([payback('ret-a2', 'sale-a', 2000)]);
       const [result] = await run(f);
       assert.equal(result.removed, 75);
+      assert.equal(result.returnedCents, 250_000);
       assert.equal(await balance(f.db, 1), 100);
       await f.importDocs([payback('ret-a3', 'sale-a', 100)]);
       const [nothing] = await run(f);
       assert.equal(nothing.reason, 'nothing_to_reverse');
+      assert.equal(nothing.returnedCents, 260_000, 'a return with no bonus left still re-counts the tickets');
     });
     await t.test('full return cancels the original accrual', async () => {
       await f.importDocs([payback('ret-b', 'sale-b', 1000)]);
       const [result] = await run(f);
       assert.ok(result.cancelledTransactionId);
+      assert.equal(result.baseTransactionId, undefined, 'a cancelled purchase loses its tickets through the cancel hook');
       assert.equal(await balance(f.db, 2), 200);
       const original = (await f.db.query("SELECT status FROM transactions WHERE request_key='evotor:bar:sale-b'")).rows[0];
       assert.equal(original.status, 'cancelled');
@@ -208,6 +214,7 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
       const [result] = await run(f);
       assert.equal(result.removed, 50);
       assert.equal(result.shortfall, 150);
+      assert.equal(result.returnedCents, 400_000, 'a capped full return keeps the sale completed, so its tickets are re-counted');
       assert.equal(await balance(f.db, 2), 0);
     });
     await t.test('a return after an admin cancelled the bonus takes nothing and does not retry', async () => {
@@ -220,6 +227,7 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
       await f.importDocs([payback('ret-d1', 'sale-d', 500), payback('ret-d2', 'sale-d', 1000)]);
       const results = await run(f);
       assert.deepEqual(results.map((r) => r.reason), ['base_cancelled', 'base_cancelled']);
+      assert.deepEqual(results.map((r) => r.baseTransactionId), [undefined, undefined]);
       assert.equal(await balance(f.db, 1), before);
       assert.deepEqual(await run(f), []);
     });
