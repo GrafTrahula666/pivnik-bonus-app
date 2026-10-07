@@ -10009,6 +10009,17 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   color: #6b5a43;
 }
 
+/* Readable fields and text buttons on the white-gold sheets: the old dark field (#0e0b09)
+   kept dark text, and the light-gold text buttons were hard to read on white. */
+.text-input {
+  border-color: rgba(151, 112, 59, .22);
+  background: rgba(255, 255, 255, .92);
+  color: #2b241c;
+}
+.text-input::placeholder { color: #8f8476; }
+.text-btn,
+.text-link { color: #8a5a0c; }
+
 /* ============================================================
    Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
    app.js applyDesign() toggles html.theme-halloween. Every rule below is
@@ -10833,4 +10844,16 @@ html.theme-halloween .halloween-invite-sheet #halloweenCopyCode {
   border: 1px solid rgba(185,121,22,.55);
   background: #fffaf2;
   color: #2e210f;
+}
+
+/* Profile work modes: the bartender button was cream on a light fill, the admin one cream on gold */
+html.theme-halloween body .screen[data-screen="profile"] #profileStaffNav {
+  border: 1px solid rgba(233, 168, 59, .6) !important;
+  background: rgba(11, 10, 36, .86) !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween body .screen[data-screen="profile"] #profileAdminNav {
+  border: 1px solid rgba(255, 214, 140, .7) !important;
+  background: linear-gradient(145deg, #f4cf82, #b97916) !important;
+  color: #2e210f !important;
 }
