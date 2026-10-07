@@ -10859,7 +10859,7 @@ html.theme-halloween body .screen[data-screen="profile"] #profileAdminNav {
 }
 
 /* Visible actions and loading/error state for the Halloween ticket counters. */
-.halloween-controls { display: grid; gap: 10px; padding: 12px 16px; }
-.halloween-controls p { margin: 0; font-size: 13px; line-height: 1.45; }
-.halloween-controls button { min-height: 44px; white-space: normal; }
-.halloween-controls button[hidden] { display: none; }
+html.theme-halloween .halloween-controls { display: grid; gap: 10px; padding: 12px 16px; }
+html.theme-halloween .halloween-controls p { margin: 0; font-size: 13px; line-height: 1.45; }
+html.theme-halloween .halloween-controls button { min-height: 44px; white-space: normal; }
+html.theme-halloween .halloween-controls button[hidden] { display: none; }
