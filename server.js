@@ -1431,7 +1431,8 @@ async function getBroadcastRecipients(audience) {
      FROM users u
      WHERE u.merged_into_user_id IS NULL
        AND u.deleted_at IS NULL
-       -- Everyone except guests who turned promo messages off (owner's choice, 2026-10-07)
+       -- Everyone who accepted the rules, except guests who turned promo messages off (owner's choice, 2026-10-07)
+       AND u.terms_accepted_at IS NOT NULL
        AND (u.marketing_opt_in = TRUE OR u.marketing_opt_out_at IS NULL)
        AND ($1::text = 'all' OR u.role = 'client')
      ORDER BY u.created_at ASC
@@ -2972,10 +2973,11 @@ app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), asyn
     const recipients = await getBroadcastRecipients(audience);
     const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
     const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
-    // Everyone the audience covers, opted out or not, so the panel can say "N of M".
+    // Everyone in the audience who accepted the rules, opted out or not, so the panel can say "N of M".
     const active = await pool.query(
       `SELECT COUNT(*)::int AS n FROM users u
-       WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND ($1::text = 'all' OR u.role = 'client')`,
+       WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.terms_accepted_at IS NOT NULL
+         AND ($1::text = 'all' OR u.role = 'client')`,
       [audience]
     );
     res.json({

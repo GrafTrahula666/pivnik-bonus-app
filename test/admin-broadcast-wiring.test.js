@@ -63,13 +63,13 @@ test('VK broadcast secrets are environment-only', () => {
   assert.doesNotMatch(server, /VK_COMMUNITY_TOKEN\s*=\s*['"][^'"]+['"]/);
 });
 
-test('promotional broadcasts go to every guest except those who turned them off on the server', () => {
+test('promotional broadcasts go to every guest who accepted the rules, except those who turned them off on the server', () => {
   const server = read('server.js');
   const html = read('index.html');
   const app = read('app.js');
   assert.match(server, /marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE/);
   assert.match(server, /app\.post\('\/api\/me\/marketing-consent'/);
-  assert.match(server, /AND \(u\.marketing_opt_in = TRUE OR u\.marketing_opt_out_at IS NULL\)/);
+  assert.match(server, /AND u\.terms_accepted_at IS NOT NULL\s+AND \(u\.marketing_opt_in = TRUE OR u\.marketing_opt_out_at IS NULL\)/);
   assert.match(server, /MARKETING_CONSENT_VERSION/);
   assert.match(app, /promotions: false/);
   assert.match(app, /\/api\/me\/marketing-consent/);

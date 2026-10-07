@@ -3073,7 +3073,7 @@ async function loadBroadcastPreview() {
     : 'VK: токен сообщества не настроен';
   const truncated = preview.truncated ? ` · показан лимит ${fmt(preview.maxRecipients)}` : '';
   const consent = Number.isFinite(Number(preview.activeUsers))
-    ? `Получат: ${fmt(preview.totalUsers)} из ${fmt(preview.activeUsers)} (кроме отказавшихся от акций) · `
+    ? `Получат: ${fmt(preview.totalUsers)} из ${fmt(preview.activeUsers)} принявших правила (кроме отказавшихся от акций) · `
     : '';
   if (info) info.textContent = `${consent}${telegramState} · ${vkState}${truncated}`;
 
