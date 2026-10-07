@@ -1365,6 +1365,7 @@ async function sendVkCommunityMessage(vkId, text) {
     return { ok: false, status: 0, error: 'vk_not_configured' };
   }
   try {
+    const signal = AbortSignal.timeout(8_000);
     const form = new URLSearchParams({
       user_id: String(vkId),
       random_id: String(crypto.randomInt(1, 2_147_483_647)),
@@ -1375,9 +1376,12 @@ async function sendVkCommunityMessage(vkId, text) {
     const response = await fetch('https://api.vk.com/method/messages.send', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-      body: form
+      body: form,
+      signal
     });
     const payload = await response.json().catch(() => ({}));
+    // JSON parsing catches body aborts; keep an aborted send out of success.
+    signal.throwIfAborted();
     if (!response.ok || payload?.error) {
       const code = payload?.error?.error_code ? `vk_${payload.error.error_code}` : 'vk_send_failed';
       console.error('VK messages.send failed:', code);
