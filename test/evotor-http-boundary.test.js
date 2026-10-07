@@ -11,8 +11,9 @@ import { importEvotorPage } from '../pos/repository.js';
 import { sale } from './fixtures/evotor.js';
 
 // Actual checked-out auth functions and route composition, mounted on loopback.
-// Startup, getProfile's unrelated joins, provider HTTP and advisory locks are NOT
-// exercised here. SQL is real PostgreSQL/WASM, not mocked financial results.
+// Startup, getProfile's unrelated joins and real advisory locks are NOT exercised
+// here. SQL is real PostgreSQL/WASM, not mocked financial results. The sync tests
+// below use real HTTP against a loopback provider fixture, never live Evotor.
 const secret='local-fixture-secret-not-production';
 const config={enabled:true,token:'fixture-provider',storeId:'bar'};
 const terms='fixture-terms';
@@ -100,4 +101,74 @@ for(const kind of ['express','gateway'])test(`${kind}: real auth and POS routes 
   }
   assert.deepEqual((await pool.query('SELECT * FROM wallets')).rows,financialBefore);assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n,1);
  }finally{await app.close();await db.close();}
+});
+
+for(const kind of ['express','gateway'])test(`${kind}: malformed provider HTTP preserves cursor and sales; authorized recovery replays safely`,async()=>{
+ const {db,pool:basePool}=await fixture();
+ const query=async(sql,args)=>sql.includes('pg_try_advisory_lock')?{rows:[{locked:true}]}
+   :sql.includes('pg_advisory_unlock')?{rows:[]}:basePool.query(sql,args);
+ const pool={query,connect:async()=>({query,release(){}})};
+ const app=await mount(kind,pool);
+ const nativeFetch=globalThis.fetch;
+ let payload=null,providerCalls=0;
+ const providerCursors=[];
+ const provider=http.createServer((req,res)=>{
+   providerCalls++;
+   providerCursors.push(new URL(req.url,'http://fixture').searchParams.get('cursor'));
+   assert.equal(req.headers.authorization,'Bearer fixture-provider');
+   res.setHeader('content-type','application/json');res.end(JSON.stringify(payload));
+ });
+ await new Promise(resolve=>provider.listen(0,'127.0.0.1',resolve));
+ const providerBase=`http://127.0.0.1:${provider.address().port}`;
+ globalThis.fetch=(url,options)=>{
+   const target=new URL(String(url));
+   if(target.origin==='https://api.evotor.ru')return nativeFetch(providerBase+target.pathname+target.search,options);
+   return nativeFetch(url,options);
+ };
+ const request=async(credential,body)=>{
+   const response=await nativeFetch(app.base+'/api/admin/pos/sync',{method:'POST',headers:{authorization:credential,'content-type':'application/json'},body:JSON.stringify(body)});
+   return {status:response.status,body:await response.json()};
+ };
+ try{
+   await query("UPDATE pos_sync_state SET cursor='resume-page' WHERE store_id='bar'");
+   const documents=(await query('SELECT * FROM pos_documents ORDER BY document_id')).rows;
+   const progress=(await query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows;
+   const wallets=(await query('SELECT * FROM wallets')).rows;
+   const journal=(await query('SELECT * FROM transactions')).rows;
+   assert.equal((await request('Bearer forged',{})).status,401);
+   assert.equal((await request('Bearer '+token(4),{})).status,403);
+   assert.equal((await request('Bearer '+token(3),{storeId:'foreign'})).status,403);
+   assert.equal((await request('Bearer '+token(3),{storeId:42})).status,400);
+   assert.equal(providerCalls,0);
+   for(const invalid of [null,{items:[],paging:[]}]){
+     payload=invalid;
+     const failed=await request('Bearer '+token(3),{});
+     assert.equal(failed.status,502);
+     assert.ok(JSON.stringify(failed.body).includes('invalid_response'));
+     assert.deepEqual((await query('SELECT * FROM pos_documents ORDER BY document_id')).rows,documents);
+     assert.deepEqual((await query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows,progress);
+     const response=await nativeFetch(app.base+'/api/admin/pos/dashboard?period=custom&from=2026-10-02&to=2026-10-02',{headers:{authorization:'Bearer '+token(3)}});
+     assert.equal(response.status,200);
+     const dashboard=await response.json();
+     assert.equal(dashboard.connection.errorCode,'invalid_response');
+     assert.equal(dashboard.all.salesCents,'60');
+   }
+   payload={items:[sale()],paging:{}};
+   for(let attempt=0;attempt<2;attempt++){
+     const recovered=await request('Bearer '+token(3),{});
+     assert.equal(recovered.status,200);assert.equal(recovered.body.complete,true);
+   }
+   assert.equal(providerCalls,4);
+   assert.deepEqual(providerCursors,['resume-page','resume-page','resume-page',null]);
+   assert.equal((await query('SELECT COUNT(*)::int AS n FROM pos_documents')).rows[0].n,2);
+   const state=(await query('SELECT cursor,last_error_code FROM pos_sync_state')).rows[0];
+   assert.equal(state.cursor,null);assert.equal(state.last_error_code,null);
+   assert.deepEqual((await query('SELECT * FROM wallets')).rows,wallets);
+   assert.deepEqual((await query('SELECT * FROM transactions')).rows,journal);
+ }finally{
+   globalThis.fetch=nativeFetch;
+   provider.closeAllConnections();
+   await new Promise(resolve=>provider.close(resolve));
+   await app.close();await db.close();
+ }
 });

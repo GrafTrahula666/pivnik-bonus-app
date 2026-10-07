@@ -56,3 +56,29 @@ labels provider errors correctly while retaining confirmed sales.
 The requested knowledge-base DOCX was reviewed earlier; starter-pack.md remains
 unavailable in the supplied files. No production DB/data, messages, migrations,
 merge or deployment were touched.
+
+## Follow-up: provider HTTP and both POS route boundaries
+
+The existing evotor-http-boundary verifier now exercises sync through the actual
+extracted auth and POS route registrations of both server.js and universal-server.js.
+Twenty additional client HTTP requests cover forged auth, viewer write denial,
+foreign store denial, invalid store input, malformed null/array-paging provider
+responses, reading preserved sales, recovery and a repeated successful scan.
+Denied/invalid requests make zero provider calls.
+
+The real shared reader receives real fetch responses from a local HTTP provider
+fixture: eight requests across both runtimes. Only its external origin is redirected
+to loopback; its method, path, cursor and synthetic authorization header are preserved.
+The first three calls per runtime retain resume-page; the next scan starts without
+a cursor. Failures return 502 invalid_response; documents and saved scan progress
+remain unchanged; the dashboard still reports the two existing sales (60 cents).
+Recovery and repeat keep two documents, and wallet/journal snapshots are unchanged.
+
+This uses the existing reduced PGlite schema and adapted advisory-lock functions.
+It does not prove complete process startup, actual getProfile joins, concurrent
+network PostgreSQL, live Evotor, or browser UX. No product behavior was changed
+in this follow-up; test coverage and evidence were extended for the same fix.
+
+Follow-up checks: materialize twice, 471 tracked files byte-identical; node --test
+514/514; npm run check passed; npm audit zero vulnerabilities. Materialization-only
+changes restored before commit. UI and HTTP route implementations unchanged.
