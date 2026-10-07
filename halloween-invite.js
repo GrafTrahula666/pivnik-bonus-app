@@ -72,7 +72,16 @@ export function deriveInviteCode(secret, userId, length = 8) {
 
 /** Accepts "inv_ABCD2345", "abcd2345" etc. Returns the canonical upper-case code or null. */
 export function normalizeInviteCode(raw) {
-  const text = String(raw ?? '').trim().replace(/^inv_/i, '').toUpperCase();
+  let text = String(raw ?? '').trim();
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const url = new URL(text);
+      if (!['t.me', 'vk.com', 'vk.ru', 'm.vk.com'].includes(url.hostname)) return null;
+      text = url.hostname === 't.me' ? (url.searchParams.get('startapp') || '') : url.hash.slice(1);
+      if (!/^inv_/i.test(text)) return null;
+    } catch { return null; }
+  }
+  text = text.replace(/^inv_/i, '').toUpperCase();
   return /^[A-Z2-7]{8,16}$/.test(text) ? text : null;
 }
 
@@ -127,6 +136,7 @@ export function inviteLinks(code, config = {}) {
   const bot = String(config.telegramBotUsername || '');
   const shortName = String(config.telegramMiniAppShortName || '');
   const vkAppId = String(config.vkAppId || '');
+  if (!code) return { telegram: null, vk: null };
   const telegram = /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(bot) && /^[A-Za-z0-9_]{3,64}$/.test(shortName)
     ? `https://t.me/${bot}/${shortName}?startapp=inv_${code}`
     : null;
@@ -183,34 +193,52 @@ async function codeEntryState(client, uid, now) {
   const invitedBy = (await client.query('SELECT 1 FROM halloween_invite WHERE invitee_id = $1', [uid])).rows.length > 0;
   const until = user?.until ? new Date(user.until) : null;
   const inWindow = Boolean(until && until.getTime() > new Date(now).getTime());
-  let canEnterCode = inWindow && !invitedBy;
-  if (canEnterCode) {
+  let entryReason = invitedBy ? 'already_attached' : !user ? 'user_not_found' : !inWindow ? 'window_expired' : null;
+  if (!entryReason) {
     const bought = await client.query(`SELECT 1 FROM transactions WHERE client_id = $1 AND ${PURCHASE_SQL} LIMIT 1`, [uid]);
-    canEnterCode = !bought.rows.length && (await drawIsOpen(client, now));
+    if (bought.rows.length) entryReason = 'has_purchase';
+    else if (!(await drawIsOpen(client, now))) entryReason = 'draw_closed';
   }
-  return { canEnterCode, enterUntil: canEnterCode ? until.toISOString() : null, invitedBy };
+  const canEnterCode = !entryReason;
+  return { canEnterCode, enterUntil: canEnterCode ? until.toISOString() : null, invitedBy, entryReason };
 }
 
-/** GET /api/halloween/summary payload. Never throws for a missing migration. Only counts and time, never odds. */
+/** GET /api/halloween/summary. Missing setup is explicitly unavailable, never a fabricated zero or invite code. */
 export async function getInviteSummary(client, { userId, secret, links = inviteLinkConfigFromEnv(), now = new Date() }) {
   const uid = assertId(userId, 'userId');
-  const invite = (code, weekCount, entry = { canEnterCode: false, enterUntil: null, invitedBy: false }) => ({
+  const invite = (code, weekCount, entry = { canEnterCode: false, enterUntil: null, invitedBy: false, entryReason: 'unavailable' }) => ({
     code, weekCount, weekLimit: INVITE_WEEK_LIMIT, bonusPerFriend: INVITE_BONUS, links: inviteLinks(code, links), ...entry
+  });
+  const unavailable = () => ({
+    available: false, tickets: null, status: 'unavailable', closesAt: DEFAULT_CLOSES_AT,
+    invite: invite(null, null)
   });
   try {
     const base = await getHalloweenSummary(client, uid);
+    if (!base.closesAt) return unavailable();
     const code = await ensureInviteCode(client, { userId: uid, secret });
     const weekCount = await inviteWeekCount(client, uid, weekKey(now));
     const entry = await codeEntryState(client, uid, now);
+    const counts = (await client.query(
+      `SELECT COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+              COUNT(*) FILTER (WHERE status = 'qualified')::int AS qualified,
+              COUNT(*) FILTER (WHERE status = 'capped')::int AS capped,
+              COUNT(*) FILTER (WHERE status = 'revoked')::int AS revoked
+       FROM halloween_invite WHERE inviter_id = $1`, [uid]
+    )).rows[0];
     return {
+      available: true,
       tickets: base.tickets,
       status: base.status,
       closesAt: base.closesAt || DEFAULT_CLOSES_AT,
-      invite: invite(code, weekCount, entry)
+      invite: { ...invite(code, weekCount, entry),
+        pendingCount: Number(counts.pending), qualifiedCount: Number(counts.qualified),
+        cappedCount: Number(counts.capped), revokedCount: Number(counts.revoked)
+      }
     };
   } catch (error) {
     if (!isMissingHalloweenSchema(error)) throw error;
-    return { tickets: 0, status: 'open', closesAt: DEFAULT_CLOSES_AT, invite: invite(deriveInviteCode(secret, uid), 0) };
+    return unavailable();
   }
 }
 

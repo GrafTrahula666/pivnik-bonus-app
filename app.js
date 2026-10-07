@@ -1120,31 +1120,45 @@ function halloweenTimerText(closesAt) {
   return days > 0 ? `${days}д ${hours}ч` : `${hours}ч ${minutes}м`;
 }
 let halloweenInvite = null;
+let halloweenSummary = null;
+let halloweenLoadState = 'loading';
+let halloweenSummaryRequest = null;
+let halloweenClaimPending = false;
 function renderHalloween(summary) {
+  if (summary) {
+    halloweenSummary = summary;
+    halloweenInvite = summary.invite || null;
+    halloweenLoadState = summary.available === false ? 'unavailable' :
+      Number.isSafeInteger(summary.tickets) && summary.tickets >= 0 ? 'ready' : 'error';
+  }
+  const ready = halloweenLoadState === 'ready';
   const tickets = $('#halloweenTickets');
   const timer = $('#halloweenTimer');
   const invites = $('#halloweenInviteCount');
-  if (tickets) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
-  if (summary?.invite) halloweenInvite = summary.invite;
+  if (tickets) tickets.textContent = ready ? String(halloweenSummary.tickets) : '—';
   const limit = Number(halloweenInvite?.weekLimit) || 3;
-  if (invites) invites.textContent = `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}`;
-  const closesAt = summary?.closesAt || HALLOWEEN_DRAW_AT;
+  if (invites) invites.textContent = ready ? `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}` : '—';
+  const status = $('#halloweenStatus');
+  if (status) status.textContent = ready ? 'Билеты за покупки: 1 за каждую полную 1 000 ₽ в чеке.' :
+    halloweenLoadState === 'loading' ? 'Проверяем билеты…' :
+    halloweenLoadState === 'unavailable' ? 'Начисление билетов временно недоступно. Обратитесь к сотруднику бара.' :
+    'Не удалось проверить билеты. Повторите загрузку.';
+  const retry = $('#halloweenRetry');
+  if (retry) { retry.hidden = ready; retry.disabled = halloweenLoadState === 'loading'; }
+  const closesAt = halloweenSummary?.closesAt || HALLOWEEN_DRAW_AT;
   const tick = () => { if (timer) timer.textContent = halloweenTimerText(closesAt); };
   tick();
+  renderHalloweenInviteSheet();
   clearInterval(halloweenTimerId);
   halloweenTimerId = setInterval(() => {
     if ($('.screen.active')?.dataset.screen !== 'halloween') { clearInterval(halloweenTimerId); return; }
     tick();
+    if (document.visibilityState === 'visible') void refreshHalloweenSummary();
   }, 30000);
 }
 async function openHalloweenPage() {
   switchScreen('halloween');
-  renderHalloween(null);
-  try {
-    renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }));
-  } catch {
-    // The raffle API is optional until its migration is applied; the screen keeps working with zero tickets.
-  }
+  await refreshHalloweenSummary();
 }
 
 // "Пригласи друга": the card opens a sheet with the user's own code (to give to a friend) and, during the user's own first
@@ -1160,33 +1174,64 @@ const HALLOWEEN_CLAIM_MESSAGES = {
   not_new_account: 'Код можно ввести только в первые сутки после регистрации',
   has_purchase: 'Код вводится до первой покупки',
   returning_user: 'Код можно ввести только при первой регистрации',
-  draw_closed: 'Ночь Котлов уже прошла'
+  draw_closed: 'Приём приглашений уже завершён',
+  user_not_found: 'Не удалось проверить аккаунт. Повторите загрузку.',
+  unavailable: 'Приглашения временно недоступны. Обратитесь к сотруднику бара.'
 };
 async function refreshHalloweenSummary() {
-  try { renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 })); } catch (_) {}
+  if (halloweenSummaryRequest) return halloweenSummaryRequest;
+  halloweenSummaryRequest = (async () => {
+    halloweenLoadState = 'loading';
+    renderHalloween(null);
+    try {
+      renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }));
+      return halloweenLoadState === 'ready';
+    } catch (_) {
+      halloweenLoadState = 'error';
+      renderHalloween(null);
+      return false;
+    }
+  })();
+  try { return await halloweenSummaryRequest; }
+  finally { halloweenSummaryRequest = null; }
 }
 function renderHalloweenInviteSheet() {
   const invite = halloweenInvite || {};
+  const ready = halloweenLoadState === 'ready';
   const limit = Number(invite.weekLimit) || 3;
   const count = Math.min(limit, Math.max(0, Number(invite.weekCount) || 0));
   const code = $('#halloweenMyCode');
-  if (code) code.textContent = invite.code || '—';
+  if (code) code.textContent = ready ? invite.code || '—' : '—';
+  for (const id of ['#halloweenCopyCode', '#halloweenShareCode']) {
+    const button = $(id);
+    if (button) button.disabled = !ready || !invite.code;
+  }
   const bonus = $('#halloweenInviteBonus');
   if (bonus && Number(invite.bonusPerFriend) > 0) bonus.textContent = String(invite.bonusPerFriend);
   const progress = $('#halloweenInviteProgress');
-  if (progress) progress.textContent = `Друзей на этой неделе: ${count} из ${limit}`;
+  if (progress) progress.textContent = ready ?
+    `Наград на этой неделе: ${count} из ${limit}. Ждём первую покупку: ${Number(invite.pendingCount) || 0}. Всего получили награду: ${Number(invite.qualifiedCount) || 0}.` :
+    halloweenLoadState === 'loading' ? 'Проверяем приглашения…' : 'Не удалось получить данные приглашений';
   const enter = $('#halloweenEnterBlock');
-  if (enter) enter.hidden = !invite.canEnterCode;
+  if (enter) enter.hidden = false;
+  const canEnter = ready && invite.canEnterCode;
+  for (const id of ['#halloweenCodeInput', '#halloweenApplyCode']) {
+    const control = $(id);
+    if (control) control.disabled = !canEnter || halloweenClaimPending;
+  }
   const title = $('#halloweenEnterTitle');
-  if (title && invite.enterUntil) {
-    const until = new Date(invite.enterUntil);
-    if (Number.isFinite(until.getTime())) {
-      title.textContent = `Есть код от друга? Ввести можно до ${until.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+  if (title) {
+    title.textContent = !ready ? (halloweenLoadState === 'loading' ? 'Проверяем возможность ввода кода…' : HALLOWEEN_CLAIM_MESSAGES.unavailable) :
+      !canEnter ? (HALLOWEEN_CLAIM_MESSAGES[invite.entryReason] || 'Ввод кода недоступен') : 'Вставь код или ссылку приглашения друга';
+    if (canEnter && invite.enterUntil) {
+      const until = new Date(invite.enterUntil);
+      if (Number.isFinite(until.getTime())) title.textContent += ` до ${until.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
     }
   }
   const note = $('#halloweenInvitedNote');
-  if (note) note.hidden = !invite.invitedBy;
+  if (note) note.hidden = !ready || !invite.invitedBy;
 }
+
 async function openHalloweenInvite() {
   renderHalloweenInviteSheet();
   openModal('halloweenInviteModal');
@@ -1195,16 +1240,16 @@ async function openHalloweenInvite() {
 }
 async function copyHalloweenCode() {
   const code = halloweenInvite?.code;
-  if (!code) { toast('Код появится через пару секунд'); return; }
+  if (halloweenLoadState !== 'ready' || !code) { toast('Сначала загрузите данные приглашений'); return; }
   if (IS_VK && window.vkBridge?.send) {
     try { await window.vkBridge.send('VKWebAppCopyText', { text: code }); toast('Код скопирован'); return; } catch (_) {}
   }
   try { await navigator.clipboard.writeText(code); toast('Код скопирован'); } catch (_) { toast(`Твой код: ${code}`); }
 }
 async function shareHalloweenInvite() {
-  if (!halloweenInvite?.code) await refreshHalloweenSummary();
+  if (halloweenLoadState !== 'ready' || !halloweenInvite?.code) await refreshHalloweenSummary();
   const code = halloweenInvite?.code;
-  if (!code) { toast('Код появится через пару секунд'); return; }
+  if (halloweenLoadState !== 'ready' || !code) { toast('Сначала загрузите данные приглашений'); return; }
   const text = `${HALLOWEEN_INVITE_TEXT}: ${code}`;
   const link = IS_VK ? halloweenInvite?.links?.vk : halloweenInvite?.links?.telegram;
   if (link && IS_VK && window.vkBridge?.send) {
@@ -1226,15 +1271,16 @@ async function shareHalloweenInvite() {
 async function applyHalloweenCode() {
   const input = $('#halloweenCodeInput');
   const hint = $('#halloweenEnterHint');
-  const button = $('#halloweenApplyCode');
+  if (halloweenClaimPending || halloweenLoadState !== 'ready' || !halloweenInvite?.canEnterCode) return;
   const code = String(input?.value || '').trim();
   if (!code) { if (hint) hint.textContent = 'Введи код друга'; return; }
-  if (button) button.disabled = true;
+  halloweenClaimPending = true;
+  renderHalloweenInviteSheet();
   try {
     const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
     if (result?.attached) {
       if (hint) hint.textContent = '';
-      toast('Код принят! После первой покупки другу придёт билет');
+      toast('Код принят! После твоей первой покупки пригласивший получит билет и 100 бонусов');
       if (input) input.value = '';
     } else if (hint) {
       hint.textContent = HALLOWEEN_CLAIM_MESSAGES[result?.reason] || 'Не получилось, попробуй чуть позже';
@@ -1242,7 +1288,7 @@ async function applyHalloweenCode() {
   } catch (_) {
     if (hint) hint.textContent = 'Не получилось, попробуй чуть позже';
   } finally {
-    if (button) button.disabled = false;
+    halloweenClaimPending = false;
   }
   await refreshHalloweenSummary();
   renderHalloweenInviteSheet();
@@ -3705,6 +3751,11 @@ $('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#halloweenInvite')?.addEventListener('click', () => { void openHalloweenInvite(); });
+$('#halloweenReferralOpen')?.addEventListener('click', () => { void openHalloweenInvite(); });
+$('#halloweenRetry')?.addEventListener('click', () => { void refreshHalloweenSummary(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && $('.screen.active')?.dataset.screen === 'halloween') void refreshHalloweenSummary();
+});
 $('#halloweenCopyCode')?.addEventListener('click', () => { void copyHalloweenCode(); });
 $('#halloweenShareCode')?.addEventListener('click', () => { void shareHalloweenInvite(); });
 $('#halloweenApplyCode')?.addEventListener('click', () => { void applyHalloweenCode(); });
