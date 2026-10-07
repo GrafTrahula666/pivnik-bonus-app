@@ -126,6 +126,9 @@ async function reverseReturn(db, doc, ledger) {
     FOR UPDATE OF t`, [doc.store_id, baseId])).rows[0];
   // An admin already cancelled the sale's bonus: there is nothing left to take back.
   if (base.sale_status !== 'completed') return skip(db, doc, 'reverse', base.client_id, 'base_cancelled', baseId);
+  // The sale stays a purchase after a partial or capped return: the caller re-counts its Halloween tickets.
+  const keepTickets = async (result) => ({ ...result, baseTransactionId: String(base.transaction_id),
+    returnKey: `${doc.store_id}:${doc.document_id}`, returnedCents: await returnedSoFar(db, doc.store_id, baseId) });
   const earned = Number(base.bonus_delta);
   const baseAmount = Number(base.amount_cents);
   const returned = Number(doc.amount_cents);
@@ -137,10 +140,10 @@ async function reverseReturn(db, doc, ledger) {
     WHERE id=$2 AND status='completed'`, [returned, base.transaction_id]);
   if (!(due > 0)) {
     await reduceSpend();
-    return skip(db, doc, 'reverse', base.client_id, 'nothing_to_reverse', baseId);
+    return keepTickets(await skip(db, doc, 'reverse', base.client_id, 'nothing_to_reverse', baseId));
   }
   const { user, wallet } = await lockedClient(db, base.client_id);
-  if (!user || !wallet) return skip(db, doc, 'reverse', base.client_id, 'client_unavailable', baseId);
+  if (!user || !wallet) return keepTickets(await skip(db, doc, 'reverse', base.client_id, 'client_unavailable', baseId));
   const number = doc.snapshot?.number ? ` №${String(doc.snapshot.number).slice(0, 40)}` : '';
   const reason = `Возврат по кассе Эвотор: чек${number}`;
 
@@ -173,7 +176,14 @@ async function reverseReturn(db, doc, ledger) {
   }
   await db.query(`INSERT INTO pos_bonus_accruals(source,store_id,document_id,kind,client_id,transaction_id,base_document_id,bonus_delta,shortfall,status)
     VALUES('evotor',$1,$2,'reverse',$3,$4,$5,$6,$7,'applied')`, [doc.store_id, doc.document_id, user.id, transactionId, baseId, -removed, shortfall]);
-  return { documentId: doc.document_id, kind: 'reverse', status: 'applied', removed, shortfall, balanceAfter, user };
+  return keepTickets({ documentId: doc.document_id, kind: 'reverse', status: 'applied', removed, shortfall, balanceAfter, user });
+}
+
+/** Everything returned so far against one sale, this return included (it is already recorded). */
+async function returnedSoFar(db, storeId, baseDocumentId) {
+  return Number((await db.query(`SELECT COALESCE(SUM(d.amount_cents),0)::bigint AS n FROM pos_bonus_accruals a
+    JOIN pos_documents d ON d.source=a.source AND d.store_id=a.store_id AND d.document_id=a.document_id
+    WHERE a.source='evotor' AND a.store_id=$1 AND a.base_document_id=$2 AND a.kind='reverse'`, [storeId, baseDocumentId])).rows[0].n);
 }
 
 /**
@@ -205,6 +215,9 @@ export async function processPosBonuses(pool, { storeId, ledger, limit = 50 }) {
     results.push(result);
     if (result.status === 'applied') {
       try { await ledger.afterCommit(result); } catch (error) { console.warn('POS bonus notification failed:', error.message); }
+    }
+    if (result.baseTransactionId && ledger.afterReturn) {
+      try { await ledger.afterReturn(result); } catch (error) { console.warn('POS return tickets failed:', error.message); }
     }
   }
   return results;
