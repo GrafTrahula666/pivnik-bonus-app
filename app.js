@@ -2571,7 +2571,8 @@ async function renderNotificationPreferences() {
   if ($('#notifyPromotions')) $('#notifyPromotions').checked = false;
 
   const config = await api('/api/me/messaging-config', { retries: 0, timeoutMs: 6000 });
-  if ($('#notifyPromotions')) $('#notifyPromotions').checked = config?.marketingOptIn === true;
+  // Promo messages go to every guest who has not turned them off (owner's choice, 2026-10-07).
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = config?.marketingOptIn === true || !config?.marketingOptOutAt;
 }
 
 async function saveNotificationPreferences() {
@@ -3071,7 +3072,10 @@ async function loadBroadcastPreview() {
     ? `VK: ${fmt(preview.vkRecipients)}`
     : 'VK: токен сообщества не настроен';
   const truncated = preview.truncated ? ` · показан лимит ${fmt(preview.maxRecipients)}` : '';
-  if (info) info.textContent = `${telegramState} · ${vkState} · аккаунтов в выборке: ${fmt(preview.totalUsers)}${truncated}`;
+  const consent = Number.isFinite(Number(preview.activeUsers))
+    ? `Получат: ${fmt(preview.totalUsers)} из ${fmt(preview.activeUsers)} (кроме отказавшихся от акций) · `
+    : '';
+  if (info) info.textContent = `${consent}${telegramState} · ${vkState}${truncated}`;
 
   const count = selectedBroadcastRecipientCount(preview, channel);
   const channelConfigured = channel === 'telegram'
