@@ -547,11 +547,15 @@ async function patchUniversalServer() {
   const current = rows.find((row) => String(row.id) === String(canonical)) || null;`,
     'платформы участников Лиги'
   );
+  // The previous-month top ends with the same row mapper but has no platformMap,
+  // so anchor on the monthly leaderboard's closing «}),\n    me:» to patch the right one.
   source = replaceRequired(
     source,
     `        profileFrame: showAvatar ? profileFrameFromRow(row) : 'none',
         showAvatar
-      };`,
+      };
+    }),
+    me: current`,
     `        profileFrame: showAvatar ? profileFrameFromRow(row) : 'none',
         showAvatar,
         platforms: platformMap.get(String(row.id)) || [],
@@ -562,7 +566,9 @@ async function patchUniversalServer() {
           if (platforms.includes('telegram')) return 'Telegram';
           return 'Платформа не определена';
         })()
-      };`,
+      };
+    }),
+    me: current`,
     'platformLabel участника Лиги'
   );
 

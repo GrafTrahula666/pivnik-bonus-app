@@ -3551,8 +3551,10 @@ export const server = http.createServer(async (req, res) => {
 
     return await proxyRequest(req, res);
   } catch (error) {
-    console.error('Universal server error:', error?.code || error?.message || 'unknown');
-    return sendJson(res, Number(error.statusCode || 500), {
+    const status = Number(error.statusCode || 500);
+    // A 4xx here is an ordinary refusal (not signed in, rules not accepted), not a server fault.
+    if (status >= 500) console.error('Universal server error:', error?.code || error?.message || 'unknown');
+    return sendJson(res, status, {
       error: error.statusCode ? error.message : 'Внутренняя ошибка сервера.'
     });
   }

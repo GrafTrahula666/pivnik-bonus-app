@@ -110,3 +110,12 @@ test('RED COSMOS database migration is additive and protects permanent ownership
   assert.match(prepare, /CREATE TABLE .* AS TABLE public/);
   assert.match(prepare, /RED COSMOS DB backup verification failed/);
 });
+
+test('every gateway function that reads platformMap declares it itself', async () => {
+  const gateway = await text('universal-server.js');
+  const chunks = gateway.split(/\n(?=(?:async )?function )/);
+  const broken = chunks
+    .filter((chunk) => chunk.includes('platformMap.get(') && !/\b(?:const|let) platformMap\b/.test(chunk))
+    .map((chunk) => chunk.split('\n', 1)[0]);
+  assert.deepEqual(broken, [], 'platformMap is used where it is not defined (it threw on every Лига request)');
+});
