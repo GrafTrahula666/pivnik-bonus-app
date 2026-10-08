@@ -52,7 +52,8 @@ export function PhaseCTopbar({
   role:AdminRole;adminName:string;mode:AppMode;venues:ApiVenue[];venueId:string;period:Period;compare:boolean;
   onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void
 }){
-  return <header className="topbar">
+  return <>
+    <header className="topbar">
     <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
     <div className="tenant-select-wrap">
       <select className="tenant-select" value={venueId} onChange={e=>onVenue(e.target.value)} disabled={mode==='demo'}>
@@ -77,7 +78,14 @@ export function PhaseCTopbar({
       <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{role==='SUPER_ADMIN'?'Главный администратор':'Владелец'}</span></div><ChevronDown size={14}/></button>
       <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>Выйти</button></div>
     </div>
-  </header>
+    </header>
+    <div className="mobile-period-bar">
+      <label htmlFor="business-mobile-period">Период аналитики</label>
+      <select id="business-mobile-period" value={period} onChange={e=>onPeriod(e.target.value as Period)}>
+        {periods.map(p=><option key={p} value={p}>{p}</option>)}
+      </select>
+    </div>
+  </>
 }
 
 export function TenantDangerContext({role,mode,venue,onBack}:{role:AdminRole;mode:AppMode;venue:ApiVenue|null;onBack:()=>void}){
