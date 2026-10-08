@@ -10020,6 +10020,40 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 .text-btn,
 .text-link { color: #8a5a0c; }
 
+/* Achievements: minimalist line icons and visible progress */
+.ach-icon { display: block; width: 62%; height: 62%; }
+.achievement-tile .achievement-progress { height: 6px; background: rgba(133, 100, 54, .2); }
+.achievement-tile.locked .achievement-progress > i { opacity: .9; }
+.achievement-tile.locked .achievement-state { color: #8a5a0c; font-weight: 800; font-size: 10px; }
+.achievement-tile small { font-size: 10px; }
+.achievement-next {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(181, 121, 24, .34);
+  border-radius: 18px;
+  background: linear-gradient(160deg, #fffef9, #f6e8cb);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98), 0 8px 20px rgba(130, 84, 18, .1);
+}
+.achievement-next-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(177, 119, 25, .26);
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(235, 218, 188, .94));
+  color: #9b650f;
+}
+.achievement-next b { display: block; margin: 1px 0 6px; color: #2a231b; font-size: 14px; }
+.achievement-next small { display: block; color: #786e62; font-size: 10px; line-height: 1.3; }
+.achievement-next .achievement-progress { height: 6px; margin-bottom: 5px; background: rgba(133, 100, 54, .2); }
+.achievement-next .achievement-progress i { background: linear-gradient(90deg, #b47a20, #e5be70); }
+.achievement-next > strong { color: #9a650f; font-size: 17px; font-weight: 800; }
+
 /* ============================================================
    Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
    app.js applyDesign() toggles html.theme-halloween. Every rule below is

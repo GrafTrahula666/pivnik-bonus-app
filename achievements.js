@@ -249,6 +249,7 @@ function publicDefinition(definition, current = 0) {
     description: definition.description,
     rarity: definition.rarity,
     icon: definition.icon,
+    unit: definition.unit,
     rewardBonus: number(definition.rewardBonus),
     rewardBeerMl: number(definition.rewardBeerMl),
     rewardBeerLiters: litersFromMl(definition.rewardBeerMl),
