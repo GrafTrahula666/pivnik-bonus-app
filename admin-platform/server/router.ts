@@ -46,6 +46,7 @@ import {
   getPivnikManagedWheelRead,
 } from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
+import { evotorPeriod,getEvotorReport } from './evotor-read.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -176,6 +177,16 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     }
 
     if(!isMethod(req,'GET')) throw new HttpError(405,'METHOD_NOT_ALLOWED','Эта операция не поддерживается.')
+    if(resource==='pos'&&!child){
+      const db=await readPool.connect()
+      try{
+        await db.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+        const report=await getEvotorReport(db,scope,evotorPeriod(url))
+        await db.query('COMMIT')
+        json(res,200,report);return true
+      }catch(error){await db.query('ROLLBACK');throw error}
+      finally{db.release()}
+    }
     if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
     if(resource==='clients'&&child){json(res,200,await getClientDetail(scope,child));return true}
     if(resource==='clients'){json(res,200,await getClients(scope,url));return true}

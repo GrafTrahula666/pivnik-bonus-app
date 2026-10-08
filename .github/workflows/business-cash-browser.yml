@@ -1,0 +1,37 @@
+name: Business cash dashboard browser check
+
+on:
+  pull_request:
+    paths: ['admin-platform/**', 'pos/**', '.github/workflows/business-cash-browser.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: business-cash-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - run: npm ci
+        working-directory: admin-platform
+      - run: npx playwright install --with-deps chromium
+        working-directory: admin-platform
+      - name: Cash dashboard on desktop and mobile (fixtures only, no production APIs)
+        run: npx playwright test --config playwright.evotor.config.ts
+        working-directory: admin-platform
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: business-cash-browser-evidence
+          path: admin-platform/test-results/
+          if-no-files-found: ignore

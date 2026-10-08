@@ -17,7 +17,7 @@ test('diagnose 1366 horizontal overflow on venue dashboard',async({page})=>{
   await expect(option).toHaveCount(1)
   await select.selectOption(await option.getAttribute('value')||'')
   await page.locator('.sidebar').getByRole('button',{name:'Обзор',exact:true}).click()
-  await expect(page.getByRole('heading',{name:'ПИВНИК TEST VENUE',exact:true}).first()).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Все продажи кассы',exact:true}).first()).toBeVisible()
   await expect(page.locator('.kpi-grid')).toBeVisible()
 
   const diag=await page.evaluate(()=>{
