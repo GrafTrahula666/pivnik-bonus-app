@@ -34,10 +34,10 @@ export function ProductionCRM({venue,session}:{venue:ApiVenue;session:AdminSessi
     <PageHead eyebrow="БАЗА КЛИЕНТОВ" title="Клиенты" sub={data?`${rub.format(data.total)} клиентов в выбранном заведении`:'Загрузка клиентской базы'}
       actions={<><LivePill/><WriteGatePill enabled={session.capabilities.productionBonusWrites} label="БОНУСЫ"/></>}/>
     <div className="toolbar card">
-      <label className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Имя, ник или ID клиента…"/></label>
+      <label className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Имя, @ник или ID клиента…"/></label>
       <div className="toolbar-filters"><select value={sort} onChange={e=>setSort(e.target.value)}>
         <option value="lastActivity">Последняя активность</option><option value="spend">Сумма покупок</option><option value="balance">Баланс</option><option value="created">Регистрация</option>
-      </select><div className="live-source-pill"><span/><Database/>ДАННЫЕ ЗАВЕДЕНИЯ</div></div>
+      </select><div className="live-source-pill"><span/><Database/>АКТУАЛЬНЫЕ ДАННЫЕ</div></div>
     </div>
     {error&&<ErrorCard error={error} onRetry={reload}/>}
     {loading&&!data&&<LoadingCard/>}
@@ -78,8 +78,10 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
           <Detail label="Баланс" value={rub.format(client.balance)}/><Detail label="Сумма покупок" value={`₽ ${rub.format(Math.round(client.lifetimeSpend))}`}/>
           <Detail label="Средний чек" value={client.averageCheck===null?'Нет данных':`₽ ${rub.format(Math.round(client.averageCheck))}`}/>
           <Detail label="Операций" value={String(client.operationCount)}/><Detail label="Начислено" value={rub.format(client.bonusEarned)}/><Detail label="Списано" value={rub.format(client.bonusRedeemed)}/>
+          <Detail label="Последняя активность" value={dt(client.lastActivityAt)}/><Detail label="Регистрация" value={dt(client.registeredAt)}/><Detail label="Канал" value={client.platform||'—'}/>
         </div>
-        <h3 className="section-title">Профили</h3>
+        <SourceNote>Баланс показывает фактическое количество бонусов клиента. Персональные подарки сохраняются на счёте, но не искажают бизнес-KPI обзора.</SourceNote>
+        <h3 className="section-title">Каналы и профили</h3>
         <div className="identity-list">{client.identities.map(i=><div key={`${i.provider}:${i.provider_user_id}`}><PlatformTag value={i.provider==='vk'?'VK':'TG'}/><b>{i.provider_username?`@${i.provider_username}`:i.provider_user_id}</b><span>{i.provider_user_id}</span></div>)}</div>
         <h3 className="section-title">Лояльность</h3>
         <div className="progress-card"><div><LevelBadge level={client.level}/><b>{client.cashbackPercent}% кэшбэк</b></div><span>Индивидуальные условия клиента сохраняются отдельно от общих настроек заведения.</span></div>
