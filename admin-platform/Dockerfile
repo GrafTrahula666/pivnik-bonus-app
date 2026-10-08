@@ -5,6 +5,8 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 COPY package.json platform-core.js qr-resolver.js ./
 COPY pos ./pos
+# The cash report test builds the POS tables from the app's own migrations.
+COPY migrations ./migrations
 
 WORKDIR /app/admin-platform
 COPY admin-platform/package.json admin-platform/package-lock.json ./

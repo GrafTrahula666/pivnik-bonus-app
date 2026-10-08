@@ -22,7 +22,7 @@
 
 `server/evotor-read.ts` импортирует `../../pos/*.js`, поэтому Docker-образ собирается из корня
 репозитория: Dockerfile `admin-platform/Dockerfile`, контекст — корень, исключения в
-`admin-platform/Dockerfile.dockerignore`.
+`admin-platform/Dockerfile.dockerignore`. В образ копируются `pos/`, `migrations/` (тест кассы строит таблицы POS из миграций приложения), `platform-core.js`, `qr-resolver.js` и корневой `package.json` (для `"type": "module"`).
 
 ## Проверки
 
