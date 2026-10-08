@@ -56,16 +56,6 @@ const catalog = [
     rewardBonus: 10
   },
   {
-    code: 'first-shop-purchase',
-    title: 'Из запасов Пивника',
-    description: 'Купите первый товар в бонусном магазине.',
-    rarity: 'common',
-    icon: 'shop',
-    metric: 'shopPurchaseCount',
-    target: 1,
-    rewardBonus: 10
-  },
-  {
     code: 'ten-purchases',
     title: 'Свой человек',
     description: 'Совершите 10 покупок.',
@@ -249,6 +239,7 @@ function publicDefinition(definition, current = 0) {
     description: definition.description,
     rarity: definition.rarity,
     icon: definition.icon,
+    unit: definition.unit,
     rewardBonus: number(definition.rewardBonus),
     rewardBeerMl: number(definition.rewardBeerMl),
     rewardBeerLiters: litersFromMl(definition.rewardBeerMl),
@@ -284,9 +275,6 @@ async function collectMetrics(db, userId) {
        COUNT(*) FILTER (
          WHERE t.status = 'completed' AND t.mode = 'redeem'
        )::bigint AS redemption_count,
-       COUNT(*) FILTER (
-         WHERE t.status = 'completed' AND t.mode = 'shop'
-       )::bigint AS shop_purchase_count,
        COUNT(DISTINCT (t.created_at AT TIME ZONE $2)::date) FILTER (
          WHERE t.status = 'completed' AND t.mode IN ('accrue','redeem')
        )::bigint AS purchase_days,
@@ -311,7 +299,6 @@ async function collectMetrics(db, userId) {
   return {
     purchaseCount: number(row.purchase_count),
     redemptionCount: number(row.redemption_count),
-    shopPurchaseCount: number(row.shop_purchase_count),
     purchaseDays: number(row.purchase_days),
     totalSpendCents: number(row.total_spend_cents),
     maxCheckCents: number(row.max_check_cents),

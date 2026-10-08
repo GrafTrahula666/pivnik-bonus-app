@@ -2085,7 +2085,36 @@ function achievementRarityLabel(rarity) {
   return { common: 'Обычное', rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' }[rarity] || 'Достижение';
 }
 
+const ACHIEVEMENT_SVG_ICONS = {
+  receipt: '<path d="M14 6h20v31l-3.4-2.6L27.2 37l-3.2-2.6L20.8 37l-3.4-2.6L14 37z"/><path d="m19 19 4 4 7-8"/>',
+  banknote: '<rect x="6" y="13" width="36" height="22" rx="3.5"/><circle cx="24" cy="24" r="5.5"/><path d="M11 18.5v.1M37 29.5v.1"/>',
+  triple: '<path d="M24 7c-6 0-10 4.6-10 10.5V25l-3.5 5.5h27L34 25v-7.5C34 11.6 30 7 24 7z"/><path d="M20 35a4 4 0 0 0 8 0"/>',
+  pint: '<path d="M13 16h19v21a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3z"/><path d="M32 21h3.5a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H32"/><path d="M12 16c-1.5-4 2.5-7 6-5 1.8-3.5 7-3.5 8.5 0 3.5-1.5 6.5 1.5 5.5 5"/><path d="M19 23v10M26 23v10"/>',
+  spark: '<path d="M24 6c1.2 9.5 4.5 12.8 14 18-9.5 5.2-12.8 8.5-14 18-1.2-9.5-4.5-12.8-14-18C19.5 18.8 22.8 15.5 24 6z"/>',
+  'receipt-stack': '<path d="M17 9h17v27"/><path d="M12 13h20v27l-3.3-2.5L25.5 40l-3.2-2.5L19.2 40l-3.3-2.5L12 40z"/><path d="M17 21h10M17 27h10"/>',
+  crown: '<path d="m8 34 2.5-17 8 7L24 11l5.5 13 8-7L40 34z"/><path d="M9 39h30"/>',
+  'monthly-crown': '<path d="m9 35 2.2-14 7 5.8L24 16l5.8 10.8 7-5.8L39 35z"/><path d="M10 40h28"/><path d="m24 5 1.6 3.4 3.7.5-2.7 2.6.7 3.7L24 13.4l-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z"/>',
+  calendar: '<rect x="8" y="11" width="32" height="29" rx="4"/><path d="M8 20h32M16 7v8M32 7v8"/><path d="M16 27h.1M24 27h.1M32 27h.1M16 33h.1M24 33h.1"/>',
+  bonus: '<circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="11.5" stroke-width="1.2" opacity=".55"/><path d="M19.5 17.5h9M19.5 17.5v13h5.5a3.7 3.7 0 0 0 0-7.4h-5.5"/>',
+  seal: '<path d="m24 6 4.2 3.8 5.6-.8 1.6 5.4 5 2.6-2 5.3 2 5.3-5 2.6-1.6 5.4-5.6-.8L24 42l-4.2-3.8-5.6.8-1.6-5.4-5-2.6 2-5.3-2-5.3 5-2.6 1.6-5.4 5.6.8z"/><circle cx="24" cy="24" r="6"/>',
+  beta: '<path d="M24 5c6.5 4.5 9.5 12 8 21l-4 4.5h-8L16 26c-1.5-9 1.5-16.5 8-21z"/><circle cx="24" cy="17" r="3"/><path d="m16 26-5.5 6.5 7-1.5M32 26l5.5 6.5-7-1.5M21 35.5 24 42l3-6.5"/>',
+  shield: '<path d="M24 6 38 11v11c0 9-6 16-14 20-8-4-14-11-14-20V11z"/><path d="M24 6v36M10.5 24H37.5" opacity=".55"/>'
+};
+const ACHIEVEMENT_SVG_BY_CODE = { 'beta-tester': 'beta', 'raise-shields': 'shield' };
+const ACHIEVEMENT_SHARED_ICONS = new Set(['banknote', 'pint', 'receipt-stack', 'calendar']);
+
+function achievementSvgIcon(item = {}) {
+  const key = ACHIEVEMENT_SVG_ICONS[item.icon] ? item.icon : ACHIEVEMENT_SVG_BY_CODE[item.code];
+  const body = ACHIEVEMENT_SVG_ICONS[key];
+  if (!body) return '';
+  const tier = ACHIEVEMENT_SHARED_ICONS.has(key) ? { common: 1, rare: 2, epic: 3 }[item.rarity] || 0 : 0;
+  const pips = Array.from({ length: tier }, (_, index) => `<circle cx="${24 + (index - (tier - 1) / 2) * 6}" cy="44.5" r="1.5" fill="currentColor" stroke="none"/>`).join('');
+  return `<svg class="ach-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}${pips}</svg>`;
+}
+
 function achievementIconHtml(item = {}) {
+  const svgIcon = achievementSvgIcon(item);
+  if (svgIcon) return svgIcon;
   if (item.icon === 'all-seeing-eye' || item.code === 'creator') {
     return `<svg class="all-seeing-eye" viewBox="0 0 100 90" aria-hidden="true">
       <path class="eye-triangle" d="M50 5 95 82H5Z" />
@@ -2138,6 +2167,40 @@ function achievementRewardLabel(item = {}) {
   return 'Особая награда';
 }
 
+const ACHIEVEMENTS_REFRESH_MS = 20_000;
+
+function achievementRemainingLabel(item = {}) {
+  if (item.earned || item.recurring || !item.progress) return '';
+  const remaining = Math.max(0, Number(item.progress.target || 0) - Number(item.progress.current || 0));
+  if (!remaining) return '';
+  if (item.unit === 'rub') return `ещё ${fmt(Math.ceil(remaining / 100))} ₽`;
+  if (item.unit === 'liter') return `ещё ${(remaining / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} л`;
+  if (item.unit === 'bonus') return `ещё ${fmt(remaining)} бонусов`;
+  return `ещё ${fmt(remaining)}`;
+}
+
+function nextAchievementGoal() {
+  return state.achievements
+    .filter((item) => !item.earned && !item.recurring && item.rarity !== 'legendary' && Number(item.progress?.percent || 0) > 0)
+    .sort((a, b) => Number(b.progress.percent) - Number(a.progress.percent))[0] || null;
+}
+
+function achievementNextGoalHtml() {
+  const goal = nextAchievementGoal();
+  if (!goal) return '';
+  const percent = Math.max(0, Math.min(100, Number(goal.progress.percent || 0)));
+  return `<div class="achievement-next" data-achievement-next="${escapeHtml(goal.code)}">
+      <span class="achievement-next-icon">${achievementIconHtml(goal)}</span>
+      <div>
+        <small>Ближайшая цель</small>
+        <b>${escapeHtml(goal.title)}</b>
+        <div class="achievement-progress"><i style="width:${percent}%"></i></div>
+        <small>${escapeHtml(goal.progress.label || '')} · ${escapeHtml(achievementRemainingLabel(goal))}</small>
+      </div>
+      <strong>${fmt(percent)}%</strong>
+    </div>`;
+}
+
 function renderAchievementCatalog() {
   const catalog = $('#achievementCatalog');
   if (!catalog) return;
@@ -2156,19 +2219,20 @@ function renderAchievementCatalog() {
     return;
   }
   const earnedCount = items.filter((item) => item.earned).length;
-  catalog.innerHTML = `<div class="achievement-summary">
+  catalog.innerHTML = `${rarity === 'legendary' ? '' : achievementNextGoalHtml()}<div class="achievement-summary">
       <span>${escapeHtml(achievementRarityLabel(rarity))}</span>
       <b>Получено ${earnedCount} · Всего ${items.length}</b>
     </div>
     <div class="achievement-grid">${items.map((item) => {
       const progress = item.progress || { percent: item.earned ? 100 : 0, label: item.earned ? 'Получено' : 'Уникальное условие' };
+      const remaining = achievementRemainingLabel(item);
       return `<article class="achievement-tile ${item.earned ? 'earned' : 'locked'} rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}">
         <span class="achievement-tile-icon">${achievementIconHtml(item)}</span>
         <span class="achievement-state">${item.earned ? 'Получено' : `${fmt(progress.percent)}%`}</span>
         <b>${escapeHtml(item.title)}</b>
         <p>${escapeHtml(item.description || '')}</p>
         <div class="achievement-progress"><i style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></i></div>
-        <small>${escapeHtml(progress.label || '')}</small>
+        <small>${escapeHtml(progress.label || '')}${remaining ? ` · ${escapeHtml(remaining)}` : ''}</small>
         <strong>${escapeHtml(achievementRewardLabel(item))}</strong>
       </article>`;
     }).join('')}</div>`;
@@ -2181,6 +2245,9 @@ function openAchievements(code = '') {
   }
   renderAchievementCatalog();
   openModal('achievementsModal');
+  if (state.achievementsLoaded && Date.now() - Number(state.achievementsLoadedAt || 0) > ACHIEVEMENTS_REFRESH_MS) {
+    void loadAchievements().catch((error) => console.warn('Achievement progress refresh skipped:', error));
+  }
 }
 
 function renderAchievements() {
@@ -2196,6 +2263,7 @@ async function loadAchievements() {
   const data = await api('/api/achievements');
   state.achievements = data.achievements || [];
   state.achievementsLoaded = true;
+  state.achievementsLoadedAt = Date.now();
   if (state.profile) {
     state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
     state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
