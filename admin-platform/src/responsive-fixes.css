@@ -13,3 +13,12 @@
 .profile-button > div:not(.avatar) {
   min-width: 0;
 }
+
+/* Keep the Business analytics period accessible on compact/touch screens. */
+.mobile-period-bar{display:none}
+@media(max-width:1180px){
+  .mobile-period-bar{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:8px 18px;background:#0b1519;border-bottom:1px solid var(--border-soft)}
+  .mobile-period-bar label{font-size:11px;color:var(--muted)}
+  .mobile-period-bar select{min-height:44px;min-width:136px;max-width:60vw;border:1px solid var(--border);border-radius:8px;background:#0c171d;color:#eceeef;padding:8px 10px;font:inherit;font-size:12px}
+}
+@media(max-width:560px){.mobile-period-bar{padding:7px 12px}}
