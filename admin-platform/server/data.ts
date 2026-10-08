@@ -136,9 +136,33 @@ async function periodMetrics(scope: VenueScope, range: PeriodRange) {
        (SELECT AVG(check_amount_cents)
         FROM period_tx
         WHERE mode IN ('accrue','redeem') AND check_amount_cents > 0) AS avg_check_cents,
-       (SELECT COALESCE(SUM(bonus_earned),0)::bigint FROM period_tx) AS bonus_earned,
+       (SELECT COALESCE(SUM(bonus_earned) FILTER (
+         WHERE NOT (
+           mode = 'adjustment'
+           AND (
+             staff_id IS NOT NULL
+             OR COALESCE(reward_code, '') LIKE 'admin:bonus:%'
+             OR COALESCE(reason, '') ILIKE 'Персональный подарок%'
+           )
+         )
+       ),0)::bigint FROM period_tx) AS bonus_earned,
        (SELECT COALESCE(SUM(bonus_spent),0)::bigint FROM period_tx) AS bonus_redeemed,
-       (SELECT COALESCE(SUM(w.balance),0)::bigint
+       (SELECT COALESCE(SUM(GREATEST(
+          w.balance - COALESCE((
+            SELECT SUM(gift_tx.bonus_earned)
+            FROM transactions gift_tx
+            WHERE gift_tx.client_id = m.user_id
+              AND gift_tx.status = 'completed'
+              AND gift_tx.mode = 'adjustment'
+              AND gift_tx.bonus_earned > 0
+              AND (
+                gift_tx.staff_id IS NOT NULL
+                OR COALESCE(gift_tx.reward_code, '') LIKE 'admin:bonus:%'
+                OR COALESCE(gift_tx.reason, '') ILIKE 'Персональный подарок%'
+              )
+          ),0),
+          0
+        )),0)::bigint
         FROM members m JOIN wallets w ON w.user_id = m.user_id) AS outstanding_bonus_balance,
        (SELECT COUNT(*)::bigint FROM period_tx) AS operation_count`,
     [barId, range.from.toISOString(), range.to.toISOString()],
@@ -198,7 +222,16 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
        COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
        COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
        COUNT(DISTINCT t.client_id)::bigint AS customers,
-       COALESCE(SUM(t.bonus_earned),0)::bigint AS bonus_earned,
+       COALESCE(SUM(t.bonus_earned) FILTER (
+         WHERE NOT (
+           t.mode = 'adjustment'
+           AND (
+             t.staff_id IS NOT NULL
+             OR COALESCE(t.reward_code, '') LIKE 'admin:bonus:%'
+             OR COALESCE(t.reason, '') ILIKE 'Персональный подарок%'
+           )
+         )
+       ),0)::bigint AS bonus_earned,
        COALESCE(SUM(t.bonus_spent),0)::bigint AS bonus_redeemed
      FROM transactions t
      JOIN members m ON m.user_id = t.client_id
@@ -279,14 +312,14 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
         current.returningCustomers,
         'registered before period + completed transaction during period',
       ),
-      bonusEarned: available(current.bonusEarned, 'transactions.bonus_earned'),
+      bonusEarned: available(current.bonusEarned, 'автоматические начисления; ручные подарки исключены'),
       bonusRedeemed: available(current.bonusRedeemed, 'transactions.bonus_spent'),
-      outstandingBonusBalance: available(current.outstandingBonusBalance, 'wallets.balance'),
+      outstandingBonusBalance: available(current.outstandingBonusBalance, 'баланс программы без ручных подарочных начислений'),
       operationCount: available(current.operationCount, 'completed transactions'),
       redemptionRate:
         current.redemptionRate === null
           ? unavailable('В периоде нет начисленных бонусов.')
-          : available(current.redemptionRate, 'bonus_spent / bonus_earned'),
+          : available(current.redemptionRate, 'bonus_spent / автоматические bonus_earned; ручные подарки исключены'),
       visits: unavailable(NO_ACTIVITY_EVENTS),
       dau: unavailable(NO_ACTIVITY_EVENTS),
       wau: unavailable(NO_ACTIVITY_EVENTS),
@@ -676,7 +709,6 @@ export async function getOperations(scope: VenueScope, url: URL) {
      JOIN bar_customers bc ON bc.user_id=t.client_id AND bc.bar_id=$1::bigint
      JOIN users u ON u.id=t.client_id
      WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
-       AND u.role = 'client'
      ORDER BY COALESCE(t.completed_at,t.created_at) DESC
      LIMIT $2`,
     [barId, limit],

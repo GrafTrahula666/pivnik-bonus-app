@@ -1,7 +1,8 @@
 import {Gift,ShieldCheck,Trophy} from 'lucide-react'
 import type {ApiVenue} from '../api'
 import {CardTitle,PageHead} from '../ui'
-import {ErrorCard,LoadingCard,SourceNote,WriteGatePill,useResource} from './common'
+import {ErrorCard,LoadingCard,SourceNote,useResource} from './common'
+import {businessLabel} from './labels'
 
 interface WheelPrize {
   code:string;title:string;rewardType:string;rewardValue:Record<string,unknown>;probability:string;enabled:boolean;sortOrder:number
@@ -30,12 +31,12 @@ export function PivnikLegacyWheelManager({venue}:{venue:ApiVenue}){
   const firstPaid=data.retryCostPolicy?.firstPaid??data.retryCost??0
   const subsequentPaid=data.retryCostPolicy?.subsequentPaid??data.retryCost??0
   return <div className="page">
-    <PageHead eyebrow="РАБОЧАЯ КОНФИГУРАЦИЯ" title="Колесо" sub={`${venue.companyName} → ${venue.name}`}
-      actions={<WriteGatePill enabled={false}/>}/>
+    <PageHead eyebrow="КОЛЕСО ФОРТУНЫ" title="Колесо" sub={`${venue.companyName} → ${venue.name} · действующие настройки`}
+      actions={<span className="view-only-badge"><ShieldCheck/>Только просмотр</span>}/>
     <div className="wheel-top">
       <section className="card wheel-visual">
         <div className="wheel-ring"><div className="wheel-center"><Gift/><b>ПРИЗЫ</b></div></div>
-        <div className="prob-total"><span>Сумма вероятностей</span><strong>{total.toFixed(4).replace(/\.0+$/,'')}%</strong><small>{Math.abs(total-100)<1e-9?'Текущая рабочая таблица':'Требуется проверка'}</small></div>
+        <div className="prob-total"><span>Сумма вероятностей</span><strong>{total.toFixed(4).replace(/\.0+$/,'')}%</strong><small>{Math.abs(total-100)<1e-9?'Вероятности настроены корректно':'Сумма должна быть 100%'}</small></div>
       </section>
       <section className="card editor-card">
         <CardTitle title="Механика"/>
@@ -46,8 +47,8 @@ export function PivnikLegacyWheelManager({venue}:{venue:ApiVenue}){
           <div><span>Следующие повторы</span><b>{subsequentPaid}</b><small>бонусов</small></div>
         </div>
         <SourceNote>{legacy
-          ? `Показана фактическая конфигурация текущего runtime ПИВНИКА (${data.runtimeCommit?.slice(0,8)||'production'}). Редактирование намеренно отключено: эта страница пока только читает рабочую механику.`
-          : 'Показана сохранённая конфигурация Admin Platform. Редактирование на controlled pilot отключено.'}</SourceNote>
+          ? 'Показана действующая механика колеса ПИВНИКА. Панель сейчас только читает настройки: гостевое колесо продолжает работать независимо.'
+          : 'Показана сохранённая конфигурация. На controlled pilot редактирование отключено.'}</SourceNote>
       </section>
     </div>
     <section className="card editor-card">
@@ -101,13 +102,13 @@ export function PivnikLegacyAchievementManager({venue}:{venue:ApiVenue}){
   if(!data)return null
   const legacy=data.source==='legacy-production-runtime'
   return <div className="page">
-    <PageHead eyebrow="РАБОЧИЙ КАТАЛОГ" title="Достижения" sub={`${venue.companyName} → ${venue.name}`}
-      actions={<WriteGatePill enabled={false}/>}/>
+    <PageHead eyebrow="ДОСТИЖЕНИЯ ГОСТЕЙ" title="Достижения" sub={`${venue.companyName} → ${venue.name} · ${data.items.filter(x=>x.enabled).length} активных`}
+      actions={<span className="view-only-badge"><ShieldCheck/>Только просмотр</span>}/>
     <section className="card editor-card">
       <CardTitle title={`Достижения · ${data.items.length}`}/>
       <SourceNote>{legacy
-        ? `Показан текущий production-каталог ПИВНИКА (${data.runtimeCommit?.slice(0,8)||'production'}): автоматические достижения и специальные легендарные награды. Редактирование пока отключено.`
-        : 'Показана сохранённая конфигурация Admin Platform. Редактирование на controlled pilot отключено.'}</SourceNote>
+        ? 'Показан действующий каталог ПИВНИКА: автоматические достижения и специальные награды. Редактирование на controlled pilot отключено.'
+        : 'Показан сохранённый каталог. Редактирование на controlled pilot отключено.'}</SourceNote>
       <div className="achievement-grid">
         {data.items.map(item=><article className="card achievement-card" key={item.code}>
           <div className="achievement-icon"><Trophy/></div>
@@ -115,7 +116,7 @@ export function PivnikLegacyAchievementManager({venue}:{venue:ApiVenue}){
             <div className="achievement-title"><h3>{item.title}</h3><span className="status ok">{item.special?'СПЕЦ':'АКТИВНО'}</span></div>
             <p>{item.description}</p>
             <div className="achievement-meta">
-              <span>{item.rarity||'achievement'}</span>
+              <span>{businessLabel(item.rarity||'achievement')}</span>
               <span>{achievementCondition(item)}</span>
               <span>{achievementReward(item)}</span>
               {item.recurring&&<span>повторяется: {item.recurring}</span>}

@@ -18,16 +18,16 @@ export function ProductionOperations({venue}:{venue:ApiVenue}){
     {loading&&!data&&<LoadingCard/>}
     {data&&<>
       <div className="summary-strip card">
-        <div><Database/><span>Строк</span><b>{data.rows.length}</b></div>
-        <div><Coins/><span>Начислено</span><b>{rub.format(data.rows.reduce((s,r)=>s+Number(r.bonusEarned||0),0))}</b></div>
-        <div><Coins/><span>Списано</span><b>{rub.format(data.rows.reduce((s,r)=>s+Number(r.bonusSpent||0),0))}</b></div>
+        <div><Database/><span>Операций</span><b>{data.rows.length}</b></div>
+        <div><Coins/><span>Начислено бонусов</span><b>{rub.format(data.rows.reduce((s,r)=>s+Number(r.bonusEarned||0),0))}</b></div>
+        <div><Coins/><span>Списано бонусов</span><b>{rub.format(data.rows.reduce((s,r)=>s+Number(r.bonusSpent||0),0))}</b></div>
         <div className={data.rows.some(r=>r.is_suspicious)?'warning':''}><ShieldCheck/><span>Требуют внимания</span><b>{data.rows.filter(r=>r.is_suspicious).length}</b></div>
       </div>
       <div className="table-card card"><div className="table-scroll"><table>
         <thead><tr><th>Дата</th><th>Клиент</th><th>Тип</th><th>Статус</th><th>Чек</th><th>Оплачено</th><th>Бонусы</th><th>Комментарий</th></tr></thead>
         <tbody>{data.rows.map(r=><tr key={r.id}><td>{dt(r.occurred_at)}</td><td><b>{[r.first_name,r.last_name].filter(Boolean).join(' ')}</b><br/><small>клиент #{r.user_id}</small></td>
           <td>{businessLabel(r.mode)}</td><td><Status value={businessLabel(r.status)}/></td><td>₽ {rub.format(Math.round(r.checkAmount||0))}</td><td>₽ {rub.format(Math.round(r.cashPaid||0))}</td>
-          <td>+{r.bonusEarned||0} / −{r.bonusSpent||0}</td><td>{r.reason||r.reward_code||'—'}</td></tr>)}</tbody>
+          <td><div className="bonus-flow"><span className="bonus-plus">+{r.bonusEarned||0} Б</span><span className="bonus-minus">−{r.bonusSpent||0} Б</span></div></td><td>{r.reason||r.reward_code||'—'}</td></tr>)}</tbody>
       </table></div></div>
     </>}
   </div>
@@ -41,8 +41,8 @@ export function ProductionAnalytics({venue,period}:{venue:ApiVenue;period:Period
   const {data,error,loading,reload}=useResource<DashboardLike>(`/api/admin/venues/${venue.id}/dashboard?days=${days(period)}`)
   const facts=useMemo(()=>data?[
     ['Выручка',data.metrics.trackedRevenue,'money'],['Средний чек',data.metrics.averageCheck,'money'],
-    ['Начислено бонусов',data.metrics.bonusEarned,'number'],['Списано бонусов',data.metrics.bonusRedeemed,'number'],
-    ['Баланс бонусов',data.metrics.outstandingBonusBalance,'number'],['Доля списаний',data.metrics.redemptionRate,'percent'],
+    ['Начислено по программе',data.metrics.bonusEarned,'number'],['Списано клиентами',data.metrics.bonusRedeemed,'number'],
+    ['Бонусы в обращении',data.metrics.outstandingBonusBalance,'number'],['Использование бонусов',data.metrics.redemptionRate,'percent'],
   ] as const:[],[data])
   const fmt=(m:any,k:string)=>!m.available||m.value===null?'Пока недостаточно данных':k==='money'?`₽ ${rub.format(Math.round(m.value))}`:k==='percent'?`${Number(m.value).toFixed(1)}%`:rub.format(Math.round(m.value))
   return <div className="page">
@@ -52,7 +52,7 @@ export function ProductionAnalytics({venue,period}:{venue:ApiVenue;period:Period
     {data&&<>
       <div className="analytics-grid">{facts.map(([label,m,k])=><div className="card mini-insight" key={label}><div><span>{label}</span><b>{fmt(m,k)}</b><small>{m.source||m.reason||'—'}</small></div><div className="mini-viz"><BarChart3/></div></div>)}</div>
       <section className="card editor-card"><CardTitle title="Недостающие события"/>
-        <div className="metric-definition-list">{data.unavailableMetrics.map(x=><div key={x.key}><div><b>{x.key}</b><span>Пока недостаточно данных</span></div><p>{x.reason}</p><code>{x.requiredEvent}</code></div>)}</div>
+        <div className="metric-definition-list">{data.unavailableMetrics.map(x=><div key={x.key}><div><b>{x.key}</b><span>Пока недостаточно данных</span></div><p>{x.reason}</p><small>Показатель появится автоматически после накопления достаточной истории.</small></div>)}</div>
       </section>
       <SourceNote>Сбор аналитики работает независимо и не мешает гостям пользоваться приложением.</SourceNote>
     </>}

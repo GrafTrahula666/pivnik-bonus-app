@@ -7,6 +7,7 @@ import {
   csrfTokenFor,
   enforceRateLimit,
   hashIp,
+  hashPassword,
   normalizeEmail,
   parseCookies,
   randomToken,
@@ -149,6 +150,53 @@ export async function loadSession(
     },
     rawToken,
     csrfToken: csrfTokenFor(rawToken),
+  }
+}
+
+export async function changePassword(
+  admin: AdminPrincipal,
+  rawToken: string,
+  currentPasswordRaw: unknown,
+  newPasswordRaw: unknown,
+): Promise<{ ok: true; revokedSessions: number }> {
+  const currentPassword = String(currentPasswordRaw ?? '')
+  const newPassword = String(newPasswordRaw ?? '')
+  enforceRateLimit(`admin-password-change:${admin.id}`, 6, 15 * 60 * 1000)
+  if (!currentPassword) throw new HttpError(400, 'CURRENT_PASSWORD_REQUIRED', 'Введите текущий пароль.')
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await client.query<AccountRow>(
+      `SELECT id::text,email,display_name,role,password_hash,active
+       FROM admin_accounts WHERE id=$1::bigint FOR UPDATE`,
+      [admin.id],
+    )
+    const account = result.rows[0]
+    if (!account || !account.active) throw new HttpError(401, 'AUTH_REQUIRED', 'Учётная запись недоступна.')
+    if (!verifyPassword(currentPassword, account.password_hash)) {
+      throw new HttpError(401, 'CURRENT_PASSWORD_INVALID', 'Текущий пароль указан неверно.')
+    }
+    if (verifyPassword(newPassword, account.password_hash)) {
+      throw new HttpError(400, 'PASSWORD_UNCHANGED', 'Новый пароль должен отличаться от текущего.')
+    }
+
+    const passwordHash = hashPassword(newPassword)
+    await client.query(
+      `UPDATE admin_accounts SET password_hash=$1,updated_at=NOW() WHERE id=$2::bigint`,
+      [passwordHash, admin.id],
+    )
+    const revoked = await client.query(
+      `DELETE FROM admin_sessions WHERE admin_id=$1::bigint AND token_hash<>$2`,
+      [admin.id, sha256(rawToken)],
+    )
+    await client.query('COMMIT')
+    return { ok: true, revokedSessions: revoked.rowCount ?? 0 }
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    throw error
+  } finally {
+    client.release()
   }
 }
 

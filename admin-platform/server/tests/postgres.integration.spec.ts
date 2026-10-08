@@ -258,4 +258,30 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE venue_id=$1 AND action='promotions.config.save'`,[northVenue])).rows[0]!.n).toBe('1')
   })
 
+  it('password change needs the current password, keeps this session and closes the others',async()=>{
+    const {changePassword}=await import('../auth.js')
+    const {hashPassword,sha256,verifyPassword}=await import('../security.js')
+    await setup!.query(`UPDATE admin_accounts SET password_hash=$1 WHERE id=$2::bigint`,[hashPassword('Old-Password-2026'),superAdmin.id])
+    await setup!.query(`INSERT INTO admin_sessions(token_hash,admin_id,expires_at) VALUES($1,$3::bigint,NOW()+INTERVAL '1 hour'),($2,$3::bigint,NOW()+INTERVAL '1 hour')`,
+      [sha256('current-session'),sha256('other-session'),superAdmin.id])
+    await expect(changePassword(superAdmin,'current-session','wrong-password','New-Password-2026')).rejects.toMatchObject({code:'CURRENT_PASSWORD_INVALID'})
+    await expect(changePassword(superAdmin,'current-session','Old-Password-2026','short')).rejects.toMatchObject({code:'WEAK_PASSWORD'})
+    await expect(changePassword(superAdmin,'current-session','Old-Password-2026','New-Password-2026')).resolves.toEqual({ok:true,revokedSessions:1})
+    const hash=(await setup!.query<{password_hash:string}>(`SELECT password_hash FROM admin_accounts WHERE id=$1::bigint`,[superAdmin.id])).rows[0]!.password_hash
+    expect(verifyPassword('New-Password-2026',hash)).toBe(true)
+    const left=(await setup!.query<{token_hash:string}>(`SELECT token_hash FROM admin_sessions WHERE admin_id=$1::bigint`,[superAdmin.id])).rows.map(r=>r.token_hash)
+    expect(left).toEqual([sha256('current-session')])
+  })
+
+  it('dashboard bonus KPIs leave manual admin credits out while wallets keep them',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getVenueDashboard}=await import('../data.js')
+    const scope=await resolveVenueScope(pivnikAdmin,pivnikVenue)
+    const sum=async(filter:string)=>Number((await setup!.query(`SELECT COALESCE(SUM(bonus_earned),0) AS n FROM transactions WHERE client_id=$1 AND status='completed' ${filter}`,[pivnikUser])).rows[0]!.n)
+    const manual=await sum(`AND mode='adjustment' AND reward_code LIKE 'admin:bonus:%'`),all=await sum('')
+    expect(manual).toBeGreaterThan(0)
+    const dashboard=await getVenueDashboard(scope,{from:new Date(Date.now()-30*86400000),to:new Date(Date.now()+60000),days:30})
+    expect(dashboard.metrics.bonusEarned.value).toBe(all-manual)
+  })
+
 })
