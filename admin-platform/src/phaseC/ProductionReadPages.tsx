@@ -40,7 +40,7 @@ interface DashboardLike {
 export function ProductionAnalytics({venue,period}:{venue:ApiVenue;period:Period}){
   const {data,error,loading,reload}=useResource<DashboardLike>(`/api/admin/venues/${venue.id}/dashboard?days=${days(period)}`)
   const facts=useMemo(()=>data?[
-    ['Выручка',data.metrics.trackedRevenue,'money'],['Средний чек',data.metrics.averageCheck,'money'],
+    ['Сумма операций приложения',data.metrics.trackedRevenue,'money'],['Средняя сумма записи',data.metrics.averageCheck,'money'],
     ['Начислено по программе',data.metrics.bonusEarned,'number'],['Списано клиентами',data.metrics.bonusRedeemed,'number'],
     ['Бонусы в обращении',data.metrics.outstandingBonusBalance,'number'],['Использование бонусов',data.metrics.redemptionRate,'percent'],
   ] as const:[],[data])
@@ -54,7 +54,7 @@ export function ProductionAnalytics({venue,period}:{venue:ApiVenue;period:Period
       <section className="card editor-card"><CardTitle title="Недостающие события"/>
         <div className="metric-definition-list">{data.unavailableMetrics.map(x=><div key={x.key}><div><b>{x.key}</b><span>Пока недостаточно данных</span></div><p>{x.reason}</p><small>Показатель появится автоматически после накопления достаточной истории.</small></div>)}</div>
       </section>
-      <SourceNote>Сбор аналитики работает независимо и не мешает гостям пользоваться приложением.</SourceNote>
+      <SourceNote>Суммы операций приложения не являются подтверждённой кассовой выручкой и не складываются с данными Эвотора. Сбор аналитики работает независимо и не мешает гостям пользоваться приложением.</SourceNote>
     </>}
   </div>
 }
