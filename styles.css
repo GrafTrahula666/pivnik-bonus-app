@@ -10958,11 +10958,34 @@ html.theme-halloween #achievementsModal .achievement-tile.locked {
 }
 html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-tile-icon { color: #b99a6a; border-color: rgba(233, 168, 59, .28); box-shadow: none; }
 html.theme-halloween #achievementsModal .achievement-tile.earned {
-  border-color: rgba(255, 190, 80, .85);
-  background: linear-gradient(150deg, rgba(84, 46, 40, .9), rgba(26, 14, 44, .92));
-  box-shadow: 0 0 18px rgba(255, 150, 40, .3), inset 0 1px 0 rgba(255, 226, 176, .1);
+  border: 1px solid #ffd27a;
+  background:
+    radial-gradient(circle at 85% 6%, rgba(255, 233, 160, .5), transparent 42%),
+    linear-gradient(150deg, #d9951f, #8a4e0c 62%, #5c3208);
+  box-shadow: 0 0 20px rgba(255, 190, 70, .5), inset 0 1px 0 rgba(255, 244, 205, .55);
   opacity: 1;
   filter: none;
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned b { color: #fff6dc; text-shadow: 0 1px 2px rgba(60, 28, 0, .6); }
+html.theme-halloween #achievementsModal .achievement-tile.earned p,
+html.theme-halloween #achievementsModal .achievement-tile.earned small { color: #ffeccb; }
+html.theme-halloween #achievementsModal .achievement-tile.earned > strong { color: #fff0b8; }
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-tile-icon {
+  border-color: #ffe9a8;
+  background: radial-gradient(circle at 50% 30%, #ffe9a8, #f2b53c 70%);
+  color: #5c3208;
+  box-shadow: 0 0 14px rgba(255, 220, 120, .6);
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-state {
+  border-color: #ffe9a8;
+  background: #fff1c2;
+  color: #6b3c05;
+  font-weight: 800;
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-progress { background: rgba(60, 28, 0, .45); }
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-progress > i {
+  background: linear-gradient(90deg, #fff0b8, #ffd45c);
+  box-shadow: 0 0 8px rgba(255, 233, 160, .7);
 }
 html.theme-halloween #achievementsModal .achievement-tile b { color: #ffe2b0; }
 html.theme-halloween #achievementsModal .achievement-tile p,
