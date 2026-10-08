@@ -58,11 +58,12 @@ function json(res: ServerResponse, statusCode: number, payload: unknown): void {
 }
 const routeParts=(pathname:string)=>pathname.split('/').filter(Boolean)
 const isMethod=(req:IncomingMessage,method:string)=>String(req.method||'GET').toUpperCase()===method
-const sessionCapabilities=()=>({
+export const sessionCapabilities=()=>({
   writes:config.enableWrites,
-  productionBonusWrites:config.enableProductionBonusWrites,
-  productionAchievementWrites:config.enableProductionAchievementWrites,
-  productionEntitlementWrites:config.enableProductionEntitlementWrites,
+  // The production writers also refuse while ADMIN_ENABLE_WRITES is off, so the UI must not offer them then.
+  productionBonusWrites:config.enableWrites&&config.enableProductionBonusWrites,
+  productionAchievementWrites:config.enableWrites&&config.enableProductionAchievementWrites,
+  productionEntitlementWrites:config.enableWrites&&config.enableProductionEntitlementWrites,
   demo:config.demoEnabled,
 })
 
