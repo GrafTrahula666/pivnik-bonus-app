@@ -113,7 +113,7 @@ test('01 SUPER ADMIN complete sales and management surface',async({browser})=>{
     await expect(page.locator('body')).toContainText('NORTH HOSPITALITY')
     await openNav(page,'Заведения');await pageReady(page,'Заведения','.venue-card')
     await selectPivnik(page)
-    await openNav(page,'Обзор');await pageReady(page,'ПИВНИК TEST VENUE','.kpi-grid')
+    await openNav(page,'Обзор');await pageReady(page,'Все продажи кассы','.kpi-grid')
     await openNav(page,'Аналитика');await pageReady(page,'Аналитика','.analytics-grid')
     await openNav(page,'Клиенты');await pageReady(page,'Клиенты','tbody tr')
     await page.locator('tbody tr').first().click()
@@ -222,7 +222,7 @@ for(const [number,label,width,height] of [
     const failures=observe(page)
     try{
       await selectPivnik(page)
-      await openNav(page,'Обзор');await pageReady(page,'ПИВНИК TEST VENUE','.kpi-grid')
+      await openNav(page,'Обзор');await pageReady(page,'Все продажи кассы','.kpi-grid')
       await page.screenshot({path:path.join(shot,`final-proof-${number}.png`),fullPage:true})
       expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
       clean(failures)

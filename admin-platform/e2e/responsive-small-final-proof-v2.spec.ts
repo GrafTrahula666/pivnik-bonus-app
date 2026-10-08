@@ -29,7 +29,7 @@ async function openDashboard(page:Page){
     await expect(sidebar).toHaveClass(/open/)
   }
   await sidebar.getByRole('button',{name:'Обзор',exact:true}).click()
-  await expect(page.getByRole('heading',{name:'ПИВНИК TEST VENUE',exact:true}).first()).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Все продажи кассы',exact:true}).first()).toBeVisible()
   await expect(page.locator('.kpi-grid')).toBeVisible()
 }
 

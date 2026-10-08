@@ -1,0 +1,5 @@
+admin-platform/node_modules
+admin-platform/dist
+admin-platform/dist-server
+admin-platform/.env
+admin-platform/.env.*

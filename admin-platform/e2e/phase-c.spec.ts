@@ -123,7 +123,11 @@ test('SUPER ADMIN full staging browser and visual flow',async({page})=>{
 
   await selectPivnik(page)
   await openNav(page,'Обзор')
+  await pageReady(page,'Все продажи кассы','.kpi-grid')
+  await expect(page.locator('.data-quality-card')).toContainText('Касса не подключена')
+  await page.getByRole('button',{name:'Операции приложения',exact:true}).click()
   await pageReady(page,'ПИВНИК TEST VENUE','.kpi-grid')
+  await expect(page.locator('.kpi-grid')).toContainText('Сумма операций приложения')
   await expect(page.locator('.admin-context')).toContainText('Главный администратор → ПИВНИК TEST → ПИВНИК TEST VENUE')
   await screenshot(page,'04-venue-dashboard.png')
 
@@ -329,7 +333,7 @@ for(const [label,width,height,file] of [
     await login(page,superEmail)
     await selectPivnik(page)
     await openNav(page,'Обзор')
-    await pageReady(page,'ПИВНИК TEST VENUE','.kpi-grid')
+    await pageReady(page,'Все продажи кассы','.kpi-grid')
     await screenshot(page,file)
     expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
     clean(failures)
