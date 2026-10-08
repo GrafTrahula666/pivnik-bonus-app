@@ -10020,6 +10020,40 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 .text-btn,
 .text-link { color: #8a5a0c; }
 
+/* Achievements: minimalist line icons and visible progress */
+.ach-icon { display: block; width: 62%; height: 62%; }
+.achievement-tile .achievement-progress { height: 6px; background: rgba(133, 100, 54, .2); }
+.achievement-tile.locked .achievement-progress > i { opacity: .9; }
+.achievement-tile.locked .achievement-state { color: #8a5a0c; font-weight: 800; font-size: 10px; }
+.achievement-tile small { font-size: 10px; }
+.achievement-next {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(181, 121, 24, .34);
+  border-radius: 18px;
+  background: linear-gradient(160deg, #fffef9, #f6e8cb);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98), 0 8px 20px rgba(130, 84, 18, .1);
+}
+.achievement-next-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(177, 119, 25, .26);
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(235, 218, 188, .94));
+  color: #9b650f;
+}
+.achievement-next b { display: block; margin: 1px 0 6px; color: #2a231b; font-size: 14px; }
+.achievement-next small { display: block; color: #786e62; font-size: 10px; line-height: 1.3; }
+.achievement-next .achievement-progress { height: 6px; margin-bottom: 5px; background: rgba(133, 100, 54, .2); }
+.achievement-next .achievement-progress i { background: linear-gradient(90deg, #b47a20, #e5be70); }
+.achievement-next > strong { color: #9a650f; font-size: 17px; font-weight: 800; }
+
 /* ============================================================
    Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
    app.js applyDesign() toggles html.theme-halloween. Every rule below is
@@ -10856,4 +10890,124 @@ html.theme-halloween body .screen[data-screen="profile"] #profileAdminNav {
   border: 1px solid rgba(255, 214, 140, .7) !important;
   background: linear-gradient(145deg, #f4cf82, #b97916) !important;
   color: #2e210f !important;
+}
+
+/* Halloween: achievements sheet in the night design, with two pumpkins in the background */
+html.theme-halloween #achievementsModal .achievements-sheet {
+  border: 1px solid rgba(233, 168, 59, .55);
+  background:
+    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%2090'%3E%3Cdefs%3E%3CradialGradient%20id='g'%20cx='50%25'%20cy='42%25'%20r='62%25'%3E%3Cstop%20offset='0'%20stop-color='%23ffc04a'/%3E%3Cstop%20offset='1'%20stop-color='%23d4540c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cellipse%20cx='28'%20cy='54'%20rx='24'%20ry='31'%20fill='url(%23g)'/%3E%3Cellipse%20cx='72'%20cy='54'%20rx='24'%20ry='31'%20fill='url(%23g)'/%3E%3Cellipse%20cx='50'%20cy='54'%20rx='25'%20ry='33'%20fill='url(%23g)'%20stroke='%239c3a06'%20stroke-width='1.2'/%3E%3Cpath%20d='M46%2022c1-9%207-14%2014-15l2%205c-6%201-8%205-8%2011z'%20fill='%234b8a2e'/%3E%3Cpath%20d='M33%2047l11%201-6-12zM56%2048l11-1-5-11zM50%2053l-4%208h8z'%20fill='%232a0f33'/%3E%3Cpath%20d='M32%2066c6%208%2010%205%2013%209%203-4%207-1%2010-5%203%204%207%201%2013-4-4%2012-10%2016-18%2016s-14-6-18-16z'%20fill='%232a0f33'/%3E%3C/svg%3E") no-repeat right -14px top 118px / 92px auto,
+    linear-gradient(170deg, rgba(39, 22, 88, .72), rgba(13, 10, 38, .86) 70%),
+    url("/assets/halloween/night-bg.webp?v=1") center top / cover no-repeat,
+    #0d0a26;
+  color: #f6e7c8;
+  box-shadow: 0 0 28px rgba(233, 168, 59, .22), inset 0 1px 0 rgba(255, 226, 176, .08);
+}
+html.theme-halloween #achievementsModal .achievements-sheet > .muted { color: #f0b54a; }
+html.theme-halloween #achievementsModal .achievements-sheet h2 { color: #ffe2b0; text-shadow: 0 0 14px rgba(240, 160, 50, .4); }
+html.theme-halloween #achievementsModal .help-intro { color: #cdb68f; }
+html.theme-halloween #achievementsModal .close {
+  border-color: rgba(233, 168, 59, .55);
+  background: rgba(11, 10, 36, .86);
+  color: #ffe2b0;
+  box-shadow: 0 0 10px rgba(233, 168, 59, .25);
+}
+html.theme-halloween #achievementsModal .achievement-tabs button {
+  border: 1px solid rgba(233, 168, 59, .3);
+  background: rgba(20, 14, 52, .8);
+  color: #cdb68f;
+  box-shadow: none;
+}
+html.theme-halloween #achievementsModal .achievement-tabs button.active {
+  border-color: rgba(255, 214, 140, .7);
+  background: linear-gradient(145deg, #f4cf82, #b97916);
+  color: #2e210f;
+  box-shadow: 0 0 14px rgba(233, 168, 59, .4);
+}
+html.theme-halloween #achievementsModal .achievement-summary { color: #cdb68f; }
+html.theme-halloween #achievementsModal .achievement-summary b { color: #f0b54a; }
+html.theme-halloween #achievementsModal .achievement-next {
+  border: 1px solid rgba(240, 181, 74, .7);
+  background: linear-gradient(145deg, rgba(60, 34, 92, .92), rgba(20, 12, 50, .94));
+  box-shadow: 0 0 16px rgba(233, 168, 59, .22), inset 0 1px 0 rgba(255, 226, 176, .08);
+}
+html.theme-halloween #achievementsModal .achievement-next b { color: #ffe2b0; }
+html.theme-halloween #achievementsModal .achievement-next small { color: #cdb68f; }
+html.theme-halloween #achievementsModal .achievement-next > strong { color: #ffb347; }
+html.theme-halloween #achievementsModal .achievement-next-icon,
+html.theme-halloween #achievementsModal .achievement-tile-icon {
+  border-color: rgba(233, 168, 59, .5);
+  background: radial-gradient(circle at 50% 35%, rgba(70, 40, 110, .95), rgba(14, 10, 38, .95));
+  color: #ffb347;
+  box-shadow: 0 0 12px rgba(233, 168, 59, .22);
+}
+html.theme-halloween #achievementsModal .achievement-tile,
+html.theme-halloween #achievementsModal .achievement-tile.rarity-rare,
+html.theme-halloween #achievementsModal .achievement-tile.rarity-epic,
+html.theme-halloween #achievementsModal .achievement-tile.rarity-legendary {
+  border: 1px solid rgba(233, 168, 59, .5);
+  background: linear-gradient(150deg, rgba(48, 28, 86, .88), rgba(14, 10, 38, .9));
+  color: #f6e7c8;
+  box-shadow: 0 0 12px rgba(233, 168, 59, .12), inset 0 1px 0 rgba(255, 226, 176, .06);
+}
+html.theme-halloween #achievementsModal .achievement-tile.locked {
+  border-color: rgba(233, 168, 59, .26);
+  background: linear-gradient(150deg, rgba(32, 22, 62, .86), rgba(12, 9, 32, .9));
+  opacity: 1;
+  filter: none;
+}
+html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-tile-icon { color: #b99a6a; border-color: rgba(233, 168, 59, .28); box-shadow: none; }
+html.theme-halloween #achievementsModal .achievement-tile.earned {
+  border: 1px solid #ffd27a;
+  background:
+    radial-gradient(circle at 85% 6%, rgba(255, 233, 160, .5), transparent 42%),
+    linear-gradient(150deg, #d9951f, #8a4e0c 62%, #5c3208);
+  box-shadow: 0 0 20px rgba(255, 190, 70, .5), inset 0 1px 0 rgba(255, 244, 205, .55);
+  opacity: 1;
+  filter: none;
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned b { color: #fff6dc; text-shadow: 0 1px 2px rgba(60, 28, 0, .6); }
+html.theme-halloween #achievementsModal .achievement-tile.earned p,
+html.theme-halloween #achievementsModal .achievement-tile.earned small { color: #ffeccb; }
+html.theme-halloween #achievementsModal .achievement-tile.earned > strong { color: #fff0b8; }
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-tile-icon {
+  border-color: #ffe9a8;
+  background: radial-gradient(circle at 50% 30%, #ffe9a8, #f2b53c 70%);
+  color: #5c3208;
+  box-shadow: 0 0 14px rgba(255, 220, 120, .6);
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-state {
+  border-color: #ffe9a8;
+  background: #fff1c2;
+  color: #6b3c05;
+  font-weight: 800;
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-progress { background: rgba(60, 28, 0, .45); }
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-progress > i {
+  background: linear-gradient(90deg, #fff0b8, #ffd45c);
+  box-shadow: 0 0 8px rgba(255, 233, 160, .7);
+}
+html.theme-halloween #achievementsModal .achievement-tile b { color: #ffe2b0; }
+html.theme-halloween #achievementsModal .achievement-tile p,
+html.theme-halloween #achievementsModal .achievement-tile small { color: #cdb68f; }
+html.theme-halloween #achievementsModal .achievement-tile .achievement-state {
+  border: 1px solid rgba(233, 168, 59, .4);
+  background: rgba(11, 10, 36, .85);
+  color: #ffd68a;
+}
+html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-state { color: #f0b54a; }
+html.theme-halloween #achievementsModal .achievement-progress { background: rgba(255, 226, 176, .14); }
+html.theme-halloween #achievementsModal .achievement-progress i,
+html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-progress > i {
+  background: linear-gradient(90deg, #d4540c, #ffb347);
+  box-shadow: 0 0 8px rgba(255, 150, 40, .45);
+  opacity: 1;
+}
+html.theme-halloween #achievementsModal .achievement-tile > strong,
+html.theme-halloween #achievementsModal .achievement-tile.earned > strong,
+html.theme-halloween #achievementsModal .achievement-tile.locked > strong { color: #ffb347; }
+html.theme-halloween #achievementsModal .achievement-catalog-empty {
+  border-color: rgba(233, 168, 59, .3);
+  background: rgba(20, 14, 52, .8);
+  color: #cdb68f;
 }

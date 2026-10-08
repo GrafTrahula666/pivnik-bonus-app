@@ -64,3 +64,23 @@ Knowledge base reviewed in earlier stages; starter-pack.md remains unavailable.
 
 Next small stage: validate Telegram provider payload error descriptions before
 exposing them in campaign responses, preserving bounded provider retries.
+
+## Review completed on 2026-10-08
+
+Fetched current main 42ef7d46a3ed13f8b53a60563ea41814436cd894 and started an
+isolated review branch at that exact SHA. Merged the existing #232 head
+4d42228ee4287bfc99a7d43ff790f75985b3453d without conflicts. The PR runtime
+diff remains only the original transport catch; no new provider behavior was added.
+
+The original head's release gate 37700320959 and VK parity 37700321057 succeeded.
+Local verification with current main also passes: 518/518 tests, zero skipped;
+npm run check; verify:vk-startup-parity; VK bundle with the CI fixture API origin;
+full npm audit (zero vulnerabilities); production audit; npm pack --dry-run.
+Two materializations are byte-identical across 473 tracked files. Generated
+runtime changes were restored before publishing canonical sources.
+
+Review confirms the catch never reads thrown properties, handles null/undefined,
+keeps the network failure result stable and preserves the single bounded 429
+retry. Gateway broadcast remains a proxy to server.js. Provider payload
+descriptions remain the separately documented gap. Live delivery, production
+data writes, merge into main and deployment are not part of this review.
