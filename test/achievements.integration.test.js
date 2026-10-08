@@ -10,9 +10,9 @@ import {
   syncUserAchievements
 } from '../achievements.js';
 
-test('Каталог содержит по 6 считаемых достижений каждой новой редкости', () => {
-  for (const rarity of ['common', 'rare', 'epic']) {
-    assert.equal(ACHIEVEMENT_CATALOG.filter((item) => item.rarity === rarity).length, 6);
+test('Каталог содержит считаемые достижения каждой новой редкости', () => {
+  for (const [rarity, count] of [['common', 5], ['rare', 6], ['epic', 6]]) {
+    assert.equal(ACHIEVEMENT_CATALOG.filter((item) => item.rarity === rarity).length, count);
   }
   assert.equal(ACHIEVEMENT_CATALOG.filter((item) => item.rarity === 'legendary').length, 0);
   assert.equal(
@@ -35,8 +35,7 @@ test('Каталог содержит по 6 считаемых достижен
     purchaseCount: 3,
     maxCheckCents: 100_000,
     paidBeerMl: 3_000,
-    redemptionCount: 1,
-    shopPurchaseCount: 1
+    redemptionCount: 1
   });
   assert.ok(evaluated.find((item) => item.code === 'single-check-1000')?.eligible);
   assert.equal(evaluated.find((item) => item.code === 'single-check-3000')?.eligible, false);
@@ -141,7 +140,7 @@ test('PostgreSQL: достижения и пинта выдаются один �
 
     const first = await syncUserAchievements(db, userId);
     const second = await syncUserAchievements(db, userId);
-    assert.equal(first.granted.length, 18);
+    assert.equal(first.granted.length, 17);
     assert.equal(second.granted.length, 0);
 
     const another = await db.query(
@@ -170,13 +169,13 @@ test('PostgreSQL: достижения и пинта выдаются один �
        WHERE user_id = $1 AND source = 'achievement'`,
       [userId]
     );
-    assert.equal(Number(grants.rows[0].count), 18);
-    assert.equal(Number(grants.rows[0].bonus), 330);
+    assert.equal(Number(grants.rows[0].count), 17);
+    assert.equal(Number(grants.rows[0].bonus), 320);
     assert.equal(Number(grants.rows[0].beer), 500);
 
     const wallet = await db.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
     const beer = await db.query('SELECT gift_ml_balance FROM beer_loyalty WHERE user_id = $1', [userId]);
-    assert.equal(Number(wallet.rows[0].balance), 1330);
+    assert.equal(Number(wallet.rows[0].balance), 1320);
     assert.equal(Number(beer.rows[0].gift_ml_balance), 500);
 
     const ledger = await db.query(
@@ -185,18 +184,18 @@ test('PostgreSQL: достижения и пинта выдаются один �
        WHERE client_id = $1 AND mode = 'achievement'`,
       [userId]
     );
-    assert.equal(Number(ledger.rows[0].count), 18);
+    assert.equal(Number(ledger.rows[0].count), 17);
 
     const state = await getUserAchievementState(db, userId, { sync: false });
-    assert.equal(state.achievements.length, 18);
-    assert.equal(state.earned.length, 18);
-    assert.equal(state.unannounced.length, 18);
+    assert.equal(state.achievements.length, 17);
+    assert.equal(state.earned.length, 17);
+    assert.equal(state.unannounced.length, 17);
     const monthly = state.earned.find((item) => item.code === 'monthly-top-spender');
     assert.equal(monthly.rewardBeerMl, 500);
 
     assert.equal(await acknowledgeAchievement(db, userId, monthly.grantCode), true);
     const acknowledged = await getUserAchievementState(db, userId, { sync: false });
-    assert.equal(acknowledged.unannounced.length, 17);
+    assert.equal(acknowledged.unannounced.length, 16);
   } finally {
     await db.close();
   }

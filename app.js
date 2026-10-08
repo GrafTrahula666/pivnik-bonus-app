@@ -2122,7 +2122,6 @@ function achievementRewardLabel(item = {}) {
 }
 
 const ACHIEVEMENTS_REFRESH_MS = 20_000;
-const HIDDEN_ACHIEVEMENT_CODES = new Set(['first-shop-purchase']);
 
 function achievementRemainingLabel(item = {}) {
   if (item.earned || item.recurring || !item.progress) return '';
@@ -2136,8 +2135,7 @@ function achievementRemainingLabel(item = {}) {
 
 function nextAchievementGoal() {
   return state.achievements
-    .filter((item) => !item.earned && !item.recurring && item.rarity !== 'legendary'
-      && !HIDDEN_ACHIEVEMENT_CODES.has(item.code) && Number(item.progress?.percent || 0) > 0)
+    .filter((item) => !item.earned && !item.recurring && item.rarity !== 'legendary' && Number(item.progress?.percent || 0) > 0)
     .sort((a, b) => Number(b.progress.percent) - Number(a.progress.percent))[0] || null;
 }
 
@@ -2164,7 +2162,7 @@ function renderAchievementCatalog() {
   $$('#achievementsModal [data-achievement-tab]').forEach((button) => button.classList.toggle('active', button.dataset.achievementTab === rarity));
   const items = rarity === 'legendary'
     ? (state.profile?.achievements || []).filter((item) => item.rarity === 'legendary').map((item) => ({ ...item, earned: true, locked: false }))
-    : state.achievements.filter((item) => item.rarity === rarity && (item.earned || !HIDDEN_ACHIEVEMENT_CODES.has(item.code)));
+    : state.achievements.filter((item) => item.rarity === rarity);
   if (!items.length) {
     const message = rarity === 'legendary'
       ? 'Легендарные достижения выдаются только за уникальные события.'
