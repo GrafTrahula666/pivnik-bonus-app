@@ -21,8 +21,8 @@
     "staging:verify": "node scripts/staging-verify.mjs",
     "staging:integration": "node scripts/run-staging-integration.mjs",
     "test": "vitest run",
-    "test:security": "vitest run server/tests/security.test.ts server/tests/tenant-security.test.ts server/tests/write-security.test.ts",
-    "test:integration": "vitest run server/tests/postgres.integration.test.ts",
+    "test:security": "vitest run server/tests/security.spec.ts server/tests/tenant-security.spec.ts server/tests/write-security.spec.ts",
+    "test:integration": "vitest run server/tests/postgres.integration.spec.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "1.55.1",
     "@testing-library/jest-dom": "^6.8.0",
     "@types/node": "^24.3.0",
     "@types/pg": "^8.15.5",
@@ -50,6 +50,6 @@
     "tsx": "^4.20.5",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.41.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }

@@ -1,4 +1,5 @@
 import {expect,test} from '@playwright/test'
+import {readState} from './auth-state'
 
 const baseUrl=process.env.ADMIN_E2E_BASE_URL||''
 const email=process.env.ADMIN_E2E_SUPER_EMAIL||'super-admin@pivnik.test'
@@ -7,10 +8,8 @@ const password=process.env.ADMIN_E2E_SUPER_PASSWORD||''
 test('diagnose 1366 horizontal overflow on venue dashboard',async({page})=>{
   test.skip(!baseUrl||!password,'Set staging URL and SUPER staging password')
   await page.setViewportSize({width:1366,height:768})
+  await page.context().addCookies(readState(email).cookies)
   await page.goto(baseUrl,{waitUntil:'domcontentloaded'})
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Пароль').fill(password)
-  await page.getByRole('button',{name:'Войти'}).click()
   await expect(page.locator('.app-shell')).toBeVisible()
 
   const select=page.locator('.tenant-select')

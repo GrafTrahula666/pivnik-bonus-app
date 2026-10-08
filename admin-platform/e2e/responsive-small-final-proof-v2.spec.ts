@@ -1,9 +1,9 @@
-import {expect,test,type BrowserContext,type Page} from '@playwright/test'
+import {expect,test,type Page} from '@playwright/test'
+import {readState,type StoredState} from './auth-state'
 
 const baseUrl=process.env.ADMIN_E2E_BASE_URL||''
 const email=process.env.ADMIN_E2E_SUPER_EMAIL||''
 const password=process.env.ADMIN_E2E_SUPER_PASSWORD||''
-type StoredState=Awaited<ReturnType<BrowserContext['storageState']>>
 let state:StoredState|undefined
 
 type Observation={consoleErrors:string[];pageErrors:string[];failedRequests:string[];badResponses:string[];reactWarnings:string[]}
@@ -33,17 +33,9 @@ async function openDashboard(page:Page){
   await expect(page.locator('.kpi-grid')).toBeVisible()
 }
 
-test.beforeAll(async({browser})=>{
+test.beforeAll(()=>{
   if(!baseUrl||!email||!password)throw new Error('Small responsive proof credentials are incomplete')
-  const context=await browser.newContext({baseURL:baseUrl})
-  const page=await context.newPage()
-  await page.goto('/',{waitUntil:'domcontentloaded'})
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Пароль').fill(password)
-  await page.getByRole('button',{name:'Войти'}).click()
-  await expect(page.locator('.app-shell')).toBeVisible()
-  state=await context.storageState()
-  await context.close()
+  state=readState(email)
 })
 
 for(const [label,width,height] of [['tablet 768×1024',768,1024],['mobile 390×844',390,844]] as const){

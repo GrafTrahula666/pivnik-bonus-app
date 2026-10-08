@@ -33,6 +33,9 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
+      - name: Install exact Business dependencies
+        run: npm ci --prefix admin-platform
+
       - name: Audit canonical runtime retirement evidence
         env:
           RUNTIME_RETIREMENT_REPORT_DIR: artifacts/runtime-retirement
@@ -98,6 +101,12 @@ jobs:
             echo "::endgroup::"
             exit "$status"
           fi
+
+      - name: Run Business tests with Vitest
+        run: npm test --prefix admin-platform
+
+      - name: Audit Business dependencies
+        run: npm audit --prefix admin-platform --audit-level=high
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

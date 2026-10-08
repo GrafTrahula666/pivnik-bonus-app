@@ -1,6 +1,7 @@
 import {expect,test,type Page} from '@playwright/test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import {readState} from './auth-state'
 
 const superEmail=process.env.ADMIN_E2E_SUPER_EMAIL||''
 const superPassword=process.env.ADMIN_E2E_SUPER_PASSWORD||''
@@ -14,12 +15,10 @@ type Observation={consoleErrors:string[];pageErrors:string[];failedRequests:stri
 type ApiResult={status:number;body:unknown;text:string}
 type ApiVenue={id:string;companyId:string;companyName:string;name:string}
 
-async function login(page:Page,email:string,password:string){
+async function login(page:Page,email:string){
+  await page.context().clearCookies()
+  await page.context().addCookies(readState(email).cookies)
   await page.goto('/',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:'Вход в панель управления'})).toBeVisible()
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Пароль').fill(password)
-  await page.getByRole('button',{name:'Войти'}).click()
   await expect(page.locator('.app-shell')).toBeVisible()
   await expect(page.locator('.tenant-select option').first()).toBeAttached()
 }
@@ -51,12 +50,13 @@ function clean(result:Observation){
 }
 
 async function openNav(page:Page,name:string){
-  const button=page.locator('.sidebar').getByRole('button',{name,exact:true})
-  if(!await button.isVisible()){
-    await page.locator('.mobile-menu').click()
-    await expect(button).toBeVisible()
+  const menu=page.locator('.mobile-menu')
+  const sidebar=page.locator('.sidebar')
+  if(await menu.isVisible()&&!/\bopen\b/.test(await sidebar.getAttribute('class')||'')){
+    await menu.click()
+    await expect(sidebar).toHaveClass(/\bopen\b/)
   }
-  await button.click()
+  await sidebar.getByRole('button',{name,exact:true}).click()
 }
 
 async function selectPivnik(page:Page){
@@ -105,7 +105,7 @@ test('SUPER ADMIN full staging browser and visual flow',async({page})=>{
   test.setTimeout(180_000)
   await page.setViewportSize({width:1920,height:1080})
   const failures=observe(page)
-  await login(page,superEmail,superPassword)
+  await login(page,superEmail)
 
   await openNav(page,'Платформа')
   await pageReady(page,'Платформа','.platform-kpis')
@@ -181,7 +181,7 @@ test('real customer bonus write reaches API, refreshed UI and Audit Log',async({
   test.skip(!superEmail||!superPassword,'Set SUPER E2E credentials')
   test.setTimeout(120_000)
   const failures=observe(page)
-  await login(page,superEmail,superPassword)
+  await login(page,superEmail)
   await selectPivnik(page)
   await openNav(page,'Клиенты')
   await pageReady(page,'Клиенты','tbody tr')
@@ -195,6 +195,8 @@ test('real customer bonus write reaches API, refreshed UI and Audit Log',async({
   await page.getByLabel('Причина / комментарий').fill('Проверка обновления баланса в панели')
   await page.locator('.editor-modal').getByRole('button',{name:'Начислить',exact:true}).click()
   await expect(balance).not.toHaveText(before||'')
+  await page.getByRole('button',{name:'Закрыть карточку'}).click()
+  await expect(page.locator('.drawer')).toHaveCount(0)
 
   await openNav(page,'Журнал')
   await pageReady(page,'Журнал','tbody tr')
@@ -206,7 +208,7 @@ test('real customer bonus write reaches API, refreshed UI and Audit Log',async({
 test('VENUE ADMIN A UI and HTTP tenant boundary reject every NORTH substitution',async({page})=>{
   test.skip(!venueEmail||!venuePassword||!superEmail||!superPassword,'Set staging credentials')
   test.setTimeout(120_000)
-  await login(page,venueEmail,venuePassword)
+  await login(page,venueEmail)
   await expect(page.locator('.sidebar').getByRole('button',{name:'Платформа',exact:true})).toHaveCount(0)
   await expect(page.locator('.sidebar').getByRole('button',{name:'Компании',exact:true})).toHaveCount(0)
 
@@ -220,8 +222,7 @@ test('VENUE ADMIN A UI and HTTP tenant boundary reject every NORTH substitution'
   const platform=await api(page,{path:'/api/admin/platform'})
   expect(platform.status).toBe(403)
 
-  await page.context().clearCookies()
-  await login(page,superEmail,superPassword)
+  await login(page,superEmail)
   const all=(await api(page,{path:'/api/admin/venues'})).body as {venues:ApiVenue[]}
   const north=all.venues.find(venue=>venue.companyName==='NORTH HOSPITALITY')
   expect(north,'Synthetic NORTH venue').toBeTruthy()
@@ -237,8 +238,7 @@ test('VENUE ADMIN A UI and HTTP tenant boundary reject every NORTH substitution'
     }else expect(superResult.status,`SUPER ADMIN reads NORTH ${resource}`).toBe(200)
   }
 
-  await page.context().clearCookies()
-  await login(page,venueEmail,venuePassword)
+  await login(page,venueEmail)
   for(const resource of [
     'dashboard?days=30','clients?companyId='+encodeURIComponent(north!.companyId),'operations?venueId='+encodeURIComponent(north!.id),
     'achievements','wheel','shop','promotions','design','loyalty/manage','wheel/manage','achievements/manage',
@@ -275,17 +275,15 @@ test('VENUE ADMIN A UI and HTTP tenant boundary reject every NORTH substitution'
 
 test('NORTH VENUE ADMIN cannot navigate to PIVNIK by URL, query or body substitution',async({page})=>{
   test.skip(!northEmail||!northPassword||!superEmail||!superPassword,'Set staging credentials')
-  await login(page,northEmail,northPassword)
+  await login(page,northEmail)
   const own=(await api(page,{path:'/api/admin/venues'})).body as {venues:ApiVenue[]}
   expect(own.venues).toHaveLength(1)
   expect(own.venues[0]?.companyName).toBe('NORTH HOSPITALITY')
-  await page.context().clearCookies()
-  await login(page,superEmail,superPassword)
+  await login(page,superEmail)
   const all=(await api(page,{path:'/api/admin/venues'})).body as {venues:ApiVenue[]}
   const foreign=all.venues.find(venue=>venue.companyName==='ПИВНИК TEST')
   expect(foreign).toBeTruthy()
-  await page.context().clearCookies()
-  await login(page,northEmail,northPassword)
+  await login(page,northEmail)
   const denied=await api(page,{path:`/api/admin/venues/${foreign!.id}/clients?companyId=${own.venues[0]!.companyId}&venueId=${own.venues[0]!.id}`})
   expect([403,404]).toContain(denied.status)
   const bodyDenied=await api(page,{
@@ -303,7 +301,7 @@ test('Demo Mode is synthetic and performs no production API mutations',async({pa
     if(request.url().includes('/api/admin/')&&!['GET','HEAD'].includes(request.method()))mutationRequests.push(`${request.method()} ${request.url()}`)
   })
   await page.setViewportSize({width:1440,height:900})
-  await login(page,superEmail,superPassword)
+  await login(page,superEmail)
   mutationRequests.length=0
   await page.getByRole('button',{name:'Демо',exact:true}).click()
   await expect(page.locator('.demo-watermark')).toContainText('ДЕМО-РЕЖИМ · ПРИМЕР ДАННЫХ · ИЗМЕНЕНИЯ НЕ СОХРАНЯЮТСЯ')
@@ -328,7 +326,7 @@ for(const [label,width,height,file] of [
     test.skip(!superEmail||!superPassword,'Set SUPER E2E credentials')
     await page.setViewportSize({width,height})
     const failures=observe(page)
-    await login(page,superEmail,superPassword)
+    await login(page,superEmail)
     await selectPivnik(page)
     await openNav(page,'Обзор')
     await pageReady(page,'ПИВНИК TEST VENUE','.kpi-grid')

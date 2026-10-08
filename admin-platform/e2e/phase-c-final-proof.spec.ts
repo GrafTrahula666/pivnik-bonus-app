@@ -1,6 +1,7 @@
-import {expect,test,type Browser,type BrowserContext,type Page} from '@playwright/test'
+import {expect,test,type Browser,type Page} from '@playwright/test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import {readState,type StoredState} from './auth-state'
 
 const baseUrl=process.env.ADMIN_E2E_BASE_URL||''
 const superEmail=process.env.ADMIN_E2E_SUPER_EMAIL||''
@@ -11,7 +12,6 @@ const northEmail=process.env.ADMIN_E2E_NORTH_EMAIL||''
 const northPassword=process.env.ADMIN_E2E_NORTH_PASSWORD||''
 const shot=path.resolve('artifacts/screenshots')
 
-type StoredState=Awaited<ReturnType<BrowserContext['storageState']>>
 type Observation={consoleErrors:string[];pageErrors:string[];failedRequests:string[];badResponses:string[];reactWarnings:string[]}
 type ApiResult={status:number;body:unknown;text:string}
 type ApiVenue={id:string;companyId:string;companyName:string;name:string}
@@ -19,20 +19,6 @@ type ApiVenue={id:string;companyId:string;companyName:string;name:string}
 let superState:StoredState|undefined
 let venueState:StoredState|undefined
 let northState:StoredState|undefined
-
-async function authenticate(browser:Browser,email:string,password:string):Promise<StoredState>{
-  const context=await browser.newContext({baseURL:baseUrl})
-  const page=await context.newPage()
-  await page.goto('/',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:'Вход в панель управления'})).toBeVisible()
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Пароль').fill(password)
-  await page.getByRole('button',{name:'Войти'}).click()
-  await expect(page.locator('.app-shell')).toBeVisible()
-  const state=await context.storageState()
-  await context.close()
-  return state
-}
 
 async function sessionPage(browser:Browser,state:StoredState|undefined,viewport={width:1920,height:1080}){
   if(!state)throw new Error('E2E authenticated storage state is missing')
@@ -69,12 +55,13 @@ function clean(result:Observation){
 }
 
 async function openNav(page:Page,name:string){
-  const button=page.locator('.sidebar').getByRole('button',{name,exact:true})
-  if(!await button.isVisible()){
-    await page.locator('.mobile-menu').click()
-    await expect(button).toBeVisible()
+  const menu=page.locator('.mobile-menu')
+  const sidebar=page.locator('.sidebar')
+  if(await menu.isVisible()&&!/\bopen\b/.test(await sidebar.getAttribute('class')||'')){
+    await menu.click()
+    await expect(sidebar).toHaveClass(/\bopen\b/)
   }
-  await button.click()
+  await sidebar.getByRole('button',{name,exact:true}).click()
 }
 
 async function selectPivnik(page:Page){
@@ -107,12 +94,12 @@ async function api(page:Page,request:{path:string;method?:string;body?:unknown})
   },request)
 }
 
-test.beforeAll(async({browser})=>{
+test.beforeAll(async()=>{
   if(!baseUrl||!superEmail||!superPassword||!venueEmail||!venuePassword||!northEmail||!northPassword)throw new Error('Final staging proof credentials are incomplete')
   await fs.mkdir(shot,{recursive:true})
-  superState=await authenticate(browser,superEmail,superPassword)
-  venueState=await authenticate(browser,venueEmail,venuePassword)
-  northState=await authenticate(browser,northEmail,northPassword)
+  superState=readState(superEmail)
+  venueState=readState(venueEmail)
+  northState=readState(northEmail)
 })
 
 test('01 SUPER ADMIN complete sales and management surface',async({browser})=>{
