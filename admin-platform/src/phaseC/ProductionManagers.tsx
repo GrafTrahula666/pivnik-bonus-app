@@ -9,7 +9,7 @@ import {
   CardTitle,EditorModal,Field,PageHead,Status,Toggle,cn,rub,
 } from '../ui'
 import {
-  ErrorCard,LoadingCard,SourceNote,WriteGatePill,imageFileToDataUrl,useResource,
+  ErrorCard,LoadingCard,PanelOnlyNote,SourceNote,WriteGatePill,imageFileToDataUrl,useResource,
 } from './common'
 import { businessLabel,rewardSummary } from './labels'
 
@@ -56,6 +56,7 @@ export function LoyaltyManager({venue,session}:{venue:ApiVenue;session:AdminSess
     <PageHead eyebrow="ПРОГРАММА ЛОЯЛЬНОСТИ" title="Лояльность"
       sub={`${venue.companyName} → ${venue.name}`}
       actions={<><WriteGatePill enabled={session.capabilities.writes}/><button className="btn" disabled={!session.capabilities.writes||Boolean(invalid)||save.busy} onClick={()=>setConfirm(true)}><Save/>Сохранить</button></>}/>
+    <PanelOnlyNote/>
     <section className="card editor-card">
       <CardTitle title="Базовые правила"/>
       <div className="form-grid three">
@@ -63,7 +64,7 @@ export function LoyaltyManager({venue,session}:{venue:ApiVenue;session:AdminSess
         <Field label="Бонус регистрации" type="number" value={draft.registrationBonus} onChange={v=>setDraft({...draft,registrationBonus:Number(v)})}/>
         <Field label="Бонус за рекомендацию" type="number" value={draft.referralBonus} onChange={v=>setDraft({...draft,referralBonus:Number(v)})}/>
       </div>
-      <SourceNote>{draft.source==='legacy-fallback'?'Показаны действующие параметры заведения. Изменения вступят в силу после отдельного подтверждения запуска.':'Настройки сохранены и готовы к использованию.'}</SourceNote>
+      <SourceNote>{draft.source==='legacy-fallback'?'Показаны стандартные параметры заведения.':'Настройки сохранены в панели.'}</SourceNote>
     </section>
     <section className="card editor-card">
       <CardTitle title="Уровни" action="+ Добавить" onAction={()=>setDraft({...draft,levels:[...draft.levels,{code:newCode('level'),title:'Новый уровень',thresholdRub:(draft.levels.at(-1)?.thresholdRub||0)+50000,bonusPercent:5,discountPercent:0,enabled:true,sortOrder:draft.levels.length}]})}/>
@@ -171,6 +172,7 @@ export function ShopManager({venue,session}:{venue:ApiVenue;session:AdminSession
   if(loading&&!data)return <LoadingCard/>;if(error&&!data)return <ErrorCard error={error} onRetry={reload}/>
   return <div className="page"><PageHead eyebrow="КАТАЛОГ НАГРАД" title="Магазин" sub={`${venue.companyName} → ${venue.name}`}
     actions={<><WriteGatePill enabled={session.capabilities.writes}/><button className="btn" disabled={!session.capabilities.writes||save.busy} onClick={()=>void persist()}><Save/>Сохранить</button><button className="btn secondary" onClick={()=>setEdit({code:newCode('item'),title:'',description:'',category:'merch',rewardType:'item',rewardValue:{},bonusPrice:500,stock:10,purchaseLimit:null,enabled:true,sortOrder:items.length})}><Plus/>Товар</button></>}/>
+    <PanelOnlyNote/>
     <div className="shop-grid">{items.map((x,i)=><article className="product-card card" key={x.code}><div className={cn('product-art',`art-${i%4}`)}><ShoppingBag/><span>{businessLabel(x.category)}</span><button className="icon-btn" onClick={()=>setEdit({...x})}><Pencil/></button></div>
       <div className="product-body"><div><h3>{x.title}</h3><Status value={x.enabled?'Активен':'Пауза'}/></div><p>{x.description}</p><div className="product-price"><strong>{rub.format(Number(x.bonusPrice||0))} <small>бонусов</small></strong><span>Остаток · {x.stock??'∞'}</span></div>
         <div className="reorder"><button disabled={i===0} onClick={()=>{const n=[...items];[n[i-1],n[i]]=[n[i]!,n[i-1]!];setItems(n.map((v,j)=>({...v,sortOrder:j})))}}>↑ Выше</button><button disabled={i===items.length-1} onClick={()=>{const n=[...items];[n[i],n[i+1]]=[n[i+1]!,n[i]!];setItems(n.map((v,j)=>({...v,sortOrder:j})))}}>↓ Ниже</button></div>
@@ -194,6 +196,7 @@ export function PromotionManager({venue,session}:{venue:ApiVenue;session:AdminSe
   if(loading&&!data)return <LoadingCard/>;if(error&&!data)return <ErrorCard error={error} onRetry={reload}/>
   return <div className="page"><PageHead eyebrow="МАРКЕТИНГОВЫЕ КАМПАНИИ" title="Акции" sub={`${venue.companyName} → ${venue.name}`}
     actions={<><WriteGatePill enabled={session.capabilities.writes}/><button className="btn" disabled={!session.capabilities.writes||save.busy} onClick={()=>void persist()}><Save/>Сохранить</button><button className="btn secondary" onClick={()=>setEdit({code:newCode('promo'),title:'',description:'',startsAt:null,endsAt:null,mechanic:{type:'cashback'},reward:{},multiplier:null,enabled:false,sortOrder:items.length})}><Plus/>Акция</button></>}/>
+    <PanelOnlyNote/>
     <div className="promo-grid">{items.map((x,i)=><article className="promo-card card" key={x.code}><div className={cn('promo-visual',`promo-${i%3}`)}><TicketPercent/><span>{businessLabel(x.state||'DRAFT')}</span></div><div className="promo-body">
       <div><Status value={businessLabel(x.state||'DRAFT')}/><button className="ghost-icon" onClick={()=>setEdit({...x})}><Pencil/></button></div><h3>{x.title}</h3><p>{x.description}</p><strong>{x.multiplier?`×${x.multiplier}`:rewardSummary(x.reward)}</strong><div className="promo-metrics"><span>{x.startsAt?new Date(x.startsAt).toLocaleString('ru-RU'):'без старта'}</span><span>{x.endsAt?new Date(x.endsAt).toLocaleString('ru-RU'):'без конца'}</span></div>
     </div></article>)}</div><SaveMessage state={save}/><SourceNote>Статус акции рассчитывается автоматически по датам начала и окончания.</SourceNote>
@@ -216,6 +219,7 @@ export function BrandingManager({venue,session}:{venue:ApiVenue;session:AdminSes
   const persist=async()=>{const current=draft;setSave({busy:true,error:'',ok:''});try{const saved=await apiPut<BrandingData>(path,{brandingEnabled:current.brandingEnabled===true,branding:current.branding,phone:current.phone,links:current.links,venueName:current.venue.name,address:current.venue.address});setData(saved);setDraft(structuredClone(saved));setSave({busy:false,error:'',ok:'Оформление сохранено.'})}catch(e){setSave({busy:false,error:e instanceof Error?e.message:'Не удалось сохранить.',ok:''})}}
   return <div className="page"><PageHead eyebrow="ФИРМЕННЫЙ СТИЛЬ" title="Оформление" sub={`${venue.companyName} → ${venue.name}`}
     actions={<><WriteGatePill enabled={session.capabilities.writes}/><button className="btn" disabled={!session.capabilities.writes||save.busy} onClick={()=>void persist()}><Save/>Сохранить</button></>}/>
+    <PanelOnlyNote/>
     <div className="brand-layout"><section className="card editor-card brand-form"><CardTitle title="Идентика"/>
       <div className="setting-row"><div><b>Фирменный стиль включён</b><span>Управляет оформлением клиентского интерфейса</span></div><Toggle value={draft.brandingEnabled===true} onChange={v=>setDraft({...draft,brandingEnabled:v})}/></div>
       <Field label="Название заведения" value={draft.venue.name} onChange={v=>setDraft({...draft,venue:{...draft.venue,name:v}})}/><Field label="Адрес" value={draft.venue.address||''} onChange={v=>setDraft({...draft,venue:{...draft.venue,address:v||null}})}/>
@@ -248,6 +252,7 @@ export function FeatureFlagsManager({venue,session}:{venue:ApiVenue;session:Admi
   if(loading&&!data)return <LoadingCard/>;if(error&&!data)return <ErrorCard error={error} onRetry={reload}/>
   async function persist(){setSave({busy:true,error:'',ok:''});try{await apiPut(`/api/admin/venues/${venue.id}/features/manage`,flags);setData({...flags,fallback:'Текущие настройки сохраняются'});setSave({busy:false,error:'',ok:'Настройки доступности сохранены.'})}catch(e){setSave({busy:false,error:e instanceof Error?e.message:'Не удалось сохранить.',ok:''})}}
   return <div className="page"><PageHead eyebrow="УПРАВЛЕНИЕ СЕРВИСАМИ" title="Настройки" sub={`${venue.companyName} → ${venue.name}`} actions={<><WriteGatePill enabled={session.capabilities.writes}/><button className="btn" disabled={!session.capabilities.writes} onClick={()=>void persist()}><Save/>Сохранить</button></>}/>
+    <PanelOnlyNote/>
     <div className="settings-grid"><section className="card editor-card"><CardTitle title="Доступность разделов"/>
       {[
         ['wheelEnabled','Колесо'],['shopEnabled','Магазин'],['achievementsEnabled','Достижения'],['referralsEnabled','Рефералы'],['promotionsEnabled','Акции'],['brandingEnabled','Оформление'],

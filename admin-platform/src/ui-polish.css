@@ -5,3 +5,4 @@
 .prob-total strong{font-variant-numeric:tabular-nums}.achievement-card .achievement-meta span:first-child{text-transform:none}
 @media(max-width:1180px){.drawer .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.view-only-badge{height:30px}.business-setting-row{align-items:flex-start}.drawer .detail-grid{grid-template-columns:1fr 1fr}.bonus-flow{flex-direction:column;align-items:flex-start;gap:3px}}
+.panel-only-note{margin-top:0;border-color:#4a3a1c;background:#1a160c;color:#d9c08a}.panel-only-note svg{color:#e0b453}
