@@ -15,6 +15,8 @@ export function LivePill({write=false}:{write?:boolean}){return <div className={
 export function WriteGatePill({enabled,label='ИЗМЕНЕНИЯ'}:{enabled:boolean;label?:string}){return <div className={enabled?'write-live-pill':'read-only-button'}>{enabled?<ShieldCheck/>:<AlertTriangle/>}{label} · {enabled?'ДОСТУПНЫ':'ТОЛЬКО ПРОСМОТР'}</div>}
 export function LoadingCard({text='Загрузка реальных данных…'}:{text?:string}){return <div className="card phase-loading"><LoaderCircle/><b>{text}</b></div>}
 export function ErrorCard({error,onRetry}:{error:string;onRetry?:()=>void}){return <div className="error-state card"><AlertTriangle/><h3>Не удалось выполнить запрос</h3><p>{error}</p>{onRetry&&<button className="btn secondary" onClick={onRetry}>Повторить</button>}</div>}
+// Business keeps these editors in its own database; the guest app does not read them yet.
+export function PanelOnlyNote(){return <div className="safety-note panel-only-note"><AlertTriangle/><span>Пока не связано с приложением: эти настройки сохраняются только в панели, гости их не видят. В приложении сейчас действуют настройки из его админки.</span></div>}
 export function SourceNote({children}:{children:ReactNode}){return <div className="safety-note"><ShieldCheck/><span>{children}</span></div>}
 export const money=(n:number|null|undefined)=>n===null||n===undefined?'Нет данных':`₽ ${new Intl.NumberFormat('ru-RU').format(Math.round(n))}`
 export const num=(n:number|null|undefined)=>n===null||n===undefined?'Нет данных':new Intl.NumberFormat('ru-RU').format(Math.round(n))
