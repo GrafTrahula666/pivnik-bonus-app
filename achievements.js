@@ -196,6 +196,104 @@ export const ACHIEVEMENT_CATALOG = Object.freeze(
   }))
 );
 
+// PIVNIK Business can switch automatic achievements off, change their bonus and add its own
+// achievements that are only given by hand. Without saved settings the catalog above applies as is.
+const RARITIES = new Set(['common', 'rare', 'epic', 'legendary']);
+const MAX_REWARD_BONUS = 100_000;
+const MAX_CUSTOM_ACHIEVEMENTS = 100;
+const EMPTY_SETTINGS = Object.freeze({ overrides: Object.freeze({}), custom: Object.freeze([]) });
+let achievementSettings = EMPTY_SETTINGS;
+
+function settingsError(message) {
+  return Object.assign(new Error(message), { statusCode: 400 });
+}
+
+function rewardBonusValue(value, label) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > MAX_REWARD_BONUS) {
+    throw settingsError(`${label}: награда должна быть целым числом от 0 до ${MAX_REWARD_BONUS}.`);
+  }
+  return parsed;
+}
+
+export function normalizeAchievementSettings(raw) {
+  const input = raw && typeof raw === 'object' ? raw : {};
+  const known = new Map(ACHIEVEMENT_CATALOG.map((item) => [item.code, item]));
+  const overrides = {};
+  const rawOverrides = input.overrides && typeof input.overrides === 'object' ? input.overrides : {};
+  for (const [code, value] of Object.entries(rawOverrides)) {
+    const definition = known.get(code);
+    if (!definition) continue;
+    const item = value && typeof value === 'object' ? value : {};
+    const override = {};
+    if (item.enabled === false) override.enabled = false;
+    if (item.rewardBonus !== undefined && item.rewardBonus !== null) {
+      const bonus = rewardBonusValue(item.rewardBonus, definition.title);
+      if (bonus !== definition.rewardBonus) override.rewardBonus = bonus;
+    }
+    if (Object.keys(override).length) overrides[code] = Object.freeze(override);
+  }
+  const rawCustom = Array.isArray(input.custom) ? input.custom : [];
+  if (rawCustom.length > MAX_CUSTOM_ACHIEVEMENTS) throw settingsError(`Можно добавить не больше ${MAX_CUSTOM_ACHIEVEMENTS} своих достижений.`);
+  const codes = new Set(known.keys());
+  const custom = rawCustom.map((value) => {
+    const item = value && typeof value === 'object' ? value : {};
+    const code = String(item.code || '').trim().toLowerCase();
+    if (!/^custom-[a-z0-9-]{1,60}$/.test(code)) throw settingsError('Код своего достижения должен начинаться с custom-.');
+    if (codes.has(code)) throw settingsError('Коды достижений не должны повторяться.');
+    codes.add(code);
+    const title = String(item.title || '').trim();
+    if (!title || title.length > 80) throw settingsError('Название достижения: от 1 до 80 символов.');
+    const description = String(item.description || '').trim();
+    if (description.length > 300) throw settingsError(`«${title}»: описание не длиннее 300 символов.`);
+    const rarity = RARITIES.has(item.rarity) ? item.rarity : 'rare';
+    return Object.freeze({ code, title, description, rarity, rewardBonus: rewardBonusValue(item.rewardBonus ?? 0, title) });
+  });
+  return Object.freeze({ overrides: Object.freeze(overrides), custom: Object.freeze(custom) });
+}
+
+// Applies settings read from the database. Broken settings fall back to the built-in catalog.
+export function configureAchievements(raw) {
+  try {
+    achievementSettings = raw ? normalizeAchievementSettings(raw) : EMPTY_SETTINGS;
+  } catch (error) {
+    console.warn('Achievement settings ignored:', error.message);
+    achievementSettings = EMPTY_SETTINGS;
+  }
+}
+
+export function achievementSettingsSnapshot() {
+  return achievementSettings;
+}
+
+// The catalog as guests get it now: built-in achievements with Business overrides, then manual ones.
+export function activeAchievementCatalog() {
+  const { overrides, custom } = achievementSettings;
+  return [
+    ...ACHIEVEMENT_CATALOG.map((definition) => {
+      const override = overrides[definition.code];
+      return override
+        ? { ...definition, rewardBonus: override.rewardBonus ?? definition.rewardBonus, enabled: override.enabled !== false }
+        : { ...definition, enabled: true };
+    }),
+    ...custom.map((item) => ({
+      ...item,
+      icon: 'spark',
+      metric: 'manual',
+      target: 1,
+      unit: 'count',
+      recurring: null,
+      rewardBeerMl: 0,
+      manual: true,
+      enabled: true
+    }))
+  ];
+}
+
+function automaticCatalog() {
+  return activeAchievementCatalog().filter((definition) => definition.enabled && !definition.manual);
+}
+
 function number(value) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -256,8 +354,8 @@ function publicDefinition(definition, current = 0) {
   };
 }
 
-export function evaluateAchievementCatalog(metrics = {}) {
-  return ACHIEVEMENT_CATALOG.map((definition) => {
+export function evaluateAchievementCatalog(metrics = {}, catalog = automaticCatalog()) {
+  return catalog.map((definition) => {
     const current = number(metrics[definition.metric]);
     return {
       ...publicDefinition(definition, current),
@@ -470,7 +568,7 @@ export async function syncUserAchievements(db, userId) {
     metrics.previousMonthWinner = monthly.isWinner ? 1 : 0;
 
     const granted = [];
-    for (const definition of ACHIEVEMENT_CATALOG) {
+    for (const definition of automaticCatalog()) {
       if (number(metrics[definition.metric]) < definition.target) continue;
       const periodKey = definition.recurring === 'monthly' ? monthly.periodKey : '';
       if (definition.recurring === 'monthly' && !periodKey) continue;
@@ -506,7 +604,11 @@ export async function getUserAchievementState(db, userId, { sync = true } = {}) 
 
   const grants = grantsResult.rows;
   const awarded = awardedAchievementState(grants);
-  const achievements = evaluateAchievementCatalog(metrics).map((item) => ({
+  // Switched-off and manual achievements stay visible to the guests who already have them.
+  const catalog = activeAchievementCatalog().filter((definition) => (
+    (definition.enabled && !definition.manual) || awarded.byCode.get(definition.code)?.earned
+  ));
+  const achievements = evaluateAchievementCatalog(metrics, catalog).map((item) => ({
     ...item,
     ...(awarded.byCode.get(item.code) || {
       earned: false,
@@ -543,7 +645,7 @@ function awardedAchievementState(grants) {
     }
   }
 
-  const byCode = new Map(ACHIEVEMENT_CATALOG.map((definition) => {
+  const byCode = new Map(activeAchievementCatalog().map((definition) => {
     const grant = latestByAchievement.get(definition.code);
     return [definition.code, {
       ...publicDefinition(definition, definition.target),
@@ -600,4 +702,40 @@ export async function acknowledgeAchievement(db, userId, code) {
     [userId, String(code || '')]
   );
   return hasRows(result);
+}
+// Gives an achievement and its reward by hand (PIVNIK Business). Uses the same grant code as the
+// automatic award, so a guest never gets the same achievement twice.
+export async function grantAchievementManually(db, userId, code) {
+  const definition = activeAchievementCatalog().find((item) => item.code === String(code || ''));
+  if (!definition) throw Object.assign(new Error('Такого достижения нет.'), { statusCode: 404 });
+  if (definition.recurring) throw Object.assign(new Error('Это достижение выдаётся автоматически раз в месяц.'), { statusCode: 400 });
+  const { client, release } = await acquireClient(db);
+  try {
+    await client.query('BEGIN');
+    const user = await client.query(
+      `SELECT id FROM users
+       WHERE id = $1::bigint AND merged_into_user_id IS NULL AND deleted_at IS NULL
+       FOR UPDATE`,
+      [userId]
+    );
+    if (!hasRows(user)) throw Object.assign(new Error('Гость не найден.'), { statusCode: 404 });
+    await client.query('INSERT INTO wallets (user_id, balance) VALUES ($1::bigint, 0) ON CONFLICT (user_id) DO NOTHING', [userId]);
+    await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1::bigint) ON CONFLICT (user_id) DO NOTHING', [userId]);
+    const granted = await awardAchievement(client, userId, definition, '');
+    if (!granted) throw Object.assign(new Error('У гостя уже есть это достижение.'), { statusCode: 409 });
+    const wallet = await client.query('SELECT balance FROM wallets WHERE user_id = $1::bigint', [userId]);
+    await client.query('COMMIT');
+    return {
+      code: definition.code,
+      title: definition.title,
+      rewardBonus: number(definition.rewardBonus),
+      rewardBeerMl: number(definition.rewardBeerMl),
+      balance: number(wallet.rows[0]?.balance)
+    };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    release();
+  }
 }

@@ -13,8 +13,10 @@ import {
   withVkStartupTrace, traceVkStage
 } from './vk-startup-diagnostics.js';
 import {
+  configureAchievements,
   getUserEarnedAchievementState
 } from './achievements.js';
+import { onRuntimeConfig, startRuntimeConfigRefresh } from './business-runtime-config.js';
 import {
   chooseCanonicalUser,
   effectiveRoleForAuthenticatedIdentity,
@@ -423,7 +425,7 @@ function availableFramesFromRow(row) {
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
   const frames = [{ code: 'none', title: 'Без рамки' }, ...giftedFrameChoices(row)];
-  if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
+  if ((row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') && !frames.some((frame) => frame.code === 'diamond')) frames.push({ code: 'diamond', title: 'Алмазная рамка' });
   return frames;
 }
 
@@ -3567,6 +3569,9 @@ if (!isTestImport) {
       await waitForChild();
       await initPlatformDatabase();
       await refreshDatabaseFingerprint();
+      // Achievement settings from PIVNIK Business; server.js keeps its own copy the same way.
+      onRuntimeConfig('achievements', configureAchievements);
+      startRuntimeConfigRefresh(pool);
     } catch (error) {
       console.error(
         'Platform initialization failed:',
