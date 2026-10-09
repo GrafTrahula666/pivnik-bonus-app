@@ -58,8 +58,8 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
       CREATE TABLE wheel_spins(id BIGSERIAL PRIMARY KEY,user_id BIGINT REFERENCES users(id),kind TEXT DEFAULT 'free',prize_code TEXT,charged_bonus_cost BIGINT DEFAULT 0,bonus_awarded BIGINT DEFAULT 0,beer_awarded_ml INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW());
       CREATE TABLE shop_items(id BIGSERIAL PRIMARY KEY,code TEXT UNIQUE,title TEXT,subtitle TEXT,category TEXT,price_type TEXT,bonus_price BIGINT DEFAULT 0,cash_price BIGINT DEFAULT 0,image_src TEXT,active BOOLEAN DEFAULT TRUE,sort_order INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
       CREATE TABLE shop_purchases(id BIGSERIAL PRIMARY KEY,request_key TEXT UNIQUE,user_id BIGINT REFERENCES users(id),item_code TEXT,bonus_price BIGINT DEFAULT 0,transaction_id BIGINT UNIQUE,created_at TIMESTAMPTZ DEFAULT NOW());
-      CREATE TABLE promotions(id BIGSERIAL PRIMARY KEY,code TEXT UNIQUE,title TEXT,description TEXT,badge TEXT,image_src TEXT,active BOOLEAN DEFAULT TRUE,sort_order INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
-      CREATE TABLE app_settings(id INTEGER PRIMARY KEY,published JSONB,updated_at TIMESTAMPTZ DEFAULT NOW());
+      CREATE TABLE promotions(id BIGSERIAL PRIMARY KEY,code TEXT NOT NULL UNIQUE,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',badge TEXT NOT NULL DEFAULT '',image_src TEXT,active BOOLEAN NOT NULL DEFAULT TRUE,sort_order INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_by BIGINT REFERENCES users(id));
+      CREATE TABLE app_settings(id SMALLINT PRIMARY KEY DEFAULT 1 CHECK(id=1),draft JSONB NOT NULL,published JSONB NOT NULL,updated_by BIGINT REFERENCES users(id),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     `)
     const b1=await setup.query<{id:string}>(`INSERT INTO bars(code,name,address) VALUES('pivnik','ПИВНИК','Pivnik Test') RETURNING id::text`)
     const b2=await setup.query<{id:string}>(`INSERT INTO bars(code,name,address) VALUES('north-test','NORTH BAR · TEST','North Test') RETURNING id::text`)
@@ -72,6 +72,10 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     await setup.query(`INSERT INTO user_identities(user_id,provider,provider_user_id) VALUES($1,'telegram','tg-p'),($2,'vk','vk-n')`,[pivnikUser,northUser])
     await setup.query(`INSERT INTO transactions(request_key,client_id,mode,status,check_amount_cents,cash_paid_cents,bonus_earned,completed_at)
       VALUES('seed-p',$1,'accrue','completed',2000,2000,100,NOW()-INTERVAL '1 day'),('seed-n',$2,'accrue','completed',9000,9000,450,NOW()-INTERVAL '1 day')`,[pivnikUser,northUser])
+
+    const published={version:9,colors:{accent:'#fff'},texts:{brand:'Пивник',balanceLabel:'Ваш баланс',byline:'by Kirill Gamilton',qrButton:'Показать QR'},sections:{promos:true,featured:true,leaderboard:true,team:true,byline:true},radius:20,splash:{enabled:false,imageUrl:''}}
+    await setup.query(`INSERT INTO app_settings(id,draft,published) VALUES(1,$1::jsonb,$2::jsonb)`,[JSON.stringify({...published,splash:{enabled:true,imageUrl:'/assets/draft.png'}}),JSON.stringify(published)])
+    await setup.query(`INSERT INTO promotions(code,title,image_src,sort_order) VALUES('promo-seed','Счастливые часы','data:image/png;base64,AAAA',10)`)
 
     for(const file of ['001_admin_core.sql','002_configuration_foundation.sql','003_phase_c_write_safety.sql'])
       await setup.query(await fs.readFile(path.resolve('admin-migrations',file),'utf8'))
@@ -282,6 +286,40 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect(manual).toBeGreaterThan(0)
     const dashboard=await getVenueDashboard(scope,{from:new Date(Date.now()-30*86400000),to:new Date(Date.now()+60000),days:30})
     expect(dashboard.metrics.bonusEarned.value).toBe(all-manual)
+  })
+
+  it('guest app promotions: create, edit keeps the uploaded picture, delete, all audited',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const app=await import('../pivnik-app-content.js')
+    const scope=await resolveVenueScope(pivnikAdmin,pivnikVenue)
+    const seed=(await app.listAppPromotions(scope)).items[0]!
+    expect(seed.title).toBe('Счастливые часы')
+    const edited=await app.updateAppPromotion(pivnikAdmin,scope,seed.id,{title:'Счастливые часы 18-20',active:false,sortOrder:5})
+    expect(edited).toMatchObject({title:'Счастливые часы 18-20',active:false,sortOrder:5,imageSrc:'data:image/png;base64,AAAA'})
+    const created=await app.createAppPromotion(pivnikAdmin,scope,{title:'Пятница',badge:'−20%',imageSrc:'https://x.test/p.png',sortOrder:20})
+    expect(created.code).toMatch(/^promo-/)
+    expect((await app.listAppPromotions(scope)).items.map(x=>x.title)).toEqual(['Счастливые часы 18-20','Пятница'])
+    await app.deleteAppPromotion(pivnikAdmin,scope,created.id)
+    await expect(app.deleteAppPromotion(pivnikAdmin,scope,created.id)).rejects.toMatchObject({code:'NOT_FOUND'})
+    const audit=(await setup!.query<{action:string;before_data:unknown}>(`SELECT action FROM admin_audit_log WHERE action LIKE 'app.promotion_%' ORDER BY id`)).rows.map(r=>r.action)
+    expect(audit).toEqual(['app.promotion_update','app.promotion_create','app.promotion_delete'])
+    const logged=JSON.stringify((await setup!.query(`SELECT * FROM admin_audit_log WHERE action='app.promotion_update'`)).rows[0])
+    expect(logged).not.toContain('base64')
+  })
+
+  it('guest app design: publish changes Business fields and keeps colors, version and the in-app draft',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const app=await import('../pivnik-app-content.js')
+    const scope=await resolveVenueScope(pivnikAdmin,pivnikVenue)
+    const current=await app.getAppDesign(scope)
+    expect(current.draftPending).toBe(true)
+    await app.publishAppDesign(pivnikAdmin,scope,{...current.design,texts:{...current.design.texts,brand:'ПИВНИК'},sections:{...current.design.sections,team:false},radius:24,theme:'halloween'})
+    const row=(await setup!.query<{draft:any;published:any}>(`SELECT draft,published FROM app_settings WHERE id=1`)).rows[0]!
+    expect(row.published).toMatchObject({version:9,colors:{accent:'#fff'},theme:'halloween',radius:24,texts:{brand:'ПИВНИК'},sections:{team:false,featured:true}})
+    expect(row.draft).toMatchObject({theme:'halloween',texts:{brand:'ПИВНИК'},splash:{enabled:true,imageUrl:'/assets/draft.png'}})
+    await app.publishAppDesign(pivnikAdmin,scope,{...current.design,theme:'default'})
+    expect((await setup!.query(`SELECT published ? 'theme' AS has FROM app_settings WHERE id=1`)).rows[0]!.has).toBe(false)
+    expect(Number((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='app.design_publish'`)).rows[0]!.n)).toBe(2)
   })
 
 })

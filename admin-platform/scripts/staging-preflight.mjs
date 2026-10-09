@@ -187,6 +187,14 @@ try {
       published JSONB,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    -- Same shape as the guest app's app_settings (server.js), which Business now edits.
+    ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS draft JSONB;
+    ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS updated_by BIGINT;
+    ALTER TABLE promotions ADD COLUMN IF NOT EXISTS updated_by BIGINT;
+    INSERT INTO app_settings(id,draft,published) VALUES(1,
+      '{"version":9,"texts":{"brand":"Пивник","balanceLabel":"Ваш баланс","byline":"by Kirill Gamilton","qrButton":"Показать QR"},"sections":{"promos":true,"team":true,"byline":true},"radius":20}'::jsonb,
+      '{"version":9,"texts":{"brand":"Пивник","balanceLabel":"Ваш баланс","byline":"by Kirill Gamilton","qrButton":"Показать QR"},"sections":{"promos":true,"team":true,"byline":true},"radius":20}'::jsonb)
+    ON CONFLICT(id) DO NOTHING;
   `)
 
   const bars = await client.query(`

@@ -47,6 +47,9 @@ import {
 } from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
 import { evotorPeriod,getEvotorReport } from './evotor-read.js'
+import {
+  PROMOTION_BODY_LIMIT,createAppPromotion,deleteAppPromotion,getAppDesign,listAppPromotions,publishAppDesign,updateAppPromotion,
+} from './pivnik-app-content.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -159,6 +162,20 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(resource==='clients'&&child&&grandchild==='achievements'&&parts[7]==='grant'&&isMethod(req,'POST')){
       const body=await readJsonBody(req)
       json(res,200,await manualGrantAchievement(session.admin,scope,child,body));return true
+    }
+
+    // Guest app content: these rows are what guests see in the PIVNIK app.
+    if(resource==='app'&&child==='promotions'&&!grandchild){
+      if(isMethod(req,'GET')){json(res,200,await listAppPromotions(scope));return true}
+      if(isMethod(req,'POST')){json(res,200,await createAppPromotion(session.admin,scope,await readJsonBody(req,PROMOTION_BODY_LIMIT)));return true}
+    }
+    if(resource==='app'&&child==='promotions'&&grandchild){
+      if(isMethod(req,'PUT')){json(res,200,await updateAppPromotion(session.admin,scope,grandchild,await readJsonBody(req,PROMOTION_BODY_LIMIT)));return true}
+      if(isMethod(req,'DELETE')){json(res,200,await deleteAppPromotion(session.admin,scope,grandchild));return true}
+    }
+    if(resource==='app'&&child==='design'){
+      if(isMethod(req,'GET')){json(res,200,await getAppDesign(scope));return true}
+      if(isMethod(req,'PUT')){json(res,200,await publishAppDesign(session.admin,scope,await readJsonBody(req)));return true}
     }
 
     if(resource==='loyalty'&&child==='manage'){
