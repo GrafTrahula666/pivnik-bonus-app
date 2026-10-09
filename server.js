@@ -1414,7 +1414,8 @@ function normalizeBroadcastAudience(value) {
   return BROADCAST_AUDIENCES.has(audience) ? audience : '';
 }
 
-async function getBroadcastRecipients(audience) {
+// userIds (optional) narrows the audience to a Business guest segment; the consent rule below still applies.
+async function getBroadcastRecipients(audience, userIds = null) {
   const result = await pool.query(
     `SELECT u.id, u.role,
             COALESCE(
@@ -1435,9 +1436,10 @@ async function getBroadcastRecipients(audience) {
        AND u.terms_accepted_at IS NOT NULL
        AND (u.marketing_opt_in = TRUE OR u.marketing_opt_out_at IS NULL)
        AND ($1::text = 'all' OR u.role = 'client')
+       AND ($3::bigint[] IS NULL OR u.id = ANY($3::bigint[]))
      ORDER BY u.created_at ASC
      LIMIT $2`,
-    [audience, BROADCAST_MAX_RECIPIENTS + 1]
+    [audience, BROADCAST_MAX_RECIPIENTS + 1, userIds]
   );
   const truncated = result.rows.length > BROADCAST_MAX_RECIPIENTS;
   const rows = truncated ? result.rows.slice(0, BROADCAST_MAX_RECIPIENTS) : result.rows;
@@ -2966,16 +2968,17 @@ app.post('/api/me/marketing-consent', authRequired, async (req, res, next) => {
   }
 });
 
-async function buildBroadcastPreview(audience) {
-  const recipients = await getBroadcastRecipients(audience);
+async function buildBroadcastPreview(audience, userIds = null) {
+  const recipients = await getBroadcastRecipients(audience, userIds);
   const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
   const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
   // Everyone in the audience who accepted the rules, opted out or not, so the panel can say "N of M".
   const active = await pool.query(
     `SELECT COUNT(*)::int AS n FROM users u
      WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.terms_accepted_at IS NOT NULL
-       AND ($1::text = 'all' OR u.role = 'client')`,
-    [audience]
+       AND ($1::text = 'all' OR u.role = 'client')
+       AND ($2::bigint[] IS NULL OR u.id = ANY($2::bigint[]))`,
+    [audience, userIds]
   );
   return {
     audience,
@@ -2991,7 +2994,7 @@ async function buildBroadcastPreview(audience) {
 }
 
 // Shared by the in-app admin and PIVNIK Business. Returns { status, body } for the HTTP response.
-async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAudience, message: rawMessage, source }) {
+async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAudience, message: rawMessage, source, userIds = null, segment = '' }) {
   let campaignId = null;
   try {
     const channel = normalizeBroadcastChannel(rawChannel);
@@ -3004,7 +3007,7 @@ async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAud
       return { status: 400, body: { error: `Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.` } };
     }
 
-    const recipients = await getBroadcastRecipients(audience);
+    const recipients = await getBroadcastRecipients(audience, userIds);
     const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
     const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
     const wantsTelegram = channel === 'telegram' || channel === 'all';
@@ -3022,6 +3025,7 @@ async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAud
       channel,
       audience,
       message,
+      segment,
       totalUsers: recipients.rows.length,
       truncated: recipients.truncated
     });
@@ -3079,6 +3083,7 @@ async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAud
       source,
       channel,
       audience,
+      segment: segment || undefined,
       telegram: { attempted: telegram.attempted, delivered: telegram.delivered, failed: telegram.failed },
       vk: { attempted: vk.attempted, delivered: vk.delivered, failed: vk.failed },
       truncated: recipients.truncated
@@ -3159,14 +3164,38 @@ app.get('/api/internal/business/broadcast/preview', requireBusinessService, asyn
   }
 });
 
+// A Business guest segment arrives as its name and the guests' app user ids.
+function businessSegment(body) {
+  const segment = String(body?.segment || '');
+  if (!segment) return { segment: '', userIds: null };
+  const ids = Array.isArray(body?.userIds) ? body.userIds.map(String) : null;
+  if (!/^[a-z_]{1,32}$/.test(segment) || !ids || ids.length > 5000 || !ids.every((id) => /^\d{1,18}$/.test(id))) {
+    throw Object.assign(new Error('Некорректный сегмент рассылки.'), { statusCode: 400 });
+  }
+  return { segment, userIds: ids };
+}
+
+app.post('/api/internal/business/broadcast/preview', requireBusinessService, async (req, res, next) => {
+  try {
+    const { userIds } = businessSegment(req.body);
+    res.json(await buildBroadcastPreview('clients', userIds || []));
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
 app.post('/api/internal/business/broadcast', requireBusinessService, async (req, res, next) => {
   try {
+    const { segment, userIds } = businessSegment(req.body);
     const result = await runBroadcast({
       channel: req.body?.channel,
-      audience: req.body?.audience,
+      audience: segment ? 'clients' : req.body?.audience,
       message: req.body?.message,
       actorUserId: await businessBroadcastActorId(),
-      source: 'business'
+      source: 'business',
+      segment,
+      userIds
     });
     res.status(result.status).json(result.body);
   } catch (error) {

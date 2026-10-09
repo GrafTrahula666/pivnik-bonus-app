@@ -33,6 +33,7 @@ export default function App(){
   const [mobileNav,setMobileNav]=useState(false)
   const [mode,setMode]=useState<AppMode>('production')
   const [retry,setRetry]=useState(0)
+  const [broadcastSegment,setBroadcastSegment]=useState('')
 
   useEffect(()=>{let cancelled=false;setAuthState('loading');setAuthError('')
     getSession().then(s=>{if(cancelled)return;setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')})
@@ -69,7 +70,7 @@ export default function App(){
 
   return <div className="app-shell">
     <PhaseCSidebar page={page} role={session.admin.role} mode={mode} open={mobileNav} onClose={()=>setMobileNav(false)}
-      onPage={p=>{setPage(p);setMobileNav(false)}}/>
+      onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
         period={period} compare={compare} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()}/>
@@ -82,7 +83,7 @@ export default function App(){
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}
 
           {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage}/>}
-          {selected&&page==='clients'&&<ProductionCRM venue={selected} session={session}/>}
+          {selected&&page==='clients'&&<ProductionCRM venue={selected} session={session} onBroadcast={segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
           {selected&&page==='loyalty'&&<LoyaltyManager venue={selected} session={session}/>}
@@ -90,7 +91,7 @@ export default function App(){
           {selected&&page==='achievements'&&<PivnikLegacyAchievementManager venue={selected}/>}
           {selected&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
-          {selected&&page==='broadcast'&&<BroadcastPage venue={selected} session={session}/>}
+          {selected&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&page==='brand'&&(isPivnikAppVenue(selected)?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&<SettingsPage venue={selected} session={session}/>}
           {selected&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}

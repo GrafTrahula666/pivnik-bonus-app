@@ -1,6 +1,6 @@
 import { useEffect,useState } from 'react'
 import {
-  Coins,Database,Gift,MoreHorizontal,Search,ShieldCheck,
+  Coins,Database,Gift,Megaphone,MoreHorizontal,Search,ShieldCheck,
   SlidersHorizontal,Trophy,X,
 } from 'lucide-react'
 import type { AdminSession,ApiVenue } from '../api'
@@ -15,8 +15,18 @@ interface Client {
   id:string;name:string;username:string|null;registeredAt:string;membershipStatus:string;balance:number;
   lifetimeSpend:number;averageCheck:number|null;operationCount:number;lastActivityAt:string|null;
   bonusEarned:number;bonusRedeemed:number;platform:string;level:string;cashbackPercent:number;
-  visitCount:null;visitCountReason:string
+  visitCount:null;visitCountReason:string;segment?:Segment
 }
+type Segment='new'|'regular'|'active'|'lapsing'|'gone'|'never'
+const SEGMENTS:Array<[Segment,string,string]>=[
+  ['new','Новые','Зарегистрировались за 14 дней'],
+  ['regular','Постоянные','3+ покупки за 60 дней, последняя — до 21 дня назад'],
+  ['active','Заходят','Последняя покупка до 21 дня назад'],
+  ['lapsing','Пропадают','Не были 21–60 дней: пора позвать обратно'],
+  ['gone','Ушли','Не были больше 60 дней'],
+  ['never','Не покупали','Зарегистрировались, но ни одной покупки'],
+]
+const segmentLabel=(s?:Segment)=>SEGMENTS.find(([k])=>k===s)?.[1]||'—'
 interface ListResponse {total:number;rows:Client[]}
 interface DetailResponse extends Client {
   maxCheck:number|null;firstActivityAt:string|null;paidMlTotal:number;giftMlBalance:number;
@@ -26,10 +36,11 @@ interface DetailResponse extends Client {
 }
 interface AchievementConfigResponse {items:Array<{code:string;title:string}>}
 
-export function ProductionCRM({venue,session}:{venue:ApiVenue;session:AdminSession}){
-  const [query,setQuery]=useState(''),[sort,setSort]=useState('lastActivity'),[selected,setSelected]=useState<string|null>(null)
-  const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&limit=100`
-  const {data,error,loading,reload}=useResource<ListResponse>(path,[query,sort])
+export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;session:AdminSession;onBroadcast?:(segment:string)=>void}){
+  const [query,setQuery]=useState(''),[sort,setSort]=useState('lastActivity'),[selected,setSelected]=useState<string|null>(null),[segment,setSegment]=useState<Segment|''>('')
+  const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&limit=100${segment?`&segment=${segment}`:''}`
+  const {data,error,loading,reload}=useResource<ListResponse>(path,[query,sort,segment])
+  const segments=useResource<{segments:Record<Segment,number>}>(`/api/admin/venues/${venue.id}/clients/segments`)
   return <div className="page">
     <PageHead eyebrow="БАЗА КЛИЕНТОВ" title="Клиенты" sub={data?`${rub.format(data.total)} клиентов в выбранном заведении`:'Загрузка клиентской базы'}
       actions={<><LivePill/><WriteGatePill enabled={session.capabilities.productionBonusWrites} label="БОНУСЫ"/></>}/>
@@ -39,18 +50,23 @@ export function ProductionCRM({venue,session}:{venue:ApiVenue;session:AdminSessi
         <option value="lastActivity">Последняя активность</option><option value="spend">Сумма покупок</option><option value="balance">Баланс</option><option value="created">Регистрация</option>
       </select><div className="live-source-pill"><span/><Database/>АКТУАЛЬНЫЕ ДАННЫЕ</div></div>
     </div>
+    {segments.data&&<div className="segment-row">
+      <button className={segment===''?'segment-chip active':'segment-chip'} onClick={()=>setSegment('')}><b>Все</b><span>{rub.format(Object.values(segments.data.segments).reduce((a,b)=>a+b,0))}</span></button>
+      {SEGMENTS.map(([key,label,hint])=><button key={key} title={hint} className={segment===key?`segment-chip seg-${key} active`:`segment-chip seg-${key}`} onClick={()=>setSegment(segment===key?'':key)}><b>{label}</b><span>{rub.format(segments.data!.segments[key]||0)}</span></button>)}
+    </div>}
+    {segment&&<div className="segment-note"><SourceNote>{SEGMENTS.find(([k])=>k===segment)?.[2]}.</SourceNote>{onBroadcast&&segment!=='active'&&<button className="btn secondary" onClick={()=>onBroadcast(segment)}><Megaphone/>Написать этим гостям</button>}</div>}
     {error&&<ErrorCard error={error} onRetry={reload}/>}
     {loading&&!data&&<LoadingCard/>}
     {data&&<div className={loading?'table-card card loading-dim':'table-card card'}><div className="table-scroll"><table>
-      <thead><tr><th>Клиент</th><th>Баланс</th><th>Кэшбэк</th><th>Уровень</th><th>Операции</th><th>Сумма покупок</th><th>Средний чек</th><th>Последняя активность</th><th>Канал</th><th>Статус</th><th/></tr></thead>
+      <thead><tr><th>Клиент</th><th>Баланс</th><th>Кэшбэк</th><th>Уровень</th><th>Операции</th><th>Сумма покупок</th><th>Средний чек</th><th>Последняя активность</th><th>Сегмент</th><th>Канал</th><th>Статус</th><th/></tr></thead>
       <tbody>{data.rows.map(c=><tr key={c.id} onClick={()=>setSelected(c.id)}>
         <td><div className="person"><div className="avatar">{c.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{c.name||'Без имени'}</b><span>{c.username?`@${c.username}`:`ID ${c.id}`}</span></div></div></td>
         <td><strong>{rub.format(c.balance)}</strong></td><td>{c.cashbackPercent}%</td><td><LevelBadge level={c.level}/></td>
         <td>{rub.format(c.operationCount)}</td><td>₽ {rub.format(Math.round(c.lifetimeSpend))}</td><td>{c.averageCheck===null?'Нет данных':`₽ ${rub.format(Math.round(c.averageCheck))}`}</td>
-        <td>{dt(c.lastActivityAt)}</td><td><PlatformTag value={c.platform}/></td><td><Status value={c.membershipStatus==='active'?'Активен':c.membershipStatus}/></td><td><MoreHorizontal size={17}/></td>
+        <td>{dt(c.lastActivityAt)}</td><td><span className={`segment-tag seg-${c.segment||'none'}`}>{segmentLabel(c.segment)}</span></td><td><PlatformTag value={c.platform}/></td><td><Status value={c.membershipStatus==='active'?'Активен':c.membershipStatus}/></td><td><MoreHorizontal size={17}/></td>
       </tr>)}</tbody>
     </table></div></div>}
-    {data&&data.rows.length===0&&<EmptyState title="Клиенты не найдены" sub="Измените поисковый запрос."/>}
+    {data&&data.rows.length===0&&<EmptyState title="Клиенты не найдены" sub="Измените поисковый запрос или сегмент."/>}
     {selected&&<CustomerDrawer venue={venue} session={session} userId={selected} onClose={()=>setSelected(null)} onChanged={reload}/>}
   </div>
 }

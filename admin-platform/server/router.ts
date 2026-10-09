@@ -6,7 +6,7 @@ import {
   getAchievementAnalytics,
   getCapabilities,
   getClientDetail,
-  getClients,
+  getClients,getClientSegments,
   getLegacyDesign,
   getOperations,
   getPromotions,
@@ -179,7 +179,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       if(isMethod(req,'PUT')){json(res,200,await publishAppDesign(session.admin,scope,await readJsonBody(req)));return true}
     }
 
-    if(resource==='broadcast'&&child==='preview'&&isMethod(req,'GET')){json(res,200,await getBroadcastPreview(scope,url.searchParams.get('audience')));return true}
+    if(resource==='broadcast'&&child==='preview'&&isMethod(req,'GET')){json(res,200,await getBroadcastPreview(scope,url.searchParams.get('audience'),url.searchParams.get('segment')));return true}
     if(resource==='broadcast'&&!child){
       if(isMethod(req,'GET')){json(res,200,await listBroadcasts(scope));return true}
       if(isMethod(req,'POST')){json(res,200,await sendBroadcast(session.admin,scope,await readJsonBody(req)));return true}
@@ -226,6 +226,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       finally{db.release()}
     }
     if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
+    if(resource==='clients'&&child==='segments'){json(res,200,await getClientSegments(scope));return true}
     if(resource==='clients'&&child){json(res,200,await getClientDetail(scope,child));return true}
     if(resource==='clients'){json(res,200,await getClients(scope,url));return true}
     if(resource==='operations'){json(res,200,await getOperations(scope,url));return true}

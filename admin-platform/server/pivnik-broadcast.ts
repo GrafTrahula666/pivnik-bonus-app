@@ -1,6 +1,7 @@
 import { config } from './config.js'
 import { pool, productionTableExists, readPool } from './db.js'
 import { recordAudit } from './audit.js'
+import { CLIENT_SEGMENTS,getSegmentUserIds,type ClientSegment } from './data.js'
 import { enforceRateLimit } from './security.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 
@@ -50,20 +51,28 @@ export interface BroadcastPreview {
   audience:string;totalUsers:number;activeUsers:number;truncated:boolean;telegramRecipients:number;vkRecipients:number
   telegramConfigured:boolean;vkConfigured:boolean;maxRecipients:number
 }
-export async function getBroadcastPreview(scope:VenueScope,rawAudience:string|null):Promise<BroadcastPreview> {
+const isSegment=(value:unknown):value is ClientSegment=>(CLIENT_SEGMENTS as readonly string[]).includes(String(value))
+
+export async function getBroadcastPreview(scope:VenueScope,rawAudience:string|null,rawSegment:string|null=null):Promise<BroadcastPreview> {
   requirePivnik(scope);requireConfigured()
+  if(rawSegment){
+    if(!isSegment(rawSegment)) throw new HttpError(400,'SEGMENT_INVALID','Неизвестный сегмент.')
+    const userIds=await getSegmentUserIds(scope,rawSegment)
+    return await callApp<BroadcastPreview>('/api/internal/business/broadcast/preview',{method:'POST',body:{segment:rawSegment,userIds},timeoutMs:15_000})
+  }
   const audience=AUDIENCES.has(String(rawAudience||'clients'))?String(rawAudience||'clients'):'clients'
   return await callApp<BroadcastPreview>(`/api/internal/business/broadcast/preview?audience=${audience}`,{timeoutMs:15_000})
 }
 
-export function validateBroadcastInput(raw:unknown):{channel:string;audience:string;message:string} {
+export function validateBroadcastInput(raw:unknown):{channel:string;audience:string;message:string;segment?:ClientSegment} {
   const b=(raw&&typeof raw==='object'?raw:{}) as Record<string,unknown>
   const channel=String(b.channel||''),audience=String(b.audience||'clients'),message=String(b.message||'').trim()
+  if(b.segment!==undefined&&b.segment!==null&&b.segment!==''&&!isSegment(b.segment)) throw new HttpError(400,'SEGMENT_INVALID','Неизвестный сегмент.')
   if(!CHANNELS.has(channel)) throw new HttpError(400,'CHANNEL_INVALID','Выберите канал рассылки.')
   if(!AUDIENCES.has(audience)) throw new HttpError(400,'AUDIENCE_INVALID','Недопустимая аудитория рассылки.')
   if(!message) throw new HttpError(400,'MESSAGE_REQUIRED','Введите текст рассылки.')
   if(message.length>BROADCAST_MAX_TEXT) throw new HttpError(400,'MESSAGE_TOO_LONG',`Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.`)
-  return {channel,audience,message}
+  return isSegment(b.segment)?{channel,audience:'clients',message,segment:b.segment}:{channel,audience,message}
 }
 
 interface DeliveryResult {attempted:number;delivered:number;failed:number;skipped?:string}
@@ -75,17 +84,18 @@ export async function sendBroadcast(admin:AdminPrincipal,scope:VenueScope,raw:un
   const input=validateBroadcastInput(raw)
   enforceRateLimit(`broadcast:${admin.id}`,5,10*60_000)
   // Delivery runs inside this request on the app side (about 40-70 ms per guest), so allow a few minutes.
-  const result=await callApp<BroadcastResult>('/api/internal/business/broadcast',{method:'POST',body:input,timeoutMs:5*60_000})
+  const body=input.segment?{...input,userIds:await getSegmentUserIds(scope,input.segment)}:input
+  const result=await callApp<BroadcastResult>('/api/internal/business/broadcast',{method:'POST',body,timeoutMs:5*60_000})
   const summary=(d:DeliveryResult)=>({attempted:d?.attempted||0,delivered:d?.delivered||0,failed:d?.failed||0,skipped:d?.skipped||null})
   await recordAudit({admin,scope,action:'app.broadcast_send',entityType:'broadcast_campaign',entityId:String(result.campaignId),
-    after:{channel:input.channel,audience:input.audience,message:input.message,deduplicated:result.deduplicated,totalUsers:result.totalUsers,
+    after:{channel:input.channel,audience:input.audience,segment:input.segment||null,message:input.message,deduplicated:result.deduplicated,totalUsers:result.totalUsers,
       telegram:summary(result.telegram),vk:summary(result.vk)}}).catch(()=>undefined)
   return result
 }
 
 export interface BroadcastHistoryItem {
   id:string;status:string;channel:string;audience:string;totalUsers:number;createdAt:string;completedAt:string|null
-  telegramDelivered:number;telegramFailed:number;vkDelivered:number;vkFailed:number;message:string|null;sentBy:string|null
+  telegramDelivered:number;telegramFailed:number;vkDelivered:number;vkFailed:number;message:string|null;sentBy:string|null;segment:string|null
 }
 export async function listBroadcasts(scope:VenueScope):Promise<{configured:boolean;writesEnabled:boolean;items:BroadcastHistoryItem[]}> {
   requirePivnik(scope)
@@ -97,14 +107,14 @@ export async function listBroadcasts(scope:VenueScope):Promise<{configured:boole
      FROM broadcast_campaigns ORDER BY created_at DESC LIMIT 30`)
   // The app keeps only a hash of the text; Business remembers the text of what it sent.
   const ids=r.rows.map(x=>x.id)
-  const sent=ids.length?await pool.query<{entity_id:string;message:string|null;sent_by:string|null}>(
-    `SELECT l.entity_id,l.after_value->>'message' AS message,a.display_name AS sent_by
+  const sent=ids.length?await pool.query<{entity_id:string;message:string|null;sent_by:string|null;segment:string|null}>(
+    `SELECT l.entity_id,l.after_value->>'message' AS message,l.after_value->>'segment' AS segment,a.display_name AS sent_by
      FROM admin_audit_log l LEFT JOIN admin_accounts a ON a.id=l.admin_id
      WHERE l.action='app.broadcast_send' AND l.entity_id=ANY($1::text[])`,[ids]):{rows:[]}
   const byId=new Map(sent.rows.map(x=>[x.entity_id,x]))
   return {...base,items:r.rows.map(x=>({
     id:x.id,status:x.status,channel:x.channel,audience:x.audience,totalUsers:Number(x.total_users||0),createdAt:x.created_at,completedAt:x.completed_at,
     telegramDelivered:Number(x.telegram_delivered||0),telegramFailed:Number(x.telegram_failed||0),vkDelivered:Number(x.vk_delivered||0),vkFailed:Number(x.vk_failed||0),
-    message:byId.get(x.id)?.message??null,sentBy:byId.get(x.id)?.sent_by??null,
+    message:byId.get(x.id)?.message??null,sentBy:byId.get(x.id)?.sent_by??null,segment:byId.get(x.id)?.segment??null,
   }))}
 }
