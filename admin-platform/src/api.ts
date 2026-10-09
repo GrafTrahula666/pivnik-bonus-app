@@ -4,7 +4,7 @@ export interface AdminSession {
   csrfToken:string
   capabilities:{writes:boolean;productionBonusWrites:boolean;productionAchievementWrites:boolean;productionEntitlementWrites:boolean;demo:boolean}
 }
-interface GuestSession {authenticated:false}
+interface GuestSession {authenticated:false;demo?:boolean}
 export interface ApiVenue {
   id:string;companyId:string;companyCode:string;companyName:string;code:string;name:string;address:string|null;legacyBarId:string|null
 }
@@ -24,7 +24,7 @@ async function request<T>(path:string,init:RequestInit={}):Promise<T>{
 }
 export async function getSession(){
   const s=await request<AdminSession|GuestSession>('/api/admin/auth/session')
-  if('authenticated' in s)throw new ApiError(401,'AUTH_REQUIRED','Требуется вход в Admin Platform.')
+  if('authenticated' in s)throw new ApiError(401,'AUTH_REQUIRED','Требуется вход в Admin Platform.',{demo:s.demo===true})
   csrf=s.csrfToken
   return s
 }

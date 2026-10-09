@@ -333,4 +333,14 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect((await getClients(scope,new URL('http://x/?segment=gone'))).total).toBe(0)
   })
 
+  it('developer overview reports databases and switches without secrets',async()=>{
+    const {getDeveloperOverview,rememberServerError}=await import('../developer.js')
+    rememberServerError('GET','/api/admin/venues/123456/clients',new Error('boom'))
+    const o=await getDeveloperOverview()
+    expect(o.databases.metadata.ok).toBe(true);expect(o.databases.production.ok).toBe(true);expect(o.databases.writer.ok).toBe(true)
+    expect(o.switches.find(x=>x.key==='ADMIN_ENABLE_WRITES')?.on).toBe(true)
+    expect(o.recentErrors[0]).toMatchObject({path:'/api/admin/venues/:id/clients',message:'boom'})
+    expect(JSON.stringify(o)).not.toContain('postgres://')
+  })
+
 })

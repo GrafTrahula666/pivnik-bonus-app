@@ -77,7 +77,7 @@ const server = http.createServer(async (req, res) => {
     await serveStatic(res, url.pathname)
   } catch (error) {
     if (String(req.url || '').startsWith('/api/admin/')) {
-      sendApiError(res, error)
+      sendApiError(res, error, req)
       return
     }
     console.error('Admin server error:', error)

@@ -1,7 +1,7 @@
 import { useEffect,useState } from 'react'
 import { AlertTriangle,Database,RefreshCw,ShieldCheck } from 'lucide-react'
 import type { Page } from './appTypes'
-import { apiGet,getSession,isAuthError,logout,type AdminSession,type ApiVenue } from './api'
+import { ApiError,apiGet,getSession,isAuthError,logout,type AdminSession,type ApiVenue } from './api'
 import { Login } from './Login'
 import { PhaseCSidebar,PhaseCTopbar,TenantDangerContext,type AppMode,type Period } from './phaseC/Layout'
 import { ProductionDashboard } from './phaseC/ProductionDashboard'
@@ -16,9 +16,16 @@ import { AppDesignManager,AppPromotionsManager,isPivnikAppVenue } from './phaseC
 import { PivnikLegacyAchievementManager,PivnikLegacyWheelManager } from './phaseC/PivnikLegacyManagers'
 import { SettingsPage } from './phaseC/SettingsPage'
 import { BroadcastPage } from './phaseC/BroadcastPage'
+import { DeveloperPage } from './phaseC/DeveloperPage'
 import { DemoMode } from './phaseC/DemoMode'
 
 type AuthState='loading'|'guest'|'authenticated'|'error'
+
+// The public demo: sample data only, no API calls, nothing is saved.
+const DEMO_SESSION:AdminSession={
+  admin:{id:'demo',email:'',displayName:'Демо-гость',role:'SUPER_ADMIN'},csrfToken:'',
+  capabilities:{writes:false,productionBonusWrites:false,productionAchievementWrites:false,productionEntitlementWrites:false,demo:true},
+}
 
 export default function App(){
   const [authState,setAuthState]=useState<AuthState>('loading')
@@ -34,30 +41,34 @@ export default function App(){
   const [mode,setMode]=useState<AppMode>('production')
   const [retry,setRetry]=useState(0)
   const [broadcastSegment,setBroadcastSegment]=useState('')
+  const [demoAvailable,setDemoAvailable]=useState(false),[demoGuest,setDemoGuest]=useState(false)
 
   useEffect(()=>{let cancelled=false;setAuthState('loading');setAuthError('')
     getSession().then(s=>{if(cancelled)return;setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')})
-      .catch(e=>{if(cancelled)return;if(isAuthError(e)){setAuthState('guest');setSession(null)}else{setAuthError(e instanceof Error?e.message:'Сервис управления недоступен.');setAuthState('error')}})
+      .catch(e=>{if(cancelled)return;if(isAuthError(e)){setDemoAvailable(Boolean(((e as ApiError).details as {demo?:boolean}|undefined)?.demo));setAuthState('guest');setSession(null)}else{setAuthError(e instanceof Error?e.message:'Сервис управления недоступен.');setAuthState('error')}})
     return()=>{cancelled=true}
   },[retry])
 
-  useEffect(()=>{if(!session)return;let cancelled=false;setVenueError('')
+  useEffect(()=>{if(!session||demoGuest)return;let cancelled=false;setVenueError('')
     apiGet<{venues:ApiVenue[]}>('/api/admin/venues').then(r=>{if(cancelled)return;setVenues(r.venues);setVenueId(current=>r.venues.some(v=>v.id===current)?current:r.venues[0]?.id||'')})
       .catch(e=>{if(!cancelled)setVenueError(e instanceof Error?e.message:'Не удалось загрузить список заведений.')})
     return()=>{cancelled=true}
-  },[session])
+  },[session,demoGuest])
 
   const allVenues=venueId==='__all__'
   const selected=allVenues?null:(venues.find(v=>v.id===venueId)||venues[0]||null)
   const isSuper=session?.admin.role==='SUPER_ADMIN'
-  const platformPage=['platform','companies','venues'].includes(page)
+  const platformPage=['platform','companies','venues','developer'].includes(page)
 
-  async function signOut(){try{await logout()}finally{setSession(null);setVenues([]);setVenueId('');setMode('production');setAuthState('guest')}}
+  function startDemo(){setDemoGuest(true);setSession(DEMO_SESSION);setMode('demo');setPage('overview');setAuthState('authenticated')}
+  async function signOut(){if(demoGuest){setDemoGuest(false);setSession(null);setMode('production');setAuthState('guest');return}
+    try{await logout()}finally{setSession(null);setVenues([]);setVenueId('');setMode('production');setAuthState('guest')}}
   function openVenue(id:string){setVenueId(id);setMode('production');setPage('overview')}
   function switchMode(next:AppMode){
     if(next==='demo'&&!session?.capabilities.demo)return
+    if(demoGuest&&next!=='demo')return
     setMode(next)
-    if(next==='demo'){if(['platform','companies','venues'].includes(page)&&!isSuper)setPage('overview')}
+    if(next==='demo'){if(['platform','companies','venues','developer'].includes(page)&&!isSuper)setPage('overview')}
     else if(!selected&&!platformPage)setPage(isSuper?'platform':'overview')
   }
 
@@ -66,14 +77,14 @@ export default function App(){
     <div className="login-icon error"><AlertTriangle/></div><span className="eyebrow">СЕРВИС ВРЕМЕННО НЕДОСТУПЕН</span><h1>Панель управления недоступна</h1><p>{authError}</p>
     <button className="btn secondary" onClick={()=>setRetry(v=>v+1)}><RefreshCw/>Повторить</button><div className="login-safety"><ShieldCheck/><span>Приложения для гостей продолжают работать.</span></div>
   </section></main>
-  if(authState==='guest'||!session)return <Login onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
+  if(authState==='guest'||!session)return <Login onDemo={demoAvailable?startDemo:undefined} onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
 
   return <div className="app-shell">
     <PhaseCSidebar page={page} role={session.admin.role} mode={mode} open={mobileNav} onClose={()=>setMobileNav(false)}
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
-        period={period} compare={compare} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()}/>
+        period={period} compare={compare} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest}/>
       <TenantDangerContext role={session.admin.role} mode={mode} venue={mode==='production'?selected:null} onBack={()=>setPage('platform')}/>
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
@@ -98,6 +109,7 @@ export default function App(){
 
           {isSuper&&page==='platform'&&<ProductionPlatform mode="platform" venues={venues} onOpenVenue={openVenue}/>}
           {isSuper&&page==='companies'&&<ProductionPlatform mode="companies" venues={venues} onOpenVenue={openVenue}/>}
+          {isSuper&&page==='developer'&&<DeveloperPage/>}
           {isSuper&&page==='venues'&&<ProductionPlatform mode="venues" venues={venues} onOpenVenue={openVenue}/>}
           {!isSuper&&platformPage&&<div className="error-state card"><ShieldCheck/><h3>Нет доступа</h3><p>Этот раздел доступен только главному администратору.</p></div>}
         </>}

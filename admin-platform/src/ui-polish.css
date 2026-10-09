@@ -27,3 +27,7 @@
 .seg-regular.segment-tag,.segment-chip.seg-regular span{color:#4fc68a}.seg-lapsing.segment-tag,.segment-chip.seg-lapsing span{color:#e0b453}
 .seg-gone.segment-tag,.segment-chip.seg-gone span{color:#ff8a80}.seg-new.segment-tag,.segment-chip.seg-new span{color:#73bcd9}
 .segment-note{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.segment-note .safety-note{flex:1;margin:0}
+.dev-ok{color:#4fc68a}.dev-bad{color:#ff8a80}
+.dev-meter{height:10px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin:4px 0 10px}.dev-meter i{display:block;height:100%;background:linear-gradient(90deg,#4fc68a,#e0b453)}
+.dev-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));margin-bottom:16px}.dev-grid>*{min-width:0}
+.muted-copy{font-size:13px}

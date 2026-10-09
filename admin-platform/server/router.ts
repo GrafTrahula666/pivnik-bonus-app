@@ -51,6 +51,7 @@ import {
   PROMOTION_BODY_LIMIT,createAppPromotion,deleteAppPromotion,getAppDesign,listAppPromotions,publishAppDesign,updateAppPromotion,
 } from './pivnik-app-content.js'
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
+import { getDeveloperOverview,rememberServerError } from './developer.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -105,7 +106,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       const session=await loadSession(req)
       json(res,200,{admin:session.admin,csrfToken:session.csrfToken,capabilities:sessionCapabilities()})
     }catch(error){
-      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false})
+      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false,demo:config.demoEnabled})
       else throw error
     }
     return true
@@ -135,6 +136,9 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/platform'){
     requireSuperAdmin(session.admin);json(res,200,await getAdminPlatformSummary());return true
+  }
+  if(isMethod(req,'GET')&&url.pathname==='/api/admin/developer'){
+    requireSuperAdmin(session.admin);json(res,200,await getDeveloperOverview());return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/audit'){
     requireSuperAdmin(session.admin);json(res,200,await getAdminAudit(null,Number(url.searchParams.get('limit')||100)));return true
@@ -243,8 +247,9 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   throw new HttpError(404,'ADMIN_ROUTE_NOT_FOUND','Admin API route not found.')
 }
 
-export function sendApiError(res:ServerResponse,error:unknown):void{
+export function sendApiError(res:ServerResponse,error:unknown,req?:IncomingMessage):void{
   const known=error instanceof HttpError?error:new HttpError(500,'INTERNAL_ERROR','Не удалось выполнить операцию. Повторите попытку.')
   if(!(error instanceof HttpError))console.error('Admin API error:',error)
+  if(known.statusCode>=500&&req)rememberServerError(String(req.method||'GET'),String(req.url||'').split('?')[0]!,error)
   json(res,known.statusCode,{error:known.message,code:known.code,details:known.details})
 }
