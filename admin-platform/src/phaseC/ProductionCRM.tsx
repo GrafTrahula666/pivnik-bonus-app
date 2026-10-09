@@ -37,6 +37,10 @@ interface DetailResponse extends Client {
 interface AchievementConfigResponse {items:Array<{code:string;title:string}>}
 
 export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;session:AdminSession;onBroadcast?:(segment:string)=>void}){
+  return <ProductionCRMVenue key={venue.id} venue={venue} session={session} onBroadcast={onBroadcast}/>
+}
+
+function ProductionCRMVenue({venue,session,onBroadcast}:{venue:ApiVenue;session:AdminSession;onBroadcast?:(segment:string)=>void}){
   const [query,setQuery]=useState(''),[sort,setSort]=useState('lastActivity'),[selected,setSelected]=useState<string|null>(null),[segment,setSegment]=useState<Segment|''>('')
   const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&limit=100${segment?`&segment=${segment}`:''}`
   const {data,error,loading,reload}=useResource<ListResponse>(path,[query,sort,segment])
@@ -67,7 +71,7 @@ export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;sessio
       </tr>)}</tbody>
     </table></div></div>}
     {data&&data.rows.length===0&&<EmptyState title="Клиенты не найдены" sub="Измените поисковый запрос или сегмент."/>}
-    {selected&&<CustomerDrawer venue={venue} session={session} userId={selected} onClose={()=>setSelected(null)} onChanged={reload}/>}
+    {selected&&<CustomerDrawer key={`${venue.id}:${selected}`} venue={venue} session={session} userId={selected} onClose={()=>setSelected(null)} onChanged={reload}/>}
   </div>
 }
 
