@@ -18,6 +18,7 @@ import {
   startRuntimeConfigRefresh
 } from './business-runtime-config.js';
 import { configureLoyalty, normalizeLoyaltySettings, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
+import { configureWheel, normalizeWheelSettings, wheelPrizeChances, wheelSettingsSnapshot } from './wheel.js';
 import QRCode from 'qrcode';
 import {
   ACHIEVEMENT_CATALOG,
@@ -855,6 +856,10 @@ async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_cancel_quota_resets ON cancel_quota_resets(shift_id, user_id, reset_at DESC)');
 
     await client.query(BUSINESS_RUNTIME_CONFIG_SQL);
+    // PIVNIK Business can change paid wheel prices, so the price column is no longer limited to 0/50/100.
+    // The wheel table comes from migration 006, which the gateway applies; on a fresh database it may not exist yet.
+    await client.query('ALTER TABLE IF EXISTS wheel_spins DROP CONSTRAINT IF EXISTS wheel_spins_listed_bonus_cost_check');
+    await client.query('ALTER TABLE IF EXISTS wheel_spins ADD CONSTRAINT wheel_spins_listed_bonus_cost_check CHECK (listed_bonus_cost >= 0)');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_settings (
@@ -3347,6 +3352,59 @@ app.put('/api/internal/business/loyalty', requireBusinessService, async (req, re
     const settings = normalizeLoyaltySettings(req.body?.settings);
     await saveRuntimeConfig(pool, LOYALTY_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
     res.json(await businessLoyaltyOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+// Wheel chances, paid spin prices and the free spin interval (wheel.js).
+const WHEEL_SETTINGS_KEY = 'wheel';
+onRuntimeConfig(WHEEL_SETTINGS_KEY, configureWheel);
+
+async function businessWheelOverview() {
+  let stats = { spins: 0, paidSpins: 0, bonusSpent: 0, bonusAwarded: 0, beerAwardedMl: 0, guests: 0 };
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS spins, COUNT(*) FILTER (WHERE kind <> 'free')::int AS paid_spins,
+              COALESCE(SUM(charged_bonus_cost), 0)::bigint AS bonus_spent, COALESCE(SUM(bonus_awarded), 0)::bigint AS bonus_awarded,
+              COALESCE(SUM(beer_awarded_ml), 0)::bigint AS beer_awarded_ml, COUNT(DISTINCT user_id)::int AS guests
+       FROM wheel_spins WHERE created_at >= NOW() - INTERVAL '30 days'`
+    );
+    const row = result.rows[0] || {};
+    stats = {
+      spins: Number(row.spins || 0),
+      paidSpins: Number(row.paid_spins || 0),
+      bonusSpent: Number(row.bonus_spent || 0),
+      bonusAwarded: Number(row.bonus_awarded || 0),
+      beerAwardedMl: Number(row.beer_awarded_ml || 0),
+      guests: Number(row.guests || 0)
+    };
+  } catch (error) {
+    if (error?.code !== '42P01') throw error;
+  }
+  const meta = await readRuntimeConfigMeta(pool, WHEEL_SETTINGS_KEY);
+  return {
+    settings: wheelSettingsSnapshot(),
+    prizes: wheelPrizeChances(),
+    last30Days: stats,
+    updatedAt: meta?.updatedAt || null,
+    updatedBy: meta?.updatedBy || null
+  };
+}
+
+app.get('/api/internal/business/wheel', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessWheelOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.put('/api/internal/business/wheel', requireBusinessService, async (req, res, next) => {
+  try {
+    const settings = normalizeWheelSettings(req.body?.settings);
+    await saveRuntimeConfig(pool, WHEEL_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
+    res.json(await businessWheelOverview());
   } catch (error) {
     businessError(res, error, next);
   }

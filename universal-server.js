@@ -36,9 +36,12 @@ import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
 import {
   WHEEL_PRIZES,
+  configureWheel,
   drawWheelPrize,
   freeSpinState,
-  paidSpinCost
+  paidSpinCost,
+  wheelFreeIntervalHours,
+  wheelPrizeChances
 } from './wheel.js';
 import {
   adminUserCrmStatus,
@@ -1885,7 +1888,11 @@ async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
     nextPaidCost,
     canAffordPaid: unlimitedBonus || balance >= nextPaidCost,
     balance,
-    unlimitedBonus
+    unlimitedBonus,
+    firstPaidCost: paidSpinCost(0),
+    laterPaidCost: paidSpinCost(1),
+    freeIntervalHours: wheelFreeIntervalHours(),
+    prizes: wheelPrizeChances()
   };
 }
 
@@ -1927,7 +1934,8 @@ async function spinTelegramWheel(userId, rawRequestKey) {
       const nowResult = await client.query('SELECT NOW() AS now');
       const status = await getTelegramWheelStatus(userId, client, nowResult.rows[0].now);
       const listedCost = status.freeAvailable ? 0 : status.nextPaidCost;
-      const kind = listedCost === 0 ? 'free' : listedCost === 50 ? 'paid_50' : 'paid_100';
+      // paid_50 / paid_100 name the first and the later paid spins; PIVNIK Business can change their prices.
+      const kind = status.freeAvailable ? 'free' : status.paidSpinsSinceLastFree === 0 ? 'paid_50' : 'paid_100';
       const account = accountResult.rows[0];
       const unlimitedBonus = hasUnlimitedBonus(account);
       const currentBalance = Number(account.balance || 0);
@@ -3568,6 +3576,7 @@ if (!isTestImport) {
       // Achievement settings from PIVNIK Business; server.js keeps its own copy the same way.
       onRuntimeConfig('achievements', configureAchievements);
       onRuntimeConfig('loyalty', configureLoyalty);
+      onRuntimeConfig('wheel', configureWheel);
       startRuntimeConfigRefresh(pool);
     } catch (error) {
       console.error(
