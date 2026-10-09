@@ -21,9 +21,9 @@ export function giftedFrameChoices(row) {
   const choices = [];
   if (row?.owns_money_frame || owned.has('money') || code === 'money') choices.push({ ...MONEY_FRAME });
   if (row?.owns_gold_bars_frame || owned.has('gold-bars') || code === 'gold-bars') choices.push({ ...GOLD_BARS_FRAME });
-  for (const frame of GRANTABLE_FRAMES.slice(2)) {
-    if (owned.has(frame.code)) choices.push({ ...frame });
-  }
+  if (owned.has('fire')) choices.push({ ...GRANTABLE_FRAMES[2] });
+  // The caller already lists a diamond frame bought earlier or currently selected.
+  if (owned.has('diamond') && !row?.owns_diamond_frame && code !== 'diamond') choices.push({ ...GRANTABLE_FRAMES[3] });
   return choices;
 }
 
