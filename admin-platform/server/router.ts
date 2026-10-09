@@ -50,6 +50,7 @@ import { evotorPeriod,getEvotorReport } from './evotor-read.js'
 import {
   PROMOTION_BODY_LIMIT,createAppPromotion,deleteAppPromotion,getAppDesign,listAppPromotions,publishAppDesign,updateAppPromotion,
 } from './pivnik-app-content.js'
+import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -176,6 +177,12 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(resource==='app'&&child==='design'){
       if(isMethod(req,'GET')){json(res,200,await getAppDesign(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await publishAppDesign(session.admin,scope,await readJsonBody(req)));return true}
+    }
+
+    if(resource==='broadcast'&&child==='preview'&&isMethod(req,'GET')){json(res,200,await getBroadcastPreview(scope,url.searchParams.get('audience')));return true}
+    if(resource==='broadcast'&&!child){
+      if(isMethod(req,'GET')){json(res,200,await listBroadcasts(scope));return true}
+      if(isMethod(req,'POST')){json(res,200,await sendBroadcast(session.admin,scope,await readJsonBody(req)));return true}
     }
 
     if(resource==='loyalty'&&child==='manage'){

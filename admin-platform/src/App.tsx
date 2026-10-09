@@ -15,6 +15,7 @@ import {
 import { AppDesignManager,AppPromotionsManager,isPivnikAppVenue } from './phaseC/AppContentManagers'
 import { PivnikLegacyAchievementManager,PivnikLegacyWheelManager } from './phaseC/PivnikLegacyManagers'
 import { SettingsPage } from './phaseC/SettingsPage'
+import { BroadcastPage } from './phaseC/BroadcastPage'
 import { DemoMode } from './phaseC/DemoMode'
 
 type AuthState='loading'|'guest'|'authenticated'|'error'
@@ -89,6 +90,7 @@ export default function App(){
           {selected&&page==='achievements'&&<PivnikLegacyAchievementManager venue={selected}/>}
           {selected&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
+          {selected&&page==='broadcast'&&<BroadcastPage venue={selected} session={session}/>}
           {selected&&page==='brand'&&(isPivnikAppVenue(selected)?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&<SettingsPage venue={selected} session={session}/>}
           {selected&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}

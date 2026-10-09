@@ -26,6 +26,9 @@ export const config = {
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),
   demoEnabled: bool('ADMIN_DEMO_ENABLED', process.env.NODE_ENV!=='production'),
+  // Guest app base URL and the shared token for its /api/internal/business routes (broadcasts).
+  pivnikAppUrl: String(process.env.PIVNIK_APP_URL || '').replace(/\/+$/,''),
+  businessInternalToken: String(process.env.BUSINESS_INTERNAL_TOKEN || ''),
   staticDir: String(process.env.ADMIN_STATIC_DIR || 'dist'),
 }
 export const isProduction = config.nodeEnv === 'production'
