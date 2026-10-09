@@ -1,7 +1,7 @@
 import {
   Activity,BarChart3,Bell,Building2,CalendarDays,ChevronDown,ClipboardList,Crown,
   Database,Gift,LayoutDashboard,LogOut,Megaphone,Menu,Palette,Settings,ShieldCheck,
-  ShoppingBag,Sparkles,Store,TicketPercent,Trophy,Users,WalletCards,
+  ShoppingBag,Sparkles,Store,TerminalSquare,TicketPercent,Trophy,Users,WalletCards,
 } from 'lucide-react'
 import type { Page } from '../appTypes'
 import type { AdminRole,ApiVenue } from '../api'
@@ -13,7 +13,7 @@ const nav=[
   ['achievements','Достижения',Trophy],['shop','Магазин',ShoppingBag],['promotions','Акции',TicketPercent],
   ['broadcast','Рассылки',Megaphone],['brand','Оформление',Palette],['settings','Настройки',Settings],['audit','Журнал',ClipboardList],
 ] as const
-const superNav=[['platform','Платформа',Activity],['companies','Компании',Building2],['venues','Заведения',Store]] as const
+const superNav=[['platform','Платформа',Activity],['companies','Компании',Building2],['venues','Заведения',Store],['developer','Разработчик',TerminalSquare]] as const
 export const periods=['Сегодня','7 дней','30 дней','3 месяца','Год'] as const
 export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
@@ -47,10 +47,10 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage}:{page:Page;ro
 }
 
 export function PhaseCTopbar({
-  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,
+  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,
 }:{
   role:AdminRole;adminName:string;mode:AppMode;venues:ApiVenue[];venueId:string;period:Period;compare:boolean;
-  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void
+  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean
 }){
   return <header className="topbar">
     <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
@@ -64,7 +64,7 @@ export function PhaseCTopbar({
     </div>
     <div className="topbar-grow"/>
     <div className="mode-switch segmented">
-      <button className={mode==='production'?'active':''} onClick={()=>onMode('production')}><Database size={13}/>Рабочий режим</button>
+      {!demoOnly&&<button className={mode==='production'?'active':''} onClick={()=>onMode('production')}><Database size={13}/>Рабочий режим</button>}
       <button className={mode==='demo'?'active':''} onClick={()=>onMode('demo')}><Sparkles size={13}/>Демо</button>
     </div>
     <div className="periods desktop-only">
@@ -75,7 +75,7 @@ export function PhaseCTopbar({
     <button className="icon-btn" disabled title="Новых уведомлений нет"><Bell size={18}/></button>
     <div className="profile-menu">
       <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{role==='SUPER_ADMIN'?'Главный администратор':'Владелец'}</span></div><ChevronDown size={14}/></button>
-      <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>Выйти</button></div>
+      <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>{demoOnly?'Выйти из демо':'Выйти'}</button></div>
     </div>
   </header>
 }

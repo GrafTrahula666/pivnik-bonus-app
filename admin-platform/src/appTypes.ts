@@ -15,3 +15,4 @@ export type Page =
   | 'platform'
   | 'companies'
   | 'venues'
+  | 'developer'

@@ -39,6 +39,7 @@ export function DemoMode({page,period,compare,onPage}:{page:Page;period:Period;c
     {page==='audit'&&<AuditPage session={demoSession} events={audit}/>}
     {page==='platform'&&<PlatformPage onOpenVenue={()=>onPage('overview')}/>}
     {page==='companies'&&<CompaniesPage onOpenVenue={()=>onPage('overview')}/>}
+    {page==='developer'&&<div className="page"><div className="empty card"><h3>Разработчик</h3><p>В рабочем режиме здесь видно состояние сервисов, баз данных и переключателей. В демо-режиме раздел скрыт.</p></div></div>}
     {page==='venues'&&<VenuesPage onOpenVenue={()=>onPage('overview')}/>}
     {flash&&<div className="toast">{flash} · демонстрация</div>}
   </div>
