@@ -87,4 +87,7 @@ test('PIVNIK Business sends broadcasts through the same audited path, behind a s
   // Off unless a long token is configured, and compared in constant time.
   assert.match(server, /if \(expected\.length < 32\) return res\.status\(404\)/);
   assert.match(server, /crypto\.timingSafeEqual\(a, b\)/);
+  // A segment only narrows the audience: the consent rule in getBroadcastRecipients still applies.
+  assert.match(server, /AND \(\$3::bigint\[\] IS NULL OR u\.id = ANY\(\$3::bigint\[\]\)\)/);
+  assert.match(server, /audience: segment \? 'clients' : req\.body\?\.audience/);
 });

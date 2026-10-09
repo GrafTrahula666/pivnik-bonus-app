@@ -51,3 +51,10 @@ describe('Business broadcasts',()=>{
     await expect(getBroadcastPreview(pivnik,'clients')).rejects.toMatchObject({code:'BROADCAST_APP_UNREACHABLE'})
   })
 })
+
+describe('segment broadcasts',()=>{
+  it('accept only known segments and always go to guests',()=>{
+    expect(validateBroadcastInput({channel:'all',message:'Ждём',segment:'lapsing',audience:'all'})).toEqual({channel:'all',audience:'clients',message:'Ждём',segment:'lapsing'})
+    expect(()=>validateBroadcastInput({channel:'all',message:'Ждём',segment:'vip'})).toThrow(expect.objectContaining({code:'SEGMENT_INVALID'}))
+  })
+})

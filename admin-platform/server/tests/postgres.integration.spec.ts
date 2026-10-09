@@ -322,4 +322,15 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect(Number((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='app.design_publish'`)).rows[0]!.n)).toBe(2)
   })
 
+  it('guest segments: counts and the list filter agree',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getClientSegments,getClients}=await import('../data.js')
+    const scope=await resolveVenueScope(pivnikAdmin,pivnikVenue)
+    const counts=(await getClientSegments(scope)).segments
+    expect(counts).toMatchObject({active:1,new:0,regular:0,lapsing:0,gone:0,never:0})
+    const list=await getClients(scope,new URL('http://x/?segment=active'))
+    expect(list.total).toBe(1);expect(list.rows[0]).toMatchObject({id:pivnikUser,segment:'active'})
+    expect((await getClients(scope,new URL('http://x/?segment=gone'))).total).toBe(0)
+  })
+
 })

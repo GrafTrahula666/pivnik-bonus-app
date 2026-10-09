@@ -352,6 +352,61 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
   }
 }
 
+// Guest segments from purchases (completed accrue/redeem). Same windows in the list filter and the counts.
+export const CLIENT_SEGMENTS = ['new', 'regular', 'active', 'lapsing', 'gone', 'never'] as const
+export type ClientSegment = (typeof CLIENT_SEGMENTS)[number]
+const SEGMENT_CTE = `seg AS (
+       SELECT client_id,
+         MAX(COALESCE(completed_at,created_at)) AS last_purchase_at,
+         COUNT(*) FILTER (WHERE COALESCE(completed_at,created_at) >= NOW() - INTERVAL '60 days') AS purchases_60d
+       FROM transactions
+       WHERE status='completed' AND mode IN ('accrue','redeem')
+       GROUP BY client_id
+     )`
+const SEGMENT_SQL = `CASE
+       WHEN u.created_at >= NOW() - INTERVAL '14 days' THEN 'new'
+       WHEN seg.last_purchase_at IS NULL THEN 'never'
+       WHEN seg.last_purchase_at >= NOW() - INTERVAL '21 days' AND seg.purchases_60d >= 3 THEN 'regular'
+       WHEN seg.last_purchase_at >= NOW() - INTERVAL '21 days' THEN 'active'
+       WHEN seg.last_purchase_at >= NOW() - INTERVAL '60 days' THEN 'lapsing'
+       ELSE 'gone'
+     END`
+
+export async function getClientSegments(scope: VenueScope) {
+  const barId = await requireLegacyBar(scope)
+  const result = await readPool.query<{ segment: ClientSegment; count: string }>(
+    `WITH ${SEGMENT_CTE}
+     SELECT ${SEGMENT_SQL} AS segment, COUNT(*)::bigint AS count
+     FROM bar_customers bc
+     JOIN users u ON u.id = bc.user_id
+     LEFT JOIN seg ON seg.client_id = u.id
+     WHERE bc.bar_id = $1::bigint AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.role = 'client'
+     GROUP BY 1`,
+    [barId],
+  )
+  const counts = Object.fromEntries(CLIENT_SEGMENTS.map((key) => [key, 0])) as Record<ClientSegment, number>
+  for (const row of result.rows) if (row.segment in counts) counts[row.segment] = numeric(row.count)
+  return { segments: counts }
+}
+
+// App user ids of the venue's guests in one segment, for a segment broadcast.
+export async function getSegmentUserIds(scope: VenueScope, segment: ClientSegment): Promise<string[]> {
+  const barId = await requireLegacyBar(scope)
+  const result = await readPool.query<{ id: string }>(
+    `WITH ${SEGMENT_CTE}
+     SELECT u.id::text
+     FROM bar_customers bc
+     JOIN users u ON u.id = bc.user_id
+     LEFT JOIN seg ON seg.client_id = u.id
+     WHERE bc.bar_id = $1::bigint AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.role = 'client'
+       AND bc.status = 'active' AND ${SEGMENT_SQL} = $2
+     ORDER BY u.id
+     LIMIT 5000`,
+    [barId, segment],
+  )
+  return result.rows.map((row) => row.id)
+}
+
 export async function getClients(scope: VenueScope, url: URL) {
   const barId = await requireLegacyBar(scope)
   const query = String(url.searchParams.get('q') || '').trim().slice(0, 100)
@@ -366,11 +421,16 @@ export async function getClients(scope: VenueScope, url: URL) {
     created: 'u.created_at DESC',
   }[sortKey] || 'last_activity_at DESC NULLS LAST'
 
+  const segment = String(url.searchParams.get('segment') || '')
   const params: Array<string | number> = [barId, `%${query}%`, limit, offset]
   let statusClause = ''
   if (['active', 'blocked', 'archived'].includes(status)) {
     params.push(status)
-    statusClause = `AND bc.status = $5`
+    statusClause = `AND bc.status = $${params.length}`
+  }
+  if ((CLIENT_SEGMENTS as readonly string[]).includes(segment)) {
+    params.push(segment)
+    statusClause += ` AND ${SEGMENT_SQL} = $${params.length}`
   }
 
   const result = await readPool.query<{
@@ -391,6 +451,7 @@ export async function getClients(scope: VenueScope, url: URL) {
     rolling_spend_cents: string
     has_vk: boolean
     has_tg: boolean
+    segment: ClientSegment
   }>(
     `WITH identity_flags AS (
        SELECT
@@ -419,9 +480,11 @@ export async function getClients(scope: VenueScope, url: URL) {
          ),0)::bigint AS rolling_spend_cents
        FROM transactions
        GROUP BY client_id
-     )
+     ),
+     ${SEGMENT_CTE}
      SELECT
        u.id::text,
+       ${SEGMENT_SQL} AS segment,
        u.first_name,
        u.last_name,
        u.username,
@@ -443,6 +506,7 @@ export async function getClients(scope: VenueScope, url: URL) {
      LEFT JOIN wallets w ON w.user_id = u.id
      LEFT JOIN identity_flags i ON i.user_id = u.id
      LEFT JOIN tx ON tx.client_id = u.id
+     LEFT JOIN seg ON seg.client_id = u.id
      WHERE bc.bar_id = $1::bigint
        AND u.merged_into_user_id IS NULL
        AND u.deleted_at IS NULL
@@ -464,12 +528,18 @@ export async function getClients(scope: VenueScope, url: URL) {
   let countStatusClause = ''
   if (['active', 'blocked', 'archived'].includes(status)) {
     countParams.push(status)
-    countStatusClause = `AND bc.status = $3`
+    countStatusClause = `AND bc.status = $${countParams.length}`
+  }
+  if ((CLIENT_SEGMENTS as readonly string[]).includes(segment)) {
+    countParams.push(segment)
+    countStatusClause += ` AND ${SEGMENT_SQL} = $${countParams.length}`
   }
   const countResult = await readPool.query<{ count: string }>(
-    `SELECT COUNT(*)::bigint
+    `WITH ${SEGMENT_CTE}
+     SELECT COUNT(*)::bigint
      FROM bar_customers bc
      JOIN users u ON u.id=bc.user_id
+     LEFT JOIN seg ON seg.client_id = u.id
      WHERE bc.bar_id=$1::bigint
        AND u.merged_into_user_id IS NULL
        AND u.deleted_at IS NULL
@@ -497,6 +567,7 @@ export async function getClients(scope: VenueScope, url: URL) {
         username: row.username,
         photoUrl: row.photo_url,
         registeredAt: row.created_at,
+        segment: row.segment,
         membershipStatus: row.membership_status,
         balance: numeric(row.balance),
         lifetimeSpend: centsToRubles(row.lifetime_spend_cents),

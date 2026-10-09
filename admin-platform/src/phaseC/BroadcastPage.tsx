@@ -9,36 +9,43 @@ import { LinkedToAppNote,isPivnikAppVenue } from './AppContentManagers'
 // Sends a message to guests through the PIVNIK app's Telegram and VK bots.
 
 type Channel='telegram'|'vk'|'all'
-type Audience='clients'|'all'
+type Audience='clients'|'all'|`seg:${SegmentKey}`
+type SegmentKey='new'|'regular'|'active'|'lapsing'|'gone'|'never'
 interface Preview {totalUsers:number;activeUsers:number;truncated:boolean;telegramRecipients:number;vkRecipients:number;telegramConfigured:boolean;vkConfigured:boolean;maxRecipients:number}
 interface Delivery {attempted:number;delivered:number;failed:number;skipped?:string}
 interface SendResult {deduplicated:boolean;totalUsers:number;truncated:boolean;telegram:Delivery;vk:Delivery}
-interface HistoryItem {id:string;status:string;channel:Channel;audience:Audience;totalUsers:number;createdAt:string;telegramDelivered:number;telegramFailed:number;vkDelivered:number;vkFailed:number;message:string|null;sentBy:string|null}
+interface HistoryItem {id:string;status:string;channel:Channel;audience:'clients'|'all';segment:SegmentKey|null;totalUsers:number;createdAt:string;telegramDelivered:number;telegramFailed:number;vkDelivered:number;vkFailed:number;message:string|null;sentBy:string|null}
 interface History {configured:boolean;writesEnabled:boolean;items:HistoryItem[]}
 
 const MAX=3000
 const CHANNELS:Array<[Channel,string]>=[['all','Telegram и VK'],['telegram','Только Telegram'],['vk','Только VK']]
-const AUDIENCES:Array<[Audience,string]>=[['clients','Гости'],['all','Гости и сотрудники']]
+const AUDIENCES:Array<[Audience,string]>=[
+  ['clients','Все гости'],['all','Гости и сотрудники'],
+  ['seg:lapsing','Пропадают (не были 21–60 дней)'],['seg:gone','Ушли (не были больше 60 дней)'],['seg:never','Не покупали ни разу'],
+  ['seg:new','Новые (за 14 дней)'],['seg:regular','Постоянные'],['seg:active','Заходят'],
+]
+const audienceLabel=(a:string)=>AUDIENCES.find(([k])=>k===a)?.[1]||a
 const channelLabel=(c:string)=>CHANNELS.find(([k])=>k===c)?.[1]||c
 const statusLabel=(s:string)=>s==='completed'?'Отправлена':s==='processing'?'Отправляется':'Ошибка'
 
-export function BroadcastPage({venue,session}:{venue:ApiVenue;session:AdminSession}){
+export function BroadcastPage({venue,session,segment}:{venue:ApiVenue;session:AdminSession;segment?:string}){
   if(!isPivnikAppVenue(venue))return <div className="page"><PageHead eyebrow="КОММУНИКАЦИИ" title="Рассылки" sub={`${venue.companyName} → ${venue.name}`}/>
     <div className="empty card"><Megaphone/><h3>Рассылки пока недоступны</h3><p>Это заведение ещё не подключено к приложению для гостей.</p></div></div>
-  return <PivnikBroadcast venue={venue} session={session}/>
+  return <PivnikBroadcast venue={venue} session={session} initialAudience={AUDIENCES.some(([k])=>k===`seg:${segment}`)?`seg:${segment}` as Audience:'clients'}/>
 }
 
-function PivnikBroadcast({venue,session}:{venue:ApiVenue;session:AdminSession}){
+function PivnikBroadcast({venue,session,initialAudience}:{venue:ApiVenue;session:AdminSession;initialAudience:Audience}){
   const base=`/api/admin/venues/${venue.id}/broadcast`
   const history=useResource<History>(base)
-  const [audience,setAudience]=useState<Audience>('clients'),[channel,setChannel]=useState<Channel>('all'),[message,setMessage]=useState('')
+  const [audience,setAudience]=useState<Audience>(initialAudience),[channel,setChannel]=useState<Channel>('all'),[message,setMessage]=useState('')
   const [preview,setPreview]=useState<Preview|null>(null),[previewError,setPreviewError]=useState('')
   const [confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[result,setResult]=useState<SendResult|null>(null)
   const configured=history.data?.configured
   useEffect(()=>{
     if(!configured)return
     let cancelled=false;setPreview(null);setPreviewError('')
-    apiGet<Preview>(`${base}/preview?audience=${audience}`).then(p=>{if(!cancelled)setPreview(p)}).catch(e=>{if(!cancelled)setPreviewError(e instanceof Error?e.message:'Не удалось посчитать получателей.')})
+    const query=audience.startsWith('seg:')?`segment=${audience.slice(4)}`:`audience=${audience}`
+    apiGet<Preview>(`${base}/preview?${query}`).then(p=>{if(!cancelled)setPreview(p)}).catch(e=>{if(!cancelled)setPreviewError(e instanceof Error?e.message:'Не удалось посчитать получателей.')})
     return()=>{cancelled=true}
   },[base,audience,configured])
 
@@ -50,7 +57,8 @@ function PivnikBroadcast({venue,session}:{venue:ApiVenue;session:AdminSession}){
 
   async function send(){
     setConfirm(false);setBusy(true);setError('');setResult(null)
-    try{const r=await apiPost<SendResult>(base,{channel,audience,message});setResult(r);if(!r.deduplicated)setMessage('');history.reload()}
+    try{const target=audience.startsWith('seg:')?{segment:audience.slice(4)}:{audience}
+      const r=await apiPost<SendResult>(base,{channel,message,...target});setResult(r);if(!r.deduplicated)setMessage('');history.reload()}
     catch(e){setError(e instanceof Error?e.message:'Не удалось отправить рассылку.')}
     finally{setBusy(false)}
   }
@@ -64,7 +72,7 @@ function PivnikBroadcast({venue,session}:{venue:ApiVenue;session:AdminSession}){
       <section className="card editor-card"><CardTitle title="Сообщение"/>
         <label className="field"><span>Текст ({message.length}/{MAX})</span><textarea rows={8} maxLength={MAX} value={message} placeholder="Например: В пятницу с 18 до 20 каждое второе пиво со скидкой 50%" onChange={e=>setMessage(e.target.value)}/></label>
         <div className="form-grid two">
-          <label className="field"><span>Кому</span><select value={audience} onChange={e=>setAudience(e.target.value==='all'?'all':'clients')}>{AUDIENCES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
+          <label className="field"><span>Кому</span><select value={audience} onChange={e=>setAudience(e.target.value as Audience)}>{AUDIENCES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
           <label className="field"><span>Куда</span><select value={channel} onChange={e=>setChannel(e.target.value as Channel)}>{CHANNELS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
         </div>
         {error&&<div className="login-error">{error}</div>}
@@ -84,10 +92,11 @@ function PivnikBroadcast({venue,session}:{venue:ApiVenue;session:AdminSession}){
     </div>
     <section className="card broadcast-history"><div className="card-title"><h3>История рассылок</h3><button className="btn secondary" onClick={history.reload}><RefreshCw/>Обновить</button></div>
       {!history.data?.items.length?<p className="muted-copy">Рассылок пока не было.</p>:
-      <div className="table-scroll"><table><thead><tr><th>Когда</th><th>Текст</th><th>Куда</th><th>Telegram</th><th>VK</th><th>Статус</th></tr></thead><tbody>
+      <div className="table-scroll"><table><thead><tr><th>Когда</th><th>Текст</th><th>Кому</th><th>Куда</th><th>Telegram</th><th>VK</th><th>Статус</th></tr></thead><tbody>
         {history.data.items.map(x=><tr key={x.id}>
           <td>{dt(x.createdAt)}{x.sentBy&&<small className="broadcast-by">{x.sentBy}</small>}</td>
           <td className="broadcast-text">{x.message||<span className="muted-copy">из админки приложения</span>}</td>
+          <td>{audienceLabel(x.segment?`seg:${x.segment}`:x.audience)}</td>
           <td>{channelLabel(x.channel)}</td>
           <td>{num(x.telegramDelivered)}{x.telegramFailed?` / ошибок ${num(x.telegramFailed)}`:''}</td>
           <td>{num(x.vkDelivered)}{x.vkFailed?` / ошибок ${num(x.vkFailed)}`:''}</td>
@@ -95,6 +104,6 @@ function PivnikBroadcast({venue,session}:{venue:ApiVenue;session:AdminSession}){
         </tr>)}
       </tbody></table></div>}
     </section>
-    {confirm&&<ConfirmModal title="Отправить рассылку?" text={`Сообщение уйдёт примерно ${num(recipients)} гостям (${channelLabel(channel)}). Отменить отправку будет нельзя.`} onCancel={()=>setConfirm(false)} onConfirm={()=>void send()}/>}
+    {confirm&&<ConfirmModal title="Отправить рассылку?" text={`Сообщение уйдёт примерно ${num(recipients)} гостям: ${audienceLabel(audience).toLowerCase()}, ${channelLabel(channel)}. Отменить отправку будет нельзя.`} onCancel={()=>setConfirm(false)} onConfirm={()=>void send()}/>}
   </div>
 }

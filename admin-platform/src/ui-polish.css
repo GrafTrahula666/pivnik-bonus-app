@@ -19,3 +19,11 @@
 .broadcast-history{margin-top:16px}.broadcast-history .card-title{display:flex;justify-content:space-between;align-items:center}
 .broadcast-text{max-width:420px;white-space:pre-wrap;word-break:break-word}.broadcast-by{display:block;opacity:.6}
 .broadcast-failed{color:#ff8a80;font-weight:700}.muted-copy{opacity:.6}
+.segment-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.segment-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:110px;padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:inherit;cursor:pointer;text-align:left}
+.segment-chip b{font-size:13px}.segment-chip span{font-size:18px;font-weight:700}
+.segment-chip.active{border-color:#73bcd9;background:rgba(115,188,217,.12)}
+.segment-tag{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.06);white-space:nowrap}
+.seg-regular.segment-tag,.segment-chip.seg-regular span{color:#4fc68a}.seg-lapsing.segment-tag,.segment-chip.seg-lapsing span{color:#e0b453}
+.seg-gone.segment-tag,.segment-chip.seg-gone span{color:#ff8a80}.seg-new.segment-tag,.segment-chip.seg-new span{color:#73bcd9}
+.segment-note{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.segment-note .safety-note{flex:1;margin:0}
