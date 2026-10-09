@@ -72,7 +72,7 @@ export default function App(){
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
         period={period} compare={compare} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()}/>
       <TenantDangerContext role={session.admin.role} mode={mode} venue={mode==='production'?selected:null} onBack={()=>setPage('platform')}/>
-      <div className="content">
+      <div className="content" key={`${mode}:${session.admin.id}:${selected?.companyId||"none"}:${selected?.id||(allVenues?"all":"none")}`}>
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
         <>
           {venueError&&<div className="error-state card"><AlertTriangle/><h3>Не удалось получить список заведений</h3><p>{venueError}</p></div>}
