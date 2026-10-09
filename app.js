@@ -2339,7 +2339,7 @@ function renderTransaction(transaction) {
     redeem: ['Списание', '−'],
     adjustment: ['Корректировка', '±'],
     beer_gift: ['Подарочный литр', '🍺'],
-    welcome: ['Приветственный бонус', '100'],
+    welcome: ['Приветственный бонус', '+'],
     shop: ['Покупка в магазине', '□'],
     achievement: ['Достижение', '◆']
   };

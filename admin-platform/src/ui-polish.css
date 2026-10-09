@@ -42,3 +42,8 @@
 .reward-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
 .reward-chip svg{width:13px;color:var(--accent)}.reward-chip.active{border-color:#73bcd9}
 .chip-remove{border:0;background:transparent;color:#ff8a80;padding:0;display:inline-flex;cursor:pointer}.chip-remove svg{color:#ff8a80}
+.loyalty-list{display:flex;flex-direction:column;gap:10px}
+.loyalty-row{display:grid;grid-template-columns:minmax(150px,1.6fr) repeat(3,minmax(84px,.7fr)) 70px auto;gap:10px;align-items:end;padding:10px 0;border-top:1px solid var(--border-soft)}.loyalty-row:first-child{border-top:0}
+.loyalty-row .field{margin:0}.loyalty-guests span{display:block;font-size:11px;color:var(--muted)}.loyalty-guests b{display:block;font-size:15px;margin-top:6px}
+.loyalty-welcome{max-width:220px}
+@media(max-width:640px){.loyalty-row{grid-template-columns:1fr 1fr}.loyalty-row .field:first-child{grid-column:1/-1}}

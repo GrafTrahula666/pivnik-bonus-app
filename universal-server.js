@@ -17,6 +17,7 @@ import {
   getUserEarnedAchievementState
 } from './achievements.js';
 import { onRuntimeConfig, startRuntimeConfigRefresh } from './business-runtime-config.js';
+import { configureLoyalty, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
 import {
   chooseCanonicalUser,
   effectiveRoleForAuthenticatedIdentity,
@@ -110,15 +111,6 @@ const MIGRATION_CHECKSUM_UPGRADES = Object.freeze({
   })
 });
 
-const STATUS_LEVELS = [
-  { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
-  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 0, nextCents: 3_000_000 },
-  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 0, nextCents: 7_000_000 },
-  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 0, nextCents: 10_000_000 },
-  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 0, nextCents: 15_000_000 },
-  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 0, nextCents: 50_000_000 },
-  { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
-];
 
 if (!databaseUrl) {
   console.error('DATABASE_URL is required.');
@@ -459,11 +451,11 @@ function achievementsFromRow(row) {
 }
 
 function getStatus(spendCents) {
-  return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
+  return statusForSpend(spendCents);
 }
 
 function getEffectiveStatus(row, spendCents) {
-  return hasUnlimitedBonus(row) ? STATUS_LEVELS[STATUS_LEVELS.length - 1] : getStatus(spendCents);
+  return hasUnlimitedBonus(row) ? topStatus() : getStatus(spendCents);
 }
 
 function validateVkLaunchParams(rawLaunchParams) {
@@ -1469,7 +1461,7 @@ async function getAppPayload(userId, platform = 'unknown', options = {}) {
   }
   return {
     profile,
-    statuses: STATUS_LEVELS.map((item) => ({
+    statuses: statusLevels().map((item) => ({
       ...item,
       min: rubles(item.minCents),
       next: item.nextCents ? rubles(item.nextCents) : null
@@ -1772,6 +1764,8 @@ async function authenticateTelegram(body) {
 }
 
 async function grantReward(db, userId, code, amount, source, reason, mode = 'adjustment') {
+  // A zero welcome bonus (switched off in Business) is not recorded as a grant.
+  if (!(Number(amount) > 0)) return { granted: false, amount: 0 };
   const grant = await db.query(
     `INSERT INTO reward_grants (code, user_id, amount, source)
      VALUES ($1, $2::bigint, $3::bigint, $4)
@@ -2088,6 +2082,8 @@ async function acceptConsent(userId, platform) {
        WHERE id = $2::bigint`,
       [TERMS_VERSION, canonical]
     );
+    // The amount comes from PIVNIK Business; the grant code stays 'welcome-100', so it is given once.
+    const WELCOME_BONUS = welcomeBonusAmount();
     const reward = rewardEligible
       ? await grantReward(
           client,
@@ -3571,6 +3567,7 @@ if (!isTestImport) {
       await refreshDatabaseFingerprint();
       // Achievement settings from PIVNIK Business; server.js keeps its own copy the same way.
       onRuntimeConfig('achievements', configureAchievements);
+      onRuntimeConfig('loyalty', configureLoyalty);
       startRuntimeConfigRefresh(pool);
     } catch (error) {
       console.error(
