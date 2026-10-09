@@ -33,6 +33,7 @@ export function DemoMode({page,period,compare,onPage}:{page:Page;period:Period;c
     {page==='achievements'&&<AchievementsPage onAudit={onAudit} flash={notify}/>}
     {page==='shop'&&<ShopPage onAudit={onAudit} flash={notify}/>}
     {page==='promotions'&&<PromotionsPage onAudit={onAudit} flash={notify}/>}
+    {page==='broadcast'&&<div className="page"><div className="empty card"><h3>Рассылки</h3><p>В рабочем режиме отсюда можно отправить сообщение гостям в Telegram и VK. В демо-режиме рассылки не отправляются.</p></div></div>}
     {page==='brand'&&<BrandPage venueName="ДЕМО · Флагманское заведение" onAudit={onAudit} flash={notify}/>}
     {page==='settings'&&<SettingsPage venueName="ДЕМО · Флагманское заведение" flash={notify}/>}
     {page==='audit'&&<AuditPage session={demoSession} events={audit}/>}

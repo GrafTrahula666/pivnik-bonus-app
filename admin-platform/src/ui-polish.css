@@ -16,3 +16,6 @@
 .app-preview-block{display:flex;align-items:center;gap:8px;margin:10px 12px 0;padding:14px;border-radius:var(--preview-radius);background:rgba(183,121,23,.12)}
 .app-preview-block svg{width:16px;height:16px}
 .app-preview-byline{display:block;text-align:center;margin:12px 0;opacity:.6}
+.broadcast-history{margin-top:16px}.broadcast-history .card-title{display:flex;justify-content:space-between;align-items:center}
+.broadcast-text{max-width:420px;white-space:pre-wrap;word-break:break-word}.broadcast-by{display:block;opacity:.6}
+.broadcast-failed{color:#ff8a80;font-weight:700}.muted-copy{opacity:.6}

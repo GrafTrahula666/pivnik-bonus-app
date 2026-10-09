@@ -8,6 +8,7 @@ export type Page =
   | 'achievements'
   | 'shop'
   | 'promotions'
+  | 'broadcast'
   | 'brand'
   | 'settings'
   | 'audit'

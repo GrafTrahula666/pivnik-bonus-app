@@ -77,3 +77,14 @@ test('promotional broadcasts go to every guest who accepted the rules, except th
   assert.match(html, /отказ сохраняется на сервере/);
   assert.doesNotMatch(html, /id="notifyPromotions"[^>]*checked/);
 });
+
+test('PIVNIK Business sends broadcasts through the same audited path, behind a service token', () => {
+  const server = read('server.js');
+  assert.match(server, /async function runBroadcast\(/);
+  assert.match(server, /app\.post\('\/api\/admin\/broadcast',[\s\S]*?runBroadcast\(\{ \.\.\.req\.body, actorUserId: req\.user\.id/);
+  assert.match(server, /app\.get\('\/api\/internal\/business\/broadcast\/preview', requireBusinessService,/);
+  assert.match(server, /app\.post\('\/api\/internal\/business\/broadcast', requireBusinessService,/);
+  // Off unless a long token is configured, and compared in constant time.
+  assert.match(server, /if \(expected\.length < 32\) return res\.status\(404\)/);
+  assert.match(server, /crypto\.timingSafeEqual\(a, b\)/);
+});

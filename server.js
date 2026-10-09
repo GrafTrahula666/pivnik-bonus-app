@@ -2966,47 +2966,42 @@ app.post('/api/me/marketing-consent', authRequired, async (req, res, next) => {
   }
 });
 
-app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), async (req, res, next) => {
-  try {
-    const audience = normalizeBroadcastAudience(req.query?.audience);
-    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
-    const recipients = await getBroadcastRecipients(audience);
-    const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
-    const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
-    // Everyone in the audience who accepted the rules, opted out or not, so the panel can say "N of M".
-    const active = await pool.query(
-      `SELECT COUNT(*)::int AS n FROM users u
-       WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.terms_accepted_at IS NOT NULL
-         AND ($1::text = 'all' OR u.role = 'client')`,
-      [audience]
-    );
-    res.json({
-      audience,
-      totalUsers: recipients.rows.length,
-      activeUsers: Number(active.rows[0]?.n || 0),
-      truncated: recipients.truncated,
-      telegramRecipients: telegramIds.length,
-      vkRecipients: vkIds.length,
-      telegramConfigured: Boolean(botToken),
-      vkConfigured: Boolean(vkCommunityId && vkCommunityToken),
-      maxRecipients: BROADCAST_MAX_RECIPIENTS
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+async function buildBroadcastPreview(audience) {
+  const recipients = await getBroadcastRecipients(audience);
+  const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
+  const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
+  // Everyone in the audience who accepted the rules, opted out or not, so the panel can say "N of M".
+  const active = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM users u
+     WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.terms_accepted_at IS NOT NULL
+       AND ($1::text = 'all' OR u.role = 'client')`,
+    [audience]
+  );
+  return {
+    audience,
+    totalUsers: recipients.rows.length,
+    activeUsers: Number(active.rows[0]?.n || 0),
+    truncated: recipients.truncated,
+    telegramRecipients: telegramIds.length,
+    vkRecipients: vkIds.length,
+    telegramConfigured: Boolean(botToken),
+    vkConfigured: Boolean(vkCommunityId && vkCommunityToken),
+    maxRecipients: BROADCAST_MAX_RECIPIENTS
+  };
+}
 
-app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req, res, next) => {
+// Shared by the in-app admin and PIVNIK Business. Returns { status, body } for the HTTP response.
+async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAudience, message: rawMessage, source }) {
   let campaignId = null;
   try {
-    const channel = normalizeBroadcastChannel(req.body?.channel);
-    const audience = normalizeBroadcastAudience(req.body?.audience);
-    const message = String(req.body?.message || '').trim();
-    if (!channel) return res.status(400).json({ error: 'Выберите канал рассылки.' });
-    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
-    if (!message) return res.status(400).json({ error: 'Введите текст рассылки.' });
+    const channel = normalizeBroadcastChannel(rawChannel);
+    const audience = normalizeBroadcastAudience(rawAudience);
+    const message = String(rawMessage || '').trim();
+    if (!channel) return { status: 400, body: { error: 'Выберите канал рассылки.' } };
+    if (!audience) return { status: 400, body: { error: 'Недопустимая аудитория рассылки.' } };
+    if (!message) return { status: 400, body: { error: 'Введите текст рассылки.' } };
     if (message.length > BROADCAST_MAX_TEXT) {
-      return res.status(400).json({ error: `Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.` });
+      return { status: 400, body: { error: `Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.` } };
     }
 
     const recipients = await getBroadcastRecipients(audience);
@@ -3016,14 +3011,14 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
     const wantsVk = channel === 'vk' || channel === 'all';
 
     if (channel === 'telegram' && !botToken) {
-      return res.status(503).json({ error: 'TELEGRAM_BOT_TOKEN не настроен.' });
+      return { status: 503, body: { error: 'TELEGRAM_BOT_TOKEN не настроен.' } };
     }
     if (channel === 'vk' && (!vkCommunityId || !vkCommunityToken)) {
-      return res.status(503).json({ error: 'Для VK нужны VK_COMMUNITY_ID и VK_COMMUNITY_TOKEN.' });
+      return { status: 503, body: { error: 'Для VK нужны VK_COMMUNITY_ID и VK_COMMUNITY_TOKEN.' } };
     }
 
     const claim = await broadcastCampaignStore.claim({
-      actorUserId: req.user.id,
+      actorUserId,
       channel,
       audience,
       message,
@@ -3034,24 +3029,30 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
 
     if (!claim.created) {
       if (claim.campaign.status === 'completed') {
-        return res.json({
-          ok: true,
-          deduplicated: true,
-          campaignId: claim.campaign.id,
-          channel,
-          audience,
-          totalUsers: claim.campaign.totalUsers,
-          truncated: claim.campaign.truncated,
-          telegram: claim.campaign.telegram,
-          vk: claim.campaign.vk
-        });
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            deduplicated: true,
+            campaignId: claim.campaign.id,
+            channel,
+            audience,
+            totalUsers: claim.campaign.totalUsers,
+            truncated: claim.campaign.truncated,
+            telegram: claim.campaign.telegram,
+            vk: claim.campaign.vk
+          }
+        };
       }
-      return res.status(409).json({
-        error: claim.campaign.status === 'processing'
-          ? 'Такая рассылка уже выполняется. Повторная отправка заблокирована.'
-          : 'Такая рассылка недавно завершилась с ошибкой. Повтор автоматически заблокирован, чтобы не отправить сообщение дважды.',
-        campaignId: claim.campaign.id
-      });
+      return {
+        status: 409,
+        body: {
+          error: claim.campaign.status === 'processing'
+            ? 'Такая рассылка уже выполняется. Повторная отправка заблокирована.'
+            : 'Такая рассылка недавно завершилась с ошибкой. Повтор автоматически заблокирован, чтобы не отправить сообщение дважды.',
+          campaignId: claim.campaign.id
+        }
+      };
     }
 
     const telegram = wantsTelegram && botToken
@@ -3074,7 +3075,8 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
 
     console.info('Admin broadcast completed', {
       campaignId,
-      actor: String(req.user.id),
+      actor: String(actorUserId),
+      source,
       channel,
       audience,
       telegram: { attempted: telegram.attempted, delivered: telegram.delivered, failed: telegram.failed },
@@ -3082,23 +3084,93 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
       truncated: recipients.truncated
     });
 
-    res.json({
-      ok: true,
-      deduplicated: false,
-      campaignId,
-      channel,
-      audience,
-      totalUsers: recipients.rows.length,
-      truncated: recipients.truncated,
-      telegram,
-      vk
-    });
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        deduplicated: false,
+        campaignId,
+        channel,
+        audience,
+        totalUsers: recipients.rows.length,
+        truncated: recipients.truncated,
+        telegram,
+        vk
+      }
+    };
   } catch (error) {
     if (campaignId) {
       await broadcastCampaignStore.fail(campaignId, error).catch((auditError) => {
         console.error('Broadcast campaign audit failure:', auditError.message);
       });
     }
+    throw error;
+  }
+}
+
+app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const audience = normalizeBroadcastAudience(req.query?.audience);
+    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
+    res.json(await buildBroadcastPreview(audience));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await runBroadcast({ ...req.body, actorUserId: req.user.id, source: 'app-admin' });
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PIVNIK Business (admin-pilot) sends broadcasts through the guest app, which holds the bot tokens.
+// Off unless BUSINESS_INTERNAL_TOKEN is set on both services; the campaign is recorded under the owner's app account.
+function requireBusinessService(req, res, next) {
+  const expected = String(process.env.BUSINESS_INTERNAL_TOKEN || '');
+  const given = String(req.get('x-business-token') || '');
+  if (expected.length < 32) return res.status(404).json({ error: 'Not found' });
+  const a = crypto.createHash('sha256').update(given).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  if (!crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Нет доступа.' });
+  next();
+}
+
+async function businessBroadcastActorId() {
+  const configured = String(process.env.BUSINESS_BROADCAST_ACTOR_USER_ID || '').trim();
+  if (/^\d+$/.test(configured)) return configured;
+  const owner = await pool.query(
+    `SELECT id FROM users WHERE role = 'admin' AND merged_into_user_id IS NULL AND deleted_at IS NULL ORDER BY id LIMIT 1`
+  );
+  if (!owner.rowCount) throw Object.assign(new Error('Нет администратора приложения для записи рассылки.'), { statusCode: 503 });
+  return String(owner.rows[0].id);
+}
+
+app.get('/api/internal/business/broadcast/preview', requireBusinessService, async (req, res, next) => {
+  try {
+    const audience = normalizeBroadcastAudience(req.query?.audience);
+    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
+    res.json(await buildBroadcastPreview(audience));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/internal/business/broadcast', requireBusinessService, async (req, res, next) => {
+  try {
+    const result = await runBroadcast({
+      channel: req.body?.channel,
+      audience: req.body?.audience,
+      message: req.body?.message,
+      actorUserId: await businessBroadcastActorId(),
+      source: 'business'
+    });
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     next(error);
   }
 });
