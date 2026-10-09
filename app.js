@@ -619,6 +619,14 @@ function wheelDurationLabel(ms) {
   return [hours, minutes, rest].map((value) => String(value).padStart(2, '0')).join(':');
 }
 
+function wheelHoursLabel(hours) {
+  const value = Number(hours) > 0 ? Number(hours) : 24;
+  const lastTwo = value % 100;
+  const last = value % 10;
+  const word = lastTwo >= 11 && lastTwo <= 14 ? 'часов' : last === 1 ? 'час' : last >= 2 && last <= 4 ? 'часа' : 'часов';
+  return `${value} ${word}`;
+}
+
 function effectiveWheelStatus() {
   const current = state.wheel.status;
   if (!current) return null;
@@ -675,7 +683,7 @@ function renderWheelStatus() {
     ? 'Бесплатное вращение доступно'
     : `Дополнительное вращение — ${paidCost} бонусов`;
   nextFreeHint.textContent = free
-    ? 'Следующее бесплатное вращение — через 24 часа после этого.'
+    ? `Следующее бесплатное вращение — через ${wheelHoursLabel(current.freeIntervalHours)} после этого.`
     : `Следующее бесплатное вращение — через ${wheelDurationLabel(remaining)}.`;
   balanceHint.textContent = current.unlimitedBonus
     ? 'Баланс: ∞ бонусов'
@@ -698,6 +706,38 @@ function startWheelCountdown() {
       loadWheelStatus().finally(() => { state.wheel.refreshPending = false; });
     }
   }, 1000);
+}
+
+// The rules show the chances and prices PIVNIK Business set; without a status the printed defaults stay.
+function renderWheelRules() {
+  const current = state.wheel.status;
+  if (!current) return;
+  const freeText = $('#wheelRulesFreeText');
+  const paidText = $('#wheelRulesPaidText');
+  const odds = $('#wheelOddsList');
+  if (freeText && current.freeIntervalHours) {
+    freeText.textContent = `Первое вращение бесплатно. Следующее бесплатное вращение становится доступно ровно через ${wheelHoursLabel(current.freeIntervalHours)} с момента предыдущего бесплатного вращения.`;
+  }
+  const first = Number(current.firstPaidCost);
+  const later = Number(current.laterPaidCost);
+  if (paidText && first > 0 && later > 0) {
+    paidText.textContent = first === later
+      ? `После бесплатного вращения каждое дополнительное вращение до следующего бесплатного стоит ${fmt(first)} бонусов.`
+      : `После бесплатного вращения первое дополнительное вращение стоит ${fmt(first)} бонусов. Все последующие дополнительные вращения до следующего бесплатного вращения стоят по ${fmt(later)} бонусов. Цена выше ${fmt(later)} бонусов не повышается.`;
+  }
+  const prizes = Array.isArray(current.prizes) ? current.prizes : [];
+  if (odds && prizes.length) {
+    odds.replaceChildren(...prizes.filter((prize) => prize.annualSupply || Number(prize.chancePercent) > 0).map((prize) => {
+      const item = document.createElement('li');
+      const title = document.createElement('b');
+      title.textContent = prize.title;
+      const chance = document.createElement('span');
+      const percent = `${Number(prize.chancePercent).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}%`;
+      chance.textContent = prize.annualSupply ? `${percent} · 1 из 1 000 000` : percent;
+      item.append(title, chance);
+      return item;
+    }));
+  }
 }
 
 async function loadWheelStatus() {
@@ -3785,7 +3825,10 @@ $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#leagueBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#actionsBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
-$('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
+$('#openWheelRulesButton')?.addEventListener('click', () => {
+  renderWheelRules();
+  openModal('wheelRulesModal');
+});
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));

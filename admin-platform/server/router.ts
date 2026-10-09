@@ -25,6 +25,7 @@ import {
 } from './tenant.js'
 import { adjustPivnikBonusPilot } from './bonus-pilot-writer.js'
 import { getAppLoyalty,saveAppLoyalty } from './pivnik-app-loyalty.js'
+import { getAppWheel,saveAppWheel } from './pivnik-app-wheel.js'
 import { getAppRewards,getGuestRewards,grantGuestAchievement,grantGuestFrame,revokeGuestFrame,saveAppAchievements } from './pivnik-app-rewards.js'
 import {
   getManagedBranding,
@@ -174,6 +175,10 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(resource==='app'&&child==='loyalty'&&!grandchild){
       if(isMethod(req,'GET')){json(res,200,await getAppLoyalty(scope));return true}
       if(isMethod(req,'PUT')){json(res,200,await saveAppLoyalty(session.admin,scope,await readJsonBody(req)));return true}
+    }
+    if(resource==='app'&&child==='wheel'&&!grandchild){
+      if(isMethod(req,'GET')){json(res,200,await getAppWheel(scope));return true}
+      if(isMethod(req,'PUT')){json(res,200,await saveAppWheel(session.admin,scope,await readJsonBody(req)));return true}
     }
     // Achievements and frames of the PIVNIK app: catalog settings and grants to one guest.
     if(resource==='app'&&child==='rewards'&&!grandchild&&isMethod(req,'GET')){json(res,200,await getAppRewards(scope));return true}
