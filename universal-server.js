@@ -13,8 +13,10 @@ import {
   withVkStartupTrace, traceVkStage
 } from './vk-startup-diagnostics.js';
 import {
+  configureAchievements,
   getUserEarnedAchievementState
 } from './achievements.js';
+import { onRuntimeConfig, startRuntimeConfigRefresh } from './business-runtime-config.js';
 import {
   chooseCanonicalUser,
   effectiveRoleForAuthenticatedIdentity,
@@ -3567,6 +3569,9 @@ if (!isTestImport) {
       await waitForChild();
       await initPlatformDatabase();
       await refreshDatabaseFingerprint();
+      // Achievement settings from PIVNIK Business; server.js keeps its own copy the same way.
+      onRuntimeConfig('achievements', configureAchievements);
+      startRuntimeConfigRefresh(pool);
     } catch (error) {
       console.error(
         'Platform initialization failed:',

@@ -1,4 +1,5 @@
 import { config } from './config.js'
+import { appLinkConfigured,callApp as callPivnikApp,setAppFetchForTests } from './pivnik-app-link.js'
 import { pool, productionTableExists, readPool } from './db.js'
 import { recordAudit } from './audit.js'
 import { CLIENT_SEGMENTS,getSegmentUserIds,type ClientSegment } from './data.js'
@@ -15,36 +16,15 @@ const CHANNELS=new Set(['telegram','vk','all'])
 function requirePivnik(scope:VenueScope):void {
   if(scope.companyCode!=='pivnik'||!scope.legacyBarId) throw new HttpError(409,'APP_CONTENT_NOT_LINKED','Это заведение пока не связано с приложением ПИВНИК.')
 }
-export function broadcastConfigured():boolean {
-  return Boolean(config.pivnikAppUrl&&config.businessInternalToken.length>=32)
-}
+export function broadcastConfigured():boolean { return appLinkConfigured() }
 function requireConfigured():void {
   if(!broadcastConfigured()) throw new HttpError(503,'BROADCAST_NOT_CONFIGURED','Рассылки ещё не подключены: нужны PIVNIK_APP_URL и BUSINESS_INTERNAL_TOKEN.')
 }
+export const setBroadcastFetchForTests=setAppFetchForTests
 
-type Fetch=typeof fetch
-let fetcher:Fetch=(...args)=>fetch(...args)
-export function setBroadcastFetchForTests(next:Fetch|null):void { fetcher=next||((...args)=>fetch(...args)) }
-
-async function callApp<T>(path:string,init:{method?:string;body?:unknown;timeoutMs:number}):Promise<T> {
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),init.timeoutMs)
-  try{
-    const response=await fetcher(`${config.pivnikAppUrl}${path}`,{
-      method:init.method||'GET',signal:controller.signal,
-      headers:{'x-business-token':config.businessInternalToken,...(init.body?{'content-type':'application/json'}:{})},
-      body:init.body?JSON.stringify(init.body):undefined,
-    })
-    const data=await response.json().catch(()=>({})) as Record<string,unknown>
-    if(!response.ok){
-      if(response.status===401||response.status===404) throw new HttpError(502,'BROADCAST_APP_ERROR','Приложение не принимает ключ связи: проверьте BUSINESS_INTERNAL_TOKEN на обоих сервисах.')
-      const message=typeof data.error==='string'&&(response.status<500||response.status===503)?data.error:''
-      throw new HttpError(response.status,'BROADCAST_APP_ERROR',message||'Приложение не приняло запрос на рассылку.')
-    }
-    return data as T
-  }catch(error){
-    if(error instanceof HttpError) throw error
-    throw new HttpError(502,'BROADCAST_APP_UNREACHABLE',(error as Error)?.name==='AbortError'?'Приложение не ответило вовремя. Проверьте результат в истории, прежде чем отправлять снова.':'Не удалось связаться с приложением.')
-  }finally{clearTimeout(timer)}
+function callApp<T>(path:string,init:{method?:string;body?:unknown;timeoutMs:number}):Promise<T> {
+  return callPivnikApp<T>(path,{...init,errorCode:'BROADCAST_APP_ERROR',unreachableCode:'BROADCAST_APP_UNREACHABLE',
+    failMessage:'Приложение не приняло запрос на рассылку.',timeoutMessage:'Приложение не ответило вовремя. Проверьте результат в истории, прежде чем отправлять снова.'})
 }
 
 export interface BroadcastPreview {

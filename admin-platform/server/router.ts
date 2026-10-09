@@ -24,6 +24,7 @@ import {
   resolveVenueScope,
 } from './tenant.js'
 import { adjustPivnikBonusPilot } from './bonus-pilot-writer.js'
+import { getAppRewards,getGuestRewards,grantGuestAchievement,grantGuestFrame,revokeGuestFrame,saveAppAchievements } from './pivnik-app-rewards.js'
 import {
   getManagedBranding,
   getManagedFeatures,
@@ -168,6 +169,14 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       const body=await readJsonBody(req)
       json(res,200,await manualGrantAchievement(session.admin,scope,child,body));return true
     }
+
+    // Achievements and frames of the PIVNIK app: catalog settings and grants to one guest.
+    if(resource==='app'&&child==='rewards'&&!grandchild&&isMethod(req,'GET')){json(res,200,await getAppRewards(scope));return true}
+    if(resource==='app'&&child==='rewards'&&grandchild==='achievements'&&isMethod(req,'PUT')){json(res,200,await saveAppAchievements(session.admin,scope,await readJsonBody(req)));return true}
+    if(resource==='clients'&&child&&grandchild==='rewards'&&isMethod(req,'GET')){json(res,200,await getGuestRewards(scope,child));return true}
+    if(resource==='clients'&&child&&grandchild==='app-achievements'&&isMethod(req,'POST')){json(res,200,await grantGuestAchievement(session.admin,scope,child,await readJsonBody(req)));return true}
+    if(resource==='clients'&&child&&grandchild==='frames'&&!parts[7]&&isMethod(req,'POST')){json(res,200,await grantGuestFrame(session.admin,scope,child,await readJsonBody(req)));return true}
+    if(resource==='clients'&&child&&grandchild==='frames'&&parts[7]&&isMethod(req,'DELETE')){json(res,200,await revokeGuestFrame(session.admin,scope,child,parts[7]));return true}
 
     // Guest app content: these rows are what guests see in the PIVNIK app.
     if(resource==='app'&&child==='promotions'&&!grandchild){

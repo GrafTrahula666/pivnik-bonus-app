@@ -9,10 +9,23 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import pg from 'pg';
-import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
+import { GOLD_BARS_FRAME, GRANTABLE_FRAMES, GRANTABLE_FRAME_CODES, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
+import {
+  BUSINESS_RUNTIME_CONFIG_SQL,
+  onRuntimeConfig,
+  readRuntimeConfigMeta,
+  saveRuntimeConfig,
+  startRuntimeConfigRefresh
+} from './business-runtime-config.js';
 import QRCode from 'qrcode';
 import {
+  ACHIEVEMENT_CATALOG,
+  achievementSettingsSnapshot,
   acknowledgeAchievement,
+  activeAchievementCatalog,
+  configureAchievements,
+  grantAchievementManually,
+  normalizeAchievementSettings,
   getUserAchievementState,
   getUserEarnedAchievementState,
   syncUserAchievements
@@ -848,6 +861,8 @@ async function initDatabase() {
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_cancel_quota_resets ON cancel_quota_resets(shift_id, user_id, reset_at DESC)');
+
+    await client.query(BUSINESS_RUNTIME_CONFIG_SQL);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_settings (
@@ -3204,6 +3219,181 @@ app.post('/api/internal/business/broadcast', requireBusinessService, async (req,
   }
 });
 
+// PIVNIK Business: the achievement catalog, frames, and giving them to a guest by hand.
+const ACHIEVEMENT_SETTINGS_KEY = 'achievements';
+onRuntimeConfig(ACHIEVEMENT_SETTINGS_KEY, configureAchievements);
+
+function businessError(res, error, next) {
+  if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+  return next(error);
+}
+
+async function businessGuest(rawId, db = pool) {
+  const id = String(rawId || '');
+  if (!/^\d{1,18}$/.test(id)) throw Object.assign(new Error('Некорректный гость.'), { statusCode: 400 });
+  const result = await db.query(
+    `SELECT id, profile_frame FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL AND deleted_at IS NULL`,
+    [id]
+  );
+  if (!result.rowCount) throw Object.assign(new Error('Гость не найден.'), { statusCode: 404 });
+  return result.rows[0];
+}
+
+async function businessRewardsOverview() {
+  const [achievementCounts, frameCounts, meta] = await Promise.all([
+    pool.query(
+      `SELECT achievement_code, COUNT(DISTINCT user_id)::int AS guests FROM reward_grants
+       WHERE source = 'achievement' AND achievement_code IS NOT NULL GROUP BY achievement_code`
+    ),
+    pool.query('SELECT frame_id, COUNT(*)::int AS guests FROM user_frames GROUP BY frame_id'),
+    readRuntimeConfigMeta(pool, ACHIEVEMENT_SETTINGS_KEY)
+  ]);
+  const achievementGuests = new Map(achievementCounts.rows.map((row) => [row.achievement_code, row.guests]));
+  const frameGuests = new Map(frameCounts.rows.map((row) => [row.frame_id, row.guests]));
+  const defaults = new Map(ACHIEVEMENT_CATALOG.map((item) => [item.code, item]));
+  return {
+    achievements: activeAchievementCatalog().map((item) => ({
+      code: item.code,
+      title: item.title,
+      description: item.description,
+      rarity: item.rarity,
+      metric: item.metric,
+      target: item.target,
+      unit: item.unit,
+      recurring: item.recurring || null,
+      rewardBonus: Number(item.rewardBonus || 0),
+      rewardBeerMl: Number(item.rewardBeerMl || 0),
+      defaultRewardBonus: defaults.has(item.code) ? Number(defaults.get(item.code).rewardBonus || 0) : null,
+      enabled: item.enabled !== false,
+      manual: Boolean(item.manual),
+      guests: achievementGuests.get(item.code) || 0
+    })),
+    frames: GRANTABLE_FRAMES.map((frame) => ({ ...frame, guests: frameGuests.get(frame.code) || 0 })),
+    updatedAt: meta?.updatedAt || null,
+    updatedBy: meta?.updatedBy || null
+  };
+}
+
+app.get('/api/internal/business/rewards', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessRewardsOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.put('/api/internal/business/rewards/achievements', requireBusinessService, async (req, res, next) => {
+  try {
+    const settings = normalizeAchievementSettings(req.body?.settings);
+    // An achievement that guests already have can be switched off, not deleted.
+    const kept = new Set(settings.custom.map((item) => item.code));
+    const removed = achievementSettingsSnapshot().custom.map((item) => item.code).filter((code) => !kept.has(code));
+    if (removed.length) {
+      const owned = await pool.query(
+        `SELECT 1 FROM reward_grants WHERE source = 'achievement' AND achievement_code = ANY($1::text[]) LIMIT 1`,
+        [removed]
+      );
+      if (owned.rowCount) throw Object.assign(new Error('Это достижение уже есть у гостей, его нельзя удалить.'), { statusCode: 409 });
+    }
+    await saveRuntimeConfig(pool, ACHIEVEMENT_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
+    res.json(await businessRewardsOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+async function businessGuestRewards(userId) {
+  const guest = await businessGuest(userId);
+  const [achievements, frames] = await Promise.all([
+    pool.query(
+      `SELECT achievement_code, MAX(created_at) AS granted_at, COUNT(*)::int AS times FROM reward_grants
+       WHERE user_id = $1::bigint AND source = 'achievement' AND achievement_code IS NOT NULL
+       GROUP BY achievement_code ORDER BY MAX(created_at) DESC`,
+      [guest.id]
+    ),
+    pool.query('SELECT frame_id, acquired_source, acquired_at FROM user_frames WHERE user_id = $1::bigint ORDER BY acquired_at', [guest.id])
+  ]);
+  const titles = new Map(activeAchievementCatalog().map((item) => [item.code, item.title]));
+  const frameTitles = new Map(GRANTABLE_FRAMES.map((frame) => [frame.code, frame.title]));
+  return {
+    selectedFrame: guest.profile_frame || 'none',
+    achievements: achievements.rows.map((row) => ({
+      code: row.achievement_code,
+      title: titles.get(row.achievement_code) || row.achievement_code,
+      grantedAt: row.granted_at,
+      times: row.times
+    })),
+    frames: frames.rows.map((row) => ({
+      code: row.frame_id,
+      title: frameTitles.get(row.frame_id) || row.frame_id,
+      source: row.acquired_source,
+      acquiredAt: row.acquired_at,
+      removable: row.acquired_source === 'business'
+    }))
+  };
+}
+
+app.get('/api/internal/business/users/:id/rewards', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessGuestRewards(req.params.id));
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.post('/api/internal/business/users/:id/achievements', requireBusinessService, async (req, res, next) => {
+  try {
+    const guest = await businessGuest(req.params.id);
+    const granted = await grantAchievementManually(pool, guest.id, req.body?.code);
+    res.json({ granted, rewards: await businessGuestRewards(guest.id) });
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.post('/api/internal/business/users/:id/frames', requireBusinessService, async (req, res, next) => {
+  try {
+    const code = String(req.body?.code || '');
+    if (!GRANTABLE_FRAME_CODES.has(code)) throw Object.assign(new Error('Такой рамки нет.'), { statusCode: 400 });
+    const guest = await businessGuest(req.params.id);
+    const inserted = await pool.query(
+      `INSERT INTO user_frames (user_id, frame_id, acquired_source) VALUES ($1::bigint, $2, 'business')
+       ON CONFLICT (user_id, frame_id) DO NOTHING RETURNING id`,
+      [guest.id, code]
+    );
+    if (!inserted.rowCount) throw Object.assign(new Error('У гостя уже есть эта рамка.'), { statusCode: 409 });
+    res.json(await businessGuestRewards(guest.id));
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+// Only frames given from Business can be taken back; a guest wearing it goes back to no frame.
+app.delete('/api/internal/business/users/:id/frames/:code', requireBusinessService, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const guest = await businessGuest(req.params.id, client);
+    const code = String(req.params.code || '');
+    const removed = await client.query(
+      `DELETE FROM user_frames WHERE user_id = $1::bigint AND frame_id = $2 AND acquired_source = 'business' RETURNING id`,
+      [guest.id, code]
+    );
+    if (!removed.rowCount) throw Object.assign(new Error('Эту рамку выдали не из панели, её нельзя забрать.'), { statusCode: 409 });
+    await client.query(
+      `UPDATE users SET profile_frame = 'none', updated_at = NOW() WHERE id = $1::bigint AND profile_frame = $2`,
+      [guest.id, code]
+    );
+    await client.query('COMMIT');
+    res.json(await businessGuestRewards(guest.id));
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    businessError(res, error, next);
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/admin/users', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const directory = await queryAdminUserDirectory(pool, req.query);
@@ -3675,6 +3865,7 @@ app.use((error, _req, res, _next) => {
 });
 
 await initDatabase();
+startRuntimeConfigRefresh(pool);
 const server = app.listen(port, isChildServer ? '127.0.0.1' : '0.0.0.0', () => {
   console.log(`Pivnik app is running on port ${port}`);
   startPosBonusWorker();

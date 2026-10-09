@@ -10,6 +10,8 @@ import {
 } from '../ui'
 import { ErrorCard,LivePill,LoadingCard,SourceNote,WriteGatePill,dt,useResource } from './common'
 import { businessLabel } from './labels'
+import { isPivnikAppVenue } from './AppContentManagers'
+import { GuestRewardsPanel } from './AppRewardsManagers'
 
 interface Client {
   id:string;name:string;username:string|null;registeredAt:string;membershipStatus:string;balance:number;
@@ -76,6 +78,8 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
   const [bonusMode,setBonusMode]=useState<'credit'|'debit'|null>(null),[achievementOpen,setAchievementOpen]=useState(false),[cashbackOpen,setCashbackOpen]=useState(false),[entitlementOpen,setEntitlementOpen]=useState(false)
   useEffect(()=>{setError('');apiGet<DetailResponse>(`/api/admin/venues/${venue.id}/clients/${userId}`).then(setClient).catch(e=>setError(e instanceof Error?e.message:'Ошибка клиента'))},[venue.id,userId,reload])
   const refresh=()=>{setReload(v=>v+1);onChanged()}
+  // In the PIVNIK app achievements and frames are given through the app (GuestRewardsPanel).
+  const linked=isPivnikAppVenue(venue)
   return <div className="drawer-layer">
     <button className="drawer-scrim" onClick={onClose} aria-label="Закрыть карточку"/>
     <aside className="drawer">
@@ -85,9 +89,11 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
         <div className="drawer-actions">
           <button className="btn" disabled={!session.capabilities.productionBonusWrites} onClick={()=>setBonusMode('credit')}><Coins/>Начислить</button>
           <button className="btn secondary danger-outline" disabled={!session.capabilities.productionBonusWrites} onClick={()=>setBonusMode('debit')}><Coins/>Списать</button>
-          <button className="btn secondary" disabled={!session.capabilities.productionAchievementWrites} onClick={()=>setAchievementOpen(true)}><Trophy/>Достижение</button>
-          <button className="btn secondary" disabled={!session.capabilities.writes} onClick={()=>setEntitlementOpen(true)}><Gift/>Рамка / товар</button>
-          <button className="btn secondary" disabled={!session.capabilities.writes} onClick={()=>setCashbackOpen(true)}><SlidersHorizontal/>Кешбэк</button>
+          {!linked&&<>
+            <button className="btn secondary" disabled={!session.capabilities.productionAchievementWrites} onClick={()=>setAchievementOpen(true)}><Trophy/>Достижение</button>
+            <button className="btn secondary" disabled={!session.capabilities.writes} onClick={()=>setEntitlementOpen(true)}><Gift/>Рамка / товар</button>
+            <button className="btn secondary" disabled={!session.capabilities.writes} onClick={()=>setCashbackOpen(true)}><SlidersHorizontal/>Кешбэк</button>
+          </>}
         </div>
         {!session.capabilities.productionBonusWrites&&<SourceNote>Изменение бонусного баланса сейчас доступно только для просмотра.</SourceNote>}
         <div className="detail-grid">
@@ -99,8 +105,9 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
         <SourceNote>Баланс показывает фактическое количество бонусов клиента. Персональные подарки сохраняются на счёте, но не искажают бизнес-KPI обзора.</SourceNote>
         <h3 className="section-title">Каналы и профили</h3>
         <div className="identity-list">{client.identities.map(i=><div key={`${i.provider}:${i.provider_user_id}`}><PlatformTag value={i.provider==='vk'?'VK':'TG'}/><b>{i.provider_username?`@${i.provider_username}`:i.provider_user_id}</b><span>{i.provider_user_id}</span></div>)}</div>
+        {linked&&<GuestRewardsPanel venue={venue} session={session} userId={userId} onChanged={refresh}/>}
         <h3 className="section-title">Лояльность</h3>
-        <div className="progress-card"><div><LevelBadge level={client.level}/><b>{client.cashbackPercent}% кэшбэк</b></div><span>Индивидуальные условия клиента сохраняются отдельно от общих настроек заведения.</span></div>
+        <div className="progress-card"><div><LevelBadge level={client.level}/><b>{client.cashbackPercent}% кэшбэк</b></div><span>{linked?'Уровень и процент начисления считаются приложением по сумме покупок.':'Индивидуальные условия клиента сохраняются отдельно от общих настроек заведения.'}</span></div>
         <h3 className="section-title">История операций</h3>
         <div className="timeline">{client.timeline.map(x=><div className="timeline-row" key={x.id}><i/><div><span>{dt(x.occurred_at)}</span><b>{businessLabel(x.mode)} · {businessLabel(x.status)}</b><p>Чек ₽ {rub.format(Math.round(x.checkAmount||0))} · оплачено ₽ {rub.format(Math.round(x.cashPaid||0))} · +{x.bonusEarned||0} / −{x.bonusSpent||0} Б</p>{x.reason&&<p>{x.reason}</p>}</div></div>)}</div>
       </>}

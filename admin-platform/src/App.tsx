@@ -14,6 +14,7 @@ import {
 } from './phaseC/ProductionManagers'
 import { AppDesignManager,AppPromotionsManager,isPivnikAppVenue } from './phaseC/AppContentManagers'
 import { PivnikLegacyAchievementManager,PivnikLegacyWheelManager } from './phaseC/PivnikLegacyManagers'
+import { AppAchievementsManager } from './phaseC/AppRewardsManagers'
 import { SettingsPage } from './phaseC/SettingsPage'
 import { BroadcastPage } from './phaseC/BroadcastPage'
 import { DeveloperPage } from './phaseC/DeveloperPage'
@@ -99,7 +100,7 @@ export default function App(){
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
           {selected&&page==='loyalty'&&<LoyaltyManager venue={selected} session={session}/>}
           {selected&&page==='wheel'&&<PivnikLegacyWheelManager venue={selected}/>}
-          {selected&&page==='achievements'&&<PivnikLegacyAchievementManager venue={selected}/>}
+          {selected&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
           {selected&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
           {selected&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
