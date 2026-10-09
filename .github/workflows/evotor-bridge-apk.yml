@@ -5,7 +5,7 @@ on:
     branches: ['claude/project-thread-gd8js6']
     paths: ['evotor-bridge/**', '.github/workflows/evotor-bridge-apk.yml']
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: evotor-bridge-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -43,3 +43,18 @@ jobs:
           name: evotor-bridge-test-reports
           path: evotor-bridge/app/build/reports/tests/
           if-no-files-found: ignore
+      # Copy of the APK on a separate branch, so it can be fetched as a plain file
+      # (Actions artifacts are zipped and need a GitHub login to download).
+      - name: Publish APK to the evotor-apk branch
+        run: |
+          set -e
+          apk=$(ls evotor-bridge/app/build/outputs/apk/debug/*.apk | head -n 1)
+          cp "$apk" "$RUNNER_TEMP/pivnik-evotor-debug.apk"
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan evotor-apk-publish
+          git rm -rf --quiet . || true
+          cp "$RUNNER_TEMP/pivnik-evotor-debug.apk" pivnik-evotor-debug.apk
+          git add pivnik-evotor-debug.apk
+          git commit -qm "Evotor bridge debug APK from ${GITHUB_SHA}"
+          git push --force origin HEAD:refs/heads/evotor-apk
