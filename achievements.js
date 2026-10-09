@@ -294,6 +294,15 @@ function automaticCatalog() {
   return activeAchievementCatalog().filter((definition) => definition.enabled && !definition.manual);
 }
 
+function isAutomaticallyAwarded(definition) {
+  return achievementSettings.overrides[definition.code]?.enabled !== false;
+}
+
+function withBusinessReward(definition) {
+  const rewardBonus = achievementSettings.overrides[definition.code]?.rewardBonus;
+  return rewardBonus === undefined ? definition : { ...definition, rewardBonus };
+}
+
 function number(value) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -568,11 +577,12 @@ export async function syncUserAchievements(db, userId) {
     metrics.previousMonthWinner = monthly.isWinner ? 1 : 0;
 
     const granted = [];
-    for (const definition of automaticCatalog()) {
+    for (const definition of ACHIEVEMENT_CATALOG) {
       if (number(metrics[definition.metric]) < definition.target) continue;
+      if (!isAutomaticallyAwarded(definition)) continue;
       const periodKey = definition.recurring === 'monthly' ? monthly.periodKey : '';
       if (definition.recurring === 'monthly' && !periodKey) continue;
-      if (await awardAchievement(client, userId, definition, periodKey)) {
+      if (await awardAchievement(client, userId, withBusinessReward(definition), periodKey)) {
         granted.push(grantCode(definition, periodKey));
       }
     }
@@ -604,11 +614,7 @@ export async function getUserAchievementState(db, userId, { sync = true } = {}) 
 
   const grants = grantsResult.rows;
   const awarded = awardedAchievementState(grants);
-  // Switched-off and manual achievements stay visible to the guests who already have them.
-  const catalog = activeAchievementCatalog().filter((definition) => (
-    (definition.enabled && !definition.manual) || awarded.byCode.get(definition.code)?.earned
-  ));
-  const achievements = evaluateAchievementCatalog(metrics, catalog).map((item) => ({
+  const achievements = evaluateAchievementCatalog(metrics).map((item) => ({
     ...item,
     ...(awarded.byCode.get(item.code) || {
       earned: false,
@@ -619,6 +625,12 @@ export async function getUserAchievementState(db, userId, { sync = true } = {}) 
       periodKey: null
     })
   }));
+  // Switched-off and manual achievements stay visible to the guests who already have them.
+  const shown = new Set(achievements.map((item) => item.code));
+  for (const definition of activeAchievementCatalog()) {
+    const earned = awarded.byCode.get(definition.code);
+    if (!shown.has(definition.code) && earned?.earned) achievements.push({ ...earned, eligible: true });
+  }
   const byCode = new Map(achievements.map((item) => [item.code, item]));
   const earned = achievements.filter((item) => item.earned);
   const unannounced = awarded.unannouncedRows
