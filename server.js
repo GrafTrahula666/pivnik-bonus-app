@@ -17,6 +17,7 @@ import {
   saveRuntimeConfig,
   startRuntimeConfigRefresh
 } from './business-runtime-config.js';
+import { configureLoyalty, normalizeLoyaltySettings, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
 import QRCode from 'qrcode';
 import {
   ACHIEVEMENT_CATALOG,
@@ -106,15 +107,6 @@ app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
-const STATUS_LEVELS = [
-  { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
-  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 0, nextCents: 3_000_000 },
-  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 0, nextCents: 7_000_000 },
-  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 0, nextCents: 10_000_000 },
-  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 0, nextCents: 15_000_000 },
-  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 0, nextCents: 50_000_000 },
-  { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
-];
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
@@ -457,11 +449,11 @@ async function ensurePersonalQr(db, userId, force = false) {
 }
 
 function getStatus(spendCents) {
-  return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
+  return statusForSpend(spendCents);
 }
 
 function getEffectiveStatus(row, spendCents) {
-  return hasUnlimitedBonus(row) ? STATUS_LEVELS[STATUS_LEVELS.length - 1] : getStatus(spendCents);
+  return hasUnlimitedBonus(row) ? topStatus() : getStatus(spendCents);
 }
 
 function centsFromInput(value) {
@@ -1751,7 +1743,7 @@ app.post('/api/auth', async (req, res, next) => {
         sv: Number(sessionResult.rows[0]?.session_version || 1),
         exp: Date.now() + 7 * 24 * 60 * 60 * 1000
       });
-      res.json({ token, profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
+      res.json({ token, profile, statuses: statusLevels().map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -1769,7 +1761,7 @@ app.get('/api/me', authRequired, async (req, res, next) => {
       getProfile(req.user.id),
       pool.query('SELECT published FROM app_settings WHERE id = 1')
     ]);
-    res.json({ profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
+    res.json({ profile, statuses: statusLevels().map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
   } catch (error) {
     next(error);
   }
@@ -3297,6 +3289,64 @@ app.put('/api/internal/business/rewards/achievements', requireBusinessService, a
     }
     await saveRuntimeConfig(pool, ACHIEVEMENT_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
     res.json(await businessRewardsOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+// Status levels and the welcome bonus (loyalty-config.js).
+const LOYALTY_SETTINGS_KEY = 'loyalty';
+onRuntimeConfig(LOYALTY_SETTINGS_KEY, configureLoyalty);
+
+async function businessLoyaltyOverview() {
+  const levels = statusLevels();
+  // Guests per level by the same 12-month spend the app uses for a guest's status.
+  const spend = await pool.query(
+    `SELECT COALESCE(s.spend, 0)::bigint AS spend, COUNT(*)::int AS guests
+     FROM users u
+     LEFT JOIN (
+       SELECT client_id, SUM(cash_paid_cents) AS spend FROM transactions
+       WHERE status = 'completed' AND mode IN ('accrue','redeem') AND created_at >= NOW() - INTERVAL '12 months'
+       GROUP BY client_id
+     ) s ON s.client_id = u.id
+     WHERE u.role = 'client' AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+     GROUP BY 1`
+  );
+  const guests = levels.map(() => 0);
+  for (const row of spend.rows) {
+    const value = Number(row.spend);
+    let index = 0;
+    levels.forEach((level, i) => { if (value >= level.minCents) index = i; });
+    guests[index] += row.guests;
+  }
+  const meta = await readRuntimeConfigMeta(pool, LOYALTY_SETTINGS_KEY);
+  return {
+    levels: levels.map((level, index) => ({
+      name: level.name,
+      minCents: level.minCents,
+      bonusPercent: level.bonusPercent,
+      discountPercent: level.discountPercent,
+      guests: guests[index]
+    })),
+    welcomeBonus: welcomeBonusAmount(),
+    updatedAt: meta?.updatedAt || null,
+    updatedBy: meta?.updatedBy || null
+  };
+}
+
+app.get('/api/internal/business/loyalty', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessLoyaltyOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.put('/api/internal/business/loyalty', requireBusinessService, async (req, res, next) => {
+  try {
+    const settings = normalizeLoyaltySettings(req.body?.settings);
+    await saveRuntimeConfig(pool, LOYALTY_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
+    res.json(await businessLoyaltyOverview());
   } catch (error) {
     businessError(res, error, next);
   }

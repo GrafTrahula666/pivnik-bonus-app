@@ -1,7 +1,7 @@
 import type { QueryResultRow } from 'pg'
 import { productionTableExists, readPool } from './db.js'
 import { config } from './config.js'
-import { resolvePivnikLegacyStatus } from './legacy-compat.js'
+import { loadPivnikStatusLevels,resolvePivnikLegacyStatus } from './legacy-compat.js'
 import { HttpError, type PeriodRange, type VenueScope } from './types.js'
 import { parsePositiveId } from './tenant.js'
 
@@ -554,13 +554,14 @@ export async function getClients(scope: VenueScope, url: URL) {
        ${countStatusClause}`,
     countParams,
   )
+  const statusLevels = await loadPivnikStatusLevels(readPool)
 
   return {
     total: numeric(countResult.rows[0]?.count),
     limit,
     offset,
     rows: result.rows.map((row) => {
-      const legacyStatus = resolvePivnikLegacyStatus(numeric(row.rolling_spend_cents))
+      const legacyStatus = resolvePivnikLegacyStatus(numeric(row.rolling_spend_cents), statusLevels)
       return {
         id: row.id,
         name: [row.first_name, row.last_name].filter(Boolean).join(' '),
@@ -697,7 +698,7 @@ export async function getClientDetail(scope: VenueScope, rawUserId: string) {
     [userId],
   )
 
-  const legacyStatus = resolvePivnikLegacyStatus(numeric(row.rolling_spend_cents))
+  const legacyStatus = resolvePivnikLegacyStatus(numeric(row.rolling_spend_cents), await loadPivnikStatusLevels(readPool))
   const detail: Record<string, unknown> = {
     id: row.id,
     name: [row.first_name, row.last_name].filter(Boolean).join(' '),
