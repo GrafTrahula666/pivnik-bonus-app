@@ -68,3 +68,15 @@ Current legacy financial tables are user-centric and `transactions` has no `bar_
 Therefore the legacy adapter is hard-gated to `company.code = 'pivnik'`.
 
 Do not enable legacy ledger reads for a second tenant until transactions/events have explicit venue attribution.
+
+## 3. Production writer
+
+`ADMIN_PRODUCTION_WRITE_DATABASE_URL`
+
+Used only while `ADMIN_ENABLE_WRITES=true`, and only for the PIVNIK venue. Besides the bonus,
+achievement and entitlement writers, the guest app content editors need:
+
+- `SELECT, INSERT, UPDATE, DELETE` on `promotions` (and `USAGE` on its id sequence);
+- `SELECT, UPDATE` on `app_settings`.
+
+Every write is recorded in `admin_audit_log` with the row before and after.

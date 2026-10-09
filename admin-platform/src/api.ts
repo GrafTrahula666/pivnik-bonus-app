@@ -33,5 +33,6 @@ export async function logout(){await request('/api/admin/auth/logout',{method:'P
 export const apiGet=<T,>(path:string)=>request<T>(path)
 export const apiPost=<T,>(path:string,body:unknown)=>request<T>(path,{method:'POST',body:JSON.stringify(body)})
 export const apiPut=<T,>(path:string,body:unknown)=>request<T>(path,{method:'PUT',body:JSON.stringify(body)})
+export const apiDelete=<T,>(path:string)=>request<T>(path,{method:'DELETE'})
 export const isAuthError=(e:unknown)=>e instanceof ApiError&&e.status===401
 export const makeIdempotencyKey=(prefix:string)=>`${prefix}:${Date.now()}:${crypto.randomUUID()}`
