@@ -1366,8 +1366,8 @@ async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
       status: response.status,
       messageId: payload?.result?.message_id ?? null
     };
-  } catch (error) {
-    console.error('Telegram sendMessage error:', error.message);
+  } catch {
+    console.error('Telegram sendMessage error:', 'telegram_network_error');
     return { ok: false, status: 0, error: 'telegram_network_error' };
   }
 }
