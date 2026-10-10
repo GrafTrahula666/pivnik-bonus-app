@@ -196,18 +196,24 @@ window.__PIVNIK_GO_BACK__ = () => {
     'орбиты новых рамок'
   );
 
-  source = replaceRequired(
-    source,
-    "  if (!IS_VK) void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));",
-    "  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));",
-    'обновление колеса на VK'
-  );
-  source = replaceRequired(
-    source,
-    "  if (!IS_VK) jobs.push(loadWheelStatus());",
-    "  jobs.push(loadWheelStatus());",
-    'загрузка колеса на VK'
-  );
+  // Canonical secondary recovery now includes the wheel in its shared batch.
+  // Keep the legacy conversion for old sources, without requiring its removed anchors.
+  if (!source.includes('void loadSecondaryData({ refreshWheel: true });')) {
+    source = replaceRequired(
+      source,
+      "  if (!IS_VK) void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));",
+      "  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));",
+      'обновление колеса на VK'
+    );
+  }
+  if (!source.includes(': [...state.bootSecondaryFailedJobs];')) {
+    source = replaceRequired(
+      source,
+      "  if (!IS_VK) jobs.push(loadWheelStatus());",
+      "  jobs.push(loadWheelStatus());",
+      'загрузка колеса на VK'
+    );
+  }
   source = replaceRequired(
     source,
     '<div><b>${escapeHtml(leader.name)}${leader.isMe ? \' · вы\' : \'\'}</b><small>Покупки за текущий месяц</small></div>',

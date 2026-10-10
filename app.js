@@ -107,6 +107,8 @@ const state = {
   transactions: [],
   historyTab: 'purchases',
   bootSecondaryStarted: false,
+  bootSecondaryPending: null,
+  bootSecondaryFailedJobs: [],
   wheel: {
     status: null,
     busy: false,
@@ -2425,8 +2427,7 @@ function renderTransaction(transaction) {
 async function refreshMe() {
   const data = await api('/api/me');
   applyProfilePayload(data);
-  void loadSecondaryData();
-  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
+  void loadSecondaryData({ refreshWheel: true });
 }
 
 async function waitForTelegramInitData(maxWaitMs = 2800) {
@@ -2481,27 +2482,40 @@ function applyProfilePayload(data) {
   renderCoreProfile();
 }
 
-async function loadSecondaryData() {
-  if (state.bootSecondaryStarted) return;
+async function loadSecondaryData({ refreshWheel = false } = {}) {
+  if (state.bootSecondaryPending) return state.bootSecondaryPending;
+  const initialLoad = !state.bootSecondaryStarted;
+  const jobs = initialLoad
+    ? [loadCurrentShift, loadPromotions, loadCatalog, loadLeaderboard, loadAchievements, loadShopContact, loadWalletConfig, loadWheelStatus]
+    : [...state.bootSecondaryFailedJobs];
+  if (refreshWheel && !jobs.includes(loadWheelStatus)) jobs.push(loadWheelStatus);
+  if (!jobs.length) return;
   state.bootSecondaryStarted = true;
-  const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
-  jobs.push(loadWheelStatus());
-  const results = await Promise.allSettled(jobs);
-  const failures = results.filter((item) => item.status === 'rejected');
-  failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
-  if (roleCanStaff(state.profile?.role)) {
-    try {
-      await loadStaffSession();
-      await loadStaffRecent({ silent: true });
-    } catch (staffError) {
-      console.warn('Staff workspace preload skipped:', staffError);
-      state.staffSession = '';
-      state.activeStaff = null;
-      safeStorage.remove('pivnik_staff_session');
-      renderStaffSession();
+  const pending = Promise.resolve().then(async () => {
+    const results = await Promise.allSettled(jobs.map((load) => Promise.resolve().then(load)));
+    state.bootSecondaryFailedJobs = jobs.filter((_, index) => results[index].status === 'rejected');
+    const failures = results.filter((item) => item.status === 'rejected');
+    failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
+    if (initialLoad && roleCanStaff(state.profile?.role)) {
+      try {
+        await loadStaffSession();
+        await loadStaffRecent({ silent: true });
+      } catch (staffError) {
+        console.warn('Staff workspace preload skipped:', staffError);
+        state.staffSession = '';
+        state.activeStaff = null;
+        safeStorage.remove('pivnik_staff_session');
+        renderStaffSession();
+      }
     }
+    if (failures.length && navigator.onLine) toast('Часть разделов не загружена. Повторите обновление.');
+  });
+  state.bootSecondaryPending = pending;
+  try {
+    await pending;
+  } finally {
+    state.bootSecondaryPending = null;
   }
-  if (failures.length && navigator.onLine) toast('Часть разделов обновится при следующем открытии');
 }
 
 async function hydrateAfterBoot() {
