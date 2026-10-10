@@ -6,8 +6,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.HttpsURLConnection;
 import org.json.JSONException;
 import org.json.JSONObject;
 import ru.pivnik.evotor.core.ResolveResult;
@@ -58,11 +61,57 @@ final class PivnikApi {
             int status = connection.getResponseCode();
             if (status == 404) return "OK";
             if (status == 401 || status == 403 || status == 428) return "KEY";
-            return "HTTP " + status;
+            // Unexpected answer: say who answered (Railway or something on the till's network).
+            StringBuilder details = new StringBuilder("HTTP " + status);
+            appendHeader(details, connection, "Server");
+            appendHeader(details, connection, "Via");
+            appendHeader(details, connection, "Allow");
+            appendHeader(details, connection, "X-Railway-Request-Id");
+            appendHeader(details, connection, "X-Railway-Edge");
+            if (connection instanceof HttpsURLConnection) {
+                try {
+                    java.security.cert.Certificate[] certs = ((HttpsURLConnection) connection).getServerCertificates();
+                    if (certs.length > 0 && certs[0] instanceof X509Certificate) {
+                        details.append("\nСертификат: ").append(((X509Certificate) certs[0]).getIssuerX500Principal().getName());
+                    }
+                } catch (Exception ignored) {}
+            }
+            try { details.append("\nIP: ").append(InetAddress.getByName(url.getHost()).getHostAddress()); }
+            catch (Exception ignored) {}
+            try {
+                String text = read(connection.getErrorStream());
+                if (text != null && !text.trim().isEmpty()) {
+                    text = text.replaceAll("\\s+", " ").trim();
+                    details.append("\nОтвет: ").append(text.length() > 160 ? text.substring(0, 160) : text);
+                }
+            } catch (Exception ignored) {}
+            details.append("\nПроверка /api/health: ").append(health(settings));
+            return details.toString();
         } catch (Exception error) {
             String message = error.getMessage();
             if (message != null && message.length() > 160) message = message.substring(0, 160);
             return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static void appendHeader(StringBuilder out, HttpURLConnection connection, String name) {
+        String value = connection.getHeaderField(name);
+        if (value != null) out.append("\n").append(name).append(": ").append(value.length() > 80 ? value.substring(0, 80) : value);
+    }
+
+    private static String health(BridgeSettings settings) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(settings.apiBaseUrl() + "/api/health").openConnection();
+            PivnikTls.apply(connection);
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setInstanceFollowRedirects(false);
+            return "HTTP " + connection.getResponseCode();
+        } catch (Exception error) {
+            return error.getClass().getSimpleName();
         } finally {
             if (connection != null) connection.disconnect();
         }

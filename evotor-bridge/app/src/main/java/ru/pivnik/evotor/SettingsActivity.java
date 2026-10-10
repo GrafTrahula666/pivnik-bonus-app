@@ -169,7 +169,7 @@ public final class SettingsActivity extends Activity {
     private static String describe(String result) {
         if ("OK".equals(result)) return "Подключено: сервер отвечает, ключ принят.";
         if ("KEY".equals(result)) return "Сервер отвечает, но ключ кассы не подходит. Выпустите новый и введите его.";
-        if (result.startsWith("HTTP ")) return "Сервер ответил: " + result + ". Проверьте адрес и что сервер работает.";
+        if (result.startsWith("HTTP ")) return "Сервер ответил неожиданно. Пришлите этот текст разработчику:\n" + result;
         String hint = result.contains("SSL") || result.contains("Certificate") || result.contains("Trust")
                 ? "\nПохоже на проблему с сертификатом или временем на кассе. Время на кассе: "
                         + new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).format(new Date())
