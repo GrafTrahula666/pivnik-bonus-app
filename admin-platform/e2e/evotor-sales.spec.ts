@@ -1,5 +1,5 @@
 import { expect,test } from '@playwright/test'
-const all={salesCents:'30000000',returnsCents:'1000000',netCents:'29000000',receiptCount:2,averageCents:'15000000',saleDocuments:2,returnDocuments:1,days:[{label:'2026-10-02',amountCents:'29000000'}],payments:[{label:'CASH',amountCents:'29000000'}]}
+const all={salesCents:'30000000',returnsCents:'1000000',netCents:'29000000',receiptCount:2,averageCents:'15000000',saleDocuments:2,returnDocuments:1,days:[{label:'2026-10-02',amountCents:'29000000'}],payments:[{label:'CASH',amountCents:'29000000'}],hours:[{label:'09',amountCents:'20000000'},{label:'10',amountCents:'9000000'}],products:[{name:'Лагер',measure:'л',quantityMillis:'1500',salesCents:'20000000',returnCents:'1000000',netCents:'19000000'},{name:'Сидр',measure:'шт',quantityMillis:'1000',salesCents:'10000000',returnCents:'0',netCents:'10000000'}]}
 const report={period:{from:'2026-10-01T21:00:00Z',until:'2026-10-02T21:00:00Z',timeZone:'Europe/Moscow'},connection:{state:'connected',lastSuccessAt:'2026-10-02T12:00:00Z'},all,
  app:{...all,salesCents:'11000000',returnsCents:'1000000',netCents:'10000000',activeBuyers:1,repeatBuyers:0,repeatPurchaseRate:0,purchaseFrequency:1},
  unlinked:{...all,salesCents:'19000000',returnsCents:'0',netCents:'19000000'},linkedRevenueSharePercent:36.66}
@@ -10,7 +10,7 @@ test('actual dashboard: loading, all/client split, refresh, stale failure, auth 
   if(state==='error')return route.fulfill({status:503,json:{error:'Fixture outage'}})
   if(state==='denied')return route.fulfill({status:403,json:{error:'Fixture scope denied'}})
   if(state==='disconnected')return route.fulfill({json:{connection:{state:'not_connected'},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null}})
-  if(state==='empty')return route.fulfill({json:{...report,all:{...all,salesCents:'0',returnsCents:'0',netCents:'0',receiptCount:0,averageCents:null,saleDocuments:0,returnDocuments:0,days:[],payments:[]},app:null,unlinked:null,linkedRevenueSharePercent:null}})
+  if(state==='empty')return route.fulfill({json:{...report,all:{...all,salesCents:'0',returnsCents:'0',netCents:'0',receiptCount:0,averageCents:null,saleDocuments:0,returnDocuments:0,days:[],payments:[],hours:[],products:[]},app:null,unlinked:null,linkedRevenueSharePercent:null}})
   return route.fulfill({json:report})
  })
  await page.goto('/e2e/fixtures/evotor.html');await expect(page.getByText('Загрузка кассовых документов…')).toBeVisible()
@@ -19,8 +19,17 @@ test('actual dashboard: loading, all/client split, refresh, stale failure, auth 
  const money=page.locator('.kpi-value').first();await expect(money).toHaveText(/290\s*000,00/)
  await expect(page.getByText('Клиенты PIVNIK:',{exact:false})).toContainText(/110\s*000,00/)
  await expect(page.locator('body')).not.toContainText(/410\s*000,00/)
+ await expect(page.getByText('Выручка по часам')).toBeVisible()
+ await expect(page.getByText('Продажи по товарам')).toBeVisible()
+ await expect(page.getByText('09:00')).toBeVisible()
+ await expect(page.getByRole('searchbox',{name:'Поиск товара'})).toBeVisible()
+ await page.getByRole('searchbox',{name:'Поиск товара'}).fill('Сидр')
+ await expect(page.getByText('Показано 1 из 1')).toBeVisible()
+ await page.getByRole('searchbox',{name:'Поиск товара'}).fill('')
+ await page.getByRole('combobox',{name:'Сортировка товаров'}).selectOption('quantity')
  await page.getByRole('button',{name:'Клиенты приложения',exact:true}).click();await expect(money).toHaveText(/100\s*000,00/)
  await expect(page.getByText('Частота покупок',{exact:true})).toBeVisible()
+ await expect(page.getByText('Выручка по часам')).toHaveCount(0)
  await page.getByRole('button',{name:'Все продажи кассы',exact:true}).click()
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
  await page.screenshot({path:info.outputPath('cash.png'),fullPage:true})
