@@ -10211,7 +10211,7 @@ html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse
   display: block !important;
   width: calc(var(--hal-cu) * 80) !important;
   height: calc(var(--hal-cu) * 65) !important;
-  background: url('/assets/halloween/spaceverse-logo.webp?v=1') center / contain no-repeat !important;
+  background: url('/assets/halloween/spaceverse-logo-20261010.webp') center / contain no-repeat !important;
   filter: drop-shadow(0 0 calc(var(--hal-cu) * 6) rgba(255,170,60,.35)) !important;
 }
 html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {

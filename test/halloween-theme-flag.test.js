@@ -37,7 +37,7 @@ test('Halloween skin is behind design.theme and every rule is scoped to html.the
     }
   }
 
-  for (const asset of ['night-bg.webp', 'hero-card-midnight.webp', 'business-card-midnight.webp', 'wheel-card-midnight.webp', 'liters-card-midnight.webp', 'league-card-midnight.webp', 'nav-midnight.webp', 'header-midnight.webp', 'halloween-tab.webp', 'spaceverse-logo.webp']) {
+  for (const asset of ['night-bg.webp', 'hero-card-midnight.webp', 'business-card-midnight.webp', 'wheel-card-midnight.webp', 'liters-card-midnight.webp', 'league-card-midnight.webp', 'nav-midnight.webp', 'header-midnight.webp', 'halloween-tab.webp', 'spaceverse-logo-20261010.webp']) {
     await access(new URL(`../assets/halloween/${asset}`, import.meta.url));
     assert.ok(css.includes(`/assets/halloween/${asset}`), `${asset} is not referenced`);
   }
