@@ -9,7 +9,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import ru.pivnik.evotor.core.ResolveResult;
 
 /** Owner-facing setup. Not part of the bartender flow: the sale itself never opens this screen. */
 public final class SettingsActivity extends Activity {
@@ -86,7 +85,7 @@ public final class SettingsActivity extends Activity {
                 connection.setText("Проверяем…");
                 new Thread(new Runnable() {
                     @Override public void run() {
-                        final ResolveResult result = PivnikApi.check(settings);
+                        final String result = PivnikApi.diagnose(settings);
                         runOnUiThread(new Runnable() {
                             @Override public void run() {
                                 check.setEnabled(true);
@@ -114,14 +113,15 @@ public final class SettingsActivity extends Activity {
         catch (Exception error) { return "?"; }
     }
 
-    private static String describe(ResolveResult result) {
-        switch (result.kind) {
-            case NOT_FOUND:
-            case FOUND: return "Подключено: сервер отвечает, ключ принят.";
-            case UNAUTHORIZED: return "Ключ кассы не подходит. Выпустите новый и введите его.";
-            case RATE_LIMITED: return "Слишком много запросов. Повторите через минуту.";
-            default: return "Нет связи с сервером. Проверьте интернет и адрес.";
-        }
+    private static String describe(String result) {
+        if ("OK".equals(result)) return "Подключено: сервер отвечает, ключ принят.";
+        if ("KEY".equals(result)) return "Сервер отвечает, но ключ кассы не подходит. Выпустите новый и введите его.";
+        if (result.startsWith("HTTP ")) return "Сервер ответил: " + result + ". Проверьте адрес и что сервер работает.";
+        String hint = result.contains("SSL") || result.contains("Certificate") || result.contains("Trust")
+                ? "\nПохоже на проблему с сертификатом или временем на кассе."
+                : result.contains("UnknownHost") ? "\nКасса не находит сервер: проверьте адрес и интернет."
+                : result.contains("Timeout") ? "\nСервер не отвечает вовремя: проверьте интернет кассы." : "";
+        return "Нет связи: " + result.substring(4) + hint;
     }
 
     private void refreshStatus(BridgeSettings settings) {

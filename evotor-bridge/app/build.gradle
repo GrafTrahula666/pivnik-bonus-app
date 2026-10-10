@@ -11,8 +11,8 @@ android {
         // integration-library v0.6.40: minSdkVersion 23, targetSdkVersion 30.
         minSdk 23
         targetSdk 30
-        versionCode 6
-        versionName '1.0.2'
+        versionCode 7
+        versionName '1.0.3'
         // app_uuid issued for "PIVNIK для Эвотора" in the Evotor developer account (not a secret:
         // it ships in the manifest). Override with -PevotorAppUuid=... or EVOTOR_APP_UUID.
         manifestPlaceholders = [

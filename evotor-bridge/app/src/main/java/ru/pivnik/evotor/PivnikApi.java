@@ -37,6 +37,41 @@ final class PivnikApi {
         return resolve(settings, "PIVNIK-CONNECTION-CHECK");
     }
 
+    /**
+     * Setup-screen diagnostics: the same request as a scan, but the answer is a short text with the
+     * real reason (HTTP status or the exception), so a till that cannot reach the server can be debugged.
+     */
+    static String diagnose(BridgeSettings settings) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setUseCaches(false);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            connection.setRequestProperty("Authorization", "Device " + settings.deviceToken());
+            byte[] body = "{\"payload\":\"PIVNIK-CONNECTION-CHECK\"}".getBytes(StandardCharsets.UTF_8);
+            connection.setDoOutput(true);
+            connection.setFixedLengthStreamingMode(body.length);
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(body);
+            }
+            int status = connection.getResponseCode();
+            if (status == 404) return "OK";
+            if (status == 401 || status == 403 || status == 428) return "KEY";
+            return "HTTP " + status;
+        } catch (Exception error) {
+            String message = error.getMessage();
+            if (message != null && message.length() > 160) message = message.substring(0, 160);
+            return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
     static ResolveResult bind(BridgeSettings settings, String receiptUuid, String payload) {
         try {
             return post(settings, "/api/device/pos/receipts/bind",
