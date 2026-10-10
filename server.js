@@ -1361,10 +1361,16 @@ async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
         error: String(payload?.description || 'telegram_send_failed').slice(0, 180)
       };
     }
+    // An HTTP success alone does not confirm that Telegram accepted a message.
+    // Do not retry an ambiguous response: the send may already have happened.
+    if (payload?.ok !== true || !Number.isSafeInteger(payload?.result?.message_id)
+      || payload.result.message_id < 0) {
+      return { ok: false, status: response.status, error: 'telegram_invalid_response' };
+    }
     return {
       ok: true,
       status: response.status,
-      messageId: payload?.result?.message_id ?? null
+      messageId: payload.result.message_id
     };
   } catch (error) {
     console.error('Telegram sendMessage error:', error.message);
