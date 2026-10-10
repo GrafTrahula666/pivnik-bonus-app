@@ -7,9 +7,9 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Пивник | Бонусы</title>
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="styles.css?v=20.9-service-entry-canonical-profile-placement-20260925-league-portrait-20260925-v2-home-cards-20260926-wheel-approved-history-20260929" />
+  <link rel="stylesheet" href="styles.css?v=20.9-service-entry-canonical-profile-placement-20260925-league-portrait-20260925-v2-home-cards-20260926-wheel-approved-history-20260929-tickets-referrals-20261007" />
   <link rel="stylesheet" href="/service-white-gold.css?v=20.8-service-white-gold" />
-  <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926-wheel-approved-history-20260929"></script>
+  <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926-wheel-approved-history-20260929-tickets-referrals-20261007"></script>
   <script defer src="/red-cosmos-v2.js?v=2.0.0"></script>
   <link rel="stylesheet" href="/pos-admin.css?v=2" />
   <script defer src="/pos-admin.js?v=2"></script>
@@ -169,9 +169,9 @@
 
       <section class="screen client-screen halloween-screen" data-screen="halloween">
         <div class="halloween-board">
-          <b class="halloween-tickets" id="halloweenTickets" aria-label="Тыквенные билеты">0</b>
+          <b class="halloween-tickets" id="halloweenTickets" aria-label="Тыквенные билеты">—</b>
           <b class="halloween-timer" id="halloweenTimer" aria-label="До Ночи Котлов">—</b>
-          <button class="halloween-invite" id="halloweenInvite" type="button" aria-label="Пригласить друга: 1 друг — 1 тыквенный билет, до 3 друзей в неделю"><b id="halloweenInviteCount">0/3</b></button>
+          <button class="halloween-invite" id="halloweenInvite" type="button" aria-label="Пригласить друга: 1 друг — 1 тыквенный билет, до 3 друзей в неделю"><b id="halloweenInviteCount">—</b></button>
           <div class="halloween-board-text">
             <h2>Ночь Котлов, 31 октября</h2>
             <h3>Еженедельные задания: пригласи друга</h3>
@@ -183,6 +183,11 @@
             <h3>Как пройдёт Ночь Котлов</h3>
             <p>31 октября в 20:00, один общий розыгрыш. Каждый билет — это ещё один шанс. Один гость может выиграть только одно место.</p>
           </div>
+        </div>
+        <div class="halloween-controls">
+          <p id="halloweenStatus" role="status" aria-live="polite">Проверяем билеты…</p>
+          <button class="secondary" id="halloweenRetry" type="button" disabled>Проверить билеты</button>
+          <button class="primary" id="halloweenReferralOpen" type="button">Пригласить друга / Ввести код</button>
         </div>
         <button class="halloween-business-link" id="halloweenToBusiness" type="button">SpaceVerse для бизнеса ›</button>
       </section>
@@ -649,12 +654,12 @@
       <div class="halloween-enter-code" id="halloweenEnterBlock" hidden>
         <small id="halloweenEnterTitle">Есть код от друга? Его можно ввести в первые сутки</small>
         <div class="halloween-enter-row">
-          <input id="halloweenCodeInput" type="text" inputmode="text" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Код друга" aria-label="Код друга">
+          <input id="halloweenCodeInput" type="text" inputmode="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Код или ссылка друга" aria-label="Код или ссылка друга">
           <button class="primary" id="halloweenApplyCode" type="button">Применить</button>
         </div>
         <small class="halloween-enter-hint" id="halloweenEnterHint" aria-live="polite"></small>
       </div>
-      <p class="halloween-invited-note" id="halloweenInvitedNote" hidden>Код друга уже применён</p>
+      <p class="halloween-invited-note" id="halloweenInvitedNote" hidden>Код друга уже применён. Награда пригласившему начисляется после твоей первой покупки.</p>
     </div>
   </div>
 
