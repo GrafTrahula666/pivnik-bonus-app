@@ -1391,12 +1391,14 @@ async function sendVkCommunityMessage(vkId, text) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.error) {
-      const code = payload?.error?.error_code ? `vk_${payload.error.error_code}` : 'vk_send_failed';
+      const providerCode = payload?.error?.error_code;
+      const code = Number.isSafeInteger(providerCode) && providerCode > 0
+        ? `vk_${providerCode}` : 'vk_send_failed';
       console.error('VK messages.send failed:', code);
       return {
         ok: false,
         status: response.status,
-        error: String(payload?.error?.error_msg || code).slice(0, 180)
+        error: code
       };
     }
     return {
