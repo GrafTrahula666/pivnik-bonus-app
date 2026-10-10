@@ -25,7 +25,10 @@ export function CashDashboard({report,mode='all',loading=false,error=''}:{report
   const all=readable?(mode==='app'?report?.app:report?.all):null
   const count=(n:number|null|undefined)=>n===null||n===undefined?'Нет данных':rub.format(n)
   const state=report?.connection.state
-  const status=error?'Не удалось обновить кассу':loading?'Обновляем кассу':state==='error'?'Не удалось обновить кассу':state==='syncing'?'Идёт сверка кассы':state==='awaiting_sync'?'Ожидаем загрузку кассы':all?'Данные Эвотора':'Касса не подключена'
+  // The app re-reads the whole cash history every couple of minutes; after one full pass a running
+  // pass is routine, the totals are those of the last full pass.
+  const refreshing=state==='syncing'&&Boolean(report?.connection.lastSuccessAt)
+  const status=error?'Не удалось обновить кассу':loading?'Обновляем кассу':state==='error'?'Не удалось обновить кассу':state==='syncing'&&!refreshing?'Идёт первая загрузка кассы':state==='awaiting_sync'?'Ожидаем загрузку кассы':all?'Данные Эвотора':'Касса не подключена'
   const kpis=[
     ['Выручка',cashMoney(all?.netCents),'Продажи за вычетом возвратов'],
     ['Средний чек',cashMoney(all?.averageCents),'Сумма продаж / число чеков продажи'],
@@ -50,7 +53,8 @@ export function CashDashboard({report,mode='all',loading=false,error=''}:{report
   return <div className="page cash-dashboard">
     <section className="card data-quality-card" aria-live="polite"><div><Database/><div><b>{status}</b><span>{mode==='app'?'Только подтверждённые чеки клиентов PIVNIK. Это часть общей кассы. Суммы не складываются.':all?'Все покупки, включая гостей без приложения. Клиентские чеки уже входят в этот итог.':'Кассовые показатели появятся после подключения Эвотора и полной загрузки. Данные программы лояльности здесь не используются.'}</span></div></div>
       {(error||loading)&&report&&<p className="comparison-note">{error||'Запрос выполняется.'} Показаны предыдущие данные. Не обновлено.</p>}
-      {state==='syncing'&&<p className="comparison-note">Сверка продолжается. Данные могут быть неполными.</p>}
+      {state==='syncing'&&!refreshing&&<p className="comparison-note">Первая загрузка ещё идёт. Данные могут быть неполными.</p>}
+      {refreshing&&<p className="comparison-note">Касса обновляется каждые пару минут. Цифры — на момент последней полной сверки, новые чеки появятся со следующей.</p>}
       {report?.period&&<p className="comparison-note">Период: {new Date(report.period.from).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})} — {new Date(Date.parse(report.period.until)-1).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})}. Границы дня — по Москве.</p>}
       {report?.connection.lastSuccessAt&&<p className="comparison-note">Последняя полная сверка: {new Date(report.connection.lastSuccessAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})}. Время — по Москве.</p>}
     </section>
