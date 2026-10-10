@@ -3676,8 +3676,9 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
   const requestKey = normalizeRequestKey(req.body?.requestKey);
   if (!amount || !reason) return res.status(400).json({ error: 'Укажите сумму и причину.' });
   if (!requestKey) return res.status(400).json({ error: 'Некорректный requestKey корректировки.' });
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     await lockRequestKey(client, requestKey);
     const targetResult = await client.query(
@@ -3741,10 +3742,12 @@ app.post('/api/admin/users/:id/adjust', authRequired, requireRole('admin'), asyn
     await client.query('COMMIT');
     res.json({ ok: true, balance: newBalance });
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch {}
+    }
     next(error);
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
