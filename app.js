@@ -779,7 +779,8 @@ async function loadWheelHistory() {
 }
 
 function visualSectorForPrize(code) {
-  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === code);
+  const sectorCode = code === 'halloween-ticket' ? 'beer-glass' : code;
+  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === sectorCode);
   if (!candidates.length) return WHEEL_VISUAL_SECTORS[0];
   const randomIndex = globalThis.crypto?.getRandomValues
     ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % candidates.length
@@ -809,6 +810,7 @@ function wheelPrizeDisplayTitle(prize) {
     'bonus-50': '50 бонусов',
     'bonus-100': '100 бонусов',
     'beer-glass': 'Бокал пива',
+    'halloween-ticket': 'Хэллоуинский билет',
     'annual-beer': 'Годовой запас пива'
   };
   return titles[String(prize?.code || '')] || 'Приз зачислен';
