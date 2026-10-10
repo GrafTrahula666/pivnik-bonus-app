@@ -94,6 +94,107 @@ test('API v2 exact headers, cursor-only pagination, auth/network/rate limit erro
   }
   await assert.rejects(fetchEvotorPage({...config,until,fetchImpl:async()=>{throw Error('private');}}),e=>e.code==='network');
 });
+test('API rejects malformed response envelopes with a safe provider error', async () => {
+  for (const payload of [null, [], true, 'private', 42, {},
+    {items:[],paging:[]}, {items:[],paging:'private'}, {items:[],paging:false},
+    {items:[],paging:{next_cursor:42}}, {items:new Array(1001).fill(null)}]) {
+    await assert.rejects(fetchEvotorPage({...config,until,
+      fetchImpl:async()=>new Response(JSON.stringify(payload))}),
+    error=>error.code==='invalid_response' && !error.message.includes('private'));
+  }
+  for (const paging of [undefined, null, {}, {next_cursor:null}, {next_cursor:'next'}]) {
+    const payload={items:[],...(paging===undefined?{}:{paging})};
+    assert.deepEqual(await fetchEvotorPage({...config,until,
+      fetchImpl:async()=>new Response(JSON.stringify(payload))}),payload);
+  }
+  await assert.rejects(fetchEvotorPage({...config,until,
+    fetchImpl:async()=>new Response('{"private":')}),error=>error.code==='invalid_response');
+});
+test('malformed provider page preserves sales and cursor; recovery and replay do not duplicate sales', async () => {
+  const db=await database();
+  try {
+    const pool=poolFor(db);
+    await page(db,[sale()]);
+    await page(db,[],'resume-page');
+    const documents=(await db.query('SELECT * FROM pos_documents')).rows;
+    const before=(await db.query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows;
+    for(const payload of [null,{items:[],paging:[]}]) {
+      await assert.rejects(syncEvotor({pool,config,fetchPage:args=>fetchEvotorPage({...args,
+        fetchImpl:async()=>new Response(JSON.stringify(payload))})}),error=>error.code==='invalid_response' && error.statusCode===502);
+      assert.deepEqual((await db.query('SELECT * FROM pos_documents')).rows,documents);
+      assert.deepEqual((await db.query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows,before);
+      const dashboard=await createPosService(pool,config).dashboard({id:'3',role:'viewer'},
+        {period:'custom',from:'2026-10-02',to:'2026-10-02'});
+      assert.equal(dashboard.connection.state,'error');
+      assert.equal(dashboard.connection.errorCode,'invalid_response');
+      assert.equal(dashboard.all.saleDocuments,1);
+    }
+    const fetchPage=args=>fetchEvotorPage({...args,fetchImpl:async()=>{
+      assert.equal(args.cursor,'resume-page');
+      return new Response(JSON.stringify({items:[sale()],paging:{}}));
+    }});
+    assert.deepEqual(await syncEvotor({pool,config,fetchPage}),{imported:1,complete:true});
+    await syncEvotor({pool,config,fetchPage:args=>fetchEvotorPage({...args,
+      fetchImpl:async()=>new Response(JSON.stringify({items:[sale()],paging:{}}))})});
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM pos_documents')).rows[0].n,1);
+    assert.equal((await db.query('SELECT last_error_code FROM pos_sync_state')).rows[0].last_error_code,null);
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n,0);
+  } finally {await db.close();}
+});
+test('malformed second provider page retains committed progress and resumes without duplicate revenue', async () => {
+  for (const malformed of [null, {items:[],paging:[]}]) {
+    const db=await database();
+    try {
+      const pool=poolFor(db);
+      await page(db,[sale()]);
+      await db.query("INSERT INTO transactions VALUES(1,'completed',99,NOW())");
+      const journal=(await db.query('SELECT * FROM transactions')).rows;
+      const priorSuccess=(await db.query('SELECT last_success_at FROM pos_sync_state')).rows[0].last_success_at;
+      const deadline='2026-10-04T00:00:00.000Z', cursors=[];
+      let committedDocuments, committedProgress;
+      await assert.rejects(syncEvotor({pool,config,now:()=>new Date(deadline),
+        fetchPage:args=>fetchEvotorPage({...args,fetchImpl:async()=>{
+          cursors.push(args.cursor);
+          assert.equal(args.until,deadline);
+          if (args.cursor===null) return new Response(JSON.stringify({
+            items:[sale(),sale({id:'first-page'})],paging:{next_cursor:'second-page'}
+          }));
+          assert.equal(args.cursor,'second-page');
+          committedDocuments=(await db.query('SELECT * FROM pos_documents ORDER BY document_id')).rows;
+          committedProgress=(await db.query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows;
+          return new Response(JSON.stringify(malformed));
+        }})}),error=>error.code==='invalid_response' && error.statusCode===502);
+      assert.deepEqual(cursors,[null,'second-page']);
+      assert.equal(committedDocuments.length,2);
+      assert.deepEqual((await db.query('SELECT * FROM pos_documents ORDER BY document_id')).rows,committedDocuments);
+      assert.deepEqual((await db.query('SELECT cursor,scan_until,last_success_at FROM pos_sync_state')).rows,committedProgress);
+      assert.equal(committedProgress[0].cursor,'second-page');
+      assert.equal(new Date(committedProgress[0].scan_until).toISOString(),deadline);
+      assert.equal(new Date(committedProgress[0].last_success_at).getTime(),new Date(priorSuccess).getTime());
+      const service=createPosService(pool,config), period={period:'custom',from:'2026-10-02',to:'2026-10-02'};
+      const failed=await service.dashboard({id:'3',role:'viewer'},period);
+      assert.equal(failed.all.salesCents,'60');
+      assert.equal(failed.connection.errorCode,'invalid_response');
+      assert.equal(failed.connection.historyComplete,false);
+      assert.deepEqual(await syncEvotor({pool,config,now:()=>new Date('2026-10-05T00:00:00Z'),
+        fetchPage:args=>fetchEvotorPage({...args,fetchImpl:async()=>{
+          assert.equal(args.cursor,'second-page');
+          assert.equal(new Date(args.until).toISOString(),deadline);
+          return new Response(JSON.stringify({items:[sale({id:'first-page'}),sale({id:'second-page'})],paging:{}}));
+        }})}),{imported:2,complete:true});
+      await syncEvotor({pool,config,fetchPage:args=>fetchEvotorPage({...args,fetchImpl:async()=>{
+        assert.equal(args.cursor,null);
+        return new Response(JSON.stringify({items:[sale(),sale({id:'first-page'}),sale({id:'second-page'})],paging:{}}));
+      }})});
+      const recovered=await service.dashboard({id:'3',role:'viewer'},period);
+      assert.equal(recovered.all.saleDocuments,3);
+      assert.equal(recovered.all.salesCents,'90');
+      assert.equal(recovered.connection.errorCode,null);
+      assert.equal(recovered.connection.historyComplete,true);
+      assert.deepEqual((await db.query('SELECT * FROM transactions')).rows,journal);
+    } finally {await db.close();}
+  }
+});
 test('PostgreSQL: revoked QR and split receipts cannot link; Moscow boundary and repeat buyers are exact', async () => {
   const db = await database();
   try {
