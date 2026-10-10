@@ -17,6 +17,13 @@ describe('cash register dashboard',()=>{
       expect(html).not.toContain('₽ 750,00')
     }
   })
+  it('shows the last full pass as ready data while the next pass runs',()=>{
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report:{...report,connection:{...report.connection,state:'syncing'}}}))
+    expect(html).toContain('Данные Эвотора')
+    expect(html).toContain('₽ 750,00')
+    expect(html).not.toContain('неполными')
+    expect(html).toContain('на момент последней полной сверки')
+  })
   it('shows cash sales/returns and operations without inventing customers',()=>{
     const html=renderToStaticMarkup(createElement(CashDashboard,{report}))
     expect(html).toContain('₽ 750,00')
