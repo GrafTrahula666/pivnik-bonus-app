@@ -137,7 +137,7 @@ Do not execute this checklist against production as part of this PR.
    GET `/api/admin/pos/devices?storeId=…` lists identifiers without hashes/secrets.
    POST `/api/admin/pos/devices/revoke` with `{id,storeId}` revokes. Lost issue
    response: list→revoke→new issue, never blindly accumulate live credentials.
-5. Bridge 1.0.0 (versionCode 4) is built by `.github/workflows/evotor-bridge-apk.yml`
+5. Bridge 1.0.1 (versionCode 5) is built by `.github/workflows/evotor-bridge-apk.yml`
    with a throwaway debug key, so it cannot update the installed 0.1.0 prototype
    in place: uninstall the prototype, install 0.2.0, then enter the URL and key.
    It drops the discount/SetExtra services and adds an Evotor launcher icon for

@@ -39,6 +39,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.EVOTOR" />
             </intent-filter>
+            <!-- Tile colour on the terminal home screen (HEX, never white). Key name from Evotor's
+                 "Вызов приложения из интерфейса смарт-терминала"; confirm against that page on a real till. -->
+            <meta-data
+                android:name="ru.evotor.launcher.BACKGROUND_COLOR"
+                android:value="#0A0F1C" />
         </activity>
 
         <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
