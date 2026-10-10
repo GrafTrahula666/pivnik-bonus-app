@@ -127,8 +127,8 @@ public final class SettingsActivity extends Activity {
         check.setText("Проверить подключение");
         check.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
-                if (!settings.isConfigured()) {
-                    connection.setText("Сначала введите ключ кассы и нажмите «Сохранить».");
+                if (!PosConfiguration.validBase(settings.apiBaseUrl())) {
+                    connection.setText("Сначала введите https:// адрес сервера и нажмите «Сохранить».");
                     return;
                 }
                 check.setEnabled(false);
@@ -168,6 +168,7 @@ public final class SettingsActivity extends Activity {
 
     private static String describe(String result) {
         if ("OK".equals(result)) return "Подключено: сервер отвечает, ключ принят.";
+        if ("NOKEY".equals(result)) return "Сервер отвечает. Осталось ввести ключ кассы и нажать «Сохранить».";
         if ("KEY".equals(result)) return "Сервер отвечает, но ключ кассы не подходит. Выпустите новый и введите его.";
         if (result.startsWith("HTTP ")) return "Сервер ответил неожиданно. Пришлите этот текст разработчику:\n" + result;
         String hint = result.contains("SSL") || result.contains("Certificate") || result.contains("Trust")

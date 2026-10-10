@@ -51,7 +51,9 @@ final class PivnikApi {
             connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("Authorization", "Device " + settings.deviceToken());
+            // Works before a key is entered too: then a 401 already proves the server is reachable.
+            String token = settings.deviceToken();
+            if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Device " + token);
             byte[] body = "{\"payload\":\"PIVNIK-CONNECTION-CHECK\"}".getBytes(StandardCharsets.UTF_8);
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);
@@ -60,6 +62,7 @@ final class PivnikApi {
             }
             int status = connection.getResponseCode();
             if (status == 404) return "OK";
+            if (status == 401 && token.isEmpty()) return "NOKEY";
             if (status == 401 || status == 403 || status == 428) return "KEY";
             // Unexpected answer: say who answered (Railway or something on the till's network).
             StringBuilder details = new StringBuilder("HTTP " + status);
