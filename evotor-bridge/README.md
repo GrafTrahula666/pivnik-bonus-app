@@ -32,7 +32,7 @@ Java 17, Gradle 8.9, Android SDK 35, Evotor integration-library `v0.6.40`.
 The debug APK is signed with a throwaway key generated in that run, so it
 cannot update the installed 0.1.0 prototype in place: remove the prototype
 first (it holds no data worth keeping; it was never configured), then install
-1.0.4 (versionCode 8) and enter the `pvpos_…` key (the production HTTPS address is
+1.0.5 (versionCode 9) and enter the `pvpos_…` key (the production HTTPS address is
 pre-filled). Old terminal firmware that does not trust ISRG Root X1 still connects:
 the app bundles ISRG X1/X2 and GTS R1/R3/R4 roots (`res/raw/pivnik_roots.pem`) as a
 fallback to the system roots.
