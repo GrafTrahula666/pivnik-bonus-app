@@ -32,11 +32,6 @@ final class PivnikApi {
         }
     }
 
-    /** Connection check from the setup screen: an unknown code answers 404 when the key is valid. */
-    static ResolveResult check(BridgeSettings settings) {
-        return resolve(settings, "PIVNIK-CONNECTION-CHECK");
-    }
-
     /**
      * Setup-screen diagnostics: the same request as a scan, but the answer is a short text with the
      * real reason (HTTP status or the exception), so a till that cannot reach the server can be debugged.
@@ -46,6 +41,7 @@ final class PivnikApi {
         try {
             URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
             connection = (HttpURLConnection) url.openConnection();
+            PivnikTls.apply(connection);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(8000);
             connection.setReadTimeout(8000);
@@ -87,6 +83,7 @@ final class PivnikApi {
             URL url = new URL(settings.apiBaseUrl() + path);
             if (!"https".equalsIgnoreCase(url.getProtocol())) return ResolveResult.unavailable();
             connection = (HttpURLConnection) url.openConnection();
+            PivnikTls.apply(connection);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);

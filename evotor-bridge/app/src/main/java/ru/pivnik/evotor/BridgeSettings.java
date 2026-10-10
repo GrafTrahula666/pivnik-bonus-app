@@ -11,6 +11,8 @@ final class BridgeSettings {
     private static final String PREFS = "pivnik_evotor_bridge";
     private static final String KEY_API_BASE = "api_base_url";
     private static final String KEY_LAST_STATUS = "last_status";
+    /** PIVNIK production server, so a fresh install only needs the till key typed in. */
+    static final String DEFAULT_API_BASE = "https://pivnik-bonus-app-production-df60.up.railway.app";
 
     private final SharedPreferences prefs;
     private final DeviceCredentialStore credentials;
@@ -23,6 +25,7 @@ final class BridgeSettings {
 
     String apiBaseUrl() {
         String value = prefs.getString(KEY_API_BASE, "").trim();
+        if (value.isEmpty()) value = DEFAULT_API_BASE;
         while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
         return value;
     }

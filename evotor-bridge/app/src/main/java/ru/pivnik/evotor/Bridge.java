@@ -31,6 +31,7 @@ final class Bridge {
 
     private Bridge(Context context) {
         app = context.getApplicationContext();
+        PivnikTls.install(app);
         settings = new BridgeSettings(app);
         policy = new BindingPolicy(new PrefsBindingStore(app));
     }
