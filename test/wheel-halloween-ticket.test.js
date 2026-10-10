@@ -69,3 +69,9 @@ test('Колесо Хэллоуина: картинка колеса подме�
   assert.match(app, /applyHalloweenWheelArt\(design\.theme === 'halloween'\)/);
   assert.match(app, /const HALLOWEEN_WHEEL_ART = '\/assets\/home-v2\/wheel-halloween-night-20261010\.webp'/);
 });
+
+test('a wheel ticket win refreshes the Halloween ticket counter without flashing zero', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  assert.match(app, /prize\?\.code === 'halloween-ticket'[\s\S]{0,160}refreshHalloweenSummary\(\)/);
+  assert.match(app, /tickets\.dataset\.known/);
+});
