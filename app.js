@@ -3355,12 +3355,17 @@ async function loadAdminUsersDirectory(page = 1) {
     if (!isCurrent()) return;
     state.adminUsersDirectory.busy = false;
     renderAdminUsersDirectoryMeta();
+    const accessDenied = error?.status === 401 || error?.status === 403;
     if (root) {
       root.className = 'operation-list empty-state';
-      root.textContent = 'Не удалось загрузить пользователей. Повторите попытку.';
+      root.textContent = error?.status === 401
+        ? 'Сессия истекла. Откройте приложение ещё раз.'
+        : error?.status === 403
+          ? 'Нет доступа к списку пользователей.'
+          : 'Не удалось загрузить пользователей. Повторите попытку.';
     }
     if (retry) {
-      retry.hidden = false;
+      retry.hidden = accessDenied;
       retry.onclick = () => loadAdminUsersDirectory(page).catch((err) => toast(err.message));
     }
     throw error;
