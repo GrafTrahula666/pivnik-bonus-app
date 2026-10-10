@@ -122,3 +122,21 @@ test('admin adjustment persistence contract keeps scoped writes migration-gated 
   assert.equal(adminAdjustmentPersistenceContract.requiresMigration009BeforeScopedEnablement, true);
   assert.equal(adminAdjustmentPersistenceContract.scopedFallbackToLegacy, false);
 });
+
+test('scoped admin adjustment rejects non-adjustment and unfinished journal entries before SQL', async () => {
+  let queries = 0;
+  const persist = createAdminAdjustmentPersistence({ scopedWritesEnabled: true,
+    query: async () => { queries++; return { rows: [{ id: 101 }] }; } });
+  const scope = { authorizationContext: createAuthorizationContext({ membershipRole: 'owner', tenantId: 'tenant-a' }),
+    tenantId: 'tenant-a', locationId: 'location-a' };
+  for (const mode of ['accrue', 'redeem', 'shop', 'achievement', ' adjustment ']) {
+    await assert.rejects(persist({ ...scope, transaction: adjustment({ mode }) }), /requires adjustment mode/);
+  }
+  for (const status of ['pending', 'cancelled', 'expired', '', ' completed ']) {
+    await assert.rejects(persist({ ...scope, transaction: adjustment({ status }) }), /requires completed status/);
+  }
+  for (const transaction of [null, [], 'adjustment']) {
+    await assert.rejects(persist({ ...scope, transaction }), TypeError);
+  }
+  assert.equal(queries, 0);
+});
