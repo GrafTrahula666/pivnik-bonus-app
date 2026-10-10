@@ -29,8 +29,22 @@ jobs:
           gradle-version: '8.9'
       # Signed with a throwaway debug key generated for this run: installing it over an
       # older build needs the old app removed first. A permanent release key is a separate step.
+      # If the repository has the EVOTOR_KEYSTORE_B64 secret (plus EVOTOR_KEYSTORE_PASSWORD,
+      # EVOTOR_KEY_ALIAS, EVOTOR_KEY_PASSWORD), the APK is signed with that permanent key.
+      - name: Prepare the permanent signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.EVOTOR_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/evotor-release.jks"
+            echo "EVOTOR_KEYSTORE_FILE=$RUNNER_TEMP/evotor-release.jks" >> "$GITHUB_ENV"
+          fi
       - name: Test and build debug APK
         working-directory: evotor-bridge
+        env:
+          EVOTOR_KEYSTORE_PASSWORD: ${{ secrets.EVOTOR_KEYSTORE_PASSWORD }}
+          EVOTOR_KEY_ALIAS: ${{ secrets.EVOTOR_KEY_ALIAS }}
+          EVOTOR_KEY_PASSWORD: ${{ secrets.EVOTOR_KEY_PASSWORD }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:

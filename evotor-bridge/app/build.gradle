@@ -11,8 +11,8 @@ android {
         // integration-library v0.6.40: minSdkVersion 23, targetSdkVersion 30.
         minSdk 23
         targetSdk 30
-        versionCode 3
-        versionName '0.2.1'
+        versionCode 4
+        versionName '1.0.0'
         // app_uuid issued for "PIVNIK для Эвотора" in the Evotor developer account (not a secret:
         // it ships in the manifest). Override with -PevotorAppUuid=... or EVOTOR_APP_UUID.
         manifestPlaceholders = [
@@ -24,8 +24,16 @@ android {
 
     signingConfigs {
         debug {
+            // Permanent key (GitHub secrets) when provided: builds then install over each other.
+            // Without it, the CI falls back to a throwaway debug key and the old app must be removed first.
+            def keystoreFile = System.getenv('EVOTOR_KEYSTORE_FILE')
             def bridgeDebugHome = System.getenv('EVOTOR_BRIDGE_DEBUG_HOME')
-            if (bridgeDebugHome) {
+            if (keystoreFile) {
+                storeFile file(keystoreFile)
+                storePassword System.getenv('EVOTOR_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('EVOTOR_KEY_ALIAS')
+                keyPassword System.getenv('EVOTOR_KEY_PASSWORD')
+            } else if (bridgeDebugHome) {
                 storeFile file("${bridgeDebugHome}/.android/debug.keystore")
                 storePassword 'android'
                 keyAlias 'androiddebugkey'

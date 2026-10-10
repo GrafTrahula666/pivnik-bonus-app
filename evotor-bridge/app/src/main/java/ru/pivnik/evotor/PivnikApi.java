@@ -32,6 +32,11 @@ final class PivnikApi {
         }
     }
 
+    /** Connection check from the setup screen: an unknown code answers 404 when the key is valid. */
+    static ResolveResult check(BridgeSettings settings) {
+        return resolve(settings, "PIVNIK-CONNECTION-CHECK");
+    }
+
     static ResolveResult bind(BridgeSettings settings, String receiptUuid, String payload) {
         try {
             return post(settings, "/api/device/pos/receipts/bind",
