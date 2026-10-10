@@ -907,6 +907,10 @@ async function spinWheel() {
     $('#wheelResultKicker').textContent = 'Ваш приз';
     $('#wheelResultTitle').textContent = wheelPrizeDisplayTitle(data.spin?.prize);
     loadWheelHistory().catch(() => {});
+    if (data.spin?.prize?.code === 'halloween-ticket') {
+      $('#wheelResultTitle').textContent = 'Хэллоуинский билет +1';
+      refreshHalloweenSummary();
+    }
     $('#wheelRim').classList.add('wheel-win');
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
@@ -1176,7 +1180,9 @@ function renderHalloween(summary) {
   const tickets = $('#halloweenTickets');
   const timer = $('#halloweenTimer');
   const invites = $('#halloweenInviteCount');
-  if (tickets) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  // Keep the last known count while a refresh is in flight so the counter does not flash 0.
+  if (tickets && (summary || !tickets.dataset.known)) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  if (tickets && summary) tickets.dataset.known = '1';
   if (summary?.invite) halloweenInvite = summary.invite;
   const limit = Number(halloweenInvite?.weekLimit) || 3;
   if (invites) invites.textContent = `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}`;
