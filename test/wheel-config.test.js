@@ -66,3 +66,20 @@ test('Колесо: неверные настройки отклоняются, 
   assert.deepEqual(wheelPrizes(), WHEEL_PRIZES);
   assert.equal(paidSpinCost(1), 100);
 });
+
+test('Колесо: на время Хэллоуина доля бокала пива отдаётся хэллоуинскому билету', () => {
+  const plain = drawWheelPrize((min, max) => (max === WHEEL_TICKET_COUNT ? 480_000 : 0));
+  assert.equal(plain.prize.code, 'beer-glass');
+  const hit = drawWheelPrize((min, max) => (max === WHEEL_TICKET_COUNT ? 480_000 : 0), { halloween: true });
+  assert.equal(hit.ticket, 480_000);
+  assert.equal(hit.prize.code, 'halloween-ticket');
+  assert.equal(hit.prize.halloweenTicket, true);
+  assert.equal(hit.prize.beerMl, 0);
+  assert.equal(hit.prize.bonus, 0);
+  const failedJackpot = drawWheelPrize((min, max) => (max === WHEEL_TICKET_COUNT ? 499_999 : 1), { halloween: true });
+  assert.equal(failedJackpot.prize.code, 'halloween-ticket');
+  const bonus = drawWheelPrize(() => 10, { halloween: true });
+  assert.equal(bonus.prize.code, 'bonus-5');
+  const jackpot = drawWheelPrize((min, max) => (max === WHEEL_TICKET_COUNT ? 499_999 : 0), { halloween: true });
+  assert.equal(jackpot.prize.code, 'annual-beer');
+});
