@@ -1399,10 +1399,15 @@ async function sendVkCommunityMessage(vkId, text) {
         error: String(payload?.error?.error_msg || code).slice(0, 180)
       };
     }
+    // This request targets one user_id, whose success result is a message ID.
+    // Ambiguous responses must not count as delivery or trigger another send.
+    if (!Number.isSafeInteger(payload?.response) || payload.response < 0) {
+      return { ok: false, status: response.status, error: 'vk_invalid_response' };
+    }
     return {
       ok: true,
       status: response.status,
-      messageId: payload?.response ?? null
+      messageId: payload.response
     };
   } catch (error) {
     console.error('VK messages.send error:', error.message);
