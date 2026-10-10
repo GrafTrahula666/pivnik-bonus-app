@@ -779,7 +779,10 @@ async function loadWheelHistory() {
 }
 
 function visualSectorForPrize(code) {
-  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === code);
+  // The approved artwork predates the ticket prize and has no painted sector for it;
+  // land on a beer-glass sector (same consolation tier) rather than the misleading default.
+  const landingCode = code === 'halloween-ticket' ? 'beer-glass' : code;
+  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === landingCode);
   if (!candidates.length) return WHEEL_VISUAL_SECTORS[0];
   const randomIndex = globalThis.crypto?.getRandomValues
     ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % candidates.length
@@ -809,7 +812,8 @@ function wheelPrizeDisplayTitle(prize) {
     'bonus-50': '50 бонусов',
     'bonus-100': '100 бонусов',
     'beer-glass': 'Бокал пива',
-    'annual-beer': 'Годовой запас пива'
+    'annual-beer': 'Годовой запас пива',
+    'halloween-ticket': 'Билет «Ночь Котлов»'
   };
   return titles[String(prize?.code || '')] || 'Приз зачислен';
 }

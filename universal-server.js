@@ -34,14 +34,15 @@ import {
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
+import { grantTickets } from './halloween-raffle.js';
 import {
-  WHEEL_PRIZES,
   configureWheel,
   drawWheelPrize,
   freeSpinState,
   paidSpinCost,
   wheelFreeIntervalHours,
-  wheelPrizeChances
+  wheelPrizeChances,
+  wheelPrizeDefinition
 } from './wheel.js';
 import {
   adminUserCrmStatus,
@@ -1800,7 +1801,7 @@ async function grantReward(db, userId, code, amount, source, reason, mode = 'adj
 }
 
 function wheelPrizeByCode(code) {
-  return WHEEL_PRIZES.find((item) => item.code === code) || null;
+  return wheelPrizeDefinition(code);
 }
 
 function wheelPrizeResponse(row) {
@@ -1815,7 +1816,8 @@ function wheelPrizeResponse(row) {
       title: prize.title,
       bonus: prize.bonus,
       beerMl: prize.beerMl,
-      annualSupply: prize.annualSupply
+      annualSupply: prize.annualSupply,
+      ticket: Boolean(prize.ticket)
     } : null,
     createdAt: row.created_at
   };
@@ -1905,6 +1907,7 @@ async function spinTelegramWheel(userId, rawRequestKey) {
   const client = await pool.connect();
   let spinRow;
   let idempotent = false;
+  let wonPrize = null;
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [userId]);
@@ -1947,6 +1950,7 @@ async function spinTelegramWheel(userId, rawRequestKey) {
 
       const chargedCost = unlimitedBonus ? 0 : listedCost;
       const { ticket, prize } = drawWheelPrize();
+      wonPrize = prize;
       let balanceAfter = currentBalance;
       if (unlimitedBonus && prize.bonus > 0) {
         const walletResult = await client.query(
@@ -2037,6 +2041,15 @@ async function spinTelegramWheel(userId, rawRequestKey) {
     throw error;
   } finally {
     client.release();
+  }
+
+  if (!idempotent && wonPrize?.ticket) {
+    await runHalloweenHook(pool, 'wheel', (db) => grantTickets(db, {
+      userId,
+      delta: 1,
+      reason: 'wheel',
+      sourceKey: `wheel:${storedRequestKey}`
+    }));
   }
 
   const [status, beerResult] = await Promise.all([
