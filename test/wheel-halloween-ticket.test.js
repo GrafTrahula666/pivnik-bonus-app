@@ -58,3 +58,14 @@ test('PostgreSQL: миграция 015 повторяема, принимает 
     await db.close();
   }
 });
+
+test('Колесо Хэллоуина: картинка колеса подменяется только при теме Хэллоуин', async () => {
+  const [app, image] = await Promise.all([
+    readFile(new URL('../app.js', import.meta.url), 'utf8'),
+    readFile(new URL('../assets/home-v2/wheel-halloween-night-20261010.webp', import.meta.url))
+  ]);
+  assert.equal(image.subarray(0, 4).toString(), 'RIFF');
+  assert.equal(image.subarray(8, 12).toString(), 'WEBP');
+  assert.match(app, /applyHalloweenWheelArt\(design\.theme === 'halloween'\)/);
+  assert.match(app, /const HALLOWEEN_WHEEL_ART = '\/assets\/home-v2\/wheel-halloween-night-20261010\.webp'/);
+});

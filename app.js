@@ -802,6 +802,16 @@ function waitForWheelStop(disk) {
   });
 }
 
+// The Halloween wheel art has the pumpkin tickets on the same five sectors where the glass of beer sits.
+const HALLOWEEN_WHEEL_ART = '/assets/home-v2/wheel-halloween-night-20261010.webp';
+function applyHalloweenWheelArt(on) {
+  const disk = document.getElementById('wheelDisk');
+  if (!disk) return;
+  if (!disk.dataset.defaultSrc) disk.dataset.defaultSrc = disk.getAttribute('src') || '';
+  const src = on ? HALLOWEEN_WHEEL_ART : disk.dataset.defaultSrc;
+  if (src && disk.getAttribute('src') !== src) disk.setAttribute('src', src);
+}
+
 function wheelPrizeDisplayTitle(prize) {
   const titles = {
     'bonus-5': '5 бонусов',
@@ -1378,6 +1388,7 @@ function applyDesign(design) {
   // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
   root.classList.toggle('theme-halloween', design.theme === 'halloween');
   applyHalloweenCopy(design.theme === 'halloween');
+  applyHalloweenWheelArt(design.theme === 'halloween');
   if (design.theme === 'halloween' && bootCompleted && document.readyState === 'complete') schedulePromoBanner();
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
