@@ -43,7 +43,7 @@
                  "Вызов приложения из интерфейса смарт-терминала"; confirm against that page on a real till. -->
             <meta-data
                 android:name="ru.evotor.launcher.BACKGROUND_COLOR"
-                android:value="#0A0F1C" />
+                android:value="#08040E" />
         </activity>
 
         <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->

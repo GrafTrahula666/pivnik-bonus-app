@@ -32,7 +32,7 @@ Java 17, Gradle 8.9, Android SDK 35, Evotor integration-library `v0.6.40`.
 The debug APK is signed with a throwaway key generated in that run, so it
 cannot update the installed 0.1.0 prototype in place: remove the prototype
 first (it holds no data worth keeping; it was never configured), then install
-1.0.1 (versionCode 5) and enter the HTTPS address and the `pvpos_…` key.
+1.0.2 (versionCode 6) and enter the HTTPS address and the `pvpos_…` key.
 A permanent release signing key is a separate, later step; until then every
 new test build is installed the same way.
 
