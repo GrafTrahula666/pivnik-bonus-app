@@ -24,8 +24,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .hide{display:none!important}
 #menu{justify-content:flex-start;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0) 22%,rgba(0,0,0,0) 70%,rgba(0,0,0,.55)),url(loc/menu-bg.webp) center 75%/cover no-repeat #120904}
 #menu h1{margin-top:calc(env(safe-area-inset-top) + 2vh)}
-#menu .car{position:absolute;left:50%;transform:translateX(-50%);bottom:21%;height:min(44vh,380px)}
-#menu .cname{margin-top:auto}
+#menu{gap:14px}
+#menu .car{flex:1;min-height:0;height:auto;max-height:420px;margin-top:auto}
+#menu .cname{margin-top:0}
+#menu .cdesc{margin-top:-6px}
 h1{margin:0;font-size:52px;line-height:.95;font-weight:900;text-align:center;letter-spacing:2px;background:linear-gradient(180deg,#fff2c9,var(--or2) 45%,var(--or));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,140,30,.55)) drop-shadow(0 3px 0 #3a1404)}
 h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .car{position:relative;width:100%;max-width:420px;height:min(46vh,380px);touch-action:none}
@@ -36,6 +38,32 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .slot.l{transform:translateX(-135%) scale(.5);opacity:.5;filter:brightness(.6)}
 .slot.r{transform:translateX(35%) scale(.5);opacity:.5;filter:brightness(.6)}
 .slot.off{opacity:0;transform:translateX(-50%) scale(.3)}
+.slot img{transform-origin:50% 100%}
+.slot .prop{position:absolute;font-style:normal;font-size:clamp(26px,8vw,40px);opacity:0;filter:drop-shadow(0 2px 3px #000);pointer-events:none}
+.slot:not(.c) img,.slot:not(.c) .prop{animation:none!important}
+.slot.c.a-flex img{animation:flex 2.6s ease-in-out infinite}
+.slot.c.a-flex .prop{left:2%;top:30%;animation:pop 2.6s ease-in-out infinite}
+@keyframes flex{0%,55%,100%{transform:none}65%,85%{transform:scale(1.07,1.03) rotate(-2deg)}75%{transform:scale(1.09,1.04) rotate(2deg)}}
+@keyframes pop{0%,58%,100%{opacity:0;transform:scale(.3)}66%,86%{opacity:1;transform:scale(1.15) rotate(-12deg)}76%{opacity:1;transform:scale(1) rotate(8deg)}}
+.slot.c.a-sway img{animation:sway 2.2s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-3deg) translateY(0)}25%{transform:rotate(0) translateY(-2%)}50%{transform:rotate(3deg) translateY(0)}75%{transform:rotate(0) translateY(-2%)}}
+.slot.c.a-turn img{animation:turn 4s ease-in-out infinite}
+@keyframes turn{0%,40%,100%{transform:none}55%,80%{transform:perspective(600px) rotateY(62deg) rotate(-3deg);filter:drop-shadow(0 14px 18px rgba(0,0,0,.6)) brightness(.75)}}
+.slot.c.a-trick img{animation:trick 3.2s cubic-bezier(.3,.7,.4,1) infinite}
+@keyframes trick{0%,60%,100%{transform:none}70%{transform:translateY(-22%) rotate(-10deg)}80%{transform:translateY(-26%) rotate(350deg)}90%{transform:translateY(0) rotate(360deg) scale(1.04,.96)}}
+.slot.c.a-drink img{animation:drink 3.4s ease-in-out infinite}
+.slot.c.a-drink .prop{left:58%;top:22%;animation:bottle 3.4s ease-in-out infinite}
+@keyframes drink{0%,35%,100%{transform:none}50%,75%{transform:rotate(-5deg) translateY(-1%)}}
+@keyframes bottle{0%,25%,100%{opacity:0;transform:translate(30%,60%) rotate(0)}40%{opacity:1;transform:translate(0,0) rotate(-20deg)}50%,75%{opacity:1;transform:translate(-25%,-10%) rotate(-120deg)}88%{opacity:0;transform:translate(10%,40%) rotate(-30deg)}}
+.slot.c.a-music img{animation:nod .55s ease-in-out infinite alternate}
+@keyframes nod{from{transform:rotate(-2deg)}to{transform:rotate(2deg) translateY(1%)}}
+.slot.c.a-guitar .prop.n{left:30%;top:41%;font-size:clamp(22px,7vw,34px);opacity:1;animation:strum .3s ease-in-out infinite alternate-reverse}
+.slot.c.a-music .prop{left:68%;top:8%;animation:note 1.8s linear infinite}
+@keyframes note{0%{opacity:0;transform:translate(0,40%) rotate(-10deg)}20%{opacity:1}100%{opacity:0;transform:translate(40%,-80%) rotate(15deg)}}
+.slot.c.a-guitar img{animation:rock .4s ease-in-out infinite alternate}
+.slot.c.a-guitar .prop.g{left:24%;top:46%;font-size:clamp(40px,13vw,64px);opacity:1;animation:strum .2s ease-in-out infinite alternate}
+@keyframes rock{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
+@keyframes strum{from{transform:rotate(-38deg)}to{transform:rotate(-30deg) translateY(3%)}}
 .slot span{position:absolute;right:4%;bottom:4%;font-size:clamp(28px,9vw,44px);filter:drop-shadow(0 2px 3px #000)}
 .slot:not(.c) span{display:none}
 .arr{position:absolute;top:62%;transform:translateY(-50%);z-index:2;width:52px;height:52px;border-radius:50%;border:0;background:rgba(18,10,24,.72);color:#ffd27a;font:900 34px/1 system-ui,sans-serif;cursor:pointer;box-shadow:0 0 0 2px rgba(255,194,71,.35)}
@@ -63,6 +91,9 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 #sup.full small{opacity:1}
 @keyframes supp{50%{transform:scale(1.1);box-shadow:0 0 22px var(--sc,#ffc247)}}
 .cname{font-weight:900;font-size:24px;letter-spacing:1px;margin-top:-10px;text-shadow:0 2px 8px #000}
+.cname img.gedo{width:28px;height:28px;vertical-align:-5px;margin-left:8px}
+.cdesc{max-width:320px;margin-top:-12px;padding:10px 14px;border-radius:14px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);font-size:14px;line-height:1.35;text-align:center;color:#f3e6d2}
+.cdesc b{color:#ffd27a}
 </style>
 </head>
 <body>
@@ -84,6 +115,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
       <button class="arr r" id="next" aria-label="Следующий персонаж">›</button>
     </div>
     <div class="cname" id="cname"></div>
+    <div class="cdesc" id="cdesc"></div>
     <button class="btn" id="play">Играть</button>
   </div>
   <div class="screen hide" id="over">
@@ -127,21 +159,21 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', name: 'Виталий', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
-  { id: 'anya',    name: 'Аня',     img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
-  { id: 'kirill',  name: 'Кирилл',  img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
-  { id: 'hristina', name: 'Христина', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
-  { id: 'vlad',    name: 'Влад',    img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
-  { id: 'cat',     name: 'Котик',   img: 'chars/cat.webp',     em: '🍬', col: '#ff7ac8' },
-  { id: 'raccoon', name: 'Енот',    img: 'chars/raccoon.webp', em: '🎃', col: '#ff9a2e' },
-  { id: 'imp',     name: 'Бесёнок', img: 'chars/imp.webp',     em: '🦇', col: '#b66bff' },
-  { id: 'owl',     name: 'Сова',    img: 'chars/owl.webp',     em: '🌙', col: '#7ab8ff' },
+  { id: 'vitaliy', name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
+  { id: 'kirill',  name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'turn', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
+  { id: 'hristina', name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
+  { id: 'vlad',    name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
+  { id: 'dima',    name: 'Дима',    desc: 'Магнитофон. Двойной тап раз в 3 минуты включает музыку и приносит случайный бонус.', anim: 'music', img: 'chars/dima-front.webp',    back: 'chars/dima-back.webp',    em: '🎵', col: '#ff8a1a', cut: .6, noFlip: true, sup: { kind: 'boombox', name: 'Магнитофон', dur: 0, cd: 180 } },
+  { id: 'sema',    name: 'Сёма',    desc: 'Скейтер. Всегда набирает больше очков, чем остальные.', anim: 'trick', img: 'chars/sema-front.webp',    back: 'chars/sema-back.webp',    em: '👻', col: '#2aa3b8', ride: true, sup: { kind: 'mult', mult: 1.5 } },
 ];
 // Superpowers (double tap). Default: 5 s of passing through obstacles, charged by 30 treats.
 // Characters override it and recharge on a timer (cd seconds):
 //   smash: armed until the next obstacle, which gets knocked away;  fly: up in the air and untouchable;
 //   slow: the world runs at half speed and score counts ×10;
 //   portal: passive, every portal gives a random bonus (see portalGift);
+//   mult: passive, all score ×mult;
+//   boombox: plays a track and rolls the same random bonus as Христина's portals;
 //   beer: a litre of «Чешское барное»; each one (up to 5, 5 min each) makes the screen sway, blur, cloud and fog up more.
 const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, ...CHARS[store.char].sup });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
@@ -188,6 +220,15 @@ const ICONS = {
     x.fillStyle = gr; heart(); x.fill();
     x.fillStyle = 'rgba(255,255,255,.7)'; x.beginPath(); x.ellipse(-k * .45, -k * .35, k * .16, k * .1, -.6, 0, 7); x.fill();
   }),
+  gedo: badge('#a77bff', '#3b1680', (x, r) => { // purple ringed eye
+    x.fillStyle = '#efe6ff'; outline(x, 10);
+    x.beginPath(); x.moveTo(-r * .85, 0); x.quadraticCurveTo(0, -r * .8, r * .85, 0); x.quadraticCurveTo(0, r * .8, -r * .85, 0); x.closePath(); x.stroke(); x.fill();
+    x.save(); x.clip();
+    x.fillStyle = '#9b6bff'; x.beginPath(); x.arc(0, 0, r * .42, 0, 7); x.fill();
+    x.strokeStyle = '#2a0d55'; x.lineWidth = 3;
+    for (const k of [.1, .2, .3, .41]) { x.beginPath(); x.arc(0, 0, r * k, 0, 7); x.stroke(); }
+    x.restore();
+  }),
   super: badge('#ffcf4a', '#e2551a', (x, r) => {
     const b = () => { x.beginPath(); x.moveTo(r * .12, -r * .72); x.lineTo(-r * .42, r * .1); x.lineTo(-r * .02, r * .1); x.lineTo(-r * .16, r * .72); x.lineTo(r * .42, -r * .12); x.lineTo(r * .02, -r * .12); x.closePath(); };
     outline(x, 14); b(); x.stroke(); x.fillStyle = '#fff'; b(); x.fill();
@@ -200,7 +241,7 @@ const SK = 'pivnik-run-v2';
 function loadStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(SK)); } catch (e) {}
-  return { char: 0, best: 0, ...(s && typeof s === 'object' ? { char: s.char | 0, best: s.best | 0 } : {}) };
+  return { char: 0, best: 0, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
 }
 const store = loadStore();
 const save = () => { try { localStorage.setItem(SK, JSON.stringify(store)); } catch (e) {} };
@@ -247,7 +288,7 @@ function newGame(demo) {
   return {
     demo, t: 0, dist: 0, speed: 6, loc: demo ? 0 : (+QS.get('at') || 0), locT: 0, mode: 'loc', lives: 0, inv: 0, charge: 0, superT: 0, witch: null, n: LOCS[demo ? 0 : (+QS.get('at') || 0) % LOCS.length].lanes,
     lane: 1, px: 0, y: 0, vy: 0, slide: 0, items: [], spawnZ: 26, portalZ: 0, cornerZ: 0, ending: false, yaw: 0,
-    bonus: 0, coins: 0, mag: 0, x2: 0, dead: 0, shake: 0, flash: 0, flashCol: '#fff', fl: [], dust: [], step: 0, beers: [], drink: 0, drunkK: 0, hint: demo ? 0 : 3,
+    bonus: 0, coins: 0, mag: 0, x2: 0, dead: 0, shake: 0, flash: 0, flashCol: '#fff', fl: [], dust: [], step: 0, music: 0, beers: [], drink: 0, drunkK: 0, hint: demo ? 0 : 3,
   };
 }
 const laneX = (lane, n) => lane - (n - 1) / 2;
@@ -298,14 +339,15 @@ function spawnRow(z) {
   }
 }
 
-// Христина: each portal rolls x2 40%, magnet 40%, second life 10%, nothing 10%.
-function portalGift() {
-  if (SUPER().kind !== 'portal') return;
+// Random bonus: x2 40%, magnet 40%, second life 10%, nothing 10% (Христина's portals, Дима's boombox).
+function rollGift(from) {
   const r = Math.random();
-  if (r < .4) { g.x2 = 10; toast('x2', 'Портал: очки ×2'); }
-  else if (r < .8) { g.mag = 8; toast('mag', 'Портал: магнит'); }
-  else if (r < .9) { g.lives = 1; toast('life', 'Портал: вторая жизнь'); }
+  if (r < .4) { g.x2 = 10; toast('x2', from + ': очки ×2'); }
+  else if (r < .8) { g.mag = 8; toast('mag', from + ': магнит'); }
+  else if (r < .9) { g.lives = 1; toast('life', from + ': вторая жизнь'); }
+  else toast('super', from + ': пусто');
 }
+function portalGift() { if (SUPER().kind === 'portal') rollGift('Портал'); }
 function enterTunnel() {
   portalGift();
   g.tunN = (g.tunN || 0) + 1;
@@ -363,6 +405,10 @@ function update(dt) {
   if (slow) g.t -= dt * .5; // the speed-up clock slows down too
   g.beers = g.beers.map(b => b - dt).filter(b => b > 0);
   if (g.drink > 0) g.drink -= dt;
+  if (g.music > 0) { // notes float up from the boombox
+    g.music -= dt;
+    if (Math.random() < dt * 14) { const b = pr(g.px, 1.2, 0), u = unitAt(0); g.fl.push({ t: 0, x: b[0] + rnd(-.6, .6) * u, y: b[1], txt: pick(['♪', '♫', '♬']), col: pick(['#ffd27a', '#ff8a1a', '#ffffff']) }); }
+  }
   g.drunkK += (g.beers.length - g.drunkK) * Math.min(1, dt * .8); // effects creep in, not snap
   if (sp.cd && g.superT <= 0 && !g.armed) g.charge = Math.min(1, g.charge + dt / sp.cd);
   g.slowK = slow ? Math.min(1, (g.slowK || 0) + dt * 4) : Math.max(0, (g.slowK || 0) - dt * 3);
@@ -371,6 +417,7 @@ function update(dt) {
   const mv = g.speed * dt * (1 - .5 * (g.slowK || 0));
   g.dist += mv;
   if (slow) g.bonus += mv * 9; // distance counts ×10 while time is slowed
+  if (sp.mult) g.bonus += mv * (sp.mult - 1);
   const flying = g.superT > 0 && sp.kind === 'fly';
   g.flyH = flying ? Math.min(1, (g.flyH || 0) + dt * 3) : Math.max(0, (g.flyH || 0) - dt * 2.5);
   if (g.flyH > 0) { g.y = 0; g.vy = 0; g.slide = 0; }
@@ -439,6 +486,7 @@ function update(dt) {
       if ((g.superT > 0 && sp.kind === 'ghost') || g.flyH > 0 || g.inv > 0) continue;
       if (g.armed) { smash(it, x, d); continue; }
       if (g.lives > 0) { g.lives--; g.inv = 2; g.flash = .8; g.flashCol = '#4dffb0'; toast('life', 'Жизнь сгорела'); continue; }
+      if (CHARS[store.char].gedo && !g.gedoUsed) { g.gedoUsed = true; g.inv = 2.5; g.flash = 1; g.flashCol = '#9b5cff'; toast('gedo', 'Внешний Путь'); continue; } // one revive per run
       die(); break;
     }
   }
@@ -465,7 +513,7 @@ function collect(it, x) {
   it.gone = 1;
   const p = pr(x, .8, 0);
   if (it.k === 'coin') {
-    const v = (g.x2 > 0 ? 20 : 10) * (g.slowK > .5 ? 10 : 1);
+    const v = Math.round((g.x2 > 0 ? 20 : 10) * (g.slowK > .5 ? 10 : 1) * (SUPER().mult || 1));
     g.bonus += v; g.coins++;
     g.fl.push({ t: 0, x: p[0], y: p[1], txt: '+' + v, col: g.x2 > 0 ? '#7bff9a' : '#ffd27a' });
     if (!SUPER().cd) g.charge = Math.min(1, g.charge + 1 / 30);
@@ -482,8 +530,9 @@ function toast(icon, txt) {
 }
 // Double tap: the character's superpower (see SUPER).
 function superpower() {
-  if (state !== 'run' || g.dead || g.charge < 1 || g.superT > 0 || g.armed || SUPER().kind === 'portal') return;
+  if (state !== 'run' || g.dead || g.charge < 1 || g.superT > 0 || g.armed || (SUPER().kind === 'portal' || SUPER().kind === 'mult')) return;
   const sp = SUPER();
+  if (sp.kind === 'boombox') { g.charge = 0; g.music = 2.5; rollGift('Магнитофон'); return; }
   if (sp.kind === 'beer') {
     if (g.beers.length >= sp.max) return;
     g.beers.push(sp.life); g.charge = 0; g.drink = 1.3;
@@ -1051,6 +1100,9 @@ function drawPlayer() {
       const k = clamp(Math.min(g.slide, .62 - g.slide) * 8, 0, 1);
       ctx.rotate(-.1 * k); ctx.scale(1 + .12 * k, 1 - .42 * k);
       ctx.drawImage(im, -ww / 2, -hh, ww, hh);
+    } else if (ch.ride) { // on a skateboard: no steps, just leaning into lane changes
+      ctx.rotate(clamp((laneX(g.lane, g.n) - g.px) * .25, -.18, .18) + Math.sin(g.t * 2.2) * .02);
+      ctx.drawImage(im, -ww / 2, -hh, ww, hh);
     } else {
       const air = Y > 0 || g.dead;
       const bob = air ? 0 : Math.abs(sn) * .05 * u;
@@ -1061,7 +1113,7 @@ function drawPlayer() {
       for (const side of [0, 1]) {
         const lift = air ? .22 : Math.abs(sn) * (side ? .28 : .08);
         const reach = air ? 0 : (side ? -sn : sn) * .05 * u;
-        ctx.save(); ctx.translate(0, hip); ctx.scale(!air && sn < 0 ? -1 : 1, 1 - lift); // mirroring swaps the leading foot each stride
+        ctx.save(); ctx.translate(0, hip); ctx.scale(!air && sn < 0 && !ch.noFlip ? -1 : 1, 1 - lift); // mirroring swaps the leading foot each stride
         ctx.drawImage(im, side * iw / 2, ih * CUT, iw / 2, ih * (1 - CUT), -ww / 2 + side * ww / 2 + reach * .3, 0, ww / 2, lh);
         ctx.restore();
       }
@@ -1191,6 +1243,10 @@ function hud() {
       el.querySelector('b').style.width = k === 'lives' ? '100%' : (g[k] / (k === 'mag' ? 8 : 10) * 100) + '%';
     } else if (el) el.remove();
   }
+  let gp = row.querySelector('.gedo');
+  if (CHARS[store.char].gedo && !g.gedoUsed) {
+    if (!gp) { gp = document.createElement('div'); gp.className = 'pill pw gedo'; gp.style.color = '#b98cff'; gp.innerHTML = `<img alt="" src="${ICONS.gedo.url}"><b style="width:100%"></b>`; row.appendChild(gp); }
+  } else if (gp) gp.remove();
   let bp = row.querySelector('.beer');
   if (g.beers.length) {
     if (!bp) { bp = document.createElement('div'); bp.className = 'pill pw beer'; bp.style.color = '#ffd21a'; bp.innerHTML = '<span></span><b></b>'; row.appendChild(bp); }
@@ -1205,7 +1261,8 @@ function hud() {
 const slots = CHARS.map((c, i) => {
   const d = document.createElement('div');
   d.className = 'slot'; d.style.setProperty('--c', c.col);
-  d.innerHTML = `<img alt="" src="${c.img}"><span>${c.em}</span>`;
+  const PROPS = { flex: '<i class="prop">💪</i>', drink: '<i class="prop">🍺</i>', music: '<i class="prop">♫</i>', guitar: '<i class="prop g">🎸</i><i class="prop n">🐍</i>' };
+  d.innerHTML = `<img alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
   $('#car').appendChild(d);
   return d;
 });
@@ -1213,9 +1270,14 @@ function renderCar() {
   const N = CHARS.length;
   slots.forEach((el, i) => {
     const o = ((i - store.char) % N + N) % N;
-    el.className = 'slot ' + (CHARS[i].back ? '' : 'round ') + (o === 0 ? 'c' : o === 1 ? 'r' : o === N - 1 ? 'l' : 'off');
+    el.className = 'slot ' + (CHARS[i].anim ? 'a-' + CHARS[i].anim + ' ' : '') + (o === 0 ? 'c' : o === 1 ? 'r' : o === N - 1 ? 'l' : 'off');
   });
-  $('#cname').textContent = CHARS[store.char].name;
+  const ch = CHARS[store.char], dot = ch.desc.indexOf('. ');
+  $('#cname').textContent = ch.name;
+  if (ch.gedo) { const e = document.createElement('img'); e.src = ICONS.gedo.url; e.alt = ''; e.className = 'gedo'; $('#cname').append(e); }
+  $('#cdesc').innerHTML = ''; // superpower name in bold, then what it does
+  const b = document.createElement('b'); b.textContent = ch.desc.slice(0, dot + 1);
+  $('#cdesc').append(b, ' ' + ch.desc.slice(dot + 2));
 }
 function pickChar(step) { store.char = ((store.char + step) % CHARS.length + CHARS.length) % CHARS.length; save(); renderCar(); }
 $('#prev').onclick = () => pickChar(-1);
@@ -1252,7 +1314,7 @@ function start() {
   g = newGame(false); setLanes(g.n); drunkCss(0);
   shownScore = shownCoins = -1;
   $('#cem').textContent = CHARS[store.char].em;
-  const sup = $('#sup'); sup.style.display = SUPER().kind === 'portal' ? 'none' : 'block'; sup.style.setProperty('--sc', CHARS[store.char].col); sup.querySelector('img').src = ICONS.super.url;
+  const sup = $('#sup'); sup.style.display = ['portal', 'mult'].includes(SUPER().kind) ? 'none' : 'block'; sup.style.setProperty('--sc', CHARS[store.char].col); sup.querySelector('img').src = ICONS.super.url;
   $('#menu').classList.add('hide'); $('#over').classList.add('hide');
   $('#hud').style.display = 'block';
   document.querySelectorAll('#row .pw').forEach(e => e.remove());
