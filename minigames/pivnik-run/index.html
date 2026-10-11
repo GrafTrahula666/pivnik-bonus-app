@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0b0610">
 <title>Pivnik Run</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{--or:#ff9a2e;--or2:#ffc247;--vi:#9b5cff;--glass:rgba(18,10,24,.72)}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:#07040a;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
+html,body{overscroll-behavior:none;margin:0;height:100%;background:#07040a;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
 #game{position:relative;height:100%;max-width:520px;margin:0 auto;overflow:hidden;background:#000}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 10px) 16px 0;pointer-events:none;display:none}
@@ -110,7 +111,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
   <div id="sup"><img alt=""><small>2× тап</small></div>
   <div id="toast"></div>
   <div class="screen" id="menu">
-    <a id="exitApp" href="/" onclick="if(history.length>1){history.back();return false}">‹ В приложение</a>
+    <a id="exitApp" href="/" >‹ В приложение</a>
     <h1>PIVNIK<small>RUN</small></h1>
     <div class="car" id="car">
       <button class="arr l" id="prev" aria-label="Предыдущий персонаж">‹</button>
@@ -282,6 +283,19 @@ function quad(a, b, c, e, fill) {
 
 // ---------- game state ----------
 let state = 'menu', g = null, last = 0;
+// A swipe down inside the Telegram Mini App collapses the window; keep it locked during a run, free it elsewhere.
+const TGW = window.Telegram && window.Telegram.WebApp;
+function lockSwipes(on) {
+  try {
+    if (!TGW) return;
+    if (on) { TGW.expand && TGW.expand(); TGW.disableVerticalSwipes && TGW.disableVerticalSwipes(); }
+    else TGW.enableVerticalSwipes && TGW.enableVerticalSwipes();
+  } catch (e) {}
+}
+try { TGW && TGW.ready && TGW.ready(); TGW && TGW.expand && TGW.expand(); } catch (e) {}
+addEventListener('pagehide', () => lockSwipes(false));
+document.getElementById('exitApp').addEventListener('click', e => { lockSwipes(false); if (history.length > 1) { e.preventDefault(); history.back(); } });
+document.addEventListener('touchmove', e => { if (state === 'run') e.preventDefault(); }, { passive: false });
 const PAL = () => g.mode === 'tunnel' ? TUNNELS[((g.tunN || 1) - 1) % TUNNELS.length] : LOCS[g.loc % LOCS.length];
 const fogT = d => Math.min(1, Math.pow(Math.max(d, 0) / MAXD, 1.3));
 const fg = (c, d, a = 1) => css(mix(c, PAL().fog, fogT(d)), a);
@@ -1304,7 +1318,7 @@ function showOver() {
   const isRec = s > store.best;
   store.best = Math.max(store.best, s);
   save();
-  state = 'over';
+  state = 'over'; lockSwipes(false);
   $('#hud').style.display = 'none'; $('#sup').style.display = 'none';
   $('#final').textContent = s.toLocaleString('ru-RU');
   $('#rec').classList.toggle('hide', !isRec);
@@ -1321,7 +1335,7 @@ function drunkCss(dk) {
 }
 
 function toMenu() {
-  state = 'menu'; g = newGame(true); drunkCss(0);
+  state = 'menu'; lockSwipes(false); g = newGame(true); drunkCss(0);
   $('#over').classList.add('hide'); $('#menu').classList.remove('hide');
   renderCar();
 }
@@ -1334,7 +1348,7 @@ function start() {
   $('#menu').classList.add('hide'); $('#over').classList.add('hide');
   $('#hud').style.display = 'block';
   document.querySelectorAll('#row .pw').forEach(e => e.remove());
-  state = 'run';
+  state = 'run'; lockSwipes(true);
 }
 
 $('#play').onclick = start;
