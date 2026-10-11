@@ -1458,9 +1458,13 @@ async function getAppPayload(userId, platform = 'unknown', options = {}) {
   const startup = options?.startup === true;
   const [profile, designResult] = await Promise.all([
     getProfile(userId, platform, pool, { startup }),
-    startup
-      ? Promise.resolve({ rows: [] })
-      : pool.query('SELECT published FROM app_settings WHERE id = 1')
+    // The startup payload needs the published design too: it carries the seasonal theme flag, and without it
+    // the app shell opens in the base white-gold skin until the later /api/me arrives. One primary-key row,
+    // read in parallel; if it fails, startup still succeeds and the design simply arrives with /api/me.
+    pool.query('SELECT published FROM app_settings WHERE id = 1').catch((error) => {
+      if (!startup) throw error;
+      return { rows: [] };
+    })
   ]);
   if (!profile) {
     throw Object.assign(new Error('Не удалось открыть профиль.'), { statusCode: 404 });
