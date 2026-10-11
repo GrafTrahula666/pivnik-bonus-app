@@ -62,6 +62,8 @@ export default function App(){
   const allVenues=venueId==='__all__'
   const selected=allVenues?null:(venues.find(v=>v.id===venueId)||venues[0]||null)
   const isSuper=session?.admin.role==='SUPER_ADMIN'
+  const isTrusted=Boolean(selected?.accessKind==='trusted'&&!isSuper)
+  const trustedPages=['overview','clients','operations','analytics','promotions','broadcast','audit']
   const platformPage=['platform','companies','venues','developer'].includes(page)
 
   function startDemo(){setDemoGuest(true);setSession(DEMO_SESSION);setMode('demo');setPage('overview');setAuthState('authenticated')}
@@ -73,6 +75,7 @@ export default function App(){
     if(demoGuest&&next!=='demo')return
     setMode(next)
     if(next==='demo'){if(['platform','companies','venues','developer'].includes(page)&&!isSuper)setPage('overview')}
+    else if(isTrusted&&!trustedPages.includes(page))setPage('overview')
     else if(!selected&&!platformPage)setPage(isSuper?'platform':'overview')
   }
 
@@ -84,11 +87,11 @@ export default function App(){
   if(authState==='guest'||!session)return <Login onDemo={demoAvailable?startDemo:undefined} onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
 
   return <div className="app-shell">
-    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} open={mobileNav} onClose={()=>setMobileNav(false)}
+    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} open={mobileNav} onClose={()=>setMobileNav(false)}
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
-        period={period} compare={compare} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'&&cashView}/>
+        period={period} compare={compare} restricted={isTrusted} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'&&cashView}/>
       <TenantDangerContext role={session.admin.role} mode={mode} venue={mode==='production'?selected:null} onBack={()=>setPage('platform')}/>
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
@@ -101,15 +104,17 @@ export default function App(){
           {selected&&page==='clients'&&<ProductionCRM venue={selected} session={session} onBroadcast={segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
-          {selected&&page==='loyalty'&&(isPivnikAppVenue(selected)?<AppLoyaltyManager venue={selected} session={session}/>:<LoyaltyManager venue={selected} session={session}/>)}
-          {selected&&page==='wheel'&&(isPivnikAppVenue(selected)?<AppWheelManager venue={selected} session={session}/>:<PivnikLegacyWheelManager venue={selected}/>)}
-          {selected&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
-          {selected&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
+          {selected&&!isTrusted&&page==='loyalty'&&(isPivnikAppVenue(selected)?<AppLoyaltyManager venue={selected} session={session}/>:<LoyaltyManager venue={selected} session={session}/>)}
+          {selected&&!isTrusted&&page==='wheel'&&(isPivnikAppVenue(selected)?<AppWheelManager venue={selected} session={session}/>:<PivnikLegacyWheelManager venue={selected}/>)}
+          {selected&&!isTrusted&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
+          {selected&&!isTrusted&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
           {selected&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
-          {selected&&page==='brand'&&(isPivnikAppVenue(selected)?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
-          {selected&&page==='settings'&&<SettingsPage venue={selected} session={session}/>}
+          {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
+          {selected&&!isTrusted&&page==='settings'&&<SettingsPage venue={selected} session={session}/>}
           {selected&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}
+
+          {selected&&isTrusted&&!trustedPages.includes(page)&&!platformPage&&<div className="error-state card"><ShieldCheck/><h3>Доступ ограничен</h3><p>Директор может просматривать показатели, клиентов и операции, управлять акциями и рассылками. Системные изменения доступны владельцу.</p></div>}
 
           {isSuper&&page==='platform'&&<ProductionPlatform mode="platform" venues={venues} onOpenVenue={openVenue}/>}
           {isSuper&&page==='companies'&&<ProductionPlatform mode="companies" venues={venues} onOpenVenue={openVenue}/>}
