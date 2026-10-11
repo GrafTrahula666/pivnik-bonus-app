@@ -30,6 +30,19 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       expect(()=>evotorPeriod(new URL('https://fixture.invalid/?date='+date),now)).toThrowError(expect.objectContaining({statusCode:400,code:'INVALID_PERIOD'}))
     }
   })
+  it('accepts inclusive comparison ranges and rejects reversed, ambiguous, malformed or excessive ranges',()=>{
+    const now=new Date('2026-10-11T10:00:00Z')
+    const selected=evotorPeriod(new URL('https://fixture.invalid/?from=2026-09-01&to=2026-09-07'),now)
+    expect(selected.from.toISOString()).toBe('2026-08-31T21:00:00.000Z')
+    expect(selected.to.toISOString()).toBe('2026-09-07T21:00:00.000Z')
+    expect(selected.days).toBe(7)
+    expect(evotorPeriod(new URL('https://fixture.invalid/?from=2024-01-01&to=2024-12-31'),now).days).toBe(366)
+    for(const query of ['from=2026-09-08&to=2026-09-07','from=2026-09-01','to=2026-09-07',
+      'from=2026-02-30&to=2026-03-02','from=2024-01-01&to=2025-01-01',
+      'from=2026-10-11&to=2026-10-12','date=2026-10-01&from=2026-09-01&to=2026-09-07']){
+      expect(()=>evotorPeriod(new URL('https://fixture.invalid/?'+query),now)).toThrowError(expect.objectContaining({statusCode:400,code:'INVALID_PERIOD'}))
+    }
+  })
   it('resolves company access first and selects only an explicit company/venue store mapping',async()=>{
     const db=new PGlite()
     try{
@@ -64,6 +77,10 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       expect(historical.all?.netCents).toBe('29000')
       expect(historical.all?.hours).toEqual([{label:'13',amountCents:'29000'}])
       expect(historical.period.from).toBe('2026-10-01T21:00:00.000Z')
+      const compared=await getEvotorReport(db,scope,evotorPeriod(new URL('https://fixture.invalid/?from=2026-10-01&to=2026-10-02'),new Date('2026-10-11T12:00:00Z')))
+      expect(compared.all?.salesCents).toBe('118000')
+      expect(compared.all?.netCents).toBe('117000')
+      expect(compared.app?.salesCents).toBe('11000')
       expect((await getEvotorReport(db,{...scope,id:'202'},range)).all).toBeNull()
       expect((await getEvotorReport(db,{...scope,companyId:'20'},range)).all).toBeNull()
       await db.query("UPDATE pos_store_bindings SET enabled=FALSE WHERE store_id='a'")

@@ -1,4 +1,5 @@
-import { useEffect,useRef,useState } from 'react'
+import { useEffect,useRef,useState,type ReactNode } from 'react'
+import { cashMoney } from './cash-format'
 import type { PosSummary } from '../../../pos/analytics.js'
 import { CircleHelp,Database } from 'lucide-react'
 import { CardTitle,cn,rub } from '../ui'
@@ -6,11 +7,6 @@ import { CardTitle,cn,rub } from '../ui'
 import type { CashReport } from './cash-report'
 export type { CashReport } from './cash-report'
 
-function cashMoney(cents:string|null|undefined){
-  if(cents===null||cents===undefined)return 'Нет данных'
-  const value=BigInt(cents),absolute=value<0n?-value:value
-  return `${value<0n?'−':''}₽ ${(absolute/100n).toLocaleString('ru-RU')},${String(absolute%100n).padStart(2,'0')}`
-}
 
 function CashKpi({label,value,source}:{label:string;value:string;source:string}){
   const available=value!=='Нет данных'
@@ -161,7 +157,7 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
   </div>
 }
 
-export function CashDashboard({report,mode='all',loading=false,error=''}:{report?:CashReport;mode?:'all'|'app';loading?:boolean;error?:string}){
+export function CashDashboard({report,mode='all',loading=false,error='',comparison}:{report?:CashReport;mode?:'all'|'app';loading?:boolean;error?:string;comparison?:ReactNode}){
   const readable=Boolean(report?.connection.lastSuccessAt)&&!['not_connected','schema_required'].includes(report?.connection.state||'')
   const all=readable?(mode==='app'?report?.app:report?.all):null
   const count=(n:number|null|undefined)=>n===null||n===undefined?'Нет данных':rub.format(n)
@@ -173,12 +169,7 @@ export function CashDashboard({report,mode='all',loading=false,error=''}:{report
   const kpis=[
     ['Выручка',cashMoney(all?.netCents),'Продажи за вычетом возвратов'],
     ['Средний чек',cashMoney(all?.averageCents),'Сумма продаж / число чеков продажи'],
-    ['Чеков продажи',count(all?.receiptCount),'Подтверждённые кассовые чеки'],
     ['Операций',all?count(all.saleDocuments+all.returnDocuments):'Нет данных','Документы продажи и возврата'],
-    ['Сумма продаж',cashMoney(all?.salesCents),'После скидок, до вычета возвратов'],
-    ['Сумма возвратов',cashMoney(all?.returnsCents),'Возвраты уменьшают выручку'],
-    ['Продаж',count(all?.saleDocuments),'Закрытые продажи кассы'],
-    ['Возвратов',count(all?.returnDocuments),'Закрытые возвраты кассы'],
   ]
   const tables=all?[
     {title:'Выручка по дням',label:'Дата',rows:all.days},
@@ -200,6 +191,16 @@ export function CashDashboard({report,mode='all',loading=false,error=''}:{report
       {report?.connection.lastSuccessAt&&<p className="comparison-note">Последняя полная сверка: {new Date(report.connection.lastSuccessAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})}. Время — по Москве.</p>}
     </section>
     <div className="kpi-grid">{kpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
+    {comparison}
+    {all&&<details className="card cash-calculation-details"><summary>Подробности расчёта</summary>
+      <dl>
+        <div><dt>Продажи до возвратов</dt><dd>{cashMoney(all.salesCents)}</dd></div>
+        <div><dt>Возвраты</dt><dd>{cashMoney(all.returnsCents)} · {count(all.returnDocuments)} документов</dd></div>
+        <div><dt>Документы продажи</dt><dd>{count(all.saleDocuments)}</dd></div>
+        <div><dt>Подтверждённые чеки продажи</dt><dd>{count(all.receiptCount)}</dd></div>
+      </dl>
+      <p>Выручка = продажи − возвраты. Операции = документы продажи + документы возврата. Средний чек = продажи / подтверждённые чеки продажи.</p>
+    </details>}
     {mode==='all'&&all&&report?.app&&report.unlinked&&<section className="card cash-split">
       <h3>Внутри общей кассы</h3>
       <p>Клиенты PIVNIK: <b>{cashMoney(report.app.salesCents)}</b> · {report.linkedRevenueSharePercent==null?'Нет базы для доли':report.linkedRevenueSharePercent+'% суммы продаж'}</p>
