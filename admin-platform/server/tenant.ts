@@ -11,6 +11,33 @@ interface VenueScopeRow extends QueryResultRow {
   name: string
   address: string | null
   legacy_bar_id: string | null
+  access_kind?: string
+}
+
+// The existing admin_company_access owner/trusted distinction is also the
+// authorization boundary for a trusted marketing director. Fail closed.
+export function trustedDirectorCanWrite(method: string, resource: string, child: string, grandchild: string): boolean {
+  if (method === 'POST' && resource === 'broadcast' && !child) return true
+  if (resource === 'app' && child === 'promotions') {
+    return (method === 'POST' && !grandchild) || (method === 'PUT' && Boolean(grandchild))
+  }
+  if (method === 'PUT' && resource === 'promotions' && child === 'manage') return true
+  return false
+}
+
+export async function requireVenueWriteAccess(
+  admin: AdminPrincipal, scope: VenueScope, method: string,
+  resource: string, child: string, grandchild: string,
+): Promise<void> {
+  if (admin.role === 'SUPER_ADMIN') return
+  const result = await pool.query<{access_kind:string}>(
+    'SELECT access_kind FROM admin_company_access WHERE admin_id=$1::bigint AND company_id=$2::bigint',
+    [admin.id, scope.companyId],
+  )
+  const accessKind = result.rows[0]?.access_kind
+  if (accessKind === 'owner') return
+  if (accessKind === 'trusted' && trustedDirectorCanWrite(method, resource, child, grandchild)) return
+  throw new HttpError(403, 'DIRECTOR_WRITE_FORBIDDEN', 'У этой учётной записи нет прав на изменение данного раздела.')
 }
 
 export function parsePositiveId(raw: string, fieldName = 'id'): string {
@@ -104,7 +131,8 @@ export async function listAuthorizedVenues(admin: AdminPrincipal): Promise<Venue
        v.code,
        v.name,
        v.address,
-       v.legacy_bar_id::text
+       v.legacy_bar_id::text,
+       ${admin.role === 'SUPER_ADMIN' ? "'owner'" : 'aca.access_kind'} AS access_kind
      FROM venues v
      JOIN companies c ON c.id = v.company_id
      ${accessClause}
@@ -121,6 +149,7 @@ export async function listAuthorizedVenues(admin: AdminPrincipal): Promise<Venue
     name: row.name,
     address: row.address,
     legacyBarId: row.legacy_bar_id,
+    accessKind: row.access_kind === 'owner' ? 'owner' : 'trusted',
   }))
 }
 
