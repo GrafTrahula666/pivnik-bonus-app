@@ -9,10 +9,35 @@ const summary={salesCents:'30000',returnsCents:'1000',netCents:'29000',averageCe
 const report={connection:{state:'connected',lastSuccessAt:'2026-10-02T12:00:00Z'},all:summary,app:{...summary,salesCents:'11000',returnsCents:'1000',netCents:'10000',activeBuyers:1,repeatBuyers:0,repeatPurchaseRate:0,purchaseFrequency:1},unlinked:{...summary,salesCents:'19000',returnsCents:'0',netCents:'19000'},linkedRevenueSharePercent:36.66}
 let node:HTMLDivElement,root:Root
 async function render(v=venue,period:'30 дней'|'7 дней'='30 дней'){await act(async()=>root.render(createElement(ProductionDashboard,{venue:v,period,compare:false,onNavigate:()=>{}})))}
+async function chooseDate(value:string){await act(async()=>{const input=node.querySelector('input[type=date]')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}))})}
 async function click(label:string){const button=[...node.querySelectorAll('button')].find(b=>b.textContent===label);expect(button).toBeTruthy();await act(async()=>button!.click())}
 beforeEach(()=>{Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});vi.mocked(apiGet).mockReset();node=document.createElement('div');document.body.append(node);root=createRoot(node)})
 afterEach(async()=>{await act(async()=>root.unmount());node.remove()})
 describe('actual sales component requests and state transitions',()=>{
+ it('selects yesterday by Moscow date, 14 days and calendar dates without keeping another date on errors or late replies',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-10T21:30:00Z'))
+  try{
+    vi.mocked(apiGet).mockResolvedValueOnce(report as never);await render()
+    let late!:(v:unknown)=>void;vi.mocked(apiGet).mockImplementationOnce(()=>new Promise(r=>{late=r}) as never)
+    await click('Вчера')
+    expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?date=2026-10-10')
+    expect(node.textContent).not.toContain('₽ 290,00')
+    vi.mocked(apiGet).mockRejectedValueOnce(new Error('Date unavailable'))
+    await chooseDate('2026-09-30')
+    expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?date=2026-09-30')
+    await act(async()=>late(report))
+    expect(node.textContent).toContain('Date unavailable');expect(node.textContent).not.toContain('₽ 290,00')
+    vi.mocked(apiGet).mockResolvedValueOnce(report as never);await click('14 дней')
+    expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?days=14')
+    const count=vi.mocked(apiGet).mock.calls.length
+    await chooseDate('2026-10-12')
+    expect(apiGet).toHaveBeenCalledTimes(count)
+    await click('Клиенты приложения');expect(node.textContent).toContain('₽ 100,00')
+    expect(apiGet).toHaveBeenCalledTimes(count)
+    vi.mocked(apiGet).mockResolvedValueOnce(report as never);await click('Сегодня')
+    expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?days=1')
+  }finally{vi.useRealTimers()}
+ })
  it('loads all cash first, retains stale values on retry errors and malformed JSON, clears on access denial',async()=>{
   let resolve!:(v:unknown)=>void;vi.mocked(apiGet).mockImplementationOnce(()=>new Promise(r=>{resolve=r}) as never)
   await render();expect(node.textContent).toContain('Загрузка кассовых');expect(node.textContent).not.toContain('₽ 290,00')

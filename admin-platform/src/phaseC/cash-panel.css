@@ -34,3 +34,18 @@
 .cash-product-table td:first-child{min-width:160px;overflow-wrap:anywhere}
 .cash-product-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;color:var(--muted);font-size:11px}
 @media(max-width:780px){.cash-hours-list{grid-template-columns:minmax(0,1fr)}.cash-insight-section{padding:14px}.cash-hour-value{min-width:107px}}
+
+.cash-period-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px}
+.cash-period-presets{flex-wrap:wrap;gap:3px;max-width:100%}
+.cash-period-presets button{min-height:36px;padding:8px 12px;font-size:12px}
+.cash-date-label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.cash-date-label input{color-scheme:dark;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:9px;min-width:0;max-width:100%;font:inherit}
+.cash-period-controls small{font-size:11px;color:var(--muted)}
+.cash-insight-period{font-size:12px;color:var(--text);margin:0 0 14px;line-height:1.5}
+.cash-hour-chart{margin:0 0 18px;padding:16px 12px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px}
+.cash-hour-chart svg{display:block;width:100%;height:auto}
+.cash-chart-detail{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;min-height:27px;font-size:12px}
+.cash-chart-detail span{color:var(--muted)}.cash-chart-detail b{font-size:18px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cash-hour-chart figcaption{font-size:10px;color:var(--muted);margin-top:7px}
+.cash-chart-hour{cursor:pointer;outline:none}.cash-chart-hour.selected .cash-chart-bar{filter:brightness(1.4);stroke:var(--text);stroke-width:1}
+@media(max-width:780px){.cash-period-controls{padding:12px;gap:10px}.cash-period-presets{width:100%}.cash-period-presets button{flex:1}.cash-date-label{width:100%;justify-content:space-between}.cash-hour-chart{padding:12px 8px}}

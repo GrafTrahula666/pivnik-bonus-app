@@ -49,12 +49,23 @@ describe('cash register dashboard',()=>{
     expect(html).toContain('09:00')
     expect(html).toContain('10:00')
     expect(html).toContain('−₽ 0,50')
+    expect((html.match(/data-cash-hour=/g)||[])).toHaveLength(24)
+    expect(html).toContain('00:00–00:59 · ₽ 0,00')
+    expect(html).toContain('Сумма за одинаковые часы')
     expect(html).toContain('Продажи по товарам')
     expect(html).toContain('Лагер &lt;сезон&gt;')
     expect(html).toContain('1,5 л')
     expect(html).toContain('₽ 650,00')
     expect(html.indexOf('Лагер &lt;сезон&gt;')).toBeLessThan(html.indexOf('Сидр'))
     expect(isCashReport(detailed)).toBe(true)
+  })
+  it('distinguishes a single Moscow day from summed hours across a period and keeps chart labels exact',()=>{
+    const single={...report,period:{from:'2026-10-01T21:00:00Z',until:'2026-10-02T21:00:00Z',timeZone:'Europe/Moscow'},all:{...report.all!,hours:[{label:'09',amountCents:'9007199254740993123'}]}}
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report:single}))
+    expect(html).toContain('За 02.10.2026 · один календарный день')
+    expect(html).toContain('09:00–09:59 · ₽ 90\u00a0071\u00a0992\u00a0547\u00a0409\u00a0931,23')
+    const multi=renderToStaticMarkup(createElement(CashDashboard,{report:{...single,period:{...single.period,until:'2026-10-03T21:00:00Z'}}}))
+    expect(multi).toContain('02.10.2026 — 03.10.2026 · сумма за одинаковые часы всех дней периода')
   })
   it('does not invent POS projections when they are unavailable or leak them into app-only view',()=>{
     const html=renderToStaticMarkup(createElement(CashDashboard,{report}))

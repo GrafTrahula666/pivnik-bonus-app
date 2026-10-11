@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect,useRef,useState } from 'react'
 import type { PosSummary } from '../../../pos/analytics.js'
 import { CircleHelp,Database } from 'lucide-react'
 import { CardTitle,cn,rub } from '../ui'
@@ -32,7 +32,58 @@ function cashQuantity(value:string,measure:string){
 }
 function cashAbs(value:bigint){return value<0n?-value:value}
 
-function CashInsights({summary}:{summary:PosSummary}){
+function CashHourlyChart({hours}:{hours:NonNullable<PosSummary['hours']>}){
+  const [active,setActive]=useState<string|null>(null)
+  const figure=useRef<HTMLElement>(null),[width,setWidth]=useState(960)
+  useEffect(()=>{
+    const element=figure.current
+    if(!element)return
+    const resize=()=>setWidth(Math.max(240,Math.round(element.clientWidth-24)))
+    resize()
+    const observer=new ResizeObserver(resize);observer.observe(element)
+    return()=>observer.disconnect()
+  },[])
+  const step=(width-38)/24
+  const barWidth=Math.max(3,step*.65)
+  const amounts=new Map(hours.map(row=>[row.label,row.amountCents]))
+  const rows=Array.from({length:24},(_,hour)=>({label:String(hour).padStart(2,'0'),amountCents:amounts.get(String(hour).padStart(2,'0'))||'0'}))
+  const values=rows.map(row=>BigInt(row.amountCents))
+  const maximum=values.reduce((a,b)=>b>a?b:a,0n),minimum=values.reduce((a,b)=>b<a?b:a,0n)
+  const span=maximum-minimum||1n
+  // Only normalized geometry becomes a Number; financial labels retain exact cents.
+  const y=(amount:bigint)=>208-Number((amount-minimum)*16800n/span)/100
+  const zero=y(0n)
+  const selected=rows.find(row=>row.label===active)
+  const peak=rows.find(row=>BigInt(row.amountCents)===maximum)
+  return <figure ref={figure} className="cash-hour-chart">
+    <div className="cash-chart-detail" aria-live="polite">
+      {selected?<><span>{selected.label}:00–{selected.label}:59</span><b>{cashMoney(selected.amountCents)}</b></>:
+        maximum>0n?<><span>Самый доходный час · {peak?.label}:00</span><b>{cashMoney(String(maximum))}</b></>:
+        <span>Наведите на час или выберите его клавишей Tab</span>}
+    </div>
+    <svg viewBox={`0 0 ${width} 254`} role="group" aria-label="Почасовой график выручки, 24 часа">
+      {[40,124,208].map(line=><line key={line} x1="28" x2={width-10} y1={line} y2={line} stroke="var(--border)" strokeDasharray="4 5"/>)}
+      <line x1="28" x2={width-10} y1={zero} y2={zero} stroke="var(--muted)"/>
+      <text x="4" y="30" fill="var(--muted)" fontSize="12">₽</text>
+      {rows.map((row,index)=>{
+        const amount=BigInt(row.amountCents),top=Math.min(zero,y(amount)),height=Math.abs(zero-y(amount))
+        const label=`${row.label}:00–${row.label}:59 · ${cashMoney(row.amountCents)}`
+        return <g key={row.label} tabIndex={0} role="img" aria-label={label} data-cash-hour={row.label}
+          className={'cash-chart-hour'+(active===row.label?' selected':'')}
+          onMouseEnter={()=>setActive(row.label)} onMouseLeave={()=>setActive(null)} onFocus={()=>setActive(row.label)} onBlur={()=>setActive(null)}>
+          <title>{label}</title>
+          <rect x={28+index*step} y="35" width={step} height="179" fill="transparent"/>
+          <rect className="cash-chart-bar" x={28+index*step+(step-barWidth)/2} y={amount===0n?zero-1:top} width={barWidth} height={Math.max(height,2)} rx="3"
+            fill={amount<0n?'var(--danger)':'var(--accent)'} opacity={amount===0n?.3:1}/>
+          <text x={28+index*step+step/2} y="238" textAnchor="middle" fill="var(--muted)" fontSize="12">{width>=600||index%3===0?row.label:''}</text>
+        </g>
+      })}
+    </svg>
+    <figcaption>Час дня, МСК · возвраты показаны ниже нуля</figcaption>
+  </figure>
+}
+
+function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['period']}){
   const [query,setQuery]=useState('')
   const [sort,setSort]=useState<ProductSort>('revenue')
   const [limit,setLimit]=useState(10)
@@ -48,10 +99,15 @@ function CashInsights({summary}:{summary:PosSummary}){
     const x=metric(a),y=metric(b)
     return x===y?a.name.localeCompare(b.name,'ru'):x>y?-1:1
   })
+  const dateLabel=(value:number)=>new Date(value).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})
+  const from=period?dateLabel(Date.parse(period.from)):null
+  const until=period?dateLabel(Date.parse(period.until)-1):null
   return <div className="cash-insights">
     <section className="card cash-insight-section">
       <div className="cash-insight-heading"><div><span className="eyebrow">КАССА · ВРЕМЯ</span><h3>Выручка по часам</h3></div>
         <small>С учётом возвратов · время Москвы</small></div>
+      <p className="cash-insight-period">{from&&until?(from===until?`За ${from} · один календарный день`:`${from} — ${until} · сумма за одинаковые часы всех дней периода`):'Сумма за одинаковые часы всех дней выбранного периода'}</p>
+      {hours!==undefined&&hours.length>0&&<CashHourlyChart hours={hours}/>}
       {hours===undefined?<p className="cash-insight-empty">Нет данных о продажах по часам.</p>:
        hours.length===0?<p className="cash-insight-empty">В выбранном периоде нет почасовых операций.</p>:
        <div className="cash-hours-list" role="list" aria-label="Выручка по часам">
@@ -65,7 +121,7 @@ function CashInsights({summary}:{summary:PosSummary}){
            </div>
          })}
        </div>}
-      <p className="cash-insight-note">Отображаются часы с кассовыми документами; отрицательные значения означают превышение возвратов над продажами.</p>
+      <p className="cash-insight-note">На графике — все 24 часа; в списке — часы с кассовыми документами. Отрицательные значения означают превышение возвратов над продажами. Для выручки одного дня выберите дату в календаре.</p>
     </section>
     <section className="card cash-insight-section">
       <div className="cash-insight-heading"><div><span className="eyebrow">КАССА · АССОРТИМЕНТ</span><h3>Продажи по товарам</h3></div>
@@ -157,6 +213,6 @@ export function CashDashboard({report,mode='all',loading=false,error=''}:{report
           <tbody>{rows.length?rows.map(row=><tr key={row.label}><td>{row.label}</td><td><strong>{cashMoney(row.amountCents)}</strong></td></tr>):<tr><td colSpan={2}>За период нет данных</td></tr>}</tbody></table></div>
       </section>)}
     </div>}
-    {mode==='all'&&all&&<CashInsights summary={all}/>}
+    {mode==='all'&&all&&<CashInsights summary={all} period={report?.period}/>}
   </div>
 }

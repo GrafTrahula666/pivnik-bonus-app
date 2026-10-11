@@ -1,11 +1,20 @@
 import { posDashboards } from '../../pos/analytics.js'
 import { loadPosDocuments,posConnectionStatus,type PosReadDb } from '../../pos/repository.js'
-import type { PeriodRange,VenueScope } from './types.js'
+import { HttpError,type PeriodRange,type VenueScope } from './types.js'
 
 export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
-  const requested=Number(url.searchParams.get('days')||30)
-  const days=[1,7,30,90,365].includes(requested)?requested:30
   const today=new Date(now.getTime()+3*3600000).toISOString().slice(0,10)
+  const date=url.searchParams.get('date')
+  if(date!==null){
+    const midnight=Date.parse(`${date}T00:00:00+03:00`)
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(midnight)||
+      new Date(midnight+3*3600000).toISOString().slice(0,10)!==date||date>today){
+      throw new HttpError(400,'INVALID_PERIOD','Выберите существующий день не позднее сегодняшнего по Москве.')
+    }
+    return {from:new Date(midnight),to:new Date(midnight+86400000),days:1}
+  }
+  const requested=Number(url.searchParams.get('days')||30)
+  const days=[1,7,14,30,90,365].includes(requested)?requested:30
   const midnight=Date.parse(`${today}T00:00:00+03:00`)
   return {from:new Date(midnight-(days-1)*86400000),to:new Date(midnight+86400000),days}
 }
