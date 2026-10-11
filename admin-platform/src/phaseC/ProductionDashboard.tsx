@@ -1,4 +1,4 @@
-import { useMemo,useState } from 'react'
+import { useEffect,useMemo,useState } from 'react'
 import { BarChart3,CircleHelp,Database,ShieldCheck,TrendingDown,TrendingUp } from 'lucide-react'
 import { Area,AreaChart,CartesianGrid,ResponsiveContainer,Tooltip,XAxis,YAxis } from 'recharts'
 import type { Page } from '../appTypes'
@@ -106,8 +106,10 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate}:{venue
   </div>
 }
 
-export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void}){
+export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void;onCashView?:(cash:boolean)=>void}){
   const [source,setSource]=useState<'all'|'app'|'operations'>('all')
+  const onCashView=props.onCashView
+  useEffect(()=>{onCashView?.(source!=='operations')},[source,onCashView])
   return <div className="page">
     <div className="segmented dashboard-sources" role="group" aria-label="Продажи">
       <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи кассы</button>

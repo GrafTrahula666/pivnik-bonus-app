@@ -47,10 +47,10 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage}:{page:Page;ro
 }
 
 export function PhaseCTopbar({
-  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,
+  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,hidePeriodControls=false,
 }:{
   role:AdminRole;adminName:string;mode:AppMode;venues:ApiVenue[];venueId:string;period:Period;compare:boolean;
-  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean
+  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean
 }){
   return <header className="topbar">
     <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
@@ -67,11 +67,11 @@ export function PhaseCTopbar({
       {!demoOnly&&<button className={mode==='production'?'active':''} onClick={()=>onMode('production')}><Database size={13}/>Рабочий режим</button>}
       <button className={mode==='demo'?'active':''} onClick={()=>onMode('demo')}><Sparkles size={13}/>Демо</button>
     </div>
-    <div className="periods desktop-only">
+    {!hidePeriodControls&&<div className="periods desktop-only">
       {periods.map(p=><button key={p} className={period===p?'active':''} onClick={()=>onPeriod(p)}>{p}</button>)}
       <button disabled title="Выбор произвольного периода будет доступен позже"><CalendarDays size={14}/>Свой</button>
-    </div>
-    <label className="compare desktop-only"><input type="checkbox" checked={compare} onChange={e=>onCompare(e.target.checked)}/><span/>Сравнение</label>
+    </div>}
+    {!hidePeriodControls&&<label className="compare desktop-only"><input type="checkbox" checked={compare} onChange={e=>onCompare(e.target.checked)}/><span/>Сравнение</label>}
     <button className="icon-btn" disabled title="Новых уведомлений нет"><Bell size={18}/></button>
     <div className="profile-menu">
       <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{role==='SUPER_ADMIN'?'Главный администратор':'Владелец'}</span></div><ChevronDown size={14}/></button>
