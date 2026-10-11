@@ -71,7 +71,7 @@ export function AppPromotionsManager({venue,session}:{venue:ApiVenue;session:Adm
           <span className="promo-actions">
             <button className="ghost-icon" title={x.active?'Скрыть':'Показать'} disabled={!canWrite||save.busy} onClick={()=>void toggle(x)}>{x.active?<EyeOff/>:<Eye/>}</button>
             <button className="ghost-icon" title="Изменить" disabled={!canWrite} onClick={()=>{setSave(idle);setEdit({id:x.id,title:x.title,description:x.description,badge:x.badge,active:x.active,sortOrder:x.sortOrder,imageSrc:x.imageSrc,imageChanged:false})}}><Pencil/></button>
-            <button className="ghost-icon" title="Удалить" disabled={!canWrite||save.busy} onClick={()=>setRemove(x)}><Trash2/></button>
+            {venue.accessKind!=='trusted'&&<button className="ghost-icon" title="Удалить" disabled={!canWrite||save.busy} onClick={()=>setRemove(x)}><Trash2/></button>}
           </span>
         </div>
         <h3>{x.title}</h3><p>{x.description}</p>

@@ -20,6 +20,7 @@ import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js
 import { enforceOrigin, readJsonBody, requestIp, securityHeaders } from './security.js'
 import {
   listAuthorizedVenues,
+  requireVenueAccess,
   requireSuperAdmin,
   resolveVenueScope,
 } from './tenant.js'
@@ -154,7 +155,10 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     const child=parts[5]||''
     const grandchild=parts[6]||''
 
-    if(!isMethod(req,'GET')) requireCsrf(req,session.rawToken)
+    if(!isMethod(req,'GET')) {
+      requireCsrf(req,session.rawToken)
+    }
+    await requireVenueAccess(session.admin,scope,String(req.method||'GET').toUpperCase(),resource,child,grandchild)
 
     if(resource==='clients'&&child&&grandchild==='bonus-adjustments'&&isMethod(req,'POST')){
       const body=await readJsonBody(req)

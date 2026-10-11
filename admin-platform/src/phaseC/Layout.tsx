@@ -18,7 +18,8 @@ export const periods=['Сегодня','7 дней','30 дней','3 месяц�
 export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
 
-export function PhaseCSidebar({page,role,mode,open,onClose,onPage}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void}){
+const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand'])
+export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean}){
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
     <aside className={cn('sidebar',open&&'open')}>
@@ -28,8 +29,8 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage}:{page:Page;ro
         {mode==='demo'?'ДЕМО-РЕЖИМ':'СИСТЕМА ПОДКЛЮЧЕНА'}
       </div>
       <nav className="nav">
-        {nav.map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
-          <Icon size={17}/><span>{label}</span>
+        {nav.filter(([id])=>mode==='demo'||!restricted||!trustedHiddenPages.has(id)).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
+          <Icon size={17}/><span>{restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
         </button>)}
         {role==='SUPER_ADMIN'&&<>
           <div className="nav-separator"><span>УПРАВЛЕНИЕ СЕТЬЮ</span></div>
@@ -47,10 +48,10 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage}:{page:Page;ro
 }
 
 export function PhaseCTopbar({
-  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,hidePeriodControls=false,
+  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,hidePeriodControls=false,restricted=false,
 }:{
   role:AdminRole;adminName:string;mode:AppMode;venues:ApiVenue[];venueId:string;period:Period;compare:boolean;
-  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean
+  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean;restricted?:boolean
 }){
   return <header className="topbar">
     <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
@@ -74,7 +75,7 @@ export function PhaseCTopbar({
     {!hidePeriodControls&&<label className="compare desktop-only"><input type="checkbox" checked={compare} onChange={e=>onCompare(e.target.checked)}/><span/>Сравнение</label>}
     <button className="icon-btn" disabled title="Новых уведомлений нет"><Bell size={18}/></button>
     <div className="profile-menu">
-      <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{role==='SUPER_ADMIN'?'Главный администратор':'Владелец'}</span></div><ChevronDown size={14}/></button>
+      <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{role==='SUPER_ADMIN'?'Главный администратор':restricted?'Директор':'Владелец'}</span></div><ChevronDown size={14}/></button>
       <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>{demoOnly?'Выйти из демо':'Выйти'}</button></div>
     </div>
   </header>
@@ -84,7 +85,7 @@ export function TenantDangerContext({role,mode,venue,onBack}:{role:AdminRole;mod
   if(mode==='demo')return <div className="admin-context demo-context"><Sparkles size={16}/>ДЕМО-РЕЖИМ · изменения не сохраняются</div>
   if(!venue)return null
   return <div className="admin-context">
-    <ShieldCheck size={16}/>{role==='SUPER_ADMIN'?'Главный администратор':'Владелец'} → {venue.companyName} → {venue.name}
+    <ShieldCheck size={16}/>{role==='SUPER_ADMIN'?'Главный администратор':venue.accessKind==='trusted'?'Директор':'Владелец'} → {venue.companyName} → {venue.name}
     {role==='SUPER_ADMIN'&&<button onClick={onBack}>Вернуться к платформе</button>}
   </div>
 }
