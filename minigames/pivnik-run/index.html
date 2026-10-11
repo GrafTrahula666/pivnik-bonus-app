@@ -29,10 +29,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 h1{margin:0;font-size:52px;line-height:.95;font-weight:900;text-align:center;letter-spacing:2px;background:linear-gradient(180deg,#fff2c9,var(--or2) 45%,var(--or));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,140,30,.55)) drop-shadow(0 3px 0 #3a1404)}
 h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .car{position:relative;width:100%;max-width:420px;height:min(46vh,380px);touch-action:none}
-.slot{position:absolute;left:50%;bottom:0;width:62%;aspect-ratio:1;max-width:100%;transform:translateX(-50%);transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .32s,filter .32s;pointer-events:none}
-.slot:not(.round){height:100%;width:auto;aspect-ratio:.62}
+.slot{position:absolute;left:50%;bottom:0;height:100%;width:auto;aspect-ratio:.62;max-width:100%;transform:translateX(-50%);transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .32s,filter .32s;pointer-events:none}
 .slot img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 14px 18px rgba(0,0,0,.6))}
-.slot.round img{border-radius:50%;border:5px solid var(--c);box-shadow:0 0 0 6px rgba(0,0,0,.35),0 0 40px var(--c)}
 .slot.l{transform:translateX(-135%) scale(.5);opacity:.5;filter:brightness(.6)}
 .slot.r{transform:translateX(35%) scale(.5);opacity:.5;filter:brightness(.6)}
 .slot.off{opacity:0;transform:translateX(-50%) scale(.3)}
@@ -55,7 +53,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 #toast img{width:44px;height:44px}
 #toast.show{animation:toast 1.6s cubic-bezier(.2,.8,.2,1) forwards}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,-14px) scale(.85)}12%{opacity:1;transform:translate(-50%,0) scale(1.06)}20%{transform:translate(-50%,0) scale(1)}80%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-10px) scale(.95)}}
-#sup{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom) + 16px);width:64px;height:64px;border-radius:50%;padding:5px;background:conic-gradient(var(--sc,#ffc247) calc(var(--p,0)*1turn),rgba(255,255,255,.14) 0);pointer-events:none;display:none}
+#sup{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom) + 16px);width:64px;height:64px;border-radius:50%;padding:5px;background:conic-gradient(var(--sc,#ffc247) calc(var(--p,0)*1turn),rgba(255,255,255,.14) 0);pointer-events:auto;display:none}
 #sup img{width:100%;height:100%;display:block;filter:grayscale(.85) brightness(.6)}
 #sup.full img{filter:none}
 #sup.full{animation:supp 1s ease-in-out infinite}
@@ -63,6 +61,9 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 #sup.full small{opacity:1}
 @keyframes supp{50%{transform:scale(1.1);box-shadow:0 0 22px var(--sc,#ffc247)}}
 .cname{font-weight:900;font-size:24px;letter-spacing:1px;margin-top:-10px;text-shadow:0 2px 8px #000}
+.cdesc{max-width:280px;margin-top:-4px;padding:8px 16px;border-radius:14px;background:rgba(12,5,16,.72);backdrop-filter:blur(4px);box-shadow:0 0 0 1px rgba(255,255,255,.1);font-size:14px;line-height:1.3;text-align:center;color:#ffe7a8;text-shadow:0 1px 2px #000}
+#supDesc{position:absolute;right:0;bottom:76px;transform:translateX(16px) translateY(6px);max-width:200px;padding:8px 14px;border-radius:14px;background:rgba(12,5,16,.85);box-shadow:0 0 0 1px rgba(255,255,255,.1);font-size:13px;line-height:1.3;text-align:right;color:#ffe7a8;text-shadow:0 1px 2px #000;opacity:0;pointer-events:none;transition:opacity .18s}
+#supDesc.show{opacity:1}
 </style>
 </head>
 <body>
@@ -76,6 +77,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
     <div id="row"><div class="pill" id="coins"><span id="cem"></span><span id="cn">0</span></div></div>
   </div>
   <div id="sup"><img alt=""><small>2× тап</small></div>
+  <div id="supDesc"></div>
   <div id="toast"></div>
   <div class="screen" id="menu">
     <h1>PIVNIK<small>RUN</small></h1>
@@ -84,6 +86,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
       <button class="arr r" id="next" aria-label="Следующий персонаж">›</button>
     </div>
     <div class="cname" id="cname"></div>
+    <div class="cdesc" id="cdesc"></div>
     <button class="btn" id="play">Играть</button>
   </div>
   <div class="screen hide" id="over">
@@ -127,15 +130,11 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', name: 'Виталий', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
-  { id: 'anya',    name: 'Аня',     img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
-  { id: 'kirill',  name: 'Кирилл',  img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
-  { id: 'hristina', name: 'Христина', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
-  { id: 'vlad',    name: 'Влад',    img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
-  { id: 'cat',     name: 'Котик',   img: 'chars/cat.webp',     em: '🍬', col: '#ff7ac8' },
-  { id: 'raccoon', name: 'Енот',    img: 'chars/raccoon.webp', em: '🎃', col: '#ff9a2e' },
-  { id: 'imp',     name: 'Бесёнок', img: 'chars/imp.webp',     em: '🦇', col: '#b66bff' },
-  { id: 'owl',     name: 'Сова',    img: 'chars/owl.webp',     em: '🌙', col: '#7ab8ff' },
+  { id: 'vitaliy', name: 'Виталий', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180, desc: 'Сносит ближайшую преграду с пути' } },
+  { id: 'anya',    name: 'Аня',     img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180, desc: 'Поднимается в воздух и становится неприступной' } },
+  { id: 'kirill',  name: 'Кирилл',  img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60, desc: 'Замедляет мир вокруг и разгоняет счёт очков' } },
+  { id: 'hristina', name: 'Христина', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal', name: 'Портал', desc: 'Каждый портал приносит случайный бонус' } },
+  { id: 'vlad',    name: 'Влад',    img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300, desc: 'Пьёт пиво — экран плывёт, мутнеет и запотевает' } },
 ];
 // Superpowers (double tap). Default: 5 s of passing through obstacles, charged by 30 treats.
 // Characters override it and recharge on a timer (cd seconds):
@@ -143,7 +142,7 @@ const CHARS = [
 //   slow: the world runs at half speed and score counts ×10;
 //   portal: passive, every portal gives a random bonus (see portalGift);
 //   beer: a litre of «Чешское барное»; each one (up to 5, 5 min each) makes the screen sway, blur, cloud and fog up more.
-const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, ...CHARS[store.char].sup });
+const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, desc: 'Даёт временную неприступность', ...CHARS[store.char].sup });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
 CHARS.forEach(c => { c.im = loadImg(c.img); if (c.back) c.bk = loadImg(c.back); });
@@ -1213,9 +1212,10 @@ function renderCar() {
   const N = CHARS.length;
   slots.forEach((el, i) => {
     const o = ((i - store.char) % N + N) % N;
-    el.className = 'slot ' + (CHARS[i].back ? '' : 'round ') + (o === 0 ? 'c' : o === 1 ? 'r' : o === N - 1 ? 'l' : 'off');
+    el.className = 'slot ' + (o === 0 ? 'c' : o === 1 ? 'r' : o === N - 1 ? 'l' : 'off');
   });
   $('#cname').textContent = CHARS[store.char].name;
+  $('#cdesc').textContent = SUPER().name + ' — ' + SUPER().desc;
 }
 function pickChar(step) { store.char = ((store.char + step) % CHARS.length + CHARS.length) % CHARS.length; save(); renderCar(); }
 $('#prev').onclick = () => pickChar(-1);
@@ -1288,6 +1288,19 @@ const release = e => {
 };
 addEventListener('pointerup', release);
 addEventListener('pointercancel', release);
+// a small description window under the superpower icon, on hover (mouse) or a tap on it (touch)
+const supEl = $('#sup'), supDesc = $('#supDesc');
+let supDescTimer = null;
+function showSupDesc() {
+  const sp = SUPER();
+  supDesc.textContent = sp.name + ' — ' + sp.desc;
+  supDesc.classList.add('show');
+  clearTimeout(supDescTimer);
+  supDescTimer = setTimeout(() => supDesc.classList.remove('show'), 3000);
+}
+supEl.addEventListener('pointerenter', showSupDesc);
+supEl.addEventListener('pointerdown', showSupDesc);
+supEl.addEventListener('pointerleave', () => { clearTimeout(supDescTimer); supDesc.classList.remove('show'); });
 addEventListener('keydown', e => {
   const m = { ArrowLeft: 'L', KeyA: 'L', ArrowRight: 'R', KeyD: 'R', ArrowUp: 'U', KeyW: 'U', Space: 'U', ArrowDown: 'D', KeyS: 'D' }[e.code];
   if (state === 'menu' && (m === 'L' || m === 'R')) { pickChar(m === 'L' ? -1 : 1); e.preventDefault(); return; }
