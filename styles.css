@@ -6459,6 +6459,16 @@ body,
   box-shadow: inset 1px 0 0 rgba(193,145,59,.10);
 }
 
+.home-run-card { display: none; }
+@keyframes homeDuoPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.22); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-halloween.platform-telegram body .home-run-caption i,
+  html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta { animation: none !important; }
+}
+
 .home-wheel-card {
   position: relative;
   display: grid;
@@ -11011,3 +11021,112 @@ html.theme-halloween #achievementsModal .achievement-catalog-empty {
   background: rgba(20, 14, 52, .8);
   color: #cdb68f;
 }
+
+/* ============================================================
+   Halloween home duo: Pivnik Run tile (left) + wheel tile (right), 4:3 art 1448x1086 each.
+   Only for Telegram/web (the VK static bundle has no /run). Wheel timer and button sit on the two empty glass windows of the art.
+   ============================================================ */
+html.theme-halloween.platform-telegram body .client-home.home-v2.active {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: calc(var(--hal-cu) * 6);
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > * { grid-column: 1 / -1; }
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-run-card,
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-wheel-card {
+  grid-column: auto;
+  display: block;
+  position: relative;
+  width: 100%;
+  height: calc(var(--hal-cu) * 134.25);
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: calc(var(--hal-cu) * 14);
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.5) !important;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .16s ease, filter .16s ease;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-run-card {
+  background: url('/assets/halloween/run-tile-night.webp?v=1') center / 100% 100% no-repeat !important;
+  color: #fff;
+  text-decoration: none;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-wheel-card {
+  background: url('/assets/halloween/wheel-tile-night.webp?v=1') center / 100% 100% no-repeat !important;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-run-card:active,
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-wheel-card:active { transform: scale(.975); filter: brightness(1.12); }
+
+html.theme-halloween.platform-telegram body .home-run-caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--hal-cu) * 4);
+  padding: calc(var(--hal-cu) * 14) calc(var(--hal-cu) * 7) calc(var(--hal-cu) * 6);
+  background: linear-gradient(0deg, rgba(10,4,24,.92), rgba(10,4,24,0));
+}
+html.theme-halloween.platform-telegram body .home-run-caption b {
+  font: 900 calc(var(--hal-cu) * 12.5)/1 system-ui, sans-serif;
+  letter-spacing: .04em;
+  color: #ffd27a;
+  text-shadow: 0 0 calc(var(--hal-cu) * 7) rgba(255,140,30,.7), 0 1px 0 #3a1500;
+}
+html.theme-halloween.platform-telegram body .home-run-caption i {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--hal-cu) * 2);
+  padding: calc(var(--hal-cu) * 3.5) calc(var(--hal-cu) * 7);
+  border-radius: 999px;
+  font: 900 calc(var(--hal-cu) * 9)/1 system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: .06em;
+  color: #2a0c00;
+  background: linear-gradient(180deg, #ffd36a, #ff8a1f);
+  box-shadow: 0 0 calc(var(--hal-cu) * 9) rgba(255,150,40,.65);
+  animation: homeDuoPulse 2.4s ease-in-out infinite;
+}
+html.theme-halloween.platform-telegram body .home-run-caption i em { font-style: normal; font-size: 1.3em; line-height: .8; }
+
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer,
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta {
+  position: absolute !important;
+  left: 5.73% !important;
+  width: 33.56% !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  border-radius: calc(var(--hal-cu) * 7);
+  background: linear-gradient(180deg, rgba(34,12,58,.97), rgba(20,6,38,.97)) !important;
+  border: calc(var(--hal-cu) * 1.4) solid rgba(255,150,45,.9);
+  box-shadow: 0 0 calc(var(--hal-cu) * 7) rgba(255,120,20,.45), inset 0 0 calc(var(--hal-cu) * 6) rgba(150,60,255,.3);
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer {
+  top: 56.35% !important;
+  height: 11.1% !important;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer > span { width: auto; }
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer em {
+  font: 800 calc(var(--hal-cu) * 10.5)/1 system-ui, sans-serif;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .03em;
+  color: #ffe2b0 !important;
+  text-shadow: 0 0 calc(var(--hal-cu) * 5) rgba(255,150,40,.7);
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta {
+  top: 72.95% !important;
+  height: 16.5% !important;
+  color: #fff0cc !important;
+  font: 900 calc(var(--hal-cu) * 9.6)/1 system-ui, sans-serif;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  text-shadow: 0 0 calc(var(--hal-cu) * 7) rgba(255,140,30,.85), 0 1px 0 #2a0c00 !important;
+  animation: homeDuoPulse 2.4s ease-in-out infinite;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta > i { display: none !important; }
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta > span { color: inherit; }

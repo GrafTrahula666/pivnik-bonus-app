@@ -24,6 +24,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .hide{display:none!important}
 #menu{justify-content:flex-start;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0) 22%,rgba(0,0,0,0) 70%,rgba(0,0,0,.55)),url(loc/menu-bg.webp) center 75%/cover no-repeat #120904}
 #menu h1{margin-top:calc(env(safe-area-inset-top) + 2vh)}
+#exitApp{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:12px;z-index:5;padding:7px 12px;border-radius:999px;background:rgba(10,4,24,.7);color:#ffe2b0;font:700 13px system-ui;text-decoration:none;border:1px solid rgba(255,150,45,.55)}
 #menu{gap:14px}
 #menu .car{flex:1;min-height:0;height:auto;max-height:420px;margin-top:auto}
 #menu .cname{margin-top:0}
@@ -109,6 +110,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
   <div id="sup"><img alt=""><small>2× тап</small></div>
   <div id="toast"></div>
   <div class="screen" id="menu">
+    <a id="exitApp" href="/" onclick="if(history.length>1){history.back();return false}">‹ В приложение</a>
     <h1>PIVNIK<small>RUN</small></h1>
     <div class="car" id="car">
       <button class="arr l" id="prev" aria-label="Предыдущий персонаж">‹</button>
