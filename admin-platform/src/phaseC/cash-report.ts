@@ -5,12 +5,7 @@ import type { PosSummary } from '../../../pos/analytics.js'
 export interface CashReport {
   period?:{from:string;until:string;timeZone:string}
   connection:{state:string;lastSuccessAt?:string|null;errorCode?:string|null}
-  all:null|{
-    salesCents:string;returnsCents:string;netCents:string;averageCents:string|null
-    receiptCount:number|null;saleDocuments:number;returnDocuments:number
-    days:Array<{label:string;amountCents:string}>
-    payments:Array<{label:string;amountCents:string}>
-  }
+  all:PosSummary|null
   app?:PosSummary|null
   unlinked?:PosSummary|null
   linkedRevenueSharePercent?:number|null
@@ -30,6 +25,9 @@ export function isCashReport(value:unknown):value is CashReport {
     if(!record(m)||!integer(m.salesCents)||!integer(m.returnsCents)||!integer(m.netCents,true)||!count(m.saleDocuments)||!count(m.returnDocuments))return false
     if(m.receiptCount!==null&&!count(m.receiptCount)||m.averageCents!==null&&!integer(m.averageCents)||m.receiptCount===null&&m.averageCents!==null)return false
     if(!['days','payments'].every(k=>Array.isArray(m[k])&&m[k].every((r:unknown)=>record(r)&&typeof r.label==='string'&&integer(r.amountCents,true))))return false
+    // The older API fixtures omit these projections, but malformed present data is rejected.
+    if(m.hours!==undefined&&(!Array.isArray(m.hours)||!m.hours.every((r:unknown)=>record(r)&&typeof r.label==='string'&&/^(?:[01]\d|2[0-3])$/.test(r.label)&&integer(r.amountCents,true))))return false
+    if(m.products!==undefined&&(!Array.isArray(m.products)||!m.products.every((p:unknown)=>record(p)&&typeof p.name==='string'&&typeof p.measure==='string'&&integer(p.quantityMillis,true)&&integer(p.salesCents)&&integer(p.returnCents)&&integer(p.netCents,true)&&BigInt(p.netCents)===BigInt(p.salesCents)-BigInt(p.returnCents))))return false
     for(const k of ['activeBuyers','repeatBuyers'])if(m[k]!=null&&!count(m[k]))return false
     for(const k of ['repeatPurchaseRate','purchaseFrequency'])if(m[k]!=null&&(typeof m[k]!=='number'||!Number.isFinite(m[k])||m[k]<0))return false
     if(typeof m.repeatPurchaseRate==='number'&&m.repeatPurchaseRate>100)return false
