@@ -159,12 +159,12 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'vitaliy', run: 2, name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
   { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
-  { id: 'kirill',  name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'turn', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
-  { id: 'hristina', name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
-  { id: 'vlad',    name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
-  { id: 'dima',    name: 'Дима',    desc: 'Магнитофон. Двойной тап раз в 3 минуты включает музыку и приносит случайный бонус.', anim: 'music', img: 'chars/dima-front.webp',    back: 'chars/dima-back.webp',    em: '🎵', col: '#ff8a1a', cut: .6, noFlip: true, sup: { kind: 'boombox', name: 'Магнитофон', dur: 0, cd: 180 } },
+  { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'turn', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
+  { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
+  { id: 'vlad', run: 3, name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
+  { id: 'dima', run: 2, name: 'Дима',    desc: 'Магнитофон. Двойной тап раз в 3 минуты включает музыку и приносит случайный бонус.', anim: 'music', img: 'chars/dima-front.webp',    back: 'chars/dima-back.webp',    em: '🎵', col: '#ff8a1a', cut: .6, noFlip: true, sup: { kind: 'boombox', name: 'Магнитофон', dur: 0, cd: 180 } },
   { id: 'sema',    name: 'Сёма',    desc: 'Скейтер. Всегда набирает больше очков, чем остальные.', anim: 'trick', img: 'chars/sema-front.webp',    back: 'chars/sema-back.webp',    em: '👻', col: '#2aa3b8', ride: true, sup: { kind: 'mult', mult: 1.5 } },
 ];
 // Superpowers (double tap). Default: 5 s of passing through obstacles, charged by 30 treats.
@@ -178,7 +178,7 @@ const CHARS = [
 const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, ...CHARS[store.char].sup });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
-CHARS.forEach(c => { c.im = loadImg(c.img); if (c.back) c.bk = loadImg(c.back); });
+CHARS.forEach(c => { c.im = loadImg(c.img); if (c.back) c.bk = loadImg(c.back); if (c.run) c.rf = Array.from({ length: c.run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)); });
 
 // ---------- bonus icons: glossy HD badges, drawn once ----------
 function badge(c1, c2, draw) {
@@ -1108,6 +1108,15 @@ function drawPlayer() {
     } else if (ch.ride) { // on a skateboard: no steps, just leaning into lane changes
       ctx.rotate(clamp((laneX(g.lane, g.n) - g.px) * .25, -.18, .18) + Math.sin(g.t * 2.2) * .02);
       ctx.drawImage(im, -ww / 2, -hh, ww, hh);
+    } else if (ch.rf && ch.rf.every(f => f.complete && f.naturalWidth)) { // real run cycle: drawn frames flipped through in stride order
+      const air = Y > 0 || g.dead, n = ch.rf.length;
+      const fr = ch.rf[air ? 0 : Math.floor((((g.step % 1) + 1) % 1) * n) % n];
+      const fw = hh * fr.naturalWidth / fr.naturalHeight, c2 = Math.cos(ph * 2);
+      const lean = clamp((laneX(g.lane, g.n) - g.px) * .22, -.16, .16);
+      ctx.translate(0, air ? 0 : -Math.abs(Math.sin(ph * n / 2)) * .045 * u); // body rises on each push-off
+      ctx.rotate(air ? lean * .5 : lean + sn * .02);
+      if (!air) ctx.scale(1 - c2 * .012, 1 + c2 * .02); // slight squash and stretch with the stride
+      ctx.drawImage(fr, -fw / 2, -hh, fw, hh);
     } else {
       const air = Y > 0 || g.dead;
       const bob = air ? 0 : Math.abs(sn) * .05 * u;
