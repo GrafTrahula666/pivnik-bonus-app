@@ -18,6 +18,7 @@ import { AppAchievementsManager } from './phaseC/AppRewardsManagers'
 import { AppLoyaltyManager } from './phaseC/AppLoyaltyManager'
 import { AppWheelManager } from './phaseC/AppWheelManager'
 import { SettingsPage } from './phaseC/SettingsPage'
+import { AccountSecurityPanel } from './phaseC/AccountSecurity'
 import { BroadcastPage } from './phaseC/BroadcastPage'
 import { DeveloperPage } from './phaseC/DeveloperPage'
 import { DemoMode } from './phaseC/DemoMode'
@@ -63,7 +64,7 @@ export default function App(){
   const selected=allVenues?null:(venues.find(v=>v.id===venueId)||venues[0]||null)
   const isSuper=session?.admin.role==='SUPER_ADMIN'
   const isTrusted=Boolean(selected?.accessKind==='trusted'&&!isSuper)
-  const trustedPages=['overview','clients','operations','analytics','promotions','broadcast','audit']
+  const trustedPages=['overview','clients','operations','analytics','promotions','broadcast','audit','settings']
   const platformPage=['platform','companies','venues','developer'].includes(page)
 
   function startDemo(){setDemoGuest(true);setSession(DEMO_SESSION);setMode('demo');setPage('overview');setAuthState('authenticated')}
@@ -111,7 +112,7 @@ export default function App(){
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
           {selected&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
-          {selected&&!isTrusted&&page==='settings'&&<SettingsPage venue={selected} session={session}/>}
+          {selected&&page==='settings'&&(isTrusted?<AccountSecurityPanel session={session}/>:<SettingsPage venue={selected} session={session}/>)}
           {selected&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}
 
           {selected&&isTrusted&&!trustedPages.includes(page)&&!platformPage&&<div className="error-state card"><ShieldCheck/><h3>Доступ ограничен</h3><p>Директор может просматривать показатели, клиентов и операции, управлять акциями и рассылками. Системные изменения доступны владельцу.</p></div>}

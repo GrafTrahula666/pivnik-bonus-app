@@ -21,11 +21,19 @@ export function trustedDirectorCanWrite(method: string, resource: string, child:
   if (resource === 'app' && child === 'promotions') {
     return (method === 'POST' && !grandchild) || (method === 'PUT' && Boolean(grandchild))
   }
-  if (method === 'PUT' && resource === 'promotions' && child === 'manage') return true
+  if (method === 'PUT' && resource === 'promotions' && child === 'manage' && !grandchild) return true
   return false
 }
 
-export async function requireVenueWriteAccess(
+export function trustedDirectorCanRead(resource: string, child: string, grandchild: string): boolean {
+  if (resource === 'clients') return !grandchild || grandchild === 'rewards'
+  if (resource === 'broadcast') return !child || (child === 'preview' && !grandchild)
+  if (resource === 'app') return child === 'promotions' && !grandchild
+  if (resource === 'promotions' && child === 'manage' && !grandchild) return true
+  return !child && !grandchild && ['dashboard', 'pos', 'operations', 'achievements', 'wheel', 'shop', 'promotions', 'capabilities', 'audit'].includes(resource)
+}
+
+export async function requireVenueAccess(
   admin: AdminPrincipal, scope: VenueScope, method: string,
   resource: string, child: string, grandchild: string,
 ): Promise<void> {
@@ -36,7 +44,10 @@ export async function requireVenueWriteAccess(
   )
   const accessKind = result.rows[0]?.access_kind
   if (accessKind === 'owner') return
-  if (accessKind === 'trusted' && trustedDirectorCanWrite(method, resource, child, grandchild)) return
+  if (accessKind === 'trusted' && (method === 'GET'
+    ? trustedDirectorCanRead(resource, child, grandchild)
+    : trustedDirectorCanWrite(method, resource, child, grandchild))) return
+  if (method === 'GET') throw new HttpError(403, 'DIRECTOR_READ_FORBIDDEN', 'У этой учётной записи нет доступа к данному разделу.')
   throw new HttpError(403, 'DIRECTOR_WRITE_FORBIDDEN', 'У этой учётной записи нет прав на изменение данного раздела.')
 }
 

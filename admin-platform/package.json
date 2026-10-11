@@ -21,7 +21,7 @@
     "staging:verify": "node scripts/staging-verify.mjs",
     "staging:integration": "node scripts/run-staging-integration.mjs",
     "test": "vitest run",
-    "test:security": "vitest run server/tests/security.spec.ts server/tests/tenant-security.spec.ts server/tests/write-security.spec.ts",
+    "test:security": "vitest run server/tests/security.spec.ts server/tests/tenant-security.spec.ts server/tests/write-security.spec.ts server/tests/trusted-director-http.spec.ts",
     "test:integration": "vitest run server/tests/postgres.integration.spec.ts",
     "test:e2e": "playwright test"
   },

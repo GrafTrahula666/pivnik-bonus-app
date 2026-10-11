@@ -18,7 +18,7 @@ export const periods=['Сегодня','7 дней','30 дней','3 месяц�
 export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
 
-const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand','settings'])
+const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand'])
 export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean}){
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
@@ -30,7 +30,7 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=fal
       </div>
       <nav className="nav">
         {nav.filter(([id])=>mode==='demo'||!restricted||!trustedHiddenPages.has(id)).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
-          <Icon size={17}/><span>{label}</span>
+          <Icon size={17}/><span>{restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
         </button>)}
         {role==='SUPER_ADMIN'&&<>
           <div className="nav-separator"><span>УПРАВЛЕНИЕ СЕТЬЮ</span></div>
