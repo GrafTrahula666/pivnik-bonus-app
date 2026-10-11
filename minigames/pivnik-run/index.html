@@ -160,7 +160,7 @@ TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
   { id: 'vitaliy', name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
-  { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
+  { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
   { id: 'kirill',  name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'turn', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
   { id: 'hristina', name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
   { id: 'vlad',    name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
@@ -1067,10 +1067,11 @@ function drawWitch() {
   ctx.restore();
 }
 
+const sliding0 = () => g.slide > 0;
 function drawPlayer() {
   if (state === 'menu') return;
   const ch = CHARS[store.char], u = unitAt(0);
-  const bob = 0, Y = g.y + (g.flyH || 0) * (1.5 + Math.sin(g.t * 4) * .12);
+  const bob = 0, Y = g.y + (g.flyH || 0) * ((ch.hover ? 2.1 : 1.5) + Math.sin(g.t * 4) * .12) + (ch.hover && !sliding0() ? .32 + Math.sin(g.t * 3.2) * .06 : 0); // Аня always hovers a little
   const base = pr(g.px, 0, 0);
   const sh = clamp(1 - Y / 3, .3, 1);
   ctx.fillStyle = `rgba(0,0,0,${.45 * sh})`;
@@ -1099,6 +1100,10 @@ function drawPlayer() {
     if (sliding) { // knee slide: low, leaning back, dust spraying from under him
       const k = clamp(Math.min(g.slide, .62 - g.slide) * 8, 0, 1);
       ctx.rotate(-.1 * k); ctx.scale(1 + .12 * k, 1 - .42 * k);
+      ctx.drawImage(im, -ww / 2, -hh, ww, hh);
+    } else if (ch.hover) { // gliding just above the floor, wings beating, no steps
+      ctx.rotate(clamp((laneX(g.lane, g.n) - g.px) * .2, -.15, .15));
+      ctx.scale(1 + Math.sin(g.t * 14) * .025, 1);
       ctx.drawImage(im, -ww / 2, -hh, ww, hh);
     } else if (ch.ride) { // on a skateboard: no steps, just leaning into lane changes
       ctx.rotate(clamp((laneX(g.lane, g.n) - g.px) * .25, -.18, .18) + Math.sin(g.t * 2.2) * .02);
