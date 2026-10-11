@@ -108,6 +108,10 @@ app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
+// Standalone minigame, served as a static page. Not linked from the app shell,
+// the wheel or bonuses — no API/auth wiring, just the page and its images.
+app.use('/run', express.static(path.join(__dirname, 'minigames', 'pivnik-run'), { maxAge: '1h' }));
+
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
