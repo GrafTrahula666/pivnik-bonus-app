@@ -45,7 +45,7 @@ export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;sessio
   const segments=useResource<{segments:Record<Segment,number>}>(`/api/admin/venues/${venue.id}/clients/segments`)
   return <div className="page">
     <PageHead eyebrow="БАЗА КЛИЕНТОВ" title="Клиенты" sub={data?`${rub.format(data.total)} клиентов в выбранном заведении`:'Загрузка клиентской базы'}
-      actions={<><LivePill/><WriteGatePill enabled={session.capabilities.productionBonusWrites} label="БОНУСЫ"/></>}/>
+      actions={<><LivePill/>{venue.accessKind!=='trusted'&&<WriteGatePill enabled={session.capabilities.productionBonusWrites} label="БОНУСЫ"/>}</>}/>
     <div className="toolbar card">
       <label className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Имя, @ник или ID клиента…"/></label>
       <div className="toolbar-filters"><select value={sort} onChange={e=>setSort(e.target.value)}>
@@ -86,7 +86,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
       <div className="drawer-head"><div><span className="eyebrow">КАРТОЧКА КЛИЕНТА</span><h2>{client?.name||'Загрузка…'}</h2><span className="drawer-sub">{venue.companyName} → {venue.name} · клиент #{userId}</span></div><button className="icon-btn" onClick={onClose}><X/></button></div>
       {error&&<div className="inline-warning">{error}</div>}
       {client&&<>
-        <div className="drawer-actions">
+        {venue.accessKind!=='trusted'&&<div className="drawer-actions">
           <button className="btn" disabled={!session.capabilities.productionBonusWrites} onClick={()=>setBonusMode('credit')}><Coins/>Начислить</button>
           <button className="btn secondary danger-outline" disabled={!session.capabilities.productionBonusWrites} onClick={()=>setBonusMode('debit')}><Coins/>Списать</button>
           {!linked&&<>
@@ -94,8 +94,8 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
             <button className="btn secondary" disabled={!session.capabilities.writes} onClick={()=>setEntitlementOpen(true)}><Gift/>Рамка / товар</button>
             <button className="btn secondary" disabled={!session.capabilities.writes} onClick={()=>setCashbackOpen(true)}><SlidersHorizontal/>Кешбэк</button>
           </>}
-        </div>
-        {!session.capabilities.productionBonusWrites&&<SourceNote>Изменение бонусного баланса сейчас доступно только для просмотра.</SourceNote>}
+        </div>}
+        {venue.accessKind!=='trusted'&&!session.capabilities.productionBonusWrites&&<SourceNote>Изменение бонусного баланса сейчас доступно только для просмотра.</SourceNote>}
         <div className="detail-grid">
           <Detail label="Баланс" value={rub.format(client.balance)}/><Detail label="Сумма покупок" value={`₽ ${rub.format(Math.round(client.lifetimeSpend))}`}/>
           <Detail label="Средний чек" value={client.averageCheck===null?'Нет данных':`₽ ${rub.format(Math.round(client.averageCheck))}`}/>
@@ -105,7 +105,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
         <SourceNote>Баланс показывает фактическое количество бонусов клиента. Персональные подарки сохраняются на счёте, но не искажают бизнес-KPI обзора.</SourceNote>
         <h3 className="section-title">Каналы и профили</h3>
         <div className="identity-list">{client.identities.map(i=><div key={`${i.provider}:${i.provider_user_id}`}><PlatformTag value={i.provider==='vk'?'VK':'TG'}/><b>{i.provider_username?`@${i.provider_username}`:i.provider_user_id}</b><span>{i.provider_user_id}</span></div>)}</div>
-        {linked&&<GuestRewardsPanel venue={venue} session={session} userId={userId} onChanged={refresh}/>}
+        {linked&&venue.accessKind!=='trusted'&&<GuestRewardsPanel venue={venue} session={session} userId={userId} onChanged={refresh}/>}
         <h3 className="section-title">Лояльность</h3>
         <div className="progress-card"><div><LevelBadge level={client.level}/><b>{client.cashbackPercent}% кэшбэк</b></div><span>{linked?'Уровень и процент начисления считаются приложением по сумме покупок.':'Индивидуальные условия клиента сохраняются отдельно от общих настроек заведения.'}</span></div>
         <h3 className="section-title">История операций</h3>
