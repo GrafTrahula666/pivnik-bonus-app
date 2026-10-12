@@ -42,6 +42,7 @@ final class PivnikApi {
      */
     static String diagnose(BridgeSettings settings) {
         HttpURLConnection connection = null;
+        String stage = "подключение";
         try {
             URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
             connection = (HttpURLConnection) url.openConnection();
@@ -59,8 +60,10 @@ final class PivnikApi {
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);
             try (OutputStream out = connection.getOutputStream()) {
+                stage = "отправка запроса";
                 out.write(body);
             }
+            stage = "ожидание ответа";
             int status = connection.getResponseCode();
             String errorText = null;
             if (status == 404) {
@@ -100,7 +103,9 @@ final class PivnikApi {
         } catch (Exception error) {
             String message = error.getMessage();
             if (message != null && message.length() > 160) message = message.substring(0, 160);
-            return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+            // Any failure: say at which step it broke and whether the lighter /api/health route gets through.
+            return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message)
+                    + "\nЭтап: " + stage + "\nПроверка /api/health: " + health(settings);
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -125,7 +130,9 @@ final class PivnikApi {
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setInstanceFollowRedirects(false);
-            return "HTTP " + connection.getResponseCode();
+            long started = System.currentTimeMillis();
+            int code = connection.getResponseCode();
+            return "HTTP " + code + " за " + (System.currentTimeMillis() - started) + " мс";
         } catch (Exception error) {
             return error.getClass().getSimpleName();
         } finally {

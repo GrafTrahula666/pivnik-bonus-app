@@ -46,6 +46,14 @@ jobs:
           EVOTOR_KEY_ALIAS: ${{ secrets.EVOTOR_KEY_ALIAS }}
           EVOTOR_KEY_PASSWORD: ${{ secrets.EVOTOR_KEY_PASSWORD }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Check the built APK manifest
+        run: |
+          apk=$(ls evotor-bridge/app/build/outputs/apk/debug/*.apk | head -n 1)
+          dump=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump xmltree --file AndroidManifest.xml "$apk")
+          echo "$dump" | grep -q 'ru.evotor.permission.SELL_INTEGRATION_SERVICE'
+          echo "$dump" | grep -q 'android.intent.category.EVOTOR'
+          echo "$dump" | grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED'
+          echo "$dump" | grep -c 'android:permission' | grep -qv '^0$'
       - uses: actions/upload-artifact@v4
         with:
           name: pivnik-evotor-debug-apk

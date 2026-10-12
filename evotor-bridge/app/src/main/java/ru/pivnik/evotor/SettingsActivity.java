@@ -160,7 +160,7 @@ public final class SettingsActivity extends Activity {
                         + new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).format(new Date())
                         + ". Если дата неверная, исправьте её в настройках кассы."
                 : result.contains("UnknownHost") ? "\nКасса не находит сервер: проверьте адрес и интернет."
-                : result.contains("Timeout") ? "\nСервер не отвечает вовремя: проверьте интернет кассы." : "";
+                : result.contains("Timeout") ? "\nСервер не отвечает вовремя: проверьте интернет кассы и настройки прокси приложения в кабинете Эвотора. Этап и проверку health пришлите разработчику." : "";
         return "Нет связи: " + result.substring(4) + hint;
     }
 
