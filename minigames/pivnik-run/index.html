@@ -95,6 +95,10 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .rec{color:var(--or2);font-weight:900;font-size:18px;letter-spacing:2px;margin-top:-18px}
 .best{color:#e9d9c6;font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;margin-top:-10px}
 #flash{position:absolute;inset:0;pointer-events:none;opacity:0}
+#rage{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;background:radial-gradient(ellipse at 50% 55%,rgba(255,30,20,.18) 0,rgba(210,0,10,.5) 70%,rgba(120,0,0,.78) 100%);mix-blend-mode:multiply}
+#rage::after{content:'';position:absolute;inset:0;background:rgba(255,40,30,.22);mix-blend-mode:screen}
+#rage.on{opacity:1;animation:ragePulse .9s ease-in-out infinite alternate}
+@keyframes ragePulse{from{filter:brightness(.9)}to{filter:brightness(1.25)}}
 #fog{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.5) 0 1.5%,transparent 2.5%) 0 0/90px 110px,radial-gradient(circle at 70% 60%,rgba(255,255,255,.4) 0 1%,transparent 2%) 0 0/70px 80px,radial-gradient(ellipse at 50% 55%,rgba(205,212,218,.55),rgba(225,230,235,.95) 75%)}
 .pw img,.pill img{width:26px;height:26px;display:block}
 .pw{padding:3px 6px 5px;min-width:0}
@@ -123,6 +127,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
   <canvas id="cv"></canvas>
   <div id="flash"></div>
   <div id="fog"></div>
+  <div id="rage"></div>
   <div id="hud">
     <div id="prog"><i></i></div>
     <div id="score">0</div>
@@ -191,8 +196,8 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Воин', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', run: 0 }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
-  { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
+  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Кратос', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', key: 'vitaliy-warrior', run: 2, desc: 'Спартанская Ярость. Двойной тап раз в 3 минуты: Виталий впадает в ярость, на 10 секунд становится неуязвимым, а экран заливает красным.', sup: { kind: 'rage', name: 'Спартанская Ярость', dur: 10, cd: 180 } }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'anya',    skins: [{ n: 'Классика' }, { n: 'Красное платье', img: 'chars/anya-red-front.webp', back: 'chars/anya-red-back.webp', key: 'anya-red', run: 2, hover: false, desc: 'Супер-прыжки. Двойной тап раз в минуту: на 5 секунд Аня прыгает почти до потолка.', sup: { kind: 'jump', name: 'Супер-прыжки', dur: 5, cd: 60 } }], name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
   { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'sway', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, guardian: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
   { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
   { id: 'vlad', run: 3, name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
@@ -214,14 +219,14 @@ LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
 CHARS.forEach(c => {
   const looks = c.skins || [{}];
   c.looks = looks.map(k => {
-    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run;
-    return { n: k.n || '', img, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)) : null };
+    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run, key = k.key || c.id;
+    return { n: k.n || '', img, hover: 'hover' in k ? k.hover : c.hover, sup: k.sup || c.sup, desc: k.desc || c.desc, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${key}-run${i + 1}.webp`)) : null };
   });
 });
 // make look #idx the one the rest of the game reads (c.img, c.im, c.bk, c.rf)
 function applyLook(c, idx) {
   const k = c.looks[idx] || c.looks[0];
-  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf;
+  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf; c.hover = k.hover; c.sup = k.sup; c.desc = k.desc;
 }
 
 // ---------- bonus icons: glossy HD badges, drawn once ----------
@@ -439,7 +444,7 @@ function act(a) {
   if (a === 'R' && turnWindow()) { doTurn(); return; }
   if (a === 'L') { if (g.lane > 0) { sfx('swoosh'); haptic('light'); } g.lane = Math.max(0, g.lane - 1); }
   else if (a === 'R') { if (g.lane < g.n - 1) { sfx('swoosh'); haptic('light'); } g.lane = Math.min(g.n - 1, g.lane + 1); }
-  else if (a === 'U') { if (g.y <= .001) { g.vy = 9.4; g.slide = 0; sfx('jump'); haptic('light'); } }
+  else if (a === 'U') { if (g.y <= .001) { g.vy = g.superT > 0 && SUPER().kind === 'jump' ? 14.5 : 9.4; g.slide = 0; sfx('jump'); haptic('light'); } }
   else if (a === 'D') { if (g.y > .001) g.vy = -16; else sfx('slide'); g.slide = .62; }
   g.hint = Math.min(g.hint, .4);
 }
@@ -543,7 +548,7 @@ function update(dt) {
     else if (it.k === 'bar') hit = standing || g.y > 0;
     if (hit) {
       it.hit = 1;
-      if ((g.superT > 0 && sp.kind === 'ghost') || g.flyH > 0 || g.inv > 0) continue;
+      if ((g.superT > 0 && (sp.kind === 'ghost' || sp.kind === 'rage')) || g.flyH > 0 || g.inv > 0) continue;
       if (g.armed) { smash(it, x, d); continue; }
       if (g.lives > 0) { g.lives--; g.inv = 2; g.flash = .8; g.flashCol = '#4dffb0'; toast('life', 'Жизнь сгорела'); sfx('life'); haptic('medium'); continue; }
       if (CHARS[store.char].gedo && !g.gedoUsed) { g.gedoUsed = true; g.inv = 2.5; g.flash = 1; g.flashCol = '#9b5cff'; toast('gedo', 'Внешний Путь'); sfx('gedo'); haptic('heavy'); continue; } // one revive per run
@@ -611,6 +616,7 @@ function superpower() {
   }
   g.charge = 0; g.superT = sp.dur; sfx('super'); haptic('heavy');
   if (sp.kind === 'smash') g.armed = true;
+  if (sp.kind === 'rage') { sfx('gedo'); g.shake = .35; }
   g.flash = .7; g.flashCol = CHARS[store.char].col;
   toast('super', sp.name);
 }
@@ -1308,6 +1314,7 @@ function render() {
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   }
   fl.style.opacity = g.flash * .3; fl.style.background = g.flashCol;
+  $('#rage').classList.toggle('on', g.superT > 0 && SUPER().kind === 'rage' && state === 'run');
 }
 
 // ---------- HUD / screens ----------
