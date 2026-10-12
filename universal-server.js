@@ -35,6 +35,7 @@ import {
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
 import { grantTickets as grantHalloweenTickets } from './halloween-raffle.js';
+import { issueRunTicket, readRunTicket, plausibleScore, normalizeRunChar, submitRunScore, runBoard } from './run-leaderboard.js';
 import {
   HALLOWEEN_TICKET_PRIZE,
   HALLOWEEN_TICKET_PRIZE_CODE,
@@ -3469,6 +3470,31 @@ export const server = http.createServer(async (req, res) => {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
       return sendJson(res, 200, await getUnifiedMonthlyLeaderboard(user.id));
+    }
+
+    if (url.pathname === '/api/run/start' || url.pathname === '/api/run/score' || url.pathname === '/api/run/leaderboard') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      const canonical = await canonicalUserId(pool, user.id);
+      if (!canonical) return sendJson(res, 404, { error: 'Пользователь не найден.' });
+      if (req.method === 'GET' && url.pathname === '/api/run/leaderboard') {
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/start') {
+        return sendJson(res, 200, { ticket: issueRunTicket(sessionSecret, canonical) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/score') {
+        const body = parseJsonBody(await readRequestBody(req));
+        const run = readRunTicket(sessionSecret, body.ticket, canonical);
+        const score = Number(body.score);
+        if (!run || !plausibleScore(score, Date.now() - run.startedAt)) {
+          return sendJson(res, 422, { error: 'Результат не принят.' });
+        }
+        if (score > 0) await submitRunScore(pool, canonical, score, normalizeRunChar(body.character));
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
     }
 
     if (req.method === 'GET' && url.pathname === '/api/admin/users') {

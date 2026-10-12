@@ -11,7 +11,8 @@ const automaticMigrations = new Set([
   '007_red_cosmos_v2.sql',
   '008_tester_recipient_aliases.sql',
   '010_repair_originaltopg_admin.sql',
-  '015_wheel_halloween_ticket.sql'
+  '015_wheel_halloween_ticket.sql',
+  '016_run_scores.sql'
 ]);
 
 export function isAutomaticStartupMigration(filename) {

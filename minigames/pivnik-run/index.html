@@ -23,6 +23,16 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .pw{flex-direction:column;gap:0;padding:4px 10px 5px;min-width:46px}
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px 16px calc(env(safe-area-inset-bottom) + 24px);background:radial-gradient(120% 80% at 50% 30%,rgba(20,8,30,.35),rgba(6,2,10,.88))}
 .hide{display:none!important}
+.lbs{margin-top:-10px;border:0;cursor:pointer;display:flex;align-items:center;gap:8px;max-width:92%;padding:8px 14px;border-radius:999px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);color:#f3e6d2;font:700 13px/1.2 system-ui,sans-serif;white-space:nowrap;overflow:hidden}
+.lbs b{color:#ffd27a;font-variant-numeric:tabular-nums}.lbs span{overflow:hidden;text-overflow:ellipsis}
+#lbBox{z-index:30;background:rgba(6,2,10,.97);justify-content:flex-start;gap:12px;padding-top:calc(env(safe-area-inset-top) + 18px)}
+#lbBox h2{margin:0;font-size:26px;font-weight:900;letter-spacing:1px;color:#ffd27a}
+#lbList{width:100%;max-width:420px;flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:6px}
+.lbr{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:var(--glass);font-weight:700;font-size:15px}
+.lbr i{font-style:normal;width:30px;color:#ffd27a;font-variant-numeric:tabular-nums}.lbr span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lbr b{font-variant-numeric:tabular-nums}
+.lbr.me{box-shadow:0 0 0 1.5px var(--or);background:rgba(255,150,40,.16)}
+.lbe{color:#e9d9c6;text-align:center;padding:24px 8px;font-size:15px}
+
 #menu{justify-content:flex-start;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0) 22%,rgba(0,0,0,0) 70%,rgba(0,0,0,.55)),url(loc/menu-bg.webp) center 75%/cover no-repeat #120904}
 #menu h1{margin-top:calc(env(safe-area-inset-top) + 2vh)}
 #exitApp{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:12px;z-index:5;padding:7px 12px;border-radius:999px;background:rgba(10,4,24,.7);color:#ffe2b0;font:700 13px system-ui;text-decoration:none;border:1px solid rgba(255,150,45,.55)}
@@ -126,11 +136,18 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
     <div class="cname" id="cname"></div>
     <div class="cdesc" id="cdesc"></div>
     <button class="btn" id="play">Играть</button>
+    <button class="lbs hide" id="lbStrip" type="button"></button>
+  </div>
+  <div class="screen hide" id="lbBox">
+    <h2>🏆 Рейтинг</h2>
+    <div id="lbList"></div>
+    <button class="ghost" id="lbClose" type="button">Закрыть</button>
   </div>
   <div class="screen hide" id="over">
     <div class="big" id="final">0</div>
     <div class="rec hide" id="rec">★ РЕКОРД ★</div>
     <div class="best" id="best"></div>
+    <div class="best hide" id="place"></div>
     <button class="btn" id="again">Заново</button>
     <button class="ghost" id="tomenu">Сменить персонажа</button>
   </div>
@@ -1329,7 +1346,9 @@ function showOver() {
   $('#final').textContent = s.toLocaleString('ru-RU');
   $('#rec').classList.toggle('hide', !isRec);
   $('#best').textContent = isRec ? '' : '★ ' + store.best.toLocaleString('ru-RU');
+  $('#place').classList.add('hide');
   $('#over').classList.remove('hide');
+  lbFinish(s);
 }
 // blur → muddy colours → fogged-up glass, stacking with the number of beers
 let lastFilter = '';
@@ -1343,7 +1362,46 @@ function drunkCss(dk) {
 function toMenu() {
   state = 'menu'; lockSwipes(false); g = newGame(true); drunkCss(0);
   $('#over').classList.add('hide'); $('#menu').classList.remove('hide');
+  lbRefresh();
   renderCar();
+}
+
+// ---------- all-time leaderboard (server side; needs the guest's app session, so it is simply hidden without one) ----------
+const LB = { ticket: null, board: null };
+const lbToken = () => { try { return localStorage.getItem('pivnik_tg_session') || ''; } catch (e) { return ''; } };
+async function lbApi(path, body) {
+  const token = lbToken();
+  if (!token) return null;
+  try {
+    const r = await fetch('/api/run/' + path, {
+      method: body ? 'POST' : 'GET',
+      headers: { authorization: 'Bearer ' + token, ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    return r.ok ? await r.json() : null;
+  } catch (e) { return null; }
+}
+const fmtN = n => Number(n).toLocaleString('ru-RU');
+function lbPaint() {
+  const b = LB.board, strip = $('#lbStrip');
+  if (!b) { strip.classList.add('hide'); return; }
+  const top = b.leaders[0];
+  strip.innerHTML = '<span>🏆 ' + (top ? '1. ' + esc(top.name) + ' <b>' + fmtN(top.score) + '</b>' : 'Рейтинг пока пуст') + '</span>' + (b.me ? '<span>· ты <b>№' + b.me.rank + '</b></span>' : '');
+  strip.classList.remove('hide');
+  $('#lbList').innerHTML = b.leaders.length ? b.leaders.map(l => '<div class="lbr' + (l.isMe ? ' me' : '') + '"><i>' + l.rank + '</i><span>' + esc(l.name) + '</span><b>' + fmtN(l.score) + '</b></div>').join('') + (b.me && b.me.rank > b.leaders.length ? '<div class="lbr me"><i>' + b.me.rank + '</i><span>Ты</span><b>' + fmtN(b.me.score) + '</b></div>' : '') : '<div class="lbe">Пока никто не бегал. Стань первым!</div>';
+}
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function lbRefresh() { const b = await lbApi('leaderboard'); if (b) LB.board = b; lbPaint(); }
+$('#lbStrip').onclick = () => { $('#lbBox').classList.remove('hide'); lbRefresh(); };
+$('#lbClose').onclick = () => $('#lbBox').classList.add('hide');
+async function lbBegin() { LB.ticket = null; const r = await lbApi('start', {}); LB.ticket = r && r.ticket || null; }
+async function lbFinish(score) {
+  const ticket = LB.ticket; LB.ticket = null;
+  if (!ticket) return;
+  const b = await lbApi('score', { ticket, score, character: CHARS[store.char].id });
+  if (!b) return;
+  LB.board = b; lbPaint();
+  if (b.me && state === 'over') { const p = $('#place'); p.textContent = '🏆 Твоё место: ' + b.me.rank + ' из ' + b.total; p.classList.remove('hide'); }
 }
 
 function start() {
@@ -1355,8 +1413,10 @@ function start() {
   $('#hud').style.display = 'block';
   document.querySelectorAll('#row .pw').forEach(e => e.remove());
   state = 'run'; lockSwipes(true);
+  lbBegin();
 }
 
+lbRefresh();
 $('#play').onclick = start;
 $('#again').onclick = start;
 $('#tomenu').onclick = toMenu;
