@@ -1273,6 +1273,44 @@ function drawHint() {
   ctx.restore();
 }
 
+// ---------- atmosphere: warm vignette, drifting embers and speed streaks, drawn over the finished frame ----------
+let vigC = null;
+function vignette() {
+  if (!vigC || vigC.width !== W || vigC.height !== H) {
+    vigC = document.createElement('canvas'); vigC.width = W; vigC.height = H;
+    const x = vigC.getContext('2d'), gr = x.createRadialGradient(W / 2, H * .52, Math.min(W, H) * .34, W / 2, H * .52, Math.max(W, H) * .78);
+    gr.addColorStop(0, 'rgba(14,4,22,0)'); gr.addColorStop(1, 'rgba(14,4,22,.62)');
+    x.fillStyle = gr; x.fillRect(0, 0, W, H);
+  }
+  ctx.drawImage(vigC, 0, 0);
+}
+const EMBERS = Array.from({ length: 34 }, () => ({ x: Math.random(), y: Math.random(), s: .02 + Math.random() * .05, r: 1 + Math.random() * 2.4, ph: Math.random() * 6.28, w: .01 + Math.random() * .03 }));
+function drawEmbers() {
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const e of EMBERS) {
+    const y = (((e.y - g.t * e.s) % 1) + 1) % 1, x = e.x + Math.sin(g.t * .8 + e.ph) * e.w;
+    const a = (.45 + .35 * Math.sin(g.t * 2.4 + e.ph)) * Math.min(1, y * 4);
+    const gx = x * W, gy = y * H, r = e.r * (W / 390) * 4;
+    const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
+    gr.addColorStop(0, `rgba(255,190,90,${a})`); gr.addColorStop(1, 'rgba(255,120,30,0)');
+    ctx.fillStyle = gr; ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
+  }
+  ctx.restore();
+}
+function drawStreaks() {
+  const k = clamp((g.speed - 30) / 180, 0, 1);
+  if (k <= 0) return;
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineCap = 'round';
+  const cx = W / 2, cy = H * .5, n = 16;
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? 1 : -1, a = ((i * 0.618 + g.t * (.6 + k)) % 1), ang = side * (.35 + ((i * 37) % 17) / 17 * .75) + (side > 0 ? 0 : Math.PI) + (side > 0 ? 0 : 0);
+    const dx = Math.cos(side > 0 ? -.5 + ((i * 37) % 17) / 17 : Math.PI + .5 - ((i * 37) % 17) / 17), dy = Math.sin(side > 0 ? -.5 + ((i * 37) % 17) / 17 : Math.PI + .5 - ((i * 37) % 17) / 17) * .6;
+    const r0 = (.45 + a * .55) * W * .8, r1 = r0 + (.05 + k * .18) * W;
+    ctx.globalAlpha = (1 - a) * .22 * k; ctx.lineWidth = 1 + k * 1.6;
+    ctx.beginPath(); ctx.moveTo(cx + dx * r0, cy + dy * r0 + H * .1); ctx.lineTo(cx + dx * r1, cy + dy * r1 + H * .1); ctx.stroke();
+  }
+  ctx.restore();
+}
 function render() {
   YAW = g.yaw || 0;
   ctx.save();
@@ -1304,6 +1342,7 @@ function render() {
     ctx.drawImage(cv, 0, 0, cv.width, cv.height, Math.sin(g.t * 1.1) * 14 * Math.min(2, dk), Math.cos(g.t * .8) * 6, W, H);
     ctx.globalAlpha = 1;
   }
+  if (!g.demo) { drawStreaks(); drawEmbers(); vignette(); }
   drunkCss(dk);
   const fl = $('#flash');
   if (g.slowK > 0) { // slowed time: cool violet tint and dark edges
