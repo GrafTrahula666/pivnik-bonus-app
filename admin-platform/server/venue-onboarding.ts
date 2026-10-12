@@ -5,6 +5,7 @@ import { config } from './config.js'
 import { pool } from './db.js'
 import { requireSuperAdmin } from './tenant.js'
 import { HttpError, type AdminPrincipal } from './types.js'
+import { createSpaceverseRuntimeManifest } from '../../spaceverse-runtime-manifest.js'
 
 export interface OnboardingData {
   companyId: string | null
@@ -154,13 +155,17 @@ const appContract = {
   published:false as const,
 }
 function appResponse(row: AppConfigRow) {
+  const appConfig=onboardingAppConfig(row.config)
   return {
     draftId:row.draft_id,
     tenantKey:row.tenant_key,
-    config:onboardingAppConfig(row.config),
+    config:appConfig,
     revision:row.revision,
     updatedAt:row.updated_at,
     contract:{...appContract,isolationPolicy:row.isolation_policy},
+    runtimeManifest:createSpaceverseRuntimeManifest({
+      draftId:row.draft_id,runtimeKey:row.tenant_key,revision:row.revision,config:appConfig,
+    }),
   }
 }
 function unavailable(error: unknown): never {

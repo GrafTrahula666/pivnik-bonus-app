@@ -14,10 +14,17 @@ requires the global write switch. Drafts and their standard application blueprin
 are scoped to their creator, versioned, idempotent and audited. Migration 005
 reserves a stable `sv-*` tenant key and requires `dedicated_database`; the API
 contract remains `not_provisioned`, `published=false` and `legacyDataAccess=false`.
-It does not create an active company/venue, database, runtime, bot, webhook or POS
-link. The guest gateway/Express copies are unchanged and do not consume this
-blueprint yet. Continue from `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store
-provider keys, URLs or other secrets in draft/application JSON.
+It does not create an active company/venue, database, bot, webhook or POS link.
+`spaceverse-runtime-manifest.js` now turns that blueprint into a strict,
+checksummed, non-secret runtime manifest. A tenant-mode guest process must find an
+exact binding in its dedicated database (manual additive migration 017); both
+`universal-server.js` and `server.js` check this before spawning/initializing any
+PIVNIK runtime data. Even an exact binding is deliberately rejected with
+`SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
+and the manifest cannot claim publication. With no tenant manifest, the existing
+legacy PIVNIK startup path is unchanged and performs no binding query. Continue
+from `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store provider keys, database
+URLs or other secrets in draft/application JSON or the runtime manifest.
 
 ## The honest starting picture
 

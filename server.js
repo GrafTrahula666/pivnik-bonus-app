@@ -39,6 +39,7 @@ import {
   validateTelegramInitData as validateCoreTelegramInitData,
   verifySession as verifyCoreSession
 } from './platform-core.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
 import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
@@ -3975,6 +3976,17 @@ app.use((error, _req, res, _next) => {
     : (process.env.NODE_ENV === 'production' ? 'Внутренняя ошибка сервера.' : error.message);
   res.status(500).json({ error: message });
 });
+
+try {
+  await guardSpaceverseRuntimeStartup({
+    environment: process.env,
+    query: (text, params) => pool.query(text, params)
+  });
+} catch (error) {
+  console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+  await pool.end().catch(() => {});
+  process.exit(1);
+}
 
 await initDatabase();
 startRuntimeConfigRefresh(pool);

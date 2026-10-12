@@ -3,6 +3,7 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import type { PGlite } from '@electric-sql/pglite'
 import { afterAll,beforeAll,describe,expect,it,vi } from 'vitest'
+import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false}))
 vi.mock('../db.js',()=>{
@@ -144,9 +145,17 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     const draft=await (await request('root','POST','',command())).json() as {id:string}
     const empty=await (await request('root','GET','/'+draft.id+'/application')).json()
     expect(empty).toEqual({application:null,contract:{template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}})
-    const saved=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {tenantKey:string;revision:number}
+    const saved=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {tenantKey:string;revision:number;runtimeManifest:unknown}
     expect(saved).toMatchObject({draftId:draft.id,config:appConfig,revision:1,contract:{template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}})
     expect(saved.tenantKey).toMatch(/^sv-[0-9a-f]{32}$/)
+    expect(parseSpaceverseRuntimeManifest(saved.runtimeManifest)).toMatchObject({
+      runtimeKey:saved.tenantKey,
+      source:{kind:'onboarding',draftId:draft.id,revision:1},
+      application:{template:'standard',qrEnabled:true,...appConfig},
+      isolation:{policy:'dedicated_database',legacyDataAccess:false},
+      release:{runtimeStatus:'not_provisioned',published:false},
+    })
+    expect(JSON.stringify(saved.runtimeManifest)).not.toMatch(/token|secret|password|databaseUrl|https?:\/\//i)
     expect(await (await request('root','GET','/'+draft.id+'/application')).json()).toEqual({application:saved,contract:(saved as {contract:unknown}).contract})
     expect(await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json()).toEqual(saved)
     expect(await appRows()).toHaveLength(1)

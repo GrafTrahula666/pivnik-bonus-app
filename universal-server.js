@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
 import {
   createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
   withVkStartupTrace, traceVkStage
@@ -3158,6 +3159,19 @@ function isConsentExempt(pathname) {
     || pathname === '/api/me'
     || pathname === '/api/me/consent'
     || pathname.startsWith('/api/account-link/');
+}
+
+if (!isTestImport) {
+  try {
+    await guardSpaceverseRuntimeStartup({
+      environment: process.env,
+      query: (text, params) => pool.query(text, params)
+    });
+  } catch (error) {
+    console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+    await pool.end().catch(() => {});
+    process.exit(1);
+  }
 }
 
 const child = isTestImport ? null : spawn(process.execPath, [path.join(__dirname, 'server.js')], {
