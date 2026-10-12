@@ -18,9 +18,22 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   const created=await (await post).json() as {id:string;revision:number}
   expect(created.revision).toBe(1)
   await expect(page.getByRole('status')).toContainText('Заведение ещё не подключено')
+  await expect(page.getByLabel('Название приложения',{exact:true})).toHaveValue(name)
+  await page.getByLabel('Название приложения',{exact:true}).fill(name+' App')
+  await page.getByLabel('Основной цвет',{exact:true}).fill('#114488')
+  await page.getByLabel('Дополнительный цвет',{exact:true}).fill('#221133')
+  const appPut=page.waitForResponse(response=>response.url().endsWith('/application')&&response.request().method()==='PUT')
+  await page.getByRole('button',{name:'Сохранить приложение',exact:true}).dblclick()
+  const configured=await (await appPut).json() as {tenantKey:string;revision:number;contract:{published:boolean;legacyDataAccess:boolean}}
+  expect(configured).toMatchObject({revision:1,contract:{published:false,legacyDataAccess:false}})
+  expect(configured.tenantKey).toMatch(/^sv-[0-9a-f]{32}$/)
+  await expect(page.getByText('Настройка приложения сохранена. Приложение ещё не опубликовано.',{exact:true})).toBeVisible()
   await page.reload()
   await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
   await expect(page.getByLabel('Адрес',{exact:true})).toHaveValue('Мулино, тестовая улица')
+  await expect(page.getByLabel('Название приложения',{exact:true})).toHaveValue(name+' App')
+  await expect(page.getByLabel('Основной цвет',{exact:true})).toHaveValue('#114488')
+  await expect(page.getByText(configured.tenantKey,{exact:true})).toBeVisible()
   await page.getByLabel('Адрес',{exact:true}).fill('Мулино, изменённый адрес')
   await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click()
   await expect(page.getByRole('status')).toContainText('Черновик сохранён')
@@ -52,6 +65,10 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   const index=await (await page.request.get('/api/admin/onboarding/drafts')).json() as {drafts:{id:string;data:{venueName:string}}[]}
   expect(index.drafts.filter(draft=>draft.data.venueName===recoveredName).map(draft=>draft.id)).toEqual([committedId])
   expect(index.drafts.filter(draft=>draft.data.venueName===name)).toHaveLength(1)
+  expect(await (await page.request.get('/api/admin/onboarding/drafts/'+created.id+'/application')).json()).toMatchObject({application:{tenantKey:configured.tenantKey,config:{displayName:name+' App'},revision:1},contract:{runtimeStatus:'not_provisioned',published:false}})
+  await page.getByRole('button',{name:'Закрыть',exact:true}).click()
+  await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
+  await expect(page.getByText(configured.tenantKey,{exact:true})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   const screenshot=`artifacts/onboarding-${testInfo.project.name}.png`
   await fs.mkdir('artifacts',{recursive:true})

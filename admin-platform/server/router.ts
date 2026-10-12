@@ -56,7 +56,10 @@ import {
 } from './pivnik-app-content.js'
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
-import { createOnboardingDraft, getOnboardingDraft, getOnboardingIndex, getOnboardingRequest, requireOnboardingAccess, updateOnboardingDraft } from './venue-onboarding.js'
+import {
+  createOnboardingDraft,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,getOnboardingRequest,
+  requireOnboardingAccess,saveOnboardingAppConfig,updateOnboardingDraft,
+} from './venue-onboarding.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -136,6 +139,19 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  const onboardingApp=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/application$/.exec(url.pathname)
+  if(onboardingApp){
+    requireOnboardingAccess(session.admin)
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingAppConfig(session.admin,onboardingApp[1]!));return true}
+    if(isMethod(req,'PUT')){
+      json(res,200,await saveOnboardingAppConfig(session.admin,onboardingApp[1]!,await readJsonBody(req,4*1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }
   const onboarding=/^\/api\/admin\/onboarding\/drafts(?:\/([^/]+))?$/.exec(url.pathname)
   if(onboarding){

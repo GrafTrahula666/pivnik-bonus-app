@@ -8,12 +8,16 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
 the SUPER_ADMIN-only draft API. `src/phaseC/VenueOnboarding.tsx` extends the real
-Business App. Additive admin migration 004 is separate from guest/startup policy;
-`ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also requires the global write
-switch. Drafts are scoped to their creator, versioned, idempotent and audited.
-This step does not create an active tenant, launch a guest app or connect a bot/POS.
-The guest gateway/Express copies are unchanged. Continue from
-`ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store provider keys in draft JSON.
+Business App. Additive admin migrations 004 and 005 are separate from
+guest/startup policy; `ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also
+requires the global write switch. Drafts and their standard application blueprint
+are scoped to their creator, versioned, idempotent and audited. Migration 005
+reserves a stable `sv-*` tenant key and requires `dedicated_database`; the API
+contract remains `not_provisioned`, `published=false` and `legacyDataAccess=false`.
+It does not create an active company/venue, database, runtime, bot, webhook or POS
+link. The guest gateway/Express copies are unchanged and do not consume this
+blueprint yet. Continue from `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store
+provider keys, URLs or other secrets in draft/application JSON.
 
 ## The honest starting picture
 

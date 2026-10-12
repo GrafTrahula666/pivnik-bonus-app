@@ -24,10 +24,38 @@ interface DraftRow extends QueryResultRow {
   revision: number
   updated_at: string
 }
+export interface OnboardingAppConfig {
+  displayName: string
+  theme: 'premium-dark' | 'dark' | 'light'
+  primaryColor: string
+  secondaryColor: string
+  shopEnabled: boolean
+  loyaltyEnabled: boolean
+}
+interface AppConfigRow extends QueryResultRow {
+  draft_id: string
+  tenant_key: string
+  config: OnboardingAppConfig
+  isolation_policy: 'dedicated_database'
+  provisioning_status: 'not_started'
+  revision: number
+  updated_at: string
+}
+interface AppDraftRow extends QueryResultRow {
+  id: string
+}
 const fields = ['companyId','companyName','venueName','address','timeZone','venueType','ownerEmail'] as const
 const columns = 'id::text,request_key::text,initial_hash,data,status,revision,updated_at::text'
+const appFields = ['displayName','theme','primaryColor','secondaryColor','shopEnabled','loyaltyEnabled'] as const
+const appColumns = `draft_id::text,tenant_key,config,isolation_policy,provisioning_status,revision,updated_at::text`
+const joinedAppColumns = `a.draft_id::text,a.tenant_key,a.config,a.isolation_policy,a.provisioning_status,a.revision,a.updated_at::text`
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const invalid = () => new HttpError(400,'ONBOARDING_INVALID','Проверьте данные заведения. Ключи интеграций на этом шаге не принимаются.')
+const appInvalid = () => new HttpError(400,'ONBOARDING_APP_INVALID','Проверьте настройки приложения. Ключи, URL и произвольные поля на этом шаге не принимаются.')
+const hasControlCharacter=(value:string)=>Array.from(value).some(character=>{
+  const code=character.charCodeAt(0)
+  return code<=31||code===127
+})
 
 function record(raw: unknown, allowed: readonly string[]): Record<string,unknown> {
   if(!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalid()
@@ -38,12 +66,42 @@ function record(raw: unknown, allowed: readonly string[]): Record<string,unknown
 function text(raw: unknown, max: number, required=false): string {
   if(raw !== undefined && typeof raw !== 'string') throw invalid()
   const value = String(raw ?? '').trim()
-  if(value.length>max || (required&&!value) || /[\u0000-\u001f\u007f]/.test(value)) throw invalid()
+  if(value.length>max || (required&&!value) || hasControlCharacter(value)) throw invalid()
   return value
 }
 function uuid(raw: unknown): string {
   if(typeof raw!=='string'||!uuidPattern.test(raw)) throw invalid()
   return raw.toLowerCase()
+}
+function appText(raw: unknown, max: number, required=false): string {
+  if(raw !== undefined && typeof raw !== 'string') throw appInvalid()
+  const value=String(raw ?? '').trim()
+  if(value.length>max||(required&&!value)||hasControlCharacter(value)) throw appInvalid()
+  return value
+}
+function appBoolean(raw: unknown): boolean {
+  if(typeof raw!=='boolean') throw appInvalid()
+  return raw
+}
+export function onboardingAppConfig(raw: unknown): OnboardingAppConfig {
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw appInvalid()
+  const value=raw as Record<string,unknown>
+  if(Object.keys(value).some(key=>!appFields.includes(key as typeof appFields[number]))) throw appInvalid()
+  const theme=appText(value.theme,20,true)
+  if(!['premium-dark','dark','light'].includes(theme)) throw appInvalid()
+  const color=(input:unknown)=>{
+    const value=appText(input,7,true).toLowerCase()
+    if(!/^#[0-9a-f]{6}$/.test(value)) throw appInvalid()
+    return value
+  }
+  return {
+    displayName:appText(value.displayName,120,true),
+    theme:theme as OnboardingAppConfig['theme'],
+    primaryColor:color(value.primaryColor),
+    secondaryColor:color(value.secondaryColor),
+    shopEnabled:appBoolean(value.shopEnabled),
+    loyaltyEnabled:appBoolean(value.loyaltyEnabled),
+  }
 }
 export function onboardingData(raw: unknown): OnboardingData {
   const value = record(raw,fields)
@@ -74,16 +132,41 @@ async function ready(admin: AdminPrincipal): Promise<void> {
     if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_NOT_READY','Хранилище черновиков ещё не подготовлено.')
   } catch(error) { unavailable(error) }
 }
+async function appReady(admin: AdminPrincipal): Promise<void> {
+  await ready(admin)
+  try {
+    const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_app_configs') IS NOT NULL AS exists")
+    if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_APP_NOT_READY','Хранилище конфигурации приложения ещё не подготовлено.')
+  } catch(error) { unavailable(error) }
+}
 async function connection(): Promise<PoolClient> {
   try {return await pool.connect()} catch(error) {unavailable(error)}
 }
 function response(row: DraftRow) {
   return {id:row.id,requestKey:row.request_key,data:row.data,status:row.status,revision:row.revision,updatedAt:row.updated_at}
 }
+const appContract = {
+  template:'standard' as const,
+  qrEnabled:true as const,
+  isolationPolicy:'dedicated_database' as const,
+  legacyDataAccess:false as const,
+  runtimeStatus:'not_provisioned' as const,
+  published:false as const,
+}
+function appResponse(row: AppConfigRow) {
+  return {
+    draftId:row.draft_id,
+    tenantKey:row.tenant_key,
+    config:onboardingAppConfig(row.config),
+    revision:row.revision,
+    updatedAt:row.updated_at,
+    contract:{...appContract,isolationPolicy:row.isolation_policy},
+  }
+}
 function unavailable(error: unknown): never {
   if(error instanceof HttpError) throw error
   // Database errors may contain entire rows. Do not send/log draft contacts or bodies.
-  throw new HttpError(503,'ONBOARDING_UNAVAILABLE','Не удалось подтвердить сохранение черновика. Повторите сохранение.')
+  throw new HttpError(503,'ONBOARDING_UNAVAILABLE','Не удалось подтвердить сохранение данных мастера. Повторите сохранение.')
 }
 async function companyAvailable(client: PoolClient, data: OnboardingData): Promise<void> {
   if(!data.companyId) return
@@ -170,4 +253,63 @@ export async function updateOnboardingDraft(admin: AdminPrincipal, id: string, r
     await client.query('ROLLBACK').catch(()=>undefined)
     unavailable(error)
   } finally { client.release() }
+}
+
+export async function getOnboardingAppConfig(admin: AdminPrincipal, id: string) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  await appReady(admin)
+  try {
+    const result=await pool.query<AppConfigRow&{owned_draft_id:string}>(`SELECT d.id::text AS owned_draft_id,${joinedAppColumns}
+      FROM admin_onboarding_drafts d
+      LEFT JOIN admin_onboarding_app_configs a ON a.draft_id=d.id
+      WHERE d.id=$1::uuid AND d.admin_id=$2::bigint`,[draftId,admin.id])
+    const row=result.rows[0]
+    if(!row) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
+    return {application:row.tenant_key?appResponse(row):null,contract:appContract}
+  } catch(error) { unavailable(error) }
+}
+
+export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string, raw: unknown) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw appInvalid()
+  const body=raw as Record<string,unknown>
+  if(Object.keys(body).some(key=>!['revision','config'].includes(key))) throw appInvalid()
+  if(typeof body.revision!=='number'||!Number.isSafeInteger(body.revision)||body.revision<0||body.revision>2147483646) throw appInvalid()
+  const appConfig=onboardingAppConfig(body.config)
+  await appReady(admin)
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    const draft=(await client.query<AppDraftRow>(`SELECT id::text FROM admin_onboarding_drafts
+      WHERE id=$1::uuid AND admin_id=$2::bigint FOR UPDATE`,[draftId,admin.id])).rows[0]
+    if(!draft) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
+    const before=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid FOR UPDATE`,[draftId])).rows[0]
+    const same=before&&JSON.stringify(onboardingAppConfig(before.config))===JSON.stringify(appConfig)
+    if(before&&before.revision!==body.revision) {
+      if(before.revision===Number(body.revision)+1&&same){await client.query('COMMIT');return appResponse(before)}
+      throw new HttpError(409,'ONBOARDING_APP_REVISION_CONFLICT','Настройки приложения изменились. Откройте последнюю сохранённую версию.')
+    }
+    if(!before&&body.revision!==0) throw new HttpError(409,'ONBOARDING_APP_REVISION_CONFLICT','Настройки приложения ещё не созданы. Откройте последнюю сохранённую версию.')
+    let row:AppConfigRow
+    if(before) {
+      row=(await client.query<AppConfigRow>(`UPDATE admin_onboarding_app_configs
+        SET config=$2::jsonb,revision=revision+1,updated_at=NOW()
+        WHERE draft_id=$1::uuid RETURNING ${appColumns}`,[draftId,JSON.stringify(appConfig)])).rows[0]!
+    } else {
+      const tenantKey='sv-'+draftId.replaceAll('-','')
+      const collision=await client.query(`SELECT 1 FROM companies WHERE code=$1 LIMIT 1`,[tenantKey])
+      if(collision.rowCount) throw new HttpError(409,'ONBOARDING_TENANT_KEY_CONFLICT','Не удалось зарезервировать идентификатор приложения. Создайте новый черновик.')
+      row=(await client.query<AppConfigRow>(`INSERT INTO admin_onboarding_app_configs(draft_id,tenant_key,config)
+        VALUES($1::uuid,$2,$3::jsonb) RETURNING ${appColumns}`,[draftId,tenantKey,JSON.stringify(appConfig)])).rows[0]!
+    }
+    await recordAudit({admin,action:before?'onboarding.app_config_update':'onboarding.app_config_create',entityType:'onboarding_app_config',entityId:draftId,
+      before:before?{revision:before.revision}:null,after:{revision:row.revision},metadata:{tenantKey:row.tenant_key,changedFields:before?appFields.filter(key=>before.config[key]!==appConfig[key]):appFields}},client)
+    await client.query('COMMIT')
+    return appResponse(row)
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally {client.release()}
 }

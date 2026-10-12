@@ -19,6 +19,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   let server:http.Server,origin='',config:typeof import('../config.js').config
   const sessions=new Map<string,{cookie:string;csrf:string}>()
   const data={companyId:null,companyName:'Бар в Мулино',venueName:'Бар в Мулино',address:'Мулино',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:'owner@client.invalid'}
+  const appConfig={displayName:'Бар в Мулино',theme:'premium-dark',primaryColor:'#73bcd9',secondaryColor:'#172c36',shopEnabled:true,loyaltyEnabled:true}
   const command=()=>({requestKey:crypto.randomUUID(),data})
 
   beforeAll(async()=>{
@@ -45,6 +46,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     await state.db?.close()
   })
   const rows=async(table:string)=>(await state.db!.query('SELECT * FROM '+table+' ORDER BY id')).rows
+  const appRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_app_configs ORDER BY draft_id')).rows
   async function request(who:string,method:string,path='',body?:unknown,csrf=true,requestOrigin?:string) {
     const session=sessions.get(who)!
     return fetch(origin+'/api/admin/onboarding/drafts'+path,{method,headers:{cookie:session.cookie,origin:requestOrigin??config.publicOrigin,
@@ -66,7 +68,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
 
   it.each(['owner','trusted'])('denies %s every draft method and preserves credentials/access',async who=>{
     const before=await rows('admin_accounts')
-    for(const [method,path,body] of [['GET','',undefined],['POST','',command()],['GET','/'+crypto.randomUUID(),undefined],['PUT','/'+crypto.randomUUID(),{revision:1,data}],['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
+    for(const [method,path,body] of [['GET','',undefined],['POST','',command()],['GET','/'+crypto.randomUUID(),undefined],['PUT','/'+crypto.randomUUID(),{revision:1,data}],
+      ['GET','/'+crypto.randomUUID()+'/application',undefined],['PUT','/'+crypto.randomUUID()+'/application',{revision:0,config:appConfig}],['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
       const r=await request(who,method,path,body)
       expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
     }
@@ -135,6 +138,63 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect((await rows('admin_audit_log')).filter(row=>row.action==='onboarding.draft_update'&&row.entity_id===saved.id)).toHaveLength(1)
   })
 
+  it('saves one tenant-bound application blueprint without provisioning or legacy data access',async()=>{
+    const protectedTables=['companies','venues','wallets','transactions','admin_accounts']
+    const before=await Promise.all(protectedTables.map(rows))
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    const empty=await (await request('root','GET','/'+draft.id+'/application')).json()
+    expect(empty).toEqual({application:null,contract:{template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}})
+    const saved=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {tenantKey:string;revision:number}
+    expect(saved).toMatchObject({draftId:draft.id,config:appConfig,revision:1,contract:{template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}})
+    expect(saved.tenantKey).toMatch(/^sv-[0-9a-f]{32}$/)
+    expect(await (await request('root','GET','/'+draft.id+'/application')).json()).toEqual({application:saved,contract:(saved as {contract:unknown}).contract})
+    expect(await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json()).toEqual(saved)
+    expect(await appRows()).toHaveLength(1)
+    expect(await Promise.all(protectedTables.map(rows))).toEqual(before)
+    const audits=await rows('admin_audit_log')
+    expect(audits.filter(row=>row.action==='onboarding.app_config_create'&&row.entity_id===draft.id)).toHaveLength(1)
+    expect(JSON.stringify(audits)).not.toContain(appConfig.displayName)
+  })
+
+  it('isolates application config between operators and versions safe retries',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    const created=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {revision:number}
+    expect(created.revision).toBe(1)
+    expect((await request('other-root','GET','/'+draft.id+'/application')).status).toBe(404)
+    expect((await request('other-root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).status).toBe(404)
+    const changed={...appConfig,displayName:'Мулино — приложение',shopEnabled:false}
+    const updated=await (await request('root','PUT','/'+draft.id+'/application',{revision:1,config:changed})).json()
+    expect(updated).toMatchObject({revision:2,config:changed})
+    expect(await (await request('root','PUT','/'+draft.id+'/application',{revision:1,config:changed})).json()).toEqual(updated)
+    const stale=await request('root','PUT','/'+draft.id+'/application',{revision:1,config:{...changed,theme:'light'}})
+    expect(stale.status).toBe(409)
+    expect(await (await request('root','GET','/'+draft.id+'/application')).json()).toMatchObject({application:updated})
+  })
+
+  it('requires a signed session, same origin and CSRF for application config',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    const path='/'+draft.id+'/application',before=await appRows()
+    expect((await fetch(origin+'/api/admin/onboarding/drafts'+path)).status).toBe(401)
+    expect((await request('root','PUT',path,{revision:0,config:appConfig},false)).status).toBe(403)
+    expect((await request('root','PUT',path,{revision:0,config:appConfig},true,'https://foreign.invalid')).status).toBe(403)
+    const secret=await request('root','PUT',path,{revision:0,config:appConfig,token:'synthetic-secret'})
+    expect(secret.status).toBe(400);expect(JSON.stringify(await secret.json())).not.toContain('synthetic-secret')
+    expect(await appRows()).toEqual(before)
+  })
+
+  it.each([
+    {token:'synthetic-secret'}, {logoUrl:'https://secret.invalid/logo'}, {theme:'unknown'},
+    {primaryColor:'red'}, {secondaryColor:'#12345g'}, {shopEnabled:'true'}, {loyaltyEnabled:null},
+    {displayName:'x'.repeat(121)},
+  ])('rejects unsafe or malformed application fields without storing or echoing them: %j',async invalidConfig=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    const before=await appRows()
+    const r=await request('root','PUT','/'+draft.id+'/application',{revision:0,config:{...appConfig,...invalidConfig}})
+    expect(r.status).toBe(400)
+    expect(JSON.stringify(await r.json())).not.toContain('synthetic-secret')
+    expect(await appRows()).toEqual(before)
+  })
+
   it.each([
     {token:'synthetic-secret'}, {role:'SUPER_ADMIN'}, {companyId:'9223372036854775808'},
     {timeZone:'No/SuchZone'}, {ownerEmail:'invalid'}, {venueName:'x'.repeat(121)}, {companyName:null},
@@ -150,6 +210,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   it('rejects oversized bodies and unsupported methods',async()=>{
     expect((await request('root','POST','',{junk:'x'.repeat(9000)})).status).toBe(413)
     expect((await request('root','DELETE','/'+crypto.randomUUID())).status).toBe(405)
+    expect((await request('root','PUT','/'+crypto.randomUUID()+'/application',{junk:'x'.repeat(5000)})).status).toBe(413)
+    expect((await request('root','POST','/'+crypto.randomUUID()+'/application',{})).status).toBe(405)
   })
 
   it('rolls back draft and audit together and never logs sensitive database errors',async()=>{
@@ -165,9 +227,32 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect((await request('root','POST','',input)).status).toBe(200)
   })
 
+  it('rolls back application config and audit together after a partial failure',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    const before=await appRows(),logs=vi.spyOn(console,'error')
+    state.failAudit=true
+    try {
+      const r=await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})
+      expect(r.status).toBe(503)
+      expect(await appRows()).toEqual(before)
+      expect(logs).not.toHaveBeenCalled()
+    } finally {state.failAudit=false;logs.mockRestore()}
+    expect((await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).status).toBe(200)
+  })
+
+  it('fails closed when the separately applied application migration is missing',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    await state.db!.exec('DROP TABLE admin_onboarding_app_configs')
+    for(const method of ['GET','PUT']) {
+      const r=await request('root',method,'/'+draft.id+'/application',method==='PUT'?{revision:0,config:appConfig}:undefined)
+      expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_APP_NOT_READY'})
+    }
+    expect((await request('root','GET','/'+draft.id)).status).toBe(200)
+  })
+
   it('fails closed without the separately applied optional migration',async()=>{
     const before=await rows('companies')
-    await state.db!.exec('DROP TABLE admin_onboarding_drafts')
+    await state.db!.exec('DROP TABLE admin_onboarding_drafts CASCADE')
     for(const method of ['GET','POST']) {
       const r=await request('root',method,'',method==='POST'?command():undefined)
       expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_NOT_READY'})

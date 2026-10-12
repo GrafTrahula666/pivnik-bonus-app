@@ -14,9 +14,22 @@
 .onboarding .field input,.onboarding .field select{width:100%;min-width:0;font-size:14px;min-height:42px}
 .onboarding .field small{font-size:11px}
 .onboarding-actions{justify-content:flex-start;margin-top:20px}
+.onboarding-application{margin-top:28px;padding-top:4px;border-top:1px solid var(--border-soft)}
+.onboarding-contract{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 18px}
+.onboarding-contract>div{display:flex;align-items:flex-start;gap:8px;min-width:0;padding:12px;border:1px solid var(--border-soft);border-radius:8px;background:rgba(255,255,255,.02)}
+.onboarding-contract span,.onboarding-contract b,.onboarding-contract small{display:block;min-width:0;overflow-wrap:anywhere}
+.onboarding-contract b{font-size:12px}.onboarding-contract small{font-size:11px;margin-top:3px}
+.onboarding-contract svg{flex:0 0 auto;color:var(--accent)}
+.tenant-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.onboarding-color{display:grid;grid-template-columns:46px minmax(0,1fr);gap:8px}
+.onboarding-color input[type="color"]{padding:4px;cursor:pointer}
+.onboarding-check{display:flex;align-items:flex-start;gap:10px;min-width:0;padding:11px 12px;border:1px solid var(--border-soft);border-radius:8px}
+.onboarding-check input{margin-top:3px}.onboarding-check span,.onboarding-check b,.onboarding-check small{display:block}.onboarding-check b{font-size:13px}.onboarding-check small{font-size:11px;margin-top:3px}
+.onboarding-note{margin:14px 0 0!important;font-size:12px;overflow-wrap:anywhere}
 .onboarding-list-head{margin-top:24px;font-size:14px}
 .onboarding-list{list-style:none;margin:12px 0 0;padding:0}
 .onboarding-list li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-top:1px solid var(--border-soft)}
 .onboarding-list li>div{min-width:0;overflow-wrap:anywhere}
 .onboarding-list b,.onboarding-list small{display:block;font-size:13px}
+@media(max-width:760px){.onboarding-contract{grid-template-columns:1fr}}
 @media(max-width:600px){.onboarding{padding:16px}.onboarding-fields{grid-template-columns:1fr}.onboarding-head>.btn{width:100%}.onboarding-actions>.btn{flex:1 1 100%}.onboarding-list li>.btn{flex-shrink:0}}
