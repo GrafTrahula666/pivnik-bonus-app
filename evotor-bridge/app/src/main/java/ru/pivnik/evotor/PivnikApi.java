@@ -23,7 +23,7 @@ import ru.pivnik.evotor.core.ResolveResult;
  */
 final class PivnikApi {
     // Requests go through the Evotor cloud proxy, which adds a round trip.
-    private static final int TIMEOUT_MS = 6000;
+    private static final int TIMEOUT_MS = 10000;
     private static final int MAX_RESPONSE_CHARS = 64 * 1024;
 
     private PivnikApi() {}
@@ -42,13 +42,14 @@ final class PivnikApi {
      */
     static String diagnose(BridgeSettings settings) {
         HttpURLConnection connection = null;
+        String stage = "подключение";
         try {
             URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
             connection = (HttpURLConnection) url.openConnection();
             PivnikTls.apply(connection);
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(8000);
-            connection.setReadTimeout(8000);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
             connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -59,10 +60,17 @@ final class PivnikApi {
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);
             try (OutputStream out = connection.getOutputStream()) {
+                stage = "отправка запроса";
                 out.write(body);
             }
+            stage = "ожидание ответа";
             int status = connection.getResponseCode();
-            if (status == 404) return "OK";
+            String errorText = null;
+            if (status == 404) {
+                try { errorText = read(connection.getErrorStream()); } catch (Exception ignored) {}
+                // Only our own "QR not found" answer proves the right server replied; any other 404 is a stranger.
+                if (errorText != null && (errorText.contains("qr_not_found") || errorText.contains("QR не найден"))) return "OK";
+            }
             if (status == 401 && token.isEmpty()) return "NOKEY";
             if (status == 401 || status == 403 || status == 428) return "KEY";
             // Unexpected answer: say who answered (Railway or something on the till's network).
@@ -83,7 +91,7 @@ final class PivnikApi {
             try { details.append("\nIP: ").append(InetAddress.getByName(url.getHost()).getHostAddress()); }
             catch (Exception ignored) {}
             try {
-                String text = read(connection.getErrorStream());
+                String text = errorText != null ? errorText : read(connection.getErrorStream());
                 if (text != null && !text.trim().isEmpty()) {
                     text = text.replaceAll("\\s+", " ").trim();
                     details.append("\nОтвет: ").append(text.length() > 160 ? text.substring(0, 160) : text);
@@ -95,7 +103,9 @@ final class PivnikApi {
         } catch (Exception error) {
             String message = error.getMessage();
             if (message != null && message.length() > 160) message = message.substring(0, 160);
-            return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+            // Any failure: say at which step it broke and whether the lighter /api/health route gets through.
+            return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message)
+                    + "\nЭтап: " + stage + "\nПроверка /api/health: " + health(settings);
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -117,10 +127,12 @@ final class PivnikApi {
         try {
             connection = (HttpURLConnection) new URL(settings.apiBaseUrl() + "/api/health").openConnection();
             PivnikTls.apply(connection);
-            connection.setConnectTimeout(8000);
-            connection.setReadTimeout(8000);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
             connection.setInstanceFollowRedirects(false);
-            return "HTTP " + connection.getResponseCode();
+            long started = System.currentTimeMillis();
+            int code = connection.getResponseCode();
+            return "HTTP " + code + " за " + (System.currentTimeMillis() - started) + " мс";
         } catch (Exception error) {
             return error.getClass().getSimpleName();
         } finally {

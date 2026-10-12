@@ -20,7 +20,6 @@ import ru.pivnik.evotor.core.PosConfiguration;
 
 /** Owner-facing setup. Not part of the bartender flow: the sale itself never opens this screen. */
 public final class SettingsActivity extends Activity {
-    private EditText apiBase;
     private EditText session;
     private TextView status;
     private TextView connection;
@@ -44,7 +43,7 @@ public final class SettingsActivity extends Activity {
 
         TextView note = new TextView(this);
         note.setText("Введите ключ кассы pvpos_… от администратора (или отсканируйте его QR, если сканер "
-                + "печатает в поле) и нажмите «Сохранить». Адрес сервера уже заполнен. "
+                + "печатает в поле) и нажмите «Сохранить». Адрес сервера задан в приложении. "
                 + "Ключ позволяет только узнать клиента по QR и отметить его в чеке.");
         root.addView(note);
 
@@ -81,32 +80,17 @@ public final class SettingsActivity extends Activity {
             }
         });
 
-        TextView baseLabel = new TextView(this);
-        baseLabel.setText("Адрес сервера (менять не нужно):");
-        root.addView(baseLabel);
-
-        apiBase = new EditText(this);
-        apiBase.setHint("https://… адрес сервера PIVNIK");
-        apiBase.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        apiBase.setText(settings.apiBaseUrl());
-        root.addView(apiBase);
-
         Button save = new Button(this);
         save.setText("Сохранить");
         save.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
-                String base = apiBase.getText().toString().trim();
-                if (!base.startsWith("https://")) {
-                    Toast.makeText(SettingsActivity.this, "Нужен https:// адрес", Toast.LENGTH_SHORT).show();
-                    return;
-                }
                 String key = PosConfiguration.cleanToken(session.getText().toString());
                 if (!key.isEmpty() && !PosConfiguration.validToken(key)) {
                     Toast.makeText(SettingsActivity.this, "В ключе " + key.length() + " символов, нужно " + KEY_LENGTH
                             + ". Проверьте ключ.", Toast.LENGTH_LONG).show();
                     return;
                 }
-                try { settings.save(base, key); }
+                try { settings.save(key); }
                 catch (IllegalArgumentException error) {
                     Toast.makeText(SettingsActivity.this, error.getMessage(), Toast.LENGTH_SHORT).show();
                     return;
@@ -128,7 +112,7 @@ public final class SettingsActivity extends Activity {
         check.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
                 if (!PosConfiguration.validBase(settings.apiBaseUrl())) {
-                    connection.setText("Сначала введите https:// адрес сервера и нажмите «Сохранить».");
+                    connection.setText("Адрес сервера не задан.");
                     return;
                 }
                 check.setEnabled(false);
@@ -176,7 +160,7 @@ public final class SettingsActivity extends Activity {
                         + new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).format(new Date())
                         + ". Если дата неверная, исправьте её в настройках кассы."
                 : result.contains("UnknownHost") ? "\nКасса не находит сервер: проверьте адрес и интернет."
-                : result.contains("Timeout") ? "\nСервер не отвечает вовремя: проверьте интернет кассы." : "";
+                : result.contains("Timeout") ? "\nСервер не отвечает вовремя: проверьте интернет кассы и настройки прокси приложения в кабинете Эвотора. Этап и проверку health пришлите разработчику." : "";
         return "Нет связи: " + result.substring(4) + hint;
     }
 
