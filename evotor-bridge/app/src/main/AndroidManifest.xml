@@ -47,9 +47,15 @@
         </activity>
 
         <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
+        <!-- Evotor's barcode-event page lists category EVOTOR and this permission; the generic manifest page lists DEFAULT, so both filters are declared. -->
         <service
             android:name=".PivnikSellService"
-            android:exported="true">
+            android:exported="true"
+            android:permission="ru.evotor.permission.SELL_INTEGRATION_SERVICE">
+            <intent-filter>
+                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
+                <category android:name="android.intent.category.EVOTOR" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
                 <category android:name="android.intent.category.DEFAULT" />
