@@ -191,8 +191,8 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Воин', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', run: 0 }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
-  { id: 'anya',    skins: [{ n: 'Классика' }, { n: 'Красное платье', img: 'chars/anya-red-front.webp', back: 'chars/anya-red-back.webp' }], name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
+  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Воин', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', key: 'vitaliy-warrior', run: 2 }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'anya',    skins: [{ n: 'Классика' }, { n: 'Красное платье', img: 'chars/anya-red-front.webp', back: 'chars/anya-red-back.webp', key: 'anya-red', run: 2, hover: false }], name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
   { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'sway', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, guardian: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
   { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
   { id: 'vlad', run: 3, name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
@@ -214,14 +214,14 @@ LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
 CHARS.forEach(c => {
   const looks = c.skins || [{}];
   c.looks = looks.map(k => {
-    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run;
-    return { n: k.n || '', img, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)) : null };
+    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run, key = k.key || c.id;
+    return { n: k.n || '', img, hover: 'hover' in k ? k.hover : c.hover, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${key}-run${i + 1}.webp`)) : null };
   });
 });
 // make look #idx the one the rest of the game reads (c.img, c.im, c.bk, c.rf)
 function applyLook(c, idx) {
   const k = c.looks[idx] || c.looks[0];
-  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf;
+  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf; c.hover = k.hover;
 }
 
 // ---------- bonus icons: glossy HD badges, drawn once ----------
