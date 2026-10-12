@@ -4,7 +4,7 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт и mergeable, reviews/threads отсутствуют.
 - Проверенный base перед изменением: `aa07f7ed40fcf74e4720f089910761e89b64648d` (main, повторно получен 2026-10-12).
-- Implementation HEAD резервирования scope: `fe3a6531f92cc1a73edc5262a2fcdd537fc57dc8`, tree `3da80f5800ed26e2c8246e1b8c3d261937e00b81`. Следующий commit обновляет только эту контрольную точку; реализация остаётся той же.
+- Опубликованный implementation commit резервирования scope: `aa32b7384f1789e69df7b48135ffa7ff0c940fbf`, tree `3da80f5800ed26e2c8246e1b8c3d261937e00b81`. Текущий docs HEAD нужно читать из GitHub/`git rev-parse`, реализация остаётся на указанном tree.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -68,7 +68,7 @@
 
 ## Проверки этой итерации
 
-- Scope-шаг на exact implementation commit `fe3a6531f92cc1a73edc5262a2fcdd537fc57dc8`, tree `3da80f5800ed26e2c8246e1b8c3d261937e00b81`: onboarding HTTP/SQL suite — 40/40; полный Business suite — 191 passed, 20 skipped; security — 124/124; typecheck, build и lint — успешно (только 12 существующих Fast Refresh warning, 0 errors); настоящий Playwright UI — 4/4 desktop/mobile. Проверены создание новой неактивной организации, два разных неактивных заведения одной существующей компании, replay/double-click, точные ревизии, Origin/CSRF/session, запрет owner/trusted/другого SUPER_ADMIN, прямой API 404, rollback при ошибке audit и отсутствие migration 006. Скриншоты desktop/mobile просмотрены, горизонтального overflow нет.
+- Scope-шаг на exact published implementation commit `aa32b7384f1789e69df7b48135ffa7ff0c940fbf`, tree `3da80f5800ed26e2c8246e1b8c3d261937e00b81`: onboarding HTTP/SQL suite — 40/40; полный Business suite — 191 passed, 20 skipped; security — 124/124; typecheck, build и lint — успешно (только 12 существующих Fast Refresh warning, 0 errors); настоящий Playwright UI — 4/4 desktop/mobile. Проверены создание новой неактивной организации, два разных неактивных заведения одной существующей компании, replay/double-click, точные ревизии, Origin/CSRF/session, запрет owner/trusted/другого SUPER_ADMIN, прямой API 404, rollback при ошибке audit и отсутствие migration 006. Скриншоты desktop/mobile просмотрены, горизонтального overflow нет.
 - Root: полный materialize дважды дал одинаковый SHA256 diff `a8cf026d34d7acddab940bcde5a0581df8ab2864d772656df10024960c331472`; с материализованными файлами `node --test` — 548/548, `npm run check` — успешно. Генерируемый diff в commit не включён. Root и Business `npm audit` — 0 уязвимостей. PostgreSQL integration suite пропущен из-за отсутствия безопасного `ADMIN_INTEGRATION_TEST_DATABASE_URL`; PGlite не выдаётся за проверку межсоединительной concurrency.
 
 - Root на exact implementation commit `512425392d385ee91a558d5c69e38de39d000b88`, tree `e9787e6f18e12adc0484b15710092d31f4871a6d`: materialize дважды, одинаковый SHA256 diff `a8cf026d34d7acddab940bcde5a0581df8ab2864d772656df10024960c331472`; `node --test` — 548/548, без skipped; `npm run check` — успешно. Результаты materialize в commit не включены.
