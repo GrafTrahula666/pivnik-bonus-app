@@ -22,6 +22,7 @@ import { AccountSecurityPanel } from './phaseC/AccountSecurity'
 import { BroadcastPage } from './phaseC/BroadcastPage'
 import { DeveloperPage } from './phaseC/DeveloperPage'
 import { DemoMode } from './phaseC/DemoMode'
+import { VenueOnboarding } from './phaseC/VenueOnboarding'
 
 type AuthState='loading'|'guest'|'authenticated'|'error'
 
@@ -97,6 +98,7 @@ export default function App(){
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
         <>
+          {isSuper&&session.capabilities.onboardingDrafts&&['platform','companies','venues'].includes(page)&&<VenueOnboarding key={session.admin.id} session={session}/>}
           {venueError&&<div className="error-state card"><AlertTriangle/><h3>Не удалось получить список заведений</h3><p>{venueError}</p></div>}
           {!selected&&!allVenues&&!platformPage&&!venueError&&<div className="empty card"><Database/><h3>Нет доступных заведений</h3><p>Для этой учётной записи пока не назначены заведения.</p></div>}
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}

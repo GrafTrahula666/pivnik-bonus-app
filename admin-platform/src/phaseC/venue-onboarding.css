@@ -1,0 +1,22 @@
+.onboarding{padding:24px;margin-bottom:24px;min-width:0}
+.onboarding-head,.onboarding-list-head,.onboarding-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.onboarding h2{margin:6px 0;font-size:22px}
+.onboarding p,.onboarding small{color:var(--muted);line-height:1.5}
+.onboarding-head p{margin:0 0 8px;font-size:13px}
+.onboarding .btn{min-height:40px;font-size:12px;white-space:normal}
+.onboarding-feedback{padding:12px;border:1px solid var(--border);border-radius:8px;margin:14px 0;font-size:13px;overflow-wrap:anywhere}
+.onboarding-feedback.error{color:var(--danger);border-color:var(--danger)}
+.onboarding-step{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:22px 0 16px}
+.onboarding-step span{color:var(--muted);font-size:12px}
+.onboarding-fields{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.onboarding .field{margin:0;min-width:0}
+.onboarding .field>span{font-size:12px}
+.onboarding .field input,.onboarding .field select{width:100%;min-width:0;font-size:14px;min-height:42px}
+.onboarding .field small{font-size:11px}
+.onboarding-actions{justify-content:flex-start;margin-top:20px}
+.onboarding-list-head{margin-top:24px;font-size:14px}
+.onboarding-list{list-style:none;margin:12px 0 0;padding:0}
+.onboarding-list li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-top:1px solid var(--border-soft)}
+.onboarding-list li>div{min-width:0;overflow-wrap:anywhere}
+.onboarding-list b,.onboarding-list small{display:block;font-size:13px}
+@media(max-width:600px){.onboarding{padding:16px}.onboarding-fields{grid-template-columns:1fr}.onboarding-head>.btn{width:100%}.onboarding-actions>.btn{flex:1 1 100%}.onboarding-list li>.btn{flex-shrink:0}}

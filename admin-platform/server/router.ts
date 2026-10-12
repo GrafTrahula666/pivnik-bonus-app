@@ -17,7 +17,7 @@ import {
 } from './data.js'
 import { recordAudit } from './audit.js'
 import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js'
-import { enforceOrigin, readJsonBody, requestIp, securityHeaders } from './security.js'
+import { enforceOrigin, enforceRateLimit, readJsonBody, requestIp, securityHeaders } from './security.js'
 import {
   listAuthorizedVenues,
   requireVenueAccess,
@@ -56,6 +56,7 @@ import {
 } from './pivnik-app-content.js'
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
+import { createOnboardingDraft, getOnboardingDraft, getOnboardingIndex, getOnboardingRequest, requireOnboardingAccess, updateOnboardingDraft } from './venue-onboarding.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -74,6 +75,7 @@ export const sessionCapabilities=()=>({
   productionAchievementWrites:config.enableWrites&&config.enableProductionAchievementWrites,
   productionEntitlementWrites:config.enableWrites&&config.enableProductionEntitlementWrites,
   demo:config.demoEnabled,
+  onboardingDrafts:config.enableWrites&&config.enableOnboardingDrafts,
 })
 
 export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
@@ -134,6 +136,26 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  const onboarding=/^\/api\/admin\/onboarding\/drafts(?:\/([^/]+))?$/.exec(url.pathname)
+  if(onboarding){
+    requireOnboardingAccess(session.admin)
+    const id=onboarding[1]
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){
+      const requestKey=url.searchParams.get('requestKey')
+      json(res,200,id?await getOnboardingDraft(session.admin,id):requestKey?await getOnboardingRequest(session.admin,requestKey):await getOnboardingIndex(session.admin));return true
+    }
+    if(!id&&isMethod(req,'POST')){
+      json(res,200,await createOnboardingDraft(session.admin,await readJsonBody(req,8*1024)));return true
+    }
+    if(id&&isMethod(req,'PUT')){
+      json(res,200,await updateOnboardingDraft(session.admin,id,await readJsonBody(req,8*1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/venues'){
     json(res,200,{venues:await listAuthorizedVenues(session.admin)});return true

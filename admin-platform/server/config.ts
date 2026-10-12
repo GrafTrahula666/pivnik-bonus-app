@@ -22,6 +22,7 @@ export const config = {
   trustProxy: bool('ADMIN_TRUST_PROXY', true),
   allowMigrations: bool('ADMIN_ALLOW_MIGRATIONS', false),
   enableWrites: bool('ADMIN_ENABLE_WRITES', false),
+  enableOnboardingDrafts: bool('ADMIN_ENABLE_ONBOARDING_DRAFTS', false),
   enableProductionBonusWrites: bool('ADMIN_ENABLE_PRODUCTION_BONUS_WRITES', false),
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),

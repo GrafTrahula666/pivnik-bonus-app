@@ -4,6 +4,17 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Business onboarding drafts (2026-10-12, opt-in)
+
+`admin-platform/server/venue-onboarding.ts` and the existing Business router own
+the SUPER_ADMIN-only draft API. `src/phaseC/VenueOnboarding.tsx` extends the real
+Business App. Additive admin migration 004 is separate from guest/startup policy;
+`ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also requires the global write
+switch. Drafts are scoped to their creator, versioned, idempotent and audited.
+This step does not create an active tenant, launch a guest app or connect a bot/POS.
+The guest gateway/Express copies are unchanged. Continue from
+`ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store provider keys in draft JSON.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already
