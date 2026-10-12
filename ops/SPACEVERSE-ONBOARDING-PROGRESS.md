@@ -2,9 +2,9 @@
 
 ## Контрольная точка
 
-- Ветка: `spaceverse/venue-onboarding`; один связанный draft PR.
+- Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт и mergeable, reviews/threads отсутствуют.
 - Проверенный base перед изменением: `aa07f7ed40fcf74e4720f089910761e89b64648d` (main, повторно получен 2026-10-12).
-- Implementation HEAD с проверенным кодом/снимками: `bbe5d876c6a3c0e4d85cbfca26a9ebb2f08833aa`. Следующий commit обновляет только эту контрольную точку; реализация остаётся той же.
+- Implementation HEAD с проверенным кодом: `512425392d385ee91a558d5c69e38de39d000b88`, tree `e9787e6f18e12adc0484b15710092d31f4871a6d`. Следующий commit обновляет только эту контрольную точку; реализация остаётся той же.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -13,7 +13,7 @@
 ## Цель и этапы
 
 1. **Данные заведения, серверный черновик, повторное открытие** — реализовано и проверено в изолированном окружении.
-2. **Принадлежность tenant и конфигурация guest-приложения** — серверный blueprint и стабильный tenant ID реализованы; runtime ещё не читает эту конфигурацию. Новое заведение не получает доступ к историческим кошелькам/операциям ПИВНИКА.
+2. **Принадлежность tenant и конфигурация guest-приложения** — серверный blueprint, стабильный tenant ID, строгий runtime manifest и проверка привязки отдельной БД реализованы. Текущий ПИВНИК-специфичный runtime намеренно отказывает tenant-запуску даже при правильной привязке; новое заведение не получает доступ к историческим кошелькам/операциям ПИВНИКА.
 3. **Зашифрованные подключения и реальные проверки Telegram/VK/Эвотора** — предстоит.
 4. **Возобновляемое создание ресурсов из того же релизного артефакта** — предстоит.
 5. **Приглашения и гибкие права** — предстоит.
@@ -26,6 +26,8 @@
 - `companies`, `venues`, `admin_company_access` и tenant resolver существуют. Создания организаций в публичном Business API до этого шага нет; оно встречается в bootstrap/seed.
 - Черновик хранится отдельно от активных организаций/заведений и ссылается на существующую `companies`, если оператор выбрал её. Новая организация пока представлена данными черновика; канонические сущности будут созданы при проверенном provisioning, без двойной модели tenant.
 - Конфигурация стандартного приложения хранится отдельно от черновика, но связана с ним внешним ключом один-к-одному. Сервер резервирует стабильный `sv-*` tenant ID; это ещё не запись в `companies` и не опубликованный runtime.
+- Оба guest entrypoint исторически запускают ПИВНИК-специфичную инициализацию: gateway сначала создаёт child `server.js`, а child запускает миграции/seed. Поэтому tenant preflight установлен в обоих файлах до spawn/`initDatabase`, а не только в одном процессе.
+- Runtime manifest содержит только идентификатор/ревизию blueprint, брендируемые настройки, явную политику `dedicated_database` и честный статус выпуска. URL БД, токены и provider credentials в него не входят; целостность проверяется SHA-256.
 - Использованы настоящие `App`, Business HTTP router, подписанные сессии, Origin/CSRF и существующий аудит.
 - Guest runtime исторически связан с ПИВНИКОМ; наличие companies/venues не делает его автоматически безопасным для других клиентов. Legacy read adapter уже отказывает чужим tenant.
 - OAuth/права Telegram/VK/кассы требуют официальной авторизации владельца. Наличие строки токена не означает подключение.
@@ -45,26 +47,33 @@
 - Контракт всегда сообщает `template=standard`, `qrEnabled=true`, `isolationPolicy=dedicated_database`, `legacyDataAccess=false`, `runtimeStatus=not_provisioned`, `published=false`. Наличие blueprint не выдаётся за созданное приложение.
 - Произвольные поля, URL, токены и неправильные типы отвергаются. Мастер прямо сообщает, что логотип и ключи Telegram/VK/кассы будут приниматься только через будущий защищённый канал.
 - Создание/обновление application blueprint и audit выполняются одной транзакцией. Stable tenant ID выводится из UUID черновика и не меняется при повторе; приложение, база, бот, webhook, касса, клиенты, кошельки и операции этим шагом не создаются.
+- Ответ application API теперь содержит строгий `runtimeManifest`, собранный сервером из сохранённого blueprint. Неизвестные поля (включая поля URL/токенов), подмена конфигурации без нового checksum и ложные статусы `ready/published` отвергаются.
+- `spaceverse-runtime-manifest.js` разбирает manifest и в tenant-режиме делает один параметризованный lookup точной привязки в выбранной БД. Runtime key, checksum, revision, isolation policy и статус обязаны совпасть; отсутствие таблицы, чужая БД и несовпадение закрывают запуск без деталей БД в ошибке.
+- `migrations/017_spaceverse_runtime_binding.sql` — отдельная ручная additive-миграция для будущей выделенной tenant-БД. Она создаёт только singleton binding table, не вставляет строки и не касается компаний, клиентов, кошельков, операций или provider data.
+- `universal-server.js` проверяет привязку до запуска child, `server.js` — до `initDatabase`. Текущий manifest всегда `not_provisioned`, поэтому даже корректная подготовленная привязка заканчивается `SPACEVERSE_RUNTIME_NOT_PROVISIONED`. Legacy ПИВНИК без tenant env работает как раньше и не выполняет binding query.
+- Две независимые PGlite-БД с разными manifest проверены: каждая принимает только свою привязку, перекрёстная попытка закрывается. VK static builder не получает server manifest.
 
 ## Включение в изолированном окружении
 
 - Additive migrations: `admin-platform/admin-migrations/004_onboarding_drafts.sql` и `005_onboarding_app_config.sql`. Нет запуска из `server/index.ts` и нет изменения исторических миграций. 005 применяется только после 004 и фиксирует политику `dedicated_database`/`not_started` ограничениями БД.
+- Migration 017 не входит в automatic startup allowlist. Её можно применять только вручную к новой выделенной тестовой БД; в общей исторической БД ПИВНИКА этот шаг не нужен и не разрешён.
 - Только после подготовки изолированной metadata-БД: `ADMIN_ENABLE_WRITES=true` и `ADMIN_ENABLE_ONBOARDING_DRAFTS=true`. Второй флаг выключен по умолчанию. Без таблицы API возвращает `ONBOARDING_NOT_READY`, ничего не создаёт.
+- `SPACEVERSE_RUNTIME_MODE=tenant` и `SPACEVERSE_RUNTIME_MANIFEST_JSON` предназначены для будущего provisioner. Сейчас их установка намеренно не запускает приложение; до завершения tenant-aware runtime их нельзя добавлять в действующие Railway-сервисы.
 - Production БД, Railway env, секреты, реальные сообщения, webhook, main и действующие приложения не изменялись.
 - При откате выключить флаг; сохранённые черновики оставить. Удаление таблицы не требуется.
 
 ## Проверки этой итерации
 
-- Root на exact implementation tree `6bfa9d459b2f63e06c3a502ee4371e89f7923575`, опубликованном как `bbe5d876c6a3c0e4d85cbfca26a9ebb2f08833aa`: materialize дважды, одинаковый SHA256 diff root runtime `4abf9e1b8b8e81dcce5e4655811639d5867899b7b85ae82bccdcfd164c7ced79`; `node --test` — 540/540, без skipped; `npm run check` — успешно. Контрольная сумма не изменилась относительно предыдущего шага; результаты materialize в commit не включены.
+- Root на exact implementation commit `512425392d385ee91a558d5c69e38de39d000b88`, tree `e9787e6f18e12adc0484b15710092d31f4871a6d`: materialize дважды, одинаковый SHA256 diff `a8cf026d34d7acddab940bcde5a0581df8ab2864d772656df10024960c331472`; `node --test` — 548/548, без skipped; `npm run check` — успешно. Результаты materialize в commit не включены.
 - Business: `npm test -- --maxWorkers=1` — 184 passed, 20 skipped. Skipped — существующие тесты с внешним PostgreSQL, а не новые тесты мастера.
-- Файл onboarding содержит 33 HTTP/SQL проверки; общий `test:security` — 117/117. Проверены реальные сессии/Origin/CSRF, роли, разные tenant/два заведения, разные SUPER_ADMIN, create/reopen/replay, app revision, rollback, запрет неизвестных/секретных полей, отсутствие изменений `companies`/`venues`/`wallets`/`transactions`/учётных записей и отдельная миграция.
+- Файл onboarding содержит 33 HTTP/SQL проверки; новый runtime suite — 8/8; общий `test:security` — 117/117. Дополнительно проверены checksum/strict schema, legacy без DB lookup, точная binding-запись, две независимые tenant-БД, cross-binding denial, отсутствие автозапуска migration 017, порядок guard в обоих runtime и отсутствие server manifest в VK build.
 - Root и Business `npm audit` — 0 уязвимостей; установлены точные lockfile-зависимости через npm ci.
 - `npm run test:security -- --maxWorkers=1` — 117/117.
-- Typecheck и полный build — успешно. `npm run test:e2e:onboarding` — 4/4 на 1440×1000 и 390×844: настоящий UI → HTTP → SQL, reload/edit, double click, потерянный ответ после настоящего COMMIT и восстановление того же черновика, запрет владельцу заведения.
+- Typecheck, API build и полный build — успешно. `npm run test:e2e:onboarding` — 4/4 на desktop/mobile: настоящий UI → HTTP → SQL, reload/edit, double click, потерянный ответ после настоящего COMMIT и восстановление того же черновика, запрет владельцу заведения. PostgreSQL integration suite корректно пропущен целиком (20 тестов): внешний test URL в этом окружении не настроен.
 - Проверены снимки `admin-platform/artifacts/onboarding-desktop.png` и `onboarding-mobile.png`; горизонтального overflow нет. Fixture-процесс ограничен loopback, оба пула используют изолированную БД.
 - PGlite исполняет настоящий SQL, но не доказывает независимую PostgreSQL concurrency. Браузерная проверка использует настоящий собранный App и router, синтетические учётные записи и изолированную БД; это не production-авторизация и не проверка внешнего провайдера.
-- Railway проверен только на чтение: production-сервис `admin-pilot` активен на ветке main, staged-изменений нет; последний успешный deployment использует старый SHA `5dd9201…` (2026-10-12 06:05 UTC), onboarding-флаг отсутствует. Этот PR в production не развёрнут.
+- Railway повторно проверен только на чтение: production-сервис `admin-pilot` активен на ветке main, staged-изменений нет; последний успешный deployment использует старый SHA `5dd9201…` (2026-10-12 06:05 UTC), onboarding-флаг и новые runtime env отсутствуют. Этот PR в production не развёрнут.
 
 ## Следующий безопасный шаг
 
-Продолжить этап 2 минимальным runtime manifest/resolver: тот же артефакт должен прочитать только подтверждённый blueprint и явную ссылку на отдельную тестовую БД, отказавшись запускаться при отсутствии tenant/isolation binding. Не создавать БД и не подключать legacy wallet автоматически; сначала доказать два tenant и два заведения в изолированном окружении и паритет обоих runtime/VK build. Ключи провайдеров принимать только после готовности шифрования; не добавлять plaintext-поля в JSON черновика.
+Продолжить этап 2 явным tenant/venue runtime context: добавить в проверяемый provisioning plan канонические company/venue ID и заставить tenant-mode repositories требовать этот scope до любых запросов к клиентам, кошелькам и операциям. Проверить два tenant и два заведения одной компании, не включая tenant startup и не создавая production-БД. Только после устранения ПИВНИК-специфичных fallback можно будет разрешать manifest status выше `not_provisioned`; ключи провайдеров до готового шифрования не принимать.
