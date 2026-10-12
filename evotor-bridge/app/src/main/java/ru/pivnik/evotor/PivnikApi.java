@@ -22,7 +22,8 @@ import ru.pivnik.evotor.core.ResolveResult;
  * Always runs off the Evotor binder thread.
  */
 final class PivnikApi {
-    private static final int TIMEOUT_MS = 3000;
+    // Requests go through the Evotor cloud proxy, which adds a round trip.
+    private static final int TIMEOUT_MS = 6000;
     private static final int MAX_RESPONSE_CHARS = 64 * 1024;
 
     private PivnikApi() {}
@@ -53,7 +54,7 @@ final class PivnikApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             // Works before a key is entered too: then a 401 already proves the server is reachable.
             String token = settings.deviceToken();
-            if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Device " + token);
+            if (!token.isEmpty()) setKey(connection, token);
             byte[] body = "{\"payload\":\"PIVNIK-CONNECTION-CHECK\"}".getBytes(StandardCharsets.UTF_8);
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);
@@ -86,6 +87,7 @@ final class PivnikApi {
                 if (text != null && !text.trim().isEmpty()) {
                     text = text.replaceAll("\\s+", " ").trim();
                     details.append("\nОтвет: ").append(text.length() > 160 ? text.substring(0, 160) : text);
+                    if (text.contains("2003")) details.append("\nЭвотор не пропускает запрос: на dev.evotor.ru, вкладка «Интеграция», включите «Проксирование запросов… (ver. 2)» с адресом сервера и переустановите приложение через Личный кабинет.");
                 }
             } catch (Exception ignored) {}
             details.append("\nПроверка /api/health: ").append(health(settings));
@@ -97,6 +99,12 @@ final class PivnikApi {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    // The Evotor cloud proxy replaces Authorization with its own token, so the key also travels in X-Pivnik-Device-Key.
+    private static void setKey(HttpURLConnection connection, String token) {
+        connection.setRequestProperty("X-Pivnik-Device-Key", token);
+        connection.setRequestProperty("Authorization", "Device " + token);
     }
 
     private static void appendHeader(StringBuilder out, HttpURLConnection connection, String name) {
@@ -143,7 +151,7 @@ final class PivnikApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("Authorization", "Device " + settings.deviceToken());
+            setKey(connection, settings.deviceToken());
             byte[] body = json.toString().getBytes(StandardCharsets.UTF_8);
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);

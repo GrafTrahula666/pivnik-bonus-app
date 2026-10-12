@@ -2875,6 +2875,7 @@ app.use('/api/device/pos', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,
       pathname: req.originalUrl.split('?')[0], authorization: req.headers.authorization,
+      deviceKey: req.headers['x-pivnik-device-key'],
       body: req.body, address: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress }));
   } catch (error) { next(error); }
 });

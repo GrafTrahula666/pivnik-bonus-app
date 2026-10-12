@@ -2,7 +2,7 @@ name: Evotor bridge test APK
 on:
   workflow_dispatch:
   push:
-    branches: ['claude/project-thread-gd8js6']
+    branches: ['claude/project-thread-gd8js6', 'claude/project-thread-i8kxd6']
     paths: ['evotor-bridge/**', '.github/workflows/evotor-bridge-apk.yml']
 permissions:
   contents: write
