@@ -4,6 +4,8 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR.
 - Проверенный base / HEAD перед изменением: `aa07f7ed40fcf74e4720f089910761e89b64648d` (main, 2026-10-12).
+- Implementation HEAD с проверенным кодом/снимками: `9098bf6adc80e5b16ea41578cce8041d39620e55`. Следующий commit обновляет только эту контрольную точку, код остаётся тем же.
+- Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
 - Перед продолжением проверить свежий main, PR, CI и пересечения с «SPACEVERSE Business — развитие». Не создавать вторую ветку/дубликат PR.
