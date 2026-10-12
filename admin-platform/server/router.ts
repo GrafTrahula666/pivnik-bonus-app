@@ -57,8 +57,8 @@ import {
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import {
-  createOnboardingDraft,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,getOnboardingRequest,
-  requireOnboardingAccess,saveOnboardingAppConfig,updateOnboardingDraft,
+  createOnboardingDraft,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,getOnboardingRequest,getOnboardingScope,
+  prepareOnboardingScope,requireOnboardingAccess,saveOnboardingAppConfig,updateOnboardingDraft,
 } from './venue-onboarding.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -145,11 +145,24 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     requireOnboardingAccess(session.admin)
     if(!isMethod(req,'GET')){
       requireCsrf(req,session.rawToken)
-      enforceRateLimit(`onboarding:${session.admin.id}`,60,60_000)
+      enforceRateLimit(`onboarding-application:${session.admin.id}`,60,60_000)
     }
     if(isMethod(req,'GET')){json(res,200,await getOnboardingAppConfig(session.admin,onboardingApp[1]!));return true}
     if(isMethod(req,'PUT')){
       json(res,200,await saveOnboardingAppConfig(session.admin,onboardingApp[1]!,await readJsonBody(req,4*1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingScope=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/scope$/.exec(url.pathname)
+  if(onboardingScope){
+    requireOnboardingAccess(session.admin)
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-scope:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingScope(session.admin,onboardingScope[1]!));return true}
+    if(isMethod(req,'PUT')){
+      json(res,200,await prepareOnboardingScope(session.admin,onboardingScope[1]!,await readJsonBody(req,1024)));return true
     }
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }

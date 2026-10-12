@@ -1,6 +1,7 @@
 // @vitest-environment node
 import http from 'node:http'
 import crypto from 'node:crypto'
+import fs from 'node:fs/promises'
 import type { PGlite } from '@electric-sql/pglite'
 import { afterAll,beforeAll,describe,expect,it,vi } from 'vitest'
 import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
@@ -48,6 +49,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   })
   const rows=async(table:string)=>(await state.db!.query('SELECT * FROM '+table+' ORDER BY id')).rows
   const appRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_app_configs ORDER BY draft_id')).rows
+  const scopeRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_scopes ORDER BY draft_id')).rows
   async function request(who:string,method:string,path='',body?:unknown,csrf=true,requestOrigin?:string) {
     const session=sessions.get(who)!
     return fetch(origin+'/api/admin/onboarding/drafts'+path,{method,headers:{cookie:session.cookie,origin:requestOrigin??config.publicOrigin,
@@ -67,10 +69,22 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect(await rows('admin_onboarding_drafts')).toEqual([])
   })
 
+  it('scope migration is additive, repeatable and creates no canonical rows by itself',async()=>{
+    const sql=await fs.readFile(new URL('../../admin-migrations/006_onboarding_scope.sql',import.meta.url),'utf8')
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS admin_onboarding_scopes/i)
+    expect(sql).not.toMatch(/(?:^|\n)\s*(?:INSERT|UPDATE|DELETE\s+FROM|MERGE|TRUNCATE)\b/i)
+    expect(sql).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|SCHEMA|DATABASE)\b/i)
+    const before={companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()}
+    await state.db!.exec(sql)
+    expect({companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()}).toEqual(before)
+  })
+
   it.each(['owner','trusted'])('denies %s every draft method and preserves credentials/access',async who=>{
     const before=await rows('admin_accounts')
     for(const [method,path,body] of [['GET','',undefined],['POST','',command()],['GET','/'+crypto.randomUUID(),undefined],['PUT','/'+crypto.randomUUID(),{revision:1,data}],
-      ['GET','/'+crypto.randomUUID()+'/application',undefined],['PUT','/'+crypto.randomUUID()+'/application',{revision:0,config:appConfig}],['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
+      ['GET','/'+crypto.randomUUID()+'/application',undefined],['PUT','/'+crypto.randomUUID()+'/application',{revision:0,config:appConfig}],
+      ['GET','/'+crypto.randomUUID()+'/scope',undefined],['PUT','/'+crypto.randomUUID()+'/scope',{draftRevision:1,applicationRevision:1}],
+      ['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
       const r=await request(who,method,path,body)
       expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
     }
@@ -180,6 +194,95 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect(await (await request('root','GET','/'+draft.id+'/application')).json()).toMatchObject({application:updated})
   })
 
+  it('atomically prepares inactive canonical company and venue IDs, reopens and safely replays',async()=>{
+    const protectedTables=['wallets','transactions','admin_accounts']
+    const protectedBefore=await Promise.all(protectedTables.map(rows))
+    const activeBefore=await (await fetch(origin+'/api/admin/venues',{headers:{cookie:sessions.get('root')!.cookie}})).json()
+    const companiesBefore=await rows('companies'),venuesBefore=await rows('venues')
+    const draft=await (await request('root','POST','',command())).json() as {id:string;revision:number}
+    const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {revision:number;tenantKey:string}
+    expect(await (await request('root','GET','/'+draft.id+'/scope')).json()).toEqual({scope:null,contract:{
+      status:'prepared',venueActive:false,runtimeStatus:'not_provisioned',staffAccessGranted:false,providerConnectionsCreated:false,
+    }})
+    const body={draftRevision:draft.revision,applicationRevision:application.revision}
+    const prepared=await (await request('root','PUT','/'+draft.id+'/scope',body)).json() as {
+      draftId:string;company:{id:string;code:string;createdByOnboarding:boolean;active:boolean};venue:{id:string;code:string;active:boolean};revision:number
+    }
+    expect(prepared).toMatchObject({draftId:draft.id,company:{code:application.tenantKey,createdByOnboarding:true,active:false},
+      venue:{code:application.tenantKey,active:false},source:body,revision:1,contract:{status:'prepared',venueActive:false,runtimeStatus:'not_provisioned',staffAccessGranted:false,providerConnectionsCreated:false}})
+    expect(prepared.company.id).toMatch(/^[1-9]\d*$/);expect(prepared.venue.id).toMatch(/^[1-9]\d*$/)
+    expect(await (await request('root','GET','/'+draft.id+'/scope')).json()).toEqual({scope:prepared,contract:(prepared as {contract:unknown}).contract})
+    expect(await (await request('root','PUT','/'+draft.id+'/scope',body)).json()).toEqual(prepared)
+    expect(await scopeRows()).toHaveLength(1)
+    expect((await rows('companies')).length).toBe(companiesBefore.length+1)
+    expect((await rows('venues')).length).toBe(venuesBefore.length+1)
+    expect(await Promise.all(protectedTables.map(rows))).toEqual(protectedBefore)
+    expect(await (await fetch(origin+'/api/admin/venues',{headers:{cookie:sessions.get('root')!.cookie}})).json()).toEqual(activeBefore)
+    const direct=await fetch(origin+'/api/admin/venues/'+prepared.venue.id+'/dashboard',{headers:{cookie:sessions.get('root')!.cookie}})
+    expect(direct.status).toBe(404)
+    const index=await (await request('root','GET')).json() as {companies:{id:string}[]}
+    expect(index.companies.map(company=>company.id)).not.toContain(prepared.company.id)
+    expect((await request('root','PUT','/'+draft.id,{revision:draft.revision,data:{...data,address:'После подготовки'}})).status).toBe(409)
+    expect((await request('root','PUT','/'+draft.id+'/application',{revision:application.revision,config:{...appConfig,theme:'light'}})).status).toBe(409)
+    const audits=await rows('admin_audit_log')
+    const scopeAudits=audits.filter(row=>row.action==='onboarding.scope_prepare'&&row.entity_id===draft.id)
+    expect(scopeAudits).toHaveLength(1)
+    expect(scopeAudits[0]).toMatchObject({company_id:Number(prepared.company.id),venue_id:Number(prepared.venue.id)})
+    expect(JSON.stringify(scopeAudits)).not.toContain(data.ownerEmail)
+  })
+
+  it('prepares two distinct inactive venues in one existing company without granting owner or trusted access',async()=>{
+    const companiesBefore=await rows('companies')
+    const activeBefore=await (await fetch(origin+'/api/admin/venues',{headers:{cookie:sessions.get('owner')!.cookie}})).json()
+    const prepared=[] as Array<{draftId:string;company:{id:string;createdByOnboarding:boolean;active:boolean};venue:{id:string;active:boolean}}>
+    for(const suffix of ['A','B']) {
+      const input={requestKey:crypto.randomUUID(),data:{...data,companyId:'10',companyName:'',venueName:'Север '+suffix}}
+      const draft=await (await request('root','POST','',input)).json() as {id:string;revision:number}
+      const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:{...appConfig,displayName:'Север '+suffix}})).json() as {revision:number}
+      const result=await (await request('root','PUT','/'+draft.id+'/scope',{draftRevision:draft.revision,applicationRevision:application.revision})).json() as typeof prepared[number]
+      prepared.push(result)
+    }
+    expect(await rows('companies')).toEqual(companiesBefore)
+    expect(prepared.map(item=>item.company)).toEqual([
+      {id:'10',code:'north',createdByOnboarding:false,active:true},
+      {id:'10',code:'north',createdByOnboarding:false,active:true},
+    ])
+    expect(new Set(prepared.map(item=>item.venue.id)).size).toBe(2)
+    expect(prepared.every(item=>item.venue.active===false)).toBe(true)
+    expect(await (await fetch(origin+'/api/admin/venues',{headers:{cookie:sessions.get('owner')!.cookie}})).json()).toEqual(activeBefore)
+    for(const item of prepared) {
+      expect((await fetch(origin+'/api/admin/venues/'+item.venue.id+'/dashboard',{headers:{cookie:sessions.get('owner')!.cookie}})).status).toBe(404)
+      expect((await request('other-root','GET','/'+item.draftId+'/scope')).status).toBe(404)
+    }
+  })
+
+  it('requires current source revisions and a saved app before preparing scope',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string;revision:number}
+    const before={companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()}
+    expect((await request('root','PUT','/'+draft.id+'/scope',{draftRevision:1,applicationRevision:1})).status).toBe(409)
+    const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {revision:number}
+    for(const body of [
+      {draftRevision:99,applicationRevision:application.revision},
+      {draftRevision:draft.revision,applicationRevision:99},
+      {draftRevision:draft.revision,applicationRevision:application.revision,token:'synthetic-secret'},
+      {draftRevision:'1',applicationRevision:application.revision},
+    ]) {
+      const r=await request('root','PUT','/'+draft.id+'/scope',body)
+      expect([400,409]).toContain(r.status);expect(JSON.stringify(await r.json())).not.toContain('synthetic-secret')
+    }
+    expect({companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()}).toEqual(before)
+  })
+
+  it('requires session, same origin and CSRF for canonical scope preparation',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string;revision:number}
+    const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {revision:number}
+    const path='/'+draft.id+'/scope',body={draftRevision:draft.revision,applicationRevision:application.revision},before=await scopeRows()
+    expect((await fetch(origin+'/api/admin/onboarding/drafts'+path)).status).toBe(401)
+    expect((await request('root','PUT',path,body,false)).status).toBe(403)
+    expect((await request('root','PUT',path,body,true,'https://foreign.invalid')).status).toBe(403)
+    expect(await scopeRows()).toEqual(before)
+  })
+
   it('requires a signed session, same origin and CSRF for application config',async()=>{
     const draft=await (await request('root','POST','',command())).json() as {id:string}
     const path='/'+draft.id+'/application',before=await appRows()
@@ -221,6 +324,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect((await request('root','DELETE','/'+crypto.randomUUID())).status).toBe(405)
     expect((await request('root','PUT','/'+crypto.randomUUID()+'/application',{junk:'x'.repeat(5000)})).status).toBe(413)
     expect((await request('root','POST','/'+crypto.randomUUID()+'/application',{})).status).toBe(405)
+    expect((await request('root','PUT','/'+crypto.randomUUID()+'/scope',{junk:'x'.repeat(2000)})).status).toBe(413)
+    expect((await request('root','POST','/'+crypto.randomUUID()+'/scope',{})).status).toBe(405)
   })
 
   it('rolls back draft and audit together and never logs sensitive database errors',async()=>{
@@ -247,6 +352,34 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
       expect(logs).not.toHaveBeenCalled()
     } finally {state.failAudit=false;logs.mockRestore()}
     expect((await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).status).toBe(200)
+  })
+
+  it('rolls back canonical company, venue and scope together when audit fails',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string;revision:number}
+    const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {revision:number}
+    const path='/'+draft.id+'/scope',body={draftRevision:draft.revision,applicationRevision:application.revision}
+    const before={companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()},logs=vi.spyOn(console,'error')
+    state.failAudit=true
+    try {
+      const r=await request('root','PUT',path,body)
+      expect(r.status).toBe(503)
+      expect(await r.json()).toMatchObject({code:'ONBOARDING_UNAVAILABLE'})
+      expect({companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()}).toEqual(before)
+      expect(logs).not.toHaveBeenCalled()
+    } finally {state.failAudit=false;logs.mockRestore()}
+    expect((await request('root','PUT',path,body)).status).toBe(200)
+  })
+
+  it('fails scope endpoints closed when optional migration 006 is missing without breaking draft/application reads',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json()
+    await state.db!.exec('DROP TABLE admin_onboarding_scopes')
+    for(const method of ['GET','PUT']) {
+      const r=await request('root',method,'/'+draft.id+'/scope',method==='PUT'?{draftRevision:1,applicationRevision:1}:undefined)
+      expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_SCOPE_NOT_READY'})
+    }
+    expect(await (await request('root','GET','/'+draft.id)).json()).toMatchObject({id:draft.id})
+    expect(await (await request('root','GET','/'+draft.id+'/application')).json()).toMatchObject({application})
   })
 
   it('fails closed when the separately applied application migration is missing',async()=>{

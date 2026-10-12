@@ -8,13 +8,18 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
 the SUPER_ADMIN-only draft API. `src/phaseC/VenueOnboarding.tsx` extends the real
-Business App. Additive admin migrations 004 and 005 are separate from
+Business App. Additive admin migrations 004, 005 and 006 are separate from
 guest/startup policy; `ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also
 requires the global write switch. Drafts and their standard application blueprint
 are scoped to their creator, versioned, idempotent and audited. Migration 005
 reserves a stable `sv-*` tenant key and requires `dedicated_database`; the API
 contract remains `not_provisioned`, `published=false` and `legacyDataAccess=false`.
-It does not create an active company/venue, database, bot, webhook or POS link.
+Migration 006 lets an explicit `PUT .../scope` atomically reserve the canonical
+company/venue IDs. A new company and every new venue are created with
+`active=false`; no access row is granted, and source revisions are frozen after
+preparation. The operation is replay-safe and audit failure rolls back the scope
+and both canonical rows. Inactive scope rows remain invisible to the normal venue
+resolver. It does not create an active company/venue, database, bot, webhook or POS link.
 `spaceverse-runtime-manifest.js` now turns that blueprint into a strict,
 checksummed, non-secret runtime manifest. A tenant-mode guest process must find an
 exact binding in its dedicated database (manual additive migration 017); both

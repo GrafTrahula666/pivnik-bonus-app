@@ -4,7 +4,7 @@ import { recordAudit } from './audit.js'
 import { config } from './config.js'
 import { pool } from './db.js'
 import { requireSuperAdmin } from './tenant.js'
-import { HttpError, type AdminPrincipal } from './types.js'
+import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 import { createSpaceverseRuntimeManifest } from '../../spaceverse-runtime-manifest.js'
 
 export interface OnboardingData {
@@ -45,14 +45,39 @@ interface AppConfigRow extends QueryResultRow {
 interface AppDraftRow extends QueryResultRow {
   id: string
 }
+interface ScopeRow extends QueryResultRow {
+  draft_id: string
+  company_id: string
+  venue_id: string
+  company_created_by_onboarding: boolean
+  draft_revision: number
+  application_revision: number
+  status: 'prepared'
+  revision: number
+  updated_at: string
+  company_code: string
+  company_name: string
+  company_active: boolean
+  venue_company_id: string
+  venue_code: string
+  venue_name: string
+  venue_address: string | null
+  venue_active: boolean
+}
 const fields = ['companyId','companyName','venueName','address','timeZone','venueType','ownerEmail'] as const
 const columns = 'id::text,request_key::text,initial_hash,data,status,revision,updated_at::text'
 const appFields = ['displayName','theme','primaryColor','secondaryColor','shopEnabled','loyaltyEnabled'] as const
 const appColumns = `draft_id::text,tenant_key,config,isolation_policy,provisioning_status,revision,updated_at::text`
 const joinedAppColumns = `a.draft_id::text,a.tenant_key,a.config,a.isolation_policy,a.provisioning_status,a.revision,a.updated_at::text`
+const joinedScopeColumns = `s.draft_id::text,s.company_id::text,s.venue_id::text,s.company_created_by_onboarding,
+  s.draft_revision,s.application_revision,s.status,s.revision,s.updated_at::text,
+  c.code AS company_code,c.name AS company_name,c.active AS company_active,
+  v.company_id::text AS venue_company_id,v.code AS venue_code,v.name AS venue_name,
+  v.address AS venue_address,v.active AS venue_active`
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const invalid = () => new HttpError(400,'ONBOARDING_INVALID','Проверьте данные заведения. Ключи интеграций на этом шаге не принимаются.')
 const appInvalid = () => new HttpError(400,'ONBOARDING_APP_INVALID','Проверьте настройки приложения. Ключи, URL и произвольные поля на этом шаге не принимаются.')
+const scopeInvalid = () => new HttpError(400,'ONBOARDING_SCOPE_INVALID','Не удалось подтвердить версии черновика и приложения. Ключи интеграций здесь не принимаются.')
 const hasControlCharacter=(value:string)=>Array.from(value).some(character=>{
   const code=character.charCodeAt(0)
   return code<=31||code===127
@@ -140,6 +165,13 @@ async function appReady(admin: AdminPrincipal): Promise<void> {
     if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_APP_NOT_READY','Хранилище конфигурации приложения ещё не подготовлено.')
   } catch(error) { unavailable(error) }
 }
+async function scopeReady(admin: AdminPrincipal): Promise<void> {
+  await appReady(admin)
+  try {
+    const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_scopes') IS NOT NULL AS exists")
+    if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_SCOPE_NOT_READY','Хранилище областей заведений ещё не подготовлено.')
+  } catch(error) { unavailable(error) }
+}
 async function connection(): Promise<PoolClient> {
   try {return await pool.connect()} catch(error) {unavailable(error)}
 }
@@ -168,6 +200,28 @@ function appResponse(row: AppConfigRow) {
     }),
   }
 }
+const scopeContract = {
+  status:'prepared' as const,
+  venueActive:false as const,
+  runtimeStatus:'not_provisioned' as const,
+  staffAccessGranted:false as const,
+  providerConnectionsCreated:false as const,
+}
+function scopeResponse(row: ScopeRow) {
+  if(row.status!=='prepared'||row.revision!==1||row.venue_company_id!==row.company_id||row.venue_active||
+    (row.company_created_by_onboarding&&row.company_active)) {
+    throw new HttpError(503,'ONBOARDING_SCOPE_INCONSISTENT','Подготовленная область не прошла проверку безопасности.')
+  }
+  return {
+    draftId:row.draft_id,
+    company:{id:row.company_id,code:row.company_code,createdByOnboarding:row.company_created_by_onboarding,active:row.company_active},
+    venue:{id:row.venue_id,code:row.venue_code,active:false as const},
+    source:{draftRevision:row.draft_revision,applicationRevision:row.application_revision},
+    revision:row.revision,
+    updatedAt:row.updated_at,
+    contract:scopeContract,
+  }
+}
 function unavailable(error: unknown): never {
   if(error instanceof HttpError) throw error
   // Database errors may contain entire rows. Do not send/log draft contacts or bodies.
@@ -177,6 +231,22 @@ async function companyAvailable(client: PoolClient, data: OnboardingData): Promi
   if(!data.companyId) return
   const result=await client.query('SELECT id FROM companies WHERE id=$1::bigint AND active=TRUE FOR SHARE',[data.companyId])
   if(!result.rowCount) throw new HttpError(404,'ONBOARDING_COMPANY_NOT_FOUND','Организация недоступна. Выберите другую организацию.')
+}
+async function scopeTableExists(client: PoolClient): Promise<boolean> {
+  const result=await client.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_scopes') IS NOT NULL AS exists")
+  return Boolean(result.rows[0]?.exists)
+}
+async function assertScopeNotPrepared(client: PoolClient, draftId: string): Promise<void> {
+  if(!await scopeTableExists(client)) return
+  const result=await client.query('SELECT 1 FROM admin_onboarding_scopes WHERE draft_id=$1::uuid LIMIT 1',[draftId])
+  if(result.rowCount) throw new HttpError(409,'ONBOARDING_SCOPE_LOCKED','Область уже подготовлена. Создайте новый черновик, если нужно изменить организацию, заведение или приложение.')
+}
+async function loadScope(client: Pick<PoolClient,'query'>, draftId: string): Promise<ScopeRow|undefined> {
+  return (await client.query<ScopeRow>(`SELECT ${joinedScopeColumns}
+    FROM admin_onboarding_scopes s
+    JOIN companies c ON c.id=s.company_id
+    JOIN venues v ON v.id=s.venue_id
+    WHERE s.draft_id=$1::uuid`,[draftId])).rows[0]
 }
 export async function getOnboardingIndex(admin: AdminPrincipal) {
   try {
@@ -247,6 +317,7 @@ export async function updateOnboardingDraft(admin: AdminPrincipal, id: string, r
       }
       throw new HttpError(409,'ONBOARDING_REVISION_CONFLICT','Черновик изменился. Откройте последнюю сохранённую версию.')
     }
+    await assertScopeNotPrepared(client,draftId)
     await companyAvailable(client,data)
     const row=(await client.query<DraftRow>(`UPDATE admin_onboarding_drafts SET company_id=$3::bigint,data=$4::jsonb,revision=revision+1,updated_at=NOW()
       WHERE id=$1::uuid AND admin_id=$2::bigint RETURNING ${columns}`,[draftId,admin.id,data.companyId,JSON.stringify(data)])).rows[0]!
@@ -297,6 +368,7 @@ export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string,
       throw new HttpError(409,'ONBOARDING_APP_REVISION_CONFLICT','Настройки приложения изменились. Откройте последнюю сохранённую версию.')
     }
     if(!before&&body.revision!==0) throw new HttpError(409,'ONBOARDING_APP_REVISION_CONFLICT','Настройки приложения ещё не созданы. Откройте последнюю сохранённую версию.')
+    await assertScopeNotPrepared(client,draftId)
     let row:AppConfigRow
     if(before) {
       row=(await client.query<AppConfigRow>(`UPDATE admin_onboarding_app_configs
@@ -315,6 +387,84 @@ export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string,
     return appResponse(row)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally {client.release()}
+}
+
+export async function getOnboardingScope(admin: AdminPrincipal, id: string) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  await scopeReady(admin)
+  try {
+    const owned=await pool.query<{id:string}>(`SELECT id::text FROM admin_onboarding_drafts
+      WHERE id=$1::uuid AND admin_id=$2::bigint`,[draftId,admin.id])
+    if(!owned.rows[0]) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
+    const row=await loadScope(pool,draftId)
+    return {scope:row?scopeResponse(row):null,contract:scopeContract}
+  } catch(error) { unavailable(error) }
+}
+
+export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, raw: unknown) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw scopeInvalid()
+  const body=raw as Record<string,unknown>
+  if(Object.keys(body).some(key=>!['draftRevision','applicationRevision'].includes(key))) throw scopeInvalid()
+  const revision=(value:unknown)=>{
+    if(typeof value!=='number'||!Number.isSafeInteger(value)||value<1||value>2147483647) throw scopeInvalid()
+    return value
+  }
+  const draftRevision=revision(body.draftRevision),applicationRevision=revision(body.applicationRevision)
+  await scopeReady(admin)
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    const draft=(await client.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts
+      WHERE id=$1::uuid AND admin_id=$2::bigint FOR UPDATE`,[draftId,admin.id])).rows[0]
+    if(!draft) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
+    const application=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs
+      WHERE draft_id=$1::uuid FOR UPDATE`,[draftId])).rows[0]
+    if(!application) throw new HttpError(409,'ONBOARDING_APP_REQUIRED','Сначала сохраните настройки приложения.')
+    const existing=await loadScope(client,draftId)
+    if(existing) {
+      if(existing.draft_revision===draftRevision&&existing.application_revision===applicationRevision) {
+        await client.query('COMMIT');return scopeResponse(existing)
+      }
+      throw new HttpError(409,'ONBOARDING_SCOPE_LOCKED','Область уже подготовлена для другой версии. Откройте сохранённую область.')
+    }
+    if(draft.revision!==draftRevision||application.revision!==applicationRevision) {
+      throw new HttpError(409,'ONBOARDING_SCOPE_REVISION_CONFLICT','Черновик или приложение изменились. Откройте последние сохранённые версии.')
+    }
+    const data=onboardingData(draft.data)
+    let company:{id:string;code:string;name:string;active:boolean},companyCreated=false
+    if(data.companyId) {
+      const row=(await client.query<{id:string;code:string;name:string;active:boolean}>(`SELECT id::text,code,name,active FROM companies
+        WHERE id=$1::bigint AND active=TRUE FOR SHARE`,[data.companyId])).rows[0]
+      if(!row) throw new HttpError(404,'ONBOARDING_COMPANY_NOT_FOUND','Организация недоступна. Выберите другую организацию.')
+      company=row
+    } else {
+      company=(await client.query<{id:string;code:string;name:string;active:boolean}>(`INSERT INTO companies(code,name,active)
+        VALUES($1,$2,FALSE) RETURNING id::text,code,name,active`,[application.tenant_key,data.companyName])).rows[0]!
+      companyCreated=true
+    }
+    const venue=(await client.query<{id:string;code:string;name:string;address:string|null;active:boolean}>(`INSERT INTO venues(company_id,code,name,address,active)
+      VALUES($1::bigint,$2,$3,$4,FALSE) RETURNING id::text,code,name,address,active`,
+      [company.id,application.tenant_key,data.venueName,data.address||null])).rows[0]!
+    await client.query(`INSERT INTO admin_onboarding_scopes(
+      draft_id,company_id,venue_id,company_created_by_onboarding,draft_revision,application_revision)
+      VALUES($1::uuid,$2::bigint,$3::bigint,$4,$5,$6)`,
+      [draftId,company.id,venue.id,companyCreated,draftRevision,applicationRevision])
+    const row=await loadScope(client,draftId)
+    if(!row) throw new Error('Scope insert was not confirmed')
+    const auditScope:VenueScope={id:venue.id,companyId:company.id,companyCode:company.code,companyName:company.name,
+      code:venue.code,name:venue.name,address:venue.address,legacyBarId:null}
+    await recordAudit({admin,scope:auditScope,action:'onboarding.scope_prepare',entityType:'onboarding_scope',entityId:draftId,
+      after:{status:'prepared',revision:1},metadata:{companyCreated,draftRevision,applicationRevision}},client)
+    await client.query('COMMIT')
+    return scopeResponse(row)
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    if((error as {code?:string})?.code==='23505') throw new HttpError(409,'ONBOARDING_SCOPE_CONFLICT','Идентификатор области уже занят. Создайте новый черновик.')
     unavailable(error)
   } finally {client.release()}
 }

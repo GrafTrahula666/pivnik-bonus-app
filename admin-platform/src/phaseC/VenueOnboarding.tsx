@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Plus, RefreshCw, Save, ShieldCheck, Smartphone } from 'lucide-react'
+import { Building2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone } from 'lucide-react'
 import { ApiError, apiGet, apiPost, apiPut, type AdminSession } from '../api'
 import './venue-onboarding.css'
 
@@ -47,6 +47,23 @@ interface Application {
   contract:ApplicationContract
 }
 type ApplicationCommand={revision:number;config:ApplicationConfig}
+interface ScopeContract {
+  status:'prepared'
+  venueActive:false
+  runtimeStatus:'not_provisioned'
+  staffAccessGranted:false
+  providerConnectionsCreated:false
+}
+interface PreparedScope {
+  draftId:string
+  company:{id:string;code:string;createdByOnboarding:boolean;active:boolean}
+  venue:{id:string;code:string;active:false}
+  source:{draftRevision:number;applicationRevision:number}
+  revision:1
+  updatedAt:string
+  contract:ScopeContract
+}
+type ScopeCommand={draftRevision:number;applicationRevision:number}
 const base = '/api/admin/onboarding/drafts'
 const empty = ():OnboardingData=>({companyId:null,companyName:'',venueName:'',address:'',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:''})
 const defaultContract:ApplicationContract={template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}
@@ -82,6 +99,25 @@ function applicationResponse(raw:unknown):Application {
   }
   return {...value,contract:contractResponse(value.contract)} as Application
 }
+function scopeContractResponse(raw:unknown):ScopeContract {
+  const value=raw as Partial<ScopeContract>|null
+  if(!value||value.status!=='prepared'||value.venueActive!==false||value.runtimeStatus!=='not_provisioned'||
+    value.staffAccessGranted!==false||value.providerConnectionsCreated!==false) {
+    throw new Error('Статус области заведения не подтверждён. Откройте сохранённую область.')
+  }
+  return value as ScopeContract
+}
+function scopeResponse(raw:unknown):PreparedScope {
+  const value=raw as Partial<PreparedScope>|null,company=value?.company,venue=value?.venue,source=value?.source
+  if(!value||typeof value.draftId!=='string'||!company||!venue||!source||
+    !/^[1-9]\d*$/.test(String(company.id))||typeof company.code!=='string'||typeof company.createdByOnboarding!=='boolean'||typeof company.active!=='boolean'||
+    (company.createdByOnboarding&&company.active)||!/^[1-9]\d*$/.test(String(venue.id))||typeof venue.code!=='string'||venue.active!==false||
+    !Number.isInteger(source.draftRevision)||Number(source.draftRevision)<1||!Number.isInteger(source.applicationRevision)||Number(source.applicationRevision)<1||
+    value.revision!==1||typeof value.updatedAt!=='string') {
+    throw new Error('Подготовленная область заведения не подтверждена. Откройте её повторно.')
+  }
+  return {...value,contract:scopeContractResponse(value.contract)} as PreparedScope
+}
 
 export function VenueOnboarding({session}:{session:AdminSession}) {
   const allowed=session.admin.role==='SUPER_ADMIN'&&session.capabilities.onboardingDrafts===true
@@ -94,8 +130,10 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   const [appContract,setAppContract]=useState<ApplicationContract>(defaultContract)
   const [appLoading,setAppLoading]=useState(false),[appBusy,setAppBusy]=useState(false),[appUncertain,setAppUncertain]=useState(false)
   const [appError,setAppError]=useState(''),[appNotice,setAppNotice]=useState('')
-  const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),createKey=useRef('')
-  const busyRef=useRef(false),appBusyRef=useRef(false),sequence=useRef(0),appSequence=useRef(0)
+  const [scope,setScope]=useState<PreparedScope|null>(null),[scopeLoading,setScopeLoading]=useState(false),[scopeBusy,setScopeBusy]=useState(false),[scopeUncertain,setScopeUncertain]=useState(false)
+  const [scopeError,setScopeError]=useState(''),[scopeNotice,setScopeNotice]=useState('')
+  const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),createKey=useRef('')
+  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0)
   const checkpoint=`spaceverse:onboarding:create:${session.admin.id}`
   function clearCheckpoint() {
     // An already confirmed server save stays successful even if tab storage becomes unavailable.
@@ -116,13 +154,27 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } catch(error) {if(run===appSequence.current)setAppError(message(error))}
     finally {if(run===appSequence.current)setAppLoading(false)}
   },[])
+  const loadScope=useCallback(async(draft:Draft)=>{
+    const run=++scopeSequence.current
+    setScopeLoading(true);setScopeError('')
+    try {
+      const result=await apiGet<{scope:unknown;contract:unknown}>(base+'/'+draft.id+'/scope')
+      scopeContractResponse(result.contract)
+      const saved=result.scope?scopeResponse(result.scope):null
+      if(run!==scopeSequence.current)return
+      if(saved&&saved.draftId!==draft.id)throw new Error('Область относится к другому черновику.')
+      setScope(saved);setScopeUncertain(false);scopeCommand.current=null
+    } catch(error) {if(run===scopeSequence.current)setScopeError(message(error))}
+    finally {if(run===scopeSequence.current)setScopeLoading(false)}
+  },[])
   const showDraft=useCallback((draft:Draft)=>{
     setCurrent(draft);setData(draft.data);setEditing(true);command.current=null
     setUncertain(false);setError('');setNotice('Черновик сохранён. Заведение ещё не подключено.')
     setApplication(null);setAppData(emptyApplication(draft.data.venueName));setAppContract(defaultContract)
     setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
-    void loadApplication(draft)
-  },[loadApplication])
+    setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
+    void loadApplication(draft);void loadScope(draft)
+  },[loadApplication,loadScope])
   const load=useCallback(async(recover=false)=>{
     const run=++sequence.current
     setLoading(true);setError('')
@@ -149,7 +201,8 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   },[checkpoint,showDraft])
 
   const invalidateAppLoads=useCallback(()=>{appSequence.current++},[])
-  const invalidateLoads=useCallback(()=>{sequence.current++;invalidateAppLoads()},[invalidateAppLoads])
+  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++},[])
+  const invalidateLoads=useCallback(()=>{sequence.current++;invalidateAppLoads();invalidateScopeLoads()},[invalidateAppLoads,invalidateScopeLoads])
 
   useEffect(()=>{
     if(allowed) void load(true)
@@ -160,18 +213,19 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     if(busyRef.current) return
     try {createKey.current=sessionStorage.getItem(checkpoint)||crypto.randomUUID()}
     catch {setError('Не удалось подготовить безопасное сохранение. Разрешите хранилище вкладки и повторите.');return}
-    invalidateAppLoads();setData(empty());setCurrent(null);setEditing(true);setError('');setNotice('');setUncertain(false);command.current=null
+    invalidateAppLoads();invalidateScopeLoads();setData(empty());setCurrent(null);setEditing(true);setError('');setNotice('');setUncertain(false);command.current=null
     setApplication(null);setAppData(emptyApplication());setAppContract(defaultContract);setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
+    setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
   }
   async function open(id:string) {
-    if(busyRef.current||appBusyRef.current) return
+    if(busyRef.current||appBusyRef.current||scopeBusyRef.current) return
     busyRef.current=true;setBusy(true);setError('')
     try {showDraft(draftResponse(await apiGet(base+'/'+id)))}
     catch(error) {setError(message(error))}
     finally {busyRef.current=false;setBusy(false)}
   }
   async function save() {
-    if(busyRef.current||appBusyRef.current) return
+    if(busyRef.current||appBusyRef.current||scopeBusyRef.current) return
     const body=command.current||(current?{id:current.id,revision:current.revision,data}:{requestKey:createKey.current,data})
     command.current=body
     busyRef.current=true;setBusy(true);setError('');setNotice('')
@@ -193,7 +247,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } finally {busyRef.current=false;setBusy(false)}
   }
   async function saveApplication() {
-    if(!current||appBusyRef.current||busyRef.current)return
+    if(!current||scope||appBusyRef.current||busyRef.current||scopeBusyRef.current)return
     const body=appCommand.current||{revision:application?.revision||0,config:appData}
     appCommand.current=body;appBusyRef.current=true;setAppBusy(true);setAppError('');setAppNotice('')
     try {
@@ -207,6 +261,21 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       else setAppUncertain(true)
     } finally {appBusyRef.current=false;setAppBusy(false)}
   }
+  async function prepareScope() {
+    if(!current||!application||scopeBusyRef.current||busyRef.current||appBusyRef.current)return
+    const body=scopeCommand.current||{draftRevision:current.revision,applicationRevision:application.revision}
+    scopeCommand.current=body;scopeBusyRef.current=true;setScopeBusy(true);setScopeError('');setScopeNotice('')
+    try {
+      const saved=scopeResponse(await apiPut(base+'/'+current.id+'/scope',body))
+      if(saved.draftId!==current.id)throw new Error('Сервер вернул область другого черновика.')
+      setScope(saved);setScopeUncertain(false);scopeCommand.current=null
+      setScopeNotice('Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.')
+    } catch(error) {
+      setScopeError(message(error))
+      if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408){scopeCommand.current=null;setScopeUncertain(false)}
+      else setScopeUncertain(true)
+    } finally {scopeBusyRef.current=false;setScopeBusy(false)}
+  }
   function change<K extends keyof OnboardingData>(key:K,value:OnboardingData[K]) {
     setData(previous=>({...previous,[key]:value}));setNotice('')
   }
@@ -214,6 +283,8 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     setAppData(previous=>({...previous,[key]:value}));setAppNotice('')
   }
   if(!allowed) return null
+  const draftDirty=Boolean(current)&&JSON.stringify(data)!==JSON.stringify(current?.data)
+  const appDirty=Boolean(application)&&JSON.stringify(appData)!==JSON.stringify(application?.config)
 
   return <section className="card onboarding" aria-label="Подключение заведений">
     <div className="onboarding-head">
@@ -224,7 +295,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
-      <fieldset className="onboarding-fields" disabled={busy||uncertain||appBusy}>
+      <fieldset className="onboarding-fields" disabled={busy||uncertain||appBusy||scopeBusy||scopeLoading||Boolean(scope)}>
         <label className="field"><span>Название заведения</span><input required maxLength={120} value={data.venueName} onChange={event=>{
           const venueName=event.target.value
           setData(previous=>({...previous,venueName,companyName:!previous.companyId&&(!previous.companyName||previous.companyName===previous.venueName)?venueName:previous.companyName}));setNotice('')
@@ -246,9 +317,9 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <label className="field"><span>Email владельца</span><input aria-label="Email владельца" aria-describedby="onboarding-owner-note" type="email" maxLength={254} value={data.ownerEmail} onChange={event=>change('ownerEmail',event.target.value)}/><small id="onboarding-owner-note">Приглашение на этом шаге не отправляется.</small></label>
       </fieldset>
       <div className="onboarding-actions">
-        <button className="btn" type="submit" disabled={busy||appBusy}><Save size={16}/>{busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
-        <button className="btn secondary" type="button" disabled={busy||appBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
-        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain} onClick={()=>{invalidateAppLoads();setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('')}}>Закрыть</button>
+        <button className="btn" type="submit" disabled={busy||appBusy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
+        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
+        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('')}}>Закрыть</button>
       </div>
     </form>}
     {editing&&current&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
@@ -261,7 +332,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <div><span><b>Публикация</b><small>{appContract.published?'Опубликовано':appContract.runtimeStatus==='not_provisioned'?'Не запускалась':'Не подтверждена'}</small></span></div>
         {application&&<div><span><b>Tenant ID</b><small className="tenant-key">{application.tenantKey}</small></span></div>}
       </div>
-      <fieldset className="onboarding-fields" disabled={appBusy||appLoading||appUncertain||busy}>
+      <fieldset className="onboarding-fields" disabled={appBusy||appLoading||appUncertain||busy||scopeBusy||scopeLoading||Boolean(scope)}>
         <label className="field"><span>Название приложения</span><input required maxLength={120} value={appData.displayName} onChange={event=>changeApplication('displayName',event.target.value)}/></label>
         <label className="field"><span>Тема</span><select value={appData.theme} onChange={event=>changeApplication('theme',event.target.value as ApplicationConfig['theme'])}>
           <option value="premium-dark">Тёмная премиальная</option><option value="dark">Тёмная</option><option value="light">Светлая</option>
@@ -273,16 +344,31 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       </fieldset>
       <p className="onboarding-note">Логотип и ключи Telegram, VK и кассы здесь пока не принимаются: для них нужен защищённый канал хранения. Эта настройка не даёт доступ к кошелькам ПИВНИКА.</p>
       <div className="onboarding-actions">
-        <button className="btn" type="submit" disabled={appBusy||appLoading||busy}><Save size={16}/>{appBusy?'Сохраняем…':appUncertain?'Повторить сохранение приложения':'Сохранить приложение'}</button>
-        <button className="btn secondary" type="button" disabled={appBusy||appLoading} onClick={()=>void loadApplication(current)}><RefreshCw size={16}/>Открыть сохранённую конфигурацию</button>
+        <button className="btn" type="submit" disabled={appBusy||appLoading||busy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':appBusy?'Сохраняем…':appUncertain?'Повторить сохранение приложения':'Сохранить приложение'}</button>
+        <button className="btn secondary" type="button" disabled={appBusy||appLoading||scopeBusy} onClick={()=>void loadApplication(current)}><RefreshCw size={16}/>Открыть сохранённую конфигурацию</button>
       </div>
     </form>}
-    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
+    {editing&&current&&<section className="onboarding-scope" aria-label="Область заведения">
+      <div className="onboarding-step"><MapPinned size={18}/><b>Организация и заведение</b><span>{scope?'Подготовлено · выключено':'Не подготовлено'}</span></div>
+      {scopeError&&<div className="onboarding-feedback error" role="alert">{scopeError}</div>}
+      {scopeNotice&&<p className="onboarding-feedback" role="status">{scopeNotice}</p>}
+      {scope&&<div className="onboarding-contract" aria-label="Статус области заведения">
+        <div><ShieldCheck size={17}/><span><b>Организация</b><small>ID {scope.company.id} · {scope.company.createdByOnboarding?'создана выключенной':'существующая'}</small></span></div>
+        <div><ShieldCheck size={17}/><span><b>Заведение</b><small>ID {scope.venue.id} · выключено</small></span></div>
+        <div><span><b>Доступ</b><small>Сотрудники не назначены · подключения не созданы</small></span></div>
+      </div>}
+      <p className="onboarding-note">Подготовка атомарно резервирует канонические ID в metadata-БД. Заведение не появляется в рабочей панели, runtime не запускается, данные клиентов и ПИВНИКА не подключаются.</p>
+      <div className="onboarding-actions">
+        {!scope&&<button className="btn" type="button" disabled={!application||draftDirty||appDirty||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||appDirty?'Сначала сохраните изменения':'Подготовить область'}</button>}
+        <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
+      </div>
+    </section>}
+    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
     {loading?<p role="status">Загружаем черновики…</p>:<>
       {!index.drafts.length&&<p>Сохранённых черновиков пока нет.</p>}
       <ul className="onboarding-list">{index.drafts.map(draft=><li key={draft.id}>
         <div><b>{draft.data.venueName}</b><small>{draft.data.companyName||index.companies.find(company=>company.id===draft.data.companyId)?.name||'Организация недоступна'} · Черновик</small></div>
-        <button className="btn secondary" disabled={busy||appBusy||uncertain||appUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
+        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||uncertain||appUncertain||scopeUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
       </li>)}</ul>
       {index.drafts.length===50&&<small>Показаны последние 50 черновиков.</small>}
     </>}

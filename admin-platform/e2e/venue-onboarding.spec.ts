@@ -35,11 +35,20 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await expect(page.getByLabel('Основной цвет',{exact:true})).toHaveValue('#114488')
   await expect(page.getByText(configured.tenantKey,{exact:true})).toBeVisible()
   await page.getByLabel('Адрес',{exact:true}).fill('Мулино, изменённый адрес')
+  await expect(page.getByRole('button',{name:'Сначала сохраните изменения',exact:true})).toBeDisabled()
   await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click()
   await expect(page.getByRole('status')).toContainText('Черновик сохранён')
   await page.reload()
   await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
   await expect(page.getByLabel('Адрес',{exact:true})).toHaveValue('Мулино, изменённый адрес')
+  const scopePut=page.waitForResponse(response=>response.url().endsWith('/scope')&&response.request().method()==='PUT')
+  await page.getByRole('button',{name:'Подготовить область',exact:true}).dblclick()
+  const prepared=await (await scopePut).json() as {company:{id:string;active:boolean};venue:{id:string;active:boolean};contract:{runtimeStatus:string;staffAccessGranted:boolean}}
+  expect(prepared).toMatchObject({company:{active:false},venue:{active:false},contract:{runtimeStatus:'not_provisioned',staffAccessGranted:false}})
+  await expect(page.getByText('Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.',{exact:true})).toBeVisible()
+  await expect(page.getByLabel('Название заведения',{exact:true})).toBeDisabled()
+  await expect(page.getByText('ID '+prepared.company.id+' · создана выключенной',{exact:true})).toBeVisible()
+  await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
 
   // Execute the real POST, then lose its HTTP result. Reload must find the existing server draft.
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
@@ -69,6 +78,7 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
   await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
   await expect(page.getByText(configured.tenantKey,{exact:true})).toBeVisible()
+  await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   const screenshot=`artifacts/onboarding-${testInfo.project.name}.png`
   await fs.mkdir('artifacts',{recursive:true})
