@@ -23,6 +23,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .pw{flex-direction:column;gap:0;padding:4px 10px 5px;min-width:46px}
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px 16px calc(env(safe-area-inset-bottom) + 24px);background:radial-gradient(120% 80% at 50% 30%,rgba(20,8,30,.35),rgba(6,2,10,.88))}
 .hide{display:none!important}
+#snd{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;z-index:5;width:38px;height:34px;border-radius:999px;background:rgba(10,4,24,.7);color:#ffe2b0;font-size:16px;line-height:1;border:1px solid rgba(255,150,45,.55);cursor:pointer;padding:0}
+#score.pop{animation:scorePop .22s ease-out}@keyframes scorePop{0%{transform:scale(1)}40%{transform:scale(1.16)}100%{transform:scale(1)}}
 .lbs{margin-top:-10px;border:0;cursor:pointer;display:flex;align-items:center;gap:8px;max-width:92%;padding:8px 14px;border-radius:999px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);color:#f3e6d2;font:700 13px/1.2 system-ui,sans-serif;white-space:nowrap;overflow:hidden}
 .lbs b{color:#ffd27a;font-variant-numeric:tabular-nums}.lbs span{overflow:hidden;text-overflow:ellipsis}
 #lbBox{z-index:30;background:rgba(6,2,10,.97);justify-content:flex-start;gap:12px;padding-top:calc(env(safe-area-inset-top) + 18px)}
@@ -128,6 +130,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
   <div id="toast"></div>
   <div class="screen" id="menu">
     <a id="exitApp" href="/" >‹ В приложение</a>
+    <button id="snd" type="button" aria-label="Звук"></button>
     <h1>PIVNIK<small>RUN</small></h1>
     <div class="car" id="car">
       <button class="arr l" id="prev" aria-label="Предыдущий персонаж">‹</button>
@@ -416,17 +419,17 @@ function doTurn() {
 function act(a) {
   if (state !== 'run' || g.dead) return;
   if (a === 'R' && turnWindow()) { doTurn(); return; }
-  if (a === 'L') g.lane = Math.max(0, g.lane - 1);
-  else if (a === 'R') g.lane = Math.min(g.n - 1, g.lane + 1);
-  else if (a === 'U') { if (g.y <= .001) { g.vy = 9.4; g.slide = 0; } }
-  else if (a === 'D') { if (g.y > .001) g.vy = -16; g.slide = .62; }
+  if (a === 'L') { if (g.lane > 0) { sfx('swoosh'); haptic('light'); } g.lane = Math.max(0, g.lane - 1); }
+  else if (a === 'R') { if (g.lane < g.n - 1) { sfx('swoosh'); haptic('light'); } g.lane = Math.min(g.n - 1, g.lane + 1); }
+  else if (a === 'U') { if (g.y <= .001) { g.vy = 9.4; g.slide = 0; sfx('jump'); haptic('light'); } }
+  else if (a === 'D') { if (g.y > .001) g.vy = -16; else sfx('slide'); g.slide = .62; }
   g.hint = Math.min(g.hint, .4);
 }
 
 function die() {
   if (GOD) return;
   g.dead = 1; g.shake = .45; g.flash = 1; g.flashCol = '#ff2a3a';
-  if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {}
+  sfx('crash'); haptic('bad');
   setTimeout(showOver, 750);
 }
 
@@ -464,7 +467,7 @@ function update(dt) {
   // lanes & body
   const tx = laneX(g.lane, g.n), k = 1 - Math.exp(-dt * 16 * Math.max(1, g.speed / 16));
   g.px += (tx - g.px) * k;
-  if (g.y > 0 || g.vy > 0) { g.vy -= 26 * dt; g.y = Math.max(0, g.y + g.vy * dt); if (g.y === 0) { g.vy = 0; puff(10, 1); } }
+  if (g.y > 0 || g.vy > 0) { g.vy -= 26 * dt; g.y = Math.max(0, g.y + g.vy * dt); if (g.y === 0) { g.vy = 0; puff(10, 1); sfx('land'); haptic('light'); } }
   if (g.slide > 0) { g.slide = Math.max(0, g.slide - dt); puff(3, 0); }
   g.step += dt * Math.min(4.2, 2.4 + g.speed * .05); // stride cycles per second, quicker as the run speeds up
   g.dust = g.dust.filter(p => (p.t += dt) < p.life);
@@ -524,8 +527,8 @@ function update(dt) {
       it.hit = 1;
       if ((g.superT > 0 && sp.kind === 'ghost') || g.flyH > 0 || g.inv > 0) continue;
       if (g.armed) { smash(it, x, d); continue; }
-      if (g.lives > 0) { g.lives--; g.inv = 2; g.flash = .8; g.flashCol = '#4dffb0'; toast('life', 'Жизнь сгорела'); continue; }
-      if (CHARS[store.char].gedo && !g.gedoUsed) { g.gedoUsed = true; g.inv = 2.5; g.flash = 1; g.flashCol = '#9b5cff'; toast('gedo', 'Внешний Путь'); continue; } // one revive per run
+      if (g.lives > 0) { g.lives--; g.inv = 2; g.flash = .8; g.flashCol = '#4dffb0'; toast('life', 'Жизнь сгорела'); sfx('life'); haptic('medium'); continue; }
+      if (CHARS[store.char].gedo && !g.gedoUsed) { g.gedoUsed = true; g.inv = 2.5; g.flash = 1; g.flashCol = '#9b5cff'; toast('gedo', 'Внешний Путь'); sfx('gedo'); haptic('heavy'); continue; } // one revive per run
       die(); break;
     }
   }
@@ -539,8 +542,13 @@ function puff(n, land) {
     g.dust.push({ x: b[0] + side * rnd(.05, .35) * u, y: b[1] - rnd(0, .1) * u, vx: side * rnd(.6, 2.2) * u * (land ? .8 : 1), vy: -rnd(.6, 1.8) * u, r: rnd(.06, .13) * u, t: 0, life: rnd(.35, .6) });
   }
 }
+// a little burst of glints where something was picked up
+function sparkle(p, n, col) {
+  const u = unitAt(0);
+  for (let i = 0; i < n; i++) g.dust.push({ x: p[0], y: p[1], vx: rnd(-2.2, 2.2) * u, vy: -rnd(.4, 2.6) * u, r: rnd(.03, .07) * u, t: 0, life: rnd(.3, .55), col });
+}
 function smash(it, x, d) {
-  g.armed = false; it.gone = 1; g.shake = .3;
+  g.armed = false; it.gone = 1; g.shake = .3; sfx('smash'); haptic('heavy');
   const p = pr(x, it.k === 'bar' ? 1.2 : .6, Math.max(d, .2)), u = unitAt(0);
   const cols = ['#e9ecef', '#d8283a', '#2f6fd0', '#9aa3ad', '#7a4622', '#ffd23a'];
   for (let i = 0; i < 18; i++) g.dust.push({ x: p[0] + rnd(-.3, .3) * u, y: p[1] + rnd(-.3, .3) * u, vx: rnd(-3, 3) * u, vy: -rnd(1.5, 4) * u, r: rnd(.05, .12) * u, t: 0, life: rnd(.5, .9), col: pick(cols) });
@@ -556,9 +564,14 @@ function collect(it, x) {
     g.bonus += v; g.coins++;
     g.fl.push({ t: 0, x: p[0], y: p[1], txt: '+' + v, col: g.x2 > 0 ? '#7bff9a' : '#ffd27a' });
     if (!SUPER().cd) g.charge = Math.min(1, g.charge + 1 / 30);
-  } else if (it.k === 'mag') { g.mag = 8; toast('mag', 'Магнит'); }
-  else if (it.k === 'x2') { g.x2 = 10; toast('x2', 'Очки ×2'); }
-  else { g.lives = 1; toast('life', 'Вторая жизнь'); }
+    sfx('coin'); sparkle(p, 7, '#ffd23a');
+    const sc = $('#score'); sc.classList.remove('pop'); void sc.offsetWidth; sc.classList.add('pop');
+  } else {
+    sfx('power'); haptic('medium'); sparkle(p, 16, it.k === 'x2' ? '#7bff9a' : it.k === 'mag' ? '#6fb8ff' : '#4dffb0');
+    if (it.k === 'mag') { g.mag = 8; toast('mag', 'Магнит'); }
+    else if (it.k === 'x2') { g.x2 = 10; toast('x2', 'Очки ×2'); }
+    else { g.lives = 1; toast('life', 'Вторая жизнь'); }
+  }
 }
 const PICKUPS = new Set(['coin', 'mag', 'x2', 'life']);
 let toastT = 0;
@@ -574,11 +587,11 @@ function superpower() {
   if (sp.kind === 'boombox') { g.charge = 0; g.music = 2.5; rollGift('Магнитофон'); return; }
   if (sp.kind === 'beer') {
     if (g.beers.length >= sp.max) return;
-    g.beers.push(sp.life); g.charge = 0; g.drink = 1.3;
+    g.beers.push(sp.life); g.charge = 0; g.drink = 1.3; sfx('gulp'); haptic('medium');
     toast('super', `${sp.name} ×${g.beers.length}`);
     return;
   }
-  g.charge = 0; g.superT = sp.dur;
+  g.charge = 0; g.superT = sp.dur; sfx('super'); haptic('heavy');
   if (sp.kind === 'smash') g.armed = true;
   g.flash = .7; g.flashCol = CHARS[store.char].col;
   toast('super', sp.name);
@@ -1348,6 +1361,7 @@ function showOver() {
   $('#best').textContent = isRec ? '' : '★ ' + store.best.toLocaleString('ru-RU');
   $('#place').classList.add('hide');
   $('#over').classList.remove('hide');
+  sfx(isRec && s > 0 ? 'record' : 'over'); if (isRec && s > 0) haptic('ok');
   lbFinish(s);
 }
 // blur → muddy colours → fogged-up glass, stacking with the number of beers
@@ -1365,6 +1379,77 @@ function toMenu() {
   lbRefresh();
   renderCar();
 }
+
+// ---------- sound + haptics: every effect is synthesised with WebAudio, so there are no audio files to load ----------
+const SND = { ctx: null, on: true, master: null, noise: null, coinT: 0, coinN: 0 };
+try { SND.on = localStorage.getItem('pivnik-run-snd') !== '0'; } catch (e) {}
+function sndInit() {
+  if (SND.ctx) { if (SND.ctx.state === 'suspended') SND.ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  try {
+    const c = SND.ctx = new AC();
+    SND.master = c.createGain(); SND.master.gain.value = .5; SND.master.connect(c.destination);
+    const b = c.createBuffer(1, c.sampleRate * .6, c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    SND.noise = b;
+  } catch (e) { SND.ctx = null; }
+}
+// one oscillator note: frequency, length, wave, volume, slide target and start delay
+function tone(f, dur, type, vol, to, delay) {
+  const c = SND.ctx; if (!c) return;
+  const t = c.currentTime + (delay || 0), o = c.createOscillator(), g2 = c.createGain();
+  o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vol || .3, t + .008); g2.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g2); g2.connect(SND.master); o.start(t); o.stop(t + dur + .02);
+}
+function hiss(dur, vol, f0, f1, delay) {
+  const c = SND.ctx; if (!c || !SND.noise) return;
+  const t = c.currentTime + (delay || 0), n = c.createBufferSource(), fl = c.createBiquadFilter(), g2 = c.createGain();
+  n.buffer = SND.noise; fl.type = 'bandpass'; fl.Q.value = .9;
+  fl.frequency.setValueAtTime(f0, t); fl.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g2.gain.setValueAtTime(vol, t); g2.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  n.connect(fl); fl.connect(g2); g2.connect(SND.master); n.start(t); n.stop(t + dur + .02);
+}
+const SFX = {
+  tap: () => tone(520, .06, 'triangle', .18, 780),
+  start: () => { tone(330, .12, 'square', .12); tone(494, .12, 'square', .12, 0, .1); tone(660, .22, 'square', .14, 0, .2); },
+  swoosh: () => hiss(.14, .22, 900, 3200),
+  jump: () => { tone(260, .2, 'sine', .3, 620); hiss(.12, .08, 600, 2400); },
+  land: () => { tone(120, .12, 'sine', .35, 55); hiss(.08, .12, 700, 300); },
+  slide: () => hiss(.28, .18, 2600, 700),
+  coin: () => {
+    const n = performance.now(); SND.coinN = n - SND.coinT < 700 ? Math.min(SND.coinN + 1, 8) : 0; SND.coinT = n;
+    const k = Math.pow(2, SND.coinN / 12) * 988;
+    tone(k, .09, 'square', .12); tone(k * 1.5, .16, 'square', .12, 0, .06);
+  },
+  power: () => { tone(523, .1, 'triangle', .22); tone(659, .1, 'triangle', .22, 0, .08); tone(784, .1, 'triangle', .22, 0, .16); tone(1046, .24, 'triangle', .22, 0, .24); },
+  life: () => { tone(700, .3, 'sawtooth', .16, 180); hiss(.25, .12, 2400, 500); },
+  gedo: () => { tone(110, .6, 'sawtooth', .2, 440); tone(220, .6, 'sine', .25, 880); },
+  smash: () => { hiss(.3, .5, 1800, 200); tone(180, .22, 'square', .2, 50); },
+  crash: () => { hiss(.5, .6, 1500, 120); tone(150, .45, 'sawtooth', .3, 38); },
+  super: () => { tone(220, .5, 'sawtooth', .16, 880); tone(330, .5, 'square', .1, 1320); hiss(.45, .1, 600, 4000); },
+  gulp: () => { tone(300, .1, 'sine', .3, 160); tone(260, .12, 'sine', .3, 140, .12); },
+  over: () => { tone(392, .18, 'triangle', .22); tone(330, .18, 'triangle', .22, 0, .18); tone(262, .4, 'triangle', .22, 0, .36); },
+  record: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .16, 'triangle', .22, 0, i * .09)); }
+};
+function sfx(name) { if (!SND.on || !SND.ctx) return; try { SFX[name] && SFX[name](); } catch (e) {} }
+const HAPTIC = { light: ['impact', 'light', 8], medium: ['impact', 'medium', 16], heavy: ['impact', 'heavy', 40], ok: ['notification', 'success', 20], bad: ['notification', 'error', 120] };
+function haptic(kind) {
+  if (!SND.on) return;
+  const h = HAPTIC[kind]; if (!h) return;
+  const hf = TGW && TGW.HapticFeedback;
+  try {
+    if (hf) { h[0] === 'impact' ? hf.impactOccurred(h[1]) : hf.notificationOccurred(h[1]); }
+    else if (navigator.vibrate) navigator.vibrate(h[2]);
+  } catch (e) {}
+}
+function sndPaint() { $('#snd').textContent = SND.on ? '🔊' : '🔇'; }
+$('#snd').onclick = e => { e.stopPropagation(); SND.on = !SND.on; try { localStorage.setItem('pivnik-run-snd', SND.on ? '1' : '0'); } catch (x) {} sndPaint(); sndInit(); sfx('tap'); };
+$('#snd').addEventListener('pointerdown', e => e.stopPropagation());
+sndPaint();
+// browsers only allow audio after a touch, so wake it on the first one
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, sndInit, { passive: true }));
 
 // ---------- all-time leaderboard (server side; needs the guest's app session, so it is simply hidden without one) ----------
 const LB = { ticket: null, board: null };
@@ -1413,7 +1498,7 @@ function start() {
   $('#hud').style.display = 'block';
   document.querySelectorAll('#row .pw').forEach(e => e.remove());
   state = 'run'; lockSwipes(true);
-  lbBegin();
+  lbBegin(); sfx('start'); haptic('light');
 }
 
 lbRefresh();
