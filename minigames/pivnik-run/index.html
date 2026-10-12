@@ -42,7 +42,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #menu .car{flex:1;min-height:0;height:auto;max-height:420px;margin-top:auto}
 #menu .cname{margin-top:0}
 #menu .cdesc{margin-top:-6px}
-h1{margin:0;font-size:52px;line-height:.95;font-weight:900;text-align:center;letter-spacing:2px;background:linear-gradient(180deg,#fff2c9,var(--or2) 45%,var(--or));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,140,30,.55)) drop-shadow(0 3px 0 #3a1404)}
+h1{position:relative;z-index:3;margin:0;font-size:52px;line-height:.95;font-weight:900;text-align:center;letter-spacing:2px;background:linear-gradient(180deg,#fff2c9,var(--or2) 45%,var(--or));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,140,30,.55)) drop-shadow(0 3px 0 #3a1404)}
 h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .car{position:relative;width:100%;max-width:420px;height:min(46vh,380px);touch-action:none}
 .slot{position:absolute;left:50%;bottom:0;width:62%;aspect-ratio:1;max-width:100%;transform:translateX(-50%);transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .32s,filter .32s;pointer-events:none}
@@ -63,12 +63,11 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 @keyframes sway{0%,100%{transform:rotate(-3deg) translateY(0)}25%{transform:rotate(0) translateY(-2%)}50%{transform:rotate(3deg) translateY(0)}75%{transform:rotate(0) translateY(-2%)}}
 .slot.c.a-turn img{animation:turn 4s ease-in-out infinite}
 @keyframes turn{0%,40%,100%{transform:none}55%,80%{transform:perspective(600px) rotateY(62deg) rotate(-3deg);filter:drop-shadow(0 14px 18px rgba(0,0,0,.6)) brightness(.75)}}
-.slot .guard{position:absolute;left:-57%;width:214%;bottom:6%;aspect-ratio:1;z-index:-1;opacity:0;transform:translateY(14%) scale(.82);transform-origin:50% 100%;transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1);pointer-events:none;filter:drop-shadow(0 0 26px rgba(130,60,255,.55))}
-.slot.c .guard{opacity:.95;transform:none;animation:guardBreath 4.2s ease-in-out .8s infinite}
-.guard svg{display:block;width:100%;height:100%}
-.guard .ge{animation:guardEyes 3.1s ease-in-out infinite}
+/* the guardian demon: art has a dark smoky backdrop, so it is screened in and its edges fade out */
+.slot .guard{position:absolute;left:-10.5%;width:121%;bottom:0;z-index:-1;opacity:0;transform:translateY(14%) scale(.82);transform-origin:50% 100%;mix-blend-mode:screen;-webkit-mask-image:radial-gradient(closest-side,#000 58%,transparent 100%);mask-image:radial-gradient(closest-side,#000 58%,transparent 100%);transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.slot .guard img{display:block;width:100%;height:auto;object-fit:fill;filter:none;animation:none!important;transform:none!important}
+.slot.c .guard{opacity:.9;transform:none;animation:guardBreath 4.2s ease-in-out .8s infinite}
 @keyframes guardBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.035) translateY(-1%)}}
-@keyframes guardEyes{0%,100%{opacity:.85}45%{opacity:1}50%{opacity:.35}55%{opacity:1}}
 .slot.c.a-trick img{animation:trick 3.2s cubic-bezier(.3,.7,.4,1) infinite}
 @keyframes trick{0%,60%,100%{transform:none}70%{transform:translateY(-22%) rotate(-10deg)}80%{transform:translateY(-26%) rotate(350deg)}90%{transform:translateY(0) rotate(360deg) scale(1.04,.96)}}
 .slot.c.a-drink img{animation:drink 3.4s ease-in-out infinite}
@@ -111,6 +110,9 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 #sup.full small{opacity:1}
 @keyframes supp{50%{transform:scale(1.1);box-shadow:0 0 22px var(--sc,#ffc247)}}
 .cname{font-weight:900;font-size:24px;letter-spacing:1px;margin-top:-10px;text-shadow:0 2px 8px #000}
+.cskin{display:flex;align-items:center;gap:10px;margin-top:-14px;padding:3px 6px;border-radius:999px;background:var(--glass);box-shadow:0 0 0 1px rgba(255,194,71,.25);font:700 14px/1 system-ui,sans-serif;color:#f3e6d2;backdrop-filter:blur(6px)}
+.cskin button{width:30px;height:28px;border:0;border-radius:999px;background:rgba(255,194,71,.18);color:#ffd27a;font-size:20px;line-height:1;cursor:pointer;padding:0}
+.cskin span{min-width:120px;text-align:center}
 .cname img.gedo{width:28px;height:28px;vertical-align:-5px;margin-left:8px}
 .cdesc{max-width:320px;margin-top:-12px;padding:10px 14px;border-radius:14px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);font-size:14px;line-height:1.35;text-align:center;color:#f3e6d2}
 .cdesc b{color:#ffd27a}
@@ -137,6 +139,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
       <button class="arr r" id="next" aria-label="Следующий персонаж">›</button>
     </div>
     <div class="cname" id="cname"></div>
+    <div class="cskin hide" id="cskin"><button type="button" id="skPrev" aria-label="Предыдущий костюм">‹</button><span id="skName"></span><button type="button" id="skNext" aria-label="Следующий костюм">›</button></div>
     <div class="cdesc" id="cdesc"></div>
     <button class="btn" id="play">Играть</button>
     <button class="lbs hide" id="lbStrip" type="button"></button>
@@ -188,7 +191,7 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', run: 2, name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Воин', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', run: 0 }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
   { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
   { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'sway', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, guardian: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
   { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
@@ -207,7 +210,19 @@ const CHARS = [
 const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, ...CHARS[store.char].sup });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
-CHARS.forEach(c => { c.im = loadImg(c.img); if (c.back) c.bk = loadImg(c.back); if (c.run) c.rf = Array.from({ length: c.run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)); });
+// every character has one look (the art above) and some have more (c.skins); each look carries its own pictures and run frames
+CHARS.forEach(c => {
+  const looks = c.skins || [{}];
+  c.looks = looks.map(k => {
+    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run;
+    return { n: k.n || '', img, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)) : null };
+  });
+});
+// make look #idx the one the rest of the game reads (c.img, c.im, c.bk, c.rf)
+function applyLook(c, idx) {
+  const k = c.looks[idx] || c.looks[0];
+  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf;
+}
 
 // ---------- bonus icons: glossy HD badges, drawn once ----------
 function badge(c1, c2, draw) {
@@ -270,9 +285,12 @@ const SK = 'pivnik-run-v2';
 function loadStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(SK)); } catch (e) {}
-  return { char: 0, best: 0, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
+  const skin = {};
+  if (s && s.skin && typeof s.skin === 'object') CHARS.forEach(c => { const v = s.skin[c.id] | 0; if (v > 0 && v < c.looks.length) skin[c.id] = v; });
+  return { char: 0, best: 0, skin, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
 }
 const store = loadStore();
+CHARS.forEach(c => applyLook(c, store.skin[c.id] | 0));
 const save = () => { try { localStorage.setItem(SK, JSON.stringify(store)); } catch (e) {} };
 
 // ---------- canvas / projection ----------
@@ -1328,7 +1346,7 @@ const slots = CHARS.map((c, i) => {
   const d = document.createElement('div');
   d.className = 'slot'; d.style.setProperty('--c', c.col);
   const PROPS = { flex: '<i class="prop">💪</i>', drink: '<i class="prop">🍺</i>', music: '<i class="prop">♫</i>', guitar: '<i class="prop g">🎸</i><i class="prop n">🐍</i>' };
-  d.innerHTML = `${c.guardian ? '<div class="guard"><svg viewBox="0 0 400 400" aria-hidden="true"><defs><radialGradient id="gA" cx="50%" cy="58%" r="55%"><stop offset="0" stop-color="#8a3cff" stop-opacity=".6"/><stop offset="1" stop-color="#8a3cff" stop-opacity="0"/></radialGradient><linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#341563"/><stop offset="1" stop-color="#07030f"/></linearGradient><radialGradient id="gE"><stop offset="0" stop-color="#fff7d0"/><stop offset=".4" stop-color="#ffb52e"/><stop offset="1" stop-color="#ff4a00" stop-opacity="0"/></radialGradient></defs><circle cx="200" cy="215" r="200" fill="url(#gA)"/><g stroke="#a874ff" stroke-opacity=".7" stroke-width="2.5" stroke-linejoin="round"><path d="M0 400C6 318 70 272 132 258L268 258C330 272 394 318 400 400Z" fill="url(#gB)"/><path d="M132 112C84 104 44 64 52 10C78 52 112 66 150 78Z" fill="#1b0b38"/><path d="M268 112C316 104 356 64 348 10C322 52 288 66 250 78Z" fill="#1b0b38"/><path d="M136 100C130 52 270 52 264 100L276 176C278 226 248 260 200 268C152 260 122 226 124 176Z" fill="url(#gB)"/></g><path d="M150 138L186 160L152 168Z M250 138L214 160L248 168Z" fill="#0a0414"/><g class="ge"><circle cx="170" cy="162" r="22" fill="url(#gE)"/><circle cx="230" cy="162" r="22" fill="url(#gE)"/><path d="M152 158Q172 148 190 164Q172 174 152 158Z M248 158Q228 148 210 164Q228 174 248 158Z" fill="#fff3c0"/></g><path d="M156 214Q200 236 244 214L238 240L224 228L212 246L200 230L188 246L176 228L162 240Z" fill="#0a0414" stroke="#d9c2ff" stroke-opacity=".55" stroke-width="2"/><path d="M200 70v34M178 80l10 24M222 80l-10 24" stroke="#a874ff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/></svg></div>' : ''}<img alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
+  d.innerHTML = `${c.guardian ? '<div class="guard"><img alt="" src="chars/kirill-guardian.webp"></div>' : ''}<img class="sk" alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
   $('#car').appendChild(d);
   return d;
 });
@@ -1342,10 +1360,21 @@ function renderCar() {
   $('#cname').textContent = ch.name;
   if (ch.gedo) { const e = document.createElement('img'); e.src = ICONS.gedo.url; e.alt = ''; e.className = 'gedo'; $('#cname').append(e); }
   $('#cdesc').innerHTML = ''; // superpower name in bold, then what it does
+  const many = ch.looks.length > 1;
+  $('#cskin').classList.toggle('hide', !many);
+  if (many) $('#skName').textContent = 'Костюм: ' + ch.looks[store.skin[ch.id] | 0].n;
   const b = document.createElement('b'); b.textContent = ch.desc.slice(0, dot + 1);
   $('#cdesc').append(b, ' ' + ch.desc.slice(dot + 2));
 }
 function pickChar(step) { store.char = ((store.char + step) % CHARS.length + CHARS.length) % CHARS.length; save(); renderCar(); }
+function pickLook(step) {
+  const c = CHARS[store.char], n = c.looks.length; if (n < 2) return;
+  const v = (((store.skin[c.id] | 0) + step) % n + n) % n;
+  if (v) store.skin[c.id] = v; else delete store.skin[c.id];
+  applyLook(c, v); slots[store.char].querySelector('img.sk').src = c.img; save(); renderCar(); sfx('tap');
+}
+$('#skPrev').onclick = () => pickLook(-1);
+$('#skNext').onclick = () => pickLook(1);
 $('#prev').onclick = () => pickChar(-1);
 $('#next').onclick = () => pickChar(1);
 
