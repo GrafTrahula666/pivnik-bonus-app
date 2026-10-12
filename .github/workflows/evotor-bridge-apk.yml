@@ -2,10 +2,10 @@ name: Evotor bridge test APK
 on:
   workflow_dispatch:
   push:
-    branches: ['claude/project-thread-gd8js6']
+    branches: ['claude/project-thread-gd8js6', 'claude/project-thread-i8kxd6']
     paths: ['evotor-bridge/**', '.github/workflows/evotor-bridge-apk.yml']
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: evotor-bridge-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -29,8 +29,22 @@ jobs:
           gradle-version: '8.9'
       # Signed with a throwaway debug key generated for this run: installing it over an
       # older build needs the old app removed first. A permanent release key is a separate step.
+      # If the repository has the EVOTOR_KEYSTORE_B64 secret (plus EVOTOR_KEYSTORE_PASSWORD,
+      # EVOTOR_KEY_ALIAS, EVOTOR_KEY_PASSWORD), the APK is signed with that permanent key.
+      - name: Prepare the permanent signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.EVOTOR_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/evotor-release.jks"
+            echo "EVOTOR_KEYSTORE_FILE=$RUNNER_TEMP/evotor-release.jks" >> "$GITHUB_ENV"
+          fi
       - name: Test and build debug APK
         working-directory: evotor-bridge
+        env:
+          EVOTOR_KEYSTORE_PASSWORD: ${{ secrets.EVOTOR_KEYSTORE_PASSWORD }}
+          EVOTOR_KEY_ALIAS: ${{ secrets.EVOTOR_KEY_ALIAS }}
+          EVOTOR_KEY_PASSWORD: ${{ secrets.EVOTOR_KEY_PASSWORD }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
@@ -43,3 +57,18 @@ jobs:
           name: evotor-bridge-test-reports
           path: evotor-bridge/app/build/reports/tests/
           if-no-files-found: ignore
+      # Copy of the APK on a separate branch, so it can be fetched as a plain file
+      # (Actions artifacts are zipped and need a GitHub login to download).
+      - name: Publish APK to the evotor-apk branch
+        run: |
+          set -e
+          apk=$(ls evotor-bridge/app/build/outputs/apk/debug/*.apk | head -n 1)
+          cp "$apk" "$RUNNER_TEMP/pivnik-evotor-debug.apk"
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan evotor-apk-publish
+          git rm -rf --quiet . || true
+          cp "$RUNNER_TEMP/pivnik-evotor-debug.apk" pivnik-evotor-debug.apk
+          git add pivnik-evotor-debug.apk
+          git commit -qm "Evotor bridge debug APK from ${GITHUB_SHA}"
+          git push --force origin HEAD:refs/heads/evotor-apk

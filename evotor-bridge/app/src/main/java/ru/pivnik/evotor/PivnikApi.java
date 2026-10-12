@@ -6,8 +6,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.HttpsURLConnection;
 import org.json.JSONException;
 import org.json.JSONObject;
 import ru.pivnik.evotor.core.ResolveResult;
@@ -19,7 +22,8 @@ import ru.pivnik.evotor.core.ResolveResult;
  * Always runs off the Evotor binder thread.
  */
 final class PivnikApi {
-    private static final int TIMEOUT_MS = 3000;
+    // Requests go through the Evotor cloud proxy, which adds a round trip.
+    private static final int TIMEOUT_MS = 6000;
     private static final int MAX_RESPONSE_CHARS = 64 * 1024;
 
     private PivnikApi() {}
@@ -29,6 +33,98 @@ final class PivnikApi {
             return post(settings, "/api/device/pos/qr/resolve", new JSONObject().put("payload", payload));
         } catch (JSONException error) {
             return ResolveResult.unavailable();
+        }
+    }
+
+    /**
+     * Setup-screen diagnostics: the same request as a scan, but the answer is a short text with the
+     * real reason (HTTP status or the exception), so a till that cannot reach the server can be debugged.
+     */
+    static String diagnose(BridgeSettings settings) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
+            connection = (HttpURLConnection) url.openConnection();
+            PivnikTls.apply(connection);
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setUseCaches(false);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            // Works before a key is entered too: then a 401 already proves the server is reachable.
+            String token = settings.deviceToken();
+            if (!token.isEmpty()) setKey(connection, token);
+            byte[] body = "{\"payload\":\"PIVNIK-CONNECTION-CHECK\"}".getBytes(StandardCharsets.UTF_8);
+            connection.setDoOutput(true);
+            connection.setFixedLengthStreamingMode(body.length);
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(body);
+            }
+            int status = connection.getResponseCode();
+            if (status == 404) return "OK";
+            if (status == 401 && token.isEmpty()) return "NOKEY";
+            if (status == 401 || status == 403 || status == 428) return "KEY";
+            // Unexpected answer: say who answered (Railway or something on the till's network).
+            StringBuilder details = new StringBuilder("HTTP " + status);
+            appendHeader(details, connection, "Server");
+            appendHeader(details, connection, "Via");
+            appendHeader(details, connection, "Allow");
+            appendHeader(details, connection, "X-Railway-Request-Id");
+            appendHeader(details, connection, "X-Railway-Edge");
+            if (connection instanceof HttpsURLConnection) {
+                try {
+                    java.security.cert.Certificate[] certs = ((HttpsURLConnection) connection).getServerCertificates();
+                    if (certs.length > 0 && certs[0] instanceof X509Certificate) {
+                        details.append("\nСертификат: ").append(((X509Certificate) certs[0]).getIssuerX500Principal().getName());
+                    }
+                } catch (Exception ignored) {}
+            }
+            try { details.append("\nIP: ").append(InetAddress.getByName(url.getHost()).getHostAddress()); }
+            catch (Exception ignored) {}
+            try {
+                String text = read(connection.getErrorStream());
+                if (text != null && !text.trim().isEmpty()) {
+                    text = text.replaceAll("\\s+", " ").trim();
+                    details.append("\nОтвет: ").append(text.length() > 160 ? text.substring(0, 160) : text);
+                    if (text.contains("2003")) details.append("\nЭвотор не пропускает запрос: на dev.evotor.ru, вкладка «Интеграция», включите «Проксирование запросов… (ver. 2)» с адресом сервера и переустановите приложение через Личный кабинет.");
+                }
+            } catch (Exception ignored) {}
+            details.append("\nПроверка /api/health: ").append(health(settings));
+            return details.toString();
+        } catch (Exception error) {
+            String message = error.getMessage();
+            if (message != null && message.length() > 160) message = message.substring(0, 160);
+            return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    // The Evotor cloud proxy replaces Authorization with its own token, so the key also travels in X-Pivnik-Device-Key.
+    private static void setKey(HttpURLConnection connection, String token) {
+        connection.setRequestProperty("X-Pivnik-Device-Key", token);
+        connection.setRequestProperty("Authorization", "Device " + token);
+    }
+
+    private static void appendHeader(StringBuilder out, HttpURLConnection connection, String name) {
+        String value = connection.getHeaderField(name);
+        if (value != null) out.append("\n").append(name).append(": ").append(value.length() > 80 ? value.substring(0, 80) : value);
+    }
+
+    private static String health(BridgeSettings settings) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(settings.apiBaseUrl() + "/api/health").openConnection();
+            PivnikTls.apply(connection);
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setInstanceFollowRedirects(false);
+            return "HTTP " + connection.getResponseCode();
+        } catch (Exception error) {
+            return error.getClass().getSimpleName();
+        } finally {
+            if (connection != null) connection.disconnect();
         }
     }
 
@@ -47,6 +143,7 @@ final class PivnikApi {
             URL url = new URL(settings.apiBaseUrl() + path);
             if (!"https".equalsIgnoreCase(url.getProtocol())) return ResolveResult.unavailable();
             connection = (HttpURLConnection) url.openConnection();
+            PivnikTls.apply(connection);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
@@ -54,7 +151,7 @@ final class PivnikApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("Authorization", "Device " + settings.deviceToken());
+            setKey(connection, settings.deviceToken());
             byte[] body = json.toString().getBytes(StandardCharsets.UTF_8);
             connection.setDoOutput(true);
             connection.setFixedLengthStreamingMode(body.length);

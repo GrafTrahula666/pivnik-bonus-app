@@ -1,5 +1,6 @@
 package ru.pivnik.evotor.core;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import org.junit.Test;
@@ -16,5 +17,12 @@ public class PosConfigurationTest {
         assertFalse(PosConfiguration.validBase("https://user:password@example.invalid"));
         assertFalse(PosConfiguration.validBase("https://example.invalid?token=secret"));
         assertFalse(PosConfiguration.validBase("https://example.invalid#token"));
+    }
+    @Test public void typedOrScannedKeyIsCleaned() {
+        String key = "pvpos_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ";
+        assertEquals(key, PosConfiguration.cleanToken(" pvpos_abcdefghijklmnopqrstuvw xyzABCDEFGHIJKLMNOPQ\n"));
+        assertEquals(key, PosConfiguration.cleanToken("Device " + key));
+        assertEquals("", PosConfiguration.cleanToken(null));
+        assertEquals("Devicex", PosConfiguration.cleanToken("Device x"));
     }
 }
