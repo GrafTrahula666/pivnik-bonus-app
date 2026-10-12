@@ -110,6 +110,9 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 #sup.full small{opacity:1}
 @keyframes supp{50%{transform:scale(1.1);box-shadow:0 0 22px var(--sc,#ffc247)}}
 .cname{font-weight:900;font-size:24px;letter-spacing:1px;margin-top:-10px;text-shadow:0 2px 8px #000}
+.cskin{display:flex;align-items:center;gap:10px;margin-top:-14px;padding:3px 6px;border-radius:999px;background:var(--glass);box-shadow:0 0 0 1px rgba(255,194,71,.25);font:700 14px/1 system-ui,sans-serif;color:#f3e6d2;backdrop-filter:blur(6px)}
+.cskin button{width:30px;height:28px;border:0;border-radius:999px;background:rgba(255,194,71,.18);color:#ffd27a;font-size:20px;line-height:1;cursor:pointer;padding:0}
+.cskin span{min-width:120px;text-align:center}
 .cname img.gedo{width:28px;height:28px;vertical-align:-5px;margin-left:8px}
 .cdesc{max-width:320px;margin-top:-12px;padding:10px 14px;border-radius:14px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);font-size:14px;line-height:1.35;text-align:center;color:#f3e6d2}
 .cdesc b{color:#ffd27a}
@@ -136,6 +139,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
       <button class="arr r" id="next" aria-label="Следующий персонаж">›</button>
     </div>
     <div class="cname" id="cname"></div>
+    <div class="cskin hide" id="cskin"><button type="button" id="skPrev" aria-label="Предыдущий костюм">‹</button><span id="skName"></span><button type="button" id="skNext" aria-label="Следующий костюм">›</button></div>
     <div class="cdesc" id="cdesc"></div>
     <button class="btn" id="play">Играть</button>
     <button class="lbs hide" id="lbStrip" type="button"></button>
@@ -187,7 +191,7 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', run: 2, name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Воин', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', run: 0 }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
   { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
   { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'sway', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, guardian: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
   { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
@@ -206,7 +210,19 @@ const CHARS = [
 const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, ...CHARS[store.char].sup });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
-CHARS.forEach(c => { c.im = loadImg(c.img); if (c.back) c.bk = loadImg(c.back); if (c.run) c.rf = Array.from({ length: c.run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)); });
+// every character has one look (the art above) and some have more (c.skins); each look carries its own pictures and run frames
+CHARS.forEach(c => {
+  const looks = c.skins || [{}];
+  c.looks = looks.map(k => {
+    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run;
+    return { n: k.n || '', img, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)) : null };
+  });
+});
+// make look #idx the one the rest of the game reads (c.img, c.im, c.bk, c.rf)
+function applyLook(c, idx) {
+  const k = c.looks[idx] || c.looks[0];
+  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf;
+}
 
 // ---------- bonus icons: glossy HD badges, drawn once ----------
 function badge(c1, c2, draw) {
@@ -269,9 +285,12 @@ const SK = 'pivnik-run-v2';
 function loadStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(SK)); } catch (e) {}
-  return { char: 0, best: 0, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
+  const skin = {};
+  if (s && s.skin && typeof s.skin === 'object') CHARS.forEach(c => { const v = s.skin[c.id] | 0; if (v > 0 && v < c.looks.length) skin[c.id] = v; });
+  return { char: 0, best: 0, skin, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
 }
 const store = loadStore();
+CHARS.forEach(c => applyLook(c, store.skin[c.id] | 0));
 const save = () => { try { localStorage.setItem(SK, JSON.stringify(store)); } catch (e) {} };
 
 // ---------- canvas / projection ----------
@@ -1327,7 +1346,7 @@ const slots = CHARS.map((c, i) => {
   const d = document.createElement('div');
   d.className = 'slot'; d.style.setProperty('--c', c.col);
   const PROPS = { flex: '<i class="prop">💪</i>', drink: '<i class="prop">🍺</i>', music: '<i class="prop">♫</i>', guitar: '<i class="prop g">🎸</i><i class="prop n">🐍</i>' };
-  d.innerHTML = `${c.guardian ? '<div class="guard"><img alt="" src="chars/kirill-guardian.webp"></div>' : ''}<img alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
+  d.innerHTML = `${c.guardian ? '<div class="guard"><img alt="" src="chars/kirill-guardian.webp"></div>' : ''}<img class="sk" alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
   $('#car').appendChild(d);
   return d;
 });
@@ -1341,10 +1360,21 @@ function renderCar() {
   $('#cname').textContent = ch.name;
   if (ch.gedo) { const e = document.createElement('img'); e.src = ICONS.gedo.url; e.alt = ''; e.className = 'gedo'; $('#cname').append(e); }
   $('#cdesc').innerHTML = ''; // superpower name in bold, then what it does
+  const many = ch.looks.length > 1;
+  $('#cskin').classList.toggle('hide', !many);
+  if (many) $('#skName').textContent = 'Костюм: ' + ch.looks[store.skin[ch.id] | 0].n;
   const b = document.createElement('b'); b.textContent = ch.desc.slice(0, dot + 1);
   $('#cdesc').append(b, ' ' + ch.desc.slice(dot + 2));
 }
 function pickChar(step) { store.char = ((store.char + step) % CHARS.length + CHARS.length) % CHARS.length; save(); renderCar(); }
+function pickLook(step) {
+  const c = CHARS[store.char], n = c.looks.length; if (n < 2) return;
+  const v = (((store.skin[c.id] | 0) + step) % n + n) % n;
+  if (v) store.skin[c.id] = v; else delete store.skin[c.id];
+  applyLook(c, v); slots[store.char].querySelector('img.sk').src = c.img; save(); renderCar(); sfx('tap');
+}
+$('#skPrev').onclick = () => pickLook(-1);
+$('#skNext').onclick = () => pickLook(1);
 $('#prev').onclick = () => pickChar(-1);
 $('#next').onclick = () => pickChar(1);
 
