@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { signSession, verifySession, effectiveRoleForAuthenticatedIdentity } from '../platform-core.js';
 import { createPosHttp } from '../pos/http.js';
+import { assertLegacyScopeBody } from '../legacy-api-boundary.js';
 import { importEvotorPage } from '../pos/repository.js';
 import { sale } from './fixtures/evotor.js';
 
@@ -41,7 +42,7 @@ async function fixture(){
 }
 async function mount(kind,pool){
  const pos=createPosHttp(pool,config);
- const globals={pool,Buffer,URL,MAX_BODY_BYTES:8192,verifySession:t=>verifySession(t,secret),effectiveRoleForAuthenticatedIdentity,ownerTelegramId:'fixture-owner',ownerVkId:'fixture-owner-vk',TERMS_VERSION:terms,createPosHttp:()=>pos};
+ const globals={pool,Buffer,URL,MAX_BODY_BYTES:8192,verifySession:t=>verifySession(t,secret),effectiveRoleForAuthenticatedIdentity,ownerTelegramId:'fixture-owner',ownerVkId:'fixture-owner-vk',TERMS_VERSION:terms,createPosHttp:()=>pos,assertLegacyScopeBody};
  let server,dropNextLink=false;
  if(kind==='express'){
    const text=await source('server.js'),app=express();app.use(express.json());
