@@ -24,7 +24,9 @@ export async function fetchEvotorPage({ token, storeId, cursor, until, fetchImpl
     if (bytes.byteLength > 5 * 1024 * 1024) throw new Error();
     page = JSON.parse(new TextDecoder().decode(bytes));
   } catch { throw Object.assign(new Error('Некорректный ответ Облака Эвотора.'), { code: 'invalid_response' }); }
-  if (!Array.isArray(page.items) || page.items.length > 1000
+  if (!page || typeof page !== 'object' || Array.isArray(page)
+    || !Array.isArray(page.items) || page.items.length > 1000
+    || (page.paging != null && (typeof page.paging !== 'object' || Array.isArray(page.paging)))
     || (page.paging?.next_cursor != null && typeof page.paging.next_cursor !== 'string')) {
     throw Object.assign(new Error('Некорректная страница документов.'), { code: 'invalid_response' });
   }
