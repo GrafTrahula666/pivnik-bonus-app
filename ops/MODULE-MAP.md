@@ -7,7 +7,11 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
-the SUPER_ADMIN-only draft API. `src/phaseC/VenueOnboarding.tsx` extends the real
+the draft API. With the invitation flag off it remains SUPER_ADMIN-only.
+`server/onboarding-access.ts` adds scoped owner/manager/viewer access through
+existing canonical company/venue IDs and the revocable invitation access ledger;
+it does not introduce another tenant model. Mutations lock their grants until
+COMMIT and recheck exact draft scope. `src/phaseC/VenueOnboarding.tsx` extends the real
 Business App. Additive admin migrations 004, 005 and 006 are separate from
 guest/startup policy; `ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also
 requires the global write switch. Drafts and their standard application blueprint
@@ -20,6 +24,25 @@ company/venue IDs. A new company and every new venue are created with
 preparation. The operation is replay-safe and audit failure rolls back the scope
 and both canonical rows. Inactive scope rows remain invisible to the normal venue
 resolver. It does not create an active company/venue, database, bot, webhook or POS link.
+Manual admin migration 011 extends the existing 007/008 invitation table with
+server-owned canonical scope, role and replay fields, and adds revocable access.
+No second invitation or tenant model is introduced.
+`server/onboarding-invitations.ts` owns issuance, exact replay, expiry, acceptance
+and revocation; `ADMIN_ENABLE_ONBOARDING_INVITATIONS` defaults off. Tokens use a
+domain-separated HMAC of the existing strong Admin CSRF secret; only their hash
+is stored. Tokens/passwords are excluded from audit and browser storage. An
+accepted invitation creates an Admin account only when its email is new; an
+existing account must log in. Accepting/revoking access and auditing are atomic.
+`OnboardingInvitations.tsx` and `InviteAcceptance.tsx` connect the owner link to
+the real resumable wizard, with server-provided per-draft write permissions.
+Organization owners can delegate their prepared inactive organization or point;
+a point grant cannot expose another point in that company. No messaging is sent.
+Runbook: `ops/SPACEVERSE-VENUE-ONBOARDING.md`. Browser checks use real signed
+Admin HTTP and SQL fixtures on desktop/mobile (`test:e2e:invitations`). Runtime
+provisioning and live terminal verification remain pending; prepared metadata
+never means an active venue. When the scoped invitation flag is on, legacy
+issuance/claim is disabled and old links require reissue from «Приглашения».
+Legacy rows and independently granted company rights are retained.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find
@@ -74,8 +97,10 @@ stores the exact prepared draft/provider/store binding plus only an AES-256-GCM
 envelope, key ID, HMAC request fingerprint and verification state. The keyring is
 read only from protected server variables, supports active + previous keys, and a
 verification write rewraps the token under the active key. `GET/PUT
-.../integrations/evotor` and `POST .../integrations/evotor/verify` are creator-
-scoped SUPER_ADMIN routes behind writes, draft and integration feature flags.
+.../integrations/evotor` and `POST .../integrations/evotor/verify` use the same draft
+read/write permissions behind writes, draft and integration feature flags.
+Invited viewers can read masked state; only scoped owners/managers can save or
+verify, and revocation is rechecked before recording a verification result.
 Responses expose a fixed mask, never ciphertext or plaintext. Verification calls
 the existing fixed-host Evotor document-page adapter and records only
 `configured`, `verified`, `action_required` or `error`; HTTP 200 without the
@@ -91,7 +116,7 @@ migration `010_onboarding_provisioning.sql` stores one
 `runtime_database_binding` ledger row per prepared draft. A transaction claims
 the row with a short lease; an unexpired claim blocks double execution, while an
 expired claim or a recorded safe failure can be retried. The worker reloads the
-manifest from the creator-owned frozen draft/application/scope and resolves the
+manifest from the authorized frozen draft/application/scope and resolves the
 target database only by that server-derived runtime key. Request data never
 contains a database URL or credential. In the already-created dedicated
 database, the action requires manual migrations 017/018, inserts the exact

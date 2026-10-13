@@ -19,18 +19,18 @@ export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
 
 const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand'])
-export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean}){
+export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false,setupOnly=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean;setupOnly?:boolean}){
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
     <aside className={cn('sidebar',open&&'open')}>
       <div className="brand"><div className="brand-mark">P</div><div><b>PIVNIK</b><span>BUSINESS</span></div></div>
       <div className={cn('demo-badge',mode==='production'&&'live-badge')}>
         {mode==='demo'?<Sparkles size={13}/>:<Database size={13}/>}
-        {mode==='demo'?'ДЕМО-РЕЖИМ':'СИСТЕМА ПОДКЛЮЧЕНА'}
+        {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':'СИСТЕМА ПОДКЛЮЧЕНА'}
       </div>
       <nav className="nav">
-        {nav.filter(([id])=>mode==='demo'||!restricted||!trustedHiddenPages.has(id)).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
-          <Icon size={17}/><span>{restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
+        {nav.filter(([id])=>setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id)).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
+          <Icon size={17}/><span>{setupOnly?'Подключение':restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
         </button>)}
         {role==='SUPER_ADMIN'&&<>
           <div className="nav-separator"><span>УПРАВЛЕНИЕ СЕТЬЮ</span></div>
@@ -41,17 +41,17 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=fal
       </nav>
       <div className="sidebar-foot"><div className="system-ok"><span/><div>
         <b>{mode==='demo'?'Демонстрация':'Панель управления'}</b>
-        <small>{mode==='demo'?'изменения не сохраняются':'приложения для гостей работают независимо'}</small>
+        <small>{mode==='demo'?'изменения не сохраняются':setupOnly?'настройка ещё не означает запуск':'приложения для гостей работают независимо'}</small>
       </div></div></div>
     </aside>
   </>
 }
 
 export function PhaseCTopbar({
-  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,hidePeriodControls=false,restricted=false,
+  role,adminName,mode,venues,venueId,period,compare,onMenu,onVenue,onPeriod,onCompare,onMode,onLogout,demoOnly=false,hidePeriodControls=false,restricted=false,roleLabel,
 }:{
   role:AdminRole;adminName:string;mode:AppMode;venues:ApiVenue[];venueId:string;period:Period;compare:boolean;
-  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean;restricted?:boolean
+  onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean;restricted?:boolean;roleLabel?:string
 }){
   return <header className="topbar">
     <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
@@ -75,7 +75,7 @@ export function PhaseCTopbar({
     {!hidePeriodControls&&<label className="compare desktop-only"><input type="checkbox" checked={compare} onChange={e=>onCompare(e.target.checked)}/><span/>Сравнение</label>}
     <button className="icon-btn" disabled title="Новых уведомлений нет"><Bell size={18}/></button>
     <div className="profile-menu">
-      <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{role==='SUPER_ADMIN'?'Главный администратор':restricted?'Директор':'Владелец'}</span></div><ChevronDown size={14}/></button>
+      <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{roleLabel||(role==='SUPER_ADMIN'?'Главный администратор':restricted?'Директор':'Владелец')}</span></div><ChevronDown size={14}/></button>
       <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>{demoOnly?'Выйти из демо':'Выйти'}</button></div>
     </div>
   </header>

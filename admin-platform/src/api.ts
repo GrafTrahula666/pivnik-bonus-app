@@ -2,9 +2,9 @@ export type AdminRole='SUPER_ADMIN'|'VENUE_ADMIN'
 export interface AdminSession {
   admin:{id:string;email:string;displayName:string;role:AdminRole}
   csrfToken:string
-  capabilities:{writes:boolean;productionBonusWrites:boolean;productionAchievementWrites:boolean;productionEntitlementWrites:boolean;demo:boolean;onboardingDrafts?:boolean;onboardingIntegrations?:boolean}
+  capabilities:{writes:boolean;productionBonusWrites:boolean;productionAchievementWrites:boolean;productionEntitlementWrites:boolean;demo:boolean;onboardingDrafts?:boolean;onboardingIntegrations?:boolean;onboardingInvitations?:boolean;onboardingAccess?:boolean;onboardingWrite?:boolean;onboardingInvitationOwner?:boolean}
 }
-interface GuestSession {authenticated:false;demo?:boolean}
+interface GuestSession {authenticated:false;demo?:boolean;invitations?:boolean}
 export interface ApiVenue {
   id:string;companyId:string;companyCode:string;companyName:string;code:string;name:string;address:string|null;legacyBarId:string|null;accessKind?:'owner'|'trusted'
 }
@@ -24,12 +24,13 @@ async function request<T>(path:string,init:RequestInit={}):Promise<T>{
 }
 export async function getSession(){
   const s=await request<AdminSession|GuestSession>('/api/admin/auth/session')
-  if('authenticated' in s)throw new ApiError(401,'AUTH_REQUIRED','Требуется вход в Admin Platform.',{demo:s.demo===true})
+  if('authenticated' in s)throw new ApiError(401,'AUTH_REQUIRED','Требуется вход в Admin Platform.',{demo:s.demo===true,invitations:s.invitations===true})
   csrf=s.csrfToken
   return s
 }
 export async function login(email:string,password:string){const s=await request<AdminSession>('/api/admin/auth/login',{method:'POST',body:JSON.stringify({email,password})});csrf=s.csrfToken;return s}
 export async function logout(){await request('/api/admin/auth/logout',{method:'POST'});csrf=''}
+export async function acceptInvitation(body:unknown){const s=await request<AdminSession&{draftId:string|null;companyId:string;role:string}>('/api/admin/onboarding/invitations/accept',{method:'POST',body:JSON.stringify(body)});csrf=s.csrfToken;return s}
 export const apiGet=<T,>(path:string)=>request<T>(path)
 export const apiPost=<T,>(path:string,body:unknown)=>request<T>(path,{method:'POST',body:JSON.stringify(body)})
 export const apiPut=<T,>(path:string,body:unknown)=>request<T>(path,{method:'PUT',body:JSON.stringify(body)})

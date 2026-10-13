@@ -24,7 +24,8 @@
     "test:security": "vitest run server/tests/security.spec.ts server/tests/tenant-security.spec.ts server/tests/write-security.spec.ts server/tests/trusted-director-http.spec.ts server/tests/venue-onboarding.spec.ts server/tests/onboarding-provisioning.spec.ts",
     "test:integration": "vitest run server/tests/postgres.integration.spec.ts",
     "test:e2e": "playwright test",
-    "test:e2e:onboarding": "playwright test -c playwright.onboarding.config.ts"
+    "test:e2e:onboarding": "playwright test -c playwright.onboarding.config.ts",
+    "test:e2e:invitations": "playwright test -c playwright.invitations.config.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.2",

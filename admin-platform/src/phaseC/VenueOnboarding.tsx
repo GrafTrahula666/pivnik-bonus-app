@@ -19,6 +19,7 @@ interface Draft {
   status: 'draft'
   revision: number
   updatedAt: string
+  permissions?:{canWrite:boolean;role:string}
 }
 interface Index {drafts: Draft[]; companies: {id:string;name:string}[]}
 type Command = {id:string;revision:number;data:OnboardingData} | {requestKey:string;data:OnboardingData}
@@ -185,12 +186,14 @@ function inviteResponse(raw:unknown):Invite {
   return value as Invite
 }
 
-export function VenueOnboarding({session}:{session:AdminSession}) {
-  const allowed=session.admin.role==='SUPER_ADMIN'&&session.capabilities.onboardingDrafts===true
+export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;initialDraftId?:string|null}) {
+  const allowed=(session.admin.role==='SUPER_ADMIN'||session.capabilities.onboardingAccess===true)&&session.capabilities.onboardingDrafts===true
   const integrationsAllowed=allowed&&session.capabilities.onboardingIntegrations===true
+  const legacyInvitesAllowed=allowed&&session.admin.role==='SUPER_ADMIN'&&!session.capabilities.onboardingInvitations
   const [index,setIndex]=useState<Index>({drafts:[],companies:[]})
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false)
   const [editing,setEditing]=useState(false),[current,setCurrent]=useState<Draft|null>(null)
+  const canWrite=current?.permissions?.canWrite??session.capabilities.onboardingWrite!==false
   const [data,setData]=useState<OnboardingData>(empty)
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[uncertain,setUncertain]=useState(false)
   const [application,setApplication]=useState<Application|null>(null),[appData,setAppData]=useState<ApplicationConfig>(emptyApplication)
@@ -245,6 +248,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     finally {if(run===integrationSequence.current)setIntegrationLoading(false)}
   },[integrationsAllowed])
   const loadInvites=useCallback(async(draft:Draft)=>{
+    if(!legacyInvitesAllowed)return
     const run=++inviteSequence.current
     setInviteLoading(true);setInviteError('')
     try {
@@ -256,7 +260,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       setInvites(checked)
     } catch(error) {if(run===inviteSequence.current)setInviteError(message(error))}
     finally {if(run===inviteSequence.current)setInviteLoading(false)}
-  },[])
+  },[legacyInvitesAllowed])
   const loadScope=useCallback(async(draft:Draft)=>{
     const run=++scopeSequence.current
     setScopeLoading(true);setScopeError('')
@@ -291,6 +295,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       const checked={...result,drafts:result.drafts.map(draftResponse)}
       if(run!==sequence.current) return
       setIndex(checked)
+      if(recover&&session.admin.role!=='SUPER_ADMIN'&&checked.drafts.length===1)showDraft(checked.drafts[0]!)
       if(recover) {
         // Only a non-secret request UUID is kept in this tab; names/contacts/keys stay on the server.
         const key=sessionStorage.getItem(checkpoint)
@@ -305,7 +310,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       }
     } catch(error) {if(run===sequence.current)setError(message(error))}
     finally {if(run===sequence.current)setLoading(false)}
-  },[checkpoint,showDraft])
+  },[checkpoint,showDraft,session.admin.role])
 
   const invalidateAppLoads=useCallback(()=>{appSequence.current++},[])
   const invalidateIntegrationLoads=useCallback(()=>{integrationSequence.current++},[])
@@ -317,6 +322,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     if(allowed) void load(true)
     return invalidateLoads
   },[allowed,invalidateLoads,load])
+  useEffect(()=>{if(allowed&&initialDraftId)void apiGet<unknown>(base+'/'+initialDraftId).then(value=>showDraft(draftResponse(value))).catch(error=>setError(message(error)))},[allowed,initialDraftId,showDraft])
 
   useEffect(()=>{
     if(!inviteCopied)return
@@ -328,7 +334,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     if(busyRef.current) return
     try {createKey.current=sessionStorage.getItem(checkpoint)||crypto.randomUUID()}
     catch {setError('Не удалось подготовить безопасное сохранение. Разрешите хранилище вкладки и повторите.');return}
-    invalidateAppLoads();invalidateScopeLoads();setData(empty());setCurrent(null);setEditing(true);setError('');setNotice('');setUncertain(false);command.current=null
+    invalidateAppLoads();invalidateScopeLoads();setData({...empty(),companyId:session.admin.role==='SUPER_ADMIN'?null:index.companies[0]?.id||null});setCurrent(null);setEditing(true);setError('');setNotice('');setUncertain(false);command.current=null
     setApplication(null);setAppData(emptyApplication());setAppContract(defaultContract);setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
     setIntegration(null);setIntegrationStoreId('');setIntegrationToken('');setIntegrationContract(defaultIntegrationContract)
@@ -396,7 +402,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } finally {scopeBusyRef.current=false;setScopeBusy(false)}
   }
   async function saveIntegration() {
-    if(!integrationsAllowed||!current||!scope||integrationBusyRef.current||busyRef.current||scopeBusyRef.current)return
+    if(!canWrite||!integrationsAllowed||!current||!scope||integrationBusyRef.current||busyRef.current||scopeBusyRef.current)return
     const body=integrationCommand.current||{requestKey:crypto.randomUUID(),revision:integration?.revision||0,storeId:integrationStoreId,token:integrationToken}
     integrationCommand.current=body;integrationBusyRef.current=true;setIntegrationBusy(true);setIntegrationError('');setIntegrationNotice('')
     try {
@@ -412,7 +418,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } finally {integrationBusyRef.current=false;setIntegrationBusy(false)}
   }
   async function verifyIntegration() {
-    if(!integrationsAllowed||!current||!integration||integrationBusyRef.current||integrationUncertain)return
+    if(!canWrite||!integrationsAllowed||!current||!integration||integrationBusyRef.current||integrationUncertain)return
     integrationBusyRef.current=true;setIntegrationBusy(true);setIntegrationError('');setIntegrationNotice('')
     try {
       const saved=integrationResponse(await apiPost(base+'/'+current.id+'/integrations/evotor/verify',{revision:integration.revision}))
@@ -467,21 +473,22 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   return <section className="card onboarding" aria-label="Подключение заведений">
     <div className="onboarding-head">
       <div><span className="eyebrow">ПОДКЛЮЧЕНИЕ ЗАВЕДЕНИЙ</span><h2>Новое заведение</h2><p>Сохраните данные сейчас и продолжите настройку позже.</p></div>
-      <button className="btn" disabled={busy||loading||editing} onClick={begin}><Plus size={16}/>Добавить заведение</button>
+      {canWrite&&<button className="btn" disabled={busy||loading||editing} onClick={begin}><Plus size={16}/>Добавить заведение</button>}
     </div>
     {error&&<div className="onboarding-feedback error" role="alert">{error}</div>}
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
+    {!canWrite&&<p className="onboarding-feedback">Вам доступен просмотр. Изменения выполняет владелец или управляющий этой точки.</p>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
-      <fieldset className="onboarding-fields" disabled={busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
+      <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
         <label className="field"><span>Название заведения</span><input required maxLength={120} value={data.venueName} onChange={event=>{
           const venueName=event.target.value
           setData(previous=>({...previous,venueName,companyName:!previous.companyId&&(!previous.companyName||previous.companyName===previous.venueName)?venueName:previous.companyName}));setNotice('')
         }}/></label>
-        <label className="field"><span>Организация</span><select value={data.companyId||'new'} onChange={event=>{
+        <label className="field"><span>Организация</span><select aria-label="Организация" value={data.companyId||'new'} onChange={event=>{
           const companyId=event.target.value==='new'?null:event.target.value
           setData(previous=>({...previous,companyId,companyName:companyId?'':previous.venueName}));setNotice('')
-        }}><option value="new">Новая организация</option>{index.companies.map(company=><option key={company.id} value={company.id}>{company.name}</option>)}
+        }}>{session.admin.role==='SUPER_ADMIN'&&<option value="new">Новая организация</option>}{index.companies.map(company=><option key={company.id} value={company.id}>{company.name}</option>)}
           {data.companyId&&!index.companies.some(company=>company.id===data.companyId)&&<option value={data.companyId} disabled>Организация недоступна</option>}
         </select></label>
         {!data.companyId&&<label className="field"><span>Название организации</span><input required maxLength={120} value={data.companyName} onChange={event=>change('companyName',event.target.value)}/></label>}
@@ -495,7 +502,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <label className="field"><span>Email владельца</span><input aria-label="Email владельца" aria-describedby="onboarding-owner-note" type="email" maxLength={254} value={data.ownerEmail} onChange={event=>change('ownerEmail',event.target.value)}/><small id="onboarding-owner-note">Приглашение на этом шаге не отправляется.</small></label>
       </fieldset>
       <div className="onboarding-actions">
-        <button className="btn" type="submit" disabled={busy||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
+        <button className="btn" type="submit" disabled={!canWrite||busy||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
         <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy||integrationBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
         <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('')}}>Закрыть</button>
       </div>
@@ -510,7 +517,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <div><span><b>Публикация</b><small>{appContract.published?'Опубликовано':appContract.runtimeStatus==='not_provisioned'?'Не запускалась':'Не подтверждена'}</small></span></div>
         {application&&<div><span><b>Tenant ID</b><small className="tenant-key">{application.tenantKey}</small></span></div>}
       </div>
-      <fieldset className="onboarding-fields" disabled={appBusy||appLoading||appUncertain||busy||scopeBusy||scopeLoading||Boolean(scope)}>
+      <fieldset className="onboarding-fields" disabled={!canWrite||appBusy||appLoading||appUncertain||busy||scopeBusy||scopeLoading||Boolean(scope)}>
         <label className="field"><span>Название приложения</span><input required maxLength={120} value={appData.displayName} onChange={event=>changeApplication('displayName',event.target.value)}/></label>
         <label className="field"><span>Тема</span><select value={appData.theme} onChange={event=>changeApplication('theme',event.target.value as ApplicationConfig['theme'])}>
           <option value="premium-dark">Тёмная премиальная</option><option value="dark">Тёмная</option><option value="light">Светлая</option>
@@ -522,7 +529,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       </fieldset>
       <p className="onboarding-note">Логотип, Telegram и VK пока не подключаются. Эвотор настраивается ниже отдельным защищённым шагом после подготовки области. Эта конфигурация не даёт доступ к кошелькам ПИВНИКА.</p>
       <div className="onboarding-actions">
-        <button className="btn" type="submit" disabled={appBusy||appLoading||busy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':appBusy?'Сохраняем…':appUncertain?'Повторить сохранение приложения':'Сохранить приложение'}</button>
+        <button className="btn" type="submit" disabled={!canWrite||appBusy||appLoading||busy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':appBusy?'Сохраняем…':appUncertain?'Повторить сохранение приложения':'Сохранить приложение'}</button>
         <button className="btn secondary" type="button" disabled={appBusy||appLoading||scopeBusy} onClick={()=>void loadApplication(current)}><RefreshCw size={16}/>Открыть сохранённую конфигурацию</button>
       </div>
     </form>}
@@ -537,7 +544,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       </div>}
       <p className="onboarding-note">Подготовка атомарно резервирует канонические ID в metadata-БД. Заведение не появляется в рабочей панели, runtime не запускается, данные клиентов и ПИВНИКА не подключаются.</p>
       <div className="onboarding-actions">
-        {!scope&&<button className="btn" type="button" disabled={!application||draftDirty||appDirty||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||appDirty?'Сначала сохраните изменения':'Подготовить область'}</button>}
+        {!scope&&<button className="btn" type="button" disabled={!canWrite||!application||draftDirty||appDirty||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||appDirty?'Сначала сохраните изменения':'Подготовить область'}</button>}
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
       </div>
     </section>}
@@ -551,19 +558,19 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
           <div><span><b>Проверка доступа</b><small>{integration?integration.verification.nextAction:'Сначала сохраните ID магазина и токен.'}</small></span></div>
           <div><span><b>Запуск</b><small>{integrationContract.posBindingCreated?'POS привязан':'POS не привязан'} · приложение не опубликовано</small></span></div>
         </div>
-        <fieldset className="onboarding-fields" disabled={integrationBusy||integrationLoading||integrationUncertain||busy||scopeBusy}>
+        <fieldset className="onboarding-fields" disabled={!canWrite||integrationBusy||integrationLoading||integrationUncertain||busy||scopeBusy}>
           <label className="field"><span>ID магазина Эвотора</span><input required maxLength={200} autoComplete="off" value={integrationStoreId} onChange={event=>{setIntegrationStoreId(event.target.value);setIntegrationNotice('')}}/></label>
           <label className="field"><span>Токен Эвотора</span><input aria-label="Токен Эвотора" aria-describedby="onboarding-evotor-token-note" required={!integration} type="password" minLength={16} maxLength={4096} autoComplete="new-password" spellCheck={false} value={integrationToken} placeholder={integration?'Введите только для замены':'Вставьте токен'} onChange={event=>{setIntegrationToken(event.target.value);setIntegrationNotice('')}}/><small id="onboarding-evotor-token-note">После сохранения поле очистится. Токен обратно не показывается.</small></label>
         </fieldset>
         <p className="onboarding-note">Проверка читает одну страницу документов через существующий адаптер. Она не создаёт аккаунт Эвотора, не ставит приложение на кассу и не включает импорт чеков.</p>
         <div className="onboarding-actions">
-          <button className="btn" type="submit" disabled={integrationBusy||integrationLoading||busy||!integrationStoreId||!integrationToken}><Save size={16}/>{integrationBusy?'Сохраняем…':integrationUncertain?'Повторить сохранение':integration?'Заменить настройку':'Сохранить настройку'}</button>
-          <button className="btn secondary" type="button" disabled={!integration||integrationDirty||integrationBusy||integrationLoading||integrationUncertain} onClick={()=>void verifyIntegration()}><ShieldCheck size={16}/>Проверить доступ</button>
+          <button className="btn" type="submit" disabled={!canWrite||integrationBusy||integrationLoading||busy||!integrationStoreId||!integrationToken}><Save size={16}/>{integrationBusy?'Сохраняем…':integrationUncertain?'Повторить сохранение':integration?'Заменить настройку':'Сохранить настройку'}</button>
+          <button className="btn secondary" type="button" disabled={!canWrite||!integration||integrationDirty||integrationBusy||integrationLoading||integrationUncertain} onClick={()=>void verifyIntegration()}><ShieldCheck size={16}/>Проверить доступ</button>
           <button className="btn secondary" type="button" disabled={integrationBusy||integrationLoading} onClick={()=>void loadIntegration(current)}><RefreshCw size={16}/>Открыть сохранённую настройку</button>
         </div>
       </>}
     </form>}
-    {editing&&current&&scope&&<section className="onboarding-invite" aria-label="Приглашение владельцу">
+    {legacyInvitesAllowed&&editing&&current&&scope&&<section className="onboarding-invite" aria-label="Приглашение владельцу">
       <div className="onboarding-step"><Link2 size={18}/><b>Приглашение владельцу</b><span>{invites.some(invite=>invite.status==='pending')?'Активная ссылка есть':'Ссылки нет'}</span></div>
       {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}
       {inviteToken&&<div className="onboarding-contract" aria-label="Новая ссылка приглашения">

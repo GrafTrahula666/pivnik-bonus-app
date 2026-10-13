@@ -2,7 +2,7 @@ import { useState,type FormEvent } from 'react'
 import { LockKeyhole,ShieldCheck,Sparkles } from 'lucide-react'
 import { login,type AdminSession } from './api'
 
-export function Login({onAuthenticated,onDemo}:{onAuthenticated:(session:AdminSession)=>void;onDemo?:()=>void}){
+export function Login({onAuthenticated,onDemo,onInvite}:{onAuthenticated:(session:AdminSession)=>void;onDemo?:()=>void;onInvite?:()=>void}){
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   async function submit(event:FormEvent){event.preventDefault();setBusy(true);setError('')
     try{onAuthenticated(await login(email,password))}catch(e){setError(e instanceof Error?e.message:'Не удалось войти.')}finally{setBusy(false)}
@@ -20,6 +20,7 @@ export function Login({onAuthenticated,onDemo}:{onAuthenticated:(session:AdminSe
         <button className="btn login-submit" disabled={busy}>{busy?'Проверяем…':'Войти'}</button>
       </form>
       {onDemo&&<button type="button" className="btn secondary login-demo" onClick={onDemo}><Sparkles/>Посмотреть демо-версию</button>}
+      {onInvite&&<button type="button" className="btn secondary login-demo" onClick={onInvite}>Войти по приглашению</button>}
       <div className="login-safety"><ShieldCheck/><span>Клиентские приложения VK и Telegram работают независимо от панели управления.</span></div>
     </section>
   </main>

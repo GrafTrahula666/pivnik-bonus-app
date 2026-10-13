@@ -31,6 +31,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='true'
     process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='fixture-v1'
     process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'fixture-v1':Buffer.alloc(32,7).toString('base64')})
+    process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS='false'
     process.env.ADMIN_PUBLIC_ORIGIN='https://onboarding.fixture.invalid'
     process.env.ADMIN_CSRF_SECRET='synthetic-onboarding-secret-123456789012345'
     const {onboardingFixture,fixturePassword}=await import('./onboarding-fixture.js')
@@ -501,15 +502,14 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
 
   it('fails closed when the invite migration is missing, without breaking scope reads',async()=>{
     const draft=await preparedDraft('Приглашение — без миграции')
-    await state.db!.exec('DROP TABLE admin_onboarding_invites')
+    await state.db!.exec('ALTER TABLE admin_onboarding_invites RENAME TO fixture_saved_onboarding_invites')
+    try {
     for(const [method,suffix] of [['GET',''],['POST',''],['DELETE','/'+crypto.randomUUID()]] as const) {
       const r=await request('root',method,invitesPath(draft.id,suffix))
       expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_INVITE_NOT_READY'})
     }
     expect((await request('root','GET','/'+draft.id+'/scope')).status).toBe(200)
-    for(const file of ['007_onboarding_invites.sql','008_onboarding_invite_claims.sql']) {
-      await state.db!.exec(await fs.readFile(new URL('../../admin-migrations/'+file,import.meta.url),'utf8'))
-    }
+    } finally {await state.db!.exec('ALTER TABLE fixture_saved_onboarding_invites RENAME TO admin_onboarding_invites')}
   })
 
   async function createInviteFor(draftId:string) {

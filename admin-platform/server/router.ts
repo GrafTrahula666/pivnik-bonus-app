@@ -56,6 +56,8 @@ import {
 } from './pivnik-app-content.js'
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
+import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
+import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
   claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
   getOnboardingEvotorIntegration,getOnboardingInvitePreview,getOnboardingInvites,getOnboardingRequest,getOnboardingScope,
@@ -82,7 +84,14 @@ export const sessionCapabilities=()=>({
   demo:config.demoEnabled,
   onboardingDrafts:config.enableWrites&&config.enableOnboardingDrafts,
   onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
+  onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
 })
+async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
+  const capabilities=sessionCapabilities()
+  if(!capabilities.onboardingInvitations)return capabilities
+  return {...capabilities,onboardingAccess:await canUseOnboarding(admin),onboardingWrite:await canUseOnboarding(admin,true),
+    onboardingInvitationOwner:await canManageOnboardingInvitations(admin)}
+}
 
 export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
   if(!url.pathname.startsWith('/api/admin/')) return false
@@ -110,7 +119,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     const body=await readJsonBody<{email?:string;password?:string}>(req)
     const result=await login(req,res,body.email,body.password)
     await recordAudit({admin:result.admin,action:'auth.login',entityType:'admin_session',metadata:{ipHashOnly:true}}).catch(()=>undefined)
-    json(res,200,{...result,capabilities:sessionCapabilities()});return true
+    json(res,200,{...result,capabilities:await capabilitiesFor(result.admin)});return true
   }
 
   // Public (unauthenticated) one-time invite redemption — no session exists yet to load.
@@ -126,15 +135,44 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/auth/session'){
     try{
       const session=await loadSession(req)
-      json(res,200,{admin:session.admin,csrfToken:session.csrfToken,capabilities:sessionCapabilities()})
+      json(res,200,{admin:session.admin,csrfToken:session.csrfToken,capabilities:await capabilitiesFor(session.admin)})
     }catch(error){
-      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false,demo:config.demoEnabled})
+      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false,demo:config.demoEnabled,
+        invitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations})
       else throw error
     }
     return true
   }
 
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/onboarding/invitations/preview'){
+    enforceRateLimit(`invitation-preview:${requestIp(req)}`,30,60_000)
+    json(res,200,await previewOnboardingInvitation(await readJsonBody(req,1024)));return true
+  }
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/onboarding/invitations/accept'){
+    enforceRateLimit(`invitation-accept:${requestIp(req)}`,10,60_000)
+    let existing:Awaited<ReturnType<typeof loadSession>>|null=null
+    try{existing=await loadSession(req)}catch(error){if(!(error instanceof HttpError&&error.statusCode===401))throw error}
+    if(existing)requireCsrf(req,existing.rawToken)
+    const body=await readJsonBody<{token?:unknown;email?:unknown;displayName?:unknown;password?:unknown}>(req,4*1024)
+    const accepted=await acceptOnboardingInvitation(existing?.admin||null,body)
+    if(!existing){
+      // New-account password was chosen by this recipient; never reset an existing account.
+      const authenticated=await login(req,res,accepted.admin.email,body.password)
+      json(res,200,{...accepted,...authenticated,capabilities:await capabilitiesFor(authenticated.admin)});return true
+    }
+    json(res,200,{...accepted,csrfToken:existing.csrfToken,capabilities:await capabilitiesFor(existing.admin)});return true
+  }
   const session=await loadSession(req)
+  const invitation=/^\/api\/admin\/onboarding\/invitations(?:\/([^/]+)\/(revoke|link))?$/.exec(url.pathname)
+  if(invitation){
+    if(isMethod(req,'GET')&&!invitation[1]){json(res,200,await listOnboardingInvitations(session.admin));return true}
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`invitation-owner:${session.admin.id}`,30,60_000)
+    if(isMethod(req,'POST')){
+      json(res,200,invitation[1]?invitation[2]==='link'?await reopenOnboardingInvitation(session.admin,invitation[1]):await revokeOnboardingInvitation(session.admin,invitation[1]):await createOnboardingInvitation(session.admin,await readJsonBody(req,2048)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
   if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/logout'){
     requireCsrf(req,session.rawToken)
     await recordAudit({admin:session.admin,action:'auth.logout',entityType:'admin_session',metadata:{ipPresent:Boolean(requestIp(req))}}).catch(()=>undefined)
@@ -155,7 +193,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboardingApp=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/application$/.exec(url.pathname)
   if(onboardingApp){
-    requireOnboardingAccess(session.admin)
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
     if(!isMethod(req,'GET')){
       requireCsrf(req,session.rawToken)
       enforceRateLimit(`onboarding-application:${session.admin.id}`,60,60_000)
@@ -168,7 +206,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboardingScope=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/scope$/.exec(url.pathname)
   if(onboardingScope){
-    requireOnboardingAccess(session.admin)
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
     if(!isMethod(req,'GET')){
       requireCsrf(req,session.rawToken)
       enforceRateLimit(`onboarding-scope:${session.admin.id}`,60,60_000)
@@ -181,7 +219,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboardingEvotorVerify=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/evotor\/verify$/.exec(url.pathname)
   if(onboardingEvotorVerify){
-    requireOnboardingIntegrationAccess(session.admin)
+    await requireOnboardingIntegrationAccess(session.admin,!isMethod(req,'GET'))
     requireCsrf(req,session.rawToken)
     enforceRateLimit(`onboarding-evotor-verify:${session.admin.id}`,20,60_000)
     if(isMethod(req,'POST')){
@@ -191,7 +229,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboardingEvotor=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/evotor$/.exec(url.pathname)
   if(onboardingEvotor){
-    requireOnboardingIntegrationAccess(session.admin)
+    await requireOnboardingIntegrationAccess(session.admin,!isMethod(req,'GET'))
     if(!isMethod(req,'GET')){
       requireCsrf(req,session.rawToken)
       enforceRateLimit(`onboarding-evotor:${session.admin.id}`,30,60_000)
@@ -204,7 +242,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboardingInvite=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/invites\/([^/]+)$/.exec(url.pathname)
   if(onboardingInvite){
-    requireOnboardingAccess(session.admin)
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
     requireCsrf(req,session.rawToken)
     enforceRateLimit(`onboarding-invite:${session.admin.id}`,60,60_000)
     if(isMethod(req,'DELETE')){json(res,200,await revokeOnboardingInvite(session.admin,onboardingInvite[1]!,onboardingInvite[2]!));return true}
@@ -212,7 +250,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboardingInvites=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/invites$/.exec(url.pathname)
   if(onboardingInvites){
-    requireOnboardingAccess(session.admin)
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
     if(!isMethod(req,'GET')){
       requireCsrf(req,session.rawToken)
       enforceRateLimit(`onboarding-invite:${session.admin.id}`,60,60_000)
@@ -223,7 +261,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   const onboarding=/^\/api\/admin\/onboarding\/drafts(?:\/([^/]+))?$/.exec(url.pathname)
   if(onboarding){
-    requireOnboardingAccess(session.admin)
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
     const id=onboarding[1]
     if(!isMethod(req,'GET')){
       requireCsrf(req,session.rawToken)

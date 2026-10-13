@@ -353,3 +353,37 @@ PGlite не считается доказательством независим
 credential references. База, runtime, provider account, webhook и POS не
 создавались; company/venue не активировались; production/main/Railway не
 изменялись.
+Шаг 1 опубликован в существующей ветке Draft PR #273: commit 77783e6. Origin branch проверена через git ls-remote; merge/deploy не выполнялись.
+
+### Текущая итерация — scoped приглашение ведёт в сохранённый мастер
+
+Лично добавлены ручная additive Admin migration 011 (расширяет существующую таблицу 007/008), server-owned приглашения на canonical company/venue и отзывной ledger прав (без второй tenant модели). Выдача и точный повтор, срок 1–168 часов, одноразовость, принятие, отзыв и audit подтверждаются сервером. Токен только в явном ответе владельцу/fragment ссылки, в БД только hash; audit/browser storage не получают token/password. Существующая учётная запись требует входа и не получает новый пароль. Новый Admin account, принятие, scope access и audit атомарны. Принявший может повторить запрос при потере ответа; чужой повтор закрыт.
+
+Owner/manager/viewer права распространяются только на приглашённую организацию или точку; per-draft permissions вычисляются сервером. Права используемой записи блокируются до COMMIT, отзыв закрывает последующие запросы. Creator shortcut не сохраняет доступ после отзыва, даже при наличии приглашения на другую компанию. Для новой выключенной организации используется существующий canonical scope, а не nullable company_id исходного draft. Manager продолжает сохранённый мастер после reload; viewer не может писать. Owner может вновь открыть выданную активную ссылку после reload или отозвать уже принятые права. Панель нового управляющего честно показывает «Заведение не запущено».
+
+Проверки исходного локального commit 02b98e1 до обнаружения новых remote commits (они не считаются проверкой общего дерева); все exit 0, логи /tmp/spaceverse-invitation-gate:
+
+- npm run materialize ×2; cmp materialize-first.diff materialize-second.diff — идентичны. Тот же исходный diff в семи root файлах (включая server.js, universal-server.js, app.js; 365/78) сохранён вне checkout и исключён из commit, patch-chain не исправлялась.
+- node --test --test-concurrency=2 — 573 passed, 0 skipped; npm run check; npm run audit:runtime-patches — passed.
+- npm audit; npm audit --omit=dev --audit-level=high; npm audit --prefix admin-platform — по 0 vulnerabilities.
+- Business npm run typecheck; npm test -- --maxWorkers=2 — 197 passed, 20 skipped; npm run build — passed. 20 прежних integration tests требуют URL и сбрасывают public schema; существующие БД не сбрасывались.
+- npm test -- --maxWorkers=1 server/tests/onboarding-invitations.spec.ts server/tests/venue-onboarding.spec.ts — 46/46; реальные signed Admin HTTP и SQL, чужие scopes, viewer, CSRF/Origin, expiry/revoke, rollback audit, новая pending организация и две точки одной компании.
+- node /tmp/spaceverse-invitations-postgres-proof.mjs — PASS, настоящий PostgreSQL: 6 одновременных HTTP повторов выдали одну ссылку; 2 разных получателя одновременно приняли её, только один получил права; повтор тем же actor и отзыв подтверждены. Новая синтетическая БД сохранена, удаления данных не было.
+- npm exec --no -- playwright test -c /tmp/spaceverse-invitations-playwright.config.mjs — 2/2 desktop/mobile: owner link → новый manager → настоящий wizard → reload → сохранённое приложение → inactive scope → отзыв → 403. Chromium /usr/bin/chromium, SQL и подписанные сессии, без mocked frontend API.
+- npm exec --no -- playwright test -c /tmp/spaceverse-onboarding-playwright.config.mjs — 4/4 прежних E2E с выключенным invitation flag; backward compatibility сохранена.
+
+Runbook ops/SPACEVERSE-VENUE-ONBOARDING.md и MODULE-MAP обновлены в том же PR. Остаётся: terminal/proxy v2, общие статусы шагов и modules, deployment UI, unified owner statuses и реальная внешняя связь. Пришедшее с remote чтение документов Эвотора не подтверждает терминал. Флаг приглашений по умолчанию выключен; production миграции/env/данные/устройства не менялись. На подготовленной точке по-прежнему not_provisioned, published=false; это не готовое активное заведение. Требуемый /mnt/project-files/owner-panel/progress.md остаётся недоступен из-за read-only mount, журнал хранится в этом файле.
+
+При первом push remote ушёл с 77783e6 на 7f596f6. Свои изменения сохранены в локальной recovery branch, перенесены rebase без force-push; чужие auth/provisioner, Evotor, provisioning и документация сохранены. Изменение CI f917e99 пришло с remote и не является моей работой. Новая migration перенумерована в 011 и расширяет admin_onboarding_invites вместо второй таблицы. Scoped flow выключает старый claim/issuance при новом flag, старые строки/права не удаляются. Проверки общего дерева и публикация ещё выполняются.
+
+Проверки сведённого дерева поверх remote 7f596f6, лично выполнены, все exit 0; логи /tmp/spaceverse-invitations-merged-gate:
+
+- materialize ×2 и cmp diff — одинаковый исходный побочный diff семи файлов, 365/78; generated файлы восстановлены из сохранённых canonical копий, diff не включён в feature commit;
+- node --test --test-concurrency=2 — 581/581, 0 skipped; npm run check; npm run audit:runtime-patches — passed;
+- npm audit; npm audit --omit=dev --audit-level=high; npm audit --prefix admin-platform — 0 vulnerabilities каждый;
+- Business npm run typecheck; npm test -- --maxWorkers=2 — 225 passed, 20 прежних PostgreSQL integration tests skipped по указанной выше причине; npm run build — passed;
+- профиль invitations/onboarding/provisioning — 74/74; viewer не может сохранять/проверять Evotor, старый claim закрыт при scoped flag;
+- node /tmp/spaceverse-invitations-merged-postgres-proof.mjs — PASS с независимыми PostgreSQL соединениями на актуальной migration 011: 6 параллельных выдач одной команды, 2 получателя/1 winner, signed retry, revoke; новая synthetic DB сохранена;
+- Playwright invitations — 2/2 desktop/mobile; прежний onboarding с Evotor read fixture — 4/4 desktop/mobile. API/SQL настоящие, provider-ответ синтетический. Никаких production/provider/device действий.
+
+Новая модель приглашений использует существующие admin_onboarding_invites (007/008), не вторую таблицу; migration 011 только metadata, без backfill/удаления строк. Тест отсутствия старой таблицы теперь временно переименовывает её и восстанавливает в finally, сохраняя FK и fixture data. Изменения других авторов сохранены; мной CI/main/Railway не менялись. Runtime всё ещё not_provisioned. Публикация этой итерации выполняется обычным fast-forward push в существующий Draft PR #273.

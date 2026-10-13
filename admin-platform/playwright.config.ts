@@ -5,7 +5,7 @@ const proxyServer=process.env.HTTPS_PROXY||process.env.https_proxy||''
 export default defineConfig({
   testDir: './e2e',
   // Fixture-only cash dashboard check runs through playwright.evotor.config.ts.
-  testIgnore: ['evotor-sales.spec.ts','venue-onboarding.spec.ts'],
+  testIgnore: ['evotor-sales.spec.ts','venue-onboarding.spec.ts','onboarding-invitations.spec.ts'],
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },

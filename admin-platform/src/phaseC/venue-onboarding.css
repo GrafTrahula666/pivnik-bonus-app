@@ -31,5 +31,7 @@
 .onboarding-list li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-top:1px solid var(--border-soft)}
 .onboarding-list li>div{min-width:0;overflow-wrap:anywhere}
 .onboarding-list b,.onboarding-list small{display:block;font-size:13px}
+.onboarding-invite-link{display:flex;align-items:flex-end;gap:12px;margin:18px 0;flex-wrap:wrap}.onboarding-invite-link>.field{flex:1 1 280px}.onboarding-invite-link input{width:100%;min-width:0;font-family:ui-monospace,monospace}
+.invitation-back{display:block;margin:-12px auto 24px}
 @media(max-width:760px){.onboarding-contract{grid-template-columns:1fr}}
 @media(max-width:600px){.onboarding{padding:16px}.onboarding-fields{grid-template-columns:1fr}.onboarding-head>.btn{width:100%}.onboarding-actions>.btn{flex:1 1 100%}.onboarding-list li>.btn{flex-shrink:0}}

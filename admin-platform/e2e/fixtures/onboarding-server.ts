@@ -15,6 +15,7 @@ process.env.ADMIN_ENABLE_ONBOARDING_DRAFTS='true'
 process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='true'
 process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='e2e-v1'
 process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'e2e-v1':Buffer.alloc(32,9).toString('base64')})
+process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS=process.env.SPACEVERSE_E2E_INVITATIONS==='true'?'true':'false'
 process.env.ADMIN_PUBLIC_ORIGIN='http://127.0.0.1:5097'
 process.env.ADMIN_CSRF_SECRET='synthetic-loopback-onboarding-csrf-secret-123456'
 process.env.ADMIN_SECURE_COOKIES='false'

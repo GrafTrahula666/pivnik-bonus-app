@@ -6,6 +6,7 @@ import { config } from './config.js'
 import { pool } from './db.js'
 import { csrfTokenFor, enforceRateLimit, hashIp, hashPassword, normalizeEmail, randomToken, requestIp, setSessionCookie, sha256 } from './security.js'
 import { requireSuperAdmin } from './tenant.js'
+import { lockOnboardingDraftAccess,onboardingDraftAccessSql,onboardingDraftPermissions,requireOnboardingCompany,requireWritableOnboarding } from './onboarding-access.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 import { createSpaceverseRuntimeManifest } from '../../spaceverse-runtime-manifest.js'
 import { fetchEvotorPage } from '../../pos/evotor-client.js'
@@ -186,16 +187,17 @@ export function onboardingData(raw: unknown): OnboardingData {
   return {companyId,companyName,venueName:text(value.venueName,120,true),address:text(value.address,300),
     timeZone,venueType:venueType as OnboardingData['venueType'],ownerEmail}
 }
-export function requireOnboardingAccess(admin: AdminPrincipal): void {
-  requireSuperAdmin(admin)
+export async function requireOnboardingAccess(admin: AdminPrincipal,write=false): Promise<void> {
   if(!config.enableWrites||!config.enableOnboardingDrafts) throw new HttpError(403,'ONBOARDING_DISABLED','Мастер подключения пока выключен.')
+  if(!config.enableOnboardingInvitations){requireSuperAdmin(admin);return}
+  await requireWritableOnboarding(admin,write)
 }
-export function requireOnboardingIntegrationAccess(admin:AdminPrincipal):void {
-  requireOnboardingAccess(admin)
+export async function requireOnboardingIntegrationAccess(admin:AdminPrincipal,write=false):Promise<void> {
+  await requireOnboardingAccess(admin,write)
   if(!config.enableOnboardingIntegrations)throw new HttpError(403,'ONBOARDING_INTEGRATIONS_DISABLED','Защищённые подключения мастера пока выключены.')
 }
 async function ready(admin: AdminPrincipal): Promise<void> {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin)
   try {
     const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_drafts') IS NOT NULL AS exists")
     if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_NOT_READY','Хранилище черновиков ещё не подготовлено.')
@@ -216,7 +218,7 @@ async function scopeReady(admin: AdminPrincipal): Promise<void> {
   } catch(error) { unavailable(error) }
 }
 async function integrationReady(admin:AdminPrincipal):Promise<void> {
-  requireOnboardingIntegrationAccess(admin)
+  await requireOnboardingIntegrationAccess(admin)
   await scopeReady(admin)
   onboardingSecretBox()
   try {
@@ -239,6 +241,9 @@ async function connection(): Promise<PoolClient> {
 }
 function response(row: DraftRow) {
   return {id:row.id,requestKey:row.request_key,data:row.data,status:row.status,revision:row.revision,updatedAt:row.updated_at}
+}
+async function permittedResponse(admin:AdminPrincipal,row:DraftRow){
+  return config.enableOnboardingInvitations?{...response(row),permissions:await onboardingDraftPermissions(admin,row.id)}:response(row)
 }
 const appContract = {
   template:'standard' as const,
@@ -368,9 +373,17 @@ function unavailable(error: unknown): never {
   // Database errors may contain entire rows. Do not send/log draft contacts or bodies.
   throw new HttpError(503,'ONBOARDING_UNAVAILABLE','Не удалось подтвердить сохранение данных мастера. Повторите сохранение.')
 }
-async function companyAvailable(client: PoolClient, data: OnboardingData): Promise<void> {
+async function companyAvailable(client: PoolClient, data: OnboardingData,admin:AdminPrincipal): Promise<void> {
+  if(config.enableOnboardingInvitations)await requireOnboardingCompany(client,admin,data.companyId)
   if(!data.companyId) return
-  const result=await client.query('SELECT id FROM companies WHERE id=$1::bigint AND active=TRUE FOR SHARE',[data.companyId])
+  const result=config.enableOnboardingInvitations
+    ?await client.query(`SELECT id FROM companies WHERE id=$1::bigint AND (active=TRUE OR EXISTS(
+      SELECT 1 FROM admin_onboarding_scopes scope JOIN admin_onboarding_drafts draft ON draft.id=scope.draft_id
+      WHERE scope.company_id=companies.id AND (draft.admin_id=$2::bigint
+        OR EXISTS(SELECT 1 FROM admin_company_access WHERE admin_id=$2::bigint AND company_id=companies.id AND access_kind='owner')
+        OR EXISTS(SELECT 1 FROM admin_onboarding_access WHERE admin_id=$2::bigint AND company_id=companies.id
+          AND venue_id IS NULL AND role IN ('owner','manager') AND revoked_at IS NULL)))) FOR SHARE`,[data.companyId,admin.id])
+    :await client.query('SELECT id FROM companies WHERE id=$1::bigint AND active=TRUE FOR SHARE',[data.companyId])
   if(!result.rowCount) throw new HttpError(404,'ONBOARDING_COMPANY_NOT_FOUND','Организация недоступна. Выберите другую организацию.')
 }
 async function scopeTableExists(client: Pick<PoolClient,'query'>): Promise<boolean> {
@@ -396,36 +409,41 @@ async function loadOptionalScope(client: Pick<PoolClient,'query'>, draftId: stri
 export async function getOnboardingIndex(admin: AdminPrincipal) {
   try {
     await ready(admin)
-    const drafts=await pool.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE admin_id=$1::bigint ORDER BY updated_at DESC,id LIMIT 50`,[admin.id])
-    const companies=await pool.query<{id:string;name:string}>('SELECT id::text,name FROM companies WHERE active=TRUE ORDER BY name,id')
-    return {drafts:drafts.rows.map(response),companies:companies.rows}
+    const drafts=await pool.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE ${onboardingDraftAccessSql('admin_onboarding_drafts','$1')} ORDER BY updated_at DESC,id LIMIT 50`,[admin.id])
+    const companies=admin.role==='SUPER_ADMIN'
+      ?await pool.query<{id:string;name:string}>('SELECT id::text,name FROM companies WHERE active=TRUE ORDER BY name,id')
+      :await pool.query<{id:string;name:string}>(`SELECT company.id::text,company.name FROM companies company WHERE
+        EXISTS(SELECT 1 FROM admin_company_access WHERE admin_id=$1::bigint AND company_id=company.id AND access_kind='owner')
+        OR EXISTS(SELECT 1 FROM admin_onboarding_access WHERE admin_id=$1::bigint AND company_id=company.id AND revoked_at IS NULL)
+        ORDER BY company.name,company.id`,[admin.id])
+    return {drafts:await Promise.all(drafts.rows.map(row=>permittedResponse(admin,row))),companies:companies.rows}
   } catch(error) { unavailable(error) }
 }
 export async function getOnboardingDraft(admin: AdminPrincipal, id: string) {
   try {
     await ready(admin)
-    const result=await pool.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE id=$1::uuid AND admin_id=$2::bigint`,[uuid(id),admin.id])
+    const result=await pool.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE id=$1::uuid AND ${onboardingDraftAccessSql()}`,[uuid(id),admin.id])
     if(!result.rows[0]) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
-    return response(result.rows[0])
+    return permittedResponse(admin,result.rows[0])
   } catch(error) { unavailable(error) }
 }
 export async function getOnboardingRequest(admin: AdminPrincipal, requestKey: string) {
   try {
     await ready(admin)
-    const result=await pool.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE request_key=$1::uuid AND admin_id=$2::bigint`,[uuid(requestKey),admin.id])
-    return {draft:result.rows[0]?response(result.rows[0]):null}
+    const result=await pool.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE request_key=$1::uuid AND ${onboardingDraftAccessSql()}`,[uuid(requestKey),admin.id])
+    return {draft:result.rows[0]?await permittedResponse(admin,result.rows[0]):null}
   } catch(error) { unavailable(error) }
 }
 export async function createOnboardingDraft(admin: AdminPrincipal, raw: unknown) {
   // Gate before parsing input or opening a transaction, including direct callers.
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin,true)
   const body=record(raw,['requestKey','data']),requestKey=uuid(body.requestKey),data=onboardingData(body.data)
   const initialHash=crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex')
   await ready(admin)
   const client=await connection()
   try {
     await client.query('BEGIN')
-    await companyAvailable(client,data)
+    await companyAvailable(client,data,admin)
     const inserted=await client.query<DraftRow>(`INSERT INTO admin_onboarding_drafts(id,admin_id,company_id,request_key,initial_hash,data)
       VALUES($1::uuid,$2::bigint,$3::bigint,$4::uuid,$5,$6::jsonb)
       ON CONFLICT(admin_id,request_key) DO NOTHING RETURNING ${columns}`,
@@ -439,37 +457,38 @@ export async function createOnboardingDraft(admin: AdminPrincipal, raw: unknown)
         after:{revision:row.revision,status:row.status},metadata:{companyId:data.companyId}},client)
     }
     await client.query('COMMIT')
-    return response(row)
+    return permittedResponse(admin,row)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     unavailable(error)
   } finally { client.release() }
 }
 export async function updateOnboardingDraft(admin: AdminPrincipal, id: string, raw: unknown) {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin,true)
   const draftId=uuid(id),body=record(raw,['revision','data']),data=onboardingData(body.data)
   if(typeof body.revision!=='number'||!Number.isSafeInteger(body.revision)||body.revision<1||body.revision>2147483646) throw invalid()
   await ready(admin)
   const client=await connection()
   try {
     await client.query('BEGIN')
-    const before=(await client.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE id=$1::uuid AND admin_id=$2::bigint FOR UPDATE`,[draftId,admin.id])).rows[0]
+    await lockOnboardingDraftAccess(client,admin,draftId)
+    const before=(await client.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts WHERE id=$1::uuid AND ${onboardingDraftAccessSql("admin_onboarding_drafts","$2",true)} FOR UPDATE`,[draftId,admin.id])).rows[0]
     if(!before) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
     // An uncertain PUT can safely replay the same command; a stale edit cannot overwrite another one.
     if(before.revision!==body.revision) {
       if(before.revision===body.revision+1 && JSON.stringify(onboardingData(before.data))===JSON.stringify(data)) {
-        await client.query('COMMIT');return response(before)
+        await client.query('COMMIT');return permittedResponse(admin,before)
       }
       throw new HttpError(409,'ONBOARDING_REVISION_CONFLICT','Черновик изменился. Откройте последнюю сохранённую версию.')
     }
     await assertScopeNotPrepared(client,draftId)
-    await companyAvailable(client,data)
+    await companyAvailable(client,data,admin)
     const row=(await client.query<DraftRow>(`UPDATE admin_onboarding_drafts SET company_id=$3::bigint,data=$4::jsonb,revision=revision+1,updated_at=NOW()
-      WHERE id=$1::uuid AND admin_id=$2::bigint RETURNING ${columns}`,[draftId,admin.id,data.companyId,JSON.stringify(data)])).rows[0]!
+      WHERE id=$1::uuid AND ${onboardingDraftAccessSql("admin_onboarding_drafts","$2",true)} RETURNING ${columns}`,[draftId,admin.id,data.companyId,JSON.stringify(data)])).rows[0]!
     await recordAudit({admin,action:'onboarding.draft_update',entityType:'onboarding_draft',entityId:row.id,
       before:{revision:before.revision},after:{revision:row.revision},metadata:{changedFields:fields.filter(key=>before.data[key]!==data[key])}},client)
     await client.query('COMMIT')
-    return response(row)
+    return permittedResponse(admin,row)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     unavailable(error)
@@ -477,14 +496,14 @@ export async function updateOnboardingDraft(admin: AdminPrincipal, id: string, r
 }
 
 export async function getOnboardingAppConfig(admin: AdminPrincipal, id: string) {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin)
   const draftId=uuid(id)
   await appReady(admin)
   try {
     const result=await pool.query<AppConfigRow&{owned_draft_id:string}>(`SELECT d.id::text AS owned_draft_id,${joinedAppColumns}
       FROM admin_onboarding_drafts d
       LEFT JOIN admin_onboarding_app_configs a ON a.draft_id=d.id
-      WHERE d.id=$1::uuid AND d.admin_id=$2::bigint`,[draftId,admin.id])
+      WHERE d.id=$1::uuid AND ${onboardingDraftAccessSql("d")}`,[draftId,admin.id])
     const row=result.rows[0]
     if(!row) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
     const scope=row.tenant_key?await loadOptionalScope(pool,draftId):undefined
@@ -493,7 +512,7 @@ export async function getOnboardingAppConfig(admin: AdminPrincipal, id: string) 
 }
 
 export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string, raw: unknown) {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin,true)
   const draftId=uuid(id)
   if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw appInvalid()
   const body=raw as Record<string,unknown>
@@ -504,8 +523,9 @@ export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string,
   const client=await connection()
   try {
     await client.query('BEGIN')
+    await lockOnboardingDraftAccess(client,admin,draftId)
     const draft=(await client.query<AppDraftRow>(`SELECT id::text FROM admin_onboarding_drafts
-      WHERE id=$1::uuid AND admin_id=$2::bigint FOR UPDATE`,[draftId,admin.id])).rows[0]
+      WHERE id=$1::uuid AND ${onboardingDraftAccessSql("admin_onboarding_drafts","$2",true)} FOR UPDATE`,[draftId,admin.id])).rows[0]
     if(!draft) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
     const before=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid FOR UPDATE`,[draftId])).rows[0]
     const same=before&&JSON.stringify(onboardingAppConfig(before.config))===JSON.stringify(appConfig)
@@ -541,12 +561,12 @@ export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string,
 }
 
 export async function getOnboardingScope(admin: AdminPrincipal, id: string) {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin)
   const draftId=uuid(id)
   await scopeReady(admin)
   try {
     const owned=await pool.query<{id:string}>(`SELECT id::text FROM admin_onboarding_drafts
-      WHERE id=$1::uuid AND admin_id=$2::bigint`,[draftId,admin.id])
+      WHERE id=$1::uuid AND ${onboardingDraftAccessSql()}`,[draftId,admin.id])
     if(!owned.rows[0]) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
     const row=await loadScope(pool,draftId)
     return {scope:row?scopeResponse(row):null,contract:scopeContract}
@@ -554,7 +574,7 @@ export async function getOnboardingScope(admin: AdminPrincipal, id: string) {
 }
 
 export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, raw: unknown) {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin,true)
   const draftId=uuid(id)
   if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw scopeInvalid()
   const body=raw as Record<string,unknown>
@@ -568,8 +588,9 @@ export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, 
   const client=await connection()
   try {
     await client.query('BEGIN')
+    await lockOnboardingDraftAccess(client,admin,draftId)
     const draft=(await client.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts
-      WHERE id=$1::uuid AND admin_id=$2::bigint FOR UPDATE`,[draftId,admin.id])).rows[0]
+      WHERE id=$1::uuid AND ${onboardingDraftAccessSql("admin_onboarding_drafts","$2",true)} FOR UPDATE`,[draftId,admin.id])).rows[0]
     if(!draft) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
     const application=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs
       WHERE draft_id=$1::uuid FOR UPDATE`,[draftId])).rows[0]
@@ -587,8 +608,9 @@ export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, 
     const data=onboardingData(draft.data)
     let company:{id:string;code:string;name:string;active:boolean},companyCreated=false
     if(data.companyId) {
+      await companyAvailable(client,data,admin)
       const row=(await client.query<{id:string;code:string;name:string;active:boolean}>(`SELECT id::text,code,name,active FROM companies
-        WHERE id=$1::bigint AND active=TRUE FOR SHARE`,[data.companyId])).rows[0]
+        WHERE id=$1::bigint FOR SHARE`,[data.companyId])).rows[0]
       if(!row) throw new HttpError(404,'ONBOARDING_COMPANY_NOT_FOUND','Организация недоступна. Выберите другую организацию.')
       company=row
     } else {
@@ -619,8 +641,9 @@ export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, 
 }
 
 async function ownedDraftWithPreparedScope(client: Pick<PoolClient,'query'>, admin: AdminPrincipal, draftId: string, lock=false): Promise<ScopeRow> {
+  if(lock)await lockOnboardingDraftAccess(client,admin,draftId)
   const owned=await client.query<{id:string}>(`SELECT id::text FROM admin_onboarding_drafts
-    WHERE id=$1::uuid AND admin_id=$2::bigint${lock?' FOR UPDATE':''}`,[draftId,admin.id])
+    WHERE id=$1::uuid AND ${onboardingDraftAccessSql('admin_onboarding_drafts','$2',lock)}${lock?' FOR UPDATE':''}`,[draftId,admin.id])
   if(!owned.rows[0]) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
   const scope=await loadScope(client,draftId)
   if(!scope||!scopeIsConsistent(scope)) throw new HttpError(409,'ONBOARDING_SCOPE_REQUIRED','Сначала подготовьте область заведения.')
@@ -636,7 +659,7 @@ export async function loadOwnedOnboardingRuntimeSource(
   id: string,
   lock=false,
 ) {
-  requireOnboardingAccess(admin)
+  await requireOnboardingAccess(admin,true)
   const draftId=uuid(id)
   const scope=await ownedDraftWithPreparedScope(client,admin,draftId,lock)
   const manifest=runtimeManifest({
@@ -649,7 +672,7 @@ export async function loadOwnedOnboardingRuntimeSource(
 }
 
 export async function getOnboardingEvotorIntegration(admin:AdminPrincipal,id:string) {
-  requireOnboardingIntegrationAccess(admin)
+  await requireOnboardingIntegrationAccess(admin)
   const draftId=uuid(id)
   await integrationReady(admin)
   try {
@@ -663,7 +686,7 @@ export async function getOnboardingEvotorIntegration(admin:AdminPrincipal,id:str
 }
 
 export async function saveOnboardingEvotorIntegration(admin:AdminPrincipal,id:string,raw:unknown) {
-  requireOnboardingIntegrationAccess(admin)
+  await requireOnboardingIntegrationAccess(admin,true)
   const draftId=uuid(id),command=integrationCommand(raw)
   await integrationReady(admin)
   const secretBox=onboardingSecretBox()
@@ -714,7 +737,7 @@ export async function saveOnboardingEvotorIntegration(admin:AdminPrincipal,id:st
 const actionRequiredEvotorCodes=new Set(['token_expired','forbidden','not_installed','invalid_cursor'])
 const knownEvotorCodes=new Set([...actionRequiredEvotorCodes,'rate_limit','network','invalid_response','api_error'])
 export async function verifyOnboardingEvotorIntegration(admin:AdminPrincipal,id:string,raw:unknown) {
-  requireOnboardingIntegrationAccess(admin)
+  await requireOnboardingIntegrationAccess(admin,true)
   const draftId=uuid(id),command=integrationVerificationCommand(raw)
   await integrationReady(admin)
   let before:IntegrationRow
@@ -766,7 +789,9 @@ export async function verifyOnboardingEvotorIntegration(admin:AdminPrincipal,id:
 }
 
 export async function getOnboardingInvites(admin: AdminPrincipal, id: string) {
-  requireOnboardingAccess(admin)
+  requireInviteFeatureEnabled()
+  requireSuperAdmin(admin)
+  await requireOnboardingAccess(admin)
   const draftId=uuid(id)
   await inviteReady(admin)
   try {
@@ -779,7 +804,9 @@ export async function getOnboardingInvites(admin: AdminPrincipal, id: string) {
 
 // The raw token is returned only here, in this one response, and is never stored or logged.
 export async function createOnboardingInvite(admin: AdminPrincipal, id: string) {
-  requireOnboardingAccess(admin)
+  requireInviteFeatureEnabled()
+  requireSuperAdmin(admin)
+  await requireOnboardingAccess(admin)
   const draftId=uuid(id)
   await inviteReady(admin)
   const client=await connection()
@@ -805,7 +832,9 @@ export async function createOnboardingInvite(admin: AdminPrincipal, id: string) 
 }
 
 export async function revokeOnboardingInvite(admin: AdminPrincipal, id: string, inviteId: string) {
-  requireOnboardingAccess(admin)
+  requireInviteFeatureEnabled()
+  requireSuperAdmin(admin)
+  await requireOnboardingAccess(admin)
   const draftId=uuid(id),invite=uuid(inviteId)
   await inviteReady(admin)
   const client=await connection()
@@ -833,6 +862,7 @@ const inviteTokenPattern=/^[A-Za-z0-9_-]{16,256}$/
 const inviteNotFound=()=>new HttpError(404,'ONBOARDING_INVITE_NOT_FOUND','Приглашение недействительно, использовано или истекло.')
 const inviteClaimInvalid=()=>new HttpError(400,'ONBOARDING_INVITE_CLAIM_INVALID','Проверьте email, имя и пароль.')
 function requireInviteFeatureEnabled(): void {
+  if(config.enableOnboardingInvitations)throw new HttpError(410,'ONBOARDING_INVITE_REISSUE_REQUIRED','Попросите владельца создать новое приглашение в разделе «Приглашения».')
   if(!config.enableWrites||!config.enableOnboardingDrafts) throw new HttpError(403,'ONBOARDING_DISABLED','Мастер подключения пока выключен.')
 }
 

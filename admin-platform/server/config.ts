@@ -25,6 +25,7 @@ export const config = {
   enableWrites: bool('ADMIN_ENABLE_WRITES', false),
   enableOnboardingDrafts: bool('ADMIN_ENABLE_ONBOARDING_DRAFTS', false),
   enableOnboardingIntegrations: bool('ADMIN_ENABLE_ONBOARDING_INTEGRATIONS', false),
+  enableOnboardingInvitations: bool('ADMIN_ENABLE_ONBOARDING_INVITATIONS', false),
   enableProductionBonusWrites: bool('ADMIN_ENABLE_PRODUCTION_BONUS_WRITES', false),
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),
