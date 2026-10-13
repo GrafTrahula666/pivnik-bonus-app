@@ -33,8 +33,16 @@ rechecks the exact runtime/database binding in the same parameterized INSERT,
 derives tenant/location from that binding, and uses `request_key` for exact
 replay after an uncertain response. A mismatched payload, tenant, location,
 database or forged runtime returns no write and never falls back to legacy SQL.
-Both adapters remain unwired while tenant startup is blocked; customer and
-wallet ownership still need an approved tenant boundary. Both
+Manual additive migration 019 adds explicit customer ownership without
+backfill: every owned user is tied by a composite foreign key to the exact
+runtime/company/venue binding. `customer-wallet-repository.js` is the matching
+read boundary. It accepts only a canonical user ID plus the privately verified
+runtime, rechecks the same binding inside the read query, and can reach
+`users`/`wallets` only through the ownership row. Unowned historical rows are
+invisible; a different database, tenant or venue is rejected, and request scope
+or a copied runtime never reaches SQL. The runtime adapters remain unwired while
+tenant startup is blocked; tenant-local customer creation/auth writes still need
+an approved boundary. Both
 `universal-server.js` and `server.js` check this before spawning/initializing any
 PIVNIK runtime data. Even an exact binding is deliberately rejected with
 `SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
