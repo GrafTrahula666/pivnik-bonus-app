@@ -28,7 +28,7 @@ async function fixture(seed = 'a', companyId = '700', venueId = '701') {
     CREATE TABLE user_identities(id BIGSERIAL PRIMARY KEY,user_id BIGINT REFERENCES users(id),provider TEXT,
       provider_user_id TEXT,provider_username TEXT,UNIQUE(provider,provider_user_id),UNIQUE(user_id,provider));`);
   for (const name of ['017_spaceverse_runtime_binding.sql', '018_spaceverse_runtime_scope_binding.sql',
-    '019_spaceverse_customer_ownership.sql', '020_spaceverse_customer_auth_requests.sql']) {
+    '019_spaceverse_customer_ownership.sql', '020_spaceverse_customer_create_requests.sql']) {
     await db.exec(await fs.readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
   }
   const manifest = createSpaceverseRuntimeManifest({ draftId: `${seed.repeat(8)}-${seed.repeat(4)}-4${seed.repeat(3)}-8${seed.repeat(3)}-${seed.repeat(12)}`,
@@ -97,7 +97,7 @@ test('tenant auth creates canonical user, zero wallet, ownership and exact repla
     for (const table of ['users', 'wallets', 'user_identities', 'spaceverse_customer_ownership']) {
       assert.equal((await f.query(`SELECT count(*)::int AS count FROM ${table}`)).rows[0].count, 1);
     }
-    assert.equal((await f.query('SELECT count(*)::int AS count FROM spaceverse_customer_auth_requests')).rows[0].count, 2);
+    assert.equal((await f.query('SELECT count(*)::int AS count FROM spaceverse_customer_create_requests')).rows[0].count, 1);
     assert.equal(first.runtimeStatus, 'not_provisioned');
     await assert.rejects(f.auth.authenticate({ ...input, credentials: identity('102') }), { code: 'SPACEVERSE_AUTH_REPLAY_CONFLICT' });
     assert.equal((await f.query('SELECT count(*)::int AS count FROM users')).rows[0].count, 1);
@@ -107,14 +107,14 @@ test('tenant auth creates canonical user, zero wallet, ownership and exact repla
   } finally { await f.db.close(); }
 });
 
-test('tenant auth rolls back all new rows on receipt failure and replays an uncertain COMMIT', async () => {
+test('tenant auth rolls back all new rows on ledger failure and recovers an uncertain COMMIT', async () => {
   const f = await fixture();
   try {
-    let failReceipt = true, uncertainCommit = false;
+    let failLedger = true, uncertainCommit = false;
     const auth = createSpaceverseCustomerAuth({ runtime: f.runtime, query: f.query,
       verifyIdentity: async value => value, sessionSecret, connect: async () => ({
         query: async (sql, params) => {
-          if (failReceipt && sql.includes('INSERT INTO spaceverse_customer_auth_requests')) throw new Error('synthetic audit store failure');
+          if (failLedger && sql.includes('INSERT INTO spaceverse_customer_create_requests')) throw new Error('synthetic audit store failure');
           const result = await f.query(sql, params);
           if (uncertainCommit && sql === 'COMMIT') { uncertainCommit = false; throw new Error('synthetic lost reply'); }
           return result;
@@ -123,12 +123,12 @@ test('tenant auth rolls back all new rows on receipt failure and replays an unce
     const input = { requestKey: requestKey(), credentials: identity() };
     await assert.rejects(auth.authenticate(input), { code: 'SPACEVERSE_AUTH_UNAVAILABLE' });
     assert.equal((await f.query('SELECT count(*)::int AS count FROM users')).rows[0].count, 0);
-    failReceipt = false; uncertainCommit = true;
+    failLedger = false; uncertainCommit = true;
     await assert.rejects(auth.authenticate(input), { code: 'SPACEVERSE_AUTH_UNAVAILABLE' });
     const recovered = await auth.authenticate(input);
     assert.equal(recovered.profile.wallet.balance, '0');
     assert.equal((await f.query('SELECT count(*)::int AS count FROM users')).rows[0].count, 1);
-    assert.equal((await f.query('SELECT count(*)::int AS count FROM spaceverse_customer_auth_requests')).rows[0].count, 1);
+    assert.equal((await f.query('SELECT count(*)::int AS count FROM spaceverse_customer_create_requests')).rows[0].count, 1);
   } finally { await f.db.close(); }
 });
 
@@ -141,6 +141,9 @@ test('historical identities are never attached and missing wallets are not zero 
     await assert.rejects(f.auth.authenticate({ requestKey: requestKey(), credentials: identity('9090') }), { code: 'SPACEVERSE_AUTH_CUSTOMER_NOT_OWNED' });
     assert.equal((await f.query('SELECT balance::text FROM wallets WHERE user_id=90')).rows[0].balance, '99999');
     assert.equal((await f.query('SELECT count(*)::int AS count FROM spaceverse_customer_ownership')).rows[0].count, 0);
+    await f.db.exec("INSERT INTO users(id,telegram_id,first_name) VALUES(89,8080,'Исторический без identity')");
+    await assert.rejects(f.auth.authenticate({ requestKey: requestKey(), credentials: identity('8080') }), { code: 'SPACEVERSE_AUTH_CUSTOMER_NOT_OWNED' });
+    assert.equal((await f.query('SELECT count(*)::int AS count FROM user_identities WHERE user_id=89')).rows[0].count, 0);
     await f.query(`INSERT INTO spaceverse_customer_ownership(user_id,runtime_key,company_id,venue_id)
       VALUES(90,$1,'700','701')`, [f.manifest.runtimeKey]);
     await f.db.exec("INSERT INTO users(id,first_name) VALUES(91,'Без кошелька'); INSERT INTO user_identities(user_id,provider,provider_user_id) VALUES(91,'vk','9191')");
@@ -224,9 +227,9 @@ test('shared real HTTP adapters enforce signed Telegram/VK auth and wallet isola
   } finally { await f.db.close(); }
 });
 
-test('new auth migration is manual/additive and both production mounts remain behind startup guard', async () => {
-  const migration = await fs.readFile(new URL('../migrations/020_spaceverse_customer_auth_requests.sql', import.meta.url), 'utf8');
-  assert.equal(isAutomaticStartupMigration('020_spaceverse_customer_auth_requests.sql'), false);
+test('the single create ledger is manual/additive and both production mounts remain behind startup guard', async () => {
+  const migration = await fs.readFile(new URL('../migrations/020_spaceverse_customer_create_requests.sql', import.meta.url), 'utf8');
+  assert.equal(isAutomaticStartupMigration('020_spaceverse_customer_create_requests.sql'), false);
   assert.doesNotMatch(migration, /^\s*(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/im);
   assert.doesNotMatch(migration, /ALTER TABLE\s+(?:users|wallets|purchases)/i);
   for (const name of ['server.js', 'universal-server.js']) {
@@ -239,4 +242,9 @@ test('new auth migration is manual/additive and both production mounts remain be
   assert.match(manifest, /startAllowed: false/);
   const verifier = createSpaceverseSignedIdentityVerifier({ telegramBotToken: botToken });
   await assert.rejects(verifier({ ...telegramCredentials(), userId: '999', tenantId: '800' }), { code: 'SPACEVERSE_RUNTIME_REQUEST_SCOPE_FORBIDDEN' });
+  await assert.rejects(fixture().then(async f => {
+    try {
+      return await f.auth.authenticate({ requestKey: requestKey(), credentials: { ...identity(), photoUrl: 'http://127.0.0.1/avatar' } });
+    } finally { await f.db.close(); }
+  }), { code: 'SPACEVERSE_AUTH_INVALID' });
 });

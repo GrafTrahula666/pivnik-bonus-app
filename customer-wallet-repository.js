@@ -76,7 +76,8 @@ function runtimeReadFailure(code, message) {
  * non-client rows all resolve to null. Request data may select only the
  * canonical user id; tenant, venue and runtime scope remain server-owned.
  *
- * This repository remains unwired while tenant startup is not provisioned.
+ * Tenant auth/wallet HTTP uses this repository only behind the existing
+ * startup guard; tenant startup remains blocked while it is not provisioned.
  */
 export function createSpaceverseCustomerWalletRepository({ query, runtime } = {}) {
   if (typeof query !== 'function') throw new TypeError('query must be a function');

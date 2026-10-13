@@ -40,20 +40,25 @@ read boundary. It accepts only a canonical user ID plus the privately verified
 runtime, rechecks the same binding inside the read query, and can reach
 `users`/`wallets` only through the ownership row. Unowned historical rows are
 invisible; a different database, tenant or venue is rejected, and request scope
-or a copied runtime never reaches SQL. The runtime adapters remain unwired while
-tenant startup is blocked. `spaceverse-customer-auth.js` now supplies the
-tenant-local atomic create/auth boundary: it locks and rechecks the exact DB
-binding, serializes request and provider identity, and creates canonical user,
-zero wallet, identity, ownership and a replay receipt in one transaction.
-Historical/unowned identities are never reassigned. Manual additive migration
-020 adds only tenant auth receipts; it does not alter users/wallets or run at
-startup. Sessions carry the exact runtime/checksum/company/venue and every read
-rechecks identity, ownership, session version and live binding. A missing wallet
-is an unavailable configuration, not a zero balance.
-`routes/spaceverse-customer.js` is the shared signed Telegram/VK auth and wallet
-HTTP adapter mounted by both guest entrypoints behind the same preflight. It
-rejects request scope and prevents tenant APIs falling through to legacy staff,
-money or PIVNIK-specific handlers. Wallet issuers remain not_configured. Both
+or a copied runtime never reaches SQL. `customer-provisioning.js` is the single
+write boundary for a **new** tenant customer. Inside one database transaction it
+locks and rechecks the exact binding, records only a UUID/fingerprint in the
+manual additive migration 020 ledger, and creates the existing `users`,
+`user_identities`, `wallets` and ownership rows. An exact retry (including after
+an uncertain COMMIT response) resolves to the same user; a changed payload,
+request-supplied scope, another tenant database, or any historical Telegram/VK
+identity fails closed instead of adopting that row. The ledger stores no
+provider ID or profile data. `spaceverse-customer-auth.js` verifies signed
+Telegram/VK identity, accepts existing customers only through exact ownership,
+and delegates every missing-customer write to that provisioner; there is no
+second auth-specific creation path or ledger. Sessions carry the exact
+runtime/checksum/company/venue and every read rechecks identity, ownership,
+session version and live binding. A missing wallet is an unavailable
+configuration, not a zero balance. `routes/spaceverse-customer.js` is the shared
+auth and wallet HTTP adapter mounted by both guest entrypoints behind the same
+preflight. It rejects request scope and prevents tenant APIs falling through to
+legacy staff, money or PIVNIK-specific handlers. Wallet issuers remain
+`not_configured`. Both
 `universal-server.js` and `server.js` check this before spawning/initializing any
 PIVNIK runtime data. Even an exact binding is deliberately rejected with
 `SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
