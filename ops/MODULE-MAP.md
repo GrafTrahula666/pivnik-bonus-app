@@ -608,3 +608,18 @@ isolation.
   with explicit fixture adapters; it does not claim complete production startup.
 - See `EVOTOR-INTEGRATION.md` and `EVOTOR-VERIFICATION.md` for the separate Business
   branch, rollback, unresolved real Extras and production approval boundaries.
+
+### Wallet route extraction first stage of P3 (2026-10-10)
+
+- `routes/wallet.js` registers the three existing GET endpoints under `/api/wallet/`.
+  `server.js` mounts them at their original position, passing the existing
+  `authRequired` middleware and Apple/Google issuer URLs. Handler bodies are
+  unchanged apart from indentation. This is pass delivery, not bonus persistence.
+- The public gateway continues to enforce consent and proxy these endpoints;
+  it has no separate Wallet handler. No gateway, auth, money or patch-chain
+  implementation changed. The user explicitly selected this first P3 stage
+  while the patch-chain remains active; this does not retire any patch script
+  or establish that other domains are safe to extract yet.
+- `test/wallet-routes.test.js` exercises the actual mount, existing signed-session
+  middleware and gateway consent/proxy source on loopback with fixture DB/profile
+  adapters. Evidence and limits: `ops/WALLET-ROUTES-EXTRACTION-20261010.md`.
