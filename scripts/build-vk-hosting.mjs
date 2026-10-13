@@ -65,6 +65,12 @@ function renderVkIndex(source) {
     .replace(/<script defer src="\/vendor\/vk-bridge\.js[^>]*><\/script>\s*/gi, '')
     .replace(/<script defer src="\/vk-platform\.js[^>]*><\/script>\s*/gi, '');
 
+  // Match renderAppIndex(): loader overrides follow the main stylesheet.
+  const mainStylePattern = /<link rel="stylesheet" href="\/?styles\.css[^"]*"\s*\/>/i;
+  if (!mainStylePattern.test(html)) throw new Error('index.html main stylesheet not found.');
+  html = html.replace(mainStylePattern,
+    '$&\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />');
+
   if (!html.includes('account-link.js')) {
     html = html.replace(
       /<script defer src="app\.js([^\"]*)"><\/script>/i,
@@ -220,7 +226,8 @@ const requiredFiles = [
   'vk-platform.js',
   'account-link.js',
   'vendor/vk-bridge.js',
-  'styles.css'
+  'styles.css',
+  'loader-fix.css'
 ];
 for (const relativePath of requiredFiles) {
   await fs.access(path.join(outDir, relativePath));
