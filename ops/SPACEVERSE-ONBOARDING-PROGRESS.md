@@ -4,7 +4,7 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт; reviews/threads отсутствуют. Mergeability перепроверять после публикации нового HEAD.
 - Проверенный свежий base: `3d3d1935f6885f6dca49ceb59d55e7af9118096a` (main, получен 2026-10-13; включает merged PR #235/#238/#250). Он влит в рабочую ветку merge-коммитом `e6678123f0f37ccd826e5ac0e5dd11975bfa7855` без конфликтов; оба POS mount, wallet-route extraction и tenant preflight сохранены.
-- Последний опубликованный HEAD перед этим шагом: `656e277d632d4c9e48516dbca8147bff69c3971b`. Точный опубликованный implementation commit защищённого Эвотора: `fbf69646ddb7518df6d043bc36cf50b058610970`, tree `3cdd8cce36d4b2d76458d98e1485674eb0c0655c`; локально проверенный эквивалент того же tree — `469f8b7b6d455251c9d73811c90ddcfaa25cdfac`. CI-подключение browser-сценария: `f917e9973dded51aa8fc7229fdfa5c20196f2410`, tree `9ac4afa32f98553cd4d18b4fcd15a832ddf08165`. Итоговый docs/published HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
+- Последний опубликованный HEAD перед этим шагом: `656e277d632d4c9e48516dbca8147bff69c3971b`. Точный опубликованный implementation commit защищённого Эвотора: `fbf69646ddb7518df6d043bc36cf50b058610970`, tree `3cdd8cce36d4b2d76458d98e1485674eb0c0655c`; локально проверенный эквивалент того же tree — `469f8b7b6d455251c9d73811c90ddcfaa25cdfac`. CI-подключение browser-сценария: `f917e9973dded51aa8fc7229fdfa5c20196f2410`; проверенный accessibility fix: `066d52dc3e699ac18d93f6ea7da88e4e7280be14`, tree `eb48a037e998b9d8214bb3cfd4f6a122573d9cb2`. Итоговый docs/published HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -285,8 +285,16 @@ URL, audit, runtime manifest и ответах API.
   PostgreSQL concurrency;
 - локальный Playwright не запустил сценарии из-за отсутствующего Chromium
   headless shell v1193. Commit `f917e9973dded51aa8fc7229fdfa5c20196f2410`
-  добавляет существующий onboarding desktop/mobile suite в browser CI, который
-  устанавливает точный Chromium. Итог этого job фиксируется после публикации.
+  добавил существующий onboarding desktop/mobile suite в browser CI с точным
+  Chromium. Первый run #42 нашёл настоящий accessibility-дефект: поле токена
+  не имело отдельного exact accessible name. Commit
+  `066d52dc3e699ac18d93f6ea7da88e4e7280be14` добавил явный `aria-label`;
+  typecheck/build, lint (0 ошибок) и профиль 62/62 прошли локально. Повторный
+  browser run #43 прошёл: cash 6/6 и onboarding 4/4 на desktop/mobile;
+- все пять workflow exact functional HEAD `066d52dc3e699ac18d93f6ea7da88e4e7280be14`
+  завершились success: public startup #350, Evotor draft #22, browser #43,
+  release gate #1940 и VK parity #765. Review threads/reviews отсутствовали,
+  PR оставался mergeable draft.
 
 Production/main, Railway variables, реальные секреты, webhook, бот и касса не
 изменялись. Для будущего выпуска требуется заранее создать и проверить три
