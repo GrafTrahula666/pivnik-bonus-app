@@ -16,6 +16,7 @@ WHERE singleton=TRUE AND runtime_key=$1
 LIMIT 1`;
 
 const verifiedRuntimeContexts = new WeakSet();
+const verifiedTenantRuntimes = new WeakSet();
 
 export class SpaceverseRuntimeError extends Error {
   constructor(code, message) {
@@ -215,8 +216,7 @@ export async function resolveSpaceverseRuntime({ environment = {}, query } = {})
     tenantId: configured.manifest.scope.companyId,
     locationId: configured.manifest.scope.venueId
   });
-  verifiedRuntimeContexts.add(context);
-  return Object.freeze({
+  const runtime = Object.freeze({
     mode: 'tenant',
     manifest: configured.manifest,
     binding: Object.freeze({
@@ -233,13 +233,24 @@ export async function resolveSpaceverseRuntime({ environment = {}, query } = {})
     // isolation/config ownership; it is not publication or provisioning.
     startAllowed: false
   });
+  verifiedRuntimeContexts.add(context);
+  verifiedTenantRuntimes.add(runtime);
+  return runtime;
+}
+
+export function requireSpaceverseTenantRuntime(runtime) {
+  if (runtime?.mode !== 'tenant' || !verifiedTenantRuntimes.has(runtime)) {
+    throw failure('SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED', 'SPACEVERSE tenant context is not verified.');
+  }
+  return runtime;
 }
 
 export function requireSpaceverseTenantContext(runtime) {
-  if (runtime?.mode !== 'tenant' || !verifiedRuntimeContexts.has(runtime?.context)) {
+  const verified = requireSpaceverseTenantRuntime(runtime);
+  if (!verifiedRuntimeContexts.has(verified.context)) {
     throw failure('SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED', 'SPACEVERSE tenant context is not verified.');
   }
-  return runtime.context;
+  return verified.context;
 }
 
 export function assertSpaceverseRuntimeStartAllowed(runtime) {

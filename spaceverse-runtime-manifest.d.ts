@@ -90,6 +90,9 @@ export function resolveSpaceverseRuntime(options?: {
   query?: (text: string, params?: unknown[]) => Promise<unknown>
 }): Promise<SpaceverseResolvedRuntime>
 
+export function requireSpaceverseTenantRuntime(runtime: SpaceverseResolvedRuntime):
+  Extract<SpaceverseResolvedRuntime, { mode: 'tenant' }>
+
 export function requireSpaceverseTenantContext(runtime: SpaceverseResolvedRuntime): SpaceverseTenantContext
 
 export function assertSpaceverseRuntimeStartAllowed(runtime: SpaceverseResolvedRuntime): SpaceverseResolvedRuntime

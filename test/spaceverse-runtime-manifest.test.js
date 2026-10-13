@@ -8,6 +8,7 @@ import {
   guardSpaceverseRuntimeStartup,
   parseSpaceverseRuntimeManifest,
   requireSpaceverseTenantContext,
+  requireSpaceverseTenantRuntime,
   resolveSpaceverseRuntime,
   runtimeManifestFromEnvironment,
   SPACEVERSE_RUNTIME_BINDING_SQL
@@ -129,7 +130,12 @@ test('one exact dedicated database binding resolves the manifest but cannot clai
     assert.deepEqual(resolved.context, {
       companyId: '100', venueId: '101', tenantId: '100', locationId: '101'
     });
+    assert.equal(requireSpaceverseTenantRuntime(resolved), resolved);
     assert.equal(requireSpaceverseTenantContext(resolved), resolved.context);
+    assert.throws(
+      () => requireSpaceverseTenantContext({ ...resolved }),
+      (error) => error?.code === 'SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED'
+    );
     assert.throws(
       () => requireSpaceverseTenantContext({ mode: 'tenant', context: { tenantId: '100', locationId: '101' } }),
       (error) => error?.code === 'SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED'
