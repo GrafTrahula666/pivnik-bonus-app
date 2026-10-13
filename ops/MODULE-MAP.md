@@ -25,10 +25,16 @@ manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find
 the same IDs and checksum in its dedicated database (manual additive migrations
 017 and 018); only then does it receive a verified immutable tenant/location
-context. `dashboard-summary-repository.js` has the first tenant-runtime adapter:
-the operational query captures that verified context and rejects request-supplied
-scope before SQL. It remains unwired while tenant startup is blocked; customer,
-wallet and write repositories still need equivalent boundaries. Both
+context. `dashboard-summary-repository.js` has the first tenant-runtime read
+adapter: the operational query captures that verified context and rejects
+request-supplied scope before SQL. `transaction-persistence.js` now has the
+matching write boundary for new operations: it accepts only transaction data,
+rechecks the exact runtime/database binding in the same parameterized INSERT,
+derives tenant/location from that binding, and uses `request_key` for exact
+replay after an uncertain response. A mismatched payload, tenant, location,
+database or forged runtime returns no write and never falls back to legacy SQL.
+Both adapters remain unwired while tenant startup is blocked; customer and
+wallet ownership still need an approved tenant boundary. Both
 `universal-server.js` and `server.js` check this before spawning/initializing any
 PIVNIK runtime data. Even an exact binding is deliberately rejected with
 `SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
