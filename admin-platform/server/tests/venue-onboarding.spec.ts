@@ -7,6 +7,7 @@ import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false}))
+const nativeFetch=globalThis.fetch
 vi.mock('../db.js',()=>{
   const query=async(text:string,params?:unknown[])=>{
     if(state.failAudit&&text.startsWith('INSERT INTO admin_audit_log')) throw new Error('Synthetic sensitive database details')
@@ -27,6 +28,9 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   beforeAll(async()=>{
     process.env.ADMIN_ENABLE_WRITES='true'
     process.env.ADMIN_ENABLE_ONBOARDING_DRAFTS='true'
+    process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='true'
+    process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='fixture-v1'
+    process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'fixture-v1':Buffer.alloc(32,7).toString('base64')})
     process.env.ADMIN_PUBLIC_ORIGIN='https://onboarding.fixture.invalid'
     process.env.ADMIN_CSRF_SECRET='synthetic-onboarding-secret-123456789012345'
     const {onboardingFixture,fixturePassword}=await import('./onboarding-fixture.js')
@@ -50,12 +54,14 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   // No test in this file exercises rate-limiting itself, so clearing counts after each
   // test avoids unrelated later tests failing once enough tests share the same admin id.
   afterEach(async()=>{
+    globalThis.fetch=nativeFetch
     const {__resetRateLimitBucketsForTests}=await import('../security.js')
     __resetRateLimitBucketsForTests()
   })
   const rows=async(table:string)=>(await state.db!.query('SELECT * FROM '+table+' ORDER BY id')).rows
   const appRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_app_configs ORDER BY draft_id')).rows
   const scopeRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_scopes ORDER BY draft_id')).rows
+  const integrationRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_integrations ORDER BY draft_id,provider')).rows
   const invitesFor=async(draftId:string)=>(await state.db!.query('SELECT * FROM admin_onboarding_invites WHERE draft_id=$1::uuid ORDER BY created_at',[draftId])).rows
   const companyAccessRows=async()=>(await state.db!.query('SELECT * FROM admin_company_access ORDER BY admin_id,company_id')).rows
   async function request(who:string,method:string,path='',body?:unknown,csrf=true,requestOrigin?:string) {
@@ -87,11 +93,36 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect({companies:await rows('companies'),venues:await rows('venues'),scopes:await scopeRows()}).toEqual(before)
   })
 
+  it('encrypted integration migration is additive, repeatable and stores no provider resource by itself',async()=>{
+    const sql=await fs.readFile(new URL('../../admin-migrations/009_onboarding_integrations.sql',import.meta.url),'utf8')
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS admin_onboarding_integrations/i)
+    expect(sql).not.toMatch(/(?:^|\n)\s*(?:INSERT|UPDATE|DELETE\s+FROM|MERGE|TRUNCATE)\b/i)
+    expect(sql).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|SCHEMA|DATABASE)\b/i)
+    const before={companies:await rows('companies'),venues:await rows('venues'),integrations:await integrationRows()}
+    await state.db!.exec(sql)
+    expect({companies:await rows('companies'),venues:await rows('venues'),integrations:await integrationRows()}).toEqual(before)
+  })
+
+  it('separately gates protected integrations and reports the capability honestly',async()=>{
+    config.enableOnboardingIntegrations=false
+    try {
+      const path='/'+crypto.randomUUID()+'/integrations/evotor'
+      expect((await request('root','GET',path)).status).toBe(403)
+      expect((await request('root','PUT',path,{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture',token:'synthetic-token-123456'})).status).toBe(403)
+      const session=await fetch(origin+'/api/admin/auth/session',{headers:{cookie:sessions.get('root')!.cookie}})
+      expect(await session.json()).toMatchObject({capabilities:{onboardingDrafts:true,onboardingIntegrations:false}})
+      expect(await integrationRows()).toEqual([])
+    } finally {config.enableOnboardingIntegrations=true}
+  })
+
   it.each(['owner','trusted'])('denies %s every draft method and preserves credentials/access',async who=>{
     const before=await rows('admin_accounts')
     for(const [method,path,body] of [['GET','',undefined],['POST','',command()],['GET','/'+crypto.randomUUID(),undefined],['PUT','/'+crypto.randomUUID(),{revision:1,data}],
       ['GET','/'+crypto.randomUUID()+'/application',undefined],['PUT','/'+crypto.randomUUID()+'/application',{revision:0,config:appConfig}],
       ['GET','/'+crypto.randomUUID()+'/scope',undefined],['PUT','/'+crypto.randomUUID()+'/scope',{draftRevision:1,applicationRevision:1}],
+      ['GET','/'+crypto.randomUUID()+'/integrations/evotor',undefined],
+      ['PUT','/'+crypto.randomUUID()+'/integrations/evotor',{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture',token:'synthetic-token-123456'}],
+      ['POST','/'+crypto.randomUUID()+'/integrations/evotor/verify',{revision:1}],
       ['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
       const r=await request(who,method,path,body)
       expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
@@ -277,6 +308,133 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     await request('root','PUT','/'+draft.id+'/scope',{draftRevision:draft.revision,applicationRevision:application.revision})
     return draft
   }
+  const evotorPath=(draftId:string,suffix='')=>'/'+draftId+'/integrations/evotor'+suffix
+
+  it('saves, reopens and idempotently replays only a masked encrypted Evotor credential',async()=>{
+    const draft=await preparedDraft('Эвотор — сохранение')
+    const token='synthetic-evotor-token-'+crypto.randomUUID(),requestKey=crypto.randomUUID()
+    const path=evotorPath(draft.id),input={requestKey,revision:0,storeId:'fixture-store-1',token}
+    expect(await (await request('root','GET',path)).json()).toMatchObject({integration:null,contract:{
+      provider:'evotor',credentialStorage:'server_encrypted',credentialExposure:'masked_only',verificationMethod:'documents_read',
+      externalAccountCreated:false,posBindingCreated:false,runtimeStatus:'not_provisioned',
+    }})
+    const saved=await (await request('root','PUT',path,input)).json() as {revision:number;status:string;credential:unknown}
+    expect(saved).toMatchObject({provider:'evotor',storeId:'fixture-store-1',revision:1,status:'configured',
+      credential:{present:true,masked:'••••••••'},verification:{code:'not_verified',checkedAt:null,verifiedAt:null}})
+    expect(JSON.stringify(saved)).not.toContain(token)
+    expect(await (await request('root','GET',path)).json()).toMatchObject({integration:saved})
+    expect(await (await request('root','PUT',path,input)).json()).toEqual(saved)
+    const stored=await integrationRows()
+    expect(stored).toHaveLength(1)
+    expect(JSON.stringify(stored)).not.toContain(token)
+    expect(stored[0]).toMatchObject({provider:'evotor',store_id:'fixture-store-1',status:'configured',revision:1,secret_key_id:'fixture-v1'})
+    const conflicting=await request('root','PUT',path,{...input,token:token+'-changed'})
+    expect(conflicting.status).toBe(409);expect(await conflicting.json()).toMatchObject({code:'ONBOARDING_INTEGRATION_REQUEST_CONFLICT'})
+    expect((await request('other-root','GET',path)).status).toBe(404)
+    const audits=(await rows('admin_audit_log')).filter(row=>row.action==='onboarding.integration_create'&&row.entity_id===draft.id)
+    expect(audits).toHaveLength(1)
+    expect(JSON.stringify(audits)).not.toContain(token)
+    expect(JSON.stringify(audits)).not.toContain('fixture-store-1')
+  })
+
+  it('verifies document access through the existing Evotor adapter and records actionable failures without leaking responses',async()=>{
+    const draft=await preparedDraft('Эвотор — проверка')
+    const token='synthetic-verify-token-'+crypto.randomUUID(),path=evotorPath(draft.id)
+    const configured=await (await request('root','PUT',path,{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture-store-verify',token})).json() as {revision:number}
+    globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
+      if(target.hostname==='api.evotor.ru') {
+        expect(target.pathname).toBe('/stores/fixture-store-verify/documents')
+        expect(target.searchParams.get('type')).toBe('SELL,PAYBACK')
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer '+token)
+        return new Response(JSON.stringify({items:[],paging:{}}),{status:200,headers:{'content-type':'application/json'}})
+      }
+      return nativeFetch(input,init)
+    }) as typeof fetch
+    const verified=await (await request('root','POST',evotorPath(draft.id,'/verify'),{revision:configured.revision})).json() as {revision:number;status:string}
+    expect(verified).toMatchObject({revision:2,status:'verified',verification:{code:'documents_readable',checkedAt:expect.any(String),verifiedAt:expect.any(String)},
+      contract:{posBindingCreated:false,runtimeStatus:'not_provisioned'}})
+    expect(JSON.stringify(verified)).not.toContain(token)
+
+    const changedToken=token+'-rotated'
+    const rotated=await (await request('root','PUT',path,{requestKey:crypto.randomUUID(),revision:verified.revision,storeId:'fixture-store-verify',token:changedToken})).json() as {revision:number}
+    const providerBody='provider-body-must-never-leak-'+crypto.randomUUID()
+    globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
+      if(target.hostname==='api.evotor.ru')return new Response(providerBody,{status:403})
+      return nativeFetch(input,init)
+    }) as typeof fetch
+    const denied=await (await request('root','POST',evotorPath(draft.id,'/verify'),{revision:rotated.revision})).json()
+    expect(denied).toMatchObject({revision:4,status:'action_required',verification:{code:'forbidden',checkedAt:expect.any(String),verifiedAt:null}})
+    expect(JSON.stringify(denied)).not.toContain(providerBody)
+    expect(JSON.stringify(await rows('admin_audit_log'))).not.toContain(providerBody)
+    expect(JSON.stringify(await integrationRows())).not.toContain(changedToken)
+  })
+
+  it('treats an HTTP 200 with an invalid provider payload as an error, not as a connection',async()=>{
+    const draft=await preparedDraft('Эвотор — неверный ответ')
+    const path=evotorPath(draft.id),token='synthetic-invalid-response-'+crypto.randomUUID()
+    const configured=await (await request('root','PUT',path,{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture-invalid',token})).json() as {revision:number}
+    globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
+      if(target.hostname==='api.evotor.ru')return new Response(JSON.stringify({ok:true}),{status:200})
+      return nativeFetch(input,init)
+    }) as typeof fetch
+    const result=await (await request('root','POST',evotorPath(draft.id,'/verify'),{revision:configured.revision})).json()
+    expect(result).toMatchObject({status:'error',verification:{code:'invalid_response',verifiedAt:null}})
+  })
+
+  it('rewraps a verified credential under the active key before an old key is retired',async()=>{
+    const draft=await preparedDraft('Эвотор — ротация ключа')
+    const path=evotorPath(draft.id),token='synthetic-key-rotation-'+crypto.randomUUID()
+    const configured=await (await request('root','PUT',path,{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture-rotation',token})).json() as {revision:number}
+    const originalId=process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID,originalKeyring=process.env.ADMIN_ONBOARDING_SECRET_KEYRING
+    const firstKey=Buffer.alloc(32,7).toString('base64'),secondKey=Buffer.alloc(32,8).toString('base64')
+    globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
+      if(target.hostname==='api.evotor.ru')return new Response(JSON.stringify({items:[],paging:{}}),{status:200})
+      return nativeFetch(input,init)
+    }) as typeof fetch
+    try {
+      process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='fixture-v2'
+      process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'fixture-v1':firstKey,'fixture-v2':secondKey})
+      const verified=await request('root','POST',evotorPath(draft.id,'/verify'),{revision:configured.revision})
+      expect(verified.status).toBe(200)
+      expect((await integrationRows()).find(row=>row.draft_id===draft.id)).toMatchObject({secret_key_id:'fixture-v2',status:'verified'})
+      process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'fixture-v2':secondKey})
+      const reopened=await request('root','GET',path)
+      expect(reopened.status).toBe(200);expect(await reopened.json()).toMatchObject({integration:{status:'verified',credential:{masked:'••••••••'}}})
+    } finally {
+      process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID=originalId
+      process.env.ADMIN_ONBOARDING_SECRET_KEYRING=originalKeyring
+    }
+  })
+
+  it('fails closed when the encryption key is missing or authenticated ciphertext is altered',async()=>{
+    const draft=await preparedDraft('Эвотор — fail closed')
+    const path=evotorPath(draft.id),token='synthetic-tamper-token-'+crypto.randomUUID()
+    await request('root','PUT',path,{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture-tamper',token})
+    const originalKeyring=process.env.ADMIN_ONBOARDING_SECRET_KEYRING
+    process.env.ADMIN_ONBOARDING_SECRET_KEYRING='{}'
+    try {
+      const missing=await request('root','GET',path)
+      expect(missing.status).toBe(503);expect(await missing.json()).toMatchObject({code:'ONBOARDING_SECRET_KEY_UNAVAILABLE'})
+    } finally {process.env.ADMIN_ONBOARDING_SECRET_KEYRING=originalKeyring}
+    await state.db!.query(`UPDATE admin_onboarding_integrations SET secret_ciphertext=decode('00','hex') WHERE draft_id=$1::uuid`,[draft.id])
+    const tampered=await request('root','GET',path)
+    expect(tampered.status).toBe(503);expect(await tampered.json()).toMatchObject({code:'ONBOARDING_SECRET_KEY_UNAVAILABLE'})
+  })
+
+  it('requires a session, same origin and CSRF for Evotor credential changes and checks',async()=>{
+    const draft=await preparedDraft('Эвотор — CSRF')
+    const path=evotorPath(draft.id),body={requestKey:crypto.randomUUID(),revision:0,storeId:'fixture-csrf',token:'synthetic-csrf-token-123456'}
+    expect((await fetch(origin+'/api/admin/onboarding/drafts'+path)).status).toBe(401)
+    expect((await request('root','PUT',path,body,false)).status).toBe(403)
+    expect((await request('root','PUT',path,body,true,'https://foreign.invalid')).status).toBe(403)
+    const saved=await (await request('root','PUT',path,body)).json() as {revision:number}
+    expect((await request('root','POST',evotorPath(draft.id,'/verify'),{revision:saved.revision},false)).status).toBe(403)
+  })
+
   const invitesPath=(draftId:string,suffix='')=>'/'+draftId+'/invites'+suffix
 
   it('issues a one-time owner invite link, never stores or echoes the raw token, and audits it',async()=>{
@@ -565,7 +723,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   it('fails scope endpoints closed when optional migration 006 is missing without breaking draft/application reads',async()=>{
     const draft=await (await request('root','POST','',command())).json() as {id:string}
     const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json()
-    await state.db!.exec('DROP TABLE admin_onboarding_scopes')
+    // Optional integration storage has an intentional RESTRICT dependency on a prepared scope.
+    await state.db!.exec('DROP TABLE admin_onboarding_integrations; DROP TABLE admin_onboarding_scopes')
     for(const method of ['GET','PUT']) {
       const r=await request('root',method,'/'+draft.id+'/scope',method==='PUT'?{draftRevision:1,applicationRevision:1}:undefined)
       expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_SCOPE_NOT_READY'})

@@ -64,10 +64,33 @@ interface PreparedScope {
   contract:ScopeContract
 }
 type ScopeCommand={draftRevision:number;applicationRevision:number}
+type IntegrationStatus='configured'|'verified'|'action_required'|'error'
+interface IntegrationContract {
+  provider:'evotor'
+  credentialStorage:'server_encrypted'
+  credentialExposure:'masked_only'
+  verificationMethod:'documents_read'
+  externalAccountCreated:false
+  posBindingCreated:false
+  runtimeStatus:'not_provisioned'
+}
+interface Integration {
+  draftId:string
+  provider:'evotor'
+  storeId:string
+  credential:{present:true;masked:'••••••••'}
+  status:IntegrationStatus
+  verification:{code:string;checkedAt:string|null;verifiedAt:string|null;nextAction:string}
+  revision:number
+  updatedAt:string
+  contract:IntegrationContract
+}
+type IntegrationCommand={requestKey:string;revision:number;storeId:string;token:string}
 interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';expiresAt:string;createdAt:string;revokedAt:string|null;claimedAt:string|null}
 const base = '/api/admin/onboarding/drafts'
 const empty = ():OnboardingData=>({companyId:null,companyName:'',venueName:'',address:'',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:''})
 const defaultContract:ApplicationContract={template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}
+const defaultIntegrationContract:IntegrationContract={provider:'evotor',credentialStorage:'server_encrypted',credentialExposure:'masked_only',verificationMethod:'documents_read',externalAccountCreated:false,posBindingCreated:false,runtimeStatus:'not_provisioned'}
 const emptyApplication=(displayName=''):ApplicationConfig=>({displayName,theme:'premium-dark',primaryColor:'#73bcd9',secondaryColor:'#172c36',shopEnabled:true,loyaltyEnabled:true})
 const message = (error:unknown)=>error instanceof Error?error.message:'Не удалось загрузить черновики.'
 
@@ -120,6 +143,38 @@ function scopeResponse(raw:unknown):PreparedScope {
   return {...value,contract:scopeContractResponse(value.contract)} as PreparedScope
 }
 
+function integrationContractResponse(raw:unknown):IntegrationContract {
+  const value=raw as Partial<IntegrationContract>|null
+  const allowed=['provider','credentialStorage','credentialExposure','verificationMethod','externalAccountCreated','posBindingCreated','runtimeStatus']
+  if(!value||Object.keys(value).some(key=>!allowed.includes(key))||value.provider!=='evotor'||value.credentialStorage!=='server_encrypted'||
+    value.credentialExposure!=='masked_only'||value.verificationMethod!=='documents_read'||value.externalAccountCreated!==false||
+    value.posBindingCreated!==false||value.runtimeStatus!=='not_provisioned') {
+    throw new Error('Статус защищённого подключения не подтверждён. Откройте настройку повторно.')
+  }
+  return value as IntegrationContract
+}
+function integrationResponse(raw:unknown):Integration {
+  const value=raw as Partial<Integration>|null,credential=value?.credential,verification=value?.verification
+  const allowed=['draftId','provider','storeId','credential','status','verification','revision','updatedAt','contract']
+  if(!value||Object.keys(value).some(key=>!allowed.includes(key))||typeof value.draftId!=='string'||value.provider!=='evotor'||
+    typeof value.storeId!=='string'||!value.storeId||!credential||Object.keys(credential).some(key=>!['present','masked'].includes(key))||
+    credential.present!==true||credential.masked!=='••••••••'||!['configured','verified','action_required','error'].includes(String(value.status))||
+    !verification||Object.keys(verification).some(key=>!['code','checkedAt','verifiedAt','nextAction'].includes(key))||
+    typeof verification.code!=='string'||!/^[a-z0-9_]{1,64}$/.test(verification.code)||typeof verification.nextAction!=='string'||
+    !(verification.checkedAt===null||typeof verification.checkedAt==='string')||!(verification.verifiedAt===null||typeof verification.verifiedAt==='string')||
+    !Number.isInteger(value.revision)||Number(value.revision)<1||typeof value.updatedAt!=='string') {
+    throw new Error('Результат подключения Эвотора не подтверждён. Откройте сохранённую настройку.')
+  }
+  if((value.status==='configured'&&(verification.code!=='not_verified'||verification.checkedAt!==null||verification.verifiedAt!==null))||
+    (value.status==='verified'&&(verification.code!=='documents_readable'||typeof verification.checkedAt!=='string'||typeof verification.verifiedAt!=='string'))||
+    (['action_required','error'].includes(String(value.status))&&typeof verification.checkedAt!=='string')) {
+    throw new Error('Состояние проверки Эвотора противоречиво. Откройте сохранённую настройку.')
+  }
+  return {...value,contract:integrationContractResponse(value.contract)} as Integration
+}
+const integrationStatusLabel=(integration:Integration|null)=>!integration?'Не настроено':integration.status==='configured'?'Настроено · не проверено':
+  integration.status==='verified'?'Проверено':integration.status==='action_required'?'Нужно действие':'Ошибка проверки'
+
 function inviteResponse(raw:unknown):Invite {
   const value=raw as Partial<Invite>|null
   if(!value||typeof value.id!=='string'||typeof value.draftId!=='string'||!['pending','revoked','claimed'].includes(String(value.status))||
@@ -132,6 +187,7 @@ function inviteResponse(raw:unknown):Invite {
 
 export function VenueOnboarding({session}:{session:AdminSession}) {
   const allowed=session.admin.role==='SUPER_ADMIN'&&session.capabilities.onboardingDrafts===true
+  const integrationsAllowed=allowed&&session.capabilities.onboardingIntegrations===true
   const [index,setIndex]=useState<Index>({drafts:[],companies:[]})
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false)
   const [editing,setEditing]=useState(false),[current,setCurrent]=useState<Draft|null>(null)
@@ -143,12 +199,16 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   const [appError,setAppError]=useState(''),[appNotice,setAppNotice]=useState('')
   const [scope,setScope]=useState<PreparedScope|null>(null),[scopeLoading,setScopeLoading]=useState(false),[scopeBusy,setScopeBusy]=useState(false),[scopeUncertain,setScopeUncertain]=useState(false)
   const [scopeError,setScopeError]=useState(''),[scopeNotice,setScopeNotice]=useState('')
+  const [integration,setIntegration]=useState<Integration|null>(null),[integrationStoreId,setIntegrationStoreId]=useState(''),[integrationToken,setIntegrationToken]=useState('')
+  const [integrationContract,setIntegrationContract]=useState<IntegrationContract>(defaultIntegrationContract)
+  const [integrationLoading,setIntegrationLoading]=useState(false),[integrationBusy,setIntegrationBusy]=useState(false),[integrationUncertain,setIntegrationUncertain]=useState(false)
+  const [integrationError,setIntegrationError]=useState(''),[integrationNotice,setIntegrationNotice]=useState('')
   const [invites,setInvites]=useState<Invite[]>([]),[inviteLoading,setInviteLoading]=useState(false),[inviteBusy,setInviteBusy]=useState(false)
   const [inviteError,setInviteError]=useState(''),[inviteToken,setInviteToken]=useState('')
   const [inviteCopied,setInviteCopied]=useState(false)
-  const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),createKey=useRef('')
-  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),inviteBusyRef=useRef(false)
-  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),inviteSequence=useRef(0)
+  const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),integrationCommand=useRef<IntegrationCommand|null>(null),createKey=useRef('')
+  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),integrationBusyRef=useRef(false),inviteBusyRef=useRef(false)
+  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),integrationSequence=useRef(0),inviteSequence=useRef(0)
   const checkpoint=`spaceverse:onboarding:create:${session.admin.id}`
   function clearCheckpoint() {
     // An already confirmed server save stays successful even if tab storage becomes unavailable.
@@ -169,6 +229,21 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } catch(error) {if(run===appSequence.current)setAppError(message(error))}
     finally {if(run===appSequence.current)setAppLoading(false)}
   },[])
+  const loadIntegration=useCallback(async(draft:Draft)=>{
+    if(!integrationsAllowed)return
+    const run=++integrationSequence.current
+    setIntegrationLoading(true);setIntegrationError('')
+    try {
+      const result=await apiGet<{integration:unknown;contract:unknown}>(base+'/'+draft.id+'/integrations/evotor')
+      const contract=integrationContractResponse(result.contract)
+      const saved=result.integration?integrationResponse(result.integration):null
+      if(run!==integrationSequence.current)return
+      if(saved&&saved.draftId!==draft.id)throw new Error('Подключение относится к другому черновику.')
+      setIntegrationContract(contract);setIntegration(saved);setIntegrationStoreId(saved?.storeId||'');setIntegrationToken('')
+      setIntegrationUncertain(false);integrationCommand.current=null
+    } catch(error) {if(run===integrationSequence.current)setIntegrationError(message(error))}
+    finally {if(run===integrationSequence.current)setIntegrationLoading(false)}
+  },[integrationsAllowed])
   const loadInvites=useCallback(async(draft:Draft)=>{
     const run=++inviteSequence.current
     setInviteLoading(true);setInviteError('')
@@ -192,16 +267,18 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       if(run!==scopeSequence.current)return
       if(saved&&saved.draftId!==draft.id)throw new Error('Область относится к другому черновику.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
-      if(saved) void loadInvites(draft)
+      if(saved) {void loadInvites(draft);void loadIntegration(draft)}
     } catch(error) {if(run===scopeSequence.current)setScopeError(message(error))}
     finally {if(run===scopeSequence.current)setScopeLoading(false)}
-  },[loadInvites])
+  },[loadIntegration,loadInvites])
   const showDraft=useCallback((draft:Draft)=>{
     setCurrent(draft);setData(draft.data);setEditing(true);command.current=null
     setUncertain(false);setError('');setNotice('Черновик сохранён. Заведение ещё не подключено.')
     setApplication(null);setAppData(emptyApplication(draft.data.venueName));setAppContract(defaultContract)
     setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
+    setIntegration(null);setIntegrationStoreId('');setIntegrationToken('');setIntegrationContract(defaultIntegrationContract)
+    setIntegrationError('');setIntegrationNotice('');setIntegrationUncertain(false);integrationCommand.current=null
     setInvites([]);setInviteError('');setInviteToken('')
     void loadApplication(draft);void loadScope(draft)
   },[loadApplication,loadScope])
@@ -231,8 +308,9 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   },[checkpoint,showDraft])
 
   const invalidateAppLoads=useCallback(()=>{appSequence.current++},[])
+  const invalidateIntegrationLoads=useCallback(()=>{integrationSequence.current++},[])
   const invalidateInviteLoads=useCallback(()=>{inviteSequence.current++},[])
-  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++;invalidateInviteLoads()},[invalidateInviteLoads])
+  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++;invalidateIntegrationLoads();invalidateInviteLoads()},[invalidateIntegrationLoads,invalidateInviteLoads])
   const invalidateLoads=useCallback(()=>{sequence.current++;invalidateAppLoads();invalidateScopeLoads()},[invalidateAppLoads,invalidateScopeLoads])
 
   useEffect(()=>{
@@ -253,17 +331,19 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     invalidateAppLoads();invalidateScopeLoads();setData(empty());setCurrent(null);setEditing(true);setError('');setNotice('');setUncertain(false);command.current=null
     setApplication(null);setAppData(emptyApplication());setAppContract(defaultContract);setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
+    setIntegration(null);setIntegrationStoreId('');setIntegrationToken('');setIntegrationContract(defaultIntegrationContract)
+    setIntegrationError('');setIntegrationNotice('');setIntegrationUncertain(false);integrationCommand.current=null
     setInvites([]);setInviteError('');setInviteToken('')
   }
   async function open(id:string) {
-    if(busyRef.current||appBusyRef.current||scopeBusyRef.current) return
+    if(busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current) return
     busyRef.current=true;setBusy(true);setError('')
     try {showDraft(draftResponse(await apiGet(base+'/'+id)))}
     catch(error) {setError(message(error))}
     finally {busyRef.current=false;setBusy(false)}
   }
   async function save() {
-    if(busyRef.current||appBusyRef.current||scopeBusyRef.current) return
+    if(busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current) return
     const body=command.current||(current?{id:current.id,revision:current.revision,data}:{requestKey:createKey.current,data})
     command.current=body
     busyRef.current=true;setBusy(true);setError('');setNotice('')
@@ -285,7 +365,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } finally {busyRef.current=false;setBusy(false)}
   }
   async function saveApplication() {
-    if(!current||scope||appBusyRef.current||busyRef.current||scopeBusyRef.current)return
+    if(!current||scope||appBusyRef.current||busyRef.current||scopeBusyRef.current||integrationBusyRef.current)return
     const body=appCommand.current||{revision:application?.revision||0,config:appData}
     appCommand.current=body;appBusyRef.current=true;setAppBusy(true);setAppError('');setAppNotice('')
     try {
@@ -300,7 +380,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } finally {appBusyRef.current=false;setAppBusy(false)}
   }
   async function prepareScope() {
-    if(!current||!application||scopeBusyRef.current||busyRef.current||appBusyRef.current)return
+    if(!current||!application||scopeBusyRef.current||busyRef.current||appBusyRef.current||integrationBusyRef.current)return
     const body=scopeCommand.current||{draftRevision:current.revision,applicationRevision:application.revision}
     scopeCommand.current=body;scopeBusyRef.current=true;setScopeBusy(true);setScopeError('');setScopeNotice('')
     try {
@@ -308,15 +388,44 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       if(saved.draftId!==current.id)throw new Error('Сервер вернул область другого черновика.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
       setScopeNotice('Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.')
-      void loadInvites(current)
+      void loadInvites(current);void loadIntegration(current)
     } catch(error) {
       setScopeError(message(error))
       if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408){scopeCommand.current=null;setScopeUncertain(false)}
       else setScopeUncertain(true)
     } finally {scopeBusyRef.current=false;setScopeBusy(false)}
   }
+  async function saveIntegration() {
+    if(!integrationsAllowed||!current||!scope||integrationBusyRef.current||busyRef.current||scopeBusyRef.current)return
+    const body=integrationCommand.current||{requestKey:crypto.randomUUID(),revision:integration?.revision||0,storeId:integrationStoreId,token:integrationToken}
+    integrationCommand.current=body;integrationBusyRef.current=true;setIntegrationBusy(true);setIntegrationError('');setIntegrationNotice('')
+    try {
+      const saved=integrationResponse(await apiPut(base+'/'+current.id+'/integrations/evotor',body))
+      if(saved.draftId!==current.id)throw new Error('Сервер вернул подключение другого черновика.')
+      setIntegration(saved);setIntegrationContract(saved.contract);setIntegrationStoreId(saved.storeId);setIntegrationToken('')
+      setIntegrationUncertain(false);integrationCommand.current=null
+      setIntegrationNotice('Настройка зашифрована на сервере. Доступ к магазину ещё нужно проверить.')
+    } catch(error) {
+      setIntegrationError(message(error))
+      if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408){integrationCommand.current=null;setIntegrationUncertain(false)}
+      else setIntegrationUncertain(true)
+    } finally {integrationBusyRef.current=false;setIntegrationBusy(false)}
+  }
+  async function verifyIntegration() {
+    if(!integrationsAllowed||!current||!integration||integrationBusyRef.current||integrationUncertain)return
+    integrationBusyRef.current=true;setIntegrationBusy(true);setIntegrationError('');setIntegrationNotice('')
+    try {
+      const saved=integrationResponse(await apiPost(base+'/'+current.id+'/integrations/evotor/verify',{revision:integration.revision}))
+      if(saved.draftId!==current.id)throw new Error('Сервер вернул проверку другого черновика.')
+      setIntegration(saved);setIntegrationContract(saved.contract);setIntegrationStoreId(saved.storeId);setIntegrationToken('')
+      setIntegrationNotice(saved.status==='verified'?'Чтение документов магазина подтверждено. POS ещё не привязан, приложение не опубликовано.':saved.verification.nextAction)
+    } catch(error) {
+      setIntegrationError(message(error))
+      if(!(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408))setIntegrationUncertain(true)
+    } finally {integrationBusyRef.current=false;setIntegrationBusy(false)}
+  }
   async function createInvite() {
-    if(!current||!scope||inviteBusyRef.current||busyRef.current||appBusyRef.current||scopeBusyRef.current)return
+    if(!current||!scope||inviteBusyRef.current||busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current)return
     inviteBusyRef.current=true;setInviteBusy(true);setInviteError('');setInviteToken('');setInviteCopied(false)
     try {
       const result=await apiPost<{token:string}&Invite>(base+'/'+current.id+'/invites',undefined)
@@ -353,6 +462,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   if(!allowed) return null
   const draftDirty=Boolean(current)&&JSON.stringify(data)!==JSON.stringify(current?.data)
   const appDirty=Boolean(application)&&JSON.stringify(appData)!==JSON.stringify(application?.config)
+  const integrationDirty=Boolean(integration)&&(integrationStoreId!==integration?.storeId||Boolean(integrationToken))
 
   return <section className="card onboarding" aria-label="Подключение заведений">
     <div className="onboarding-head">
@@ -363,7 +473,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
-      <fieldset className="onboarding-fields" disabled={busy||uncertain||appBusy||scopeBusy||scopeLoading||Boolean(scope)}>
+      <fieldset className="onboarding-fields" disabled={busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
         <label className="field"><span>Название заведения</span><input required maxLength={120} value={data.venueName} onChange={event=>{
           const venueName=event.target.value
           setData(previous=>({...previous,venueName,companyName:!previous.companyId&&(!previous.companyName||previous.companyName===previous.venueName)?venueName:previous.companyName}));setNotice('')
@@ -385,9 +495,9 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <label className="field"><span>Email владельца</span><input aria-label="Email владельца" aria-describedby="onboarding-owner-note" type="email" maxLength={254} value={data.ownerEmail} onChange={event=>change('ownerEmail',event.target.value)}/><small id="onboarding-owner-note">Приглашение на этом шаге не отправляется.</small></label>
       </fieldset>
       <div className="onboarding-actions">
-        <button className="btn" type="submit" disabled={busy||appBusy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
-        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
-        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('')}}>Закрыть</button>
+        <button className="btn" type="submit" disabled={busy||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
+        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy||integrationBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
+        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('')}}>Закрыть</button>
       </div>
     </form>}
     {editing&&current&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
@@ -410,7 +520,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <label className="onboarding-check"><input type="checkbox" checked={appData.shopEnabled} onChange={event=>changeApplication('shopEnabled',event.target.checked)}/><span><b>Магазин</b><small>Подготовить раздел стандартного шаблона</small></span></label>
         <label className="onboarding-check"><input type="checkbox" checked={appData.loyaltyEnabled} onChange={event=>changeApplication('loyaltyEnabled',event.target.checked)}/><span><b>Лояльность</b><small>Только поддерживаемая базовая конфигурация</small></span></label>
       </fieldset>
-      <p className="onboarding-note">Логотип и ключи Telegram, VK и кассы здесь пока не принимаются: для них нужен защищённый канал хранения. Эта настройка не даёт доступ к кошелькам ПИВНИКА.</p>
+      <p className="onboarding-note">Логотип, Telegram и VK пока не подключаются. Эвотор настраивается ниже отдельным защищённым шагом после подготовки области. Эта конфигурация не даёт доступ к кошелькам ПИВНИКА.</p>
       <div className="onboarding-actions">
         <button className="btn" type="submit" disabled={appBusy||appLoading||busy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':appBusy?'Сохраняем…':appUncertain?'Повторить сохранение приложения':'Сохранить приложение'}</button>
         <button className="btn secondary" type="button" disabled={appBusy||appLoading||scopeBusy} onClick={()=>void loadApplication(current)}><RefreshCw size={16}/>Открыть сохранённую конфигурацию</button>
@@ -431,6 +541,28 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
       </div>
     </section>}
+    {editing&&current&&scope&&<form className="onboarding-integration" aria-label="Подключение Эвотора" onSubmit={event=>{event.preventDefault();void saveIntegration()}}>
+      <div className="onboarding-step"><Link2 size={18}/><b>Касса · Эвотор</b><span>{integrationsAllowed?integrationStatusLabel(integration):'Недоступно в этой среде'}</span></div>
+      {!integrationsAllowed?<p className="onboarding-note">Защищённые подключения выключены. Черновик и остальные шаги можно продолжить без кассы.</p>:<>
+        {integrationError&&<div className="onboarding-feedback error" role="alert">{integrationError}</div>}
+        {integrationNotice&&<p className="onboarding-feedback" role="status">{integrationNotice}</p>}
+        <div className="onboarding-contract" aria-label="Статус подключения Эвотора">
+          <div><ShieldCheck size={17}/><span><b>Секрет</b><small>{integration?integration.credential.masked:'Не сохранён'} · {integrationContract.credentialStorage==='server_encrypted'?'зашифрован на сервере':'не подтверждено'}</small></span></div>
+          <div><span><b>Проверка доступа</b><small>{integration?integration.verification.nextAction:'Сначала сохраните ID магазина и токен.'}</small></span></div>
+          <div><span><b>Запуск</b><small>{integrationContract.posBindingCreated?'POS привязан':'POS не привязан'} · приложение не опубликовано</small></span></div>
+        </div>
+        <fieldset className="onboarding-fields" disabled={integrationBusy||integrationLoading||integrationUncertain||busy||scopeBusy}>
+          <label className="field"><span>ID магазина Эвотора</span><input required maxLength={200} autoComplete="off" value={integrationStoreId} onChange={event=>{setIntegrationStoreId(event.target.value);setIntegrationNotice('')}}/></label>
+          <label className="field"><span>Токен Эвотора</span><input aria-describedby="onboarding-evotor-token-note" required={!integration} type="password" minLength={16} maxLength={4096} autoComplete="new-password" spellCheck={false} value={integrationToken} placeholder={integration?'Введите только для замены':'Вставьте токен'} onChange={event=>{setIntegrationToken(event.target.value);setIntegrationNotice('')}}/><small id="onboarding-evotor-token-note">После сохранения поле очистится. Токен обратно не показывается.</small></label>
+        </fieldset>
+        <p className="onboarding-note">Проверка читает одну страницу документов через существующий адаптер. Она не создаёт аккаунт Эвотора, не ставит приложение на кассу и не включает импорт чеков.</p>
+        <div className="onboarding-actions">
+          <button className="btn" type="submit" disabled={integrationBusy||integrationLoading||busy||!integrationStoreId||!integrationToken}><Save size={16}/>{integrationBusy?'Сохраняем…':integrationUncertain?'Повторить сохранение':integration?'Заменить настройку':'Сохранить настройку'}</button>
+          <button className="btn secondary" type="button" disabled={!integration||integrationDirty||integrationBusy||integrationLoading||integrationUncertain} onClick={()=>void verifyIntegration()}><ShieldCheck size={16}/>Проверить доступ</button>
+          <button className="btn secondary" type="button" disabled={integrationBusy||integrationLoading} onClick={()=>void loadIntegration(current)}><RefreshCw size={16}/>Открыть сохранённую настройку</button>
+        </div>
+      </>}
+    </form>}
     {editing&&current&&scope&&<section className="onboarding-invite" aria-label="Приглашение владельцу">
       <div className="onboarding-step"><Link2 size={18}/><b>Приглашение владельцу</b><span>{invites.some(invite=>invite.status==='pending')?'Активная ссылка есть':'Ссылки нет'}</span></div>
       {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}
@@ -450,12 +582,12 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         {invite.status==='pending'&&<button className="btn secondary" disabled={inviteBusy||inviteLoading} onClick={()=>void revokeInvite(invite.id)} aria-label="Отозвать ссылку"><XCircle size={16}/>Отозвать</button>}
       </li>)}</ul>}
     </section>}
-    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
+    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
     {loading?<p role="status">Загружаем черновики…</p>:<>
       {!index.drafts.length&&<p>Сохранённых черновиков пока нет.</p>}
       <ul className="onboarding-list">{index.drafts.map(draft=><li key={draft.id}>
         <div><b>{draft.data.venueName}</b><small>{draft.data.companyName||index.companies.find(company=>company.id===draft.data.companyId)?.name||'Организация недоступна'} · Черновик</small></div>
-        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||uncertain||appUncertain||scopeUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
+        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||uncertain||appUncertain||scopeUncertain||integrationUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
       </li>)}</ul>
       {index.drafts.length===50&&<small>Показаны последние 50 черновиков.</small>}
     </>}

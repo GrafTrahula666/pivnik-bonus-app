@@ -67,6 +67,24 @@ legacy PIVNIK startup path is unchanged and performs no binding query. Continue
 from `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store provider keys, database
 URLs or other secrets in draft/application JSON or the runtime manifest.
 
+The first provider slice stays in that same master and reuses
+`pos/evotor-client.js`; it is not a second integration framework. Manual admin
+migration `admin-platform/admin-migrations/009_onboarding_integrations.sql`
+stores the exact prepared draft/provider/store binding plus only an AES-256-GCM
+envelope, key ID, HMAC request fingerprint and verification state. The keyring is
+read only from protected server variables, supports active + previous keys, and a
+verification write rewraps the token under the active key. `GET/PUT
+.../integrations/evotor` and `POST .../integrations/evotor/verify` are creator-
+scoped SUPER_ADMIN routes behind writes, draft and integration feature flags.
+Responses expose a fixed mask, never ciphertext or plaintext. Verification calls
+the existing fixed-host Evotor document-page adapter and records only
+`configured`, `verified`, `action_required` or `error`; HTTP 200 without the
+expected document shape is an error. This proves read permission only: it does
+not create an Evotor account, install an app, bind POS, import receipts, provision
+runtime or publish the guest application. Telegram/VK remain external-
+authorization work. Do not confuse this admin migration 009 with root
+`migrations/009_spaceverse_transaction_scope.sql`.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already

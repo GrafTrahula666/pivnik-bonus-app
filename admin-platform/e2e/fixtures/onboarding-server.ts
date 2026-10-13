@@ -12,11 +12,25 @@ process.env.ADMIN_READ_DATABASE_URL=''
 process.env.ADMIN_PRODUCTION_WRITE_DATABASE_URL=''
 process.env.ADMIN_ENABLE_WRITES='true'
 process.env.ADMIN_ENABLE_ONBOARDING_DRAFTS='true'
+process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='true'
+process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='e2e-v1'
+process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'e2e-v1':Buffer.alloc(32,9).toString('base64')})
 process.env.ADMIN_PUBLIC_ORIGIN='http://127.0.0.1:5097'
 process.env.ADMIN_CSRF_SECRET='synthetic-loopback-onboarding-csrf-secret-123456'
 process.env.ADMIN_SECURE_COOKIES='false'
 process.env.PIVNIK_APP_URL=''
 process.env.BUSINESS_INTERNAL_TOKEN=''
+
+// Deterministic provider fixture: exercises the real adapter without any live token,
+// account, webhook, cash register or network request to Evotor.
+const nativeFetch=globalThis.fetch
+globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
+  if(target.hostname==='api.evotor.ru') {
+    return new Response(JSON.stringify({items:[],paging:{}}),{status:200,headers:{'content-type':'application/json'}})
+  }
+  return nativeFetch(input,init)
+}) as typeof fetch
 
 const {onboardingFixture}=await import('../../server/tests/onboarding-fixture.js')
 const db=await onboardingFixture()

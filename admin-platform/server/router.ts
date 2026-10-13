@@ -58,8 +58,9 @@ import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broad
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import {
   claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
-  getOnboardingInvitePreview,getOnboardingInvites,getOnboardingRequest,getOnboardingScope,prepareOnboardingScope,requireOnboardingAccess,
-  revokeOnboardingInvite,saveOnboardingAppConfig,updateOnboardingDraft,
+  getOnboardingEvotorIntegration,getOnboardingInvitePreview,getOnboardingInvites,getOnboardingRequest,getOnboardingScope,
+  prepareOnboardingScope,requireOnboardingAccess,requireOnboardingIntegrationAccess,revokeOnboardingInvite,
+  saveOnboardingAppConfig,saveOnboardingEvotorIntegration,updateOnboardingDraft,verifyOnboardingEvotorIntegration,
 } from './venue-onboarding.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -80,6 +81,7 @@ export const sessionCapabilities=()=>({
   productionEntitlementWrites:config.enableWrites&&config.enableProductionEntitlementWrites,
   demo:config.demoEnabled,
   onboardingDrafts:config.enableWrites&&config.enableOnboardingDrafts,
+  onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
 })
 
 export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
@@ -174,6 +176,29 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(isMethod(req,'GET')){json(res,200,await getOnboardingScope(session.admin,onboardingScope[1]!));return true}
     if(isMethod(req,'PUT')){
       json(res,200,await prepareOnboardingScope(session.admin,onboardingScope[1]!,await readJsonBody(req,1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingEvotorVerify=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/evotor\/verify$/.exec(url.pathname)
+  if(onboardingEvotorVerify){
+    requireOnboardingIntegrationAccess(session.admin)
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-evotor-verify:${session.admin.id}`,20,60_000)
+    if(isMethod(req,'POST')){
+      json(res,200,await verifyOnboardingEvotorIntegration(session.admin,onboardingEvotorVerify[1]!,await readJsonBody(req,1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingEvotor=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/evotor$/.exec(url.pathname)
+  if(onboardingEvotor){
+    requireOnboardingIntegrationAccess(session.admin)
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-evotor:${session.admin.id}`,30,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingEvotorIntegration(session.admin,onboardingEvotor[1]!));return true}
+    if(isMethod(req,'PUT')){
+      json(res,200,await saveOnboardingEvotorIntegration(session.admin,onboardingEvotor[1]!,await readJsonBody(req,8*1024)));return true
     }
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }

@@ -8,6 +8,8 @@ import { csrfTokenFor, enforceRateLimit, hashIp, hashPassword, normalizeEmail, r
 import { requireSuperAdmin } from './tenant.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 import { createSpaceverseRuntimeManifest } from '../../spaceverse-runtime-manifest.js'
+import { fetchEvotorPage } from '../../pos/evotor-client.js'
+import { onboardingSecretBox, type OnboardingSecretEnvelope } from './onboarding-secrets.js'
 
 export interface OnboardingData {
   companyId: string | null
@@ -77,6 +79,24 @@ interface ScopeRow extends QueryResultRow {
   venue_address: string | null
   venue_active: boolean
 }
+type IntegrationStatus='configured'|'verified'|'action_required'|'error'
+interface IntegrationRow extends QueryResultRow {
+  draft_id:string
+  provider:'evotor'
+  store_id:string
+  secret_key_id:string
+  secret_nonce:Buffer|Uint8Array
+  secret_ciphertext:Buffer|Uint8Array
+  secret_auth_tag:Buffer|Uint8Array
+  last_request_key:string
+  last_request_hash:string
+  status:IntegrationStatus
+  last_error_code:string|null
+  last_checked_at:string|null
+  verified_at:string|null
+  revision:number
+  updated_at:string
+}
 const fields = ['companyId','companyName','venueName','address','timeZone','venueType','ownerEmail'] as const
 const columns = 'id::text,request_key::text,initial_hash,data,status,revision,updated_at::text'
 const appFields = ['displayName','theme','primaryColor','secondaryColor','shopEnabled','loyaltyEnabled'] as const
@@ -92,8 +112,11 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const invalid = () => new HttpError(400,'ONBOARDING_INVALID','Проверьте данные заведения. Ключи интеграций на этом шаге не принимаются.')
 const appInvalid = () => new HttpError(400,'ONBOARDING_APP_INVALID','Проверьте настройки приложения. Ключи, URL и произвольные поля на этом шаге не принимаются.')
 const scopeInvalid = () => new HttpError(400,'ONBOARDING_SCOPE_INVALID','Не удалось подтвердить версии черновика и приложения. Ключи интеграций здесь не принимаются.')
+const integrationInvalid=()=>new HttpError(400,'ONBOARDING_INTEGRATION_INVALID','Проверьте ID магазина, токен и версию настройки Эвотора.')
 const INVITE_TTL = '7 days'
 const inviteColumns = 'id::text,draft_id::text,status,expires_at::text,created_at::text,revoked_at::text,claimed_at::text'
+const integrationColumns=`draft_id::text,provider,store_id,secret_key_id,secret_nonce,secret_ciphertext,secret_auth_tag,
+  last_request_key::text,last_request_hash,status,last_error_code,last_checked_at::text,verified_at::text,revision,updated_at::text`
 const hasControlCharacter=(value:string)=>Array.from(value).some(character=>{
   const code=character.charCodeAt(0)
   return code<=31||code===127
@@ -167,6 +190,10 @@ export function requireOnboardingAccess(admin: AdminPrincipal): void {
   requireSuperAdmin(admin)
   if(!config.enableWrites||!config.enableOnboardingDrafts) throw new HttpError(403,'ONBOARDING_DISABLED','Мастер подключения пока выключен.')
 }
+export function requireOnboardingIntegrationAccess(admin:AdminPrincipal):void {
+  requireOnboardingAccess(admin)
+  if(!config.enableOnboardingIntegrations)throw new HttpError(403,'ONBOARDING_INTEGRATIONS_DISABLED','Защищённые подключения мастера пока выключены.')
+}
 async function ready(admin: AdminPrincipal): Promise<void> {
   requireOnboardingAccess(admin)
   try {
@@ -187,6 +214,15 @@ async function scopeReady(admin: AdminPrincipal): Promise<void> {
     const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_scopes') IS NOT NULL AS exists")
     if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_SCOPE_NOT_READY','Хранилище областей заведений ещё не подготовлено.')
   } catch(error) { unavailable(error) }
+}
+async function integrationReady(admin:AdminPrincipal):Promise<void> {
+  requireOnboardingIntegrationAccess(admin)
+  await scopeReady(admin)
+  onboardingSecretBox()
+  try {
+    const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_integrations') IS NOT NULL AS exists")
+    if(!result.rows[0]?.exists)throw new HttpError(503,'ONBOARDING_INTEGRATION_NOT_READY','Хранилище защищённых подключений ещё не подготовлено.')
+  } catch(error) {unavailable(error)}
 }
 async function inviteReady(admin: AdminPrincipal): Promise<void> {
   await scopeReady(admin)
@@ -260,6 +296,72 @@ function scopeResponse(row: ScopeRow) {
     runtimeManifest:runtimeManifest({draft_id:row.draft_id,tenant_key:row.tenant_key,
       config:row.application_config,revision:row.application_revision},row),
   }
+}
+const integrationContract={
+  provider:'evotor' as const,
+  credentialStorage:'server_encrypted' as const,
+  credentialExposure:'masked_only' as const,
+  verificationMethod:'documents_read' as const,
+  externalAccountCreated:false as const,
+  posBindingCreated:false as const,
+  runtimeStatus:'not_provisioned' as const,
+}
+const providerAdvice:Record<string,string>={
+  not_verified:'Нажмите «Проверить доступ», чтобы подтвердить токен и права на магазин.',
+  token_expired:'Обновите токен Эвотора и сохраните настройку повторно.',
+  forbidden:'Проверьте права токена на документы указанного магазина.',
+  not_installed:'Установите приложение интеграции для этого магазина в Эвоторе.',
+  rate_limit:'Эвотор ограничил частоту запросов. Повторите проверку позже.',
+  network:'Облако Эвотора не ответило вовремя. Повторите проверку позже.',
+  invalid_response:'Эвотор вернул неожиданный ответ. Повторите позже или обратитесь в поддержку.',
+  invalid_cursor:'Эвотор отклонил запрос проверки. Сохраните настройку заново.',
+  api_error:'Эвотор отклонил запрос. Повторите позже или обратитесь в поддержку.',
+  documents_readable:'Токен и чтение документов магазина подтверждены. Привязка POS и публикация приложения ещё не выполнены.',
+}
+function integrationAad(draftId:string,storeId:string):string {
+  return `spaceverse:onboarding:${draftId}:evotor:${storeId}`
+}
+function integrationEnvelope(row:IntegrationRow):OnboardingSecretEnvelope {
+  return {keyId:row.secret_key_id,nonce:row.secret_nonce,ciphertext:row.secret_ciphertext,authTag:row.secret_auth_tag}
+}
+function storedIntegrationSecret(row:IntegrationRow):string {
+  const token=onboardingSecretBox().decrypt(integrationEnvelope(row),integrationAad(row.draft_id,row.store_id))
+  if(token.length<16||token.length>4096||/\s/.test(token)||hasControlCharacter(token)) {
+    throw new HttpError(503,'ONBOARDING_SECRET_KEY_UNAVAILABLE','Защищённая настройка Эвотора повреждена или недоступна.')
+  }
+  return token
+}
+function integrationResponse(row:IntegrationRow) {
+  const code=row.status==='configured'?'not_verified':row.status==='verified'?'documents_readable':row.last_error_code||'api_error'
+  return {
+    draftId:row.draft_id,provider:row.provider,storeId:row.store_id,
+    credential:{present:true as const,masked:'••••••••' as const},
+    status:row.status,verification:{code,checkedAt:row.last_checked_at,verifiedAt:row.verified_at,nextAction:providerAdvice[code]||providerAdvice.api_error},
+    revision:row.revision,updatedAt:row.updated_at,contract:integrationContract,
+  }
+}
+function integrationCommand(raw:unknown) {
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw integrationInvalid()
+  const body=raw as Record<string,unknown>
+  if(Object.keys(body).some(key=>!['requestKey','revision','storeId','token'].includes(key)))throw integrationInvalid()
+  if(typeof body.requestKey!=='string'||!uuidPattern.test(body.requestKey))throw integrationInvalid()
+  if(typeof body.revision!=='number'||!Number.isSafeInteger(body.revision)||body.revision<0||body.revision>2147483646)throw integrationInvalid()
+  if(typeof body.storeId!=='string'||!body.storeId||body.storeId!==body.storeId.trim()||body.storeId.length>200||hasControlCharacter(body.storeId))throw integrationInvalid()
+  if(typeof body.token!=='string'||body.token.length<16||body.token.length>4096||body.token!==body.token.trim()||/\s/.test(body.token)||hasControlCharacter(body.token))throw integrationInvalid()
+  return {requestKey:body.requestKey.toLowerCase(),revision:body.revision,storeId:body.storeId,token:body.token}
+}
+function integrationVerificationCommand(raw:unknown) {
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw integrationInvalid()
+  const body=raw as Record<string,unknown>
+  if(Object.keys(body).some(key=>key!=='revision')||typeof body.revision!=='number'||!Number.isSafeInteger(body.revision)||body.revision<1||body.revision>2147483646)throw integrationInvalid()
+  return {revision:body.revision}
+}
+function integrationCanonicalCommand(storeId:string,token:string):string {
+  return JSON.stringify({provider:'evotor',storeId,token})
+}
+function integrationAuditScope(row:ScopeRow):VenueScope {
+  return {id:row.venue_id,companyId:row.company_id,companyCode:row.company_code,companyName:row.company_name,
+    code:row.venue_code,name:row.venue_name,address:row.venue_address,legacyBarId:null}
 }
 function unavailable(error: unknown): never {
   if(error instanceof HttpError) throw error
@@ -516,12 +618,130 @@ export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, 
   } finally {client.release()}
 }
 
-async function ownedDraftWithPreparedScope(client: Pick<PoolClient,'query'>, admin: AdminPrincipal, draftId: string): Promise<ScopeRow> {
-  const owned=await client.query<{id:string}>(`SELECT id::text FROM admin_onboarding_drafts WHERE id=$1::uuid AND admin_id=$2::bigint`,[draftId,admin.id])
+async function ownedDraftWithPreparedScope(client: Pick<PoolClient,'query'>, admin: AdminPrincipal, draftId: string, lock=false): Promise<ScopeRow> {
+  const owned=await client.query<{id:string}>(`SELECT id::text FROM admin_onboarding_drafts
+    WHERE id=$1::uuid AND admin_id=$2::bigint${lock?' FOR UPDATE':''}`,[draftId,admin.id])
   if(!owned.rows[0]) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
   const scope=await loadScope(client,draftId)
   if(!scope||!scopeIsConsistent(scope)) throw new HttpError(409,'ONBOARDING_SCOPE_REQUIRED','Сначала подготовьте область заведения.')
   return scope
+}
+
+export async function getOnboardingEvotorIntegration(admin:AdminPrincipal,id:string) {
+  requireOnboardingIntegrationAccess(admin)
+  const draftId=uuid(id)
+  await integrationReady(admin)
+  try {
+    await ownedDraftWithPreparedScope(pool,admin,draftId)
+    const row=(await pool.query<IntegrationRow>(`SELECT ${integrationColumns} FROM admin_onboarding_integrations
+      WHERE draft_id=$1::uuid AND provider='evotor'`,[draftId])).rows[0]
+    // A masked record is useful only when the key material and authenticated binding are readable.
+    if(row) storedIntegrationSecret(row)
+    return {integration:row?integrationResponse(row):null,contract:integrationContract}
+  } catch(error) {unavailable(error)}
+}
+
+export async function saveOnboardingEvotorIntegration(admin:AdminPrincipal,id:string,raw:unknown) {
+  requireOnboardingIntegrationAccess(admin)
+  const draftId=uuid(id),command=integrationCommand(raw)
+  await integrationReady(admin)
+  const secretBox=onboardingSecretBox()
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    const scope=await ownedDraftWithPreparedScope(client,admin,draftId,true)
+    const before=(await client.query<IntegrationRow>(`SELECT ${integrationColumns} FROM admin_onboarding_integrations
+      WHERE draft_id=$1::uuid AND provider='evotor' FOR UPDATE`,[draftId])).rows[0]
+    const canonical=integrationCanonicalCommand(command.storeId,command.token)
+    if(before?.last_request_key===command.requestKey) {
+      const sameHash=secretBox.matchesFingerprint(before.last_request_hash,secretBox.fingerprint(before.secret_key_id,canonical))
+      const sameSecret=storedIntegrationSecret(before)===command.token&&before.store_id===command.storeId
+      if(!sameHash||!sameSecret) throw new HttpError(409,'ONBOARDING_INTEGRATION_REQUEST_CONFLICT','Этот ключ запроса уже использован с другими данными.')
+      await client.query('COMMIT')
+      return integrationResponse(before)
+    }
+    if(before&&before.revision!==command.revision) throw new HttpError(409,'ONBOARDING_INTEGRATION_REVISION_CONFLICT','Настройка Эвотора изменилась. Откройте последнюю сохранённую версию.')
+    if(!before&&command.revision!==0) throw new HttpError(409,'ONBOARDING_INTEGRATION_REVISION_CONFLICT','Настройка Эвотора ещё не создана. Откройте последнюю сохранённую версию.')
+    const encrypted=secretBox.encrypt(command.token,integrationAad(draftId,command.storeId))
+    const fingerprint=secretBox.fingerprint(encrypted.keyId,canonical)
+    let row:IntegrationRow
+    if(before) {
+      row=(await client.query<IntegrationRow>(`UPDATE admin_onboarding_integrations SET
+        store_id=$3,secret_key_id=$4,secret_nonce=$5,secret_ciphertext=$6,secret_auth_tag=$7,
+        last_request_key=$8::uuid,last_request_hash=$9,status='configured',last_error_code=NULL,
+        last_checked_at=NULL,verified_at=NULL,revision=revision+1,updated_at=NOW()
+        WHERE draft_id=$1::uuid AND provider=$2 RETURNING ${integrationColumns}`,
+      [draftId,'evotor',command.storeId,encrypted.keyId,encrypted.nonce,encrypted.ciphertext,encrypted.authTag,command.requestKey,fingerprint])).rows[0]!
+    } else {
+      row=(await client.query<IntegrationRow>(`INSERT INTO admin_onboarding_integrations(
+        draft_id,provider,store_id,secret_key_id,secret_nonce,secret_ciphertext,secret_auth_tag,last_request_key,last_request_hash)
+        VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8::uuid,$9) RETURNING ${integrationColumns}`,
+      [draftId,'evotor',command.storeId,encrypted.keyId,encrypted.nonce,encrypted.ciphertext,encrypted.authTag,command.requestKey,fingerprint])).rows[0]!
+    }
+    await recordAudit({admin,scope:integrationAuditScope(scope),action:before?'onboarding.integration_update':'onboarding.integration_create',
+      entityType:'onboarding_integration',entityId:draftId,before:before?{provider:'evotor',status:before.status,revision:before.revision}:null,
+      after:{provider:'evotor',status:row.status,revision:row.revision},
+      metadata:{credentialRotated:Boolean(before),storeChanged:Boolean(before&&before.store_id!==command.storeId)}},client)
+    await client.query('COMMIT')
+    return integrationResponse(row)
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally {client.release()}
+}
+
+const actionRequiredEvotorCodes=new Set(['token_expired','forbidden','not_installed','invalid_cursor'])
+const knownEvotorCodes=new Set([...actionRequiredEvotorCodes,'rate_limit','network','invalid_response','api_error'])
+export async function verifyOnboardingEvotorIntegration(admin:AdminPrincipal,id:string,raw:unknown) {
+  requireOnboardingIntegrationAccess(admin)
+  const draftId=uuid(id),command=integrationVerificationCommand(raw)
+  await integrationReady(admin)
+  let before:IntegrationRow
+  try {
+    await ownedDraftWithPreparedScope(pool,admin,draftId)
+    before=(await pool.query<IntegrationRow>(`SELECT ${integrationColumns} FROM admin_onboarding_integrations
+      WHERE draft_id=$1::uuid AND provider='evotor'`,[draftId])).rows[0]!
+    if(!before) throw new HttpError(409,'ONBOARDING_INTEGRATION_REQUIRED','Сначала сохраните настройку Эвотора.')
+    if(before.revision!==command.revision) throw new HttpError(409,'ONBOARDING_INTEGRATION_REVISION_CONFLICT','Настройка Эвотора изменилась. Откройте последнюю сохранённую версию.')
+  } catch(error) {unavailable(error)}
+  const token=storedIntegrationSecret(before)
+  let status:IntegrationStatus='verified',errorCode:string|null=null
+  try {
+    await fetchEvotorPage({token,storeId:before.store_id,cursor:null,until:new Date().toISOString()})
+  } catch(error) {
+    const candidate=(error as {code?:unknown})?.code
+    errorCode=typeof candidate==='string'&&knownEvotorCodes.has(candidate)?candidate:'api_error'
+    status=actionRequiredEvotorCodes.has(errorCode)?'action_required':'error'
+  }
+  const secretBox=onboardingSecretBox()
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    const scope=await ownedDraftWithPreparedScope(client,admin,draftId,true)
+    const current=(await client.query<IntegrationRow>(`SELECT ${integrationColumns} FROM admin_onboarding_integrations
+      WHERE draft_id=$1::uuid AND provider='evotor' FOR UPDATE`,[draftId])).rows[0]
+    if(!current) throw new HttpError(409,'ONBOARDING_INTEGRATION_REQUIRED','Сначала сохраните настройку Эвотора.')
+    if(current.revision!==command.revision) throw new HttpError(409,'ONBOARDING_INTEGRATION_REVISION_CONFLICT','Настройка Эвотора изменилась во время проверки. Повторите её для последней версии.')
+    const currentToken=storedIntegrationSecret(current)
+    if(currentToken!==token||current.store_id!==before.store_id) throw new HttpError(409,'ONBOARDING_INTEGRATION_REVISION_CONFLICT','Настройка Эвотора изменилась во время проверки. Повторите её для последней версии.')
+    // Every successful database write rewraps under the active key. Old keys may then be retired safely.
+    const encrypted=secretBox.encrypt(currentToken,integrationAad(draftId,current.store_id))
+    const fingerprint=secretBox.fingerprint(encrypted.keyId,integrationCanonicalCommand(current.store_id,currentToken))
+    const row=(await client.query<IntegrationRow>(`UPDATE admin_onboarding_integrations SET
+      secret_key_id=$3,secret_nonce=$4,secret_ciphertext=$5,secret_auth_tag=$6,last_request_hash=$7,
+      status=$8,last_error_code=$9,last_checked_at=NOW(),verified_at=CASE WHEN $8='verified' THEN NOW() ELSE verified_at END,
+      revision=revision+1,updated_at=NOW()
+      WHERE draft_id=$1::uuid AND provider=$2 RETURNING ${integrationColumns}`,
+    [draftId,'evotor',encrypted.keyId,encrypted.nonce,encrypted.ciphertext,encrypted.authTag,fingerprint,status,errorCode])).rows[0]!
+    await recordAudit({admin,scope:integrationAuditScope(scope),action:'onboarding.integration_verify',entityType:'onboarding_integration',entityId:draftId,
+      before:{provider:'evotor',status:current.status,revision:current.revision},after:{provider:'evotor',status:row.status,revision:row.revision},
+      metadata:{verificationCode:errorCode||'documents_readable'}},client)
+    await client.query('COMMIT')
+    return integrationResponse(row)
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally {client.release()}
 }
 
 export async function getOnboardingInvites(admin: AdminPrincipal, id: string) {

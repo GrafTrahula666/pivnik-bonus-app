@@ -49,6 +49,24 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await expect(page.getByLabel('Название заведения',{exact:true})).toBeDisabled()
   await expect(page.getByText('ID '+prepared.company.id+' · создана выключенной',{exact:true})).toBeVisible()
   await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
+  const evotor=page.getByLabel('Подключение Эвотора')
+  await expect(evotor).toBeVisible()
+  await evotor.getByLabel('ID магазина Эвотора',{exact:true}).fill('fixture-'+testInfo.project.name)
+  const syntheticToken='synthetic-e2e-evotor-token-'+testInfo.project.name
+  await evotor.getByLabel('Токен Эвотора',{exact:true}).fill(syntheticToken)
+  const integrationPut=page.waitForResponse(response=>response.url().endsWith('/integrations/evotor')&&response.request().method()==='PUT')
+  await evotor.getByRole('button',{name:'Сохранить настройку',exact:true}).dblclick()
+  const savedIntegration=await (await integrationPut).json() as {revision:number;status:string;credential:{masked:string};contract:{posBindingCreated:boolean}}
+  expect(savedIntegration).toMatchObject({revision:1,status:'configured',credential:{masked:'••••••••'},contract:{posBindingCreated:false}})
+  expect(JSON.stringify(savedIntegration)).not.toContain(syntheticToken)
+  await expect(evotor.getByLabel('Токен Эвотора',{exact:true})).toHaveValue('')
+  await expect(evotor.getByText('Настроено · не проверено',{exact:true})).toBeVisible()
+  const verifyPost=page.waitForResponse(response=>response.url().endsWith('/integrations/evotor/verify')&&response.request().method()==='POST')
+  await evotor.getByRole('button',{name:'Проверить доступ',exact:true}).click()
+  const verifiedIntegration=await (await verifyPost).json() as {revision:number;status:string;verification:{code:string}}
+  expect(verifiedIntegration).toMatchObject({revision:2,status:'verified',verification:{code:'documents_readable'}})
+  await expect(evotor.getByText('Проверено',{exact:true})).toBeVisible()
+  await expect(evotor.getByText('Чтение документов магазина подтверждено. POS ещё не привязан, приложение не опубликовано.',{exact:true})).toBeVisible()
 
   // Execute the real POST, then lose its HTTP result. Reload must find the existing server draft.
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
@@ -79,6 +97,8 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
   await expect(page.getByText(configured.tenantKey,{exact:true})).toBeVisible()
   await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
+  await expect(page.getByLabel('Подключение Эвотора').getByText('Проверено',{exact:true})).toBeVisible()
+  await expect(page.getByLabel('Подключение Эвотора').getByText('•••••••• · зашифрован на сервере',{exact:true})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   const screenshot=`artifacts/onboarding-${testInfo.project.name}.png`
   await fs.mkdir('artifacts',{recursive:true})
