@@ -20,9 +20,15 @@ company/venue IDs. A new company and every new venue are created with
 preparation. The operation is replay-safe and audit failure rolls back the scope
 and both canonical rows. Inactive scope rows remain invisible to the normal venue
 resolver. It does not create an active company/venue, database, bot, webhook or POS link.
-`spaceverse-runtime-manifest.js` now turns that blueprint into a strict,
-checksummed, non-secret runtime manifest. A tenant-mode guest process must find an
-exact binding in its dedicated database (manual additive migration 017); both
+`spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
+manifest only after canonical scope exists. It binds draft/application/scope
+revisions plus canonical company/venue IDs. A tenant-mode guest process must find
+the same IDs and checksum in its dedicated database (manual additive migrations
+017 and 018); only then does it receive a verified immutable tenant/location
+context. `dashboard-summary-repository.js` has the first tenant-runtime adapter:
+the operational query captures that verified context and rejects request-supplied
+scope before SQL. It remains unwired while tenant startup is blocked; customer,
+wallet and write repositories still need equivalent boundaries. Both
 `universal-server.js` and `server.js` check this before spawning/initializing any
 PIVNIK runtime data. Even an exact binding is deliberately rejected with
 `SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
