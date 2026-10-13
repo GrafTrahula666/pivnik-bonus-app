@@ -47,6 +47,8 @@ interface AppDraftRow extends QueryResultRow {
 }
 interface ScopeRow extends QueryResultRow {
   draft_id: string
+  tenant_key: string
+  application_config: OnboardingAppConfig
   company_id: string
   venue_id: string
   company_created_by_onboarding: boolean
@@ -71,6 +73,7 @@ const appColumns = `draft_id::text,tenant_key,config,isolation_policy,provisioni
 const joinedAppColumns = `a.draft_id::text,a.tenant_key,a.config,a.isolation_policy,a.provisioning_status,a.revision,a.updated_at::text`
 const joinedScopeColumns = `s.draft_id::text,s.company_id::text,s.venue_id::text,s.company_created_by_onboarding,
   s.draft_revision,s.application_revision,s.status,s.revision,s.updated_at::text,
+  a.tenant_key,a.config AS application_config,
   c.code AS company_code,c.name AS company_name,c.active AS company_active,
   v.company_id::text AS venue_company_id,v.code AS venue_code,v.name AS venue_name,
   v.address AS venue_address,v.active AS venue_active`
@@ -186,7 +189,21 @@ const appContract = {
   runtimeStatus:'not_provisioned' as const,
   published:false as const,
 }
-function appResponse(row: AppConfigRow) {
+function scopeIsConsistent(row: ScopeRow): boolean {
+  return row.status==='prepared'&&row.revision===1&&row.venue_company_id===row.company_id&&!row.venue_active&&
+    !(row.company_created_by_onboarding&&row.company_active)
+}
+function runtimeManifest(row: Pick<AppConfigRow,'draft_id'|'tenant_key'|'config'|'revision'>, scope: ScopeRow) {
+  if(!scopeIsConsistent(scope)||scope.draft_id!==row.draft_id||scope.application_revision!==row.revision) {
+    throw new HttpError(503,'ONBOARDING_SCOPE_INCONSISTENT','Подготовленная область не прошла проверку безопасности.')
+  }
+  return createSpaceverseRuntimeManifest({
+    draftId:row.draft_id,runtimeKey:row.tenant_key,draftRevision:scope.draft_revision,
+    applicationRevision:row.revision,scopeRevision:1,
+    scope:{companyId:scope.company_id,venueId:scope.venue_id},config:onboardingAppConfig(row.config),
+  })
+}
+function appResponse(row: AppConfigRow, scope?: ScopeRow) {
   const appConfig=onboardingAppConfig(row.config)
   return {
     draftId:row.draft_id,
@@ -195,9 +212,7 @@ function appResponse(row: AppConfigRow) {
     revision:row.revision,
     updatedAt:row.updated_at,
     contract:{...appContract,isolationPolicy:row.isolation_policy},
-    runtimeManifest:createSpaceverseRuntimeManifest({
-      draftId:row.draft_id,runtimeKey:row.tenant_key,revision:row.revision,config:appConfig,
-    }),
+    runtimeManifest:scope?runtimeManifest(row,scope):null,
   }
 }
 const scopeContract = {
@@ -208,8 +223,7 @@ const scopeContract = {
   providerConnectionsCreated:false as const,
 }
 function scopeResponse(row: ScopeRow) {
-  if(row.status!=='prepared'||row.revision!==1||row.venue_company_id!==row.company_id||row.venue_active||
-    (row.company_created_by_onboarding&&row.company_active)) {
+  if(!scopeIsConsistent(row)) {
     throw new HttpError(503,'ONBOARDING_SCOPE_INCONSISTENT','Подготовленная область не прошла проверку безопасности.')
   }
   return {
@@ -220,6 +234,8 @@ function scopeResponse(row: ScopeRow) {
     revision:row.revision,
     updatedAt:row.updated_at,
     contract:scopeContract,
+    runtimeManifest:runtimeManifest({draft_id:row.draft_id,tenant_key:row.tenant_key,
+      config:row.application_config,revision:row.application_revision},row),
   }
 }
 function unavailable(error: unknown): never {
@@ -232,7 +248,7 @@ async function companyAvailable(client: PoolClient, data: OnboardingData): Promi
   const result=await client.query('SELECT id FROM companies WHERE id=$1::bigint AND active=TRUE FOR SHARE',[data.companyId])
   if(!result.rowCount) throw new HttpError(404,'ONBOARDING_COMPANY_NOT_FOUND','Организация недоступна. Выберите другую организацию.')
 }
-async function scopeTableExists(client: PoolClient): Promise<boolean> {
+async function scopeTableExists(client: Pick<PoolClient,'query'>): Promise<boolean> {
   const result=await client.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_scopes') IS NOT NULL AS exists")
   return Boolean(result.rows[0]?.exists)
 }
@@ -244,9 +260,13 @@ async function assertScopeNotPrepared(client: PoolClient, draftId: string): Prom
 async function loadScope(client: Pick<PoolClient,'query'>, draftId: string): Promise<ScopeRow|undefined> {
   return (await client.query<ScopeRow>(`SELECT ${joinedScopeColumns}
     FROM admin_onboarding_scopes s
+    JOIN admin_onboarding_app_configs a ON a.draft_id=s.draft_id
     JOIN companies c ON c.id=s.company_id
     JOIN venues v ON v.id=s.venue_id
     WHERE s.draft_id=$1::uuid`,[draftId])).rows[0]
+}
+async function loadOptionalScope(client: Pick<PoolClient,'query'>, draftId: string): Promise<ScopeRow|undefined> {
+  return await scopeTableExists(client)?loadScope(client,draftId):undefined
 }
 export async function getOnboardingIndex(admin: AdminPrincipal) {
   try {
@@ -342,7 +362,8 @@ export async function getOnboardingAppConfig(admin: AdminPrincipal, id: string) 
       WHERE d.id=$1::uuid AND d.admin_id=$2::bigint`,[draftId,admin.id])
     const row=result.rows[0]
     if(!row) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
-    return {application:row.tenant_key?appResponse(row):null,contract:appContract}
+    const scope=row.tenant_key?await loadOptionalScope(pool,draftId):undefined
+    return {application:row.tenant_key?appResponse(row,scope):null,contract:appContract}
   } catch(error) { unavailable(error) }
 }
 
@@ -364,7 +385,10 @@ export async function saveOnboardingAppConfig(admin: AdminPrincipal, id: string,
     const before=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid FOR UPDATE`,[draftId])).rows[0]
     const same=before&&JSON.stringify(onboardingAppConfig(before.config))===JSON.stringify(appConfig)
     if(before&&before.revision!==body.revision) {
-      if(before.revision===Number(body.revision)+1&&same){await client.query('COMMIT');return appResponse(before)}
+      if(before.revision===Number(body.revision)+1&&same){
+        const scope=await loadOptionalScope(client,draftId)
+        await client.query('COMMIT');return appResponse(before,scope)
+      }
       throw new HttpError(409,'ONBOARDING_APP_REVISION_CONFLICT','Настройки приложения изменились. Откройте последнюю сохранённую версию.')
     }
     if(!before&&body.revision!==0) throw new HttpError(409,'ONBOARDING_APP_REVISION_CONFLICT','Настройки приложения ещё не созданы. Откройте последнюю сохранённую версию.')

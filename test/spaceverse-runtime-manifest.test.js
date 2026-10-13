@@ -7,12 +7,14 @@ import {
   createSpaceverseRuntimeManifest,
   guardSpaceverseRuntimeStartup,
   parseSpaceverseRuntimeManifest,
+  requireSpaceverseTenantContext,
   resolveSpaceverseRuntime,
   runtimeManifestFromEnvironment,
   SPACEVERSE_RUNTIME_BINDING_SQL
 } from '../spaceverse-runtime-manifest.js';
 
-const migrationUrl = new URL('../migrations/017_spaceverse_runtime_binding.sql', import.meta.url);
+const bindingMigrationUrl = new URL('../migrations/017_spaceverse_runtime_binding.sql', import.meta.url);
+const scopeMigrationUrl = new URL('../migrations/018_spaceverse_runtime_scope_binding.sql', import.meta.url);
 const appConfig = Object.freeze({
   displayName: 'Бар в Мулино',
   theme: 'premium-dark',
@@ -22,8 +24,11 @@ const appConfig = Object.freeze({
   loyaltyEnabled: true
 });
 
-function manifest(draftId, runtimeKey, revision = 1) {
-  return createSpaceverseRuntimeManifest({ draftId, runtimeKey, revision, config: appConfig });
+function manifest(draftId, runtimeKey, revision = 1, scope = { companyId: '100', venueId: '101' }) {
+  return createSpaceverseRuntimeManifest({
+    draftId, runtimeKey, draftRevision: revision, applicationRevision: revision,
+    scopeRevision: 1, scope, config: appConfig
+  });
 }
 
 function environment(value) {
@@ -35,12 +40,13 @@ function environment(value) {
 
 async function databaseFor(value) {
   const db = new PGlite();
-  await db.exec(await fs.readFile(migrationUrl, 'utf8'));
+  await db.exec(await fs.readFile(bindingMigrationUrl, 'utf8'));
+  await db.exec(await fs.readFile(scopeMigrationUrl, 'utf8'));
   await db.query(
     `INSERT INTO spaceverse_runtime_binding(
-       singleton,runtime_key,manifest_sha256,manifest_revision,isolation_policy,status
-     ) VALUES(TRUE,$1,$2,$3,'dedicated_database','prepared')`,
-    [value.runtimeKey, value.manifestSha256, value.source.revision]
+       singleton,runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
+     ) VALUES(TRUE,$1,$2,$3,$4,$5,'dedicated_database','prepared')`,
+    [value.runtimeKey, value.manifestSha256, value.source.applicationRevision, value.scope.companyId, value.scope.venueId]
   );
   return db;
 }
@@ -51,7 +57,12 @@ test('Business blueprint creates a strict non-secret runtime manifest with a sta
     'sv-11111111111141118111111111111111'
   );
   assert.deepEqual(parseSpaceverseRuntimeManifest(JSON.stringify(value)), value);
-  assert.equal(value.schemaVersion, 1);
+  assert.equal(value.schemaVersion, 2);
+  assert.deepEqual(value.source, {
+    kind: 'onboarding', draftId: '11111111-1111-4111-8111-111111111111',
+    draftRevision: 1, applicationRevision: 1, scopeRevision: 1
+  });
+  assert.deepEqual(value.scope, { companyId: '100', venueId: '101' });
   assert.equal(value.application.template, 'standard');
   assert.equal(value.application.qrEnabled, true);
   assert.deepEqual(value.isolation, { policy: 'dedicated_database', legacyDataAccess: false });
@@ -69,6 +80,9 @@ test('manifest parsing rejects tampering, URLs, tokens and unknown release claim
     { ...value, token: 'synthetic-secret' },
     { ...value, application: { ...value.application, logoUrl: 'https://invalid.example/logo' } },
     { ...value, application: { ...value.application, displayName: 'Changed without digest' } },
+    { ...value, scope: { companyId: '100', venueId: '999' } },
+    { ...value, scope: { companyId: '0', venueId: '101' } },
+    { ...value, scope: { companyId: '100', venueId: '101', tenantId: 'request-value' } },
     { ...value, release: { runtimeStatus: 'ready', published: true } },
     { ...value, manifestSha256: '0'.repeat(64) }
   ]) {
@@ -86,7 +100,7 @@ test('legacy PIVNIK mode remains the default and never queries a runtime binding
     query: async () => { queries += 1; throw new Error('must not query'); }
   });
   assert.deepEqual(resolved, {
-    mode: 'legacy-pivnik', manifest: null, binding: null, startAllowed: true
+    mode: 'legacy-pivnik', manifest: null, binding: null, context: null, startAllowed: true
   });
   assert.equal(queries, 0);
   assert.equal(runtimeManifestFromEnvironment({ SPACEVERSE_RUNTIME_MODE: 'legacy-pivnik' }).mode, 'legacy-pivnik');
@@ -112,6 +126,14 @@ test('one exact dedicated database binding resolves the manifest but cannot clai
     assert.equal(resolved.manifest.application.displayName, appConfig.displayName);
     assert.equal(resolved.binding.runtimeKey, value.runtimeKey);
     assert.equal(resolved.binding.manifestRevision, 2);
+    assert.deepEqual(resolved.context, {
+      companyId: '100', venueId: '101', tenantId: '100', locationId: '101'
+    });
+    assert.equal(requireSpaceverseTenantContext(resolved), resolved.context);
+    assert.throws(
+      () => requireSpaceverseTenantContext({ mode: 'tenant', context: { tenantId: '100', locationId: '101' } }),
+      (error) => error?.code === 'SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED'
+    );
     assert.equal(resolved.startAllowed, false);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].text, SPACEVERSE_RUNTIME_BINDING_SQL);
@@ -126,11 +148,15 @@ test('one exact dedicated database binding resolves the manifest but cannot clai
 test('two tenant manifests stay bound to separate databases and cross-binding fails closed', async () => {
   const first = manifest(
     '44444444-4444-4444-8444-444444444444',
-    'sv-44444444444444448444444444444444'
+    'sv-44444444444444448444444444444444',
+    1,
+    { companyId: '200', venueId: '201' }
   );
   const second = manifest(
     '55555555-5555-4555-8555-555555555555',
-    'sv-55555555555545558555555555555555'
+    'sv-55555555555545558555555555555555',
+    1,
+    { companyId: '300', venueId: '301' }
   );
   const firstDb = await databaseFor(first);
   const secondDb = await databaseFor(second);
@@ -141,6 +167,36 @@ test('two tenant manifests stay bound to separate databases and cross-binding fa
       resolveSpaceverseRuntime({ environment: environment(second), query: firstDb.query.bind(firstDb) }),
       (error) => error?.code === 'SPACEVERSE_RUNTIME_BINDING_MISMATCH'
     );
+    await assert.rejects(
+      resolveSpaceverseRuntime({ environment: environment(first), query: secondDb.query.bind(secondDb) }),
+      (error) => error?.code === 'SPACEVERSE_RUNTIME_BINDING_MISMATCH'
+    );
+  } finally {
+    await firstDb.close();
+    await secondDb.close();
+  }
+});
+
+test('two venues in one company receive distinct verified server contexts', async () => {
+  const first = manifest(
+    '77777777-7777-4777-8777-777777777777',
+    'sv-77777777777747778777777777777777',
+    1,
+    { companyId: '400', venueId: '401' }
+  );
+  const second = manifest(
+    '88888888-8888-4888-8888-888888888888',
+    'sv-88888888888848888888888888888888',
+    1,
+    { companyId: '400', venueId: '402' }
+  );
+  const firstDb = await databaseFor(first);
+  const secondDb = await databaseFor(second);
+  try {
+    const firstRuntime = await resolveSpaceverseRuntime({ environment: environment(first), query: firstDb.query.bind(firstDb) });
+    const secondRuntime = await resolveSpaceverseRuntime({ environment: environment(second), query: secondDb.query.bind(secondDb) });
+    assert.deepEqual(firstRuntime.context, { companyId: '400', venueId: '401', tenantId: '400', locationId: '401' });
+    assert.deepEqual(secondRuntime.context, { companyId: '400', venueId: '402', tenantId: '400', locationId: '402' });
     await assert.rejects(
       resolveSpaceverseRuntime({ environment: environment(first), query: secondDb.query.bind(secondDb) }),
       (error) => error?.code === 'SPACEVERSE_RUNTIME_BINDING_MISMATCH'
@@ -171,14 +227,21 @@ test('missing binding schema and incomplete environment fail without database de
 });
 
 test('binding migration is additive, manual and creates no application or customer data', async () => {
-  const sql = await fs.readFile(migrationUrl, 'utf8');
-  assert.match(sql, /CREATE TABLE IF NOT EXISTS spaceverse_runtime_binding/i);
-  assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i);
-  assert.doesNotMatch(sql, /\bDROP\s+(?:TABLE|COLUMN|SCHEMA|DATABASE)\b/i);
+  const bindingSql = await fs.readFile(bindingMigrationUrl, 'utf8');
+  const scopeSql = await fs.readFile(scopeMigrationUrl, 'utf8');
+  assert.match(bindingSql, /CREATE TABLE IF NOT EXISTS spaceverse_runtime_binding/i);
+  assert.match(scopeSql, /ADD COLUMN IF NOT EXISTS company_id/i);
+  for (const sql of [bindingSql, scopeSql]) {
+    assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i);
+    assert.doesNotMatch(sql, /\bDROP\s+(?:TABLE|COLUMN|SCHEMA|DATABASE)\b/i);
+  }
   assert.equal(isAutomaticStartupMigration('017_spaceverse_runtime_binding.sql'), false);
+  assert.equal(isAutomaticStartupMigration('018_spaceverse_runtime_scope_binding.sql'), false);
   const db = new PGlite();
   try {
-    await db.exec(sql);
+    await db.exec(bindingSql);
+    await db.exec(scopeSql);
+    await db.exec(scopeSql);
     const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
     assert.deepEqual(tables.rows.map((row) => row.tablename), ['spaceverse_runtime_binding']);
     assert.equal((await db.query('SELECT COUNT(*)::integer AS count FROM spaceverse_runtime_binding')).rows[0].count, 0);

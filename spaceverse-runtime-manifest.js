@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RUNTIME_KEY_PATTERN = /^sv-[0-9a-f]{32}$/;
+const CANONICAL_ID_PATTERN = /^[1-9]\d{0,18}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 const THEMES = new Set(['premium-dark', 'dark', 'light']);
 const APP_FIELDS = Object.freeze([
@@ -9,10 +10,12 @@ const APP_FIELDS = Object.freeze([
 ]);
 
 export const SPACEVERSE_RUNTIME_BINDING_SQL = `SELECT
-  runtime_key,manifest_sha256,manifest_revision,isolation_policy,status
+  runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
 FROM spaceverse_runtime_binding
 WHERE singleton=TRUE AND runtime_key=$1
 LIMIT 1`;
+
+const verifiedRuntimeContexts = new WeakSet();
 
 export class SpaceverseRuntimeError extends Error {
   constructor(code, message) {
@@ -69,16 +72,37 @@ function applicationConfig(raw) {
   };
 }
 
-function manifestCore({ draftId, runtimeKey, revision, config }) {
+function canonicalId(raw) {
+  const value = safeText(raw, { max: 19, pattern: CANONICAL_ID_PATTERN });
+  if (BigInt(value) > 9_223_372_036_854_775_807n) {
+    throw failure('SPACEVERSE_RUNTIME_MANIFEST_INVALID', 'SPACEVERSE runtime manifest is invalid.');
+  }
+  return value;
+}
+
+function manifestScope(raw) {
+  const value = exactRecord(raw, ['companyId', 'venueId']);
+  return { companyId: canonicalId(value.companyId), venueId: canonicalId(value.venueId) };
+}
+
+function manifestCore({ draftId, runtimeKey, draftRevision, applicationRevision, scopeRevision, scope, config }) {
   const normalizedDraftId = safeText(draftId, { max: 36, pattern: UUID_PATTERN });
   const normalizedRuntimeKey = safeText(runtimeKey, { max: 35, pattern: RUNTIME_KEY_PATTERN });
-  if (!Number.isSafeInteger(revision) || revision < 1 || revision > 2_147_483_647) {
+  if (!Number.isSafeInteger(draftRevision) || draftRevision < 1 || draftRevision > 2_147_483_647
+    || !Number.isSafeInteger(applicationRevision) || applicationRevision < 1 || applicationRevision > 2_147_483_647) {
+    throw failure('SPACEVERSE_RUNTIME_MANIFEST_INVALID', 'SPACEVERSE runtime manifest is invalid.');
+  }
+  if (!Number.isSafeInteger(scopeRevision) || scopeRevision !== 1) {
     throw failure('SPACEVERSE_RUNTIME_MANIFEST_INVALID', 'SPACEVERSE runtime manifest is invalid.');
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     runtimeKey: normalizedRuntimeKey,
-    source: { kind: 'onboarding', draftId: normalizedDraftId.toLowerCase(), revision },
+    source: {
+      kind: 'onboarding', draftId: normalizedDraftId.toLowerCase(),
+      draftRevision, applicationRevision, scopeRevision
+    },
+    scope: manifestScope(scope),
     application: {
       template: 'standard',
       qrEnabled: true,
@@ -95,7 +119,16 @@ function digest(core) {
 
 export function createSpaceverseRuntimeManifest(input) {
   const core = manifestCore(input || {});
-  return Object.freeze({ ...core, manifestSha256: digest(core) });
+  const manifest = {
+    ...core,
+    source: Object.freeze(core.source),
+    scope: Object.freeze(core.scope),
+    application: Object.freeze(core.application),
+    isolation: Object.freeze(core.isolation),
+    release: Object.freeze(core.release),
+    manifestSha256: digest(core)
+  };
+  return Object.freeze(manifest);
 }
 
 export function parseSpaceverseRuntimeManifest(raw) {
@@ -108,12 +141,14 @@ export function parseSpaceverseRuntimeManifest(raw) {
     catch { throw failure('SPACEVERSE_RUNTIME_MANIFEST_INVALID', 'SPACEVERSE runtime manifest is invalid.'); }
   }
   const value = exactRecord(parsed, [
-    'schemaVersion', 'runtimeKey', 'source', 'application', 'isolation', 'release', 'manifestSha256'
+    'schemaVersion', 'runtimeKey', 'source', 'scope', 'application', 'isolation', 'release', 'manifestSha256'
   ]);
-  if (value.schemaVersion !== 1) {
+  if (value.schemaVersion !== 2) {
     throw failure('SPACEVERSE_RUNTIME_MANIFEST_INVALID', 'SPACEVERSE runtime manifest is invalid.');
   }
-  const source = exactRecord(value.source, ['kind', 'draftId', 'revision']);
+  const source = exactRecord(value.source, [
+    'kind', 'draftId', 'draftRevision', 'applicationRevision', 'scopeRevision'
+  ]);
   const application = exactRecord(value.application, ['template', 'qrEnabled', ...APP_FIELDS]);
   const isolation = exactRecord(value.isolation, ['policy', 'legacyDataAccess']);
   const release = exactRecord(value.release, ['runtimeStatus', 'published']);
@@ -125,7 +160,10 @@ export function parseSpaceverseRuntimeManifest(raw) {
   const manifest = createSpaceverseRuntimeManifest({
     draftId: source.draftId,
     runtimeKey: value.runtimeKey,
-    revision: source.revision,
+    draftRevision: source.draftRevision,
+    applicationRevision: source.applicationRevision,
+    scopeRevision: source.scopeRevision,
+    scope: value.scope,
     config: Object.fromEntries(APP_FIELDS.map((field) => [field, application[field]]))
   });
   if (value.manifestSha256 !== manifest.manifestSha256) {
@@ -149,7 +187,7 @@ export function runtimeManifestFromEnvironment(environment = {}) {
 export async function resolveSpaceverseRuntime({ environment = {}, query } = {}) {
   const configured = runtimeManifestFromEnvironment(environment);
   if (configured.mode === 'legacy-pivnik') {
-    return Object.freeze({ mode: configured.mode, manifest: null, binding: null, startAllowed: true });
+    return Object.freeze({ mode: configured.mode, manifest: null, binding: null, context: null, startAllowed: true });
   }
   if (typeof query !== 'function') {
     throw failure('SPACEVERSE_RUNTIME_BINDING_UNAVAILABLE', 'SPACEVERSE runtime database binding is unavailable.');
@@ -164,11 +202,20 @@ export async function resolveSpaceverseRuntime({ environment = {}, query } = {})
   if (!row || Number(result.rowCount ?? result.rows.length) !== 1
     || row.runtime_key !== configured.manifest.runtimeKey
     || row.manifest_sha256 !== configured.manifest.manifestSha256
-    || Number(row.manifest_revision) !== configured.manifest.source.revision
+    || Number(row.manifest_revision) !== configured.manifest.source.applicationRevision
+    || row.company_id !== configured.manifest.scope.companyId
+    || row.venue_id !== configured.manifest.scope.venueId
     || row.isolation_policy !== 'dedicated_database'
     || row.status !== 'prepared') {
     throw failure('SPACEVERSE_RUNTIME_BINDING_MISMATCH', 'SPACEVERSE runtime database is not bound to this manifest.');
   }
+  const context = Object.freeze({
+    companyId: configured.manifest.scope.companyId,
+    venueId: configured.manifest.scope.venueId,
+    tenantId: configured.manifest.scope.companyId,
+    locationId: configured.manifest.scope.venueId
+  });
+  verifiedRuntimeContexts.add(context);
   return Object.freeze({
     mode: 'tenant',
     manifest: configured.manifest,
@@ -176,13 +223,23 @@ export async function resolveSpaceverseRuntime({ environment = {}, query } = {})
       runtimeKey: row.runtime_key,
       manifestSha256: row.manifest_sha256,
       manifestRevision: Number(row.manifest_revision),
+      companyId: row.company_id,
+      venueId: row.venue_id,
       isolationPolicy: row.isolation_policy,
       status: row.status
     }),
+    context,
     // The current artifact is still PIVNIK-specific. A valid binding proves only
     // isolation/config ownership; it is not publication or provisioning.
     startAllowed: false
   });
+}
+
+export function requireSpaceverseTenantContext(runtime) {
+  if (runtime?.mode !== 'tenant' || !verifiedRuntimeContexts.has(runtime?.context)) {
+    throw failure('SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED', 'SPACEVERSE tenant context is not verified.');
+  }
+  return runtime.context;
 }
 
 export function assertSpaceverseRuntimeStartAllowed(runtime) {

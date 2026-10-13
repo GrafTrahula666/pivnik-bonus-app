@@ -162,13 +162,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     const saved=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {tenantKey:string;revision:number;runtimeManifest:unknown}
     expect(saved).toMatchObject({draftId:draft.id,config:appConfig,revision:1,contract:{template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}})
     expect(saved.tenantKey).toMatch(/^sv-[0-9a-f]{32}$/)
-    expect(parseSpaceverseRuntimeManifest(saved.runtimeManifest)).toMatchObject({
-      runtimeKey:saved.tenantKey,
-      source:{kind:'onboarding',draftId:draft.id,revision:1},
-      application:{template:'standard',qrEnabled:true,...appConfig},
-      isolation:{policy:'dedicated_database',legacyDataAccess:false},
-      release:{runtimeStatus:'not_provisioned',published:false},
-    })
+    expect(saved.runtimeManifest).toBeNull()
     expect(JSON.stringify(saved.runtimeManifest)).not.toMatch(/token|secret|password|databaseUrl|https?:\/\//i)
     expect(await (await request('root','GET','/'+draft.id+'/application')).json()).toEqual({application:saved,contract:(saved as {contract:unknown}).contract})
     expect(await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json()).toEqual(saved)
@@ -206,11 +200,24 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     }})
     const body={draftRevision:draft.revision,applicationRevision:application.revision}
     const prepared=await (await request('root','PUT','/'+draft.id+'/scope',body)).json() as {
-      draftId:string;company:{id:string;code:string;createdByOnboarding:boolean;active:boolean};venue:{id:string;code:string;active:boolean};revision:number
+      draftId:string;company:{id:string;code:string;createdByOnboarding:boolean;active:boolean};venue:{id:string;code:string;active:boolean};revision:number;runtimeManifest:unknown
     }
     expect(prepared).toMatchObject({draftId:draft.id,company:{code:application.tenantKey,createdByOnboarding:true,active:false},
       venue:{code:application.tenantKey,active:false},source:body,revision:1,contract:{status:'prepared',venueActive:false,runtimeStatus:'not_provisioned',staffAccessGranted:false,providerConnectionsCreated:false}})
     expect(prepared.company.id).toMatch(/^[1-9]\d*$/);expect(prepared.venue.id).toMatch(/^[1-9]\d*$/)
+    const manifest=parseSpaceverseRuntimeManifest(prepared.runtimeManifest)
+    expect(manifest).toMatchObject({
+      schemaVersion:2,runtimeKey:application.tenantKey,
+      source:{kind:'onboarding',draftId:draft.id,draftRevision:draft.revision,
+        applicationRevision:application.revision,scopeRevision:1},
+      scope:{companyId:prepared.company.id,venueId:prepared.venue.id},
+      application:{template:'standard',qrEnabled:true,...appConfig},
+      isolation:{policy:'dedicated_database',legacyDataAccess:false},
+      release:{runtimeStatus:'not_provisioned',published:false},
+    })
+    expect(JSON.stringify(manifest)).not.toMatch(/token|secret|password|databaseUrl|https?:\/\//i)
+    const reopenedApp=await (await request('root','GET','/'+draft.id+'/application')).json() as {application:{runtimeManifest:unknown}}
+    expect(reopenedApp.application.runtimeManifest).toEqual(prepared.runtimeManifest)
     expect(await (await request('root','GET','/'+draft.id+'/scope')).json()).toEqual({scope:prepared,contract:(prepared as {contract:unknown}).contract})
     expect(await (await request('root','PUT','/'+draft.id+'/scope',body)).json()).toEqual(prepared)
     expect(await scopeRows()).toHaveLength(1)
@@ -264,6 +271,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     for(const body of [
       {draftRevision:99,applicationRevision:application.revision},
       {draftRevision:draft.revision,applicationRevision:99},
+      {draftRevision:draft.revision,applicationRevision:application.revision,companyId:'10'},
+      {draftRevision:draft.revision,applicationRevision:application.revision,venueId:'20'},
       {draftRevision:draft.revision,applicationRevision:application.revision,token:'synthetic-secret'},
       {draftRevision:'1',applicationRevision:application.revision},
     ]) {
