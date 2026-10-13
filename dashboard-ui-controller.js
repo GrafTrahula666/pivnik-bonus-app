@@ -1,5 +1,6 @@
 import { createDashboardUiViewModel } from './dashboard-ui-view-model.js';
 import { createDashboardDrilldownViewModel } from './dashboard-drilldown-view-model.js';
+import { createDashboardAiAnalystPanel } from './dashboard-ai-analyst-panel.js';
 
 const DEFAULT_DRILLDOWN_LIMIT = 50;
 
@@ -77,11 +78,19 @@ function renderReady(documentRef, viewModel, onDrilldown) {
   section.className = 'sv-dashboard';
   section.setAttribute('aria-label', 'SPACEVERSE Dashboard');
 
+  const hero = documentRef.createElement('div');
+  hero.className = 'sv-dashboard__hero';
+
   const header = documentRef.createElement('header');
   header.className = 'sv-dashboard__header';
   appendTextElement(documentRef, header, 'h1', 'sv-dashboard__title', 'Dashboard');
   appendTextElement(documentRef, header, 'p', 'sv-dashboard__period', `${viewModel.period.start} — ${viewModel.period.end}`);
-  section.append(header);
+  hero.append(header);
+
+  const ai = createDashboardAiAnalystPanel({ documentRef });
+  hero.append(ai.panel);
+  section.append(hero);
+  section.append(ai.drawer);
 
   const grid = documentRef.createElement('div');
   grid.className = 'sv-dashboard__grid';
@@ -277,5 +286,7 @@ export const dashboardUiControllerContract = Object.freeze({
   paginationControls: true,
   defaultDrilldownLimit: DEFAULT_DRILLDOWN_LIMIT,
   staleRequestProtection: true,
-  mobileTouchTargetCssRequired: true
+  mobileTouchTargetCssRequired: true,
+  aiAnalystShellIncluded: true,
+  aiApiConnected: false
 });
