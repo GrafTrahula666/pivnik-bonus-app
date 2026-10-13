@@ -67,3 +67,31 @@ test('CRM ignores responses belonging to a previous signed-in profile', async ()
   assert.equal(h.renders.length, 0);
   assert.equal(h.state.adminUsers.length, 0);
 });
+
+for (const status of [401, 403]) {
+  test(`CRM distinguishes access failure ${status} from a retryable outage`, async () => {
+    const h = harness();
+    const request = h.context.loadAdminUsersDirectory(2);
+    h.pending[0].reject(Object.assign(new Error('denied'), { status }));
+    await assert.rejects(request, /denied/);
+    assert.equal(h.state.adminUsersDirectory.busy, false);
+    assert.equal(h.nodes.adminUsersRetry.hidden, true);
+    assert.match(h.nodes.allUsersList.textContent, status === 401 ? /Сессия истекла/ : /Нет доступа/);
+    // A later explicit directory load still succeeds after access is restored.
+    const restored = h.context.loadAdminUsersDirectory(1);
+    h.pending[1].resolve(response('restored')); await restored;
+    assert.equal(h.state.adminUsers[0].id, 'restored');
+    assert.equal(h.nodes.adminUsersRetry.hidden, true);
+  });
+}
+
+test('CRM does not display a stale permission failure over newer results', async () => {
+  const h = harness();
+  const old = h.context.loadAdminUsersDirectory(1);
+  const current = h.context.loadAdminUsersDirectory(1);
+  h.pending[1].resolve(response('current')); await current;
+  h.pending[0].reject(Object.assign(new Error('denied'), { status: 403 })); await old;
+  assert.equal(h.state.adminUsers[0].id, 'current');
+  assert.equal(h.nodes.adminUsersRetry.hidden, true);
+  assert.doesNotMatch(h.nodes.allUsersList.textContent, /Нет доступа/);
+});
