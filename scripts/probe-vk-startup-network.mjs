@@ -71,15 +71,8 @@ const vkHostingOriginSample = String(
   process.env.PIVNIK_VK_HOSTING_ORIGIN_SAMPLE || 'https://prod-app54694987-000000000000.pages-ac.vk-apps.ru'
 ).replace(/\/+$/, '');
 
-async function probeGateway(baseUrl, originSample) {
-  const hostname = new URL(baseUrl).hostname;
-  const dns = await Promise.allSettled([resolver.resolve4(hostname), resolver.resolve6(hostname)]);
-  const [health, ready, transports] = await Promise.all([
-    get(new URL('/healthz', baseUrl).href),
-    get(new URL('/readyz', baseUrl).href),
-    Promise.all([transport(baseUrl, 4, '/healthz'), transport(baseUrl, 6, '/healthz')])
-  ]);
-  const cors = await new Promise((resolve) => {
+function probeCors(baseUrl, originSample, timeoutMs = 15_000) {
+  return new Promise((resolve) => {
     const started = performance.now();
     const target = new URL('/api/me', baseUrl);
     const request = https.request(target, {
@@ -98,9 +91,22 @@ async function probeGateway(baseUrl, originSample) {
         allowOrigin: response.headers['access-control-allow-origin'] || null
       });
     });
+    const deadline = setTimeout(() => request.destroy(Object.assign(new Error(), { code: 'PROBE_TIMEOUT' })), timeoutMs);
+    request.on('close', () => clearTimeout(deadline));
     request.on('error', (error) => resolve({ error: safeError(error), elapsedMs: Math.round(performance.now() - started) }));
     request.end();
   });
+}
+
+async function probeGateway(baseUrl, originSample) {
+  const hostname = new URL(baseUrl).hostname;
+  const dns = await Promise.allSettled([resolver.resolve4(hostname), resolver.resolve6(hostname)]);
+  const [health, ready, transports] = await Promise.all([
+    get(new URL('/healthz', baseUrl).href),
+    get(new URL('/readyz', baseUrl).href),
+    Promise.all([transport(baseUrl, 4, '/healthz'), transport(baseUrl, 6, '/healthz')])
+  ]);
+  const cors = await probeCors(baseUrl, originSample);
   const aaaaRecord = dns[1];
   const hasAaaa = aaaaRecord.status === 'fulfilled' && aaaaRecord.value.length > 0;
   const warnings = [];
