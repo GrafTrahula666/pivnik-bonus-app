@@ -1,4 +1,5 @@
 import { registerWalletRoutes } from './routes/wallet.js';
+import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
 import { createPosHttp } from './pos/http.js';
 import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
 import { evotorConfig } from './pos/evotor-client.js';
@@ -108,6 +109,11 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
+let spaceverseCustomerHttp = null;
+app.use((req, res, next) => {
+  if (!spaceverseCustomerHttp) return next();
+  spaceverseCustomerHttp(req, res).then(handled => { if (!handled) next(); }).catch(next);
+});
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
 // Standalone minigame, served as a static page. Not linked from the app shell,
@@ -3962,10 +3968,15 @@ app.use((error, _req, res, _next) => {
 });
 
 try {
-  await guardSpaceverseRuntimeStartup({
+  const runtime = await guardSpaceverseRuntimeStartup({
     environment: process.env,
     query: (text, params) => pool.query(text, params)
   });
+  if (runtime.mode === 'tenant') {
+    spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
+      sessionSecret: process.env.SESSION_SECRET || '', telegramBotToken: botToken,
+      vkAppId: process.env.VK_APP_ID || '', vkAppSecret: process.env.VK_APP_SECRET || '' });
+  }
 } catch (error) {
   console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
   await pool.end().catch(() => {});

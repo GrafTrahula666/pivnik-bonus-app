@@ -95,3 +95,34 @@
 ## Следующий безопасный шаг
 
 Продолжить этап 2 следующим узким срезом: добавить атомарную идемпотентную write boundary для создания **нового** tenant-клиента, его кошелька и ownership-строки в выделенной БД. В той же транзакции повторно проверить runtime binding; provider identity не должна присваивать исторические строки, а повтор после потерянного ответа обязан вернуть исходный результат по стабильному request key. Не принимать request scope и не подключать HTTP/auth, пока этот контракт не доказан. После него отдельно подключать auth/wallet routes с паритетом `server.js`/`universal-server.js`. Manifest оставить `not_provisioned`, реальные базы/пользователей/секреты не создавать, production не менять.
+
+
+## Продолжение владельческого сценария — 2026-10-13
+
+Лично начатая в этой сессии работа: auth/wallet adapters поверх существующей migration 019. Предыдущий мастер, runtime binding и ownership read repository уже были в PR #273 на HEAD 530df108d5ca71b4d08d267abc4e6ded5d85de9a; они не выдаются за новую реализацию этой сессии. Работа ведётся в существующем cloud checkout /workspace/pivnik-bonus-app, ветка spaceverse/venue-onboarding, без нового worktree. Main совпадает с базой PR: 3d3d1935f6885f6dca49ceb59d55e7af9118096a.
+
+Фактическое имя канонической таблицы migration 019 — spaceverse_customer_ownership, а не spaceverse_tenant_customers. Вторая модель tenant не создаётся.
+
+До правок выполнены npm run materialize дважды. Первый чистый запуск меняет семь tracked файлов: achievements.js, app.js, index.html, red-cosmos-v2.js, scripts/v22-data-audit-and-repair.mjs, server.js, universal-server.js (365 добавленных / 78 удалённых строк). Второй запуск даёт тот же побайтовый diff. Это исходное поведение patch-chain, не исправление текущей задачи; сгенерированный diff сохранён вне checkout и не включается в feature commit.
+
+SHA256 исходного materialize diff: 2dd57cd01ca18100560d959d5d67eec11053b05ae7c03a718d92022221da6250.
+
+/mnt/project-files/owner-panel/progress.md сейчас недоступен: /mnt смонтирован read-only, даже после предоставления sandbox write permission. Журнал ведётся здесь; перенос копии в требуемый путь остаётся внешним ограничением среды. GitHub REST/GraphQL API отклонены прокси (Forbidden); описание PR прочитано один раз через разрешённую публичную страницу github.com. Git read и push --dry-run текущей ветки доступны.
+
+План этой сессии: (1) атомарный tenant-local auth/create + wallet adapters и серверные проверки изоляции; (2) приглашения и возобновляемые шаги мастера; (3) provider/proxy boundary и честная проверка связи; (4) владельческий список, мобильные E2E и runbook. Production, merge/deploy, Railway, CI configuration, реальные устройства и удаление данных не разрешены и не выполняются.
+
+### Шаг 1 — auth и wallet adapters
+
+Лично реализованы spaceverse-customer-auth.js, общий routes/spaceverse-customer.js, manual additive migration 020 и mounts в обоих runtime. Создание нового клиента/identity/кошелька/ownership/receipt атомарно; исторические identity не присваиваются. Подписанные сессии привязаны к точному runtime/company/venue/checksum; scope из body/query/headers отвергается. Wallet balance=0 возвращается как реальные данные; отсутствующий кошелёк возвращает 503. Apple/Google issuer остаются not_configured, весь runtime остаётся not_provisioned. Guard старта не ослаблен.
+
+Лично выполненные команды, все exit 0:
+
+- npm run materialize ×2; cmp materialize-first.diff materialize-second.diff — побайтовая идемпотентность. Исходный побочный diff patch-chain сохранён вне репозитория и не включён в commit.
+- node --test --test-concurrency=2 — 573/573, 0 skipped. Семь новых тестов включают реальные Express/gateway HTTP → signed auth → SQL → wallet, два tenant, две точки одной компании, scope substitution, stale/changed sessions, rollback и lost-COMMIT replay.
+- npm run check; npm run audit:runtime-patches — passed.
+- npm audit; npm audit --omit=dev --audit-level=high; npm audit --prefix admin-platform — каждый found 0 vulnerabilities.
+- Business npm run typecheck; npm test -- --maxWorkers=2 — 191 passed, 20 skipped; npm run build — passed. Старый integration suite не запускался без выделенного test URL: он сбрасывает public schema; существующие базы/данные не сбрасывались.
+- node /tmp/spaceverse-auth-postgres-proof.mjs — PASS на настоящем PostgreSQL 17, независимые соединения: 8 одновременных входов создали одну ownership/user/wallet, точные повторы не дублируют, конфликт payload закрывается, чужие tenant/venue/БД закрываются. Три новых синтетических proof DB сохранены; ничего не удалено.
+- npm exec --prefix admin-platform --no -- playwright test -c /tmp/spaceverse-onboarding-playwright.config.mjs — 4/4 desktop/mobile. Использованы существующие UI/HTTP/SQL E2E; ключи/учётные записи синтетические, Chromium из /usr/bin/chromium.
+
+Непроверено: production provisioning, настоящие Telegram/VK credentials/providers и реальные устройства. Это отдельные запрещённые внешние действия; not_provisioned не заменяется успехом. P3 вне scope: существующий onboarding E2E fixture пишет ENOENT для favicon.ico; четыре теста успешны, попутная правка не делалась.
