@@ -104,7 +104,9 @@ export function createMembershipAuthorizationResolver({ loadMemberships }) {
 
     if (!membership) {
       return Object.freeze({
-        mode: 'legacy',
+        // Existing members and explicitly scoped requests cannot regain global
+        // rights by omitting/changing their tenant or location.
+        mode: memberships.length || normalizedTenantId || normalizedLocationId ? 'scoped' : 'legacy',
         context: createAuthorizationContext(),
         legacyCapabilities,
         membership: null

@@ -1,3 +1,5 @@
+import { assertLegacyApiRequest, assertLegacyScopeBody } from './legacy-api-boundary.js';
+import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
 import { createPosHttp } from './pos/http.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -2933,7 +2935,9 @@ async function readRequestBody(req, maxBytes = MAX_BODY_BYTES) {
 
 function parseJsonBody(buffer) {
   try {
-    return JSON.parse(buffer.toString('utf8') || '{}');
+    const body = JSON.parse(buffer.toString('utf8') || '{}');
+    assertLegacyScopeBody(body);
+    return body;
   } catch {
     throw Object.assign(new Error('Некорректный JSON.'), { statusCode: 400 });
   }
@@ -3199,6 +3203,7 @@ export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+    assertLegacyApiRequest(req, SPACEVERSE_RUNTIME);
     if (url.pathname === '/api/device/pos' || url.pathname.startsWith('/api/device/pos/')) {
       const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
       return sendJson(res, 200, await posHttp.device({ method: req.method, pathname: url.pathname,
