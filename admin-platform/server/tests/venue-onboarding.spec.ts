@@ -3,7 +3,7 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import type { PGlite } from '@electric-sql/pglite'
-import { afterAll,beforeAll,describe,expect,it,vi } from 'vitest'
+import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false}))
@@ -47,10 +47,17 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     if(server)await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()))
     await state.db?.close()
   })
+  // No test in this file exercises rate-limiting itself, so clearing counts after each
+  // test avoids unrelated later tests failing once enough tests share the same admin id.
+  afterEach(async()=>{
+    const {__resetRateLimitBucketsForTests}=await import('../security.js')
+    __resetRateLimitBucketsForTests()
+  })
   const rows=async(table:string)=>(await state.db!.query('SELECT * FROM '+table+' ORDER BY id')).rows
   const appRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_app_configs ORDER BY draft_id')).rows
   const scopeRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_scopes ORDER BY draft_id')).rows
   const invitesFor=async(draftId:string)=>(await state.db!.query('SELECT * FROM admin_onboarding_invites WHERE draft_id=$1::uuid ORDER BY created_at',[draftId])).rows
+  const companyAccessRows=async()=>(await state.db!.query('SELECT * FROM admin_company_access ORDER BY admin_id,company_id')).rows
   async function request(who:string,method:string,path='',body?:unknown,csrf=true,requestOrigin?:string) {
     const session=sessions.get(who)!
     return fetch(origin+'/api/admin/onboarding/drafts'+path,{method,headers:{cookie:session.cookie,origin:requestOrigin??config.publicOrigin,
@@ -284,7 +291,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect(JSON.stringify(stored)).not.toContain(created.token)
     expect(stored[0]).toMatchObject({id:created.id,status:'pending',created_by_admin_id:1})
     const listed=await (await request('root','GET',invitesPath(draft.id))).json() as {invites:unknown[]}
-    expect(listed.invites).toEqual([{id:created.id,draftId:draft.id,status:'pending',expiresAt:created.expiresAt,createdAt:expect.any(String),revokedAt:null}])
+    expect(listed.invites).toEqual([{id:created.id,draftId:draft.id,status:'pending',expiresAt:created.expiresAt,createdAt:expect.any(String),revokedAt:null,claimedAt:null}])
     const audits=(await rows('admin_audit_log')).filter(row=>row.action==='onboarding.invite_create'&&row.entity_id===created.id)
     expect(audits).toHaveLength(1)
     expect(JSON.stringify(audits)).not.toContain(created.token)
@@ -342,7 +349,101 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
       expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_INVITE_NOT_READY'})
     }
     expect((await request('root','GET','/'+draft.id+'/scope')).status).toBe(200)
-    await state.db!.exec(await fs.readFile(new URL('../../admin-migrations/007_onboarding_invites.sql',import.meta.url),'utf8'))
+    for(const file of ['007_onboarding_invites.sql','008_onboarding_invite_claims.sql']) {
+      await state.db!.exec(await fs.readFile(new URL('../../admin-migrations/'+file,import.meta.url),'utf8'))
+    }
+  })
+
+  async function createInviteFor(draftId:string) {
+    return await (await request('root','POST',invitesPath(draftId))).json() as {id:string;token:string}
+  }
+  const claim=(body:unknown,requestOrigin?:string)=>fetch(origin+'/api/admin/onboarding/invite/claim',
+    {method:'POST',headers:{origin:requestOrigin??config.publicOrigin,'content-type':'application/json'},body:JSON.stringify(body)})
+  const preview=(token:string)=>fetch(origin+'/api/admin/onboarding/invite/'+encodeURIComponent(token))
+
+  it('shows only the venue/company name for a pending link and 404s once it is gone',async()=>{
+    const draft=await preparedDraft('Приглашение — превью')
+    const invite=await createInviteFor(draft.id)
+    const shown=await (await preview(invite.token)).json()
+    expect(shown).toEqual({venueName:'Приглашение — превью',companyName:data.companyName})
+    expect((await preview('not-a-real-token-but-shaped-like-one-0000')).status).toBe(404)
+    await request('root','DELETE',invitesPath(draft.id,'/'+invite.id))
+    expect((await preview(invite.token)).status).toBe(404)
+  })
+
+  it('claims a pending invite into a brand-new VENUE_ADMIN with owner access and signs them in',async()=>{
+    const draft=await preparedDraft('Приглашение — редемпция')
+    const scope=(await (await request('root','GET','/'+draft.id+'/scope')).json() as {scope:{company:{id:string}}}).scope
+    const invite=await createInviteFor(draft.id)
+    const email='new-owner-'+crypto.randomUUID()+'@claim.invalid'
+    const before=await rows('admin_accounts')
+    const r=await claim({token:invite.token,email,displayName:'Новый владелец',password:'Correct-Horse-Battery-123'})
+    expect(r.status).toBe(200)
+    const body=await r.json() as {admin:{id:string;email:string;role:string};csrfToken:string}
+    expect(body).toMatchObject({admin:{email,displayName:'Новый владелец',role:'VENUE_ADMIN'}})
+    expect(body.csrfToken).toBeTruthy()
+    expect(r.headers.get('set-cookie')).toBeTruthy()
+    const accounts=await rows('admin_accounts')
+    expect(accounts.length).toBe(before.length+1)
+    const created=accounts.find(account=>account.email===email)!
+    expect(String(created.id)).toBe(body.admin.id);expect(created.role).toBe('VENUE_ADMIN')
+    expect((await companyAccessRows()).some(grant=>String(grant.admin_id)===body.admin.id&&String(grant.company_id)===scope.company.id&&grant.access_kind==='owner')).toBe(true)
+    const stored=(await invitesFor(draft.id)).find(row=>row.id===invite.id)!
+    expect(stored).toMatchObject({status:'claimed'});expect(String(stored.claimed_admin_id)).toBe(body.admin.id)
+    const audits=(await rows('admin_audit_log')).filter(row=>row.action==='onboarding.invite_claim'&&row.entity_id===invite.id)
+    expect(audits).toHaveLength(1)
+    expect(JSON.stringify(audits)).not.toContain('Correct-Horse-Battery-123')
+  })
+
+  it('refuses to reuse an already-claimed or revoked token',async()=>{
+    const draftClaimed=await preparedDraft('Приглашение — повтор после редемпции')
+    const claimedInvite=await createInviteFor(draftClaimed.id)
+    const firstClaim=await claim({token:claimedInvite.token,email:'once-'+crypto.randomUUID()+'@claim.invalid',displayName:'Once',password:'Correct-Horse-Battery-123'})
+    expect(firstClaim.status).toBe(200)
+    const before=await rows('admin_accounts')
+    const second=await claim({token:claimedInvite.token,email:'twice-'+crypto.randomUUID()+'@claim.invalid',displayName:'Twice',password:'Correct-Horse-Battery-123'})
+    expect(second.status).toBe(404)
+    expect(await rows('admin_accounts')).toEqual(before)
+
+    const draftRevoked=await preparedDraft('Приглашение — повтор после отзыва')
+    const revokedInvite=await createInviteFor(draftRevoked.id)
+    await request('root','DELETE',invitesPath(draftRevoked.id,'/'+revokedInvite.id))
+    const afterRevoke=await claim({token:revokedInvite.token,email:'revoked-'+crypto.randomUUID()+'@claim.invalid',displayName:'X',password:'Correct-Horse-Battery-123'})
+    expect(afterRevoke.status).toBe(404)
+  })
+
+  it('refuses an email that already has an admin account, without creating anything',async()=>{
+    const draft=await preparedDraft('Приглашение — существующий email')
+    const invite=await createInviteFor(draft.id)
+    const before={accounts:await rows('admin_accounts'),access:await companyAccessRows()}
+    const r=await claim({token:invite.token,email:'owner@fixture.invalid',displayName:'Дубликат',password:'Correct-Horse-Battery-123'})
+    expect(r.status).toBe(409);expect(await r.json()).toMatchObject({code:'ONBOARDING_ACCOUNT_EXISTS'})
+    expect({accounts:await rows('admin_accounts'),access:await companyAccessRows()}).toEqual(before)
+    expect((await invitesFor(draft.id)).find(row=>row.id===invite.id)).toMatchObject({status:'pending'})
+  })
+
+  it('rejects malformed claim input without creating an account, and the link survives to be claimed properly',async()=>{
+    const draft=await preparedDraft('Приглашение — валидация')
+    const invite=await createInviteFor(draft.id)
+    const before=await rows('admin_accounts')
+    for(const invalidField of [
+      {password:'too-short'}, {email:'not-an-email'}, {email:''}, {displayName:''}, {displayName:'x'.repeat(121)}, {token:''},
+    ]) {
+      const r=await claim({token:invite.token,email:'valid-'+crypto.randomUUID()+'@claim.invalid',displayName:'Valid',password:'Correct-Horse-Battery-123',...invalidField})
+      expect([400,404]).toContain(r.status)
+    }
+    expect(await rows('admin_accounts')).toEqual(before)
+    expect((await invitesFor(draft.id)).find(row=>row.id===invite.id)).toMatchObject({status:'pending'})
+    expect((await claim({token:invite.token,email:'finally-'+crypto.randomUUID()+'@claim.invalid',displayName:'Valid',password:'Correct-Horse-Battery-123'})).status).toBe(200)
+  })
+
+  it('requires same origin to claim a link, without creating anything',async()=>{
+    const draft=await preparedDraft('Приглашение — origin')
+    const invite=await createInviteFor(draft.id)
+    const before=await rows('admin_accounts')
+    const r=await claim({token:invite.token,email:'origin-'+crypto.randomUUID()+'@claim.invalid',displayName:'Origin',password:'Correct-Horse-Battery-123'},'https://foreign.invalid')
+    expect(r.status).toBe(403)
+    expect(await rows('admin_accounts')).toEqual(before)
   })
 
   it('requires current source revisions and a saved app before preparing scope',async()=>{

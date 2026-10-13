@@ -63,6 +63,9 @@ export async function readJsonBody<T=Record<string,unknown>>(req:IncomingMessage
   try{return JSON.parse(raw) as T}catch{throw new HttpError(400,'INVALID_JSON','Некорректный JSON.')}
 }
 const buckets=new Map<string,number[]>()
+// Test-only: lets a long-running spec file clear accumulated counts between tests
+// instead of hitting real limits meant to throttle production abuse.
+export function __resetRateLimitBucketsForTests(){buckets.clear()}
 export function enforceRateLimit(key:string,limit:number,windowMs:number) {
   const now=Date.now(), current=(buckets.get(key)||[]).filter(t=>now-t<windowMs)
   if(current.length>=limit)throw new HttpError(429,'RATE_LIMITED','Слишком много попыток. Повторите позже.')

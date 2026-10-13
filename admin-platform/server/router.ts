@@ -57,9 +57,9 @@ import {
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import {
-  createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,getOnboardingInvites,
-  getOnboardingRequest,getOnboardingScope,prepareOnboardingScope,requireOnboardingAccess,revokeOnboardingInvite,
-  saveOnboardingAppConfig,updateOnboardingDraft,
+  claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
+  getOnboardingInvitePreview,getOnboardingInvites,getOnboardingRequest,getOnboardingScope,prepareOnboardingScope,requireOnboardingAccess,
+  revokeOnboardingInvite,saveOnboardingAppConfig,updateOnboardingDraft,
 } from './venue-onboarding.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -108,6 +108,16 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     const body=await readJsonBody<{email?:string;password?:string}>(req)
     const result=await login(req,res,body.email,body.password)
     await recordAudit({admin:result.admin,action:'auth.login',entityType:'admin_session',metadata:{ipHashOnly:true}}).catch(()=>undefined)
+    json(res,200,{...result,capabilities:sessionCapabilities()});return true
+  }
+
+  // Public (unauthenticated) one-time invite redemption — no session exists yet to load.
+  const onboardingInvitePreview=/^\/api\/admin\/onboarding\/invite\/([^/]+)$/.exec(url.pathname)
+  if(isMethod(req,'GET')&&onboardingInvitePreview){
+    json(res,200,await getOnboardingInvitePreview(req,onboardingInvitePreview[1]));return true
+  }
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/onboarding/invite/claim'){
+    const result=await claimOnboardingInvite(req,res,await readJsonBody(req,4*1024))
     json(res,200,{...result,capabilities:sessionCapabilities()});return true
   }
 

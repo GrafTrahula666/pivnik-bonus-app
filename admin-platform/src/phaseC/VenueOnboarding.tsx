@@ -64,7 +64,7 @@ interface PreparedScope {
   contract:ScopeContract
 }
 type ScopeCommand={draftRevision:number;applicationRevision:number}
-interface Invite {id:string;draftId:string;status:'pending'|'revoked';expiresAt:string;createdAt:string;revokedAt:string|null}
+interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';expiresAt:string;createdAt:string;revokedAt:string|null;claimedAt:string|null}
 const base = '/api/admin/onboarding/drafts'
 const empty = ():OnboardingData=>({companyId:null,companyName:'',venueName:'',address:'',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:''})
 const defaultContract:ApplicationContract={template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}
@@ -122,8 +122,9 @@ function scopeResponse(raw:unknown):PreparedScope {
 
 function inviteResponse(raw:unknown):Invite {
   const value=raw as Partial<Invite>|null
-  if(!value||typeof value.id!=='string'||typeof value.draftId!=='string'||!['pending','revoked'].includes(String(value.status))||
-    typeof value.expiresAt!=='string'||typeof value.createdAt!=='string'||!(value.revokedAt===null||typeof value.revokedAt==='string')) {
+  if(!value||typeof value.id!=='string'||typeof value.draftId!=='string'||!['pending','revoked','claimed'].includes(String(value.status))||
+    typeof value.expiresAt!=='string'||typeof value.createdAt!=='string'||!(value.revokedAt===null||typeof value.revokedAt==='string')||
+    !(value.claimedAt===null||typeof value.claimedAt==='string')) {
     throw new Error('Приглашение не подтверждено. Обновите список приглашений.')
   }
   return value as Invite
@@ -420,15 +421,15 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       <div className="onboarding-step"><Link2 size={18}/><b>Приглашение владельцу</b><span>{invites.some(invite=>invite.status==='pending')?'Активная ссылка есть':'Ссылки нет'}</span></div>
       {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}
       {inviteToken&&<div className="onboarding-contract" aria-label="Новая ссылка приглашения">
-        <div><Link2 size={17}/><span><b>Ссылка показана один раз</b><small className="tenant-key">{inviteToken}</small></span></div>
+        <div><Link2 size={17}/><span><b>Ссылка показана один раз</b><small className="tenant-key">{window.location.origin}/invite/{inviteToken}</small></span></div>
       </div>}
-      <p className="onboarding-note">Ссылка одноразовая, с ограниченным сроком действия и может быть отозвана. Отправьте её владельцу сами — письма и SMS этот шаг не рассылает. Доступ в панель ссылка сама по себе не даёт.</p>
+      <p className="onboarding-note">Ссылка одноразовая, с ограниченным сроком действия и может быть отозвана. Перейдя по ней, человек сам задаёт email и пароль и получает доступ владельца только к этому заведению. Отправьте ссылку сами — письма и SMS этот шаг не рассылает.</p>
       <div className="onboarding-actions">
         <button className="btn" type="button" disabled={inviteBusy||inviteLoading||busy||appBusy||scopeBusy} onClick={()=>void createInvite()}><Link2 size={16}/>{inviteBusy?'Создаём…':invites.some(invite=>invite.status==='pending')?'Создать новую ссылку':'Создать ссылку'}</button>
         <button className="btn secondary" type="button" disabled={inviteBusy||inviteLoading} onClick={()=>void loadInvites(current)}><RefreshCw size={16}/>Обновить список</button>
       </div>
       {invites.length>0&&<ul className="onboarding-list">{invites.map(invite=><li key={invite.id}>
-        <div><b>{invite.status==='pending'?'Активна':'Отозвана'}</b><small>до {new Date(invite.expiresAt).toLocaleString('ru-RU')}</small></div>
+        <div><b>{invite.status==='pending'?'Активна':invite.status==='claimed'?'Использована':'Отозвана'}</b><small>{invite.status==='pending'?'до '+new Date(invite.expiresAt).toLocaleString('ru-RU'):invite.status==='claimed'?new Date(invite.claimedAt!).toLocaleString('ru-RU'):new Date(invite.revokedAt!).toLocaleString('ru-RU')}</small></div>
         {invite.status==='pending'&&<button className="btn secondary" disabled={inviteBusy||inviteLoading} onClick={()=>void revokeInvite(invite.id)} aria-label="Отозвать ссылку"><XCircle size={16}/>Отозвать</button>}
       </li>)}</ul>}
     </section>}

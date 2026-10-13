@@ -1,8 +1,10 @@
 import crypto from 'node:crypto'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { PoolClient, QueryResultRow } from 'pg'
 import { recordAudit } from './audit.js'
 import { config } from './config.js'
 import { pool } from './db.js'
+import { csrfTokenFor, enforceRateLimit, hashIp, hashPassword, normalizeEmail, randomToken, requestIp, setSessionCookie, sha256 } from './security.js'
 import { requireSuperAdmin } from './tenant.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 import { createSpaceverseRuntimeManifest } from '../../spaceverse-runtime-manifest.js'
@@ -48,10 +50,11 @@ interface AppDraftRow extends QueryResultRow {
 interface InviteRow extends QueryResultRow {
   id: string
   draft_id: string
-  status: 'pending' | 'revoked'
+  status: 'pending' | 'revoked' | 'claimed'
   expires_at: string
   created_at: string
   revoked_at: string | null
+  claimed_at: string | null
 }
 interface ScopeRow extends QueryResultRow {
   draft_id: string
@@ -90,7 +93,7 @@ const invalid = () => new HttpError(400,'ONBOARDING_INVALID','Проверьте
 const appInvalid = () => new HttpError(400,'ONBOARDING_APP_INVALID','Проверьте настройки приложения. Ключи, URL и произвольные поля на этом шаге не принимаются.')
 const scopeInvalid = () => new HttpError(400,'ONBOARDING_SCOPE_INVALID','Не удалось подтвердить версии черновика и приложения. Ключи интеграций здесь не принимаются.')
 const INVITE_TTL = '7 days'
-const inviteColumns = 'id::text,draft_id::text,status,expires_at::text,created_at::text,revoked_at::text'
+const inviteColumns = 'id::text,draft_id::text,status,expires_at::text,created_at::text,revoked_at::text,claimed_at::text'
 const hasControlCharacter=(value:string)=>Array.from(value).some(character=>{
   const code=character.charCodeAt(0)
   return code<=31||code===127
@@ -193,7 +196,7 @@ async function inviteReady(admin: AdminPrincipal): Promise<void> {
   } catch(error) { unavailable(error) }
 }
 function inviteResponse(row: InviteRow) {
-  return {id:row.id,draftId:row.draft_id,status:row.status,expiresAt:row.expires_at,createdAt:row.created_at,revokedAt:row.revoked_at}
+  return {id:row.id,draftId:row.draft_id,status:row.status,expiresAt:row.expires_at,createdAt:row.created_at,revokedAt:row.revoked_at,claimedAt:row.claimed_at}
 }
 async function connection(): Promise<PoolClient> {
   try {return await pool.connect()} catch(error) {unavailable(error)}
@@ -571,6 +574,7 @@ export async function revokeOnboardingInvite(admin: AdminPrincipal, id: string, 
     const before=(await client.query<InviteRow>(`SELECT ${inviteColumns} FROM admin_onboarding_invites
       WHERE id=$1::uuid AND draft_id=$2::uuid FOR UPDATE`,[invite,draftId])).rows[0]
     if(!before) throw new HttpError(404,'ONBOARDING_INVITE_NOT_FOUND','Приглашение не найдено или недоступно.')
+    if(before.status==='claimed') throw new HttpError(409,'ONBOARDING_INVITE_ALREADY_CLAIMED','Приглашение уже использовано. Отзыв ссылки не отменяет уже выданный доступ.')
     if(before.status==='revoked') { await client.query('COMMIT');return inviteResponse(before) }
     const row=(await client.query<InviteRow>(`UPDATE admin_onboarding_invites SET status='revoked',revoked_at=NOW()
       WHERE id=$1::uuid RETURNING ${inviteColumns}`,[invite])).rows[0]!
@@ -580,6 +584,90 @@ export async function revokeOnboardingInvite(admin: AdminPrincipal, id: string, 
     return inviteResponse(row)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally { client.release() }
+}
+
+const inviteTokenPattern=/^[A-Za-z0-9_-]{16,256}$/
+const inviteNotFound=()=>new HttpError(404,'ONBOARDING_INVITE_NOT_FOUND','Приглашение недействительно, использовано или истекло.')
+const inviteClaimInvalid=()=>new HttpError(400,'ONBOARDING_INVITE_CLAIM_INVALID','Проверьте email, имя и пароль.')
+function requireInviteFeatureEnabled(): void {
+  if(!config.enableWrites||!config.enableOnboardingDrafts) throw new HttpError(403,'ONBOARDING_DISABLED','Мастер подключения пока выключен.')
+}
+
+// Public (unauthenticated): shows only the venue/company name for a still-pending, unexpired link.
+export async function getOnboardingInvitePreview(req: IncomingMessage, tokenRaw: unknown) {
+  requireInviteFeatureEnabled()
+  enforceRateLimit(`onboarding-invite-preview:${requestIp(req)}`,30,60_000)
+  const token=String(tokenRaw??'')
+  if(!inviteTokenPattern.test(token)) throw inviteNotFound()
+  try {
+    const result=await pool.query<{venue_name:string;company_name:string}>(`SELECT v.name AS venue_name,c.name AS company_name
+      FROM admin_onboarding_invites i
+      JOIN admin_onboarding_scopes s ON s.draft_id=i.draft_id
+      JOIN companies c ON c.id=s.company_id
+      JOIN venues v ON v.id=s.venue_id
+      WHERE i.token_hash=$1 AND i.status='pending' AND i.expires_at>NOW()`,[sha256(token)])
+    const row=result.rows[0]
+    if(!row) throw inviteNotFound()
+    return {venueName:row.venue_name,companyName:row.company_name}
+  } catch(error) {
+    if(error instanceof HttpError) throw error
+    unavailable(error)
+  }
+}
+
+// Public (unauthenticated): redeems a pending link exactly once into a brand-new VENUE_ADMIN
+// account with owner access to the prepared company. Never attaches access to an existing
+// account — a colliding email is refused, so this never silently widens someone else's access.
+export async function claimOnboardingInvite(req: IncomingMessage, res: ServerResponse, raw: unknown) {
+  requireInviteFeatureEnabled()
+  enforceRateLimit(`onboarding-invite-claim:${requestIp(req)}`,20,15*60_000)
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw inviteClaimInvalid()
+  const body=raw as Record<string,unknown>
+  if(Object.keys(body).some(key=>!['token','email','displayName','password'].includes(key))) throw inviteClaimInvalid()
+  const token=String(body.token??'')
+  if(!inviteTokenPattern.test(token)) throw inviteNotFound()
+  const email=normalizeEmail(body.email)
+  if(!email||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw inviteClaimInvalid()
+  const displayName=String(body.displayName??'').trim()
+  if(!displayName||displayName.length>120||Array.from(displayName).some(character=>{const code=character.charCodeAt(0);return code<=31||code===127}))throw inviteClaimInvalid()
+  const password=String(body.password??'')
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    const invite=(await client.query<InviteRow>(`SELECT ${inviteColumns} FROM admin_onboarding_invites
+      WHERE token_hash=$1 AND status='pending' AND expires_at>NOW() FOR UPDATE`,[sha256(token)])).rows[0]
+    if(!invite) throw inviteNotFound()
+    const scope=await loadScope(client,invite.draft_id)
+    if(!scope||!scopeIsConsistent(scope)) throw new HttpError(409,'ONBOARDING_SCOPE_REQUIRED','Область заведения больше не подготовлена.')
+    const colliding=await client.query('SELECT 1 FROM admin_accounts WHERE LOWER(email)=$1 LIMIT 1',[email])
+    if(colliding.rowCount) throw new HttpError(409,'ONBOARDING_ACCOUNT_EXISTS','Учётная запись с этим email уже существует. Попросите владельца выдать доступ вручную.')
+    // hashPassword enforces the same length policy as the admin login/password-change flow.
+    const passwordHash=hashPassword(password)
+    const account=(await client.query<{id:string;email:string;display_name:string;role:'SUPER_ADMIN'|'VENUE_ADMIN'}>(
+      `INSERT INTO admin_accounts(email,display_name,role,password_hash) VALUES($1,$2,'VENUE_ADMIN',$3)
+       RETURNING id::text,email,display_name,role`,[email,displayName,passwordHash])).rows[0]!
+    await client.query(`INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES($1::bigint,$2::bigint,'owner')`,
+      [account.id,scope.company_id])
+    await client.query(`UPDATE admin_onboarding_invites SET status='claimed',claimed_at=NOW(),claimed_admin_id=$2::bigint WHERE id=$1::uuid`,
+      [invite.id,account.id])
+    const principal:AdminPrincipal={id:account.id,email:account.email,displayName:account.display_name,role:account.role}
+    const auditScope:VenueScope={id:scope.venue_id,companyId:scope.company_id,companyCode:scope.company_code,companyName:scope.company_name,
+      code:scope.venue_code,name:scope.venue_name,address:scope.venue_address,legacyBarId:null,accessKind:'owner'}
+    await recordAudit({admin:principal,scope:auditScope,action:'onboarding.invite_claim',entityType:'onboarding_invite',entityId:invite.id,
+      after:{status:'claimed'},metadata:{draftId:invite.draft_id,newAdminId:account.id}},client)
+    const sessionToken=randomToken(32)
+    const expiresAt=new Date(Date.now()+config.sessionTtlMs)
+    await client.query(`INSERT INTO admin_sessions(token_hash,admin_id,expires_at,user_agent,ip_hash) VALUES($1,$2::bigint,$3,$4,$5)`,
+      [sha256(sessionToken),account.id,expiresAt.toISOString(),String(req.headers['user-agent']||'').slice(0,500),hashIp(req)])
+    await client.query('COMMIT')
+    setSessionCookie(res,sessionToken)
+    return {admin:principal,csrfToken:csrfTokenFor(sessionToken)}
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    if(error instanceof HttpError) throw error
+    if((error as {code?:string})?.code==='23505') throw new HttpError(409,'ONBOARDING_ACCOUNT_EXISTS','Учётная запись с этим email уже существует. Попросите владельца выдать доступ вручную.')
     unavailable(error)
   } finally { client.release() }
 }
