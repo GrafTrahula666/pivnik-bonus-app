@@ -126,3 +126,34 @@ SHA256 исходного materialize diff: 2dd57cd01ca18100560d959d5d67eec11053
 - npm exec --prefix admin-platform --no -- playwright test -c /tmp/spaceverse-onboarding-playwright.config.mjs — 4/4 desktop/mobile. Использованы существующие UI/HTTP/SQL E2E; ключи/учётные записи синтетические, Chromium из /usr/bin/chromium.
 
 Непроверено: production provisioning, настоящие Telegram/VK credentials/providers и реальные устройства. Это отдельные запрещённые внешние действия; not_provisioned не заменяется успехом. P3 вне scope: существующий onboarding E2E fixture пишет ENOENT для favicon.ico; четыре теста успешны, попутная правка не делалась.
+
+### Шаг 2 — одноразовая ссылка-приглашение владельцу (2026-10-13, коммит 6a40bb7)
+
+Владелец явно выбрал канал доставки «ссылка» (не email/Telegram) через
+decision-карточку. Реализована только выдача/отзыв/аудит самого
+артефакта-ссылки: `admin-migrations/007_onboarding_invites.sql`
+(`admin_onboarding_invites`: hash токена, expires_at, pending/revoked),
+create/list/revoke в `venue-onboarding.ts` и роуты в `router.ts`, UI-блок в
+`VenueOnboarding.tsx`. Сырой токен возвращается ровно один раз, не хранится
+и не логируется. Создание новой ссылки автоматически отзывает предыдущую
+pending-ссылку того же черновика. Требует подготовленной области (scope);
+без неё — 409, без миграции — 503 (fail-closed).
+
+Осознанно не сделано: редемпция ссылки в реальный доступ VENUE_ADMIN/owner.
+Это меняет права и требует отдельного явного разрешения владельца (как и
+прочие изменения прав/API/бонусов) — не угадывается и не берётся без ответа.
+
+Проверено: materialize ×2 идемпотентно (изменений в patch-chain нет — весь
+diff в `admin-platform/`), корневой `node --test` 573/573 без изменений,
+`npm run check`, `npm audit --omit=dev --audit-level=high` 0, Business
+`tsc -b` чисто, Business `vitest run` 199 passed/20 skipped (+8 новых тестов
+на инвайты), Business `npm run build` успешно, `npm run lint` 0 ошибок (12
+прежних warnings), Business `npm audit` 0. Попутно починен скрытый баг
+тестового фикстура (`companies_id_seq`/`venues_id_seq` не сдвигались после
+ручных INSERT с explicit id, из-за чего новые тесты рано или поздно
+коллизировали с id=10/20/30) — только тестовое окружение, не миграции.
+
+Следующий безопасный шаг: ждёт владельца — разрешение на редемпцию ссылки
+(создание реального доступа владельцу заведения). Без этого ответа следующий
+шаг без его решения — п. в) очереди мастера: мелкие улучшения удобства самой
+Панели Владельца без изменения расчётов/API.
