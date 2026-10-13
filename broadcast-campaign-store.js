@@ -23,6 +23,26 @@ function safeErrorCode(error) {
   return /^[a-z0-9_.:-]{1,80}$/i.test(candidate) ? candidate : 'broadcast_failed';
 }
 
+// Store only bounded aggregate machine codes, never provider text or recipients.
+function deliveryErrors(value, failed, channel) {
+  if (!Array.isArray(value)) return null;
+  const errors = new Map();
+  let remaining = safeCount(failed);
+  for (const entry of value.slice(0, 8)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const count = Math.min(safeCount(entry.count), remaining);
+    if (!count) continue;
+    const candidate = typeof entry.error === 'string' ? entry.error : '';
+    const known = channel === 'telegram'
+      ? /^(?:telegram_not_configured|telegram_send_failed|telegram_network_error|telegram_invalid_response)$/
+      : /^(?:vk_not_configured|vk_send_failed|vk_network_error|vk_[0-9]{1,6})$/;
+    const error = known.test(candidate) ? candidate : `${channel}_send_failed`;
+    errors.set(error, (errors.get(error) || 0) + count);
+    remaining -= count;
+  }
+  return Object.freeze([...errors].map(([error, count]) => Object.freeze({ error, count })));
+}
+
 export function hashBroadcastMessage(message) {
   return crypto.createHash('sha256').update(String(message ?? ''), 'utf8').digest('hex');
 }
@@ -55,12 +75,14 @@ function campaignResponse(row) {
     telegram: Object.freeze({
       attempted: safeCount(row.telegram_attempted),
       delivered: safeCount(row.telegram_delivered),
-      failed: safeCount(row.telegram_failed)
+      failed: safeCount(row.telegram_failed),
+      errors: deliveryErrors(row.telegram_errors, row.telegram_failed, 'telegram')
     }),
     vk: Object.freeze({
       attempted: safeCount(row.vk_attempted),
       delivered: safeCount(row.vk_delivered),
-      failed: safeCount(row.vk_failed)
+      failed: safeCount(row.vk_failed),
+      errors: deliveryErrors(row.vk_errors, row.vk_failed, 'vk')
     }),
     createdAt: row.created_at || null,
     completedAt: row.completed_at || null,
@@ -91,11 +113,17 @@ export function createBroadcastCampaignStore(pool) {
         vk_attempted INTEGER NOT NULL DEFAULT 0 CHECK (vk_attempted >= 0),
         vk_delivered INTEGER NOT NULL DEFAULT 0 CHECK (vk_delivered >= 0),
         vk_failed INTEGER NOT NULL DEFAULT 0 CHECK (vk_failed >= 0),
+        telegram_errors JSONB,
+        vk_errors JSONB,
         error_code TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         completed_at TIMESTAMPTZ
       )
     `);
+    // Existing campaigns retain NULL: their original failure reasons are unknown.
+    await query(`ALTER TABLE broadcast_campaigns
+      ADD COLUMN IF NOT EXISTS telegram_errors JSONB,
+      ADD COLUMN IF NOT EXISTS vk_errors JSONB`);
     await query(`
       CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_fingerprint_created
       ON broadcast_campaigns (fingerprint, created_at DESC)
@@ -156,6 +184,8 @@ export function createBroadcastCampaignStore(pool) {
            vk_attempted = $5,
            vk_delivered = $6,
            vk_failed = $7,
+           telegram_errors = $8::jsonb,
+           vk_errors = $9::jsonb,
            error_code = NULL,
            completed_at = NOW()
        WHERE id = $1::bigint
@@ -167,7 +197,9 @@ export function createBroadcastCampaignStore(pool) {
         safeCount(telegram.failed),
         safeCount(vk.attempted),
         safeCount(vk.delivered),
-        safeCount(vk.failed)
+        safeCount(vk.failed),
+        JSON.stringify(deliveryErrors(telegram.errors, telegram.failed, 'telegram')),
+        JSON.stringify(deliveryErrors(vk.errors, vk.failed, 'vk'))
       ]
     );
     if (!result.rowCount) throw new Error('broadcast campaign audit row not found');
