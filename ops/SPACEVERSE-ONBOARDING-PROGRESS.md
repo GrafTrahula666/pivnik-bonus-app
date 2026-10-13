@@ -4,7 +4,7 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт; reviews/threads отсутствуют. Mergeability перепроверять после публикации нового HEAD.
 - Проверенный свежий base: `3d3d1935f6885f6dca49ceb59d55e7af9118096a` (main, получен 2026-10-13; включает merged PR #235/#238/#250). Он влит в рабочую ветку merge-коммитом `e6678123f0f37ccd826e5ac0e5dd11975bfa7855` без конфликтов; оба POS mount, wallet-route extraction и tenant preflight сохранены.
-- Последний опубликованный HEAD перед объединением: `1ead0bf8eb1230944d78fc735fff7429ba1e0d23`; точный объединённый implementation commit: `314033e81e6a658dc772e3a8db46ba36878ff6c9`, tree `06e7b632f211b9870ac91b068c7e21dc8c3a9d9c`. Он сохраняет приглашения/claim из удалённой ветки и сводит auth к единственной атомарной boundary создания клиента. Итоговый docs/published HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
+- Последний опубликованный HEAD перед этим шагом: `656e277d632d4c9e48516dbca8147bff69c3971b`. Точный опубликованный implementation commit защищённого Эвотора: `fbf69646ddb7518df6d043bc36cf50b058610970`, tree `3cdd8cce36d4b2d76458d98e1485674eb0c0655c`; локально проверенный эквивалент того же tree — `469f8b7b6d455251c9d73811c90ddcfaa25cdfac`. CI-подключение browser-сценария: `f917e9973dded51aa8fc7229fdfa5c20196f2410`, tree `9ac4afa32f98553cd4d18b4fcd15a832ddf08165`. Итоговый docs/published HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -102,7 +102,7 @@
 
 ## Следующий безопасный шаг
 
-Перейти к этапу 3 узким срезом: серверное шифрованное хранение конфигурации одного поддерживаемого подключения, начиная с существующего адаптера Эвотора. Ключ шифрования должен оставаться вне БД; API возвращает только маску и честные состояния `configured/verified/action_required/error`, не принимает scope из запроса и не называет наличие ключа проверкой. Миграция только additive/manual, функция выключена по умолчанию; реальные ключи, webhook, кассу, production и Railway не менять.
+После зелёного CI перейти к первому исполняемому шагу возобновляемого provisioning: серверный ledger шагов стандартного приложения с транзакционным claim/retry и первым действием, которое проверяет и фиксирует dedicated-database binding из существующего runtime manifest. Не активировать venue/runtime, не создавать production-ресурсы и не подключать историческую БД. Telegram/VK оставить `нужно действие` до отдельного официального OAuth/авторизации владельца.
 
 
 ## Продолжение владельческого сценария — 2026-10-13
@@ -243,3 +243,52 @@ guard. Tenant manifest по-прежнему `not_provisioned`; новая ор�
 Права/пароли существующих владельца и trusted-директора не менялись. В
 Railway выполнена только read-only проверка: активен прежний main deployment,
 staged changes нет, onboarding/runtime env-флаги отсутствуют.
+
+### Шаг 5 — защищённая настройка и проверка Эвотора (2026-10-13)
+
+В том же мастере после подготовленного scope добавлен один узкий provider-срез,
+переиспользующий `pos/evotor-client.js`. Ручная additive admin migration 009
+хранит ID магазина, AES-256-GCM envelope и безопасный request fingerprint;
+ключ остаётся вне БД. `GET` возвращает только фиксированную маску, `PUT`
+транзакционно сохраняет/заменяет настройку с UUID replay-защитой,
+`POST .../verify` читает одну страницу документов через фиксированный HTTPS host,
+15-секундный timeout, запрет redirect и проверку формы ответа. Статусы честно
+разделены на configured/verified/action_required/error. Аккаунт Эвотора,
+установка приложения, POS binding, импорт чеков, runtime и публикация не
+создаются. Функция имеет отдельный выключенный по умолчанию флаг и fail-closed
+keyring с active/previous key ID; проверочная запись rewrap-ит секрет активным
+ключом. Токен очищается из UI после сохранения и отсутствует в browser storage,
+URL, audit, runtime manifest и ответах API.
+
+Проверено на локальном implementation commit
+`469f8b7b6d455251c9d73811c90ddcfaa25cdfac`; его tree
+`3cdd8cce36d4b2d76458d98e1485674eb0c0655c` побайтово совпадает с
+опубликованным commit `fbf69646ddb7518df6d043bc36cf50b058610970`:
+
+- в чистом detached-worktree `npm run materialize` выполнен дважды; оба раза
+  получен одинаковый SHA256 diff
+  `ae50df990f6ef99e163a0ad5c9a965e24ab645ccf2ff59a498202794ecf69a37`
+  по ожидаемым семи runtime-файлам; generated diff не включён в commit;
+- materialized root: `node --test --test-concurrency=2`, `npm run check`,
+  `npm run audit:runtime-patches` — exit 0; `npm audit` — 0 уязвимостей;
+- Business: 213 passed, 20 skipped только без внешнего PostgreSQL URL;
+  security 146/146; профиль onboarding 62/62; typecheck и полный build — exit 0;
+  lint — 0 ошибок и 12 существующих Fast Refresh warnings; audit — 0;
+- проверены exact replay/conflict, creator scope, owner/trusted/другой
+  SUPER_ADMIN denial, CSRF/Origin/session, ciphertext вместо plaintext,
+  tamper/missing-key fail-closed, key rotation/retirement, валидный ответ,
+  403 и malformed HTTP 200. Provider-ответы в тестах синтетические; живой токен
+  и реальный Эвотор не вызывались;
+- один полный Business-run под одновременной нагрузкой получил timeout
+  существующего 5-секундного PGlite-теста `evotor-read`; изолированный полный
+  повтор прошёл 213/213 исполняемых тестов. Это не выдаётся за независимую
+  PostgreSQL concurrency;
+- локальный Playwright не запустил сценарии из-за отсутствующего Chromium
+  headless shell v1193. Commit `f917e9973dded51aa8fc7229fdfa5c20196f2410`
+  добавляет существующий onboarding desktop/mobile suite в browser CI, который
+  устанавливает точный Chromium. Итог этого job фиксируется после публикации.
+
+Production/main, Railway variables, реальные секреты, webhook, бот и касса не
+изменялись. Для будущего выпуска требуется заранее создать и проверить три
+независимо защищённые копии key material; в этой итерации они намеренно не
+создавались.
