@@ -9,8 +9,9 @@ import ru.pivnik.evotor.core.PosConfiguration;
  */
 final class BridgeSettings {
     private static final String PREFS = "pivnik_evotor_bridge";
-    private static final String KEY_API_BASE = "api_base_url";
     private static final String KEY_LAST_STATUS = "last_status";
+    /** PIVNIK production server, so a fresh install only needs the till key typed in. */
+    static final String DEFAULT_API_BASE = "https://pivnik-bonus-app-production-df60.up.railway.app";
 
     private final SharedPreferences prefs;
     private final DeviceCredentialStore credentials;
@@ -21,10 +22,9 @@ final class BridgeSettings {
         prefs.edit().remove("staff_session_token").apply();
     }
 
+    /** The server address is fixed: nobody types it, so a stray character can never break the connection. */
     String apiBaseUrl() {
-        String value = prefs.getString(KEY_API_BASE, "").trim();
-        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
-        return value;
+        return DEFAULT_API_BASE;
     }
 
     String deviceToken() {
@@ -35,11 +35,10 @@ final class BridgeSettings {
         return PosConfiguration.validBase(apiBaseUrl()) && PosConfiguration.validToken(deviceToken());
     }
 
-    void save(String apiBaseUrl, String deviceToken) {
-        String base = apiBaseUrl == null ? "" : apiBaseUrl.trim();
-        while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+    void save(String deviceToken) {
+        String base = apiBaseUrl();
         String token = deviceToken == null ? "" : deviceToken.trim();
-        if (token.isEmpty() && base.equals(apiBaseUrl())) token = deviceToken();
+        if (token.isEmpty()) token = deviceToken();
         if (!PosConfiguration.validBase(base) || !PosConfiguration.validToken(token)) {
             throw new IllegalArgumentException("Нужны HTTPS-адрес и отдельный ключ pvpos_… кассы.");
         }

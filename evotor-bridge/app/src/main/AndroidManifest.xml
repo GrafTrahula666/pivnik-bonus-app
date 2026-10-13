@@ -17,6 +17,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="PIVNIK для Эвотора"
         android:usesCleartextTraffic="false">
 
@@ -37,12 +39,23 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.EVOTOR" />
             </intent-filter>
+            <!-- Tile colour on the terminal home screen (HEX, never white). Key name from Evotor's
+                 "Вызов приложения из интерфейса смарт-терминала"; confirm against that page on a real till. -->
+            <meta-data
+                android:name="ru.evotor.launcher.BACKGROUND_COLOR"
+                android:value="#08040E" />
         </activity>
 
         <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
+        <!-- Evotor's barcode-event page lists category EVOTOR and this permission; the generic manifest page lists DEFAULT, so both filters are declared. -->
         <service
             android:name=".PivnikSellService"
-            android:exported="true">
+            android:exported="true"
+            android:permission="ru.evotor.permission.SELL_INTEGRATION_SERVICE">
+            <intent-filter>
+                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
+                <category android:name="android.intent.category.EVOTOR" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
                 <category android:name="android.intent.category.DEFAULT" />

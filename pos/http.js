@@ -32,13 +32,14 @@ export function createPosHttp(pool, config = evotorConfig(), clock = Date.now) {
     return ++entry.count > 30;
   };
   return {
-    async device({ method, pathname, authorization, body, address }) {
+    async device({ method, pathname, authorization, deviceKey, body, address }) {
       const routes = { '/api/device/pos/qr/resolve': 'resolveFor', '/api/device/pos/receipts/bind': 'bindFor' };
       if (method !== 'POST' || !Object.hasOwn(routes, pathname)) throw posError(404, 'pos_route_not_found', 'POS API не найден.');
       boundedBody(body);
       let device;
       try {
-        device = await devices.authenticate(authorization);
+        // Behind the Evotor cloud proxy Authorization carries Evotor's token, so the till's own header wins.
+        device = await devices.authenticate(deviceKey ? `Device ${String(deviceKey).trim()}` : authorization);
       } catch (error) {
         if (error.statusCode === 401 && recordFailure(address)) throw tooMany();
         throw error;
