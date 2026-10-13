@@ -627,6 +627,27 @@ async function ownedDraftWithPreparedScope(client: Pick<PoolClient,'query'>, adm
   return scope
 }
 
+// Server-only source for provisioning. The target database is deliberately not
+// accepted here: callers receive the exact manifest derived from the frozen
+// draft/application/scope and must resolve credentials outside request data.
+export async function loadOwnedOnboardingRuntimeSource(
+  client: Pick<PoolClient,'query'>,
+  admin: AdminPrincipal,
+  id: string,
+  lock=false,
+) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  const scope=await ownedDraftWithPreparedScope(client,admin,draftId,lock)
+  const manifest=runtimeManifest({
+    draft_id:scope.draft_id,
+    tenant_key:scope.tenant_key,
+    config:scope.application_config,
+    revision:scope.application_revision,
+  },scope)
+  return {draftId,manifest,auditScope:integrationAuditScope(scope)}
+}
+
 export async function getOnboardingEvotorIntegration(admin:AdminPrincipal,id:string) {
   requireOnboardingIntegrationAccess(admin)
   const draftId=uuid(id)
