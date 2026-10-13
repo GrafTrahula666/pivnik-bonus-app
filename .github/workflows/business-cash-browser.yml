@@ -29,6 +29,9 @@ jobs:
       - name: Cash dashboard on desktop and mobile (fixtures only, no production APIs)
         run: npx playwright test --config playwright.evotor.config.ts
         working-directory: admin-platform
+      - name: Venue onboarding on desktop and mobile (fixtures only, synthetic Evotor response)
+        run: npm run test:e2e:onboarding
+        working-directory: admin-platform
       - uses: actions/upload-artifact@v4
         if: always()
         with:
