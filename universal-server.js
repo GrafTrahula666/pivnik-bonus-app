@@ -3150,17 +3150,6 @@ function platformFromRequest(req, fallback = 'unknown') {
   return signedPlatform;
 }
 
-function isConsentExempt(pathname) {
-  return pathname === '/api/health'
-    || pathname === '/api/platform-health'
-    || pathname === '/api/release-readiness'
-    || pathname === '/api/auth'
-    || pathname === '/api/bootstrap'
-    || pathname === '/api/me'
-    || pathname === '/api/me/consent'
-    || pathname.startsWith('/api/account-link/');
-}
-
 if (!isTestImport) {
   try {
     await guardSpaceverseRuntimeStartup({
@@ -3172,6 +3161,17 @@ if (!isTestImport) {
     await pool.end().catch(() => {});
     process.exit(1);
   }
+}
+
+function isConsentExempt(pathname) {
+  return pathname === '/api/health'
+    || pathname === '/api/platform-health'
+    || pathname === '/api/release-readiness'
+    || pathname === '/api/auth'
+    || pathname === '/api/bootstrap'
+    || pathname === '/api/me'
+    || pathname === '/api/me/consent'
+    || pathname.startsWith('/api/account-link/');
 }
 
 const child = isTestImport ? null : spawn(process.execPath, [path.join(__dirname, 'server.js')], {
