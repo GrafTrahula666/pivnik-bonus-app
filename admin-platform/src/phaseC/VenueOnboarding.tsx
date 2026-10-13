@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Link2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
+import { Building2, Check, Copy, Link2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, type AdminSession } from '../api'
 import './venue-onboarding.css'
 
@@ -145,6 +145,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   const [scopeError,setScopeError]=useState(''),[scopeNotice,setScopeNotice]=useState('')
   const [invites,setInvites]=useState<Invite[]>([]),[inviteLoading,setInviteLoading]=useState(false),[inviteBusy,setInviteBusy]=useState(false)
   const [inviteError,setInviteError]=useState(''),[inviteToken,setInviteToken]=useState('')
+  const [inviteCopied,setInviteCopied]=useState(false)
   const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),createKey=useRef('')
   const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),inviteBusyRef=useRef(false)
   const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),inviteSequence=useRef(0)
@@ -239,6 +240,12 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     return invalidateLoads
   },[allowed,invalidateLoads,load])
 
+  useEffect(()=>{
+    if(!inviteCopied)return
+    const timer=setTimeout(()=>setInviteCopied(false),2000)
+    return ()=>clearTimeout(timer)
+  },[inviteCopied])
+
   function begin() {
     if(busyRef.current) return
     try {createKey.current=sessionStorage.getItem(checkpoint)||crypto.randomUUID()}
@@ -310,7 +317,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   }
   async function createInvite() {
     if(!current||!scope||inviteBusyRef.current||busyRef.current||appBusyRef.current||scopeBusyRef.current)return
-    inviteBusyRef.current=true;setInviteBusy(true);setInviteError('');setInviteToken('')
+    inviteBusyRef.current=true;setInviteBusy(true);setInviteError('');setInviteToken('');setInviteCopied(false)
     try {
       const result=await apiPost<{token:string}&Invite>(base+'/'+current.id+'/invites',undefined)
       const saved=inviteResponse(result)
@@ -319,6 +326,13 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       setInvites(previous=>[saved,...previous.map(invite=>invite.status==='pending'?{...invite,status:'revoked' as const,revokedAt:saved.createdAt}:invite)])
     } catch(error) {setInviteError(message(error))}
     finally {inviteBusyRef.current=false;setInviteBusy(false)}
+  }
+  async function copyInviteLink() {
+    if(!inviteToken)return
+    try {
+      await navigator.clipboard.writeText(window.location.origin+'/invite/'+inviteToken)
+      setInviteCopied(true)
+    } catch {setInviteError('Не удалось скопировать ссылку. Скопируйте текст вручную.')}
   }
   async function revokeInvite(id:string) {
     if(!current||inviteBusyRef.current||busyRef.current)return
@@ -422,6 +436,9 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}
       {inviteToken&&<div className="onboarding-contract" aria-label="Новая ссылка приглашения">
         <div><Link2 size={17}/><span><b>Ссылка показана один раз</b><small className="tenant-key">{window.location.origin}/invite/{inviteToken}</small></span></div>
+        <button className="btn secondary" type="button" onClick={()=>void copyInviteLink()} aria-label="Скопировать ссылку приглашения">
+          {inviteCopied?<Check size={16}/>:<Copy size={16}/>}{inviteCopied?'Скопировано':'Скопировать'}
+        </button>
       </div>}
       <p className="onboarding-note">Ссылка одноразовая, с ограниченным сроком действия и может быть отозвана. Перейдя по ней, человек сам задаёт email и пароль и получает доступ владельца только к этому заведению. Отправьте ссылку сами — письма и SMS этот шаг не рассылает.</p>
       <div className="onboarding-actions">
