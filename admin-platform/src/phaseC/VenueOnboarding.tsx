@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone } from 'lucide-react'
-import { ApiError, apiGet, apiPost, apiPut, type AdminSession } from '../api'
+import { Building2, Link2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, type AdminSession } from '../api'
 import './venue-onboarding.css'
 
 export interface OnboardingData {
@@ -64,6 +64,7 @@ interface PreparedScope {
   contract:ScopeContract
 }
 type ScopeCommand={draftRevision:number;applicationRevision:number}
+interface Invite {id:string;draftId:string;status:'pending'|'revoked';expiresAt:string;createdAt:string;revokedAt:string|null}
 const base = '/api/admin/onboarding/drafts'
 const empty = ():OnboardingData=>({companyId:null,companyName:'',venueName:'',address:'',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:''})
 const defaultContract:ApplicationContract={template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}
@@ -119,6 +120,15 @@ function scopeResponse(raw:unknown):PreparedScope {
   return {...value,contract:scopeContractResponse(value.contract)} as PreparedScope
 }
 
+function inviteResponse(raw:unknown):Invite {
+  const value=raw as Partial<Invite>|null
+  if(!value||typeof value.id!=='string'||typeof value.draftId!=='string'||!['pending','revoked'].includes(String(value.status))||
+    typeof value.expiresAt!=='string'||typeof value.createdAt!=='string'||!(value.revokedAt===null||typeof value.revokedAt==='string')) {
+    throw new Error('Приглашение не подтверждено. Обновите список приглашений.')
+  }
+  return value as Invite
+}
+
 export function VenueOnboarding({session}:{session:AdminSession}) {
   const allowed=session.admin.role==='SUPER_ADMIN'&&session.capabilities.onboardingDrafts===true
   const [index,setIndex]=useState<Index>({drafts:[],companies:[]})
@@ -132,8 +142,11 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   const [appError,setAppError]=useState(''),[appNotice,setAppNotice]=useState('')
   const [scope,setScope]=useState<PreparedScope|null>(null),[scopeLoading,setScopeLoading]=useState(false),[scopeBusy,setScopeBusy]=useState(false),[scopeUncertain,setScopeUncertain]=useState(false)
   const [scopeError,setScopeError]=useState(''),[scopeNotice,setScopeNotice]=useState('')
+  const [invites,setInvites]=useState<Invite[]>([]),[inviteLoading,setInviteLoading]=useState(false),[inviteBusy,setInviteBusy]=useState(false)
+  const [inviteError,setInviteError]=useState(''),[inviteToken,setInviteToken]=useState('')
   const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),createKey=useRef('')
-  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0)
+  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),inviteBusyRef=useRef(false)
+  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),inviteSequence=useRef(0)
   const checkpoint=`spaceverse:onboarding:create:${session.admin.id}`
   function clearCheckpoint() {
     // An already confirmed server save stays successful even if tab storage becomes unavailable.
@@ -154,6 +167,19 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     } catch(error) {if(run===appSequence.current)setAppError(message(error))}
     finally {if(run===appSequence.current)setAppLoading(false)}
   },[])
+  const loadInvites=useCallback(async(draft:Draft)=>{
+    const run=++inviteSequence.current
+    setInviteLoading(true);setInviteError('')
+    try {
+      const result=await apiGet<{invites:unknown[]}>(base+'/'+draft.id+'/invites')
+      if(!Array.isArray(result.invites)) throw new Error('Не удалось прочитать приглашения.')
+      const checked=result.invites.map(inviteResponse)
+      if(run!==inviteSequence.current)return
+      if(checked.some(invite=>invite.draftId!==draft.id))throw new Error('Приглашение относится к другому черновику.')
+      setInvites(checked)
+    } catch(error) {if(run===inviteSequence.current)setInviteError(message(error))}
+    finally {if(run===inviteSequence.current)setInviteLoading(false)}
+  },[])
   const loadScope=useCallback(async(draft:Draft)=>{
     const run=++scopeSequence.current
     setScopeLoading(true);setScopeError('')
@@ -164,15 +190,17 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       if(run!==scopeSequence.current)return
       if(saved&&saved.draftId!==draft.id)throw new Error('Область относится к другому черновику.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
+      if(saved) void loadInvites(draft)
     } catch(error) {if(run===scopeSequence.current)setScopeError(message(error))}
     finally {if(run===scopeSequence.current)setScopeLoading(false)}
-  },[])
+  },[loadInvites])
   const showDraft=useCallback((draft:Draft)=>{
     setCurrent(draft);setData(draft.data);setEditing(true);command.current=null
     setUncertain(false);setError('');setNotice('Черновик сохранён. Заведение ещё не подключено.')
     setApplication(null);setAppData(emptyApplication(draft.data.venueName));setAppContract(defaultContract)
     setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
+    setInvites([]);setInviteError('');setInviteToken('')
     void loadApplication(draft);void loadScope(draft)
   },[loadApplication,loadScope])
   const load=useCallback(async(recover=false)=>{
@@ -201,7 +229,8 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
   },[checkpoint,showDraft])
 
   const invalidateAppLoads=useCallback(()=>{appSequence.current++},[])
-  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++},[])
+  const invalidateInviteLoads=useCallback(()=>{inviteSequence.current++},[])
+  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++;invalidateInviteLoads()},[invalidateInviteLoads])
   const invalidateLoads=useCallback(()=>{sequence.current++;invalidateAppLoads();invalidateScopeLoads()},[invalidateAppLoads,invalidateScopeLoads])
 
   useEffect(()=>{
@@ -216,6 +245,7 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
     invalidateAppLoads();invalidateScopeLoads();setData(empty());setCurrent(null);setEditing(true);setError('');setNotice('');setUncertain(false);command.current=null
     setApplication(null);setAppData(emptyApplication());setAppContract(defaultContract);setAppError('');setAppNotice('');setAppUncertain(false);appCommand.current=null
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
+    setInvites([]);setInviteError('');setInviteToken('')
   }
   async function open(id:string) {
     if(busyRef.current||appBusyRef.current||scopeBusyRef.current) return
@@ -270,11 +300,34 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
       if(saved.draftId!==current.id)throw new Error('Сервер вернул область другого черновика.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
       setScopeNotice('Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.')
+      void loadInvites(current)
     } catch(error) {
       setScopeError(message(error))
       if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408){scopeCommand.current=null;setScopeUncertain(false)}
       else setScopeUncertain(true)
     } finally {scopeBusyRef.current=false;setScopeBusy(false)}
+  }
+  async function createInvite() {
+    if(!current||!scope||inviteBusyRef.current||busyRef.current||appBusyRef.current||scopeBusyRef.current)return
+    inviteBusyRef.current=true;setInviteBusy(true);setInviteError('');setInviteToken('')
+    try {
+      const result=await apiPost<{token:string}&Invite>(base+'/'+current.id+'/invites',undefined)
+      const saved=inviteResponse(result)
+      if(saved.draftId!==current.id)throw new Error('Сервер вернул приглашение другого черновика.')
+      setInviteToken(result.token)
+      setInvites(previous=>[saved,...previous.map(invite=>invite.status==='pending'?{...invite,status:'revoked' as const,revokedAt:saved.createdAt}:invite)])
+    } catch(error) {setInviteError(message(error))}
+    finally {inviteBusyRef.current=false;setInviteBusy(false)}
+  }
+  async function revokeInvite(id:string) {
+    if(!current||inviteBusyRef.current||busyRef.current)return
+    inviteBusyRef.current=true;setInviteBusy(true);setInviteError('')
+    try {
+      const saved=inviteResponse(await apiDelete(base+'/'+current.id+'/invites/'+id))
+      setInvites(previous=>previous.map(invite=>invite.id===saved.id?saved:invite))
+      if(inviteToken&&saved.id===invites.find(invite=>invite.status==='pending')?.id) setInviteToken('')
+    } catch(error) {setInviteError(message(error))}
+    finally {inviteBusyRef.current=false;setInviteBusy(false)}
   }
   function change<K extends keyof OnboardingData>(key:K,value:OnboardingData[K]) {
     setData(previous=>({...previous,[key]:value}));setNotice('')
@@ -362,6 +415,22 @@ export function VenueOnboarding({session}:{session:AdminSession}) {
         {!scope&&<button className="btn" type="button" disabled={!application||draftDirty||appDirty||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||appDirty?'Сначала сохраните изменения':'Подготовить область'}</button>}
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
       </div>
+    </section>}
+    {editing&&current&&scope&&<section className="onboarding-invite" aria-label="Приглашение владельцу">
+      <div className="onboarding-step"><Link2 size={18}/><b>Приглашение владельцу</b><span>{invites.some(invite=>invite.status==='pending')?'Активная ссылка есть':'Ссылки нет'}</span></div>
+      {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}
+      {inviteToken&&<div className="onboarding-contract" aria-label="Новая ссылка приглашения">
+        <div><Link2 size={17}/><span><b>Ссылка показана один раз</b><small className="tenant-key">{inviteToken}</small></span></div>
+      </div>}
+      <p className="onboarding-note">Ссылка одноразовая, с ограниченным сроком действия и может быть отозвана. Отправьте её владельцу сами — письма и SMS этот шаг не рассылает. Доступ в панель ссылка сама по себе не даёт.</p>
+      <div className="onboarding-actions">
+        <button className="btn" type="button" disabled={inviteBusy||inviteLoading||busy||appBusy||scopeBusy} onClick={()=>void createInvite()}><Link2 size={16}/>{inviteBusy?'Создаём…':invites.some(invite=>invite.status==='pending')?'Создать новую ссылку':'Создать ссылку'}</button>
+        <button className="btn secondary" type="button" disabled={inviteBusy||inviteLoading} onClick={()=>void loadInvites(current)}><RefreshCw size={16}/>Обновить список</button>
+      </div>
+      {invites.length>0&&<ul className="onboarding-list">{invites.map(invite=><li key={invite.id}>
+        <div><b>{invite.status==='pending'?'Активна':'Отозвана'}</b><small>до {new Date(invite.expiresAt).toLocaleString('ru-RU')}</small></div>
+        {invite.status==='pending'&&<button className="btn secondary" disabled={inviteBusy||inviteLoading} onClick={()=>void revokeInvite(invite.id)} aria-label="Отозвать ссылку"><XCircle size={16}/>Отозвать</button>}
+      </li>)}</ul>}
     </section>}
     <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
     {loading?<p role="status">Загружаем черновики…</p>:<>

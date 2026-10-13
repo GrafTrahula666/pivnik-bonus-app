@@ -50,6 +50,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   const rows=async(table:string)=>(await state.db!.query('SELECT * FROM '+table+' ORDER BY id')).rows
   const appRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_app_configs ORDER BY draft_id')).rows
   const scopeRows=async()=>(await state.db!.query('SELECT * FROM admin_onboarding_scopes ORDER BY draft_id')).rows
+  const invitesFor=async(draftId:string)=>(await state.db!.query('SELECT * FROM admin_onboarding_invites WHERE draft_id=$1::uuid ORDER BY created_at',[draftId])).rows
   async function request(who:string,method:string,path='',body?:unknown,csrf=true,requestOrigin?:string) {
     const session=sessions.get(who)!
     return fetch(origin+'/api/admin/onboarding/drafts'+path,{method,headers:{cookie:session.cookie,origin:requestOrigin??config.publicOrigin,
@@ -261,6 +262,87 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
       expect((await fetch(origin+'/api/admin/venues/'+item.venue.id+'/dashboard',{headers:{cookie:sessions.get('owner')!.cookie}})).status).toBe(404)
       expect((await request('other-root','GET','/'+item.draftId+'/scope')).status).toBe(404)
     }
+  })
+
+  async function preparedDraft(venueName=data.venueName) {
+    const draft=await (await request('root','POST','',{requestKey:crypto.randomUUID(),data:{...data,venueName}})).json() as {id:string;revision:number}
+    const application=await (await request('root','PUT','/'+draft.id+'/application',{revision:0,config:appConfig})).json() as {revision:number}
+    await request('root','PUT','/'+draft.id+'/scope',{draftRevision:draft.revision,applicationRevision:application.revision})
+    return draft
+  }
+  const invitesPath=(draftId:string,suffix='')=>'/'+draftId+'/invites'+suffix
+
+  it('issues a one-time owner invite link, never stores or echoes the raw token, and audits it',async()=>{
+    const draft=await preparedDraft('Приглашение — создание')
+    expect(await (await request('root','GET',invitesPath(draft.id))).json()).toEqual({invites:[]})
+    const created=await (await request('root','POST',invitesPath(draft.id))).json() as {id:string;draftId:string;status:string;token:string;expiresAt:string}
+    expect(created).toMatchObject({draftId:draft.id,status:'pending'})
+    expect(created.token).toMatch(/^[A-Za-z0-9_-]{40,}$/)
+    expect(new Date(created.expiresAt).getTime()).toBeGreaterThan(Date.now())
+    const stored=await invitesFor(draft.id)
+    expect(stored).toHaveLength(1)
+    expect(JSON.stringify(stored)).not.toContain(created.token)
+    expect(stored[0]).toMatchObject({id:created.id,status:'pending',created_by_admin_id:1})
+    const listed=await (await request('root','GET',invitesPath(draft.id))).json() as {invites:unknown[]}
+    expect(listed.invites).toEqual([{id:created.id,draftId:draft.id,status:'pending',expiresAt:created.expiresAt,createdAt:expect.any(String),revokedAt:null}])
+    const audits=(await rows('admin_audit_log')).filter(row=>row.action==='onboarding.invite_create'&&row.entity_id===created.id)
+    expect(audits).toHaveLength(1)
+    expect(JSON.stringify(audits)).not.toContain(created.token)
+  })
+
+  it('auto-supersedes a previous pending invite so only the newest link is valid',async()=>{
+    const draft=await preparedDraft('Приглашение — замена')
+    const first=await (await request('root','POST',invitesPath(draft.id))).json() as {id:string}
+    const second=await (await request('root','POST',invitesPath(draft.id))).json() as {id:string}
+    const listed=await (await request('root','GET',invitesPath(draft.id))).json() as {invites:{id:string;status:string}[]}
+    expect(listed.invites.find(invite=>invite.id===first.id)).toMatchObject({status:'revoked'})
+    expect(listed.invites.find(invite=>invite.id===second.id)).toMatchObject({status:'pending'})
+  })
+
+  it('revokes an invite idempotently and denies another operator',async()=>{
+    const draft=await preparedDraft('Приглашение — отзыв')
+    const created=await (await request('root','POST',invitesPath(draft.id))).json() as {id:string}
+    expect((await request('other-root','DELETE',invitesPath(draft.id,'/'+created.id))).status).toBe(404)
+    const revoked=await (await request('root','DELETE',invitesPath(draft.id,'/'+created.id))).json()
+    expect(revoked).toMatchObject({id:created.id,status:'revoked'})
+    expect(await (await request('root','DELETE',invitesPath(draft.id,'/'+created.id))).json()).toEqual(revoked)
+    expect((await rows('admin_audit_log')).filter(row=>row.action==='onboarding.invite_revoke'&&row.entity_id===created.id)).toHaveLength(1)
+  })
+
+  it('refuses an invite before the venue scope is prepared, without creating any row',async()=>{
+    const draft=await (await request('root','POST','',command())).json() as {id:string}
+    expect((await request('root','POST',invitesPath(draft.id))).status).toBe(409)
+    expect((await request('root','GET',invitesPath(draft.id))).status).toBe(409)
+    expect(await invitesFor(draft.id)).toEqual([])
+  })
+
+  it('requires a signed session, same origin and CSRF for invite creation and revocation',async()=>{
+    const draft=await preparedDraft('Приглашение — CSRF')
+    expect((await fetch(origin+'/api/admin/onboarding/drafts'+invitesPath(draft.id))).status).toBe(401)
+    expect((await request('root','POST',invitesPath(draft.id),undefined,false)).status).toBe(403)
+    expect((await request('root','POST',invitesPath(draft.id),undefined,true,'https://foreign.invalid')).status).toBe(403)
+    expect(await invitesFor(draft.id)).toEqual([])
+    const created=await (await request('root','POST',invitesPath(draft.id))).json() as {id:string}
+    expect((await request('root','DELETE',invitesPath(draft.id,'/'+created.id),undefined,false)).status).toBe(403)
+  })
+
+  it.each(['owner','trusted'])('denies %s every invite method',async who=>{
+    const draft=await preparedDraft('Приглашение — доступ '+who)
+    for(const [method,suffix] of [['GET',''],['POST',''],['DELETE','/'+crypto.randomUUID()]] as const) {
+      const r=await request(who,method,invitesPath(draft.id,suffix))
+      expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
+    }
+  })
+
+  it('fails closed when the invite migration is missing, without breaking scope reads',async()=>{
+    const draft=await preparedDraft('Приглашение — без миграции')
+    await state.db!.exec('DROP TABLE admin_onboarding_invites')
+    for(const [method,suffix] of [['GET',''],['POST',''],['DELETE','/'+crypto.randomUUID()]] as const) {
+      const r=await request('root',method,invitesPath(draft.id,suffix))
+      expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'ONBOARDING_INVITE_NOT_READY'})
+    }
+    expect((await request('root','GET','/'+draft.id+'/scope')).status).toBe(200)
+    await state.db!.exec(await fs.readFile(new URL('../../admin-migrations/007_onboarding_invites.sql',import.meta.url),'utf8'))
   })
 
   it('requires current source revisions and a saved app before preparing scope',async()=>{

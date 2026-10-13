@@ -45,6 +45,14 @@ interface AppConfigRow extends QueryResultRow {
 interface AppDraftRow extends QueryResultRow {
   id: string
 }
+interface InviteRow extends QueryResultRow {
+  id: string
+  draft_id: string
+  status: 'pending' | 'revoked'
+  expires_at: string
+  created_at: string
+  revoked_at: string | null
+}
 interface ScopeRow extends QueryResultRow {
   draft_id: string
   tenant_key: string
@@ -81,6 +89,8 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const invalid = () => new HttpError(400,'ONBOARDING_INVALID','Проверьте данные заведения. Ключи интеграций на этом шаге не принимаются.')
 const appInvalid = () => new HttpError(400,'ONBOARDING_APP_INVALID','Проверьте настройки приложения. Ключи, URL и произвольные поля на этом шаге не принимаются.')
 const scopeInvalid = () => new HttpError(400,'ONBOARDING_SCOPE_INVALID','Не удалось подтвердить версии черновика и приложения. Ключи интеграций здесь не принимаются.')
+const INVITE_TTL = '7 days'
+const inviteColumns = 'id::text,draft_id::text,status,expires_at::text,created_at::text,revoked_at::text'
 const hasControlCharacter=(value:string)=>Array.from(value).some(character=>{
   const code=character.charCodeAt(0)
   return code<=31||code===127
@@ -174,6 +184,16 @@ async function scopeReady(admin: AdminPrincipal): Promise<void> {
     const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_scopes') IS NOT NULL AS exists")
     if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_SCOPE_NOT_READY','Хранилище областей заведений ещё не подготовлено.')
   } catch(error) { unavailable(error) }
+}
+async function inviteReady(admin: AdminPrincipal): Promise<void> {
+  await scopeReady(admin)
+  try {
+    const result=await pool.query<{exists:boolean}>("SELECT to_regclass('public.admin_onboarding_invites') IS NOT NULL AS exists")
+    if(!result.rows[0]?.exists) throw new HttpError(503,'ONBOARDING_INVITE_NOT_READY','Хранилище приглашений ещё не подготовлено.')
+  } catch(error) { unavailable(error) }
+}
+function inviteResponse(row: InviteRow) {
+  return {id:row.id,draftId:row.draft_id,status:row.status,expiresAt:row.expires_at,createdAt:row.created_at,revokedAt:row.revoked_at}
 }
 async function connection(): Promise<PoolClient> {
   try {return await pool.connect()} catch(error) {unavailable(error)}
@@ -491,4 +511,75 @@ export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, 
     if((error as {code?:string})?.code==='23505') throw new HttpError(409,'ONBOARDING_SCOPE_CONFLICT','Идентификатор области уже занят. Создайте новый черновик.')
     unavailable(error)
   } finally {client.release()}
+}
+
+async function ownedDraftWithPreparedScope(client: Pick<PoolClient,'query'>, admin: AdminPrincipal, draftId: string): Promise<ScopeRow> {
+  const owned=await client.query<{id:string}>(`SELECT id::text FROM admin_onboarding_drafts WHERE id=$1::uuid AND admin_id=$2::bigint`,[draftId,admin.id])
+  if(!owned.rows[0]) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
+  const scope=await loadScope(client,draftId)
+  if(!scope||!scopeIsConsistent(scope)) throw new HttpError(409,'ONBOARDING_SCOPE_REQUIRED','Сначала подготовьте область заведения.')
+  return scope
+}
+
+export async function getOnboardingInvites(admin: AdminPrincipal, id: string) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  await inviteReady(admin)
+  try {
+    await ownedDraftWithPreparedScope(pool,admin,draftId)
+    const result=await pool.query<InviteRow>(`SELECT ${inviteColumns} FROM admin_onboarding_invites
+      WHERE draft_id=$1::uuid ORDER BY created_at DESC LIMIT 20`,[draftId])
+    return {invites:result.rows.map(inviteResponse)}
+  } catch(error) { unavailable(error) }
+}
+
+// The raw token is returned only here, in this one response, and is never stored or logged.
+export async function createOnboardingInvite(admin: AdminPrincipal, id: string) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id)
+  await inviteReady(admin)
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    await ownedDraftWithPreparedScope(client,admin,draftId)
+    const revoked=await client.query<{id:string}>(`UPDATE admin_onboarding_invites SET status='revoked',revoked_at=NOW()
+      WHERE draft_id=$1::uuid AND status='pending' RETURNING id::text`,[draftId])
+    const token=crypto.randomBytes(32).toString('base64url')
+    const tokenHash=crypto.createHash('sha256').update(token).digest('hex')
+    const inviteId=crypto.randomUUID()
+    const row=(await client.query<InviteRow>(`INSERT INTO admin_onboarding_invites(id,draft_id,token_hash,created_by_admin_id,expires_at)
+      VALUES($1::uuid,$2::uuid,$3,$4::bigint,NOW()+INTERVAL '${INVITE_TTL}') RETURNING ${inviteColumns}`,
+      [inviteId,draftId,tokenHash,admin.id])).rows[0]!
+    await recordAudit({admin,action:'onboarding.invite_create',entityType:'onboarding_invite',entityId:row.id,
+      after:{status:row.status,expiresAt:row.expires_at},metadata:{draftId,supersededInviteCount:revoked.rowCount||0}},client)
+    await client.query('COMMIT')
+    return {...inviteResponse(row),token}
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally { client.release() }
+}
+
+export async function revokeOnboardingInvite(admin: AdminPrincipal, id: string, inviteId: string) {
+  requireOnboardingAccess(admin)
+  const draftId=uuid(id),invite=uuid(inviteId)
+  await inviteReady(admin)
+  const client=await connection()
+  try {
+    await client.query('BEGIN')
+    await ownedDraftWithPreparedScope(client,admin,draftId)
+    const before=(await client.query<InviteRow>(`SELECT ${inviteColumns} FROM admin_onboarding_invites
+      WHERE id=$1::uuid AND draft_id=$2::uuid FOR UPDATE`,[invite,draftId])).rows[0]
+    if(!before) throw new HttpError(404,'ONBOARDING_INVITE_NOT_FOUND','Приглашение не найдено или недоступно.')
+    if(before.status==='revoked') { await client.query('COMMIT');return inviteResponse(before) }
+    const row=(await client.query<InviteRow>(`UPDATE admin_onboarding_invites SET status='revoked',revoked_at=NOW()
+      WHERE id=$1::uuid RETURNING ${inviteColumns}`,[invite])).rows[0]!
+    await recordAudit({admin,action:'onboarding.invite_revoke',entityType:'onboarding_invite',entityId:row.id,
+      before:{status:before.status},after:{status:row.status},metadata:{draftId}},client)
+    await client.query('COMMIT')
+    return inviteResponse(row)
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    unavailable(error)
+  } finally { client.release() }
 }

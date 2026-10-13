@@ -57,8 +57,9 @@ import {
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import {
-  createOnboardingDraft,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,getOnboardingRequest,getOnboardingScope,
-  prepareOnboardingScope,requireOnboardingAccess,saveOnboardingAppConfig,updateOnboardingDraft,
+  createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,getOnboardingInvites,
+  getOnboardingRequest,getOnboardingScope,prepareOnboardingScope,requireOnboardingAccess,revokeOnboardingInvite,
+  saveOnboardingAppConfig,updateOnboardingDraft,
 } from './venue-onboarding.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -164,6 +165,25 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(isMethod(req,'PUT')){
       json(res,200,await prepareOnboardingScope(session.admin,onboardingScope[1]!,await readJsonBody(req,1024)));return true
     }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingInvite=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/invites\/([^/]+)$/.exec(url.pathname)
+  if(onboardingInvite){
+    requireOnboardingAccess(session.admin)
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-invite:${session.admin.id}`,60,60_000)
+    if(isMethod(req,'DELETE')){json(res,200,await revokeOnboardingInvite(session.admin,onboardingInvite[1]!,onboardingInvite[2]!));return true}
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingInvites=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/invites$/.exec(url.pathname)
+  if(onboardingInvites){
+    requireOnboardingAccess(session.admin)
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-invite:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingInvites(session.admin,onboardingInvites[1]!));return true}
+    if(isMethod(req,'POST')){json(res,200,await createOnboardingInvite(session.admin,onboardingInvites[1]!));return true}
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }
   const onboarding=/^\/api\/admin\/onboarding\/drafts(?:\/([^/]+))?$/.exec(url.pathname)
