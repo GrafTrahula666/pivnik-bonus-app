@@ -4,7 +4,7 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт; reviews/threads отсутствуют. Mergeability перепроверять после публикации нового HEAD.
 - Проверенный свежий base: `3d3d1935f6885f6dca49ceb59d55e7af9118096a` (main, получен 2026-10-13; включает merged PR #235/#238/#250). Он влит в рабочую ветку merge-коммитом `e6678123f0f37ccd826e5ac0e5dd11975bfa7855` без конфликтов; оба POS mount, wallet-route extraction и tenant preflight сохранены.
-- Последний опубликованный HEAD перед этим шагом: `656e277d632d4c9e48516dbca8147bff69c3971b`. Точный опубликованный implementation commit защищённого Эвотора: `fbf69646ddb7518df6d043bc36cf50b058610970`, tree `3cdd8cce36d4b2d76458d98e1485674eb0c0655c`; локально проверенный эквивалент того же tree — `469f8b7b6d455251c9d73811c90ddcfaa25cdfac`. CI-подключение browser-сценария: `f917e9973dded51aa8fc7229fdfa5c20196f2410`; проверенный accessibility fix: `066d52dc3e699ac18d93f6ea7da88e4e7280be14`, tree `eb48a037e998b9d8214bb3cfd4f6a122573d9cb2`. Итоговый docs/published HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
+- Последний опубликованный HEAD перед этим шагом: `2e12115f2324639092f3635df0ea859c5393e61e`, tree `f5c8bf53347d8c99e7f6266f6dee434536a97d68`; пять workflow этого SHA завершились success. Опубликованный implementation commit provisioning ledger: `9c0e9de771b1dc5d7f149b305de7fa02a0148566`, tree `ddd50face39502f7fb10cce95e526993ad14b4e2`. Итоговый docs/PR HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -15,7 +15,7 @@
 1. **Данные заведения, серверный черновик, повторное открытие** — реализовано и проверено в изолированном окружении.
 2. **Принадлежность tenant и конфигурация guest-приложения** — серверный blueprint, стабильный tenant ID, канонические неактивные company/venue и runtime manifest v2 реализованы. Manifest получает company/venue только из сохранённого scope; выделенная БД обязана подтвердить те же ID и checksum. Dashboard reads, запись новых transactions, чтение customer/wallet и атомарное создание нового customer/identity/wallet/ownership принимают только проверенный server runtime и повторно связывают SQL с той же выделенной БД. Customer/wallet доступны лишь через явную ownership-строку точного runtime/company/venue; исторические строки ПИВНИКА невидимы и не присваиваются новому tenant. Общий Telegram/VK auth/wallet HTTP adapter подключён в обоих runtime только за существующим startup guard; manifest остаётся `not_provisioned`, поэтому tenant-запуск намеренно закрыт.
 3. **Зашифрованные подключения и реальные проверки Telegram/VK/Эвотора** — первый вертикальный срез Эвотора реализован: зашифрованное хранение, маска и реальная проверка чтения документов через существующий адаптер. POS binding/import не включены; Telegram/VK и живая авторизация владельца ещё предстоят.
-4. **Возобновляемое создание ресурсов из того же релизного артефакта** — предстоит.
+4. **Возобновляемое создание ресурсов из того же релизного артефакта** — первый исполняемый шаг реализован: серверный ledger с lease/claim/retry и идемпотентная фиксация exact runtime binding в уже подготовленной выделенной БД. Защищённый registry учётных данных, HTTP/UI-запуск и остальные шаги provisioning ещё предстоят; runtime остаётся выключен.
 5. **Приглашения и гибкие права** — одноразовая ссылка владельцу, claim в новую учётную запись `VENUE_ADMIN` и точный owner-доступ реализованы; приглашения директора/сотрудников и гибкий набор полномочий ещё предстоят.
 6. **Полный сценарий, доказательство изоляции, пакет выпуска/rollback** — предстоит.
 
@@ -69,10 +69,13 @@
 - После scope тот же UI показывает шаг «Касса · Эвотор». `GET/PUT .../integrations/evotor` сохраняет только creator-scoped конфигурацию, а `POST .../verify` отдельно проверяет чтение страницы документов. Состояния различаются как `configured`, `verified`, `action_required` и `error`; наличие токена или простой HTTP 200 успехом не считается.
 - Токен существует в форме только до ответа на сохранение, очищается после него и не попадает в session/local storage, URL, runtime manifest, audit или API response. PostgreSQL хранит AES-256-GCM envelope с AAD, привязанным к draft/provider/store; ключ и старые ключи ротации находятся только вне БД. API возвращает фиксированную маску.
 - Проверка переиспользует `pos/evotor-client.js`: фиксированный HTTPS host, redirect-error, 15-секундный timeout, ограничение тела и shape validation. Проверяется только право чтения документов. Аккаунт/приложение Эвотора, POS binding, синхронизация чеков и публикация приложения не создаются.
+- `admin-platform/server/onboarding-provisioning.ts` переиспользует тот же creator-scoped замороженный draft/application/scope и вычисленный сервером runtime manifest. Одна ledger-строка `runtime_database_binding` транзакционно выдаётся worker на 30 секунд; второй клик видит действующую lease, истёкшая lease и фиксированная ошибка безопасно повторяются.
+- Целевая БД выбирается только server-side resolver по сохранённому runtime key: URL/host/credential отсутствуют в request, manifest, ledger, audit и ответе. В БД с вручную применёнными migrations 017/018 worker вставляет exact singleton binding, принимает уже точное совпадение после неопределённого ответа и никогда не перезаписывает несовпадение.
+- Cross-database атомарность не симулируется: после target COMMIT metadata-финализация может быть повторена; новый worker сначала сверяет exact binding. Создание БД, автоматический запуск tenant migrations, активация company/venue/runtime и публикация не выполняются. Движок пока не смонтирован в HTTP/UI до появления защищённого registry учётных данных.
 
 ## Включение в изолированном окружении
 
-- Additive migrations: `admin-platform/admin-migrations/004_onboarding_drafts.sql`, `005_onboarding_app_config.sql`, `006_onboarding_scope.sql` и `009_onboarding_integrations.sql`. Нет запуска из `server/index.ts` и нет изменения исторических миграций. 005 применяется после 004; 006 — после обеих; admin migration 009 — после scope и создаёт только зашифрованное хранилище одного provider, без DML или внешнего provisioning. Само выделение неактивных company/venue выполняет защищённый API после явного действия.
+- Additive migrations: `admin-platform/admin-migrations/004_onboarding_drafts.sql`, `005_onboarding_app_config.sql`, `006_onboarding_scope.sql`, `009_onboarding_integrations.sql` и `010_onboarding_provisioning.sql`. Нет запуска из `server/index.ts` и нет изменения исторических миграций. 005 применяется после 004; 006 — после обеих; 009 создаёт только зашифрованное хранилище одного provider; 010 — пустой ledger фиксированного provisioning-шагa без DML, DB credentials или внешних ресурсов. Само выделение неактивных company/venue выполняет защищённый API после явного действия.
 - Migrations 009 и 017–020 не входят в automatic startup allowlist. 009 только добавляет nullable tenant/location к новым transactions без backfill; 018 добавляет к будущей binding-таблице только company/venue ID и проверки формата; 019 создаёт ownership-таблицу; 020 — idempotency ledger без provider/profile данных. В них нет DML/backfill и они не меняют существующие `users`/`wallets`/`user_identities`. Применение допустимо только вручную к новой выделенной тестовой БД; в общей исторической БД ПИВНИКА этот шаг не нужен и не разрешён.
 - Только после подготовки изолированной metadata-БД: `ADMIN_ENABLE_WRITES=true` и `ADMIN_ENABLE_ONBOARDING_DRAFTS=true`. Подключения требуют отдельный выключенный по умолчанию `ADMIN_ENABLE_ONBOARDING_INTEGRATIONS=true`, `ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID` и JSON-keyring `ADMIN_ONBOARDING_SECRET_KEYRING` с 32-байтовыми base64-ключами. Без таблицы или доступного ключа API fail-closed; остальные шаги мастера продолжают работать.
 - До production-выпуска один и тот же encryption key material должен иметь три независимо защищённые копии: основная sealed-переменная сервиса, зашифрованная резервная копия в управляемом secret manager и offline break-glass копия с отдельным доступом. Они сейчас намеренно не создавались. DB/git/CI/logs не являются хранилищем; старый key ID нельзя удалять до rewrap всех строк и проверенного восстановления из backup.
@@ -82,6 +85,7 @@
 
 ## Проверки этой итерации
 
+- Provisioning ledger на локальном implementation commit `3727d00`: профильные проверки — 6/6, объединённый onboarding HTTP/SQL профиль — 68/68; полный Business — 219 passed, 20 skipped только без внешнего PostgreSQL URL; security — 152/152; typecheck, API build, полный build и lint — успешно (0 ошибок, 12 прежних Fast Refresh warnings); Business audit — 0. В чистом detached-worktree materialize выполнен дважды с одинаковым SHA256 diff `ae50df990f6ef99e163a0ad5c9a965e24ab645ccf2ff59a498202794ecf69a37`; materialized root `node --test --test-concurrency=2` — 581/581, `npm run check`, patch-chain audit и оба root audit — успешно/0. Проверены exact binding, reopen/replay, unexpired double-click lease, expired lease reclaim, потерянное подтверждение после target COMMIT, чужая binding без перезаписи, отсутствующие schema/registry, creator/SUPER_ADMIN scope и два tenant/два venue одной company в отдельных PGlite-БД. Внешний PostgreSQL URL отсутствует: PGlite не выдаётся за независимую межсоединительную concurrency. UI не менялся, поэтому новый browser-сценарий в этом серверном шаге не добавлялся.
 - Объединённый auth/provisioning/invite кандидат на exact implementation commit `314033e81e6a658dc772e3a8db46ba36878ff6c9`, tree `06e7b632f211b9870ac91b068c7e21dc8c3a9d9c`: профильные auth/provisioning проверки — 15/15; onboarding HTTP/SQL — 54/54. В чистом detached-worktree `npm run materialize` выполнен дважды с одинаковым SHA256 diff `ae50df990f6ef99e163a0ad5c9a965e24ab645ccf2ff59a498202794ecf69a37`; с материализованными файлами root `node --test --test-concurrency=2` — 581/581, `npm run check` и patch-chain audit — успешно. Business — 205 passed, 20 skipped только без внешнего PostgreSQL URL; security — 138/138; typecheck и полный build — успешно; lint — 0 ошибок и 12 прежних Fast Refresh warnings; оба `npm audit` — 0. Playwright сначала не запустил ни одного сценария из-за отсутствующего Chromium v1193; после установки точной тестовой версии повтор прошёл 4/4 desktop/mobile. Снимки просмотрены, горизонтального overflow нет. Текущая объединённая версия проверена на PGlite/HTTP, но не выдаётся за независимую PostgreSQL concurrency или реальную Telegram/VK авторизацию.
 - Объединённый кандидат после свежего main и пересекавшегося запуска: `c10835893a71d8e1b2cdc6f980561b8d4947fb44`, tree `aaf5b85fe4da2c003d6fccd59bfa32fa292bd1d4`. Конкурентная ветка сохранена в истории, дублирующая customer/balance-модель удалена, полезный preflight fix оставлен. Двойной materialize дал одинаковый SHA256 diff `2dd57cd01ca18100560d959d5d67eec11053b05ae7c03a718d92022221da6250`; root — 566/566 без skipped, `npm run check` и audit — успешно/0. Business — 191 passed, 20 skipped только без внешнего PostgreSQL URL; security — 124/124; typecheck/build — успешно; lint — 0 errors и 12 прежних Fast Refresh warnings; audit — 0. Playwright — 4/4 desktop/mobile после установки точного Chromium v1193; снимки просмотрены, формы и данные не выходят за viewport. Первичная ошибка E2E была только отсутствием browser executable и не запускала сценарии; повтор после установки прошёл полностью.
 - Tenant customer/wallet ownership read boundary на exact implementation commit `f8e958d67771ecb312424e24b6cb9d31f7fae549`, tree `6321c1d01d3de04cd337d23854ae5aae80c27b7c`: профильный новый suite — 5/5, объединённые dashboard/runtime/transaction/ownership проверки — 28/28; полный root после двукратного materialize — 561/561 без skipped; `npm run check` — успешно; одинаковый materialize SHA256 diff `e270822fee14943bba6f4fa9aaaa6bcb17071cdce1bcd021f8dbf54a14af4618`; оба audit — 0. Business — 191 passed, 20 skipped только из-за отсутствия безопасного внешнего PostgreSQL URL; security — 124/124; typecheck/build — успешно; lint — 0 errors и 12 прежних Fast Refresh warnings; Playwright — 4/4 desktop/mobile, снимки просмотрены, горизонтального overflow нет. Проверены additive/idempotent migration без backfill, composite binding, owned против исторической строки, два tenant и два venue одной company, cross-database denial, request scope/forged runtime до SQL и очистка ошибок. PGlite не выдаётся за независимую PostgreSQL concurrency.
@@ -102,7 +106,7 @@
 
 ## Следующий безопасный шаг
 
-После зелёного CI перейти к первому исполняемому шагу возобновляемого provisioning: серверный ledger шагов стандартного приложения с транзакционным claim/retry и первым действием, которое проверяет и фиксирует dedicated-database binding из существующего runtime manifest. Не активировать venue/runtime, не создавать production-ресурсы и не подключать историческую БД. Telegram/VK оставить `нужно действие` до отдельного официального OAuth/авторизации владельца.
+После зелёного CI добавить узкий защищённый registry `runtime_key → credential reference` для заранее созданной выделенной БД и смонтировать GET/POST status/start этого одного шага в существующий мастер. Credential не принимать из client request, не хранить plaintext/URL в manifest, ledger, audit или browser storage; переиспользовать keyring/secret boundary либо внешний secret manager. Не создавать БД автоматически, не активировать venue/runtime и не подключать историческую БД. Telegram/VK оставить `нужно действие` до отдельного официального OAuth/авторизации владельца.
 
 
 ## Продолжение владельческого сценария — 2026-10-13
@@ -300,3 +304,52 @@ Production/main, Railway variables, реальные секреты, webhook, б
 изменялись. Для будущего выпуска требуется заранее создать и проверить три
 независимо защищённые копии key material; в этой итерации они намеренно не
 создавались.
+
+### Шаг 6 — возобновляемая фиксация runtime binding (2026-10-14)
+
+Добавлена ручная additive admin migration 010 и серверный
+`onboarding-provisioning.ts`. Ledger привязан к точным draft, runtime key,
+manifest checksum/revision и canonical company/venue. Claim выполняется в
+metadata-транзакции и выдаёт 30-секундную lease: активная lease закрывает
+двойной клик, истёкшая lease и безопасно зафиксированная ошибка допускают новый
+attempt. Worker повторно получает manifest только из creator-owned
+draft/application/scope; клиент не может передать tenant, venue, manifest или
+адрес БД.
+
+Первое действие работает с заранее созданной выделенной БД через server-side
+resolver по runtime key. Оно требует вручную применённых migrations 017/018,
+создаёт только exact singleton `spaceverse_runtime_binding`, принимает exact
+существующую строку после неопределённого ответа и не изменяет несовпадающую
+строку. Target COMMIT и metadata completion намеренно не выдаются за одну
+распределённую транзакцию: retry сначала сверяет binding и затем завершает
+ledger. Fixed error codes различают отсутствующий registry, отсутствующую
+schema, конфликт binding, недоступность БД и неопределённое подтверждение;
+сырой текст драйвера, URL и credentials не сохраняются и не возвращаются.
+
+Опубликованный implementation commit:
+`9c0e9de771b1dc5d7f149b305de7fa02a0148566`, tree
+`ddd50face39502f7fb10cce95e526993ad14b4e2`, parent — последний проверенный
+published HEAD `2e12115f2324639092f3635df0ea859c5393e61e`. Локальный проверенный эквивалент
+того же tree — `3727d0068258b67aaa53183a0e68ebac35738632`.
+
+Фактические проверки:
+
+- новый suite 6/6; вместе с onboarding HTTP/SQL — 68/68;
+- Business 219 passed, 20 skipped только без внешнего PostgreSQL URL;
+  security 152/152; typecheck, API/full build и lint — success, 0 ошибок и 12
+  прежних Fast Refresh warnings; audit — 0;
+- в чистом detached-worktree materialize ×2 дал один SHA256 diff
+  `ae50df990f6ef99e163a0ad5c9a965e24ab645ccf2ff59a498202794ecf69a37`;
+  materialized root 581/581, check и patch-chain audit — success, оба audit — 0;
+- проверены exact/reopen/replay, один unexpired claim при двойном запуске,
+  reclaim истёкшей lease, восстановление после target COMMIT без metadata
+  подтверждения, запрет перезаписи чужой binding, отсутствующие schema/registry,
+  owner/другой SUPER_ADMIN denial и два tenant/два venue одной company в двух
+  отдельных PGlite-БД.
+
+PGlite не считается доказательством независимой PostgreSQL concurrency;
+безопасный внешний test URL отсутствует. UI в этом серверном шаге не менялся.
+Движок намеренно не смонтирован в HTTP/UI: сначала нужен защищённый registry
+credential references. База, runtime, provider account, webhook и POS не
+создавались; company/venue не активировались; production/main/Railway не
+изменялись.

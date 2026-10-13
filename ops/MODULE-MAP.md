@@ -85,6 +85,26 @@ runtime or publish the guest application. Telegram/VK remain external-
 authorization work. Do not confuse this admin migration 009 with root
 `migrations/009_spaceverse_transaction_scope.sql`.
 
+The first executable provisioning step is isolated in
+`admin-platform/server/onboarding-provisioning.ts`. Manual additive admin
+migration `010_onboarding_provisioning.sql` stores one
+`runtime_database_binding` ledger row per prepared draft. A transaction claims
+the row with a short lease; an unexpired claim blocks double execution, while an
+expired claim or a recorded safe failure can be retried. The worker reloads the
+manifest from the creator-owned frozen draft/application/scope and resolves the
+target database only by that server-derived runtime key. Request data never
+contains a database URL or credential. In the already-created dedicated
+database, the action requires manual migrations 017/018, inserts the exact
+singleton binding if absent, accepts an exact existing binding after an
+uncertain response, and refuses to overwrite any mismatch. A successful target
+commit and metadata completion are deliberately reconciled rather than treated
+as one cross-database transaction. The ledger and audit contain only safe IDs,
+checksum, attempts, status and fixed error/result codes. This engine is not yet
+mounted in HTTP/UI because no protected runtime-key-to-database credential
+registry exists; that boundary must be added before an operator can start it
+from the master. It does not create a database, activate a venue/runtime, run
+tenant migrations automatically or publish an application.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already
