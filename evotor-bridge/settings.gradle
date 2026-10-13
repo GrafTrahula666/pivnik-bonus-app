@@ -1,0 +1,19 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // Official Evotor integration-library is published only through JitPack
+        // (https://github.com/evotor/integration-library README).
+        maven { url 'https://jitpack.io' }
+    }
+}
+rootProject.name = 'PivnikEvotorBridge'
+include ':app'

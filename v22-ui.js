@@ -204,13 +204,23 @@
   }
 
   function scheduleFallback(check, action, delay = 80) {
-    window.setTimeout(() => {
+    queueMicrotask(() => {
       try {
-        if (!check()) action();
+        // Normal click handlers run later in the same event dispatch. If they
+        // already produced the target state, do not arm a timer that can reopen
+        // a modal after the user explicitly closes it.
+        if (check()) return;
       } catch (error) {
-        console.warn('VK interaction fallback failed:', error);
+        console.warn('VK interaction fallback precheck failed:', error);
       }
-    }, delay);
+      window.setTimeout(() => {
+        try {
+          if (!check()) action();
+        } catch (error) {
+          console.warn('VK interaction fallback failed:', error);
+        }
+      }, delay);
+    });
   }
 
   function installVkInteractionFallback() {

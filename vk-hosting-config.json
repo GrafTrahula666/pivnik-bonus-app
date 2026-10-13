@@ -1,0 +1,11 @@
+{
+  "static_path": "vk-hosting-build",
+  "app_id": 54694987,
+  "endpoints": {
+    "mobile": "index.html",
+    "mvk": "index.html",
+    "web": "index.html"
+  },
+  "noprompt": 1,
+  "debug": false
+}

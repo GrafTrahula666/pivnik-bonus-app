@@ -33,11 +33,17 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
+      - name: Install exact Business dependencies
+        run: npm ci --prefix admin-platform
+
       - name: Audit canonical runtime retirement evidence
         env:
           RUNTIME_RETIREMENT_REPORT_DIR: artifacts/runtime-retirement
           RUNTIME_RETIREMENT_PHASE: canonical
         run: npm run audit:runtime-retirement
+
+      - name: Verify canonical VK startup survives prestart and materialization
+        run: npm run verify:vk-startup-parity
 
       - name: Materialize release sources
         run: npm run materialize
@@ -65,6 +71,7 @@ jobs:
 
       - name: Upload runtime retirement audit evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: runtime-retirement-audit-${{ github.run_id }}-${{ github.run_attempt }}
@@ -95,13 +102,19 @@ jobs:
             exit "$status"
           fi
 
+      - name: Run Business tests with Vitest
+        run: npm test --prefix admin-platform
+
+      - name: Audit Business dependencies
+        run: npm audit --prefix admin-platform --audit-level=high
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
       - name: Verify package contents
         run: npm pack --dry-run
 
-      - name: Synchronize strong production secrets
+      - name: Verify existing production secrets without changing them
         if: >-
           (github.event_name == 'push' &&
            (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
@@ -112,7 +125,7 @@ jobs:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           node --check scripts/railway-ensure-production-secrets.mjs
-          node scripts/railway-ensure-production-secrets.mjs
+          node scripts/railway-ensure-production-secrets.mjs --check
 
       - name: Unify VK legacy database into canonical production
         if: >-

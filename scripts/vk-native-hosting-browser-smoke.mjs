@@ -1,0 +1,254 @@
+import { createServer } from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { chromium } from 'playwright';
+
+const root = process.cwd();
+const buildRoot = path.join(root, 'vk-hosting-build');
+const outDir = path.join(root, 'artifacts', 'vk-native-hosting-browser-smoke');
+const port = 4187;
+
+const mime = new Map([
+  ['.html', 'text/html; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.svg', 'image/svg+xml'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.webp', 'image/webp'],
+  ['.woff2', 'font/woff2']
+]);
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function isTransparent(value) {
+  return value === 'rgba(0, 0, 0, 0)' || value === 'transparent';
+}
+
+function rgbMax(value) {
+  const match = String(value || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  return match ? Math.max(Number(match[1]), Number(match[2]), Number(match[3])) : 255;
+}
+
+const server = createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+    const clean = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';
+    if (clean.includes('..')) throw new Error('invalid path');
+    const filePath = path.join(buildRoot, clean);
+    const data = await fs.readFile(filePath);
+    res.writeHead(200, {
+      'content-type': mime.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream',
+      'cache-control': 'no-store'
+    });
+    res.end(data);
+  } catch {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('not found');
+  }
+});
+
+await fs.rm(outDir, { recursive: true, force: true });
+await fs.mkdir(outDir, { recursive: true });
+await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
+
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+const page = await context.newPage();
+const failedRequests = [];
+const pageErrors = [];
+
+page.on('requestfailed', (request) => failedRequests.push({ url: request.url(), error: request.failure()?.errorText || 'failed' }));
+page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+
+await page.route('**/*', async (route) => {
+  const requestUrl = new URL(route.request().url());
+  if (requestUrl.hostname === '127.0.0.1') {
+    if (requestUrl.pathname.endsWith('.js')) {
+      await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: '' });
+      return;
+    }
+    await route.continue();
+    return;
+  }
+  await route.fulfill({ status: 204, contentType: 'text/plain', body: '' });
+});
+
+try {
+  const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1`, { waitUntil: 'networkidle' });
+  assert(response?.status() === 200, `index.html returned ${response?.status()}`);
+
+  await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}.screen.spaceverse-business-screen.active{display:grid!important}' });
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    html.classList.remove('platform-telegram', 'android-webview', 'lite-mode', 'reduce-effects');
+    html.classList.add('platform-vk');
+    document.querySelector('#appShell')?.classList.remove('hidden');
+    document.querySelector('#bootScreen')?.classList.add('hidden');
+  });
+
+  const evidence = await page.evaluate(() => {
+    const read = (selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const style = getComputedStyle(node);
+      return {
+        backgroundImage: style.backgroundImage,
+        backgroundColor: style.backgroundColor,
+        borderColor: style.borderColor,
+        boxShadow: style.boxShadow,
+        pointerEvents: style.pointerEvents,
+        display: style.display,
+        visibility: style.visibility
+      };
+    };
+    return {
+      title: document.title,
+      htmlClasses: [...document.documentElement.classList],
+      navButtons: document.querySelectorAll('.bottom-nav button').length,
+      hero: read('.hero-card'),
+      activeNav: read('.bottom-nav button.active'),
+      activeNavIcon: read('.bottom-nav button.active:not(.qr-nav-button) > span'),
+      qrButton: read('.bottom-nav .qr-nav-button'),
+      qrIcon: read('.bottom-nav .qr-nav-button > span'),
+      profileLink: read('[data-screen="profile"], [data-target="profile"]'),
+      homeGeometry: (() => {
+        const home = document.querySelector('.client-home.home-v2.active');
+        const nav = document.querySelector('.bottom-nav');
+        const selectors = {
+          hero: '.spaceverse-home-hero',
+          business: '.spaceverse-business-card',
+          wheel: '.home-wheel-card',
+          liters: '.beer-loyalty-card--compact',
+          league: '.home-league-card'
+        };
+        const cards = Object.fromEntries(Object.entries(selectors).map(([key, selector]) => {
+          const node = document.querySelector(selector);
+          const rect = node?.getBoundingClientRect();
+          return [key, rect ? { top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } : null];
+        }));
+        const homeRect = home?.getBoundingClientRect();
+        const navRect = nav?.getBoundingClientRect();
+        return {
+          viewport: { width: innerWidth, height: innerHeight },
+          display: home ? getComputedStyle(home).display : null,
+          home: homeRect ? { top: homeRect.top, bottom: homeRect.bottom, height: homeRect.height } : null,
+          nav: navRect ? { top: navRect.top, bottom: navRect.bottom, height: navRect.height } : null,
+          bottomGap: homeRect && navRect ? navRect.top - homeRect.bottom : null,
+          cards
+        };
+      })()
+    };
+  });
+
+  assert(evidence.htmlClasses.includes('platform-vk'), 'VK platform class was not applied');
+  assert(evidence.navButtons >= 4, `expected bottom navigation controls, got ${evidence.navButtons}`);
+  assert(evidence.hero, 'home hero surface missing');
+  assert(evidence.activeNav, 'active bottom navigation control missing');
+  assert(evidence.activeNavIcon, 'active bottom navigation icon missing');
+  assert(evidence.qrButton, 'central QR navigation control missing');
+  assert(evidence.qrIcon, 'central QR icon surface missing');
+  assert(evidence.activeNav.pointerEvents !== 'none', 'active navigation blocks pointer events');
+  assert(evidence.qrButton.pointerEvents !== 'none', 'QR navigation blocks pointer events');
+  assert(isTransparent(evidence.activeNav.backgroundColor) && evidence.activeNav.backgroundImage === 'none', `active navigation outer plate is not transparent: ${JSON.stringify(evidence.activeNav)}`);
+  assert(isTransparent(evidence.qrButton.backgroundColor) && evidence.qrButton.backgroundImage === 'none', `QR outer plate is not transparent: ${JSON.stringify(evidence.qrButton)}`);
+  assert(evidence.activeNavIcon.backgroundImage !== 'none' || rgbMax(evidence.activeNavIcon.backgroundColor) < 40, `active navigation icon is not black-frosted: ${JSON.stringify(evidence.activeNavIcon)}`);
+  assert(evidence.qrIcon.backgroundImage !== 'none' || rgbMax(evidence.qrIcon.backgroundColor) < 40, `QR icon is not black-frosted: ${JSON.stringify(evidence.qrIcon)}`);
+  assert(evidence.hero.backgroundImage !== 'none' || rgbMax(evidence.hero.backgroundColor) < 50, `hero surface is not black-frosted: ${JSON.stringify(evidence.hero)}`);
+
+  const geometry = evidence.homeGeometry;
+  assert(geometry?.display === 'grid', `Home V2 must render as grid, got ${geometry?.display}`);
+  assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844, `unexpected geometry viewport: ${JSON.stringify(geometry?.viewport)}`);
+  const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
+  for (const [key, minimum] of Object.entries(minimumHeights)) {
+    const card = geometry?.cards?.[key];
+    assert(card, `missing Home V2 ${key} geometry`);
+    assert(card.height >= minimum - 0.5, `Home V2 ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
+    assert(card.width >= 350, `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
+  }
+  assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
+    `Home V2 leaves an excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
+
+  assert(!/telegram\.org\/js\/telegram-web-app\.js/i.test(await page.content()), 'Telegram runtime leaked into VK bundle');
+  assert(pageErrors.length === 0, `page errors detected: ${pageErrors.join(' | ')}`);
+  assert(failedRequests.length === 0, `failed local requests detected: ${JSON.stringify(failedRequests)}`);
+
+  await page.screenshot({ path: path.join(outDir, 'vk-home.png'), fullPage: true });
+
+  // Exercise the supplied Home artwork at actual phone sizes with live text.
+  const homeCardEvidence = [];
+  for (const viewport of [{ width: 320, height: 768 }, { width: 390, height: 844 }, { width: 430, height: 932 }]) {
+    await page.setViewportSize(viewport);
+    for (const status of ['Доступно', '24:00:00']) {
+      const geometry = await page.evaluate((text) => {
+        document.querySelector('#homeWheelStatus').textContent = text;
+        document.querySelectorAll('#homeLeaderboardPreview > span').forEach((node, index) => {
+          node.querySelector('b').textContent = ['SevTrout', 'Evstag90', 'Marina'][index];
+          node.querySelector('strong').textContent = ['14 806 ₽', '10 229 ₽', '4 301 ₽'][index];
+        });
+        const card = document.querySelector('.home-wheel-card');
+        const rect = card.getBoundingClientRect();
+        const cta = card.querySelector('.home-wheel-cta > span');
+        const ctaRect = cta.getBoundingClientRect();
+        const statusNode = card.querySelector('#homeWheelStatus');
+        const statusRect = statusNode.getBoundingClientRect();
+        const timerRect = card.querySelector('.home-wheel-timer').getBoundingClientRect();
+        return {
+          viewport: innerWidth, text,
+          artwork: getComputedStyle(card).backgroundImage,
+          ctaText: cta.textContent,
+          ctaCenterErrorX: Math.abs((ctaRect.left + ctaRect.right) / 2 - (rect.left + rect.width * .2605)),
+          ctaCenterErrorY: Math.abs((ctaRect.top + ctaRect.bottom) / 2 - (rect.top + rect.height * .756)),
+          statusFits: statusNode.scrollWidth <= statusNode.clientWidth && statusRect.width <= timerRect.width && statusRect.height <= timerRect.height,
+          duplicatedWheelVisible: getComputedStyle(card.querySelector('.home-wheel-visual')).display !== 'none'
+        };
+      }, status);
+      assert(geometry.artwork.includes('wheel-card-reference-20260926.webp'), 'supplied wheel artwork missing');
+      assert(geometry.ctaText === 'ВРАЩАТЬ', 'wheel CTA text changed');
+      assert(geometry.ctaCenterErrorX <= 1 && geometry.ctaCenterErrorY <= 1, `wheel CTA is off center: ${JSON.stringify(geometry)}`);
+      assert(geometry.statusFits, `wheel status overflows the clock slot: ${JSON.stringify(geometry)}`);
+      assert(!geometry.duplicatedWheelVisible, 'old wheel overlay covers supplied artwork');
+      homeCardEvidence.push(geometry);
+      const stateName = status === 'Доступно' ? 'ready' : 'countdown';
+      await page.screenshot({ path: path.join(outDir, `home-cards-${viewport.width}-${stateName}.png`), fullPage: true });
+    }
+  }
+  await fs.writeFile(path.join(outDir, 'home-cards-evidence.json'), JSON.stringify(homeCardEvidence, null, 2));
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.evaluate(() => {
+    document.querySelector('.screen.client-home')?.classList.remove('active');
+    document.querySelector('[data-screen="spaceverse-business"]')?.classList.add('active');
+    document.querySelector('#appShell')?.classList.add('spaceverse-business-mode');
+  });
+  const businessPage = await page.evaluate(() => ({
+    active: document.querySelector('[data-screen="spaceverse-business"]')?.classList.contains('active') || false,
+    nameVisible: Boolean(document.querySelector('#spaceverseLeadName')?.offsetParent),
+    phoneVisible: Boolean(document.querySelector('#spaceverseLeadPhone')?.offsetParent),
+    submitVisible: Boolean(document.querySelector('#spaceverseLeadSubmit')?.offsetParent),
+    bottomNavDisplay: getComputedStyle(document.querySelector('.bottom-nav')).display
+  }));
+  assert(businessPage.active, 'SPACEVERSE business page markup missing');
+  assert(businessPage.nameVisible && businessPage.phoneVisible && businessPage.submitVisible, 'SPACEVERSE lead form is incomplete');
+  assert(businessPage.bottomNavDisplay === 'none', `bottom navigation must stay hidden on SPACEVERSE lead page: ${businessPage.bottomNavDisplay}`);
+  await page.screenshot({ path: path.join(outDir, 'vk-spaceverse-business.png'), fullPage: true });
+
+  await page.evaluate(() => {
+    document.querySelector('[data-screen="spaceverse-business"]')?.classList.remove('active');
+    document.querySelector('.screen.client-home')?.classList.add('active');
+    document.querySelector('#appShell')?.classList.remove('spaceverse-business-mode');
+  });
+  assert(pageErrors.length === 0, `page errors detected after SPACEVERSE page render: ${pageErrors.join(' | ')}`);
+  assert(failedRequests.length === 0, `failed local requests after SPACEVERSE page render: ${JSON.stringify(failedRequests)}`);
+
+  await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify({ evidence, businessPage, pageErrors, failedRequests }, null, 2));
+  console.log(JSON.stringify({ ok: true, outDir: path.relative(root, outDir), evidence, businessPage }, null, 2));
+} finally {
+  await context.close();
+  await browser.close();
+  await new Promise((resolve) => server.close(resolve));
+}

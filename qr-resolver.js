@@ -19,6 +19,9 @@ export async function resolvePersonalQrRecord(db, payload) {
      FROM qr_aliases qa
      JOIN users u ON u.id = qa.user_id
      WHERE u.merged_into_user_id IS NULL
+       -- Self-aliases are codes revoked by an admin QR reissue. They stay
+       -- reserved for uniqueness but must no longer identify the client.
+       AND qa.source_user_id IS DISTINCT FROM qa.user_id
        AND ${token ? 'qa.qr_token = $1' : 'UPPER(qa.qr_short_code) = $1'}
      LIMIT 1`,
     [normalized.value]

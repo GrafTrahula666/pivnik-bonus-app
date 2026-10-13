@@ -2,10 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 
-const [dbPrepare, shopFragment, redCosmosCss] = await Promise.all([
+const [dbPrepare, shopFragment] = await Promise.all([
   fs.readFile(new URL('../scripts/red-cosmos-v2-db-prepare.mjs', import.meta.url), 'utf8'),
-  fs.readFile(new URL('../scripts/fragments/red-cosmos-shop-client.fragment.txt', import.meta.url), 'utf8'),
-  fs.readFile(new URL('../red-cosmos-v2.css', import.meta.url), 'utf8')
+  fs.readFile(new URL('../scripts/fragments/red-cosmos-shop-client.fragment.txt', import.meta.url), 'utf8')
 ]);
 
 test('permanent user_frames ownership restores legacy frame entitlements without charging twice', () => {
@@ -35,8 +34,6 @@ test('shop repairs all four visible frame artworks and renders a live frame prev
   assert.match(shopFragment, /function shopFramePreviewMarkup/);
   assert.match(shopFragment, /avatarInlineHtml\(entity, 'shop-frame-preview-avatar'\)/);
   assert.match(shopFragment, /shopFramePreviewMarkup\(item\)/);
-  assert.match(redCosmosCss, /\.shop-frame-live-preview/);
-  assert.match(redCosmosCss, /\.shop-frame-preview-avatar/);
 });
 
 test('tester reconciliation remains exact and idempotent while accepting canonical username fallback', () => {

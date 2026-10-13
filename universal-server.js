@@ -1,6 +1,6 @@
-import { isStartupMigration } from './startup-migrations.js';
 import { assertLegacyApiRequest, assertLegacyScopeBody } from './legacy-api-boundary.js';
 import { SPACEVERSE_RUNTIME } from './spaceverse-runtime.js';
+import { createPosHttp } from './pos/http.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -8,12 +8,23 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
+import { isAutomaticStartupMigration } from './migration-startup-policy.js';
 import {
+  createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
+  withVkStartupTrace, traceVkStage
+} from './vk-startup-diagnostics.js';
+import {
+  configureAchievements,
   getUserEarnedAchievementState
 } from './achievements.js';
+import { onRuntimeConfig, startRuntimeConfigRefresh } from './business-runtime-config.js';
+import { configureLoyalty, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
 import {
   chooseCanonicalUser,
+  effectiveRoleForAuthenticatedIdentity,
   hashLinkCode,
+  isConfiguredOwnerIdentity,
   normalizeLinkCode as normalizeCoreLinkCode,
   planMergedLedger,
   signSession as signCoreSession,
@@ -24,12 +35,26 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
+import { grantTickets as grantHalloweenTickets } from './halloween-raffle.js';
+import { issueRunTicket, readRunTicket, plausibleScore, normalizeRunChar, submitRunScore, runBoard } from './run-leaderboard.js';
 import {
+  HALLOWEEN_TICKET_PRIZE,
+  HALLOWEEN_TICKET_PRIZE_CODE,
   WHEEL_PRIZES,
+  configureWheel,
   drawWheelPrize,
   freeSpinState,
-  paidSpinCost
+  paidSpinCost,
+  wheelFreeIntervalHours,
+  wheelPrizeChances
 } from './wheel.js';
+import {
+  adminUserCrmStatus,
+  adminUserDisplayName,
+  adminUserDisplayUsername,
+  queryAdminUserDirectory
+} from './admin-user-directory.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -95,15 +120,6 @@ const MIGRATION_CHECKSUM_UPGRADES = Object.freeze({
   })
 });
 
-const STATUS_LEVELS = [
-  { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
-  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 0, nextCents: 3_000_000 },
-  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 0, nextCents: 7_000_000 },
-  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 0, nextCents: 10_000_000 },
-  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 0, nextCents: 15_000_000 },
-  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 0, nextCents: 50_000_000 },
-  { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
-];
 
 if (!databaseUrl) {
   console.error('DATABASE_URL is required.');
@@ -165,12 +181,18 @@ let platformReady = false;
 let childReady = false;
 let shuttingDown = false;
 let databaseFingerprint = null;
+const startupRuntimeHashes = Object.fromEntries(await Promise.all(
+  ['vk-platform.js', 'app.js', 'account-link.js'].map(async (file) => [
+    file, crypto.createHash('sha256').update(await fs.readFile(path.join(__dirname, file))).digest('hex')
+  ])
+));
 const rateLimitBuckets = new Map();
 
 function publicReleaseMetadata() {
   return {
     databaseFingerprint,
     releaseCommit,
+    startupRuntimeHashes,
     termsVersion: TERMS_VERSION,
     environment: process.env.NODE_ENV || 'development'
   };
@@ -353,11 +375,43 @@ function hasUnlimitedBonus(row) {
 
 // Anna frame entitlement and consent persistence hotfix 2026-08-06. A persisted personal frame remains valid after role changes
 // and Telegram/VK account linking, even when optional identity env vars are absent.
+// PIVNIK_ICECREAM69A_FRAME_20260909
+function isIceCream69ARow(row) {
+  return String(row?.username || '')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase() === 'icecream69a';
+}
+
+// PIVNIK_FRAME_SHOP_ROTATION_OWNER_ALL_20260909
+const OWNER_FRAME_CATALOG = Object.freeze([
+  { code: 'none', title: 'Без рамки' },
+  { code: 'money', title: 'Долларовая рамка' },
+  GOLD_BARS_FRAME,
+  { code: 'fire', title: 'Огненная рамка' },
+  { code: 'diamond', title: 'Алмазная рамка' },
+  { code: 'beer-mugs', title: 'Пивные кружки' },
+  { code: 'beer-bottles', title: 'Пивные бутылки' },
+  { code: 'lights', title: 'Огоньки' },
+  { code: 'middle-finger', title: 'Смайлик с факом' },
+  { code: 'premium-smiling-fuck', title: 'Premium рамка' },
+  { code: 'anna', title: 'Персональная рамка Анны' },
+  { code: 'olesya', title: 'Рамка из множества сердечек' },
+  { code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' },
+  { code: 'icecream69a', title: 'Персональная рамка 🔞 😈' }
+]);
+const OWNER_FRAME_CODES = new Set(OWNER_FRAME_CATALOG.map((frame) => frame.code));
+
 function profileFrameFromRow(row) {
-  if (isOwnerRow(row)) return 'money';
+  if (isIceCream69ARow(row)) return 'icecream69a';
+  if (isOwnerRow(row)) {
+    const selectedFrame = String(row?.profile_frame || row?.profileFrame || '');
+    return OWNER_FRAME_CODES.has(selectedFrame) ? selectedFrame : 'money';
+  }
   if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
+  if (storedFrame === 'gold-bars') return 'gold-bars';
   if (storedFrame === 'olesya') return 'olesya';
   if (storedFrame === 'vladislav') return 'vladislav';
   if (storedFrame === 'anna') return 'anna';
@@ -365,12 +419,13 @@ function profileFrameFromRow(row) {
 }
 
 function availableFramesFromRow(row) {
-  if (isOwnerRow(row)) return [{ code: 'money', title: 'Долларовая рамка' }];
+  if (isIceCream69ARow(row)) return [{ code: 'icecream69a', title: 'Персональная рамка 🔞 😈' }];
+  if (isOwnerRow(row)) return OWNER_FRAME_CATALOG.map((frame) => ({ ...frame }));
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
   if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
-  const frames = [{ code: 'none', title: 'Без рамки' }];
+  const frames = [{ code: 'none', title: 'Без рамки' }, ...giftedFrameChoices(row)];
   if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
   return frames;
 }
@@ -405,11 +460,11 @@ function achievementsFromRow(row) {
 }
 
 function getStatus(spendCents) {
-  return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
+  return statusForSpend(spendCents);
 }
 
 function getEffectiveStatus(row, spendCents) {
-  return hasUnlimitedBonus(row) ? STATUS_LEVELS[STATUS_LEVELS.length - 1] : getStatus(spendCents);
+  return hasUnlimitedBonus(row) ? topStatus() : getStatus(spendCents);
 }
 
 function validateVkLaunchParams(rawLaunchParams) {
@@ -471,7 +526,7 @@ async function runSqlMigrations(client) {
   try {
     const migrationDirectory = path.join(__dirname, 'migrations');
     const migrationFiles = (await fs.readdir(migrationDirectory))
-      .filter(isStartupMigration)
+      .filter(isAutomaticStartupMigration)
       .sort();
 
     for (const file of migrationFiles) {
@@ -708,7 +763,7 @@ async function requireGatewayUser(req) {
   const platform = normalized.payload.platform === 'vk' ? 'vk' : 'telegram';
   const providerUserId = String(normalized.payload.pid || '');
   const result = await pool.query(
-    `SELECT u.id, u.terms_accepted_at, u.terms_version,
+    `SELECT u.id, u.role, u.terms_accepted_at, u.terms_version,
             EXISTS(
               SELECT 1
               FROM user_identities ui
@@ -725,11 +780,19 @@ async function requireGatewayUser(req) {
   if (!result.rowCount || !providerUserId || !result.rows[0].identity_matches) {
     throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 401 });
   }
+  const effectiveRole = effectiveRoleForAuthenticatedIdentity(
+    result.rows[0].role,
+    platform,
+    providerUserId,
+    { telegram: ownerTelegramId, vk: ownerVkId }
+  );
   return {
     id: String(result.rows[0].id),
     token: normalized.token,
     payload: normalized.payload,
     platform,
+    providerUserId,
+    role: effectiveRole,
     termsAccepted: Boolean(
       result.rows[0].terms_accepted_at
       && result.rows[0].terms_version === TERMS_VERSION
@@ -826,7 +889,7 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
               WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
             ) AS owns_diamond_frame`;
   const result = await db.query(
-    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance
+    `SELECT u.*, w.balance, bl.paid_ml_total, bl.gift_ml_balance, ${PERSONAL_FRAME_OWNERSHIP_SQL}
             ${detailColumns}
      FROM users u
      JOIN wallets w ON w.user_id = u.id
@@ -881,7 +944,7 @@ async function getProfile(userId, platform = 'unknown', db = pool, options = {})
       showMonthlySpend: row.show_leaderboard_amount !== false,
       showStats: row.show_stats !== false
     },
-    role: row.role,
+    role: isOwnerRow(row) ? 'admin' : row.role,
     balance: unlimitedBonus ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
     qrShortCode: row.qr_short_code,
     termsAccepted: Boolean(row.terms_accepted_at && row.terms_version === TERMS_VERSION),
@@ -928,6 +991,70 @@ function leaderboardName(row) {
   return last ? `${first} ${last.slice(0, 1)}.` : first;
 }
 
+async function getUnifiedPreviousMonthTop(canonical) {
+  const result = await pool.query(
+    `WITH RECURSIVE user_map AS (
+       SELECT id AS source_id, id AS canonical_id
+       FROM users
+       WHERE merged_into_user_id IS NULL
+       UNION ALL
+       SELECT u.id AS source_id, m.canonical_id
+       FROM users u
+       JOIN user_map m ON u.merged_into_user_id = m.source_id
+     ), monthly_spend AS (
+       SELECT um.canonical_id AS user_id,
+              COALESCE(SUM(t.cash_paid_cents), 0)::bigint AS spend_cents
+       FROM user_map um
+       JOIN transactions t ON t.client_id = um.source_id
+         AND t.status = 'completed'
+         AND t.mode IN ('accrue','redeem')
+         AND t.created_at >= ((date_trunc('month', NOW() AT TIME ZONE 'Europe/Moscow') - INTERVAL '1 month') AT TIME ZONE 'Europe/Moscow')
+         AND t.created_at < (date_trunc('month', NOW() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow')
+       GROUP BY um.canonical_id
+     )
+     SELECT u.id, u.first_name, u.last_name, u.photo_url,
+            u.avatar_source, u.avatar_key, u.profile_frame, u.role,
+            u.telegram_id, u.unlimited_bonus,
+            u.profile_public, u.show_name, u.show_avatar, u.show_leaderboard_amount,
+            ms.spend_cents,
+            RANK() OVER (ORDER BY ms.spend_cents DESC, u.id ASC) AS rank
+     FROM monthly_spend ms
+     JOIN users u ON u.id = ms.user_id
+     WHERE u.merged_into_user_id IS NULL
+       AND u.deleted_at IS NULL
+       AND ms.spend_cents > 0
+     ORDER BY rank, u.id
+     LIMIT 3`,
+    []
+  );
+  if (!result.rows.length) return null;
+  const moscowNow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit' }).format(new Date());
+  const [year, monthNumber] = moscowNow.split('-').map(Number);
+  const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, monthNumber - 2, 15)));
+  return {
+    month,
+    leaders: result.rows.map((row) => {
+      const isMe = String(row.id) === String(canonical);
+      const publicProfile = row.profile_public !== false;
+      const showName = isMe || (publicProfile && row.show_name !== false);
+      const showAvatar = isMe || (publicProfile && row.show_avatar !== false);
+      const showSpend = isMe || (publicProfile && row.show_leaderboard_amount !== false);
+      return {
+        rank: Number(row.rank),
+        name: showName ? leaderboardName(row) : 'Скрытый гость',
+        spend: showSpend ? rubles(row.spend_cents) : null,
+        isMe,
+        avatarSource: showAvatar ? (row.avatar_source || 'preset_male') : null,
+        avatarKey: showAvatar ? (row.avatar_key || null) : null,
+        photoUrl: showAvatar ? (row.photo_url || null) : null,
+        profileFrame: showAvatar ? profileFrameFromRow(row) : 'none',
+        showAvatar
+      };
+    })
+  };
+}
+
 async function getUnifiedMonthlyLeaderboard(currentUserId) {
   const canonical = await canonicalUserId(pool, currentUserId);
   if (!canonical) throw Object.assign(new Error('Пользователь не найден.'), { statusCode: 404 });
@@ -972,9 +1099,14 @@ async function getUnifiedMonthlyLeaderboard(currentUserId) {
   const current = rows.find((row) => String(row.id) === String(canonical)) || null;
   const leaders = rows.filter((row) => Number(row.spend_cents || 0) > 0).slice(0, 10);
   const month = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'Europe/Moscow' }).format(new Date());
+  const previousMonth = await getUnifiedPreviousMonthTop(canonical).catch((error) => {
+    console.warn('Previous month league top skipped:', error?.message || error);
+    return null;
+  });
 
   return {
     month,
+    previousMonth,
     prizeNote: 'После закрытия месяца участник на 1-м месте получает эпическое достижение и бесплатную пинту 0,5 л.',
     scope: 'telegram-vk',
     leaders: leaders.map((row) => {
@@ -1029,7 +1161,7 @@ async function updateUnifiedProfile(userId, platform, body) {
       `SELECT u.*, EXISTS(
          SELECT 1 FROM beta_grants bg
          WHERE bg.user_id = u.id AND bg.code = 'profile-frame-diamond'
-       ) AS owns_diamond_frame
+       ) AS owns_diamond_frame, ${PERSONAL_FRAME_OWNERSHIP_SQL}
        FROM users u
        WHERE u.id = $1::bigint
          AND u.merged_into_user_id IS NULL
@@ -1050,8 +1182,7 @@ async function updateUnifiedProfile(userId, platform, body) {
     const allowedFrames = availableFramesFromRow(row);
     const requestedFrame = String(body?.profileFrame || profileFrameFromRow(row) || 'none');
     let storedFrame = requestedFrame;
-    if (isOwnerRow(row)) storedFrame = 'money';
-    else if (isAnnaRow(row)) storedFrame = 'anna';
+    if (isAnnaRow(row)) storedFrame = 'anna';
     else if (row.role === 'viewer') storedFrame = 'fire';
     else if (!allowedFrames.some((frame) => frame.code === requestedFrame)) {
       throw Object.assign(new Error('Эта рамка недоступна вашему аккаунту.'), { statusCode: 400 });
@@ -1294,35 +1425,15 @@ async function deletePlatformAccount(userId, platform, providerUserId, confirmat
   }
 }
 
-async function getUnifiedAdminUsers() {
-  const result = await pool.query(
-    `SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name, u.role,
-            u.created_at, u.qr_short_code, u.unlimited_bonus, u.profile_frame,
-            w.balance, bl.paid_ml_total, bl.gift_ml_balance,
-            (u.staff_pin_hash IS NOT NULL AND u.staff_pin_salt IS NOT NULL) AS pin_configured,
-            (SELECT ui.provider_user_id
-             FROM user_identities ui
-             WHERE ui.user_id = u.id AND ui.provider = 'vk'
-             LIMIT 1) AS vk_id,
-            ARRAY(
-              SELECT ui.provider FROM user_identities ui
-              WHERE ui.user_id = u.id ORDER BY ui.provider
-            ) AS linked_platforms
-     FROM users u
-     JOIN wallets w ON w.user_id = u.id
-     LEFT JOIN beer_loyalty bl ON bl.user_id = u.id
-     WHERE u.merged_into_user_id IS NULL
-       AND u.deleted_at IS NULL
-     ORDER BY u.created_at DESC
-     LIMIT 200`
-  );
+async function getUnifiedAdminUserDirectory(input = {}) {
+  const directory = await queryAdminUserDirectory(pool, input);
   return {
-    users: result.rows.map((row) => ({
+    users: directory.rows.map((row) => ({
       id: String(row.id),
       telegramId: row.telegram_id === null ? null : String(row.telegram_id),
       vkId: row.vk_id === null ? null : String(row.vk_id),
-      username: row.username,
-      name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      username: adminUserDisplayUsername(row.username),
+      name: adminUserDisplayName(row),
       role: row.role,
       balance: hasUnlimitedBonus(row) ? UNLIMITED_BONUS_BALANCE : Number(row.balance || 0),
       unlimitedBonus: hasUnlimitedBonus(row),
@@ -1332,25 +1443,38 @@ async function getUnifiedAdminUsers() {
       beerGiftLitersBalance: litersFromMl(row.gift_ml_balance),
       pinConfigured: Boolean(row.pin_configured),
       linkedPlatforms: row.linked_platforms || [],
-      createdAt: row.created_at
-    }))
+      createdAt: row.created_at,
+      lastActivityAt: row.last_activity_at,
+      operationsCount: Number(row.operations_count || 0),
+      crmStatus: adminUserCrmStatus(row)
+    })),
+    pagination: directory.pagination,
+    filters: directory.filters
   };
+}
+
+async function getUnifiedAdminUsers() {
+  return getUnifiedAdminUserDirectory({});
 }
 
 async function getAppPayload(userId, platform = 'unknown', options = {}) {
   const startup = options?.startup === true;
   const [profile, designResult] = await Promise.all([
     getProfile(userId, platform, pool, { startup }),
-    startup
-      ? Promise.resolve({ rows: [] })
-      : pool.query('SELECT published FROM app_settings WHERE id = 1')
+    // The startup payload needs the published design too: it carries the seasonal theme flag, and without it
+    // the app shell opens in the base white-gold skin until the later /api/me arrives. One primary-key row,
+    // read in parallel; if it fails, startup still succeeds and the design simply arrives with /api/me.
+    pool.query('SELECT published FROM app_settings WHERE id = 1').catch((error) => {
+      if (!startup) throw error;
+      return { rows: [] };
+    })
   ]);
   if (!profile) {
     throw Object.assign(new Error('Не удалось открыть профиль.'), { statusCode: 404 });
   }
   return {
     profile,
-    statuses: STATUS_LEVELS.map((item) => ({
+    statuses: statusLevels().map((item) => ({
       ...item,
       min: rubles(item.minCents),
       next: item.nextCents ? rubles(item.nextCents) : null
@@ -1396,7 +1520,9 @@ async function ensureSupplementalRecords(userId) {
 }
 
 async function resolveProviderUser(provider, externalUser) {
+  traceVkStage('VK_DB_CONNECT_START');
   const client = await pool.connect();
+  traceVkStage('VK_DB_CONNECT_OK');
   let userId;
   try {
     await client.query('BEGIN');
@@ -1407,6 +1533,7 @@ async function resolveProviderUser(provider, externalUser) {
       [`identity:${provider}:${externalUser.id}`]
     );
 
+    traceVkStage('VK_ACCOUNT_LOOKUP_START');
     const identity = await client.query(
       `SELECT ui.user_id
        FROM user_identities ui
@@ -1419,6 +1546,8 @@ async function resolveProviderUser(provider, externalUser) {
     if (identity.rowCount) {
       userId = await canonicalUserId(client, identity.rows[0].user_id);
     }
+    traceVkStage('VK_ACCOUNT_LOOKUP_OK');
+    traceVkStage('VK_ACCOUNT_WRITE_START');
 
     if (!userId && provider === 'telegram') {
       const legacy = await client.query(
@@ -1428,9 +1557,10 @@ async function resolveProviderUser(provider, externalUser) {
       if (legacy.rowCount) userId = await canonicalUserId(client, legacy.rows[0].id);
     }
 
-    const isOwner = provider === 'telegram'
-      ? Boolean(ownerTelegramId && externalUser.id === ownerTelegramId)
-      : Boolean(ownerVkId && externalUser.id === ownerVkId);
+    const isOwner = isConfiguredOwnerIdentity(provider, externalUser.id, {
+      telegram: ownerTelegramId,
+      vk: ownerVkId
+    });
 
     // VK and Telegram identities are intentionally independent, including the owner.
 
@@ -1458,6 +1588,20 @@ async function resolveProviderUser(provider, externalUser) {
       );
       userId = String(inserted.rows[0].id);
     } else {
+      // Authorization is independent from profile-metadata ownership. Legacy rows can
+      // still contain both platform identities; a signed configured owner must regain
+      // the persisted admin role even when shouldUpdateMainProfile is false.
+      if (isOwner) {
+        await client.query(
+          `UPDATE users
+           SET role = 'admin',
+               updated_at = CASE WHEN role <> 'admin' THEN NOW() ELSE updated_at END
+           WHERE id = $1::bigint
+             AND role <> 'admin'`,
+          [userId]
+        );
+      }
+
       const identityCount = await client.query(
         'SELECT COUNT(*)::int AS count FROM user_identities WHERE user_id = $1::bigint',
         [userId]
@@ -1472,11 +1616,11 @@ async function resolveProviderUser(provider, externalUser) {
            SET username = $2,
                first_name = $3,
                last_name = $4,
-               photo_url = $5,
+               photo_url = COALESCE($5, photo_url),
                language_code = $6,
                role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
                unlimited_bonus = CASE WHEN $7 = 'admin' THEN TRUE ELSE unlimited_bonus END,
-               profile_frame = CASE WHEN $7 = 'admin' THEN 'money' ELSE profile_frame END,
+               profile_frame = CASE WHEN $7 = 'admin' AND profile_frame <> 'gold-bars' THEN 'money' ELSE profile_frame END,
                telegram_id = CASE WHEN $8 = 'telegram' THEN COALESCE(telegram_id, $9::bigint) ELSE telegram_id END,
                updated_at = NOW()
            WHERE id = $1::bigint`,
@@ -1501,8 +1645,8 @@ async function resolveProviderUser(provider, externalUser) {
        ) VALUES ($1::bigint, $2, $3, $4, $5)
        ON CONFLICT (provider, provider_user_id) DO UPDATE
        SET user_id = EXCLUDED.user_id,
-           provider_username = EXCLUDED.provider_username,
-           profile_url = EXCLUDED.profile_url,
+           provider_username = COALESCE(EXCLUDED.provider_username, user_identities.provider_username),
+           profile_url = COALESCE(EXCLUDED.profile_url, user_identities.profile_url),
            updated_at = NOW()`,
       [
         userId,
@@ -1515,6 +1659,7 @@ async function resolveProviderUser(provider, externalUser) {
 
     await ensureAuthRecords(client, userId);
     await client.query('COMMIT');
+    traceVkStage('VK_ACCOUNT_WRITE_OK');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1522,6 +1667,7 @@ async function resolveProviderUser(provider, externalUser) {
     client.release();
   }
 
+  traceVkStage('VK_SESSION_CREATE_START');
   const sessionResult = await pool.query(
     'SELECT session_version FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL',
     [userId]
@@ -1532,21 +1678,52 @@ async function resolveProviderUser(provider, externalUser) {
     Number(sessionResult.rows[0]?.session_version || 1),
     { pid: String(externalUser.id) }
   );
+  await claimPendingSpecialAchievement(userId, provider, externalUser);
   setImmediate(() => {
     void ensureSupplementalRecords(userId).catch((error) => {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
     });
   });
-  return { token, ...(await getAppPayload(userId, provider, { startup: true })) };
+  traceVkStage('VK_SESSION_CREATED');
+  traceVkStage('VK_PROFILE_ASSEMBLY_START');
+  const authPayload = await getAppPayload(userId, provider, { startup: true });
+  if (authPayload?.profile) {
+    authPayload.profile.role = effectiveRoleForAuthenticatedIdentity(
+      authPayload.profile.role,
+      provider,
+      externalUser.id,
+      { telegram: ownerTelegramId, vk: ownerVkId }
+    );
+  }
+  return { token, ...authPayload };
+}
+
+async function claimPendingSpecialAchievement(userId, provider, externalUser) {
+  const result = await pool.query(
+    'SELECT * FROM pivnik_claim_pending_special_achievement($1::bigint,$2::text,$3::text,$4::text)',
+    [userId, provider, String(externalUser?.id || ''), externalUser?.username || null]
+  );
+  const claim = result.rows[0] || null;
+  if (claim?.claimed) {
+    console.log(JSON.stringify({
+      specialAchievementClaimed: true,
+      handle: claim.recipient_handle,
+      awardedBonus: Number(claim.awarded_bonus || 0),
+      userId: String(userId)
+    }));
+  }
+  return claim;
 }
 
 async function authenticateVk(body) {
+  traceVkStage('VK_SIGNATURE_START');
   let vkAuth;
   if (allowDemo && body?.demoVkId) {
     vkAuth = { userId: String(body.demoVkId), languageCode: 'ru', platform: 'demo' };
   } else {
     vkAuth = validateVkLaunchParams(body?.launchParams);
   }
+  traceVkStage('VK_SIGNATURE_OK');
 
   const rawUser = body?.user && typeof body.user === 'object' ? body.user : {};
   if (String(rawUser.id || '') && String(rawUser.id) !== vkAuth.userId) {
@@ -1583,10 +1760,25 @@ async function authenticateTelegram(body) {
     throw Object.assign(new Error('Откройте приложение через Telegram.'), { statusCode: 401 });
   }
   enforceRateLimit(`auth-identity:telegram:${user.id}`, 60, 10 * 60 * 1000);
-  return resolveProviderUser('telegram', user);
+  const data = await resolveProviderUser('telegram', user);
+  // Halloween invite from the signed start_param (inv_<code>); best-effort, never breaks login.
+  try {
+    const inviteCode = initData ? inviteCodeFromStartParam(initData) : null;
+    const inviteeId = inviteCode ? verifySession(data?.token)?.uid : null;
+    if (inviteeId) {
+      await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
+        inviteeId, code: inviteCode, channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret
+      }));
+    }
+  } catch (error) {
+    console.warn('Halloween invite start_param skipped:', error?.code || error?.message || 'unknown');
+  }
+  return data;
 }
 
 async function grantReward(db, userId, code, amount, source, reason, mode = 'adjustment') {
+  // A zero welcome bonus (switched off in Business) is not recorded as a grant.
+  if (!(Number(amount) > 0)) return { granted: false, amount: 0 };
   const grant = await db.query(
     `INSERT INTO reward_grants (code, user_id, amount, source)
      VALUES ($1, $2::bigint, $3::bigint, $4)
@@ -1618,7 +1810,18 @@ async function grantReward(db, userId, code, amount, source, reason, mode = 'adj
 }
 
 function wheelPrizeByCode(code) {
+  if (code === HALLOWEEN_TICKET_PRIZE_CODE) return HALLOWEEN_TICKET_PRIZE;
   return WHEEL_PRIZES.find((item) => item.code === code) || null;
+}
+
+// The Halloween ticket replaces the beer glass only while the theme is published and the raffle tables exist.
+async function halloweenWheelActive(client) {
+  const result = await client.query(
+    `SELECT (SELECT published->>'theme' FROM app_settings WHERE id = 1) AS theme,
+            to_regclass('halloween_ticket_ledger') IS NOT NULL AS has_tables`
+  );
+  const row = result.rows[0] || {};
+  return row.theme === 'halloween' && row.has_tables === true;
 }
 
 function wheelPrizeResponse(row) {
@@ -1637,6 +1840,19 @@ function wheelPrizeResponse(row) {
     } : null,
     createdAt: row.created_at
   };
+}
+
+async function getWheelHistory(userId) {
+  const result = await pool.query(
+    `SELECT id, kind, listed_bonus_cost, charged_bonus_cost, prize_code,
+            bonus_awarded, beer_awarded_ml, created_at
+     FROM wheel_spins
+     WHERE user_id = $1::bigint
+     ORDER BY created_at DESC, id DESC
+     LIMIT 20`,
+    [userId]
+  );
+  return result.rows.map(wheelPrizeResponse);
 }
 
 async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
@@ -1693,7 +1909,11 @@ async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
     nextPaidCost,
     canAffordPaid: unlimitedBonus || balance >= nextPaidCost,
     balance,
-    unlimitedBonus
+    unlimitedBonus,
+    firstPaidCost: paidSpinCost(0),
+    laterPaidCost: paidSpinCost(1),
+    freeIntervalHours: wheelFreeIntervalHours(),
+    prizes: wheelPrizeChances()
   };
 }
 
@@ -1735,7 +1955,8 @@ async function spinTelegramWheel(userId, rawRequestKey) {
       const nowResult = await client.query('SELECT NOW() AS now');
       const status = await getTelegramWheelStatus(userId, client, nowResult.rows[0].now);
       const listedCost = status.freeAvailable ? 0 : status.nextPaidCost;
-      const kind = listedCost === 0 ? 'free' : listedCost === 50 ? 'paid_50' : 'paid_100';
+      // paid_50 / paid_100 name the first and the later paid spins; PIVNIK Business can change their prices.
+      const kind = status.freeAvailable ? 'free' : status.paidSpinsSinceLastFree === 0 ? 'paid_50' : 'paid_100';
       const account = accountResult.rows[0];
       const unlimitedBonus = hasUnlimitedBonus(account);
       const currentBalance = Number(account.balance || 0);
@@ -1746,7 +1967,7 @@ async function spinTelegramWheel(userId, rawRequestKey) {
       }
 
       const chargedCost = unlimitedBonus ? 0 : listedCost;
-      const { ticket, prize } = drawWheelPrize();
+      const { ticket, prize } = drawWheelPrize(undefined, { halloween: await halloweenWheelActive(client) });
       let balanceAfter = currentBalance;
       if (unlimitedBonus && prize.bonus > 0) {
         const walletResult = await client.query(
@@ -1823,6 +2044,12 @@ async function spinTelegramWheel(userId, rawRequestKey) {
         ]
       );
 
+      if (prize.halloweenTicket) {
+        await grantHalloweenTickets(client, {
+          userId, delta: 1, reason: 'wheel', sourceKey: `wheel:${spinRow.id}`, note: 'Билет с колеса Пивника'
+        });
+      }
+
       if (prize.annualSupply) {
         await client.query(
           `INSERT INTO wheel_annual_prizes (spin_id, user_id)
@@ -1890,6 +2117,8 @@ async function acceptConsent(userId, platform) {
        WHERE id = $2::bigint`,
       [TERMS_VERSION, canonical]
     );
+    // The amount comes from PIVNIK Business; the grant code stays 'welcome-100', so it is given once.
+    const WELCOME_BONUS = welcomeBonusAmount();
     const reward = rewardEligible
       ? await grantReward(
           client,
@@ -2691,12 +2920,12 @@ async function consumeAccountLinkCode(currentUserId, requestedProvider, rawCode)
   };
 }
 
-async function readRequestBody(req) {
+async function readRequestBody(req, maxBytes = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) {
+    if (size > maxBytes) {
       throw Object.assign(new Error('Слишком большой запрос.'), { statusCode: 413 });
     }
     chunks.push(chunk);
@@ -2781,7 +3010,7 @@ export async function renderAppIndex(platform) {
   const source = await fs.readFile(path.join(__dirname, 'index.html'), 'utf8');
   const withLoader = source.replace(
     /<link rel="stylesheet" href="styles\.css([^"]*)"\s*\/>/i,
-    '<link rel="stylesheet" href="styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=2.1.0" />'
+    '<link rel="stylesheet" href="styles.css$1" />\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />'
   );
   const withLinking = withLoader.replace(
     /<script defer src="app\.js([^"]*)"><\/script>/i,
@@ -2795,10 +3024,6 @@ export async function renderAppIndex(platform) {
     );
   }
   return withLinking
-    .replace(
-      /<!-- telegram-wheel:start -->[\s\S]*?<!-- telegram-wheel:end -->/g,
-      ''
-    )
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(
       /<script defer src="\/account-link\.js([^"]*)"><\/script>/i,
@@ -2953,11 +3178,57 @@ child?.on('exit', (code, signal) => {
   }
 });
 
-const server = http.createServer(async (req, res) => {
+async function serveStartupProfile(req, res, startup) {
+  const bootId = req.headers['x-pivnik-platform'] === 'vk' ? validBootId(req.headers['x-pivnik-boot-id']) : null;
+  const trace = createVkStartupTrace(bootId, releaseCommit);
+  if (bootId) res.setHeader('x-pivnik-boot-id', bootId);
+  trace('VK_PROFILE_REQUEST_START');
+  try {
+    const user = await requireGatewayUser(req);
+    const platform = platformFromRequest(req, user.payload.platform || 'unknown');
+    const payload = await getAppPayload(user.id, platform, { startup });
+    // A valid signed owner session must expose service access immediately, even when
+    // the stored row still carries a legacy client role from an older linked account.
+    if (payload?.profile) payload.profile.role = user.role;
+    trace('VK_PROFILE_SUCCESS', { status: 200 });
+    return sendJson(res, 200, payload);
+  } catch (error) {
+    trace('VK_PROFILE_FAIL', { status: Number(error?.statusCode || 500), code: safeStartupCode(error) });
+    throw error;
+  }
+}
+
+const posHttp = createPosHttp(pool);
+export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
     assertLegacyApiRequest(req, SPACEVERSE_RUNTIME);
+    if (url.pathname === '/api/device/pos' || url.pathname.startsWith('/api/device/pos/')) {
+      const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
+      return sendJson(res, 200, await posHttp.device({ method: req.method, pathname: url.pathname,
+        authorization: req.headers.authorization, deviceKey: req.headers['x-pivnik-device-key'],
+        body, address: requestAddress(req) }));
+    }
+    if (url.pathname === '/api/admin/pos' || url.pathname.startsWith('/api/admin/pos/')) {
+      const user = await requireGatewayUser(req);
+      const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
+      return sendJson(res, 200, await posHttp.admin({ method: req.method, pathname: url.pathname,
+        user, params: Object.fromEntries(url.searchParams), body }));
+    }
+
+    // Available even during DB startup; no session, identity or database access.
+    if (req.method === 'POST' && url.pathname === '/api/diagnostics/vk-startup') {
+      enforceRateLimit('vk-startup-diagnostics:global', 600, 60_000);
+      enforceRateLimit(`vk-startup-diagnostics:${requestAddress(req)}`, 60, 60_000);
+      const payload = parseJsonBody(await readRequestBody(req, 16_384));
+      const records = sanitizeStartupBatch(payload);
+      if (!records.length) return sendJson(res, 400, { error: 'Invalid startup diagnostics.' });
+      for (const record of records) console.info(JSON.stringify({
+        ...record, receivedAt: new Date().toISOString(), releaseCommit
+      }));
+      return sendJson(res, 202, { ok: true });
+    }
 
     const documentPlatform = platformForDocumentRequest(url, req.headers);
     if (req.method === 'GET' && documentPlatform) {
@@ -2975,8 +3246,21 @@ const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(__dirname, 'vk-platform.js'), 'text/javascript; charset=utf-8', 'no-cache');
     }
 
+    // app.js/styles.css are mutable release assets. Serve them at the gateway with
+    // no-store so Telegram/VK WebViews cannot keep a stale ETag-backed 304 copy.
+    if (req.method === 'GET' && url.pathname === '/app.js') {
+      return serveFile(res, path.join(__dirname, 'app.js'), 'text/javascript; charset=utf-8', 'no-store');
+    }
+    if (req.method === 'GET' && url.pathname === '/styles.css') {
+      return serveFile(res, path.join(__dirname, 'styles.css'), 'text/css; charset=utf-8', 'no-store');
+    }
+
     if (req.method === 'GET' && url.pathname === '/loader-fix.css') {
       return serveFile(res, path.join(__dirname, 'loader-fix.css'), 'text/css; charset=utf-8', 'no-cache');
+    }
+
+    if (req.method === 'GET' && url.pathname === '/service-white-gold.css') {
+      return serveFile(res, path.join(__dirname, 'service-white-gold.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
     if (req.method === 'GET' && url.pathname === '/vendor/vk-bridge.js') {
@@ -2988,8 +3272,20 @@ const server = http.createServer(async (req, res) => {
       );
     }
 
+    if (req.method === 'GET' && url.pathname === '/pos-admin.js') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.js'), 'text/javascript; charset=utf-8', 'no-store');
+    }
+    if (req.method === 'GET' && url.pathname === '/pos-admin.css') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.css'), 'text/css; charset=utf-8', 'no-store');
+    }
     if (req.method === 'GET' && url.pathname === '/account-link.js') {
       return serveFile(res, path.join(__dirname, 'account-link.js'), 'text/javascript; charset=utf-8', 'no-cache');
+    }
+
+    // These files are referenced by the materialized document. The child server
+    // has no route for them and otherwise returns its HTML fallback with 200.
+    if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.js') {
+      return serveFile(res, path.join(__dirname, 'red-cosmos-v2.js'), 'text/javascript; charset=utf-8', 'no-cache');
     }
 
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
@@ -3075,15 +3371,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/auth') {
+      const bootId = validBootId(req.headers['x-pivnik-boot-id']);
       if (!platformReady) {
+        createVkStartupTrace(bootId, releaseCommit)('VK_AUTH_FAIL', { status: 503, code: 'NOT_READY' });
         return sendJson(res, 503, { error: 'Система аккаунтов ещё запускается.' });
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = body.platform === 'vk' ? 'vk' : 'telegram';
+      const trace = createVkStartupTrace(platform === 'vk' ? bootId : null, releaseCommit);
+      if (platform === 'vk' && bootId) res.setHeader('x-pivnik-boot-id', bootId);
+      trace('VK_AUTH_START');
       try {
         const data = platform === 'vk'
-          ? await authenticateVk(body)
+          ? await withVkStartupTrace(trace, () => authenticateVk(body))
           : await authenticateTelegram(body);
+        trace('VK_PROFILE_ASSEMBLY_OK');
+        trace('VK_AUTH_SUCCESS', { status: 200 });
         return sendJson(res, 200, data);
       } catch (error) {
         let responseError = error;
@@ -3098,23 +3401,21 @@ const server = http.createServer(async (req, res) => {
             responseError = limitError;
           }
         }
-        console.error(`${platform} auth failed:`, error.message);
+        console.error(`${platform} auth failed:`, platform === 'vk' ? safeStartupCode(error) : error.message);
+        trace('VK_AUTH_FAIL', { status: Number(responseError.statusCode || 500), code: safeStartupCode(error) });
         return sendJson(res, Number(responseError.statusCode || 500), {
+          ...(platform === 'vk' ? { code: safeStartupCode(error), bootId } : {}),
           error: responseError.statusCode ? responseError.message : `Не удалось войти через ${platform === 'vk' ? 'VK' : 'Telegram'}.`
         });
       }
     }
 
     if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
-      const user = await requireGatewayUser(req);
-      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await getAppPayload(user.id, platform, { startup: true }));
+      return await serveStartupProfile(req, res, true);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/me') {
-      const user = await requireGatewayUser(req);
-      const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await getAppPayload(user.id, platform));
+      return await serveStartupProfile(req, res, false);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/wheel/status') {
@@ -3124,6 +3425,14 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
       return sendJson(res, 200, await getTelegramWheelStatus(user.id));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/wheel/history') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, { spins: await getWheelHistory(user.id) });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/wheel/spin') {
@@ -3145,7 +3454,9 @@ const server = http.createServer(async (req, res) => {
       }
       const body = parseJsonBody(await readRequestBody(req));
       const platform = platformFromRequest(req, user.payload.platform || 'unknown');
-      return sendJson(res, 200, await updateUnifiedProfile(user.id, platform, body));
+      const updated = await updateUnifiedProfile(user.id, platform, body);
+      if (updated?.profile) updated.profile.role = user.role;
+      return sendJson(res, 200, updated);
     }
 
     if (req.method === 'DELETE' && url.pathname === '/api/me/account') {
@@ -3167,16 +3478,40 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await getUnifiedMonthlyLeaderboard(user.id));
     }
 
+    if (url.pathname === '/api/run/start' || url.pathname === '/api/run/score' || url.pathname === '/api/run/leaderboard') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      const canonical = await canonicalUserId(pool, user.id);
+      if (!canonical) return sendJson(res, 404, { error: 'Пользователь не найден.' });
+      if (req.method === 'GET' && url.pathname === '/api/run/leaderboard') {
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/start') {
+        return sendJson(res, 200, { ticket: issueRunTicket(sessionSecret, canonical) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/score') {
+        const body = parseJsonBody(await readRequestBody(req));
+        const run = readRunTicket(sessionSecret, body.ticket, canonical);
+        const score = Number(body.score);
+        if (!run || !plausibleScore(score, Date.now() - run.startedAt)) {
+          return sendJson(res, 422, { error: 'Результат не принят.' });
+        }
+        if (score > 0) await submitRunScore(pool, canonical, score, normalizeRunChar(body.character));
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/admin/users') {
       const user = await requireGatewayUser(req);
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      const profile = await getProfile(user.id);
-      if (!profile || !['viewer', 'admin'].includes(profile.role)) {
+      if (!['viewer', 'admin'].includes(user.role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
-      return sendJson(res, 200, await getUnifiedAdminUsers());
+      return sendJson(res, 200, await getUnifiedAdminUserDirectory(url.searchParams));
     }
 
     if (req.method === 'POST' && url.pathname === '/api/me/consent') {
@@ -3242,7 +3577,7 @@ const server = http.createServer(async (req, res) => {
       if (!user.termsAccepted) {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
-      if (!['staff', 'admin'].includes((await getProfile(user.id)).role)) {
+      if (!['staff', 'admin'].includes(user.role)) {
         return sendJson(res, 403, { error: 'Недостаточно прав.' });
       }
       enforceRateLimit(`qr:${user.id}:${requestAddress(req)}`, 60, 60 * 1000);
@@ -3278,8 +3613,10 @@ const server = http.createServer(async (req, res) => {
 
     return await proxyRequest(req, res);
   } catch (error) {
-    console.error('Universal server error:', error?.code || error?.message || 'unknown');
-    return sendJson(res, Number(error.statusCode || 500), {
+    const status = Number(error.statusCode || 500);
+    // A 4xx here is an ordinary refusal (not signed in, rules not accepted), not a server fault.
+    if (status >= 500) console.error('Universal server error:', error?.code || error?.message || 'unknown');
+    return sendJson(res, status, {
       error: error.statusCode ? error.message : 'Внутренняя ошибка сервера.'
     });
   }
@@ -3292,6 +3629,11 @@ if (!isTestImport) {
       await waitForChild();
       await initPlatformDatabase();
       await refreshDatabaseFingerprint();
+      // Achievement settings from PIVNIK Business; server.js keeps its own copy the same way.
+      onRuntimeConfig('achievements', configureAchievements);
+      onRuntimeConfig('loyalty', configureLoyalty);
+      onRuntimeConfig('wheel', configureWheel);
+      startRuntimeConfigRefresh(pool);
     } catch (error) {
       console.error(
         'Platform initialization failed:',

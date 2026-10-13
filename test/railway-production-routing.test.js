@@ -43,6 +43,9 @@ test('public production probes use the same central routing configuration', asyn
     assert.match(source, /railway-production-config\.mjs/);
   }
   assert.match(probe, /if \(!response\.ok\) failures\.push/);
+  assert.match(probe, /service-white-gold\.css\?v=20\.8-service-white-gold/);
+  assert.match(probe, /service white-gold asset is not CSS/);
+  assert.match(probe, /\.app-shell\.service-mode/);
   assert.match(probe, /if \(failures\.length\)[\s\S]*process\.exitCode = 1/);
   assert.doesNotMatch(probe, /process\.exitCode = 0/);
 });

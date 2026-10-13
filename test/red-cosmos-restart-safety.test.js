@@ -8,15 +8,15 @@ const [runtime, dbPrepare, materializer] = await Promise.all([
   fs.readFile(new URL('../scripts/materialize-runtime-patches.mjs', import.meta.url), 'utf8')
 ]);
 
-test('RED COSMOS skips obsolete v22 assertions after an in-container healthcheck restart', () => {
-  assert.match(runtime, /redCosmosAlreadyApplied/);
-  assert.match(runtime, /RED_COSMOS_V2_THEME_LOCK/);
+test('final runtime skips obsolete v22 assertions only after backend finalization', () => {
+  assert.match(runtime, /finalRuntimeAlreadyApplied/);
+  assert.match(runtime, /SPACEVERSE_CANONICAL_THEME_LOCK/);
   assert.match(runtime, /RED_COSMOS_V2_FINAL_SERVER_RUNTIME/);
   assert.match(runtime, /RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME/);
   assert.match(runtime, /restart-safe legacy v22 skip/);
-  const detection = runtime.indexOf('const redCosmosAlreadyApplied');
+  const detection = runtime.indexOf('const canonicalThemeLocked');
   const legacyVersionAssertion = runtime.indexOf("APP_VERSION = '22.0-pivnik-rebuild'");
-  assert.ok(detection >= 0 && legacyVersionAssertion > detection, 'RED COSMOS detection must run before legacy v22 assertions');
+  assert.ok(detection >= 0 && legacyVersionAssertion > detection, 'final runtime detection must run before legacy v22 assertions');
 });
 
 test('RED COSMOS DB prepare tolerates Railway private-network warmup and keeps one connection for audit', () => {
@@ -40,7 +40,7 @@ test('RED COSMOS production DB prepare audits archive schemas without guessing o
   assert.doesNotMatch(dbPrepare, /DELETE FROM .*users/i);
 });
 
-test('full materialize recognizes the RED COSMOS client version on repeated runs', () => {
+test('full materialize recognizes the canonical SPACEVERSE client version on repeated runs', () => {
   assert.match(materializer, /supportedAppVersion/);
   assert.match(materializer, /19\.1-telegram-wheel-v2/);
   assert.match(materializer, /2\.0-red-cosmos/);

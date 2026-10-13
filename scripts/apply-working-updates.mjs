@@ -27,10 +27,16 @@ const payloadBase64 = (await Promise.all(payloadParts.map((name) => fs.readFile(
 const runtimeFiles = JSON.parse(zlib.gunzipSync(Buffer.from(payloadBase64, 'base64')).toString('utf8'));
 // Applied SQL migrations are immutable. Updates to RED COSMOS recipients live in migration 008.
 delete runtimeFiles['migrations/007_red_cosmos_v2.sql'];
+// VK runtime is canonical source. Never restore an archived startup implementation.
+delete runtimeFiles['app.js'];
+delete runtimeFiles['index.html'];
+delete runtimeFiles['vk-platform.js'];
+// DB prepare is canonical source too. Its startup safety/logging fixes must survive materialization.
+delete runtimeFiles['scripts/red-cosmos-v2-db-prepare.mjs'];
+// red-cosmos-v2.css was never linked by any page; it is deleted, not restored.
+delete runtimeFiles['red-cosmos-v2.css'];
 const runtimeAnchors = {
-  'red-cosmos-v2.css': '--primary-red: #c41e3a',
   'red-cosmos-v2.js': "const EXPECTED_PRIMARY = '#c41e3a';",
-  'vk-platform.js': "window.__PIVNIK_PLATFORM__ = 'vk';",
   'scripts/red-cosmos-v2-db-prepare.mjs': "const BACKUP_SCHEMA = 'pivnik_red_cosmos_v2_preupgrade_20260827';",
   'scripts/v22-data-audit-and-repair.mjs': "const ACHIEVEMENT_CODE = 'raise-shields';"
 };
@@ -45,22 +51,88 @@ for (const [relativePath, targetContent] of Object.entries(runtimeFiles)) {
   await writeText(relativePath, targetContent);
 }
 
-// VK profile photo sync hardening 2026-08-31. Signed auth remains fast, while
-// background VK profile hydration gets bounded retries for slow WebViews/devices.
-let vkPlatform = await readText('vk-platform.js');
-vkPlatform = replaceRequired(
-  vkPlatform,
-  `  const BRIDGE_PROFILE_TIMEOUT_MS = 2200;`,
-  `  const BRIDGE_PROFILE_TIMEOUT_MS = 2200;\n  const VK_PROFILE_SYNC_RETRY_DELAYS_MS = [0, 1400, 3600];`,
-  'VK profile sync retry delays'
-);
-vkPlatform = replaceRequired(
-  vkPlatform,
-  `  const profileReady = (async () => {\n    await bridgeReady;\n    if (!bridge?.send) return null;\n    try {\n      vkUser = await withTimeout(\n        bridge.send('VKWebAppGetUserInfo'),\n        BRIDGE_PROFILE_TIMEOUT_MS,\n        'VK не передал данные профиля вовремя.'\n      );\n    } catch (error) {\n      console.warn('VK user info unavailable:', error);\n      vkUser = null;\n    }\n    if (vkUser?.id && launchVkUserId && String(vkUser.id) !== launchVkUserId) {\n      console.warn('VK profile does not match signed launch parameters; profile data ignored.');\n      vkUser = null;\n    }\n    return vkUser;\n  })();`,
-  `  async function requestVkUserInfo() {\n    await bridgeReady;\n    if (!bridge?.send) return null;\n    let lastError = null;\n    for (const retryDelay of VK_PROFILE_SYNC_RETRY_DELAYS_MS) {\n      if (retryDelay) await new Promise((resolve) => window.setTimeout(resolve, retryDelay));\n      try {\n        const profile = await withTimeout(\n          bridge.send('VKWebAppGetUserInfo'),\n          BRIDGE_PROFILE_TIMEOUT_MS,\n          'VK не передал данные профиля вовремя.'\n        );\n        if (profile?.id && launchVkUserId && String(profile.id) !== launchVkUserId) {\n          console.warn('VK profile does not match signed launch parameters; profile data ignored.');\n          return null;\n        }\n        if (profile?.id) return profile;\n      } catch (error) {\n        lastError = error;\n      }\n    }\n    if (lastError) console.warn('VK user info unavailable after retries:', lastError);\n    return null;\n  }\n\n  const profileReady = (async () => {\n    vkUser = await requestVkUserInfo();\n    return vkUser;\n  })();`,
-  'VK profile sync retries'
-);
-await writeText('vk-platform.js', vkPlatform);
+// The archived working-updates payload intentionally carries several later VK
+// repairs (service-role fallbacks and QR help cleanup). Preserve those, but do
+// not restore the old delayed interaction fallback that could reopen a modal
+// after the user had already closed it.
+{
+  const path = 'red-cosmos-v2.js';
+  const legacyFallback = `  function scheduleFallback(check, action, delay = 60) {
+    setTimeout(() => {
+      try { if (!check()) action(); }
+      catch (error) { console.warn('RED COSMOS interaction fallback failed:', error); }
+    }, delay);
+  }`;
+  const safeFallback = `  function scheduleFallback(check, action, delay = 60) {
+    queueMicrotask(() => {
+      try {
+        if (check()) return;
+      } catch (error) {
+        console.warn('RED COSMOS interaction fallback precheck failed:', error);
+      }
+      setTimeout(() => {
+        try { if (!check()) action(); }
+        catch (error) { console.warn('RED COSMOS interaction fallback failed:', error); }
+      }, delay);
+    });
+  }`;
+  let overlay = await readText(path);
+  if (!overlay.includes(safeFallback)) {
+    if (!overlay.includes(legacyFallback)) {
+      throw new Error('working updates: RED COSMOS fallback marker missing');
+    }
+    overlay = overlay.replace(legacyFallback, safeFallback);
+    await writeText(path, overlay);
+  }
+}
+
+// The archived admin data panels interpolated Telegram/VK profile names into
+// innerHTML. Keep the canonical escaped renderer after restoring the payload.
+{
+  const path = 'red-cosmos-v2.js';
+  const unsafeRows = `  function renderAdminRows(target, items, kind) {
+    if (!target) return;
+    target.className = \`operation-list\${items.length ? '' : ' empty-state'}\`;
+    if (!items.length) {
+      target.textContent = kind === 'frames' ? 'Рамок пока нет' : 'Данных достижений пока нет';
+      return;
+    }
+    target.innerHTML = items.map((item) => {
+      const name = [item.first_name, item.username ? \`@\${item.username}\` : ''].filter(Boolean).join(' · ') || 'Пользователь';
+      if (kind === 'frames') {
+        return \`<div class="op-row"><span class="op-icon">◇</span><div><b>\${name}</b><small>\${String(item.frame_id)} · \${String(item.acquired_source || '')}\${item.restored_from_legacy ? ' · восстановлено' : ''}</small></div><strong>\${item.selected_frame === item.frame_id ? 'Выбрана' : 'Есть'}</strong></div>\`;
+      }
+      return \`<div class="op-row"><span class="op-icon">◆</span><div><b>\${name}</b><small>\${String(item.achievement_code)} · \${Number(item.current_progress || 0)}/\${Number(item.required_progress || 0)}</small></div><strong>\${item.is_granted ? 'Получено' : 'В процессе'}</strong></div>\`;
+    }).join('');
+  }`;
+  const safeRows = `  function escapeAdminText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  }
+
+  function renderAdminRows(target, items, kind) {
+    if (!target) return;
+    target.className = \`operation-list\${items.length ? '' : ' empty-state'}\`;
+    if (!items.length) {
+      target.textContent = kind === 'frames' ? 'Рамок пока нет' : 'Данных достижений пока нет';
+      return;
+    }
+    // Names come from Telegram/VK profiles and must never be parsed as HTML.
+    target.innerHTML = items.map((item) => {
+      const name = escapeAdminText([item.first_name, item.username ? \`@\${item.username}\` : ''].filter(Boolean).join(' · ') || 'Пользователь');
+      if (kind === 'frames') {
+        return \`<div class="op-row"><span class="op-icon">◇</span><div><b>\${name}</b><small>\${escapeAdminText(item.frame_id)} · \${escapeAdminText(item.acquired_source || '')}\${item.restored_from_legacy ? ' · восстановлено' : ''}</small></div><strong>\${item.selected_frame === item.frame_id ? 'Выбрана' : 'Есть'}</strong></div>\`;
+      }
+      return \`<div class="op-row"><span class="op-icon">◆</span><div><b>\${name}</b><small>\${escapeAdminText(item.achievement_code)} · \${Number(item.current_progress || 0)}/\${Number(item.required_progress || 0)}</small></div><strong>\${item.is_granted ? 'Получено' : 'В процессе'}</strong></div>\`;
+    }).join('');
+  }`;
+  const overlay = await readText(path);
+  if (!overlay.includes(safeRows)) {
+    if (!overlay.includes(unsafeRows)) {
+      throw new Error('working updates: RED COSMOS admin rows marker missing');
+    }
+    await writeText(path, overlay.replace(unsafeRows, () => safeRows));
+  }
+}
 
 // Service-role reconciliation 2026-08-31. Owner authorization is derived from
 // the authenticated provider identity, and must not depend on whether legacy
@@ -102,45 +174,6 @@ gateway = replaceRequired(
   'owner role reconciliation outside profile refresh'
 );
 await writeText('universal-server.js', gateway);
-
-// Keep the current release-candidate QR invariant even though the working CSS
-// already hides both controls with a multiline selector.
-let redCss = await readText('red-cosmos-v2.css');
-const releaseQrGuard = '.platform-vk #qrToken,.platform-vk #copyQrCode{display:none!important}';
-if (!redCss.includes(releaseQrGuard)) {
-  redCss += `\n${releaseQrGuard}\n`;
-  await writeText('red-cosmos-v2.css', redCss);
-}
-
-const vkBottomNavFix = `
-/* PIVNIK_VK_BOTTOM_NAV_SAFE_AREA_20260831 */
-.platform-vk .bottom-nav {
-  box-sizing:border-box!important;
-  height:auto!important;
-  min-height:calc(72px + env(safe-area-inset-bottom))!important;
-  padding:7px 7px max(7px, env(safe-area-inset-bottom))!important;
-  align-items:center!important;
-}
-.platform-vk .bottom-nav::before {
-  content:none!important;
-  display:none!important;
-}
-.platform-vk .bottom-nav .qr-nav-button {
-  min-height:56px!important;
-  justify-content:center!important;
-  gap:2px!important;
-}
-.platform-vk .bottom-nav .qr-nav-button > span {
-  width:50px!important;
-  height:50px!important;
-  margin-top:0!important;
-  box-shadow:0 5px 20px rgba(196,30,58,.28),inset 0 1px 1px rgba(255,255,255,.34)!important;
-}
-`;
-if (!redCss.includes('PIVNIK_VK_BOTTOM_NAV_SAFE_AREA_20260831')) {
-  redCss += vkBottomNavFix;
-  await writeText('red-cosmos-v2.css', redCss);
-}
 
 let app = await readText('app.js');
 const vkClientTipStart = `  const hero = $('.hero-card');\n  if (IS_VK && hero && !$('.client-tip')) {\n`;
@@ -198,14 +231,23 @@ app = replaceRequired(
 await writeText('app.js', app);
 
 let index = await readText('index.html');
-index = replaceRequired(
-  index,
-  `<meta name="theme-color" content="#0b0e13" />`,
-  `<meta name="theme-color" content="#c41e3a" />`,
-  'RED COSMOS theme color'
-);
+// The client surface is white-gold, but Telegram's native top chrome is
+// intentionally dark. Materialization must preserve the canonical header color.
+if (index.includes('<meta name="theme-color" content="#f4eee4" />')) {
+  index = index.replace(
+    '<meta name="theme-color" content="#f4eee4" />',
+    '<meta name="theme-color" content="#0b0e13" />'
+  );
+}
 if (index.includes('        <div class="boot-badge">Пивник | Бонусы</div>\n')) {
   index = index.replace('        <div class="boot-badge">Пивник | Бонусы</div>\n', '');
+}
+const escapedProfileHistorySeparator = '</section>\\n\\n        <section class="profile-history-card vip-glass-card">';
+if (index.includes(escapedProfileHistorySeparator)) {
+  index = index.replace(
+    escapedProfileHistorySeparator,
+    '</section>\n\n        <section class="profile-history-card vip-glass-card">'
+  );
 }
 await writeText('index.html', index);
 
@@ -219,10 +261,9 @@ if (!app.includes('Achievement hub refresh skipped:')) failures.push('achievemen
 if (!platformCore.includes('export function isConfiguredOwnerIdentity(')) failures.push('configured owner identity helper');
 if (!gateway.includes('isConfiguredOwnerIdentity(provider, externalUser.id')) failures.push('provider owner identity mapping');
 if (!gateway.includes('Authorization is independent from profile-metadata ownership')) failures.push('owner role reconciliation');
-if (!index.includes('<meta name="theme-color" content="#c41e3a" />')) failures.push('theme color');
+if (!index.includes('<meta name="theme-color" content="#0b0e13" />')) failures.push('theme color');
 if (index.includes('<div class="boot-badge">Пивник | Бонусы</div>')) failures.push('boot badge');
-const finalCss = await readText('red-cosmos-v2.css');
-if (!finalCss.includes(releaseQrGuard)) failures.push('release QR guard');
+if (index.includes(escapedProfileHistorySeparator)) failures.push('profile literal newline escape');
 if (failures.length) throw new Error(`working updates verification failed: ${failures.join(', ')}`);
 
 console.log('Working updates overlay is applied and verified.');

@@ -1,7 +1,8 @@
 let tg = window.Telegram?.WebApp ?? null;
-const APP_VERSION = '19.1-telegram-wheel-v2';
+const APP_VERSION = '20.0-spaceverse-purple-home';
 const IS_VK = window.__PIVNIK_PLATFORM__ === 'vk';
 const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
+const TELEGRAM_HEADER_COLOR = '#0b0e13';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
 const telegramInitDataFromUrl = readTelegramLaunchData();
@@ -31,7 +32,7 @@ function refreshTelegramBridge() {
   try { tg.ready(); } catch (_) {}
   try { tg.expand(); } catch (_) {}
   try {
-    tg.setHeaderColor('#15110e');
+    tg.setHeaderColor(TELEGRAM_HEADER_COLOR);
     tg.setBackgroundColor('#0e0c0a');
     tg.setBottomBarColor('#120e0b');
   } catch (_) {}
@@ -59,6 +60,7 @@ const BOOT_FAILSAFE_MS = 10000;
 const API_TIMEOUT_MS = 9000;
 const bootStartedAt = performance.now();
 let bootCompleted = false;
+let bootInFlight = null;
 
 const state = {
   token: safeStorage.get('pivnik_session'),
@@ -81,7 +83,7 @@ const state = {
   promotions: [],
   adminContent: { promotions: [], shopItems: [] },
   editingContent: null,
-  selectedShopItem: 'craft-05',
+  selectedShopItem: 'frame-beer-mugs',
   leaderboard: null,
   staffRecent: [],
   profileDraft: null,
@@ -90,6 +92,9 @@ const state = {
   homeShopCarouselIndex: 0,
   homeShopCarouselTimer: null,
   adminUsers: [],
+  adminUsersDirectory: { page: 1, limit: 25, total: 0, pages: 1, busy: false },
+  adminUsersFilterTimer: 0,
+  adminUsersRequestSeq: 0,
   adminTransactions: [],
   adminInquiries: [],
   shopContact: null,
@@ -158,17 +163,26 @@ function avatarFallback(entity = {}) {
   return String(entity.firstName || entity.name || 'П').trim().slice(0, 1).toUpperCase() || 'П';
 }
 
+// PIVNIK_ICECREAM69A_FRAME_20260909
 function avatarFrameClass(entity = {}) {
+  if (entity.profileFrame === 'gold-bars') return 'avatar-frame avatar-frame-gold-bars';
   if (entity.profileFrame === 'money') return 'avatar-frame avatar-frame-money';
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
   if (entity.profileFrame === 'diamond') return 'avatar-frame avatar-frame-diamond';
   if (entity.profileFrame === 'anna') return 'avatar-frame avatar-frame-anna';
   if (entity.profileFrame === 'olesya') return 'avatar-frame avatar-frame-olesya';
   if (entity.profileFrame === 'vladislav') return 'avatar-frame avatar-frame-vladislav';
+  if (entity.profileFrame === 'icecream69a') return 'avatar-frame avatar-frame-icecream69a';
   return '';
 }
 
 function avatarOrbitHtml(entity = {}) {
+  if (entity.profileFrame === 'gold-bars') {
+    return '<span class="gold-orbital-base" aria-hidden="true"></span>'
+      + '<span class="avatar-orbit gold-bars-orbit" aria-hidden="true">'
+      + Array.from({ length: 6 }, (_, index) => '<i style="--bar-angle:' + (index * 60) + 'deg"><span class="gold-ingot"></span></i>').join('')
+      + '</span>';
+  }
   if (entity.profileFrame === 'money') {
     return `<span class="avatar-orbit money-orbit" aria-hidden="true">${Array.from({ length: 8 }, (_, index) => `<i style="--orbit-index:${index}">$</i>`).join('')}</span>`;
   }
@@ -187,6 +201,12 @@ function avatarOrbitHtml(entity = {}) {
     const poops = Array.from({ length: 12 }, () => '💩');
     return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
   }
+  if (entity.profileFrame === 'icecream69a') {
+    const symbols = Array.from({ length: 12 }, (_, index) => index % 2 === 0 ? '🔞' : '😈');
+    return '<span class="avatar-orbit icecream69a-orbit" aria-hidden="true">'
+      + symbols.map((symbol, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + symbol + '</span></i>').join('')
+      + '</span>';
+  }
   return '';
 }
 
@@ -199,10 +219,12 @@ function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = fa
 
 function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
+  element.classList.toggle('has-gold-bars-frame', entity.profileFrame === 'gold-bars');
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');
   element.classList.toggle('has-olesya-frame', entity.profileFrame === 'olesya');
   element.classList.toggle('has-vladislav-frame', entity.profileFrame === 'vladislav');
+  element.classList.toggle('has-icecream69a-frame', entity.profileFrame === 'icecream69a');
   element.innerHTML = avatarInlineHtml(entity, 'avatar-render-inner', respectPrivacy);
 }
 
@@ -262,12 +284,15 @@ function renderProfileSetup(step = state.profileSetupStep || 1) {
     const selected = state.profileDraft.avatarSource === source;
     button.classList.toggle('active', selected);
     if (source === 'telegram') {
-      button.disabled = !state.profile?.photoUrl;
+      const hasPlatformPhoto = Boolean(state.profile?.photoUrl);
+      button.disabled = !hasPlatformPhoto && !IS_VK;
       const small = button.querySelector('small');
       if (small) {
-        small.textContent = state.profile?.photoUrl
+        small.textContent = hasPlatformPhoto
           ? `Фото из профиля ${PLATFORM_NAME}`
-          : `В ${PLATFORM_NAME} нет фото`;
+          : IS_VK
+            ? 'Нажмите, чтобы загрузить фото VK'
+            : `В ${PLATFORM_NAME} нет фото`;
       }
     }
   });
@@ -379,7 +404,7 @@ function enhanceDom() {
   if (IS_VK && hero && !$('.client-tip')) {
     const tip = document.createElement('div');
     tip.className = 'client-tip';
-    tip.innerHTML = '<span class="client-tip-icon">⌗</span><div><b>Один личный код</b><small>QR постоянный. Не отправляйте его посторонним.</small></div>';
+    tip.innerHTML = '<span class="client-tip-icon">⌗</span><div><b>Один личный код</b><small>Не отправляйте QR посторонним.</small></div>';
     hero.after(tip);
   }
 
@@ -444,7 +469,7 @@ function enhanceDom() {
     const title = qrSheet.querySelector('h2');
     if (title) title.textContent = 'Личная бонусная карта';
     const qrParagraph = qrSheet.querySelector('p');
-    if (qrParagraph) qrParagraph.innerHTML = 'Код постоянный и принадлежит только вам.';
+    if (qrParagraph) qrParagraph.innerHTML = 'Покажите QR сотруднику перед оплатой.';
     const copy = document.createElement('button');
     copy.id = 'copyQrCode';
     copy.type = 'button';
@@ -568,61 +593,21 @@ function requestId() {
 }
 
 const WHEEL_VISUAL_SECTORS = (() => {
-  const smallPrizes = [
-    'bonus-5', 'bonus-10', 'beer-glass', 'bonus-20', 'bonus-5',
-    'bonus-50', 'bonus-10', 'bonus-5', 'bonus-100', 'bonus-20',
-    'beer-glass', 'bonus-5', 'bonus-10', 'bonus-50', 'bonus-20',
-    'bonus-5', 'bonus-100', 'bonus-10', 'beer-glass', 'bonus-5'
+  // Clockwise centers measured from the approved artwork. The pictured "2 б"
+  // is not a server prize and deliberately has no landing target.
+  const pictured = [
+    'annual-beer', 'beer-glass', 'bonus-100', 'bonus-5', 'bonus-50',
+    'beer-glass', 'bonus-10', 'bonus-20', 'bonus-5', null,
+    'beer-glass', 'bonus-100', 'bonus-5', 'beer-glass', 'bonus-50',
+    'bonus-10', 'bonus-5', 'bonus-20', 'beer-glass', 'bonus-50'
   ];
-  const labels = {
-    'bonus-5': '5 бонусов',
-    'bonus-10': '10 бонусов',
-    'bonus-20': '20 бонусов',
-    'bonus-50': '50 бонусов',
-    'bonus-100': '100 бонусов',
-    'beer-glass': 'Бокал пива',
-    'annual-beer': 'Годовой запас пива'
-  };
-  const sectors = [{ code: 'annual-beer', label: labels['annual-beer'], start: -22, end: 22, center: 0, jackpot: true }];
-  const size = 316 / smallPrizes.length;
-  smallPrizes.forEach((code, index) => {
-    const start = 22 + index * size;
-    sectors.push({ code, label: labels[code], start, end: start + size, center: start + size / 2, jackpot: false });
-  });
-  return sectors;
+  return pictured.map((code, index) => ({ code, center: index * 18 }))
+    .filter((sector) => sector.code);
 })();
 
-function wheelPoint(angle, radius) {
-  const radians = angle * Math.PI / 180;
-  return {
-    x: 160 + Math.sin(radians) * radius,
-    y: 160 - Math.cos(radians) * radius
-  };
-}
-
-function wheelSectorPath(start, end) {
-  const first = wheelPoint(start, 154);
-  const last = wheelPoint(end, 154);
-  const largeArc = end - start > 180 ? 1 : 0;
-  return `M160 160 L${first.x.toFixed(3)} ${first.y.toFixed(3)} A154 154 0 ${largeArc} 1 ${last.x.toFixed(3)} ${last.y.toFixed(3)} Z`;
-}
-
 function renderWheelArtwork() {
-  if (IS_VK || state.wheel.artworkReady) return;
-  const disk = $('#wheelDisk');
-  if (!disk) return;
-  disk.innerHTML = WHEEL_VISUAL_SECTORS.map((sector, index) => {
-    const path = `<path class="wheel-sector ${sector.jackpot ? 'wheel-sector-jackpot' : `wheel-sector-${index % 3}`}" d="${wheelSectorPath(sector.start, sector.end)}"></path>`;
-    if (sector.jackpot) {
-      return `${path}<text class="wheel-sector-label wheel-jackpot-label" x="160" y="42" text-anchor="middle"><tspan x="160">ГОДОВОЙ ЗАПАС</tspan><tspan x="160" dy="11">ПИВА</tspan></text>`;
-    }
-    const flipped = sector.center > 90 && sector.center < 270;
-    const labelRotation = flipped ? 90 : -90;
-    // Keep every label on the same radial ring. Moving flipped labels to y=268
-    // mirrors them into the upper half of the wheel and leaves the bottom empty.
-    const labelY = 52;
-    return `${path}<g transform="rotate(${sector.center.toFixed(3)} 160 160)"><text class="wheel-sector-label" x="160" y="${labelY}" text-anchor="middle" transform="rotate(${labelRotation} 160 ${labelY})">${escapeHtml(sector.label)}</text></g>`;
-  }).join('');
+  if (state.wheel.artworkReady) return;
+  // The approved image is an actual rotating <img>; there is no SVG overlay.
   state.wheel.artworkReady = true;
 }
 
@@ -632,6 +617,14 @@ function wheelDurationLabel(ms) {
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
   return [hours, minutes, rest].map((value) => String(value).padStart(2, '0')).join(':');
+}
+
+function wheelHoursLabel(hours) {
+  const value = Number(hours) > 0 ? Number(hours) : 24;
+  const lastTwo = value % 100;
+  const last = value % 10;
+  const word = lastTwo >= 11 && lastTwo <= 14 ? 'часов' : last === 1 ? 'час' : last >= 2 && last <= 4 ? 'часа' : 'часов';
+  return `${value} ${word}`;
 }
 
 function effectiveWheelStatus() {
@@ -644,7 +637,6 @@ function effectiveWheelStatus() {
 }
 
 function renderWheelStatus() {
-  if (IS_VK) return;
   const current = effectiveWheelStatus();
   const button = $('#wheelSpinButton');
   const availability = $('#wheelAvailability');
@@ -653,7 +645,20 @@ function renderWheelStatus() {
   const homeStatus = $('#homeWheelStatus');
   if (!button || !availability || !nextFreeHint || !balanceHint) return;
 
+  if (pendingWheelRequest()) {
+    button.textContent = state.wheel.busy ? 'Проверяем результат…' : 'Проверить результат';
+    button.disabled = state.wheel.busy;
+    availability.textContent = 'Результат предыдущего вращения ещё не подтверждён.';
+    nextFreeHint.textContent = 'Повторная проверка использует то же вращение.';
+    balanceHint.textContent = 'Новое вращение станет доступно после проверки.';
+    if (homeStatus) homeStatus.textContent = current && !current.freeAvailable && current.nextFreeAt
+      ? wheelDurationLabel(new Date(current.nextFreeAt).getTime() - Date.now())
+      : '';
+    return;
+  }
+
   if (!current) {
+    if (homeStatus) homeStatus.textContent = '';
     button.textContent = 'Проверяем доступность…';
     button.disabled = true;
     availability.textContent = 'Синхронизируем время последнего вращения.';
@@ -678,7 +683,7 @@ function renderWheelStatus() {
     ? 'Бесплатное вращение доступно'
     : `Дополнительное вращение — ${paidCost} бонусов`;
   nextFreeHint.textContent = free
-    ? 'Следующее бесплатное вращение — через 24 часа после этого.'
+    ? `Следующее бесплатное вращение — через ${wheelHoursLabel(current.freeIntervalHours)} после этого.`
     : `Следующее бесплатное вращение — через ${wheelDurationLabel(remaining)}.`;
   balanceHint.textContent = current.unlimitedBonus
     ? 'Баланс: ∞ бонусов'
@@ -686,14 +691,12 @@ function renderWheelStatus() {
       ? `Баланс: ${fmt(current.balance)} бонусов`
       : `На балансе ${fmt(current.balance)} · для вращения нужно ${paidCost}`;
   if (homeStatus) {
-    homeStatus.textContent = free
-      ? 'Бесплатное вращение доступно'
-      : `Бесплатно через ${wheelDurationLabel(remaining)}`;
+    homeStatus.textContent = free ? 'Доступно' : wheelDurationLabel(remaining);
   }
 }
 
 function startWheelCountdown() {
-  if (IS_VK || state.wheel.countdownTimer) return;
+  if (state.wheel.countdownTimer) return;
   state.wheel.countdownTimer = window.setInterval(() => {
     const before = state.wheel.status?.freeAvailable;
     renderWheelStatus();
@@ -705,8 +708,40 @@ function startWheelCountdown() {
   }, 1000);
 }
 
+// The rules show the chances and prices PIVNIK Business set; without a status the printed defaults stay.
+function renderWheelRules() {
+  const current = state.wheel.status;
+  if (!current) return;
+  const freeText = $('#wheelRulesFreeText');
+  const paidText = $('#wheelRulesPaidText');
+  const odds = $('#wheelOddsList');
+  if (freeText && current.freeIntervalHours) {
+    freeText.textContent = `Первое вращение бесплатно. Следующее бесплатное вращение становится доступно ровно через ${wheelHoursLabel(current.freeIntervalHours)} с момента предыдущего бесплатного вращения.`;
+  }
+  const first = Number(current.firstPaidCost);
+  const later = Number(current.laterPaidCost);
+  if (paidText && first > 0 && later > 0) {
+    paidText.textContent = first === later
+      ? `После бесплатного вращения каждое дополнительное вращение до следующего бесплатного стоит ${fmt(first)} бонусов.`
+      : `После бесплатного вращения первое дополнительное вращение стоит ${fmt(first)} бонусов. Все последующие дополнительные вращения до следующего бесплатного вращения стоят по ${fmt(later)} бонусов. Цена выше ${fmt(later)} бонусов не повышается.`;
+  }
+  const prizes = Array.isArray(current.prizes) ? current.prizes : [];
+  if (odds && prizes.length) {
+    odds.replaceChildren(...prizes.filter((prize) => prize.annualSupply || Number(prize.chancePercent) > 0).map((prize) => {
+      const item = document.createElement('li');
+      const title = document.createElement('b');
+      title.textContent = prize.title;
+      const chance = document.createElement('span');
+      const percent = `${Number(prize.chancePercent).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}%`;
+      chance.textContent = prize.annualSupply ? `${percent} · 1 из 1 000 000` : percent;
+      item.append(title, chance);
+      return item;
+    }));
+  }
+}
+
 async function loadWheelStatus() {
-  if (IS_VK || !state.token || !state.profile?.termsAccepted) return null;
+  if (!state.token || !state.profile?.termsAccepted) return null;
   const status = await api('/api/wheel/status', { retries: 0, timeoutMs: 7000 });
   state.wheel.status = status;
   renderWheelStatus();
@@ -714,8 +749,38 @@ async function loadWheelStatus() {
   return status;
 }
 
+async function loadWheelHistory() {
+  const target = $('#wheelHistory');
+  if (!target || !state.token || !state.profile?.termsAccepted) return;
+  try {
+    const data = await api('/api/wheel/history', { retries: 0, timeoutMs: 7000 });
+    const spins = Array.isArray(data?.spins) ? data.spins : [];
+    if (!spins.length) {
+      target.textContent = 'Вращений пока нет.';
+      return;
+    }
+    target.replaceChildren(...spins.map((spin) => {
+      const row = document.createElement('div');
+      row.className = 'wheel-history-row';
+      const description = document.createElement('span');
+      description.textContent = spin.kind === 'free' ? 'Бесплатное' : `За ${Number(spin.chargedBonusCost || 0)} бонусов`;
+      const date = document.createElement('small');
+      const time = new Date(spin.createdAt);
+      date.textContent = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      description.append(date);
+      const prize = document.createElement('strong');
+      prize.textContent = wheelPrizeDisplayTitle(spin.prize);
+      row.append(description, prize);
+      return row;
+    }));
+  } catch (_) {
+    target.textContent = 'Не удалось загрузить историю. Откройте колесо ещё раз.';
+  }
+}
+
 function visualSectorForPrize(code) {
-  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === code);
+  const sectorCode = code === 'halloween-ticket' ? 'beer-glass' : code;
+  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === sectorCode);
   if (!candidates.length) return WHEEL_VISUAL_SECTORS[0];
   const randomIndex = globalThis.crypto?.getRandomValues
     ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % candidates.length
@@ -737,31 +802,92 @@ function waitForWheelStop(disk) {
   });
 }
 
-async function spinWheel() {
-  if (IS_VK || state.wheel.busy) return;
-  if (!state.wheel.status) await loadWheelStatus();
-  const current = effectiveWheelStatus();
-  if (!current?.freeAvailable && !current?.canAffordPaid) {
-    return toast(`Для вращения нужно ${current?.nextPaidCost || 50} бонусов.`);
-  }
+// The Halloween wheel art has the pumpkin tickets on the same five sectors where the glass of beer sits.
+const HALLOWEEN_WHEEL_ART = '/assets/home-v2/wheel-halloween-night-20261010.webp';
+function applyHalloweenWheelArt(on) {
+  const disk = document.getElementById('wheelDisk');
+  if (!disk) return;
+  if (!disk.dataset.defaultSrc) disk.dataset.defaultSrc = disk.getAttribute('src') || '';
+  const src = on ? HALLOWEEN_WHEEL_ART : disk.dataset.defaultSrc;
+  if (src && disk.getAttribute('src') !== src) disk.setAttribute('src', src);
+}
 
+function wheelPrizeDisplayTitle(prize) {
+  const titles = {
+    'bonus-5': '5 бонусов',
+    'bonus-10': '10 бонусов',
+    'bonus-20': '20 бонусов',
+    'bonus-50': '50 бонусов',
+    'bonus-100': '100 бонусов',
+    'beer-glass': 'Бокал пива',
+    'halloween-ticket': 'Хэллоуинский билет',
+    'annual-beer': 'Годовой запас пива'
+  };
+  return titles[String(prize?.code || '')] || 'Приз зачислен';
+}
+
+function wheelUserErrorMessage(error) {
+  if (error?.status === 401) return 'Сессия истекла. Откройте приложение ещё раз.';
+  if (error?.status === 409) return 'Сейчас это вращение недоступно. Проверьте таймер и баланс.';
+  if (error?.status === 429) return 'Слишком много попыток. Попробуйте немного позже.';
+  if (error?.code === 'TIMEOUT' || error instanceof TypeError) return 'Не удалось получить результат. Проверьте интернет и повторите.';
+  return 'Не удалось завершить вращение. Попробуйте ещё раз.';
+}
+
+function pendingWheelRequest() {
+  let pending = state.wheel.pendingRequest;
+  if (!pending) {
+    try { pending = JSON.parse(safeStorage.get('pivnik_wheel_pending_request') || 'null'); }
+    catch (_) { return null; }
+  }
+  if (!state.profile?.id || pending?.userId !== String(state.profile.id)
+    || !/^[A-Za-z0-9-]{8,100}$/.test(pending?.requestKey || '')) return null;
+  state.wheel.pendingRequest = pending;
+  return pending;
+}
+
+function clearPendingWheelRequest(requestKey) {
+  if (pendingWheelRequest()?.requestKey !== requestKey) return;
+  state.wheel.pendingRequest = null;
+  safeStorage.remove('pivnik_wheel_pending_request');
+}
+
+async function spinWheel() {
+  if (state.wheel.busy) return;
   const disk = $('#wheelDisk');
   if (!disk) return;
+  // Lock before the first await so status loading cannot admit a second click.
   state.wheel.busy = true;
   renderWheelStatus();
-  const result = $('#wheelResult');
-  result?.classList.add('is-visible');
-  result?.setAttribute('aria-hidden', 'false');
-  $('#wheelResultKicker').textContent = 'Определяем результат на сервере';
-  $('#wheelResultTitle').textContent = 'Колесо набирает ход…';
-
+  let requestKey;
   try {
+    const pending = pendingWheelRequest();
+    if (!pending && !state.wheel.status) await loadWheelStatus();
+    const current = effectiveWheelStatus();
+    if (!pending && !current?.freeAvailable && !current?.canAffordPaid) {
+      return toast(`Для вращения нужно ${current?.nextPaidCost || 50} бонусов.`);
+    }
+    requestKey = pending?.requestKey || requestId();
+    state.wheel.pendingRequest = { userId: String(state.profile.id), requestKey };
+    // Keep the command across manual retry/reload until its outcome is known.
+    // The server checks replay before cooldown/balance, so recovery stays possible
+    // even if the original spin spent the user's remaining bonuses.
+    safeStorage.set('pivnik_wheel_pending_request', JSON.stringify(state.wheel.pendingRequest));
+    const result = $('#wheelResult');
+    result?.classList.add('is-visible');
+    result?.setAttribute('aria-hidden', 'false');
+    $('#wheelResultKicker').textContent = 'Определяем результат на сервере';
+    $('#wheelResultTitle').textContent = pending ? 'Проверяем предыдущее вращение…' : 'Колесо набирает ход…';
     const data = await api('/api/wheel/spin', {
       method: 'POST',
-      body: JSON.stringify({ requestKey: requestId() }),
+      body: JSON.stringify({ requestKey }),
       retries: 1,
       timeoutMs: 9000
     });
+    if (!data?.spin?.prize || !data?.status || !data?.account) {
+      throw new Error('Не удалось подтвердить результат вращения. Повторите проверку.');
+    }
+    clearPendingWheelRequest(requestKey);
     const sector = visualSectorForPrize(data.spin?.prize?.code);
     const currentAngle = ((state.wheel.rotation % 360) + 360) % 360;
     const alignment = ((360 - sector.center - currentAngle) % 360 + 360) % 360;
@@ -779,15 +905,24 @@ async function spinWheel() {
       renderProfile();
     }
     $('#wheelResultKicker').textContent = 'Ваш приз';
-    $('#wheelResultTitle').textContent = data.spin?.prize?.title || 'Приз зачислен';
+    $('#wheelResultTitle').textContent = wheelPrizeDisplayTitle(data.spin?.prize);
+    loadWheelHistory().catch(() => {});
+    if (data.spin?.prize?.code === 'halloween-ticket') {
+      $('#wheelResultTitle').textContent = 'Хэллоуинский билет +1';
+      refreshHalloweenSummary();
+    }
     $('#wheelRim').classList.add('wheel-win');
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
   } catch (error) {
-    $('#wheelResultKicker').textContent = 'Вращение не выполнено';
-    $('#wheelResultTitle').textContent = error.message;
+    // These responses are returned before a successful mutation. Auth, transport
+    // and 5xx errors can also occur after a prior commit and must keep the key.
+    if ([400, 404, 409].includes(error?.status)) clearPendingWheelRequest(requestKey);
+    const userMessage = wheelUserErrorMessage(error);
+    $('#wheelResultKicker').textContent = pendingWheelRequest() ? 'Результат уточняется' : 'Вращение не выполнено';
+    $('#wheelResultTitle').textContent = userMessage;
     await loadWheelStatus().catch(() => {});
-    toast(error.message);
+    toast(userMessage);
   } finally {
     state.wheel.busy = false;
     renderWheelStatus();
@@ -795,10 +930,10 @@ async function spinWheel() {
 }
 
 function openWheel() {
-  if (IS_VK) return;
   renderWheelArtwork();
   switchScreen('wheel');
   loadWheelStatus().catch((error) => toast(error.message));
+  loadWheelHistory().catch(() => {});
 }
 
 renderWheelArtwork();
@@ -813,9 +948,12 @@ async function finishBoot() {
   try {
     window.dispatchEvent(new CustomEvent('pivnik:boot-complete'));
   } catch (_) {}
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_BOOT_COMPLETE');
 }
 
 function showBootActions(message, { canOpenApp = Boolean(state.profile) } = {}) {
+  const diagnostics = IS_VK ? window.__PIVNIK_VK_DIAGNOSTICS__ : null;
+  if (diagnostics) message = `${message || 'Не удалось загрузить приложение.'} Код запуска: ${diagnostics.id}`;
   const text = $('#bootText');
   if (text && message) text.textContent = message;
   $('#bootScreen')?.classList.add('error');
@@ -855,6 +993,7 @@ setTimeout(() => {
     finishBoot();
     toast('Часть данных продолжает загружаться');
   } else {
+    if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_BOOT_STALLED');
     showBootActions(`Не удалось завершить подключение. Можно повторить без перезапуска ${PLATFORM_NAME}.`);
   }
 }, BOOT_FAILSAFE_MS);
@@ -968,12 +1107,21 @@ function closeModal(id) {
   modal.setAttribute('aria-hidden', 'true');
 }
 
-function switchScreen(target) {
+function switchScreen(target, navigation = {}) {
   if (!target) return;
+  if (target === 'staff' && !roleCanStaff(state.profile?.role)) return;
+  if (target === 'admin' && !roleCanAdmin(state.profile?.role)) return;
+  const active = $('.screen.active')?.dataset.screen || null;
+  state.screenHistory ||= [];
+  if (!navigation.fromHistory && active && active !== target) {
+    state.screenHistory.push(active);
+    if (state.screenHistory.length > 24) state.screenHistory.shift();
+  }
   $$('.screen').forEach((screen) => screen.classList.toggle('active', screen.dataset.screen === target));
   $$('.bottom-nav [data-target]').forEach((button) => button.classList.toggle('active', button.dataset.target === target));
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
+  $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
@@ -982,39 +1130,296 @@ function switchScreen(target) {
   if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
 
+window.__PIVNIK_GO_BACK__ = () => {
+  state.screenHistory ||= [];
+  const active = $('.screen.active')?.dataset.screen || 'client';
+  let previous = state.screenHistory.pop();
+  while (previous === active && state.screenHistory.length) previous = state.screenHistory.pop();
+  switchScreen(previous || (active === 'client' ? 'profile' : 'client'), { fromHistory: true });
+};
+
 function currentLevelIndex() {
   return Math.max(0, state.statuses.findIndex((level) => level.name === state.profile?.status?.name));
+}
+
+// Halloween copy for the home SPACEVERSE card; the original text is kept so the flag can be turned off again.
+const HALLOWEEN_BUSINESS_COPY = {
+  title: 'Хэллоуин в SpaceVerse',
+  sub: 'Ночь Котлов 31 октября. Копите тыквенные билеты',
+  cta: 'К котлам',
+};
+function applyHalloweenCopy(on) {
+  const title = document.querySelector('.spaceverse-business-copy > strong');
+  const sub = document.querySelector('.spaceverse-business-copy > em');
+  const cta = document.querySelector('.spaceverse-business-cta');
+  if (!title || !sub) return;
+  if (title.dataset.originalText === undefined) {
+    title.dataset.originalText = title.textContent;
+    sub.dataset.originalText = sub.textContent;
+    if (cta) cta.dataset.originalHtml = cta.innerHTML;
+  }
+  title.textContent = on ? HALLOWEEN_BUSINESS_COPY.title : title.dataset.originalText;
+  sub.textContent = on ? HALLOWEEN_BUSINESS_COPY.sub : sub.dataset.originalText;
+  if (cta) cta.innerHTML = on ? `${HALLOWEEN_BUSINESS_COPY.cta} <i aria-hidden="true">›</i>` : cta.dataset.originalHtml;
+}
+
+// Halloween tab: live ticket count and timer over the drawn "Night of Cauldrons" header.
+const HALLOWEEN_DRAW_AT = '2026-10-31T20:00:00+03:00';
+let halloweenTimerId = 0;
+function halloweenTimerText(closesAt) {
+  const left = new Date(closesAt).getTime() - Date.now();
+  if (!Number.isFinite(left)) return '—';
+  if (left <= 0) return 'Розыгрыш идёт';
+  const days = Math.floor(left / 86400000);
+  const hours = Math.floor((left % 86400000) / 3600000);
+  const minutes = Math.floor((left % 3600000) / 60000);
+  return days > 0 ? `${days}д ${hours}ч` : `${hours}ч ${minutes}м`;
+}
+let halloweenInvite = null;
+function renderHalloween(summary) {
+  const tickets = $('#halloweenTickets');
+  const timer = $('#halloweenTimer');
+  const invites = $('#halloweenInviteCount');
+  // Keep the last known count while a refresh is in flight so the counter does not flash 0.
+  if (tickets && (summary || !tickets.dataset.known)) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  if (tickets && summary) tickets.dataset.known = '1';
+  if (summary?.invite) halloweenInvite = summary.invite;
+  const limit = Number(halloweenInvite?.weekLimit) || 3;
+  if (invites) invites.textContent = `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}`;
+  const closesAt = summary?.closesAt || HALLOWEEN_DRAW_AT;
+  const tick = () => { if (timer) timer.textContent = halloweenTimerText(closesAt); };
+  tick();
+  clearInterval(halloweenTimerId);
+  halloweenTimerId = setInterval(() => {
+    if ($('.screen.active')?.dataset.screen !== 'halloween') { clearInterval(halloweenTimerId); return; }
+    tick();
+  }, 30000);
+}
+async function openHalloweenPage() {
+  switchScreen('halloween');
+  renderHalloween(null);
+  try {
+    renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }));
+  } catch {
+    // The raffle API is optional until its migration is applied; the screen keeps working with zero tickets.
+  }
+}
+
+// "Пригласи друга": the card opens a sheet with the user's own code (to give to a friend) and, during the user's own first
+// 24 hours, a field to enter a friend's code. Every rule (new accounts only, first purchase, 3 a week) is checked on the server.
+const HALLOWEEN_INVITE_TEXT = 'Заходи в Пивник и введи мой код в первые сутки после регистрации';
+const HALLOWEEN_CLAIM_MESSAGES = {
+  invalid_code: 'Такого кода нет, проверь буквы',
+  unknown_code: 'Такого кода нет, проверь буквы',
+  self_invite: 'Свой код ввести нельзя',
+  already_attached: 'Код друга уже применён',
+  mutual_invite: 'Этот друг уже пришёл по твоему коду, взаимно нельзя',
+  window_expired: 'Код можно ввести только в первые сутки после регистрации',
+  not_new_account: 'Код можно ввести только в первые сутки после регистрации',
+  has_purchase: 'Код вводится до первой покупки',
+  returning_user: 'Код можно ввести только при первой регистрации',
+  draw_closed: 'Ночь Котлов уже прошла'
+};
+async function refreshHalloweenSummary() {
+  try { renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 })); } catch (_) {}
+}
+function renderHalloweenInviteSheet() {
+  const invite = halloweenInvite || {};
+  const limit = Number(invite.weekLimit) || 3;
+  const count = Math.min(limit, Math.max(0, Number(invite.weekCount) || 0));
+  const code = $('#halloweenMyCode');
+  if (code) code.textContent = invite.code || '—';
+  const bonus = $('#halloweenInviteBonus');
+  if (bonus && Number(invite.bonusPerFriend) > 0) bonus.textContent = String(invite.bonusPerFriend);
+  const progress = $('#halloweenInviteProgress');
+  if (progress) progress.textContent = `Друзей на этой неделе: ${count} из ${limit}`;
+  const enter = $('#halloweenEnterBlock');
+  if (enter) enter.hidden = !invite.canEnterCode;
+  const title = $('#halloweenEnterTitle');
+  if (title && invite.enterUntil) {
+    const until = new Date(invite.enterUntil);
+    if (Number.isFinite(until.getTime())) {
+      title.textContent = `Есть код от друга? Ввести можно до ${until.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+    }
+  }
+  const note = $('#halloweenInvitedNote');
+  if (note) note.hidden = !invite.invitedBy;
+}
+async function openHalloweenInvite() {
+  renderHalloweenInviteSheet();
+  openModal('halloweenInviteModal');
+  await refreshHalloweenSummary();
+  renderHalloweenInviteSheet();
+}
+async function copyHalloweenCode() {
+  const code = halloweenInvite?.code;
+  if (!code) { toast('Код появится через пару секунд'); return; }
+  if (IS_VK && window.vkBridge?.send) {
+    try { await window.vkBridge.send('VKWebAppCopyText', { text: code }); toast('Код скопирован'); return; } catch (_) {}
+  }
+  try { await navigator.clipboard.writeText(code); toast('Код скопирован'); } catch (_) { toast(`Твой код: ${code}`); }
+}
+async function shareHalloweenInvite() {
+  if (!halloweenInvite?.code) await refreshHalloweenSummary();
+  const code = halloweenInvite?.code;
+  if (!code) { toast('Код появится через пару секунд'); return; }
+  const text = `${HALLOWEEN_INVITE_TEXT}: ${code}`;
+  const link = IS_VK ? halloweenInvite?.links?.vk : halloweenInvite?.links?.telegram;
+  if (link && IS_VK && window.vkBridge?.send) {
+    try { await window.vkBridge.send('VKWebAppShare', { link }); return; } catch (error) {
+      if (Number(error?.error_data?.error_code) === 4) return; // the user closed the share sheet
+    }
+  }
+  if (link && !IS_VK && tg?.openTelegramLink) {
+    try {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
+      return;
+    } catch (_) {}
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Ночь Котлов', text, ...(link ? { url: link } : {}) }); return; } catch (_) {}
+  }
+  try { await navigator.clipboard.writeText(link ? `${text}\n${link}` : text); toast('Приглашение скопировано, отправь его другу'); } catch (_) { toast(`Твой код: ${code}`); }
+}
+async function applyHalloweenCode() {
+  const input = $('#halloweenCodeInput');
+  const hint = $('#halloweenEnterHint');
+  const button = $('#halloweenApplyCode');
+  const code = String(input?.value || '').trim();
+  if (!code) { if (hint) hint.textContent = 'Введи код друга'; return; }
+  if (button) button.disabled = true;
+  try {
+    const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    if (result?.attached) {
+      if (hint) hint.textContent = '';
+      toast('Код принят! После первой покупки другу придёт билет');
+      if (input) input.value = '';
+    } else if (hint) {
+      hint.textContent = HALLOWEEN_CLAIM_MESSAGES[result?.reason] || 'Не получилось, попробуй чуть позже';
+    }
+  } catch (_) {
+    if (hint) hint.textContent = 'Не получилось, попробуй чуть позже';
+  } finally {
+    if (button) button.disabled = false;
+  }
+  await refreshHalloweenSummary();
+  renderHalloweenInviteSheet();
+}
+
+// Full-screen promo banner: shown on every app open at most once an hour, only after the app has fully loaded, the terms are accepted and no other
+// window is open. The art is set in HALLOWEEN_BANNER.src; its drawn "Войти в сезон" button opens the cauldrons tab.
+const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=2', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+let promoBannerTimer = 0;
+function promoBannerDue() {
+  if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
+  if (!state.profile?.termsAccepted) return false;
+  if ($('#appShell')?.classList.contains('service-mode')) return false;
+  const last = Number(safeStorage.get(`pivnik_banner_${HALLOWEEN_BANNER.key}`)) || 0;
+  return Date.now() - last >= HALLOWEEN_BANNER.everyMs;
+}
+function schedulePromoBanner(delayMs = 1200) {
+  clearTimeout(promoBannerTimer);
+  promoBannerTimer = setTimeout(() => {
+    if (!promoBannerDue()) return;
+    if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
+    const image = $('#promoBannerImage');
+    if (!image) return;
+    const show = () => {
+      image.onload = null;
+      image.onerror = null;
+      // The image may take a moment; never open over a window the user opened meanwhile.
+      if (!promoBannerDue()) return;
+      if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
+      safeStorage.set(`pivnik_banner_${HALLOWEEN_BANNER.key}`, String(Date.now()));
+      const banner = $('#promoBanner');
+      if (!banner) return;
+      banner.hidden = false;
+      banner.classList.add('open');
+      banner.setAttribute('aria-hidden', 'false');
+    };
+    if (image.getAttribute('src') === HALLOWEEN_BANNER.src && image.complete && image.naturalWidth) { show(); return; }
+    image.onload = show;
+    image.onerror = () => { image.onload = null; image.onerror = null; };
+    image.src = HALLOWEEN_BANNER.src;
+  }, delayMs);
+}
+function closePromoBanner() {
+  const banner = $('#promoBanner');
+  if (!banner) return;
+  banner.classList.remove('open');
+  banner.setAttribute('aria-hidden', 'true');
+  banner.hidden = true;
+}
+window.addEventListener('pivnik:boot-complete', () => {
+  if (document.readyState === 'complete') schedulePromoBanner();
+  else window.addEventListener('load', () => schedulePromoBanner(), { once: true });
+  // A mini app reopened from the background counts as a new visit too.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schedulePromoBanner(); });
+});
+
+// A friend who opened an invite link is attached to the inviter once, right after login. The server ignores old accounts and self-invites.
+function pendingHalloweenInviteCode() {
+  const sources = [!IS_VK ? tg?.initDataUnsafe?.start_param : '', location.hash, location.search];
+  for (const source of sources) {
+    const match = String(source || '').match(/inv_([A-Za-z0-9]{4,32})/);
+    if (match) return match[1];
+  }
+  return '';
+}
+async function claimHalloweenInvite() {
+  const code = pendingHalloweenInviteCode();
+  if (!code || safeStorage.get('pivnik_invite_claimed') === code) return;
+  try {
+    const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    // "unavailable" means the raffle tables are not ready yet, so the next visit tries again.
+    if (result?.attached || (result?.reason && !['unavailable', 'user_not_found'].includes(result.reason))) safeStorage.set('pivnik_invite_claimed', code);
+  } catch (_) {}
 }
 
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
+  // SPACEVERSE_CANONICAL_THEME_LOCK
+  // White-gold SPACEVERSE is the canonical client palette; server settings may change copy/radius, never product colors.
   const root = document.documentElement;
-  const colors = design.colors || {};
-  root.style.setProperty('--bg', colors.background || '#0e0c0a');
-  root.style.setProperty('--header', colors.header || '#15110e');
-  root.style.setProperty('--surface', colors.surface || '#1c1612');
-  root.style.setProperty('--card', colors.card || '#231a14');
-  root.style.setProperty('--text', colors.text || '#f7eee5');
-  root.style.setProperty('--muted', colors.muted || '#a99580');
-  root.style.setProperty('--gold', colors.accent || '#e9a83b');
-  root.style.setProperty('--gold2', colors.accentSoft || '#ffc96b');
-  root.style.setProperty('--radius', `${Number(design.radius || 20)}px`);
+  root.style.setProperty('--bg', '#efe7dc');
+  root.style.setProperty('--header', '#f8f3eb');
+  root.style.setProperty('--surface', '#f4eee5');
+  root.style.setProperty('--card', '#fffaf2');
+  root.style.setProperty('--text', '#171717');
+  root.style.setProperty('--muted', '#746b5e');
+  root.style.setProperty('--gold', '#b77917');
+  root.style.setProperty('--gold2', '#e4b357');
+  root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
+  // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
+  root.classList.toggle('theme-halloween', design.theme === 'halloween');
+  applyHalloweenCopy(design.theme === 'halloween');
+  applyHalloweenWheelArt(design.theme === 'halloween');
+  if (design.theme === 'halloween' && bootCompleted && document.readyState === 'complete') schedulePromoBanner();
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
   const legacyQrButton = $('#showQrButton');
   if (legacyQrButton?.lastChild) legacyQrButton.lastChild.textContent = design.texts?.qrButton || 'Показать QR';
-  $('#byline').textContent = `${design.texts?.byline || 'by Kirill Gamilton'} △`;
+  $('#byline').textContent = (design.texts?.byline || 'by Kirill Gamilton') + ' △';
 
   Object.entries(design.sections || {}).forEach(([key, visible]) => {
     if (key === 'byline') $('#byline').classList.toggle('hidden', !visible);
-    else document.querySelectorAll(`[data-config-section="${key}"]`).forEach((element) => element.classList.toggle('hidden', !visible));
+    else document.querySelectorAll('[data-config-section="' + key + '"]').forEach((element) => element.classList.toggle('hidden', !visible));
   });
 
+  applyTelegramChrome();
+}
+
+// Telegram chrome follows the white-gold client once a profile is on screen,
+// whether or not the server published a design record.
+function applyTelegramChrome() {
+  // Halloween night skin: Telegram's own background and bottom bar go dark too, so no cream strip shows on overscroll.
+  const night = document.documentElement.classList.contains('theme-halloween');
   try {
-    tg?.setHeaderColor(colors.header || '#15110e');
-    tg?.setBackgroundColor(colors.background || '#0e0c0a');
+    tg?.setHeaderColor(night ? TELEGRAM_HEADER_COLOR : '#fbf6ef');
+    tg?.setBackgroundColor(night ? '#0b0716' : '#efe7dc');
+    tg?.setBottomBarColor(night ? '#0b0a24' : '#f8f3eb');
   } catch (_) {}
 }
 
@@ -1025,8 +1430,22 @@ function renderBeer(profile = state.profile) {
   const progress = Number(beer.progressLiters || 0);
   const remaining = Math.max(0, Number(beer.nextGiftLiters ?? target));
   const gifts = Number(beer.giftLitersBalance || 0);
-  const percentage = Math.max(0, Math.min(100, (progress / target) * 100));
-  $('#beerProgressBar').style.width = `${percentage}%`;
+
+  const segmentCount = 14;
+  const normalizedProgress = target > 0
+    ? Math.max(0, Math.min(segmentCount, (progress / target) * segmentCount))
+    : 0;
+  const segments = $$('#beerProgressBar .beer-progress-segment');
+  segments.forEach((segment, index) => {
+    const fill = Math.max(0, Math.min(1, normalizedProgress - index));
+    segment.style.setProperty('--segment-fill', `${fill * 100}%`);
+    segment.classList.toggle('is-filled', fill >= 1);
+    segment.classList.toggle('is-partial', fill > 0 && fill < 1);
+  });
+  $('#beerProgressBar')?.setAttribute('aria-valuenow', String(progress));
+  $('#beerProgressBar')?.setAttribute('aria-valuemin', '0');
+  $('#beerProgressBar')?.setAttribute('aria-valuemax', String(target));
+
   $('#beerProgressText').textContent = `${fmtLiters(progress)} из ${fmtLiters(target)} л`;
   $('#beerRemainingText').textContent = remaining > 0 ? `ещё ${fmtLiters(remaining)} л` : 'подарок готов';
   $('#beerGiftBalance').textContent = fmtLiters(gifts);
@@ -1146,10 +1565,56 @@ function restartHomeShopCarousel() {
   }
 }
 
+const RED_COSMOS_SHOP_FRAMES = Object.freeze({
+  'frame-beer-mugs': 'beer-mugs',
+  'frame-beer-bottles': 'beer-bottles',
+  'frame-lights': 'lights',
+  'frame-premium-smiling-fuck': 'premium-smiling-fuck'
+});
+
+function shopFrameOwned(item = {}) {
+  const frameId = RED_COSMOS_SHOP_FRAMES[item.code];
+  if (!frameId) return false;
+  return (state.profile?.availableFrames || []).some((frame) => frame.code === frameId);
+}
+
+function shopFramePreviewMarkup(item = {}) {
+  const frameId = RED_COSMOS_SHOP_FRAMES[item.code];
+  if (!frameId) return shopImageMarkup(item, 'shop-list-media');
+  const entity = {
+    ...(state.profile || {}),
+    firstName: state.profile?.firstName || 'П',
+    profileFrame: frameId
+  };
+  return `<div class="shop-list-media shop-frame-live-preview" data-frame-preview="${escapeHtml(frameId)}">
+    ${avatarInlineHtml(entity, 'shop-frame-preview-avatar')}
+    <span class="shop-frame-preview-caption">Так выглядит рамка</span>
+  </div>`;
+}
+
 function shopActionLabel(item = {}) {
-  if (item.category === 'limited') return 'Уточнить по кружке';
-  if (item.priceType === 'bonus') return 'Как купить';
-  return 'Уточнить покупку';
+  return shopFrameOwned(item) ? '✓ Куплено' : 'Купить';
+}
+
+async function buyShopItem(code, button = null) {
+  const item = findShopItem(code);
+  if (!item) throw new Error('Товар не найден.');
+  if (shopFrameOwned(item)) return toast('✓ Эта рамка уже куплена.');
+  if (button) button.disabled = true;
+  try {
+    const data = await api('/api/shop/buy', {
+      method: 'POST',
+      body: JSON.stringify({ itemCode: code, requestKey: requestId() }),
+      retries: 1
+    });
+    if (data.profile) state.profile = data.profile;
+    renderProfile();
+    await loadCatalog();
+    toast('Рамка куплена и сохранена в профиле');
+  } finally {
+    const refreshed = findShopItem(code);
+    if (button && !shopFrameOwned(refreshed || item)) button.disabled = false;
+  }
 }
 
 function renderShopCatalog() {
@@ -1159,24 +1624,20 @@ function renderShopCatalog() {
     if (!state.catalog.length) {
       clientList.innerHTML = 'Каталог пока пуст';
     } else {
-      const categoryOrder = ['craft', 'limited', 'profile', 'other'];
-      const groups = categoryOrder
-        .map((category) => ({ category, items: state.catalog.filter((item) => (item.category || 'other') === category) }))
-        .filter((group) => group.items.length);
-      clientList.innerHTML = groups.map((group) => {
-        const meta = SHOP_CATEGORY_META[group.category] || SHOP_CATEGORY_META.other;
-        return `<section class="shop-category" data-shop-category="${escapeHtml(group.category)}">
-          <div class="shop-category-head"><div><span>${escapeHtml(meta.subtitle)}</span><h3>${escapeHtml(meta.title)}</h3></div><b>${group.items.length}</b></div>
-          <div class="shop-category-grid">${group.items.map((item) => `<article class="shop-list-card ${item.active ? '' : 'disabled'}">
-            ${shopImageMarkup(item, 'shop-list-media')}
-            <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${escapeHtml(shopAvailabilityLabel(item))}</small></div>
-            <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions"><button class="secondary" data-shop-inquiry="${escapeHtml(item.code)}" type="button">${escapeHtml(shopActionLabel(item))}</button><button class="text-btn" data-shop-chat="${escapeHtml(item.code)}" type="button">Написать Кириллу</button></div></div>
-          </article>`).join('')}</div>
-        </section>`;
-      }).join('');
+      clientList.innerHTML = `<div class="red-cosmos-shop-grid">${state.catalog.map((item) => {
+        const owned = shopFrameOwned(item);
+        const premium = item.code === 'frame-premium-smiling-fuck';
+        return `<article class="shop-list-card ${premium ? 'v2-premium' : ''}">
+          ${premium ? '<span class="v2-premium-badge">★ PREMIUM</span>' : ''}
+          ${shopFramePreviewMarkup(item)}
+          <div class="shop-list-copy"><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.subtitle)}</p><small>${owned ? 'Навсегда в вашей коллекции' : 'Покупка за бонусы'}</small></div>
+          <div class="shop-list-price"><strong>${escapeHtml(shopPriceLabel(item))}</strong><div class="shop-card-actions">
+            <button class="secondary ${owned ? 'v2-owned-button' : ''}" data-shop-buy="${escapeHtml(item.code)}" type="button" ${owned ? 'disabled' : ''}>${escapeHtml(shopActionLabel(item))}</button>
+          </div></div>
+        </article>`;
+      }).join('')}</div>`;
       bindContentImageFallbacks(clientList);
-      clientList.querySelectorAll('[data-shop-inquiry]').forEach((button) => button.addEventListener('click', () => openShopInquiry(button.dataset.shopInquiry)));
-      clientList.querySelectorAll('[data-shop-chat]').forEach((button) => button.addEventListener('click', () => contactOwnerAboutItem(button.dataset.shopChat)));
+      clientList.querySelectorAll('[data-shop-buy]').forEach((button) => button.addEventListener('click', () => buyShopItem(button.dataset.shopBuy, button).catch((error) => toast(error.message))));
     }
   }
   const staffList = $('#staffShopItems');
@@ -1184,14 +1645,8 @@ function renderShopCatalog() {
     const activeItems = state.catalog.filter((item) => item.active && item.priceType === 'bonus' && Number(item.bonusPrice) > 0);
     if (!activeItems.some((item) => item.code === state.selectedShopItem)) state.selectedShopItem = activeItems[0]?.code || '';
     staffList.className = `staff-shop-items${activeItems.length ? '' : ' empty-state'}`;
-    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item">
-      <input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} />
-      <span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span>
-    </label>`).join('') : 'Активных товаров пока нет';
-    staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => {
-      state.selectedShopItem = input.value;
-      updateCalculation();
-    }));
+    staffList.innerHTML = activeItems.length ? activeItems.map((item) => `<label class="staff-shop-item"><input type="radio" name="staff-shop-item" value="${escapeHtml(item.code)}" ${item.code === state.selectedShopItem ? 'checked' : ''} /><span><b>${escapeHtml(item.title)}</b><small>${fmt(item.bonusPrice)} Б</small></span></label>`).join('') : 'Активных товаров пока нет';
+    staffList.querySelectorAll('input[name="staff-shop-item"]').forEach((input) => input.addEventListener('change', () => { state.selectedShopItem = input.value; updateCalculation(); }));
   }
 }
 
@@ -1253,6 +1708,61 @@ async function contactOwnerAboutItem(code) {
   } else {
     openShopInquiry(code);
     toast('Личный username владельца не настроен — отправьте вопрос через форму');
+  }
+}
+
+function openSpaceverseBusinessPage() {
+  const nameInput = $('#spaceverseLeadName');
+  if (nameInput && !nameInput.value.trim()) {
+    nameInput.value = [state.profile?.firstName, state.profile?.lastName].filter(Boolean).join(' ');
+  }
+  $('#spaceverseLeadSuccess')?.classList.add('hidden');
+  const button = $('#spaceverseLeadSubmit');
+  if (button) {
+    button.disabled = false;
+    button.textContent = 'Оставить заявку';
+  }
+  switchScreen('spaceverse-business');
+}
+
+async function submitSpaceverseBusinessLead() {
+  const name = $('#spaceverseLeadName')?.value?.trim() || '';
+  const phone = $('#spaceverseLeadPhone')?.value?.trim() || '';
+  const digits = phone.replace(/\D/g, '');
+  if (name.length < 2 || name.length > 80) throw new Error('Укажите имя.');
+  if (digits.length < 7 || digits.length > 15) throw new Error('Проверьте номер телефона.');
+
+  const button = $('#spaceverseLeadSubmit');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Отправляем…';
+  }
+
+  try {
+    const platform = IS_VK ? 'VK' : 'Telegram';
+    await api('/api/shop/inquiries', {
+      method: 'POST',
+      body: JSON.stringify({
+        itemCode: 'spaceverse-business-lead',
+        itemTitle: 'SPACEVERSE · подключение приложения',
+        message: [
+          'Заявка на подключение SPACEVERSE',
+          `Имя: ${name}`,
+          `Телефон: ${phone}`,
+          `Платформа: ${platform}`
+        ].join('\n')
+      })
+    });
+    $('#spaceverseLeadSuccess')?.classList.remove('hidden');
+    if (button) button.textContent = 'Заявка отправлена';
+    haptic('medium');
+    toast('Заявка отправлена');
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Оставить заявку';
+    }
+    throw error;
   }
 }
 
@@ -1319,6 +1829,36 @@ function renderLeaderboard() {
     $('#leagueSpentHome').textContent = data.me?.spend > 0
       ? `${fmt(data.me.spend)} ₽ за месяц`
       : 'по сумме покупок';
+  }
+  const homePreview = $('#homeLeaderboardPreview');
+  if (homePreview) {
+    homePreview.innerHTML = [1, 2, 3].map((rank) => {
+      const leader = data.leaders?.find((item) => item.rank === rank);
+      const amount = leader?.spend === null || leader?.spend === undefined ? '— ₽' : `${fmt(leader.spend)} ₽`;
+      const avatar = leader
+        ? avatarInlineHtml(leader, 'leader-avatar', true)
+        : '<span class="leader-avatar avatar-render"><span class="avatar-fallback">•</span></span>';
+      return `<span class="${leader?.isMe ? 'is-me' : ''}"><i>${rank}</i>${avatar}<b>${escapeHtml(leader?.name || 'Пока свободно')}</b><strong>${amount}</strong></span>`;
+    }).join('');
+  }
+  const previous = data.previousMonth;
+  const previousLeaders = Array.isArray(previous?.leaders) ? previous.leaders : [];
+  const homePrevious = $('#homeLeaguePrev');
+  if (homePrevious) {
+    homePrevious.textContent = previousLeaders.length ? `Топ за ${previous.month}: ${previousLeaders[0].name}` : '';
+    homePrevious.classList.toggle('hidden', !previousLeaders.length);
+  }
+  const previousBox = $('#leaguePrevMonth');
+  if (previousBox) {
+    previousBox.classList.toggle('hidden', !previousLeaders.length);
+    const medals = ['🥇', '🥈', '🥉'];
+    previousBox.innerHTML = previousLeaders.length ? `<span class="home-card-kicker">Кто выигрывал</span><h2>Топ прошлого месяца · ${escapeHtml(previous.month)}</h2>
+      <div class="leaderboard-list league-prev-list">${previousLeaders.map((leader, index) => `<div class="leaderboard-row ${leader.isMe ? 'is-me' : ''} podium">
+        <span class="leader-rank">${medals[index] || leader.rank}</span>
+        ${avatarInlineHtml(leader, 'leader-avatar', true)}
+        <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>${leader.rank} место</small></div>
+        <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
+      </div>`).join('')}</div>` : '';
   }
   const preview = $('#leaderboardPreview');
   if (preview) {
@@ -1558,7 +2098,36 @@ function achievementRarityLabel(rarity) {
   return { common: 'Обычное', rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' }[rarity] || 'Достижение';
 }
 
+const ACHIEVEMENT_SVG_ICONS = {
+  receipt: '<path d="M14 6h20v31l-3.4-2.6L27.2 37l-3.2-2.6L20.8 37l-3.4-2.6L14 37z"/><path d="m19 19 4 4 7-8"/>',
+  banknote: '<rect x="6" y="13" width="36" height="22" rx="3.5"/><circle cx="24" cy="24" r="5.5"/><path d="M11 18.5v.1M37 29.5v.1"/>',
+  triple: '<path d="M24 7c-6 0-10 4.6-10 10.5V25l-3.5 5.5h27L34 25v-7.5C34 11.6 30 7 24 7z"/><path d="M20 35a4 4 0 0 0 8 0"/>',
+  pint: '<path d="M13 16h19v21a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3z"/><path d="M32 21h3.5a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H32"/><path d="M12 16c-1.5-4 2.5-7 6-5 1.8-3.5 7-3.5 8.5 0 3.5-1.5 6.5 1.5 5.5 5"/><path d="M19 23v10M26 23v10"/>',
+  spark: '<path d="M24 6c1.2 9.5 4.5 12.8 14 18-9.5 5.2-12.8 8.5-14 18-1.2-9.5-4.5-12.8-14-18C19.5 18.8 22.8 15.5 24 6z"/>',
+  'receipt-stack': '<path d="M17 9h17v27"/><path d="M12 13h20v27l-3.3-2.5L25.5 40l-3.2-2.5L19.2 40l-3.3-2.5L12 40z"/><path d="M17 21h10M17 27h10"/>',
+  crown: '<path d="m8 34 2.5-17 8 7L24 11l5.5 13 8-7L40 34z"/><path d="M9 39h30"/>',
+  'monthly-crown': '<path d="m9 35 2.2-14 7 5.8L24 16l5.8 10.8 7-5.8L39 35z"/><path d="M10 40h28"/><path d="m24 5 1.6 3.4 3.7.5-2.7 2.6.7 3.7L24 13.4l-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z"/>',
+  calendar: '<rect x="8" y="11" width="32" height="29" rx="4"/><path d="M8 20h32M16 7v8M32 7v8"/><path d="M16 27h.1M24 27h.1M32 27h.1M16 33h.1M24 33h.1"/>',
+  bonus: '<circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="11.5" stroke-width="1.2" opacity=".55"/><path d="M19.5 17.5h9M19.5 17.5v13h5.5a3.7 3.7 0 0 0 0-7.4h-5.5"/>',
+  seal: '<path d="m24 6 4.2 3.8 5.6-.8 1.6 5.4 5 2.6-2 5.3 2 5.3-5 2.6-1.6 5.4-5.6-.8L24 42l-4.2-3.8-5.6.8-1.6-5.4-5-2.6 2-5.3-2-5.3 5-2.6 1.6-5.4 5.6.8z"/><circle cx="24" cy="24" r="6"/>',
+  beta: '<path d="M24 5c6.5 4.5 9.5 12 8 21l-4 4.5h-8L16 26c-1.5-9 1.5-16.5 8-21z"/><circle cx="24" cy="17" r="3"/><path d="m16 26-5.5 6.5 7-1.5M32 26l5.5 6.5-7-1.5M21 35.5 24 42l3-6.5"/>',
+  shield: '<path d="M24 6 38 11v11c0 9-6 16-14 20-8-4-14-11-14-20V11z"/><path d="M24 6v36M10.5 24H37.5" opacity=".55"/>'
+};
+const ACHIEVEMENT_SVG_BY_CODE = { 'beta-tester': 'beta', 'raise-shields': 'shield' };
+const ACHIEVEMENT_SHARED_ICONS = new Set(['banknote', 'pint', 'receipt-stack', 'calendar']);
+
+function achievementSvgIcon(item = {}) {
+  const key = ACHIEVEMENT_SVG_ICONS[item.icon] ? item.icon : ACHIEVEMENT_SVG_BY_CODE[item.code];
+  const body = ACHIEVEMENT_SVG_ICONS[key];
+  if (!body) return '';
+  const tier = ACHIEVEMENT_SHARED_ICONS.has(key) ? { common: 1, rare: 2, epic: 3 }[item.rarity] || 0 : 0;
+  const pips = Array.from({ length: tier }, (_, index) => `<circle cx="${24 + (index - (tier - 1) / 2) * 6}" cy="44.5" r="1.5" fill="currentColor" stroke="none"/>`).join('');
+  return `<svg class="ach-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}${pips}</svg>`;
+}
+
 function achievementIconHtml(item = {}) {
+  const svgIcon = achievementSvgIcon(item);
+  if (svgIcon) return svgIcon;
   if (item.icon === 'all-seeing-eye' || item.code === 'creator') {
     return `<svg class="all-seeing-eye" viewBox="0 0 100 90" aria-hidden="true">
       <path class="eye-triangle" d="M50 5 95 82H5Z" />
@@ -1592,7 +2161,7 @@ function renderProfileAchievements() {
   const sorted = [...achievements].sort((a, b) => (order[a.rarity] || 9) - (order[b.rarity] || 9));
   if (!sorted.length) {
     holder.innerHTML = '<button class="achievement-empty" id="achievementEmptyOpen" type="button">Открыть путь достижений <span>›</span></button>';
-    $('#achievementEmptyOpen')?.addEventListener('click', openAchievements);
+    $('#achievementEmptyOpen')?.addEventListener('click', openAchievementHub);
     return;
   }
   holder.innerHTML = sorted.map((item) => `<button class="profile-achievement-medal rarity-${escapeHtml(item.rarity)}" data-profile-achievement="${escapeHtml(item.code)}" type="button" title="${escapeHtml(item.title)}">
@@ -1601,7 +2170,7 @@ function renderProfileAchievements() {
   holder.querySelectorAll('[data-profile-achievement]').forEach((button) => button.addEventListener('click', () => {
     const selected = (state.profile?.achievements || []).find((item) => item.code === button.dataset.profileAchievement);
     state.achievementTab = selected?.rarity || 'common';
-    openAchievements(button.dataset.profileAchievement);
+    openAchievementHub();
   }));
 }
 
@@ -1609,6 +2178,40 @@ function achievementRewardLabel(item = {}) {
   if (Number(item.rewardBeerMl || 0) > 0) return '1 бесплатная пинта · 0,5 л';
   if (Number(item.rewardBonus || 0) > 0) return `+${fmt(item.rewardBonus)} бонусов`;
   return 'Особая награда';
+}
+
+const ACHIEVEMENTS_REFRESH_MS = 20_000;
+
+function achievementRemainingLabel(item = {}) {
+  if (item.earned || item.recurring || !item.progress) return '';
+  const remaining = Math.max(0, Number(item.progress.target || 0) - Number(item.progress.current || 0));
+  if (!remaining) return '';
+  if (item.unit === 'rub') return `ещё ${fmt(Math.ceil(remaining / 100))} ₽`;
+  if (item.unit === 'liter') return `ещё ${(remaining / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} л`;
+  if (item.unit === 'bonus') return `ещё ${fmt(remaining)} бонусов`;
+  return `ещё ${fmt(remaining)}`;
+}
+
+function nextAchievementGoal() {
+  return state.achievements
+    .filter((item) => !item.earned && !item.recurring && item.rarity !== 'legendary' && Number(item.progress?.percent || 0) > 0)
+    .sort((a, b) => Number(b.progress.percent) - Number(a.progress.percent))[0] || null;
+}
+
+function achievementNextGoalHtml() {
+  const goal = nextAchievementGoal();
+  if (!goal) return '';
+  const percent = Math.max(0, Math.min(100, Number(goal.progress.percent || 0)));
+  return `<div class="achievement-next" data-achievement-next="${escapeHtml(goal.code)}">
+      <span class="achievement-next-icon">${achievementIconHtml(goal)}</span>
+      <div>
+        <small>Ближайшая цель</small>
+        <b>${escapeHtml(goal.title)}</b>
+        <div class="achievement-progress"><i style="width:${percent}%"></i></div>
+        <small>${escapeHtml(goal.progress.label || '')} · ${escapeHtml(achievementRemainingLabel(goal))}</small>
+      </div>
+      <strong>${fmt(percent)}%</strong>
+    </div>`;
 }
 
 function renderAchievementCatalog() {
@@ -1629,19 +2232,20 @@ function renderAchievementCatalog() {
     return;
   }
   const earnedCount = items.filter((item) => item.earned).length;
-  catalog.innerHTML = `<div class="achievement-summary">
+  catalog.innerHTML = `${rarity === 'legendary' ? '' : achievementNextGoalHtml()}<div class="achievement-summary">
       <span>${escapeHtml(achievementRarityLabel(rarity))}</span>
-      <b>${earnedCount} из ${items.length}</b>
+      <b>Получено ${earnedCount} · Всего ${items.length}</b>
     </div>
     <div class="achievement-grid">${items.map((item) => {
       const progress = item.progress || { percent: item.earned ? 100 : 0, label: item.earned ? 'Получено' : 'Уникальное условие' };
+      const remaining = achievementRemainingLabel(item);
       return `<article class="achievement-tile ${item.earned ? 'earned' : 'locked'} rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}">
         <span class="achievement-tile-icon">${achievementIconHtml(item)}</span>
         <span class="achievement-state">${item.earned ? 'Получено' : `${fmt(progress.percent)}%`}</span>
         <b>${escapeHtml(item.title)}</b>
         <p>${escapeHtml(item.description || '')}</p>
         <div class="achievement-progress"><i style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></i></div>
-        <small>${escapeHtml(progress.label || '')}</small>
+        <small>${escapeHtml(progress.label || '')}${remaining ? ` · ${escapeHtml(remaining)}` : ''}</small>
         <strong>${escapeHtml(achievementRewardLabel(item))}</strong>
       </article>`;
     }).join('')}</div>`;
@@ -1654,6 +2258,9 @@ function openAchievements(code = '') {
   }
   renderAchievementCatalog();
   openModal('achievementsModal');
+  if (state.achievementsLoaded && Date.now() - Number(state.achievementsLoadedAt || 0) > ACHIEVEMENTS_REFRESH_MS) {
+    void loadAchievements().catch((error) => console.warn('Achievement progress refresh skipped:', error));
+  }
 }
 
 function renderAchievements() {
@@ -1669,6 +2276,7 @@ async function loadAchievements() {
   const data = await api('/api/achievements');
   state.achievements = data.achievements || [];
   state.achievementsLoaded = true;
+  state.achievementsLoadedAt = Date.now();
   if (state.profile) {
     state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
     state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
@@ -1704,10 +2312,18 @@ function maybeShowAchievementCelebration() {
 function renderProfile() {
   const profile = state.profile;
   if (!profile) return;
+  // Service access is operational UI. Resolve it before optional profile rendering
+  // so a later cosmetic/rendering failure cannot hide bartender/admin entrypoints.
+  const hasStaffAccess = roleCanStaff(profile.role);
+  const hasAdminAccess = roleCanAdmin(profile.role);
+  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
+  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
+  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Гость Пивника';
-  const platformLabel = profile.platform === 'vk' ? 'VK' : 'Telegram';
+  const profilePlatform = profile.platform || profile.provider || (IS_VK ? 'vk' : 'telegram');
+  const platformLabel = profilePlatform === 'vk' ? 'VK' : 'Telegram';
   const linked = Array.isArray(profile.linkedPlatforms) ? profile.linkedPlatforms : [];
-  $('#eyebrow').textContent = `${profile.firstName || 'Гость'}${profile.username ? ` · @${profile.username}` : ''}`;
+  $('#eyebrow').textContent = profilePlatform === 'vk' ? 'VK Mini App' : 'Telegram Mini App';
   if ($('#clientName')) $('#clientName').textContent = fullName;
   if ($('#profileName')) $('#profileName').textContent = fullName;
   if ($('#profileHandle')) $('#profileHandle').textContent = profile.username ? `@${profile.username} · ${platformLabel}` : platformLabel;
@@ -1721,7 +2337,7 @@ function renderProfile() {
   $('#clientBalance').classList.toggle('unlimited-balance', Boolean(profile.unlimitedBonus));
   $('#clientBalance').title = profile.unlimitedBonus ? 'Безлимитный баланс' : `${fmt(profile.balance)} бонусов`;
   $('#statusName').textContent = profile.status.name;
-  $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
+  if ($('#bonusPercent')) $('#bonusPercent').textContent = `${profile.status.bonusPercent}%`;
   if ($('#bonusPercentMirror')) $('#bonusPercentMirror').textContent = `${profile.status.bonusPercent}%`;
   renderAvatarInto($('#profileAvatar'), profile);
   renderAvatarInto($('#profileAvatarMirror'), profile);
@@ -1744,14 +2360,9 @@ function renderProfile() {
   } else {
     $('#statusProgress').style.width = '100%';
     $('#statusProgressText').textContent = 'Максимальный статус';
-    $('#nextRewardText').textContent = 'Максимальный статус';
+    $('#nextRewardText').textContent = '';
   }
 
-  const hasStaffAccess = roleCanStaff(profile.role);
-  const hasAdminAccess = roleCanAdmin(profile.role);
-  $('#profileStaffNav')?.classList.toggle('hidden', !hasStaffAccess);
-  $('#profileAdminNav')?.classList.toggle('hidden', !hasAdminAccess);
-  $('#profileServiceAccess')?.classList.toggle('hidden', !hasStaffAccess && !hasAdminAccess);
   if (!roleCanStaff(profile.role) && $('[data-screen="staff"]').classList.contains('active')) switchScreen('client');
   if (!roleCanAdmin(profile.role) && $('[data-screen="admin"]').classList.contains('active')) switchScreen('client');
   const partnerView = profile.role === 'viewer';
@@ -1787,7 +2398,7 @@ function renderTransaction(transaction) {
     redeem: ['Списание', '−'],
     adjustment: ['Корректировка', '±'],
     beer_gift: ['Подарочный литр', '🍺'],
-    welcome: ['Приветственный бонус', '100'],
+    welcome: ['Приветственный бонус', '+'],
     shop: ['Покупка в магазине', '□'],
     achievement: ['Достижение', '◆']
   };
@@ -1832,7 +2443,7 @@ async function refreshMe() {
   const data = await api('/api/me');
   applyProfilePayload(data);
   void loadSecondaryData();
-  if (!IS_VK) void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
+  void loadWheelStatus().catch((error) => console.warn('Wheel status refresh skipped:', error));
 }
 
 async function waitForTelegramInitData(maxWaitMs = 2800) {
@@ -1857,12 +2468,17 @@ async function authenticate() {
     retries: 0,
     timeoutMs: 7000
   });
+  if (IS_VK && (typeof data.token !== 'string' || !data.token || !data.profile)) {
+    throw Object.assign(new Error('Сервер не передал сессию и профиль.'), { code: 'INVALID_RESPONSE' });
+  }
   state.token = data.token;
   safeStorage.set('pivnik_session', state.token);
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_SESSION_RECEIVED');
   applyProfilePayload(data);
 }
 
 function renderCoreProfile() {
+  applyTelegramChrome();
   try {
     renderProfile();
     renderStatuses();
@@ -1886,7 +2502,7 @@ async function loadSecondaryData() {
   if (state.bootSecondaryStarted) return;
   state.bootSecondaryStarted = true;
   const jobs = [loadCurrentShift(), loadPromotions(), loadCatalog(), loadLeaderboard(), loadAchievements(), loadShopContact(), loadWalletConfig()];
-  if (!IS_VK) jobs.push(loadWheelStatus());
+  jobs.push(loadWheelStatus());
   const results = await Promise.allSettled(jobs);
   const failures = results.filter((item) => item.status === 'rejected');
   failures.forEach((item) => console.warn('Optional startup data skipped:', item.reason));
@@ -1918,13 +2534,14 @@ async function hydrateAfterBoot() {
 function schedulePostBootHydration() {
   window.setTimeout(() => {
     void hydrateAfterBoot();
+    void claimHalloweenInvite();
   }, 0);
 }
 
 function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
   const consentSafeTarget = event.target?.closest?.(
-    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent'
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, #halloweenToBusiness, .spaceverse-business-screen'
   );
   if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
@@ -1937,39 +2554,52 @@ function blockUnacceptedAction(event) {
 }
 
 async function boot() {
-  clearBootError();
-  try {
-    refreshTelegramBridge();
-    $('#bootText').textContent = 'Подключаем бонусный счёт…';
-    if (state.token) {
-      try {
-        const bootstrap = await api('/api/bootstrap', { retries: 0, timeoutMs: 6000 });
-        applyProfilePayload(bootstrap);
-      } catch (error) {
-        console.warn('Stored session rejected:', error);
-        state.token = '';
-        safeStorage.remove('pivnik_session');
+  if (bootInFlight) return bootInFlight;
+  bootInFlight = (async () => {
+    clearBootError();
+    bootCompleted = false;
+    if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.begin();
+    try {
+      refreshTelegramBridge();
+      $('#bootText').textContent = 'Подключаем бонусный счёт…';
+      if (state.token) {
+        try {
+          const bootstrap = await api('/api/bootstrap', { retries: 0, timeoutMs: 6000 });
+          applyProfilePayload(bootstrap);
+        } catch (error) {
+          // A transport failure does not invalidate a signed session. In VK an
+          // unnecessary re-auth can strand a warm WebView with expired launch params.
+          if (IS_VK && error?.status !== 401) throw error;
+          if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_SESSION_REJECTED', { status: error.status });
+          console.warn('Stored session rejected:', error);
+          state.token = '';
+          safeStorage.remove('pivnik_session');
+        }
       }
+      if (!state.token) {
+        $('#bootText').textContent = `Проверяем доступ в ${PLATFORM_NAME}…`;
+        await authenticate();
+      }
+      $('#bootText').textContent = 'Открываем профиль…';
+      renderCoreProfile();
+      await finishBoot();
+      closeModal('consentModal');
+      closeModal('profileSetupModal');
+      schedulePostBootHydration();
+    } catch (error) {
+      const diagnostics = IS_VK ? window.__PIVNIK_VK_DIAGNOSTICS__ : null;
+      diagnostics?.emit('VK_BOOT_FAIL', { status: error?.status, code: diagnostics.errorCode(error) });
+      console.error('Boot failed:', error);
+      const message = error?.status === 401
+        ? (IS_VK
+            ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
+            : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
+        : (error?.message || 'Не удалось загрузить приложение.');
+      showBootActions(message);
     }
-    if (!state.token) {
-      $('#bootText').textContent = `Проверяем доступ в ${PLATFORM_NAME}…`;
-      await authenticate();
-    }
-    $('#bootText').textContent = 'Открываем профиль…';
-    renderCoreProfile();
-    await finishBoot();
-    closeModal('consentModal');
-    closeModal('profileSetupModal');
-    schedulePostBootHydration();
-  } catch (error) {
-    console.error('Boot failed:', error);
-    const message = error?.status === 401
-      ? (IS_VK
-          ? `Не удалось войти в VK: ${error?.message || 'параметры запуска не подтверждены.'}`
-          : 'Telegram не передал данные входа. Закройте окно и откройте приложение ещё раз.')
-      : (error?.message || 'Не удалось загрузить приложение.');
-    showBootActions(message);
-  }
+  })();
+  try { await bootInFlight; }
+  finally { bootInFlight = null; }
 }
 
 async function acceptTerms() {
@@ -1987,6 +2617,8 @@ async function acceptTerms() {
     renderProfile();
     toast('Правила приняты');
     void loadSecondaryData();
+    void claimHalloweenInvite();
+    schedulePromoBanner();
   } finally {
     if (button) button.disabled = false;
   }
@@ -2051,29 +2683,57 @@ async function showHistory() {
 
 function notificationPreferences() {
   const raw = safeStorage.get('pivnik_notification_preferences');
-  if (!raw) return { achievements: true, bonuses: true, promotions: true };
+  if (!raw) return { achievements: true, bonuses: true, promotions: false };
   try {
-    return { achievements: true, bonuses: true, promotions: true, ...JSON.parse(raw) };
+    return { achievements: true, bonuses: true, promotions: false, ...JSON.parse(raw) };
   } catch (_) {
-    return { achievements: true, bonuses: true, promotions: true };
+    return { achievements: true, bonuses: true, promotions: false };
   }
 }
 
-function renderNotificationPreferences() {
+async function renderNotificationPreferences() {
   const preferences = notificationPreferences();
   if ($('#notifyAchievements')) $('#notifyAchievements').checked = preferences.achievements !== false;
   if ($('#notifyBonuses')) $('#notifyBonuses').checked = preferences.bonuses !== false;
-  if ($('#notifyPromotions')) $('#notifyPromotions').checked = preferences.promotions !== false;
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = false;
+
+  const config = await api('/api/me/messaging-config', { retries: 0, timeoutMs: 6000 });
+  // Promo messages go to every guest who has not turned them off (owner's choice, 2026-10-07).
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = config?.marketingOptIn === true || !config?.marketingOptOutAt;
 }
 
-function saveNotificationPreferences() {
-  safeStorage.set('pivnik_notification_preferences', JSON.stringify({
+async function saveNotificationPreferences() {
+  const preferences = {
     achievements: Boolean($('#notifyAchievements')?.checked),
     bonuses: Boolean($('#notifyBonuses')?.checked),
     promotions: Boolean($('#notifyPromotions')?.checked)
-  }));
+  };
+
+  await api('/api/me/marketing-consent', {
+    method: 'POST',
+    body: JSON.stringify({ enabled: preferences.promotions }),
+    retries: 0,
+    timeoutMs: 7000
+  });
+  safeStorage.set('pivnik_notification_preferences', JSON.stringify(preferences));
+
+  let vkPermissionWarning = '';
+  if (IS_VK && preferences.promotions) {
+    try {
+      const config = await api('/api/me/messaging-config', { retries: 0, timeoutMs: 6000 });
+      if (config?.vkCommunityId && typeof window.__PIVNIK_VK_REQUEST_COMMUNITY_MESSAGES__ === 'function') {
+        await window.__PIVNIK_VK_REQUEST_COMMUNITY_MESSAGES__(config.vkCommunityId);
+      }
+    } catch (error) {
+      console.warn('VK community messages permission was not granted:', error?.message || error);
+      vkPermissionWarning = 'Согласие сохранено, но VK не разрешил сообщения сообщества.';
+    }
+  }
+
   closeModal('notificationsModal');
-  toast('Настройки уведомлений сохранены');
+  toast(vkPermissionWarning || (preferences.promotions
+    ? 'Сообщения об акциях включены'
+    : 'Сообщения об акциях отключены'));
 }
 
 function openConnectedServices() {
@@ -2384,6 +3044,7 @@ function fillDesignForm(design) {
   $$('[data-design-color]').forEach((input) => input.value = design.colors?.[input.dataset.designColor] || '#000000');
   $$('[data-design-text]').forEach((input) => input.value = design.texts?.[input.dataset.designText] || '');
   $$('[data-design-section]').forEach((input) => input.checked = Boolean(design.sections?.[input.dataset.designSection]));
+  $$('[data-design-theme]').forEach((input) => input.checked = design.theme === input.dataset.designTheme);
   $('[data-design-radius]').value = String(design.radius || 20);
   $('#radiusValue').textContent = String(design.radius || 20);
 }
@@ -2396,6 +3057,12 @@ function readDesignForm() {
   $$('[data-design-color]').forEach((input) => design.colors[input.dataset.designColor] = input.value);
   $$('[data-design-text]').forEach((input) => design.texts[input.dataset.designText] = input.value.trim());
   $$('[data-design-section]').forEach((input) => design.sections[input.dataset.designSection] = input.checked);
+  const themeInputs = $$('[data-design-theme]');
+  if (themeInputs.length) {
+    const seasonalTheme = themeInputs.find((input) => input.checked);
+    if (seasonalTheme) design.theme = seasonalTheme.dataset.designTheme;
+    else delete design.theme;
+  }
   design.radius = Number($('[data-design-radius]').value || 20);
   return design;
 }
@@ -2505,10 +3172,113 @@ function renderInquiries(items, target = '#adminInquiries', compact = false) {
   }));
 }
 
+function selectedBroadcastRecipientCount(preview, channel) {
+  if (!preview) return 0;
+  if (channel === 'telegram') return Number(preview.telegramRecipients || 0);
+  if (channel === 'vk') return Number(preview.vkRecipients || 0);
+  return (preview.telegramConfigured ? Number(preview.telegramRecipients || 0) : 0)
+    + (preview.vkConfigured ? Number(preview.vkRecipients || 0) : 0);
+}
+
+async function loadBroadcastPreview() {
+  const channel = $('#broadcastChannel')?.value || 'telegram';
+  const audience = $('#broadcastAudience')?.value || 'clients';
+  const info = $('#broadcastAudienceInfo');
+  const sendButton = $('#sendBroadcast');
+  if (info) info.textContent = 'Считаем получателей…';
+  if (sendButton) sendButton.disabled = true;
+
+  const preview = await api(`/api/admin/broadcast/preview?audience=${encodeURIComponent(audience)}`, {
+    retries: 0,
+    timeoutMs: 8000
+  });
+  const telegramState = preview.telegramConfigured
+    ? `Telegram: ${fmt(preview.telegramRecipients)}`
+    : 'Telegram: бот не настроен';
+  const vkState = preview.vkConfigured
+    ? `VK: ${fmt(preview.vkRecipients)}`
+    : 'VK: токен сообщества не настроен';
+  const truncated = preview.truncated ? ` · показан лимит ${fmt(preview.maxRecipients)}` : '';
+  const consent = Number.isFinite(Number(preview.activeUsers))
+    ? `Получат: ${fmt(preview.totalUsers)} из ${fmt(preview.activeUsers)} принявших правила (кроме отказавшихся от акций) · `
+    : '';
+  if (info) info.textContent = `${consent}${telegramState} · ${vkState}${truncated}`;
+
+  const count = selectedBroadcastRecipientCount(preview, channel);
+  const channelConfigured = channel === 'telegram'
+    ? preview.telegramConfigured
+    : channel === 'vk'
+      ? preview.vkConfigured
+      : (preview.telegramConfigured || preview.vkConfigured);
+  if (sendButton) sendButton.disabled = !channelConfigured || count < 1;
+  return preview;
+}
+
+async function openBroadcastAdmin() {
+  const result = $('#broadcastResult');
+  if (result) {
+    result.textContent = '';
+    result.classList.add('hidden');
+  }
+  openModal('broadcastModal');
+  await loadBroadcastPreview();
+}
+
+async function sendAdminBroadcast() {
+  const channel = $('#broadcastChannel')?.value || 'telegram';
+  const audience = $('#broadcastAudience')?.value || 'clients';
+  const message = String($('#broadcastMessage')?.value || '').trim();
+  if (!message) throw new Error('Введите текст сообщения.');
+
+  const preview = await loadBroadcastPreview();
+  const count = selectedBroadcastRecipientCount(preview, channel);
+  if (count < 1) throw new Error('В выбранном канале пока нет доступных получателей.');
+  if (!window.confirm(`Отправить сообщение? Получателей по выбранным каналам: ${fmt(count)}.`)) return;
+
+  const button = $('#sendBroadcast');
+  const result = $('#broadcastResult');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Отправляем…';
+  }
+  if (result) {
+    result.classList.remove('hidden');
+    result.textContent = 'Рассылка выполняется…';
+  }
+
+  try {
+    const data = await api('/api/admin/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ channel, audience, message }),
+      retries: 0,
+      timeoutMs: 60_000
+    });
+    const parts = [];
+    if (channel === 'telegram' || channel === 'all') {
+      parts.push(data.telegram?.skipped === 'not_configured'
+        ? 'Telegram не настроен'
+        : `Telegram: доставлено ${fmt(data.telegram?.delivered || 0)}, ошибок ${fmt(data.telegram?.failed || 0)}`);
+    }
+    if (channel === 'vk' || channel === 'all') {
+      parts.push(data.vk?.skipped === 'not_configured'
+        ? 'VK не настроен'
+        : `VK: доставлено ${fmt(data.vk?.delivered || 0)}, ошибок ${fmt(data.vk?.failed || 0)}`);
+    }
+    if (data.truncated) parts.push('сработал защитный лимит получателей');
+    if (result) result.textContent = parts.join(' · ');
+    toast('Рассылка завершена');
+  } finally {
+    if (button) {
+      button.textContent = 'Отправить';
+      await loadBroadcastPreview().catch(() => { button.disabled = false; });
+    }
+  }
+}
+
 async function loadAdmin() {
   if (!roleCanAdmin(state.profile?.role)) return;
   const [summaryData, usersData, shiftData, contentData, inquiriesData] = await Promise.all([
-    api('/api/admin/summary'), api('/api/admin/users'), api('/api/admin/shift'), api('/api/admin/content'), api('/api/admin/inquiries?limit=5')
+    api('/api/admin/summary'), api('/api/admin/users?limit=5&page=1'), api('/api/admin/shift'), api('/api/admin/content'), api('/api/admin/inquiries?limit=5')
   ]);
   state.adminSettings = summaryData.settings;
   state.adminUsers = usersData.users || [];
@@ -2545,25 +3315,96 @@ function filterAdminTransactions() {
   renderAdminTransactions(filtered, '#allTransactionsList');
 }
 
-async function openAllUsers() {
-  if (!state.adminUsers.length) {
-    const data = await api('/api/admin/users');
-    state.adminUsers = data.users || [];
+function adminUsersDirectoryParams(page = 1) {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(state.adminUsersDirectory.limit || 25)
+  });
+  const q = ($('#userSearch')?.value || '').trim();
+  const role = $('#userRoleFilter')?.value || '';
+  const status = $('#userStatusFilter')?.value || '';
+  if (q) params.set('q', q);
+  if (role) params.set('role', role);
+  if (status) params.set('status', status);
+  return params;
+}
+
+function renderAdminUsersDirectoryMeta() {
+  const directory = state.adminUsersDirectory;
+  const meta = $('#adminUsersMeta');
+  const pageLabel = $('#adminUsersPageLabel');
+  const prev = $('#adminUsersPrev');
+  const next = $('#adminUsersNext');
+  if (meta) meta.textContent = `${fmt(directory.total)} пользователей · по ${directory.limit} на странице`;
+  if (pageLabel) pageLabel.textContent = `Страница ${directory.page} из ${directory.pages}`;
+  if (prev) prev.disabled = directory.busy || directory.page <= 1;
+  if (next) next.disabled = directory.busy || directory.page >= directory.pages;
+}
+
+async function loadAdminUsersDirectory(page = 1) {
+  window.clearTimeout(state.adminUsersFilterTimer);
+  const requestSeq = ++state.adminUsersRequestSeq;
+  const profileId = state.profile?.id;
+  const isCurrent = () => requestSeq === state.adminUsersRequestSeq && profileId === state.profile?.id;
+  const root = $('#allUsersList');
+  const retry = $('#adminUsersRetry');
+  if (retry) retry.hidden = true;
+  state.adminUsersDirectory.busy = true;
+  renderAdminUsersDirectoryMeta();
+  if (root) {
+    root.className = 'operation-list empty-state';
+    root.textContent = 'Загрузка пользователей…';
   }
-  filterAdminUsers();
+  try {
+    const data = await api(`/api/admin/users?${adminUsersDirectoryParams(page)}`);
+    if (!isCurrent()) return;
+    state.adminUsers = data.users || [];
+    state.adminUsersDirectory = {
+      page: Number(data.pagination?.page || page || 1),
+      limit: Number(data.pagination?.limit || state.adminUsersDirectory.limit || 25),
+      total: Number(data.pagination?.total || 0),
+      pages: Number(data.pagination?.pages || 1),
+      busy: false
+    };
+    renderUsers(state.adminUsers, '#allUsersList', false);
+    renderAdminUsersDirectoryMeta();
+  } catch (error) {
+    if (!isCurrent()) return;
+    state.adminUsersDirectory.busy = false;
+    renderAdminUsersDirectoryMeta();
+    if (root) {
+      root.className = 'operation-list empty-state';
+      root.textContent = 'Не удалось загрузить пользователей. Повторите попытку.';
+    }
+    if (retry) {
+      retry.hidden = false;
+      retry.onclick = () => loadAdminUsersDirectory(page).catch((err) => toast(err.message));
+    }
+    throw error;
+  }
+}
+
+async function openAllUsers() {
   openModal('adminUsersModal');
+  await loadAdminUsersDirectory(1);
 }
 
 function filterAdminUsers() {
-  const query = ($('#userSearch')?.value || '').trim().toLocaleLowerCase('ru-RU');
-  const role = $('#userRoleFilter')?.value || '';
-  const filtered = state.adminUsers.filter((user) => {
-    const haystack = `${user.name || ''} ${user.telegramId || ''} ${user.vkId || ''} ${user.username || ''}`.toLocaleLowerCase('ru-RU');
-    return (!query || haystack.includes(query)) && (!role || user.role === role);
-  });
-  renderUsers(filtered, '#allUsersList', false);
+  window.clearTimeout(state.adminUsersFilterTimer);
+  // Invalidate the previous request immediately, including the debounce window.
+  state.adminUsersRequestSeq += 1;
+  state.adminUsersDirectory.busy = true;
+  renderAdminUsersDirectoryMeta();
+  state.adminUsersFilterTimer = window.setTimeout(() => {
+    loadAdminUsersDirectory(1).catch((error) => toast(error.message));
+  }, 250);
 }
 
+async function refreshAdminUsersDirectory() {
+  const page = state.adminUsersDirectory.page || 1;
+  await loadAdmin();
+  await loadAdminUsersDirectory(page);
+}
 async function openAllInquiries() {
   const data = await api('/api/admin/inquiries?limit=200');
   state.adminInquiries = data.inquiries || [];
@@ -2764,6 +3605,26 @@ function openContentAdmin() {
   setTimeout(() => $('#contentAdminCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 }
 
+const ADMIN_CRM_STATUS_LABELS = {
+  new: 'Новый',
+  active: 'Активный',
+  inactive: 'Давно не был',
+  no_ops: 'Без операций'
+};
+
+function adminCrmActivityMarkup(user) {
+  if (!user?.crmStatus) return '';
+  const status = ADMIN_CRM_STATUS_LABELS[user.crmStatus] || user.crmStatus;
+  const operations = Number(user.operationsCount || 0);
+  let activity = 'операций нет';
+  if (user.lastActivityAt) {
+    const date = new Date(user.lastActivityAt);
+    if (!Number.isNaN(date.getTime())) {
+      activity = `операций ${fmt(operations)} · последняя ${date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}`;
+    }
+  }
+  return `<br><span class="crm-user-status status-${escapeHtml(user.crmStatus)}">${escapeHtml(status)}</span><span class="crm-user-activity">${escapeHtml(activity)}</span>`;
+}
 function renderUsers(users, target = '#usersList', compact = false) {
   const root = $(target);
   if (!root) return;
@@ -2802,6 +3663,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     const possibleMatchNote = possibleMatch
       ? `<br><span class="user-pin-state">Возможное совпадение: ${escapeHtml(possibleMatch.name || possibleMatch.username || possibleMatch.id)} · только подсказка, без объединения</span>`
       : '';
+    const crmActivity = adminCrmActivityMarkup(user);
     const controls = !compact && roleCanWrite(state.profile.role) && user.role !== 'admin'
       ? `<div class="user-actions">
           <select data-role-user="${user.id}">
@@ -2815,7 +3677,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
         </div>`
       : `<small>${user.role === 'viewer' ? 'Партнёр · полный обзор' : user.role === 'staff' ? 'Бармен' : user.role === 'admin' ? 'Владелец' : 'Клиент'}</small>`;
     return `<div class="user-row ${compact ? 'compact-user-row' : ''}">
-      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
+      <div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(platformDetails)}${legacyLinked ? ' · архивная связка' : ''}${user.username ? ` · @${escapeHtml(user.username)}` : ''}<br>${escapeHtml(user.qrShortCode || 'QR не создан')} · пиво ${fmtLiters(user.beerPaidLitersTotal)} л · подарок ${fmtLiters(user.beerGiftLitersBalance)} л${crmActivity}${possibleMatchNote}${user.role === 'staff' ? `<br><span class="user-pin-state">${user.pinConfigured ? 'PIN настроен' : 'PIN не задан'}</span>` : ''}</small></div>
       <strong>${user.unlimitedBonus ? '∞' : compactBonus(user.balance)} Б${user.unlimitedBonus ? '<small class="unlimited-mark">безлимит</small>' : ''}</strong>
       ${controls}
     </div>`;
@@ -2824,7 +3686,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
   root.querySelectorAll('[data-role-user]').forEach((select) => select.addEventListener('change', async () => {
     try {
       await api(`/api/admin/users/${select.dataset.roleUser}/role`, { method: 'POST', body: JSON.stringify({ role: select.value }) });
-      toast('Роль обновлена'); await loadAdmin(); await openAllUsers();
+      toast('Роль обновлена'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-adjust-user]').forEach((button) => button.addEventListener('click', async () => {
@@ -2841,7 +3703,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
           requestKey: requestId()
         })
       });
-      toast('Баланс изменён'); await loadAdmin(); await openAllUsers();
+      toast('Баланс изменён'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-pin-user]').forEach((button) => button.addEventListener('click', async () => {
@@ -2852,7 +3714,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
     if (confirmPin !== pin) return toast('PIN-коды не совпадают');
     try {
       await api(`/api/admin/users/${button.dataset.pinUser}/pin`, { method: 'POST', body: JSON.stringify({ pin }) });
-      toast('PIN сотрудника сохранён'); await loadAdmin(); await openAllUsers();
+      toast('PIN сотрудника сохранён'); await refreshAdminUsersDirectory();
     } catch (error) { toast(error.message); }
   }));
   root.querySelectorAll('[data-reset-cancel-user]').forEach((button) => button.addEventListener('click', async () => {
@@ -2862,7 +3724,7 @@ function renderUsers(users, target = '#usersList', compact = false) {
   }));
   root.querySelectorAll('[data-reissue-user]').forEach((button) => button.addEventListener('click', async () => {
     if (!confirm('Перевыпустить личный QR? Старый код останется рабочим как защищённый alias.')) return;
-    try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await loadAdmin(); await openAllUsers(); }
+    try { const data = await api(`/api/admin/users/${button.dataset.reissueUser}/reissue-qr`, { method: 'POST', body: '{}' }); toast(`Новый код: ${data.shortCode}`); await refreshAdminUsersDirectory(); }
     catch (error) { toast(error.message); }
   }));
 }
@@ -2875,12 +3737,34 @@ $('#profileSetupBack')?.addEventListener('click', () => renderProfileSetup(1));
 $('#profileSetupNext')?.addEventListener('click', () => renderProfileSetup(2));
 $('#saveProfileSettings')?.addEventListener('click', () => saveProfileSettings().catch((error) => toast(error.message)));
 $('#openAnimalPicker')?.addEventListener('click', () => { renderAnimalPicker(); openModal('animalPickerModal'); });
-$$('#profileSetupModal [data-avatar-source]').forEach((button) => button.addEventListener('click', () => {
+$$('#profileSetupModal [data-avatar-source]').forEach((button) => button.addEventListener('click', async () => {
   if (button.disabled) return;
+  const source = button.dataset.avatarSource;
+  if (IS_VK && source === 'telegram' && !state.profile?.photoUrl) {
+    const refresh = window.__PIVNIK_VK_REFRESH_PROFILE__;
+    if (typeof refresh !== 'function') {
+      toast('Фото VK пока недоступно');
+      return;
+    }
+    button.disabled = true;
+    try {
+      const hydration = await refresh();
+      if (hydration?.profile) applyVkProfileHydration(hydration);
+    } catch (error) {
+      console.warn('VK profile photo refresh failed:', error);
+      toast(error.message || 'Не удалось загрузить фото VK');
+    } finally {
+      button.disabled = false;
+    }
+    if (!state.profile?.photoUrl) {
+      renderProfileSetup();
+      return;
+    }
+  }
   state.profileDraft = state.profileDraft || profileDraftFromCurrent();
-  state.profileDraft.avatarSource = button.dataset.avatarSource;
+  state.profileDraft.avatarSource = source;
   state.profileDraft.avatarKey = null;
-  if (!state.profile?.onboardingComplete) state.profileDraft.privacy.showAvatar = button.dataset.avatarSource !== 'telegram';
+  if (!state.profile?.onboardingComplete) state.profileDraft.privacy.showAvatar = source !== 'telegram';
   renderProfileSetup();
 }));
 $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener('click', () => {
@@ -2895,11 +3779,16 @@ $$('#profileAgeOptions [data-age]').forEach((button) => button.addEventListener(
 document.addEventListener('click', blockUnacceptedAction, true);
 
 function openAchievementHub() {
-  if ((state.profile?.unannouncedAchievements || []).length) {
-    maybeShowAchievementCelebration();
-    return;
-  }
+  const hasPendingReward = (state.profile?.unannouncedAchievements || []).length > 0;
+  if (hasPendingReward) window.setTimeout(maybeShowAchievementCelebration, 0);
   openAchievements();
+  if (!state.achievementsLoaded) {
+    void loadAchievements().catch((error) => {
+      console.warn('Achievement hub refresh skipped:', error);
+      const catalog = $('#achievementCatalog');
+      if (catalog && !state.achievementsLoaded) catalog.innerHTML = `<div class="achievement-catalog-empty">${escapeHtml(error.message || 'Не удалось загрузить достижения.')}</div>`;
+    });
+  }
 }
 
 $('#openAchievementsButton')?.addEventListener('click', openAchievementHub);
@@ -2920,9 +3809,9 @@ $('#ackAchievementButton')?.addEventListener('click', async () => {
   finally { button.disabled = false; }
 });
 $('#bootRetry')?.addEventListener('click', () => {
+  if (bootInFlight) return;
   state.bootSecondaryStarted = false;
-  bootCompleted = false;
-  boot();
+  void boot();
 });
 $('#bootLite')?.addEventListener('click', enableLiteMode);
 
@@ -2930,12 +3819,35 @@ $$('.bottom-nav [data-target]').forEach((button) => button.addEventListener('cli
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.close)));
 $$('.modal:not(.consent-modal)').forEach((modal) => modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); }));
 $('#navQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
+$('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => toast(error.message)));
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
+// Registered before the original handler: with the Halloween theme on, the card opens the Halloween tab instead.
+$('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
+  if (!document.documentElement.classList.contains('theme-halloween')) return;
+  event.stopImmediatePropagation();
+  openHalloweenPage();
+});
+$('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#halloweenInvite')?.addEventListener('click', () => { void openHalloweenInvite(); });
+$('#halloweenCopyCode')?.addEventListener('click', () => { void copyHalloweenCode(); });
+$('#halloweenShareCode')?.addEventListener('click', () => { void shareHalloweenInvite(); });
+$('#halloweenApplyCode')?.addEventListener('click', () => { void applyHalloweenCode(); });
+$('#halloweenCodeInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void applyHalloweenCode(); });
+$('#promoBannerClose')?.addEventListener('click', closePromoBanner);
+$('#promoBannerCta')?.addEventListener('click', () => { closePromoBanner(); void openHalloweenPage(); });
+$('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
+$('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#leagueBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#actionsBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
-$('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
+$('#openWheelRulesButton')?.addEventListener('click', () => {
+  renderWheelRules();
+  openModal('wheelRulesModal');
+});
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));
@@ -2944,7 +3856,7 @@ $('#openProfileFrames')?.addEventListener('click', () => openProfileSetup(1));
 $('#openProfileAchievements')?.addEventListener('click', openAchievementHub);
 $('#openProfileStatistics')?.addEventListener('click', () => openModal('profileStatsModal'));
 $('#openConnectedServices')?.addEventListener('click', openConnectedServices);
-$('#openNotifications')?.addEventListener('click', () => { renderNotificationPreferences(); openModal('notificationsModal'); });
+$('#openNotifications')?.addEventListener('click', () => { openModal('notificationsModal'); renderNotificationPreferences().catch((error) => toast(error.message)); });
 $('#openProfilePrivacy')?.addEventListener('click', () => openProfileSetup(2));
 $('#openDeleteAccount')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; openModal('deleteAccountModal'); });
 $('#deleteAccountFromConsent')?.addEventListener('click', () => { if ($('#deleteAccountConfirm')) $('#deleteAccountConfirm').value = ''; if ($('#deleteAccountButton')) $('#deleteAccountButton').disabled = true; closeModal('consentModal'); openModal('deleteAccountModal'); });
@@ -2952,7 +3864,7 @@ $$('.history-tabs [data-history-tab]').forEach((button) => button.addEventListen
   state.historyTab = button.dataset.historyTab || 'purchases';
   renderHistoryTab();
 }));
-$('#saveNotifications')?.addEventListener('click', saveNotificationPreferences);
+$('#saveNotifications')?.addEventListener('click', () => saveNotificationPreferences().catch((error) => toast(error.message)));
 $('#deleteAccountConfirm')?.addEventListener('input', (event) => {
   $('#deleteAccountButton').disabled = String(event.target.value || '').trim().toUpperCase() !== 'УДАЛИТЬ';
 });
@@ -3014,8 +3926,15 @@ $('#openAllTransactionsFromCard')?.addEventListener('click', () => openAllTransa
 $('#openAllInquiries')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
 $('#openAllInquiriesFromCard')?.addEventListener('click', () => openAllInquiries().catch((error) => toast(error.message)));
 $('#openContentAdminQuick')?.addEventListener('click', openContentAdmin);
+$('#openBroadcastAdmin')?.addEventListener('click', () => openBroadcastAdmin().catch((error) => toast(error.message)));
+$('#broadcastChannel')?.addEventListener('change', () => loadBroadcastPreview().catch((error) => toast(error.message)));
+$('#broadcastAudience')?.addEventListener('change', () => loadBroadcastPreview().catch((error) => toast(error.message)));
+$('#sendBroadcast')?.addEventListener('click', () => sendAdminBroadcast().catch((error) => toast(error.message)));
 $('#userSearch')?.addEventListener('input', filterAdminUsers);
 $('#userRoleFilter')?.addEventListener('change', filterAdminUsers);
+$('#userStatusFilter')?.addEventListener('change', filterAdminUsers);
+$('#adminUsersPrev')?.addEventListener('click', () => loadAdminUsersDirectory(state.adminUsersDirectory.page - 1).catch((error) => toast(error.message)));
+$('#adminUsersNext')?.addEventListener('click', () => loadAdminUsersDirectory(state.adminUsersDirectory.page + 1).catch((error) => toast(error.message)));
 $('#transactionSearch')?.addEventListener('input', filterAdminTransactions);
 $('#transactionModeFilter')?.addEventListener('change', filterAdminTransactions);
 $('#inquirySearch')?.addEventListener('input', filterAdminInquiries);
@@ -3068,11 +3987,13 @@ $$('[data-design-color], [data-design-text], [data-design-section], [data-design
   if (state.adminSettings) applyDesign(readDesignForm());
 }));
 window.addEventListener('error', (event) => {
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_CLIENT_ERROR');
   console.error('Client error:', event.error || event.message);
   const bootScreen = $('#bootScreen');
   if (bootScreen && !bootScreen.classList.contains('hidden')) showBootActions('Ошибка запуска. Нажмите «Повторить» или откройте облегчённый режим.');
 });
 window.addEventListener('unhandledrejection', (event) => {
+  if (IS_VK) window.__PIVNIK_VK_DIAGNOSTICS__?.emit('VK_CLIENT_ERROR');
   console.error('Unhandled promise rejection:', event.reason);
 });
 document.addEventListener('visibilitychange', () => {

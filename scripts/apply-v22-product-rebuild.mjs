@@ -70,18 +70,18 @@ async function patchIndex() {
   let source = await read('index.html');
   source = replacePatternRequired(
     source,
-    /(<link rel="stylesheet" href="styles\.css[^"]*"\s*\/>)/,
-    `$1\n  <link rel="stylesheet" href="/v22.css?v=22.0.0" />`,
-    '/v22.css?v=22.0.0',
-    'v22 stylesheet'
-  );
-  source = replacePatternRequired(
-    source,
     /(<script defer src="app\.js[^"]*"><\/script>)/,
     `$1\n  <script defer src="/v22-ui.js?v=22.0.0"></script>`,
     '/v22-ui.js?v=22.0.0',
     'v22 ui script'
   );
+  // apply-red-cosmos-v2-shell-final.mjs used to strip these two transient
+  // v22 shell tags again immediately after this script ran (retired
+  // 2026-09-28, folded into index.html). Nothing wires or needs them past
+  // this point, so this script now retires its own scaffolding directly.
+  source = source
+    .replace(/\s*<link rel="stylesheet" href="\/v22\.css[^"]*"\s*\/>/g, '')
+    .replace(/\s*<script defer src="\/v22-ui\.js[^"]*"><\/script>/g, '');
   source = replaceRequired(
     source,
     '<button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>',
@@ -106,6 +106,7 @@ async function patchApp() {
     'версия клиента'
   );
 
+  if (!source.includes('window.__PIVNIK_GO_BACK__')) {
   source = replaceRequired(
     source,
     `function switchScreen(target) {
@@ -150,6 +151,7 @@ window.__PIVNIK_GO_BACK__ = () => {
 };`,
     'история экранов'
   );
+  }
 
   source = replaceRequired(
     source,
@@ -158,17 +160,23 @@ window.__PIVNIK_GO_BACK__ = () => {
   if (entity.profileFrame === 'beer-mugs') return 'avatar-frame avatar-frame-beer-mugs';
   if (entity.profileFrame === 'beer-bottles') return 'avatar-frame avatar-frame-beer-bottles';
   if (entity.profileFrame === 'lights') return 'avatar-frame avatar-frame-lights';
-  if (entity.profileFrame === 'middle-finger') return 'avatar-frame avatar-frame-middle-finger';`,
+  if (entity.profileFrame === 'middle-finger') return 'avatar-frame avatar-frame-middle-finger';
+  if (entity.profileFrame === 'premium-smiling-fuck') return 'avatar-frame avatar-frame-premium-smiling-fuck';`,
     'CSS-классы новых рамок'
   );
 
+  // Anchor only on the vladislav block itself, not on what immediately
+  // follows it. Canonical source can have other per-username orbit blocks
+  // (e.g. icecream69a) inserted after vladislav and before the final
+  // `return '';` — this must not stop matching just because something new
+  // now sits between them.
   source = replaceRequired(
     source,
     `  if (entity.profileFrame === 'vladislav') {
     const poops = Array.from({ length: 12 }, () => '💩');
     return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
   }
-  return '';`,
+`,
     `  if (entity.profileFrame === 'vladislav') {
     const poops = Array.from({ length: 12 }, () => '💩');
     return '<span class="avatar-orbit vladislav-orbit" aria-hidden="true">' + poops.map((poop, index) => '<i style="--orbit-index:' + index + ';--counter-angle:' + (-index * 30) + 'deg"><span>' + poop + '</span></i>').join('') + '</span>';
@@ -177,13 +185,14 @@ window.__PIVNIK_GO_BACK__ = () => {
     'beer-mugs': '🍺',
     'beer-bottles': '🍾',
     lights: '✦',
-    'middle-finger': '🖕'
+    'middle-finger': '🖕',
+    'premium-smiling-fuck': '🖕'
   };
   if (v22Orbits[entity.profileFrame]) {
     const symbol = v22Orbits[entity.profileFrame];
     return '<span class="avatar-orbit v22-frame-orbit" aria-hidden="true">' + Array.from({ length: 8 }, (_, index) => '<i style="--orbit-index:' + index + '">' + symbol + '</i>').join('') + '</span>';
   }
-  return '';`,
+`,
     'орбиты новых рамок'
   );
 
@@ -538,11 +547,15 @@ async function patchUniversalServer() {
   const current = rows.find((row) => String(row.id) === String(canonical)) || null;`,
     'платформы участников Лиги'
   );
+  // The previous-month top ends with the same row mapper but has no platformMap,
+  // so anchor on the monthly leaderboard's closing «}),\n    me:» to patch the right one.
   source = replaceRequired(
     source,
     `        profileFrame: showAvatar ? profileFrameFromRow(row) : 'none',
         showAvatar
-      };`,
+      };
+    }),
+    me: current`,
     `        profileFrame: showAvatar ? profileFrameFromRow(row) : 'none',
         showAvatar,
         platforms: platformMap.get(String(row.id)) || [],
@@ -553,7 +566,9 @@ async function patchUniversalServer() {
           if (platforms.includes('telegram')) return 'Telegram';
           return 'Платформа не определена';
         })()
-      };`,
+      };
+    }),
+    me: current`,
     'platformLabel участника Лиги'
   );
 
@@ -582,17 +597,16 @@ async function patchUniversalServer() {
 }
 
 async function verify() {
-  const [index, app, achievements, server, gateway, css, ui] = await Promise.all([
+  const [index, app, achievements, server, gateway, ui] = await Promise.all([
     read('index.html'),
     read('app.js'),
     read('achievements.js'),
     read('server.js'),
     read('universal-server.js'),
-    read('v22.css'),
     read('v22-ui.js')
   ]);
   const failures = [];
-  if (!index.includes('/v22.css?v=22.0.0') || !index.includes('/v22-ui.js?v=22.0.0')) failures.push('v22 assets');
+  if (index.includes('/v22.css?v=22.0.0') || index.includes('/v22-ui.js?v=22.0.0')) failures.push('v22 assets not retired');
   if (!app.includes("APP_VERSION = '22.0-pivnik-rebuild'")) failures.push('client version');
   if (!app.includes('window.__PIVNIK_GO_BACK__')) failures.push('back history');
   if (!app.includes("profileFrame === 'middle-finger'")) failures.push('new frame render');
@@ -603,7 +617,6 @@ async function verify() {
   if (!gateway.includes("spinTelegramWheel(user.id, body.requestKey, platform)")) failures.push('VK wheel backend');
   if (gateway.includes('Колесо доступно только в Telegram.')) failures.push('Telegram-only wheel guard');
   if (!gateway.includes("return 'VK · Telegram'")) failures.push('league platform labels');
-  if (!css.includes('PIVNIK v22 — red cosmos')) failures.push('red cosmos css');
   if (!ui.includes('v22-admin-tabs')) failures.push('admin tabs ui');
   if (failures.length) throw new Error(`v22 verification failed: ${failures.join(', ')}`);
 }

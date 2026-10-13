@@ -3,7 +3,6 @@ html,
 body {
   width: 100%;
   min-height: 100%;
-  background: #000 !important;
 }
 
 .boot-screen {
@@ -15,7 +14,7 @@ body {
   padding: 0 !important;
   overflow: hidden !important;
   display: grid !important;
-  place-items: center !important;
+  place-items: start center !important;
   background: #000 !important;
 }
 
@@ -50,30 +49,20 @@ body {
   height: 100% !important;
   max-width: none !important;
   object-fit: contain !important;
-  object-position: center !important;
+  object-position: center top !important;
   transform: none !important;
 }
 
-.boot-overlay,
 .boot-copy {
   position: absolute !important;
   inset: 0 !important;
 }
 
-.boot-sign-glitch {
-  left: 67.48% !important;
-  top: 56.52% !important;
-  width: 16.47% !important;
-  height: 5.38% !important;
-  overflow: visible !important;
+.boot-copy h1 {
+  color: #fff !important;
 }
 
-.sign-layer {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-  object-position: center !important;
-}
+
 
 .boot-copy {
   padding:
@@ -125,4 +114,9 @@ body {
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Shared Telegram/VK Halloween artwork, also bundled by VK Hosting. */
+body.platform-vk .boot-image {
+  content: url('/assets/boot/pivnik-halloween-20261006.webp') !important;
 }

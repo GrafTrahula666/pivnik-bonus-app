@@ -80,13 +80,13 @@ test('every gateway /api/admin route authenticates and checks a server-side role
     );
     assert.match(
       route.body,
-      /\bprofile\.role\b/,
+      /\buser\.role\b/,
       `${route.method} ${route.path} must make an explicit server-side role decision`
     );
     assert.match(
       route.body,
-      /(?:\.includes\s*\(\s*profile\.role\s*\)|profile\.role\s*===)/,
-      `${route.method} ${route.path} must gate access using profile.role`
+      /(?:\.includes\s*\(\s*user\.role\s*\)|user\.role\s*===)/,
+      `${route.method} ${route.path} must gate access using the validated session role`
     );
   }
 });
@@ -95,8 +95,8 @@ test('gateway admin RBAC cannot rely on authentication alone', () => {
   const routes = gatewayAdminRouteDeclarations(gateway);
   const unguarded = routes.filter((route) => {
     const authenticated = /\brequireGatewayUser\s*\(\s*req\s*\)/.test(route.body);
-    const roleGated = /\bprofile\.role\b/.test(route.body)
-      && /(?:\.includes\s*\(\s*profile\.role\s*\)|profile\.role\s*===)/.test(route.body);
+    const roleGated = /\buser\.role\b/.test(route.body)
+      && /(?:\.includes\s*\(\s*user\.role\s*\)|user\.role\s*===)/.test(route.body);
     return !authenticated || !roleGated;
   });
 

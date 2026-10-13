@@ -368,6 +368,19 @@ export function chooseCanonicalUser(first, second, activityByUser = new Map()) {
   return firstWins ? { canonical: first, archived: second } : { canonical: second, archived: first };
 }
 
+export function isConfiguredOwnerIdentity(provider, providerUserId, configuredOwners = {}) {
+  const normalizedProvider = provider === 'vk' ? 'vk' : provider === 'telegram' ? 'telegram' : '';
+  if (!normalizedProvider) return false;
+  const actualId = String(providerUserId || '').trim();
+  const configuredId = String(configuredOwners[normalizedProvider] || '').trim();
+  return Boolean(actualId && configuredId && actualId === configuredId);
+}
+
+export function effectiveRoleForAuthenticatedIdentity(storedRole, provider, providerUserId, configuredOwners = {}) {
+  if (isConfiguredOwnerIdentity(provider, providerUserId, configuredOwners)) return 'admin';
+  return String(storedRole || 'client');
+}
+
 export function strongestRole(left, right) {
   return (ROLE_RANK[right] || 0) > (ROLE_RANK[left] || 0) ? right : left;
 }

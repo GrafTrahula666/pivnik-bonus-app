@@ -1,0 +1,557 @@
+{
+  "observedAt": "2026-09-13T23:38:46.720Z",
+  "scope": "public GET endpoints and assets; does not verify signed auth or boot completion",
+  "services": [
+    {
+      "baseUrl": "https://pivnik-vk-test-production-3474.up.railway.app",
+      "dns": [
+        {
+          "addresses": [
+            "69.46.46.116"
+          ],
+          "family": 4
+        },
+        {
+          "error": "ENODATA",
+          "family": 6
+        }
+      ],
+      "externalAssets": [],
+      "platform": "vk",
+      "readiness": {
+        "accountMode": "separate",
+        "environment": "production",
+        "ok": true,
+        "releaseCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+        "startupRuntimeHashes": null
+      },
+      "requests": [
+        {
+          "bytes": 70036,
+          "elapsedMs": 185,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru https://web.telegram.org https://*.telegram.org",
+            "content-type": "text/html; charset=utf-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "263e211f70e29a8f0d175f97ce50a0005e35f375ff8206d2af807f29661572e4",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/"
+        },
+        {
+          "bytes": 304,
+          "elapsedMs": 181,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/api/health",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "7d7c507ab91692f36db8d8bdaa37537d799ec052d963bb115c620550b461c694",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/api/health"
+        },
+        {
+          "bytes": 318,
+          "elapsedMs": 153,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/api/platform-health",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "508fce1205700fca160b1ba50ef1f43e348510c2d455a69b2f7d802c823bfcdc",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/api/platform-health"
+        },
+        {
+          "bytes": 426,
+          "elapsedMs": 150,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/api/release-readiness",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "8b73edeab7f4174a795f5925c5c43273f0db46c7b0594f03541baa185ab80b0e",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/api/release-readiness"
+        },
+        {
+          "bytes": 64,
+          "elapsedMs": 151,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/api/bootstrap",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "13bba5fcd41772052904e385b40690c423ec649e2d246169e71264c810d21616",
+          "status": 401,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/api/bootstrap"
+        },
+        {
+          "bytes": 169506,
+          "elapsedMs": 98,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/styles.css?v=19.1-telegram-wheel-v2",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "text/css; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "4c19d732b12d11e8ee8e3a6902ff127b134770e8a19125dc14eea9c7ff25b10d",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/styles.css?v=19.1-telegram-wheel-v2"
+        },
+        {
+          "bytes": 2906,
+          "elapsedMs": 106,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/loader-fix.css?v=2.1.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "text/css; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "258ea1b59d57e0be2f767e561b532fb0d7ec402512b3b002b14fd301b85d88f1",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/loader-fix.css?v=2.1.0"
+        },
+        {
+          "bytes": 69833,
+          "elapsedMs": 97,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/red-cosmos-v2.css?v=2.0.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "public, max-age=0",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "text/html; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "ff3abdb8b7e5a35743fde86e1a1b9ed713376a09070b074190313cd9cb9b1370",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/red-cosmos-v2.css?v=2.0.0"
+        },
+        {
+          "bytes": 8038,
+          "elapsedMs": 125,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/vendor/vk-bridge.js?v=2.15.11",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "public, max-age=31536000, immutable",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "text/javascript; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "8a818801c20e998c2f75346f52798b0e0a22613c0c7582280d1429121a4dba6e",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/vendor/vk-bridge.js?v=2.15.11"
+        },
+        {
+          "bytes": 19718,
+          "elapsedMs": 181,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/vk-platform.js?v=3.2.2-anna-consent-persistence",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "text/javascript; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "4650917839251791b9a4b046d110ec41a4c4884db74001f1630443ad680ceb49",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/vk-platform.js?v=3.2.2-anna-consent-persistence"
+        },
+        {
+          "bytes": 22050,
+          "elapsedMs": 109,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/account-link.js?v=2.3.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "text/javascript; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "7402d67b2772ac1ddaaedff21e5d6de6622622ba0f6ad257f20ebf732a58e192",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/account-link.js?v=2.3.0"
+        },
+        {
+          "bytes": 165695,
+          "elapsedMs": 130,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/app.js?v=19.1-telegram-wheel-v2",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "application/javascript; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "f21458fb27fe5fe14979b1322eefe290afaedd0f7dc24e9e5ec945d6efc02c53",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/app.js?v=19.1-telegram-wheel-v2"
+        },
+        {
+          "bytes": 69833,
+          "elapsedMs": 98,
+          "finalUrl": "https://pivnik-vk-test-production-3474.up.railway.app/red-cosmos-v2.js?v=2.0.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "public, max-age=0",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "text/html; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "ff3abdb8b7e5a35743fde86e1a1b9ed713376a09070b074190313cd9cb9b1370",
+          "status": 200,
+          "url": "https://pivnik-vk-test-production-3474.up.railway.app/red-cosmos-v2.js?v=2.0.0"
+        }
+      ],
+      "transports": [
+        {
+          "elapsedMs": 176,
+          "family": 4,
+          "status": 200,
+          "tls": {
+            "alpn": "http/1.1",
+            "authorized": true,
+            "issuer": "YE1",
+            "protocol": "TLSv1.3",
+            "validFrom": "Jul 29 02:40:55 2026 GMT",
+            "validTo": "Oct 27 02:40:54 2026 GMT"
+          }
+        },
+        {
+          "elapsedMs": 26,
+          "error": "ENOTFOUND",
+          "family": 6
+        }
+      ]
+    },
+    {
+      "baseUrl": "https://pivnik-bonus-app-production-df60.up.railway.app",
+      "dns": [
+        {
+          "addresses": [
+            "69.46.46.26"
+          ],
+          "family": 4
+        },
+        {
+          "error": "ENODATA",
+          "family": 6
+        }
+      ],
+      "externalAssets": [
+        "https://telegram.org/js/telegram-web-app.js?63"
+      ],
+      "platform": "telegram",
+      "readiness": {
+        "accountMode": "separate",
+        "environment": "production",
+        "ok": true,
+        "releaseCommit": "d207c2923dbfc01a91e4c019614a548f95a4a5c0",
+        "startupRuntimeHashes": null
+      },
+      "requests": [
+        {
+          "bytes": 69977,
+          "elapsedMs": 141,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru https://web.telegram.org https://*.telegram.org",
+            "content-type": "text/html; charset=utf-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "03c5598e2c1bd1a77a4e8433df6ed81874a3992e9711441b57caafa4a3cfe558",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/"
+        },
+        {
+          "bytes": 304,
+          "elapsedMs": 232,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/api/health",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "662b578724f8dfbbf9165098f107b7215ec69f764e76c13671dd53f196326d05",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/api/health"
+        },
+        {
+          "bytes": 317,
+          "elapsedMs": 132,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/api/platform-health",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "3e753b48b1e4a6b0887168694e4991c682b0b3a4891240a1d5587368e3811965",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/api/platform-health"
+        },
+        {
+          "bytes": 425,
+          "elapsedMs": 137,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/api/release-readiness",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "199974c0feee792382f72cadf8e827fcdd94b3a644d43e7bac575aae7284409d",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/api/release-readiness"
+        },
+        {
+          "bytes": 64,
+          "elapsedMs": 132,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/api/bootstrap",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-store",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "application/json; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "13bba5fcd41772052904e385b40690c423ec649e2d246169e71264c810d21616",
+          "status": 401,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/api/bootstrap"
+        },
+        {
+          "bytes": 169506,
+          "elapsedMs": 108,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/styles.css?v=19.1-telegram-wheel-v2",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "text/css; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "4c19d732b12d11e8ee8e3a6902ff127b134770e8a19125dc14eea9c7ff25b10d",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/styles.css?v=19.1-telegram-wheel-v2"
+        },
+        {
+          "bytes": 2906,
+          "elapsedMs": 100,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/loader-fix.css?v=2.1.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "text/css; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "258ea1b59d57e0be2f767e561b532fb0d7ec402512b3b002b14fd301b85d88f1",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/loader-fix.css?v=2.1.0"
+        },
+        {
+          "bytes": 69833,
+          "elapsedMs": 82,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/red-cosmos-v2.css?v=2.0.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "public, max-age=0",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "text/html; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "ff3abdb8b7e5a35743fde86e1a1b9ed713376a09070b074190313cd9cb9b1370",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/red-cosmos-v2.css?v=2.0.0"
+        },
+        {
+          "bytes": 22050,
+          "elapsedMs": 81,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/account-link.js?v=2.3.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": null,
+            "content-security-policy": null,
+            "content-type": "text/javascript; charset=utf-8",
+            "referrer-policy": null,
+            "strict-transport-security": null,
+            "x-frame-options": null
+          },
+          "sha256": "7402d67b2772ac1ddaaedff21e5d6de6622622ba0f6ad257f20ebf732a58e192",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/account-link.js?v=2.3.0"
+        },
+        {
+          "bytes": 165695,
+          "elapsedMs": 148,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/app.js?v=19.1-telegram-wheel-v2",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "no-cache",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "application/javascript; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "f21458fb27fe5fe14979b1322eefe290afaedd0f7dc24e9e5ec945d6efc02c53",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/app.js?v=19.1-telegram-wheel-v2"
+        },
+        {
+          "bytes": 69833,
+          "elapsedMs": 146,
+          "finalUrl": "https://pivnik-bonus-app-production-df60.up.railway.app/red-cosmos-v2.js?v=2.0.0",
+          "headers": {
+            "access-control-allow-origin": null,
+            "alt-svc": null,
+            "cache-control": "public, max-age=0",
+            "content-encoding": "br",
+            "content-security-policy": null,
+            "content-type": "text/html; charset=UTF-8",
+            "referrer-policy": "no-referrer",
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "x-frame-options": "SAMEORIGIN"
+          },
+          "sha256": "ff3abdb8b7e5a35743fde86e1a1b9ed713376a09070b074190313cd9cb9b1370",
+          "status": 200,
+          "url": "https://pivnik-bonus-app-production-df60.up.railway.app/red-cosmos-v2.js?v=2.0.0"
+        }
+      ],
+      "transports": [
+        {
+          "elapsedMs": 179,
+          "family": 4,
+          "status": 200,
+          "tls": {
+            "alpn": "http/1.1",
+            "authorized": true,
+            "issuer": "YE1",
+            "protocol": "TLSv1.3",
+            "validFrom": "Jul 29 02:40:55 2026 GMT",
+            "validTo": "Oct 27 02:40:54 2026 GMT"
+          }
+        },
+        {
+          "elapsedMs": 32,
+          "error": "ENOTFOUND",
+          "family": 6
+        }
+      ]
+    }
+  ],
+  "vantage": "runner network; not a VK device or a Russian mobile network"
+}

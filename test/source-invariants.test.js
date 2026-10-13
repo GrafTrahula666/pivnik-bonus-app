@@ -248,6 +248,18 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });
 
+test('Стартовый ответ несёт опубликованный дизайн, чтобы тема не мигала старым белым оформлением', async () => {
+  const gateway = await source('universal-server.js');
+  const start = gateway.indexOf('async function getAppPayload(');
+  const end = gateway.indexOf('async function ensureAuthRecords(', start);
+  assert.ok(start >= 0 && end > start);
+  const payload = gateway.slice(start, end);
+  assert.match(payload, /pool\.query\('SELECT published FROM app_settings WHERE id = 1'\)\.catch\(/);
+  assert.doesNotMatch(payload, /startup\s*\?\s*Promise\.resolve\(\{ rows: \[\] \}\)/);
+  assert.match(payload, /if \(!startup\) throw error;/);
+  assert.match(payload, /design: designResult\.rows\[0\]\?\.published \|\| null/);
+});
+
 test('Первый вход не открывает цепочку модалок, но блокирует действия до принятия правил', async () => {
   const [app, railway, gateway] = await Promise.all([
     source('app.js'),
@@ -272,7 +284,7 @@ test('Первый вход не открывает цепочку модало�
   assert.match(gateway, /defaultPlatform === 'vk' \? 'vk' : 'telegram'/);
 });
 
-test('Luxury VIP Space сохраняет клиентскую навигацию, реальные данные и видимый космос', async () => {
+test('Home V2 сохраняет клиентскую навигацию, реальные данные и чистый white-gold shell', async () => {
   const [index, app, styles, server, gateway, deletionMigration] = await Promise.all([
     source('index.html'),
     source('app.js'),
@@ -285,13 +297,16 @@ test('Luxury VIP Space сохраняет клиентскую навигаци�
   const navEnd = index.indexOf('</nav>', navStart);
   const nav = index.slice(navStart, navEnd);
   assert.match(nav, /Главная/);
-  assert.match(nav, /Акции/);
-  assert.match(nav, /id="navQrButton"/);
   assert.match(nav, /Лига/);
+  assert.match(nav, /id="navQrButton"/);
+  assert.match(nav, /Достижения/);
+  assert.doesNotMatch(nav, /Акции/);
   assert.match(nav, /Профиль/);
   assert.doesNotMatch(nav, /Бармен|Админ/);
-  assert.match(styles, /luxury-vip-space\.webp/);
-  assert.match(styles, /filter: brightness\(1\.72\)/);
+  assert.doesNotMatch(styles, /luxury-vip-space\.webp/);
+  assert.doesNotMatch(styles, /home-background\.webp/);
+  assert.match(styles, /V20\.2 · SPACEVERSE white-gold canonical client experience/);
+  assert.match(styles, /HOME V2 CLEAN SHELL BACKDROP/);
   assert.match(app, /profile\.status\.bonusPercent/);
   assert.match(app, /profileStaffNav/);
   assert.match(app, /profileAdminNav/);

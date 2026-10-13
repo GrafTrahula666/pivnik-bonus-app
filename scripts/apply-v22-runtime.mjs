@@ -25,19 +25,21 @@ const [app, server, gateway] = await Promise.all([
 // version/frame assertions are no longer valid. Treat that state as the final
 // materialized target and verify RED COSMOS invariants instead of trying to
 // rebuild v22 over it again.
-const redCosmosAlreadyApplied = app.includes('RED_COSMOS_V2_THEME_LOCK')
-  || server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')
-  || gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME');
+const canonicalThemeLocked = app.includes('SPACEVERSE_CANONICAL_THEME_LOCK')
+  || app.includes('RED_COSMOS_V2_THEME_LOCK');
+const finalizedBackend = server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')
+  && gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME');
+const finalRuntimeAlreadyApplied = canonicalThemeLocked && finalizedBackend;
 
-if (redCosmosAlreadyApplied) {
+if (finalRuntimeAlreadyApplied) {
   const failures = [];
-  if (!app.includes('RED_COSMOS_V2_THEME_LOCK')) failures.push('theme lock');
+  if (!canonicalThemeLocked) failures.push('theme lock');
   if (!server.includes('RED_COSMOS_V2_FINAL_SERVER_RUNTIME')) failures.push('server runtime');
   if (!gateway.includes('RED_COSMOS_V2_FINAL_GATEWAY_RUNTIME')) failures.push('gateway runtime');
   if (gateway.includes('Колесо доступно только в Telegram.')) failures.push('VK wheel guard');
   if (!gateway.includes('platformLabel')) failures.push('leaderboard platform');
-  if (failures.length) throw new Error(`RED COSMOS restart verification failed: ${failures.join(', ')}`);
-  console.log('RED COSMOS runtime already materialized; restart-safe legacy v22 skip.');
+  if (failures.length) throw new Error(`Final runtime restart verification failed: ${failures.join(', ')}`);
+  console.log('Final runtime already materialized; restart-safe legacy v22 skip.');
   process.exit(0);
 }
 
@@ -75,5 +77,18 @@ if (finalGateway.includes('Колесо доступно только в Telegra
 if (!finalServer.includes("code: 'raise-shields'")) failures.push('special tester achievement');
 if (!finalGateway.includes("achievement_code = 'raise-shields'")) failures.push('special tester lookup');
 if (failures.length) throw new Error(`v22 runtime verification failed: ${failures.join(', ')}`);
+
+// apply-red-cosmos-v2-client-final.mjs used to flip APP_VERSION from this
+// step's intermediate v22-rebuild value to the final client version right
+// after this script ran (retired 2026-09-28, folded here). Nothing
+// downstream needs the intermediate value, so finish this step by writing
+// the final one directly.
+if (finalApp.includes("APP_VERSION = '22.0-pivnik-rebuild';")) {
+  await fs.writeFile(
+    path.join(root, 'app.js'),
+    finalApp.replace("APP_VERSION = '22.0-pivnik-rebuild';", "APP_VERSION = '20.0-spaceverse-purple-home';"),
+    'utf8'
+  );
+}
 
 console.log('Pivnik v22 runtime state is restart-safe and verified.');
