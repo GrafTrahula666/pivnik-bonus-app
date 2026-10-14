@@ -547,3 +547,64 @@ runtime из существующего артефакта, его послед�
 binding; **внешняя авторизация** требуется для реальных Telegram, VK и Эвотора.
 Production/main/Railway, реальные БД, env/secrets, webhook, боты, кассы и данные
 не изменялись.
+
+### Шаг 10 — детерминированный runtime bundle (2026-10-14)
+
+Работа продолжена от проверенного опубликованного HEAD
+`cc74b7ba25cd954fae28ca44bd0492473c6cb98b`. Опубликованный implementation
+commit `9be1c56616a29cd742225ff4e8f46f782247ccbf`, tree
+`e91db5f8789c21196a762109768474ab9b85c051`; локальный проверенный эквивалент
+того же tree — `08ccad4d1406519b03ea19a170e0e1ee00dd4fa5`. Третья фиксированная операция
+`runtime_bundle_verification` использует тот же provisioning ledger,
+server-side scope, lease/claim/retry и frozen manifest после успешной
+`tenant_schema_readiness`. Migration 014 только расширяет CHECK существующей
+таблицы шагов; она не запускается автоматически и не меняет tenant-данные.
+
+Сервер собирает строгий canonical bundle для уже существующего артефакта
+`pivnik-bonus-app`, контракта `tenant-runtime-v1` и двух entrypoint:
+`server.js` и `universal-server.js`. Bundle повторно разбирается тем же строгим
+parser, из него восстанавливается exact runtime environment и сверяется source
+digest frozen manifest. Произвольные поля, URL, credentials, manifest или
+artifact из браузера не принимаются; POST принимает только `{}`. Изменённый
+bundle получает фиксированный `RUNTIME_ARTIFACT_INCOMPATIBLE`, сырой parser или
+driver text наружу не выходит. В ledger сохраняются только безопасные метаданные
+и SHA-256 bundle.
+
+Этот SHA-256 подтверждает canonical конфигурацию и compatibility contract, но
+не является подписью или hash развёрнутого бинарного артефакта. Поэтому даже
+успешный шаг честно оставляет `runtimeStatus=not_provisioned`,
+`published=false`, `startAllowed=false`: сервис, Railway, DNS, webhook и
+провайдеры не запускаются. UI восстанавливает статус после reload, блокирует
+double click/active lease, показывает retryable failure и явно отделяет
+«bundle проверен» от «runtime запущен».
+
+Фактические локальные проверки implementation tree:
+
+- strict bundle/parser tests — 10/10; provisioning/onboarding/workflow — 85/85;
+  отдельно после финальной правки copy provisioning — 13/13;
+- полный Business — 247 passed, 20 прежних PostgreSQL integration tests skipped
+  без отдельного разрешённого test URL; security — 167/167;
+- typecheck, полный build и lint — success; lint содержит 0 errors и 12 прежних
+  Fast Refresh warnings; Business audit — 0 vulnerabilities;
+- в чистом detached worktree `npm run materialize` выполнен дважды с одинаковым
+  SHA256 diff `ae50df990f6ef99e163a0ad5c9a965e24ab645ccf2ff59a498202794ecf69a37`
+  (7 файлов, 365 insertions/78 deletions); materialized root — 582/582,
+  `npm run check`, patch-chain audit, root audit и production-only audit —
+  success/0;
+- локальный Playwright собрал приложение, но 4 desktop/mobile сценария не
+  стартовали из-за отсутствующего Chromium headless shell v1193. UI должен
+  считаться подтверждённым только после browser CI опубликованного HEAD.
+  PGlite/fixtures не выдаются за PostgreSQL concurrency, live authorization или
+  production;
+- все пять workflow точного опубликованного implementation commit завершились
+  `success`: public startup `38611214959`, VK parity `38611214891`, Business
+  desktop/mobile browser `38611215168`, release gate `38611215054` и Evotor
+  draft checks `38611214927`. В release gate все production/secrets/database/
+  deploy/probe шаги 20–26 были `skipped`.
+
+Факты на границе шага: **есть** сохранённая сборка и строгая проверка tenant
+runtime bundle из существующего кода; **нужно сделать** привязку к точному
+immutable release SHA/registry, затем отдельный возобновляемый launch в
+изолированном окружении и terminal binding; **внешняя авторизация** требуется
+для реальных Telegram, VK и Эвотора. Production/main/Railway, реальные БД,
+env/secrets, webhook, боты, кассы, бонусы и данные не изменялись.
