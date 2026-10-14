@@ -32,7 +32,7 @@ export function InviteClaim({token}:{token:string}){
 
   return <main className="login-shell">
     <section className="login-card card">
-      <div className="login-brand"><div className="brand-mark">P</div><div><b>PIVNIK</b><span>BUSINESS</span></div></div>
+      <div className="login-brand"><div className="brand-mark">S</div><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className="login-icon"><Sparkles/></div><span className="eyebrow">ПРИГЛАШЕНИЕ ВЛАДЕЛЬЦУ</span>
       {loading&&<p role="status">Проверяем ссылку…</p>}
       {!loading&&loadError&&<div className="login-error" role="alert">{loadError}</div>}

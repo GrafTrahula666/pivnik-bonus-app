@@ -158,4 +158,44 @@ describe('server-owned resumable workflow on canonical scope',()=>{
    expect((await call('owner','GET','/api/admin/onboarding/drafts/'+drafts[0])).status).toBe(200)
   }finally{await state.db!.exec('ALTER TABLE fixture_saved_progress RENAME TO admin_onboarding_progress')}
  })
+ it('owner list unifies canonical prepared venues and existing points without inventing connectivity, activity or zero revenue',async()=>{
+  const response=await call('owner','GET','/api/admin/onboarding/venues');expect(response.status).toBe(200)
+  const list=await response.json()
+  expect(list).toMatchObject({total:4,offset:0,nextOffset:null})
+  expect(list.venues.filter((venue:{kind:string})=>venue.kind==='draft')).toHaveLength(2)
+  expect(list.venues.some((venue:{companyId:string})=>venue.companyId==='20')).toBe(false)
+  const legacy=list.venues.find((venue:{kind:string})=>venue.kind==='existing')
+  expect(legacy).toMatchObject({status:'pending',attentionCode:'connection_not_verified',requiresAttention:true,lastDeviceActivityAt:null,runtimeStatus:'unknown',published:null,report:{state:'unavailable',netCents:null,receiptCount:null}})
+  const prepared=list.venues.find((venue:{id:string})=>venue.id===drafts[0])
+  expect(prepared).toMatchObject({status:'pending',runtimeStatus:'not_provisioned',published:false,requiresAttention:true,lastDeviceActivityAt:null})
+  expect(prepared.lastOperatorActivityAt).toBeTruthy()
+  expect((await call('owner','GET','/api/admin/onboarding/venues?companyId=20')).status).toBe(400)
+  expect((await call('owner','GET','/api/admin/onboarding/venues?offset=-1')).status).toBe(400)
+  expect((await call('owner','GET','/api/admin/onboarding/venues?offset=0&offset=25')).status).toBe(400)
+  expect((await call('owner','PUT','/api/admin/onboarding/venues',{status:'active'})).status).toBe(405)
+ })
+ it('a newly invited point viewer sees only its point in owner list, with revoke closing list access',async()=>{
+  const scope=await (await call('owner','GET',`/api/admin/onboarding/drafts/${drafts[0]}/scope`)).json()
+  const invite=await (await call('owner','POST','/api/admin/onboarding/invitations',{requestKey:crypto.randomUUID(),companyId:'10',venueId:scope.scope.venue.id,role:'viewer',expiresInHours:24})).json()
+  const accepted=await call(null,'POST','/api/admin/onboarding/invitations/accept',{token:invite.token,email:'new-viewer@fixture.invalid',displayName:'Просмотрщик',password:'Synthetic-Viewer-Only-2026!'})
+  expect(accepted.status).toBe(200);sessions.set('new-viewer',{cookie:accepted.headers.get('set-cookie')!.split(';')[0]!,csrf:(await accepted.json()).csrfToken})
+  const own=await (await call('new-viewer','GET','/api/admin/onboarding/venues')).json()
+  expect(own.total).toBe(1);expect(own.venues.map((venue:{id:string})=>venue.id)).toEqual([drafts[0]])
+  expect((await call('owner','POST',`/api/admin/onboarding/invitations/${invite.invitation.id}/revoke`,{})).status).toBe(200)
+  expect((await call('new-viewer','GET','/api/admin/onboarding/venues')).status).toBe(403)
+ })
+ it('pagination returns every accessible point once and never mixes another company into later pages',async()=>{
+  for(let n=0;n<30;n++){
+   const created=await call('root','POST','/api/admin/onboarding/drafts',{requestKey:crypto.randomUUID(),data:{companyId:'10',companyName:'',venueName:'Пагинация '+String(n).padStart(2,'0'),address:'',timeZone:'Europe/Moscow',venueType:'cafe',ownerEmail:''}})
+   expect(created.status).toBe(200)
+  }
+  const ids:string[]=[];let offset:number|null=0
+  while(offset!==null){
+   const response=await call('owner','GET','/api/admin/onboarding/venues?offset='+offset);expect(response.status).toBe(200)
+   const page=await response.json();expect(page.total).toBe(34);expect(page.venues.length).toBeLessThanOrEqual(25)
+   for(const venue of page.venues){expect(venue.companyId).toBe('10');ids.push(venue.kind+':'+venue.id)}
+   offset=page.nextOffset
+  }
+  expect(ids.length).toBe(34);expect(new Set(ids).size).toBe(34)
+ })
 })

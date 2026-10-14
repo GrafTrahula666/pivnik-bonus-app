@@ -367,7 +367,7 @@ const runtimeBundleGuidance=(value:RuntimeBundleStep)=>{
   return 'Текущий артефакт не подтвердил tenant-runtime-v1. Не запускайте его: требуется совместимая версия существующего приложения.'
 }
 
-export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;initialDraftId?:string|null}) {
+export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}:{session:AdminSession;initialDraftId?:string|null;openRequest?:number;onChanged?:()=>void}) {
   const allowed=(session.admin.role==='SUPER_ADMIN'||session.capabilities.onboardingAccess===true)&&session.capabilities.onboardingDrafts===true
   const integrationsAllowed=allowed&&session.capabilities.onboardingIntegrations===true
   const provisioningAllowed=allowed&&session.capabilities.onboardingProvisioning===true&&session.capabilities.onboardingWrite!==false
@@ -568,7 +568,12 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     if(allowed) void load(true)
     return invalidateLoads
   },[allowed,invalidateLoads,load])
-  useEffect(()=>{if(allowed&&initialDraftId)void apiGet<unknown>(base+'/'+initialDraftId).then(value=>showDraft(draftResponse(value))).catch(error=>setError(message(error)))},[allowed,initialDraftId,showDraft])
+  useEffect(()=>{
+    let cancelled=false
+    if(allowed&&initialDraftId)void apiGet<unknown>(base+'/'+initialDraftId).then(value=>{if(!cancelled)showDraft(draftResponse(value))}).catch(error=>{if(!cancelled)setError(message(error))})
+    return()=>{cancelled=true}
+  },[allowed,initialDraftId,openRequest,showDraft])
+  useEffect(()=>{onChanged?.()},[current?.revision,scope?.revision,application?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt,connectionRefresh,onChanged])
 
   useEffect(()=>{
     if(!inviteCopied)return
@@ -833,7 +838,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       {appError&&<div className="onboarding-feedback error" role="alert">{appError}</div>}
       {appNotice&&<p className="onboarding-feedback" role="status">{appNotice}</p>}
       <div className="onboarding-contract" aria-label="Статус приложения">
-        <div><ShieldCheck size={17}/><span><b>Изоляция данных</b><small>{appContract.isolationPolicy==='dedicated_database'?'Отдельная база обязательна':'Не подтверждена'} · {appContract.legacyDataAccess?'есть доступ к legacy':'без доступа к ПИВНИКУ'}</small></span></div>
+        <div><ShieldCheck size={17}/><span><b>Изоляция данных</b><small>{appContract.isolationPolicy==='dedicated_database'?'Данные гостей будут храниться отдельно':'Не подтверждена'}</small></span></div>
         <div><span><b>Шаблон</b><small>{appContract.template==='standard'?'Стандартный':'Не подтверждён'} · {appContract.qrEnabled?'QR включён':'QR не настроен'}</small></span></div>
         <div><span><b>Публикация</b><small>{appContract.published?'Опубликовано':appContract.runtimeStatus==='not_provisioned'?'Не запускалась':'Не подтверждена'}</small></span></div>
         {application&&<div><span><b>Tenant ID</b><small className="tenant-key">{application.tenantKey}</small></span></div>}
@@ -848,7 +853,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
         <label className="onboarding-check"><input type="checkbox" checked={appData.shopEnabled} onChange={event=>changeApplication('shopEnabled',event.target.checked)}/><span><b>Магазин</b><small>Подготовить раздел стандартного шаблона</small></span></label>
         <label className="onboarding-check"><input type="checkbox" checked={appData.loyaltyEnabled} onChange={event=>changeApplication('loyaltyEnabled',event.target.checked)}/><span><b>Лояльность</b><small>Только поддерживаемая базовая конфигурация</small></span></label>
       </fieldset>
-      <p className="onboarding-note">Логотип, Telegram и VK пока не подключаются. Эвотор настраивается ниже отдельным защищённым шагом после подготовки области. Эта конфигурация не даёт доступ к кошелькам ПИВНИКА.</p>
+      <p className="onboarding-note">Сохраните оформление и нужные модули. Касса подключается отдельным шагом. Настройка приложения ещё не означает его запуск.</p>
       <div className="onboarding-actions">
         <button className="btn" type="submit" disabled={!canWrite||appBusy||appLoading||busy||scopeBusy||scopeLoading||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':appBusy?'Сохраняем…':appUncertain?'Повторить сохранение приложения':'Сохранить приложение'}</button>
         <button className="btn secondary" type="button" disabled={appBusy||appLoading||scopeBusy} onClick={()=>void loadApplication(current)}><RefreshCw size={16}/>Открыть сохранённую конфигурацию</button>
@@ -863,7 +868,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
         <div><ShieldCheck size={17}/><span><b>Заведение</b><small>ID {scope.venue.id} · выключено</small></span></div>
         <div><span><b>Доступ</b><small>Сотрудники не назначены · подключения не созданы</small></span></div>
       </div>}
-      <p className="onboarding-note">Подготовка атомарно резервирует канонические ID в metadata-БД. Заведение не появляется в рабочей панели, runtime не запускается, данные клиентов и ПИВНИКА не подключаются.</p>
+      <p className="onboarding-note">Заведение сохранено для дальнейшего подключения. Его приложение ещё не запущено; связь с кассой проверяется отдельно.</p>
       <div className="onboarding-actions">
         {!scope&&<button className="btn" type="button" disabled={!canWrite||!application||draftDirty||appDirty||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||appDirty?'Сначала сохраните изменения':'Подготовить область'}</button>}
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>

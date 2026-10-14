@@ -9,7 +9,7 @@ export function Login({onAuthenticated,onDemo,onInvite}:{onAuthenticated:(sessio
   }
   return <main className="login-shell">
     <section className="login-card card">
-      <div className="login-brand"><div className="brand-mark">P</div><div><b>PIVNIK</b><span>BUSINESS</span></div></div>
+      <div className="login-brand"><div className="brand-mark">S</div><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className="login-icon"><LockKeyhole /></div><span className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</span>
       <h1>Вход в панель управления</h1>
       <p>Безопасный доступ к показателям, клиентам и настройкам ваших заведений.</p>
@@ -21,7 +21,7 @@ export function Login({onAuthenticated,onDemo,onInvite}:{onAuthenticated:(sessio
       </form>
       {onDemo&&<button type="button" className="btn secondary login-demo" onClick={onDemo}><Sparkles/>Посмотреть демо-версию</button>}
       {onInvite&&<button type="button" className="btn secondary login-demo" onClick={onInvite}>Войти по приглашению</button>}
-      <div className="login-safety"><ShieldCheck/><span>Клиентские приложения VK и Telegram работают независимо от панели управления.</span></div>
+      <div className="login-safety"><ShieldCheck/><span>Приложения ваших гостей работают независимо от панели управления.</span></div>
     </section>
   </main>
 }

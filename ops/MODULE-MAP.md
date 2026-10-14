@@ -71,6 +71,19 @@ An empty verified 24-hour report returns 0 receipts/0 cents; unavailable data
 returns null, and a zero-value receipt is still data. Device credentials cannot
 read financial/customer rows. A successful connection probe does not bypass
 `SPACEVERSE_RUNTIME_NOT_PROVISIONED`, deploy or activate a venue.
+`server/onboarding-venues.ts` provides the authenticated read-only owner list
+(`GET /api/admin/onboarding/venues`, 25 entries/page) under the existing default-off
+workflow switch. It combines the canonical active-venue resolver with scoped
+draft access; inactive prepared points reuse `onboarding-workflow.ts` projection.
+Company/venue/status input cannot choose scope. An existing active metadata row
+without verified connectivity remains pending/unknown, never false connected or
+zero revenue. Device and operator activity are distinct. `OwnerVenues.tsx`
+refreshes results and resumes the selected real wizard, including a repeated
+open of the same draft. Its developer request copies owner text and non-secret
+connection diagnostics only; it neither sends messages nor records a delivered
+ticket. SPACEVERSE branding and general navigation omit legacy PIVNIK-only
+reward/broadcast/content controls while that flow is enabled. Mobile Integration
+Hub/OAuth/sandbox/developer integration grants remain a separate future scope.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find

@@ -103,6 +103,8 @@ describe('signed Admin → native POS proxy v2, real device evidence and canonic
   expect(workflow).toMatchObject({status:'pending',published:false,report:{state:'available',netCents:'0',receiptCount:0}})
   expect(workflow.lastDeviceActivityAt).toBeTruthy()
   expect(workflow.steps.find((s:{id:string})=>s.id==='verification')).toMatchObject({status:'active'})
+  const listing=await (await call('owner','GET','/api/admin/onboarding/venues')).json()
+  expect(listing.venues.find((venue:{id:string})=>venue.id===drafts[0])).toMatchObject({status:'pending',lastDeviceActivityAt:workflow.lastDeviceActivityAt,runtimeStatus:'not_provisioned',report:{state:'available',netCents:'0',receiptCount:0}})
   expect((await devices[0]!.db.query('SELECT * FROM wallets')).rows).toEqual([{user_id:1,balance:777}])
   expect((await state.db!.query('SELECT * FROM wallets')).rows).toEqual([{id:1,balance:100}])
   expect((await devices[0]!.db.query('SELECT COUNT(*)::int AS n FROM spaceverse_pos_test_events')).rows).toEqual([{n:1}])
@@ -160,5 +162,15 @@ describe('signed Admin → native POS proxy v2, real device evidence and canonic
   await state.db!.query("UPDATE admin_onboarding_pos_proxy SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE draft_id=$1::uuid",[drafts[1]])
   expect(await (await call('root','GET',path(1))).json()).toMatchObject({status:'degraded',code:'verification_expired'})
   expect(await (await call('root','POST',path(1)+'/verify',{})).json()).toMatchObject({status:'pending',code:'terminal_event_missing'})
+ })
+ it('one damaged application source requires attention without hiding the rest of the owner network or inventing zero',async()=>{
+  const before=(await state.db!.query<{config:unknown}>('SELECT config FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid',[drafts[1]])).rows[0]!.config
+  await state.db!.query("UPDATE admin_onboarding_app_configs SET config=jsonb_set(config,'{primaryColor}',to_jsonb('invalid-fixture'::text)) WHERE draft_id=$1::uuid",[drafts[1]])
+  try{
+   const response=await call('owner','GET','/api/admin/onboarding/venues');expect(response.status).toBe(200)
+   const list=await response.json()
+   expect(list.venues.find((venue:{id:string})=>venue.id===drafts[1])).toMatchObject({status:'failed',requiresAttention:true,attentionCode:'state_not_verified',runtimeStatus:'unknown',report:{state:'unavailable',netCents:null,receiptCount:null}})
+   expect(list.venues.find((venue:{id:string})=>venue.id===drafts[0])).toBeTruthy()
+  }finally{await state.db!.query('UPDATE admin_onboarding_app_configs SET config=$2::jsonb WHERE draft_id=$1::uuid',[drafts[1],JSON.stringify(before)])}
  })
 })

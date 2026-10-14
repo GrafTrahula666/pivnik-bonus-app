@@ -58,6 +58,7 @@ import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broad
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
 import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
+import { listOnboardingVenues } from './onboarding-venues.js'
 import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
 import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
@@ -199,6 +200,12 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  if(url.pathname==='/api/admin/onboarding/venues'){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+    if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1)throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
+    enforceRateLimit(`onboarding-venues:${session.admin.id}`,60,60_000)
+    json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset')));return true
   }
   const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
   if(posProxy){

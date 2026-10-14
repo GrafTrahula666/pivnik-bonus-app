@@ -688,3 +688,66 @@ Generated runtime diff и E2E screenshots сохранены вне checkout, ca
 runtime sources восстановлены перед commit; новые POS mounts сохранены.
 Docker image отдельно не собирался; migration/production/device/deploy не
 выполнялись. Публикация проверяется обычным push и git ls-remote.
+
+POS шаг опубликован обычным push b499cb1..d3e5f6f; git ls-remote подтвердил
+d3e5f6fba5919fff472d0c57a6e101083b197f87. PR #273 остаётся Draft.
+
+### Owner list, SPACEVERSE interface и обращение разработчику (2026-10-15)
+
+Лично добавлен GET /api/admin/onboarding/venues: единый read-only список из
+прежнего active venue resolver и scoped drafts/prepared venues. Tenant/auth/
+runtime model не дублируются, миграция не нужна. Scope выбирается подписанной
+сессией/SQL, arbitrary company/status и неверная/дублированная пагинация
+отвергаются. 25 строк на страницу, все точки доступны через «Показать ещё».
+Каждая prepared точка переиспользует настоящий workflow projection. Legacy
+metadata active без подтверждённой связи остаётся pending/unknown с null суммой.
+Две активности разделены: событие устройства и изменение оператором.
+
+Ошибка source одной точки показывает failed/degraded и requiresAttention,
+не скрывая остальные точки. Revoke при projection убирает строку/закрывает
+доступ. UI обновляет статусы, показывает объяснение и открывает нужный wizard,
+включая повторное открытие того же draft. Подтверждённый пустой отчёт имеет 0;
+неизвестная сумма и непустые данные не смешиваются.
+
+Вход, sidebar, invite claim и master получили SPACEVERSE branding и общие
+тексты. В opt-in SPACEVERSE flow скрыты legacy-only wheel/achievements/broadcast
+и специализированные content managers ПИВНИКА; общие менеджеры переиспользуются.
+Старая совместимость при выключенном workflow flag сохранена. Новая панель не
+выдаёт наличие Admin connection за работающие приложения гостей. Пустое состояние
+подготовленной точки не говорит, что ей вообще не назначено заведение.
+
+«Нужна помощь разработчика?» позволяет описать проблему и скопировать текст с
+ID, безопасным кодом состояния и диагностикой. Это подготовка обращения,
+не доставленная заявка и не автоматическая отправка. Сохранённых ключей/кодов
+приглашения в диагностике нет. Прямой канал сообщений/доступ разработчика
+планируется в отдельном Hub scope; чужие сообщения инструментами не отправлялись.
+
+Лично выполнено на дереве поверх d3e5f6f, логи /tmp/spaceverse-owner-final-gate:
+
+- materialize дважды + cmp — identical; прежние 7 generated файлов дают
+  365 insertions/78 deletions (server.js/universal-server.js/app.js включены);
+  snapshot восстановлен перед commit, generated diff не исправлялся;
+- node --test --test-concurrency=2 — 587/587; npm run check и
+  npm run audit:runtime-patches passed;
+- root npm audit, npm audit --omit=dev --audit-level=high и Business audit —
+  0 vulnerabilities;
+- Business typecheck, build, lint passed (0 errors, 12 прежних Fast Refresh
+  warnings); npm test -- --maxWorkers=2 — 258 passed, 20 прежних skipped;
+- workflow/owner list + native proxy signed HTTP/SQL — 18 tests: две компании,
+  две точки одной компании, новый viewer видит ровно одну точку, revoke → 403,
+  source corruption одного приложения, 34 доступные записи на двух страницах
+  без дублей/чужой компании, реальные native empty-sync/activity проекции;
+- Playwright invitations/owner list/proxy — 4/4 desktop/mobile: полный local
+  flow, zero/unavailable distinction, список/переоткрытие, SPACEVERSE title,
+  отсутствие legacy navigation, реальная clipboard copy обращения без key,
+  no horizontal overflow; прежний onboarding/provider/provisioning — 4/4;
+- E2E выявил неправильное accessible name textarea; исправлены aria-label и
+  проверка textarea value. Source corruption первоначально давал общий 400;
+  исправлена изоляция ошибки по строке списка и подтверждён полный повтор.
+
+Это не завершение реального самостоятельного запуска: требуются immutable
+release registration, отдельный разрешённый runtime launch, terminal provisioning
+и проверки реального провайдера/устройства. Новый Mobile Integration Hub пока
+не реализован и не добавлен в #273; сначала отдельная architecture/contract/UX
+итерация, потом sandbox vertical. Production/main/Railway, реальные env/secrets,
+БД/данные/кассы/Telegram/VK, CI и kiosk этой итерацией не менялись.

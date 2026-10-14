@@ -19,17 +19,17 @@ export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
 
 const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand'])
-export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false,setupOnly=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean;setupOnly?:boolean}){
+export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false,setupOnly=false,spaceverse=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean;setupOnly?:boolean;spaceverse?:boolean}){
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
     <aside className={cn('sidebar',open&&'open')}>
-      <div className="brand"><div className="brand-mark">P</div><div><b>PIVNIK</b><span>BUSINESS</span></div></div>
+      <div className="brand"><div className="brand-mark">S</div><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className={cn('demo-badge',mode==='production'&&'live-badge')}>
         {mode==='demo'?<Sparkles size={13}/>:<Database size={13}/>}
-        {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':'СИСТЕМА ПОДКЛЮЧЕНА'}
+        {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':spaceverse?'ПАНЕЛЬ УПРАВЛЕНИЯ':'СИСТЕМА ПОДКЛЮЧЕНА'}
       </div>
       <nav className="nav">
-        {nav.filter(([id])=>setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id)).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
+        {nav.filter(([id])=>!(spaceverse&&['wheel','achievements','broadcast'].includes(id))&&(setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id))).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
           <Icon size={17}/><span>{setupOnly?'Подключение':restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
         </button>)}
         {role==='SUPER_ADMIN'&&<>

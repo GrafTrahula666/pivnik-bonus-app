@@ -39,7 +39,7 @@ function LiveKpi({label,metric,kind,previous}:{label:string;metric:Metric;kind:'
     </div>:<div className="kpi-reason">{metric.reason||'Пока недостаточно данных'}</div>}
   </div>
 }
-function ApplicationOperationsDashboard({venue,period,compare,onNavigate}:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void}){
+function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceverse=false}:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void;spaceverse?:boolean}){
   const path=`/api/admin/venues/${venue.id}/dashboard?days=${days(period)}`
   const {data,error,loading,reload}=useResource<Dashboard>(path)
   const [metric,setMetric]=useState<'revenue'|'customers'|'bonuses'|'visits'>('revenue')
@@ -90,7 +90,7 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate}:{venue
         {[
           ['Лояльность','Уровни и кэшбэк','loyalty'],['Колесо','Призы и вероятности','wheel'],['Достижения','Условия и награды','achievements'],
           ['Магазин','Каталог и остатки','shop'],['Акции','Расписание и статусы','promotions'],['Оформление','Стиль приложения','brand'],
-        ].map(([label,value,page])=><button className="quick-row" key={label} onClick={()=>onNavigate(page as Page)}><span>{label}</span><b>{value}</b><TrendingUp size={15}/></button>)}
+        ].filter(([, ,page])=>!spaceverse||!['wheel','achievements'].includes(page!)).map(([label,value,page])=><button className="quick-row" key={label} onClick={()=>onNavigate(page as Page)}><span>{label}</span><b>{value}</b><TrendingUp size={15}/></button>)}
         <SourceNote>Изменения настроек безопасно отделены от работы приложений для гостей.</SourceNote>
       </section>
     </div>
@@ -106,7 +106,7 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate}:{venue
   </div>
 }
 
-export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void;onCashView?:(cash:boolean)=>void}){
+export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void;onCashView?:(cash:boolean)=>void;spaceverse?:boolean}){
   const [source,setSource]=useState<'all'|'app'|'operations'>('all')
   const onCashView=props.onCashView
   useEffect(()=>{onCashView?.(source!=='operations')},[source,onCashView])
