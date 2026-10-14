@@ -124,11 +124,19 @@ singleton binding if absent, accepts an exact existing binding after an
 uncertain response, and refuses to overwrite any mismatch. A successful target
 commit and metadata completion are deliberately reconciled rather than treated
 as one cross-database transaction. The ledger and audit contain only safe IDs,
-checksum, attempts, status and fixed error/result codes. This engine is not yet
-mounted in HTTP/UI because no protected runtime-key-to-database credential
-registry exists; that boundary must be added before an operator can start it
-from the master. It does not create a database, activate a venue/runtime, run
-tenant migrations automatically or publish an application.
+checksum, attempts, status and fixed error/result codes.
+`server/onboarding-database-registry.ts` now resolves only the exact frozen
+runtime key through `ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON`, whose values are
+references to separate `SPACEVERSE_TENANT_DATABASE_URL_*` variables. It rejects
+embedded URLs, Admin/legacy databases, duplicate targets and duplicate secret
+references, and safely rotates bounded pools without exposing driver errors.
+`server/onboarding-provisioning-api.ts` mounts creator/scoped GET status and POST
+run through the existing Business router behind the separate default-off
+`ADMIN_ENABLE_ONBOARDING_PROVISIONING` gate, signed session, Origin, CSRF and
+rate limits. POST accepts only an empty object; query/body scope, URL and
+credentials are invalid. The engine is still not connected to the UI. It does
+not create a database, activate a venue/runtime, run tenant migrations
+automatically or publish an application.
 
 ## The honest starting picture
 
