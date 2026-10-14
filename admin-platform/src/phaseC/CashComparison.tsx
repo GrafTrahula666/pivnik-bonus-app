@@ -63,6 +63,7 @@ function ComparisonResult({path,report,mode,currentLabel,secondLabel}:{path:stri
   if(loading)return <p className="cash-comparison-note">Загрузка периода сравнения…</p>
   if(error)return <div role="alert"><p>{error}</p><button className="btn secondary" onClick={()=>{setLoading(true);setAttempt(n=>n+1)}}>Повторить сравнение</button></div>
   const current=readable(report,mode),previous=readable(other,mode)
+  const syncError=[report,other].some(item=>item?.connection.state==='error'&&Boolean(item.connection.lastSuccessAt))
   const value=(summary:typeof current)=>!summary?null:metric==='revenue'?BigInt(summary.netCents):metric==='average'?(summary.averageCents===null?null:BigInt(summary.averageCents)):BigInt(summary.saleDocuments)+BigInt(summary.returnDocuments)
   const a=value(current),b=value(previous)
   const money=metric!=='operations',format=(n:bigint)=>money?cashMoney(String(n)):n.toLocaleString('ru-RU')
@@ -85,6 +86,6 @@ function ComparisonResult({path,report,mode,currentLabel,secondLabel}:{path:stri
         </div>
       })}
     </div>
-    <p className="cash-comparison-delta">{change===null?'Сравнение недоступно: недостаточно данных.':<>Изменение: <b>{change>0n?'+':''}{format(change)}</b> · {deltaPercent}</>}</p>
+    <p className="cash-comparison-delta">{change===null?(syncError?'Сравнение недоступно: ошибка синхронизации кассы. Данные последней успешной сверки сохранены, но сравнение заблокировано.':'Сравнение недоступно: недостаточно данных.'):<>Изменение: <b>{change>0n?'+':''}{format(change)}</b> · {deltaPercent}</>}</p>
   </>
 }
