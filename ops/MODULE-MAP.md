@@ -43,6 +43,17 @@ provisioning and live terminal verification remain pending; prepared metadata
 never means an active venue. When the scoped invitation flag is on, legacy
 issuance/claim is disabled and old links require reissue from «Приглашения».
 Legacy rows and independently granted company rights are retained.
+Manual admin migration 012 stores only the operator checkpoint, terminal ID/name
+and cash-report choice for the existing draft. `server/onboarding-workflow.ts`
+derives the eight step statuses from canonical company/venue, frozen application,
+existing provider verification and provisioning ledger; request statuses and
+scope are rejected. `GET/PUT .../progress` share the same revocable read/write
+permissions, revision/replay checks and atomic audit. `OnboardingProgress.tsx`
+restores these choices after reload. `ADMIN_ENABLE_ONBOARDING_WORKFLOW` defaults
+off. A configured terminal has no confirmed binding/event yet; its status stays
+pending. Missing connection returns unavailable report data with null amounts,
+never invented zero revenue. A database binding or readable provider documents
+do not mark a venue active or an application published.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find

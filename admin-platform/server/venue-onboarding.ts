@@ -311,7 +311,7 @@ const integrationContract={
   posBindingCreated:false as const,
   runtimeStatus:'not_provisioned' as const,
 }
-const providerAdvice:Record<string,string>={
+export const providerAdvice:Record<string,string>={
   not_verified:'Нажмите «Проверить доступ», чтобы подтвердить токен и права на магазин.',
   token_expired:'Обновите токен Эвотора и сохраните настройку повторно.',
   forbidden:'Проверьте права токена на документы указанного магазина.',

@@ -57,6 +57,7 @@ import {
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
+import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
 import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
   claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
@@ -89,6 +90,7 @@ export const sessionCapabilities=()=>({
   onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
   onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
   onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
+  onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -194,6 +196,15 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  const workflow=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/progress$/.exec(url.pathname)
+  if(workflow){
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingWorkflow(session.admin,workflow[1]!));return true}
+    if(isMethod(req,'PUT')){
+      requireCsrf(req,session.rawToken);enforceRateLimit(`onboarding-progress:${session.admin.id}`,60,60_000)
+      json(res,200,await saveOnboardingWorkflow(session.admin,workflow[1]!,await readJsonBody(req,2048)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }
   const onboardingApp=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/application$/.exec(url.pathname)
   if(onboardingApp){

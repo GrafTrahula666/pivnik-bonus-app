@@ -470,3 +470,25 @@ provisioning steps, tenant schema readiness, сборку/запуск прил�
 binding; **внешняя авторизация** всё ещё требуется для реальных Telegram, VK и
 Эвотора. Production/main/Railway, реальные БД, env/secrets, webhook, боты,
 кассы и данные не изменялись.
+Scoped приглашения опубликованы: 94d49e14398e37e2700c7b5529f946dc5562de17, ordinary push 7f596f6..94d49e1; origin SHA подтверждена git ls-remote. Миграции и production/env не применялись.
+
+### Следующая итерация — серверные статусы и сохранённый шаг
+
+Лично добавлена ручная metadata migration 012 и GET/PUT progress для того же draft. Сохраняются только текущий шаг, ID/название терминала и выбор кассовых отчётов. Компания/точка, приложение, provider state и provisioning ledger переиспользуются, tenant/model не дублируются. Статусы вычисляются сервером, arbitrary scope/status/key fields отвергаются. Запись ревизионная, exact replay восстанавливает неопределённый ответ, audit failure откатывает сохранение. Viewer только читает; отзыв и другая компания/точка закрывают доступ.
+
+Приложение/терминал/modules остаются pending до подтверждённого подключения; provider documents_readable не считается событием терминала. Итог not_provisioned/published=false, отчёт unavailable с null суммой/числом чеков, а не ложный 0 ₽. UI восстанавливает шаг/терминал/modules после reload, неизвестный ответ замораживает исходную команду. Незавершённая связь и развёртывание явно показаны по-русски.
+
+Перед публикацией перенесены remote commits до 6732e5b: защищённый provisioning registry/API/UI сохранены, их реализация не приписывается этой итерации. Projection обновляется после изменения provisioning ledger. Provider state различает свежую проверку, stale (>15 минут), первый отказ и отказ после подтверждённого доступа; сумма в переходах не участвует. Все намеренно выключенные модули имеют suspended. Контрольные символы в invitation/progress input проверяются без no-control-regex, прежняя lint-ошибка моего invitation commit исправлена.
+
+Лично выполнено на общем дереве поверх 6732e5b, все exit 0; логи /tmp/spaceverse-workflow-final-gate:
+
+- materialize ×2 и cmp diff — одинаковый исходный diff семи runtime-файлов (365/78), включая server.js/universal-server.js/app.js; canonical копии восстановлены перед commit, generated diff не включён;
+- node --test --test-concurrency=2 — 581/581, 0 skipped; npm run check; npm run audit:runtime-patches — passed;
+- npm audit; npm audit --omit=dev --audit-level=high; npm audit --prefix admin-platform — 0 vulnerabilities каждый;
+- Business npm run typecheck; npm test -- --maxWorkers=2 — 239 passed, 20 прежних integration tests skipped (нет отдельного разрешённого URL, существующие БД/данные не сбрасывались); npm run build — passed;
+- npm run lint — exit 0, 0 errors и 12 прежних Fast Refresh warnings; новый код не добавляет warnings;
+- workflow signed HTTP/SQL suite — 6/6: replay/revision conflict, два tenant/две точки одной компании, viewer/revoke, scope/status/key spoof, audit rollback, missing schema, fresh/stale/denied provider projection. Тimestamps состояния провайдера синтетические, живой provider не вызывался;
+- Playwright invitations+progress — 2/2 desktop/mobile, лог /tmp/spaceverse-workflow-final-e2e.log: приглашение/новый manager/SQL wizard, сохранение terminal/modules/current step, reload, not_provisioned, отсутствие ложного 0 ₽, отзыв → 403;
+- прежний onboarding с provider/provisioning UI — 4/4 desktop/mobile, лог onboarding-e2e.log. Провайдер в fixture синтетический, Chromium /usr/bin/chromium.
+
+E2E первоначально обнаружил реальные accessible-name дефекты поля ID терминала и селекта отчётов; исправлены aria-label/aria-describedby и повтор подтверждён 2/2. Не исправлялись попутные favicon и chunk-size предупреждения. Runbook, MODULE-MAP и STATUS-MODEL обновлены вместе с кодом. Осталось: proxy v2 с X-Pivnik-Device-Key, реальное событие терминала/честная проверка, owner venues list и runtime readiness/внешнее развёртывание. Production, реальные credentials/env/устройства/данные не менялись. /mnt/project-files/owner-panel/progress.md всё ещё read-only; журнал ведётся здесь.

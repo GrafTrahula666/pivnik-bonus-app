@@ -206,7 +206,9 @@ export async function acceptOnboardingInvitation(admin:AdminPrincipal|null,raw:u
   if(!admin){
     email=normalizeEmail(body.email)
     if(email.length>254||!/^\S+@[^\s@]+\.[^\s@]+$/.test(email)||typeof body.displayName!=='string'
-      ||!body.displayName.trim()||body.displayName.length>80||/[\x00-\x1f\x7f]/.test(body.displayName)||typeof body.password!=='string')throw invalid()
+      ||!body.displayName.trim()||body.displayName.length>80
+      ||Array.from(body.displayName).some(character=>character.charCodeAt(0)<32||character.charCodeAt(0)===127)
+      ||typeof body.password!=='string')throw invalid()
     displayName=body.displayName.trim();passwordHash=hashPassword(body.password)
   }else if(['email','displayName','password'].some(key=>body[key]!==undefined))throw invalid()
   const client=await pool.connect()

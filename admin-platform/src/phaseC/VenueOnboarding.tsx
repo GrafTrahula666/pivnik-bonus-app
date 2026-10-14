@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Building2, Check, Copy, Database, Link2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, type AdminSession } from '../api'
 import './venue-onboarding.css'
+import { OnboardingProgress } from './OnboardingProgress'
 
 export interface OnboardingData {
   companyId: string | null
@@ -579,6 +580,8 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     {error&&<div className="onboarding-feedback error" role="alert">{error}</div>}
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {!canWrite&&<p className="onboarding-feedback">Вам доступен просмотр. Изменения выполняет владелец или управляющий этой точки.</p>}
+    {editing&&current&&session.capabilities.onboardingWorkflow&&<OnboardingProgress key={current.id} draftId={current.id} canWrite={canWrite}
+      refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt].join(':')}/>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
