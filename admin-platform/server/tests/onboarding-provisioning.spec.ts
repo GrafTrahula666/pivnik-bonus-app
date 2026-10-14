@@ -37,6 +37,35 @@ async function target(withBindingSchema=true) {
   return db
 }
 
+async function readyTarget() {
+  const db=await target()
+  await db.exec(`
+    CREATE TABLE users (
+      id BIGSERIAL PRIMARY KEY,telegram_id BIGINT UNIQUE,username TEXT,first_name TEXT NOT NULL,
+      last_name TEXT,photo_url TEXT,role TEXT NOT NULL DEFAULT 'client',session_version BIGINT NOT NULL DEFAULT 1,deleted_at TIMESTAMPTZ,
+      merged_into_user_id BIGINT REFERENCES users(id)
+    );
+    CREATE TABLE user_identities (
+      id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL,provider_user_id TEXT NOT NULL,provider_username TEXT,
+      UNIQUE(provider,provider_user_id),UNIQUE(user_id,provider)
+    );
+    CREATE TABLE wallets (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      balance BIGINT NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE transactions (
+      id BIGSERIAL PRIMARY KEY,request_key TEXT UNIQUE,client_id BIGINT NOT NULL REFERENCES users(id),
+      mode TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'completed'
+    );
+  `)
+  for(const file of [
+    '009_spaceverse_tenant_attribution.sql','019_spaceverse_customer_ownership.sql',
+    '020_spaceverse_customer_create_requests.sql',
+  ]) await db.exec(await fs.readFile(new URL('../../../migrations/'+file,import.meta.url),'utf8'))
+  return db
+}
+
 async function preparedDraft(db:PGlite,label:string) {
   const draftId=crypto.randomUUID(),requestKey=crypto.randomUUID()
   const tenantKey='sv-'+draftId.replaceAll('-','')
@@ -56,7 +85,7 @@ async function preparedDraft(db:PGlite,label:string) {
 async function provisioningRows(db:PGlite) {
   return (await db.query(`SELECT draft_id::text,step,runtime_key,manifest_sha256,application_revision,
     company_id::text,venue_id::text,status,attempt_count,lease_token::text,lease_expires_at::text,
-    last_error_code,result FROM admin_onboarding_provisioning_steps ORDER BY draft_id`)).rows
+    last_error_code,result FROM admin_onboarding_provisioning_steps ORDER BY draft_id,step`)).rows
 }
 
 beforeAll(()=>{
@@ -78,6 +107,88 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     expect(await provisioningRows(db)).toEqual([])
     await db.exec(sql)
     expect(await provisioningRows(db)).toEqual([])
+  })
+
+  it('expands the existing ledger with an additive, repeatable migration',async()=>{
+    const db=await metadata()
+    const sql=await fs.readFile(new URL('../../admin-migrations/013_onboarding_schema_readiness.sql',import.meta.url),'utf8')
+    expect(sql).toMatch(/tenant_schema_readiness/)
+    expect(sql).not.toMatch(/(?:^|\n)\s*(?:INSERT|UPDATE|DELETE\s+FROM|MERGE|TRUNCATE)\b/i)
+    expect(sql).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|SCHEMA|DATABASE)\b/i)
+    expect(await provisioningRows(db)).toEqual([])
+    await db.exec(sql);await db.exec(sql)
+    expect(await provisioningRows(db)).toEqual([])
+  })
+
+  it('requires a successful exact binding before schema readiness can be claimed',async()=>{
+    const meta=await metadata(),draft=await preparedDraft(meta,'Readiness dependency')
+    let resolutions=0
+    const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>{resolutions++;return null}})
+    await expect(service.getTenantSchemaReadiness(root,draft.draftId)).rejects.toMatchObject({
+      statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+    })
+    await expect(service.runTenantSchemaReadiness(root,draft.draftId)).rejects.toMatchObject({
+      statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+    })
+    expect(resolutions).toBe(0)
+    expect(await provisioningRows(meta)).toEqual([])
+  })
+
+  it('verifies the frozen binding, required schema and empty ownership boundary once',async()=>{
+    const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Readiness success')
+    let resolutions=0
+    const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async key=>{
+      resolutions++;expect(key).toBe(draft.tenantKey);return database(tenant)
+    }})
+    expect(await service.runRuntimeDatabaseBinding(root,draft.draftId)).toMatchObject({status:'succeeded'})
+    expect(await service.getTenantSchemaReadiness(root,draft.draftId)).toMatchObject({
+      step:'tenant_schema_readiness',status:'not_started',attemptCount:0,result:null,startAllowed:true,
+    })
+    const completed=await service.runTenantSchemaReadiness(root,draft.draftId)
+    expect(completed).toMatchObject({
+      step:'tenant_schema_readiness',status:'succeeded',attemptCount:1,errorCode:null,startAllowed:false,
+      result:{schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified'},
+    })
+    expect(await service.getTenantSchemaReadiness(root,draft.draftId)).toEqual(completed)
+    expect(await service.runTenantSchemaReadiness(root,draft.draftId)).toEqual(completed)
+    expect(resolutions).toBe(2)
+    expect(await provisioningRows(meta)).toHaveLength(2)
+    const audits=(await meta.query(`SELECT action,metadata FROM admin_audit_log
+      WHERE entity_id=$1 ORDER BY id`,[draft.draftId])).rows
+    expect(audits).toEqual([
+      {action:'onboarding.provisioning_step_succeed',metadata:{step:'runtime_database_binding',binding:'created'}},
+      {action:'onboarding.provisioning_step_succeed',metadata:{
+        step:'tenant_schema_readiness',schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified',
+      }},
+    ])
+    expect(JSON.stringify({completed,audits})).not.toMatch(/database.*url|postgres:|password|secret|first_name/i)
+  })
+
+  it('reports fixed actions for an incomplete schema and unowned historical data',async()=>{
+    const meta=await metadata(),incomplete=await target(),historical=await readyTarget()
+    const incompleteDraft=await preparedDraft(meta,'Readiness schema missing')
+    const historicalDraft=await preparedDraft(meta,'Readiness ownership missing')
+    const targets=new Map([[incompleteDraft.tenantKey,database(incomplete)],[historicalDraft.tenantKey,database(historical)]])
+    const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async key=>targets.get(key)??null})
+    await service.runRuntimeDatabaseBinding(root,incompleteDraft.draftId)
+    expect(await service.runTenantSchemaReadiness(root,incompleteDraft.draftId)).toMatchObject({
+      status:'action_required',attemptCount:1,errorCode:'TARGET_TENANT_SCHEMA_REQUIRED',result:null,startAllowed:true,
+    })
+
+    const binding=await service.runRuntimeDatabaseBinding(root,historicalDraft.draftId)
+    const user=(await historical.query<{id:string}>(`INSERT INTO users(first_name) VALUES('Sensitive fixture') RETURNING id::text`)).rows[0]!
+    expect(await service.runTenantSchemaReadiness(root,historicalDraft.draftId)).toMatchObject({
+      status:'action_required',attemptCount:1,errorCode:'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED',result:null,startAllowed:true,
+    })
+    await historical.query(`INSERT INTO spaceverse_customer_ownership(user_id,runtime_key,company_id,venue_id)
+      VALUES($1::bigint,$2,$3,$4)`,[user.id,historicalDraft.tenantKey,binding.scope.companyId,binding.scope.venueId])
+    expect(await service.runTenantSchemaReadiness(root,historicalDraft.draftId)).toMatchObject({
+      status:'succeeded',attemptCount:2,errorCode:null,
+      result:{schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified'},
+    })
+    const serialized=JSON.stringify(await provisioningRows(meta))
+    expect(serialized).not.toContain('Sensitive fixture')
+    expect(serialized).not.toMatch(/postgres:|password|secret|host|url/i)
   })
 
   it('claims, writes the exact frozen manifest binding once, reopens and replays without target work',async()=>{
@@ -187,7 +298,7 @@ describe('onboarding runtime binding provisioning ledger',()=>{
   })
 
   it('derives scope from creator membership and never from caller-supplied target data',async()=>{
-    const meta=await metadata(),tenantA=await target(),tenantB=await target()
+    const meta=await metadata(),tenantA=await readyTarget(),tenantB=await readyTarget()
     const a=await preparedDraft(meta,'Tenant A'),b=await preparedDraft(meta,'Tenant B')
     const targets=new Map([[a.tenantKey,database(tenantA)],[b.tenantKey,database(tenantB)]])
     const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async key=>targets.get(key)??null})
@@ -202,5 +313,12 @@ describe('onboarding runtime binding provisioning ledger',()=>{
       .toEqual([{runtime_key:a.tenantKey,company_id:'10',venue_id:a.venueId}])
     expect((await tenantB.query('SELECT runtime_key,company_id,venue_id FROM spaceverse_runtime_binding')).rows)
       .toEqual([{runtime_key:b.tenantKey,company_id:'10',venue_id:b.venueId}])
+    expect(await service.runTenantSchemaReadiness(root,a.draftId)).toMatchObject({
+      status:'succeeded',runtimeKey:a.tenantKey,scope:{companyId:'10',venueId:a.venueId},
+    })
+    expect(await service.runTenantSchemaReadiness(root,b.draftId)).toMatchObject({
+      status:'succeeded',runtimeKey:b.tenantKey,scope:{companyId:'10',venueId:b.venueId},
+    })
+    expect(await provisioningRows(meta)).toHaveLength(4)
   })
 })

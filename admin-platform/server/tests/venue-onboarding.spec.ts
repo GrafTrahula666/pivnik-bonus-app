@@ -91,6 +91,37 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     return fetch(origin+'/api/admin/onboarding/drafts'+path,{method,headers:{cookie:session.cookie,origin:requestOrigin??config.publicOrigin,
       'content-type':'application/json',...(csrf?{'x-csrf-token':session.csrf}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})})
   }
+  async function readinessTarget() {
+    const target=new PGlite()
+    for(const file of ['017_spaceverse_runtime_binding.sql','018_spaceverse_runtime_scope_binding.sql']) {
+      await target.exec(await fs.readFile(new URL('../../../migrations/'+file,import.meta.url),'utf8'))
+    }
+    await target.exec(`
+      CREATE TABLE users (
+        id BIGSERIAL PRIMARY KEY,telegram_id BIGINT UNIQUE,username TEXT,first_name TEXT NOT NULL,
+        last_name TEXT,photo_url TEXT,role TEXT NOT NULL DEFAULT 'client',session_version BIGINT NOT NULL DEFAULT 1,deleted_at TIMESTAMPTZ,
+        merged_into_user_id BIGINT REFERENCES users(id)
+      );
+      CREATE TABLE user_identities (
+        id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,provider_user_id TEXT NOT NULL,provider_username TEXT,
+        UNIQUE(provider,provider_user_id),UNIQUE(user_id,provider)
+      );
+      CREATE TABLE wallets (
+        user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        balance BIGINT NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE transactions (
+        id BIGSERIAL PRIMARY KEY,request_key TEXT UNIQUE,client_id BIGINT NOT NULL REFERENCES users(id),
+        mode TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'completed'
+      );
+    `)
+    for(const file of [
+      '009_spaceverse_tenant_attribution.sql','019_spaceverse_customer_ownership.sql',
+      '020_spaceverse_customer_create_requests.sql',
+    ]) await target.exec(await fs.readFile(new URL('../../../migrations/'+file,import.meta.url),'utf8'))
+    return target
+  }
 
   it('both switches gate direct reads/writes before touching storage',async()=>{
     for(const flag of ['enableWrites','enableOnboardingDrafts'] as const) {
@@ -140,9 +171,11 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   it('separately gates provisioning and reports the capability honestly',async()=>{
     config.enableOnboardingProvisioning=false
     try {
-      const path='/'+crypto.randomUUID()+'/provisioning/runtime-database-binding'
-      expect((await request('root','GET',path)).status).toBe(403)
-      expect((await request('root','POST',path+'/run',{})).status).toBe(403)
+      for(const step of ['runtime-database-binding','tenant-schema-readiness']) {
+        const path='/'+crypto.randomUUID()+'/provisioning/'+step
+        expect((await request('root','GET',path)).status).toBe(403)
+        expect((await request('root','POST',path+'/run',{})).status).toBe(403)
+      }
       const session=await fetch(origin+'/api/admin/auth/session',{headers:{cookie:sessions.get('root')!.cookie}})
       expect(await session.json()).toMatchObject({capabilities:{onboardingDrafts:true,onboardingProvisioning:false}})
       expect(await state.db!.query('SELECT * FROM admin_onboarding_provisioning_steps')).toMatchObject({rows:[]})
@@ -159,6 +192,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
       ['POST','/'+crypto.randomUUID()+'/integrations/evotor/verify',{revision:1}],
       ['GET','/'+crypto.randomUUID()+'/provisioning/runtime-database-binding',undefined],
       ['POST','/'+crypto.randomUUID()+'/provisioning/runtime-database-binding/run',{}],
+      ['GET','/'+crypto.randomUUID()+'/provisioning/tenant-schema-readiness',undefined],
+      ['POST','/'+crypto.randomUUID()+'/provisioning/tenant-schema-readiness/run',{}],
       ['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
       const r=await request(who,method,path,body)
       expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
@@ -345,6 +380,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     return draft
   }
   const provisioningPath=(draftId:string,suffix='')=>'/'+draftId+'/provisioning/runtime-database-binding'+suffix
+  const schemaReadinessPath=(draftId:string,suffix='')=>'/'+draftId+'/provisioning/tenant-schema-readiness'+suffix
 
   it('exposes creator-scoped status/start, rejects target input and resumes after protected registration',async()=>{
     const draft=await preparedDraft('Provisioning HTTP')
@@ -363,10 +399,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     const missing=await (await request('root','POST',path+'/run',{})).json()
     expect(missing).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_DATABASE_NOT_REGISTERED',startAllowed:true})
 
-    const target=new PGlite()
-    for(const file of ['017_spaceverse_runtime_binding.sql','018_spaceverse_runtime_scope_binding.sql']) {
-      await target.exec(await fs.readFile(new URL('../../../migrations/'+file,import.meta.url),'utf8'))
-    }
+    const target=await readinessTarget()
     state.targets.set(application.application.tenantKey,target)
     const completed=await (await request('root','POST',path+'/run',{})).json() as {manifestSha256:string;scope:{companyId:string;venueId:string}}
     expect(completed).toMatchObject({status:'succeeded',attemptCount:2,errorCode:null,result:{binding:'created'},startAllowed:false})
@@ -378,13 +411,33 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     }])
     const serialized=JSON.stringify({completed,audit:await rows('admin_audit_log')})
     expect(serialized).not.toMatch(/postgres:|password|databaseUrl|forbidden\.invalid/i)
+
+    const schemaPath=schemaReadinessPath(draft.id)
+    expect(await (await request('root','GET',schemaPath)).json()).toMatchObject({
+      draftId:draft.id,step:'tenant_schema_readiness',status:'not_started',attemptCount:0,startAllowed:true,
+    })
+    expect((await request('owner','GET',schemaPath)).status).toBe(403)
+    expect((await request('other-root','GET',schemaPath)).status).toBe(404)
+    expect((await request('root','GET',schemaPath+'?databaseUrl=forbidden')).status).toBe(400)
+    const schemaRejected=await request('root','POST',schemaPath+'/run',{runtimeKey:application.application.tenantKey})
+    expect(schemaRejected.status).toBe(400);expect(await schemaRejected.json()).toMatchObject({code:'ONBOARDING_PROVISIONING_COMMAND_INVALID'})
+    const schemaCompleted=await (await request('root','POST',schemaPath+'/run',{})).json()
+    expect(schemaCompleted).toMatchObject({
+      status:'succeeded',attemptCount:1,errorCode:null,startAllowed:false,
+      result:{schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified'},
+    })
+    expect(await (await request('root','GET',schemaPath)).json()).toEqual(schemaCompleted)
+    expect(await (await request('root','POST',schemaPath+'/run',{})).json()).toEqual(schemaCompleted)
+    expect(JSON.stringify({schemaCompleted,audit:await rows('admin_audit_log')})).not.toMatch(/postgres:|password|databaseUrl/i)
   })
 
   it('requires a real session, same origin and CSRF to start provisioning',async()=>{
-    const draft=await preparedDraft('Provisioning HTTP security'),path=provisioningPath(draft.id,'/run')
-    expect((await fetch(origin+'/api/admin/onboarding/drafts'+path,{method:'POST',headers:{origin:config.publicOrigin,'content-type':'application/json'},body:'{}'})).status).toBe(401)
-    expect((await request('root','POST',path,{},false)).status).toBe(403)
-    expect((await request('root','POST',path,{},true,'https://foreign.invalid')).status).toBe(403)
+    const draft=await preparedDraft('Provisioning HTTP security')
+    for(const path of [provisioningPath(draft.id,'/run'),schemaReadinessPath(draft.id,'/run')]) {
+      expect((await fetch(origin+'/api/admin/onboarding/drafts'+path,{method:'POST',headers:{origin:config.publicOrigin,'content-type':'application/json'},body:'{}'})).status).toBe(401)
+      expect((await request('root','POST',path,{},false)).status).toBe(403)
+      expect((await request('root','POST',path,{},true,'https://foreign.invalid')).status).toBe(403)
+    }
     expect((await state.db!.query(`SELECT * FROM admin_onboarding_provisioning_steps WHERE draft_id=$1::uuid`,[draft.id])).rows).toEqual([])
   })
   const evotorPath=(draftId:string,suffix='')=>'/'+draftId+'/integrations/evotor'+suffix

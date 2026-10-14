@@ -66,7 +66,8 @@ import {
   saveOnboardingAppConfig,saveOnboardingEvotorIntegration,updateOnboardingDraft,verifyOnboardingEvotorIntegration,
 } from './venue-onboarding.js'
 import {
-  getOnboardingRuntimeDatabaseBinding,runOnboardingRuntimeDatabaseBinding,
+  getOnboardingRuntimeDatabaseBinding,getOnboardingTenantSchemaReadiness,
+  runOnboardingRuntimeDatabaseBinding,runOnboardingTenantSchemaReadiness,
 } from './onboarding-provisioning-api.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -247,6 +248,24 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
     if(isMethod(req,'GET')){
       json(res,200,await getOnboardingRuntimeDatabaseBinding(session.admin,onboardingProvisioning[1]!));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingSchemaReadinessRun=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/tenant-schema-readiness\/run$/.exec(url.pathname)
+  if(onboardingSchemaReadinessRun){
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-provisioning:${session.admin.id}`,20,60_000)
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'POST')){
+      json(res,200,await runOnboardingTenantSchemaReadiness(session.admin,onboardingSchemaReadinessRun[1]!,await readJsonBody(req,256)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingSchemaReadiness=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/tenant-schema-readiness$/.exec(url.pathname)
+  if(onboardingSchemaReadiness){
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'GET')){
+      json(res,200,await getOnboardingTenantSchemaReadiness(session.admin,onboardingSchemaReadiness[1]!));return true
     }
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }

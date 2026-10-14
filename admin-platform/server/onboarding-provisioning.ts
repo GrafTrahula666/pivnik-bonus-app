@@ -4,11 +4,19 @@ import { recordAudit } from './audit.js'
 import { loadOwnedOnboardingRuntimeSource } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 
-const STEP='runtime_database_binding' as const
+const BINDING_STEP='runtime_database_binding' as const
+const SCHEMA_READINESS_STEP='tenant_schema_readiness' as const
 const LEASE_SECONDS=30
+type StepName=typeof BINDING_STEP|typeof SCHEMA_READINESS_STEP
 type StoredStatus='running'|'retryable_error'|'action_required'|'succeeded'
 type VisibleStatus='not_started'|StoredStatus
-type TargetResult={binding:'created'|'verified_existing'}
+type BindingResult={binding:'created'|'verified_existing'}
+type SchemaReadinessResult={
+  schema:'verified'
+  migrationSet:'009,017-020'
+  ownershipBoundary:'verified'
+}
+type TargetResult=BindingResult|SchemaReadinessResult
 
 interface RuntimeManifest {
   runtimeKey:string
@@ -23,7 +31,7 @@ interface RuntimeSource {
 }
 interface StepRow extends QueryResultRow {
   draft_id:string
-  step:typeof STEP
+  step:StepName
   runtime_key:string
   manifest_sha256:string
   application_revision:number
@@ -81,12 +89,12 @@ function matchesSource(row:StepRow,source:RuntimeSource):boolean {
     row.company_id===source.manifest.scope.companyId&&row.venue_id===source.manifest.scope.venueId
 }
 
-function view(source:RuntimeSource,row?:StepRow) {
+function view(source:RuntimeSource,step:StepName,row?:StepRow) {
   const startAllowed=!row||row.status==='retryable_error'||row.status==='action_required'||
     (row.status==='running'&&!row.lease_active)
   return {
     draftId:source.draftId,
-    step:STEP,
+    step,
     runtimeKey:source.manifest.runtimeKey,
     manifestSha256:source.manifest.manifestSha256,
     applicationRevision:source.manifest.source.applicationRevision,
@@ -107,56 +115,64 @@ async function connect(database:Connectable):Promise<Client> {
   try {return await database.connect()} catch {throw unavailable()}
 }
 
-async function selectStep(client:Pick<PoolClient,'query'>,draftId:string,lock=false):Promise<StepRow|undefined> {
+async function selectStep(client:Pick<PoolClient,'query'>,draftId:string,step:StepName,lock=false):Promise<StepRow|undefined> {
   const result=await client.query<StepRow>(`SELECT ${stepColumns}
     FROM admin_onboarding_provisioning_steps
-    WHERE draft_id=$1::uuid AND step=$2${lock?' FOR UPDATE':''}`,[draftId,STEP])
+    WHERE draft_id=$1::uuid AND step=$2${lock?' FOR UPDATE':''}`,[draftId,step])
   return result.rows[0]
 }
 
 interface Claim {
   source:RuntimeSource
+  step:StepName
   row:StepRow
   token:string|null
 }
 
-async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,draftId:string):Promise<Claim> {
+async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,draftId:string,step:StepName):Promise<Claim> {
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
     const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
+    if(step===SCHEMA_READINESS_STEP) {
+      const dependency=await selectStep(client,source.draftId,BINDING_STEP,true)
+      if(!dependency||!matchesSource(dependency,source)||dependency.status!=='succeeded') {
+        throw new HttpError(409,'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+          'Сначала подготовьте точную привязку выделенной базы приложения.')
+      }
+    }
     const initialToken=crypto.randomUUID()
     const inserted=await client.query<{lease_token:string}>(`INSERT INTO admin_onboarding_provisioning_steps(
       draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,
       status,attempt_count,lease_token,lease_expires_at)
       VALUES($1::uuid,$2,$3,$4,$5,$6::bigint,$7::bigint,'running',1,$8::uuid,NOW()+INTERVAL '${LEASE_SECONDS} seconds')
       ON CONFLICT (draft_id,step) DO NOTHING RETURNING lease_token::text`,[
-      source.draftId,STEP,source.manifest.runtimeKey,source.manifest.manifestSha256,
+      source.draftId,step,source.manifest.runtimeKey,source.manifest.manifestSha256,
       source.manifest.source.applicationRevision,source.manifest.scope.companyId,source.manifest.scope.venueId,
       initialToken,
     ])
-    let row=await selectStep(client,source.draftId,true)
+    let row=await selectStep(client,source.draftId,step,true)
     if(!row||!matchesSource(row,source)) {
       throw new HttpError(409,'ONBOARDING_PROVISIONING_SOURCE_CHANGED',
         'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
     }
     if(inserted.rows.length===1) {
       await client.query('COMMIT')
-      return {source,row,token:initialToken}
+      return {source,step,row,token:initialToken}
     }
     if(row.status==='succeeded'||(row.status==='running'&&row.lease_active)) {
       await client.query('COMMIT')
-      return {source,row,token:null}
+      return {source,step,row,token:null}
     }
     const token=crypto.randomUUID()
     await client.query(`UPDATE admin_onboarding_provisioning_steps SET
       status='running',attempt_count=attempt_count+1,lease_token=$3::uuid,
       lease_expires_at=NOW()+INTERVAL '${LEASE_SECONDS} seconds',last_error_code=NULL,result=NULL,updated_at=NOW()
-      WHERE draft_id=$1::uuid AND step=$2`,[source.draftId,STEP,token])
-    row=await selectStep(client,source.draftId,true)
+      WHERE draft_id=$1::uuid AND step=$2`,[source.draftId,step,token])
+    row=await selectStep(client,source.draftId,step,true)
     if(!row) throw unavailable()
     await client.query('COMMIT')
-    return {source,row,token}
+    return {source,step,row,token}
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     if(error instanceof HttpError) throw error
@@ -223,6 +239,158 @@ async function bindTarget(database:Connectable,source:RuntimeSource):Promise<Tar
   } finally {client.release()}
 }
 
+interface SchemaColumnRow extends QueryResultRow {
+  table_name:string
+  column_name:string
+  udt_name:string
+}
+interface SchemaConstraintRow extends QueryResultRow {
+  table_name:string
+  conname:string
+  convalidated:boolean
+  definition:string
+}
+interface SchemaIndexRow extends QueryResultRow {
+  tablename:string
+  indexdef:string
+}
+
+const requiredSchemaColumns:Record<string,Record<string,string>>={
+  spaceverse_runtime_binding:{
+    singleton:'bool',runtime_key:'text',manifest_sha256:'text',manifest_revision:'int4',
+    company_id:'text',venue_id:'text',isolation_policy:'text',status:'text',
+  },
+  users:{
+    id:'int8',telegram_id:'int8',username:'text',first_name:'text',last_name:'text',photo_url:'text',
+    role:'text',session_version:'int8',deleted_at:'timestamptz',merged_into_user_id:'int8',
+  },
+  user_identities:{id:'int8',user_id:'int8',provider:'text',provider_user_id:'text',provider_username:'text'},
+  wallets:{user_id:'int8',balance:'int8',updated_at:'timestamptz'},
+  transactions:{id:'int8',request_key:'text',client_id:'int8',mode:'text',status:'text',tenant_id:'text',location_id:'text'},
+  spaceverse_customer_ownership:{user_id:'int8',runtime_key:'text',company_id:'text',venue_id:'text'},
+  spaceverse_customer_create_requests:{
+    runtime_key:'text',request_key:'uuid',request_fingerprint:'text',company_id:'text',venue_id:'text',
+    user_id:'int8',completed_at:'timestamptz',
+  },
+}
+
+const normalizedSql=(value:string)=>value.toLowerCase().replaceAll('"','').replace(/\s+/g,' ').trim()
+
+function hasDefinition(rows:SchemaConstraintRow[],table:string,pattern:RegExp):boolean {
+  return rows.some(row=>row.table_name===table&&row.convalidated&&pattern.test(normalizedSql(row.definition)))
+}
+
+function hasUniqueIndex(rows:SchemaIndexRow[],table:string,columns:string):boolean {
+  return rows.some(row=>row.tablename===table&&
+    /^create unique index\b/.test(normalizedSql(row.indexdef))&&
+    normalizedSql(row.indexdef).includes(`(${columns})`))
+}
+
+async function verifyTargetSchema(database:Connectable,source:RuntimeSource):Promise<SchemaReadinessResult> {
+  let client:Client
+  try {client=await database.connect()}
+  catch {throw new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')}
+  try {
+    await client.query('BEGIN READ ONLY')
+    const binding=await client.query<BindingRow>(`SELECT
+      runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
+      FROM spaceverse_runtime_binding WHERE singleton=TRUE`)
+    if(binding.rows.length!==1||!bindingMatches(binding.rows[0]!,source)) {
+      throw new TargetStepFailure('action_required','TARGET_BINDING_CONFLICT')
+    }
+
+    const columns=await client.query<SchemaColumnRow>(`SELECT table_name,column_name,udt_name
+      FROM information_schema.columns
+      WHERE table_schema='public' AND table_name IN (
+        'spaceverse_runtime_binding','users','user_identities','wallets','transactions',
+        'spaceverse_customer_ownership','spaceverse_customer_create_requests'
+      )`)
+    const available=new Map(columns.rows.map(row=>[`${row.table_name}.${row.column_name}`,row.udt_name]))
+    for(const [table,required] of Object.entries(requiredSchemaColumns)) {
+      for(const [column,type] of Object.entries(required)) {
+        if(available.get(`${table}.${column}`)!==type) {
+          throw new TargetStepFailure('action_required','TARGET_TENANT_SCHEMA_REQUIRED')
+        }
+      }
+    }
+
+    const constraints=await client.query<SchemaConstraintRow>(`SELECT
+      conrelid::regclass::text AS table_name,conname,convalidated,
+      pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint WHERE conrelid IN (
+        'public.users'::regclass,'public.user_identities'::regclass,'public.wallets'::regclass,
+        'public.transactions'::regclass,'public.spaceverse_customer_ownership'::regclass,
+        'public.spaceverse_customer_create_requests'::regclass
+      )`)
+    const definitions=constraints.rows
+    const constraintChecks:[string,RegExp][]=[
+      ['users',/^primary key \(id\)$/],
+      ['wallets',/^primary key \(user_id\)$/],
+      ['spaceverse_customer_ownership',/^primary key \(user_id\)$/],
+      ['spaceverse_customer_ownership',/^foreign key \(user_id\) references users\(id\).*on delete cascade$/],
+      ['spaceverse_customer_ownership',/^foreign key \(runtime_key, company_id, venue_id\) references spaceverse_runtime_binding\(runtime_key, company_id, venue_id\).*on update restrict on delete restrict$/],
+      ['spaceverse_customer_create_requests',/^primary key \(runtime_key, request_key\)$/],
+      ['spaceverse_customer_create_requests',/^foreign key \(runtime_key, company_id, venue_id\) references spaceverse_runtime_binding\(runtime_key, company_id, venue_id\).*on update restrict on delete restrict$/],
+      ['spaceverse_customer_create_requests',/^check \(\(\(user_id is null\) = \(completed_at is null\)\)\)$/],
+    ]
+    if(constraintChecks.some(([table,pattern])=>!hasDefinition(definitions,table,pattern))) {
+      throw new TargetStepFailure('action_required','TARGET_TENANT_SCHEMA_REQUIRED')
+    }
+
+    const indexes=await client.query<SchemaIndexRow>(`SELECT tablename,indexdef FROM pg_indexes
+      WHERE schemaname='public' AND tablename IN (
+        'spaceverse_runtime_binding','user_identities','transactions'
+      )`)
+    const indexChecks:[string,string][]=[
+      ['spaceverse_runtime_binding','runtime_key, company_id, venue_id'],
+      ['user_identities','provider, provider_user_id'],
+      ['user_identities','user_id, provider'],
+      ['transactions','request_key'],
+    ]
+    if(indexChecks.some(([table,columns])=>!hasUniqueIndex(indexes.rows,table,columns))) {
+      throw new TargetStepFailure('action_required','TARGET_TENANT_SCHEMA_REQUIRED')
+    }
+
+    const ownership=await client.query<{ownership_gap:boolean}>(`WITH exact_ownership AS (
+      SELECT user_id FROM spaceverse_customer_ownership
+      WHERE runtime_key=$1 AND company_id=$2 AND venue_id=$3
+    ), ownership_gaps AS (
+      SELECT user_row.id AS user_id FROM users AS user_row
+        WHERE NOT EXISTS (SELECT 1 FROM exact_ownership WHERE user_id=user_row.id)
+      UNION ALL
+      SELECT wallet.user_id FROM wallets AS wallet
+        WHERE NOT EXISTS (SELECT 1 FROM exact_ownership WHERE user_id=wallet.user_id)
+      UNION ALL
+      SELECT identity.user_id FROM user_identities AS identity
+        WHERE NOT EXISTS (SELECT 1 FROM exact_ownership WHERE user_id=identity.user_id)
+      UNION ALL
+      SELECT transaction.client_id FROM transactions AS transaction
+        WHERE transaction.tenant_id IS DISTINCT FROM $2
+           OR transaction.location_id IS DISTINCT FROM $3
+           OR NOT EXISTS (SELECT 1 FROM exact_ownership WHERE user_id=transaction.client_id)
+      UNION ALL
+      SELECT request.user_id FROM spaceverse_customer_create_requests AS request
+        WHERE request.runtime_key IS DISTINCT FROM $1
+           OR request.company_id IS DISTINCT FROM $2
+           OR request.venue_id IS DISTINCT FROM $3
+           OR (request.user_id IS NOT NULL AND NOT EXISTS (
+             SELECT 1 FROM exact_ownership WHERE user_id=request.user_id
+           ))
+    ) SELECT EXISTS(SELECT 1 FROM ownership_gaps) AS ownership_gap`,[
+      source.manifest.runtimeKey,source.manifest.scope.companyId,source.manifest.scope.venueId,
+    ])
+    if(ownership.rows[0]?.ownership_gap!==false) {
+      throw new TargetStepFailure('action_required','TARGET_TENANT_DATA_OWNERSHIP_REQUIRED')
+    }
+    await client.query('COMMIT')
+    return {schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified'}
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>undefined)
+    if(error instanceof TargetStepFailure) throw error
+    throw new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')
+  } finally {client.release()}
+}
+
 async function finish(
   options:OnboardingProvisioningOptions,admin:AdminPrincipal,claimValue:Claim,
   outcome:{status:'succeeded';result:TargetResult}|{status:'retryable_error'|'action_required';errorCode:string},
@@ -230,26 +398,26 @@ async function finish(
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
-    const current=await selectStep(client,claimValue.source.draftId,true)
+    const current=await selectStep(client,claimValue.source.draftId,claimValue.step,true)
     if(!current) throw unavailable()
     // A worker that lost its lease can never overwrite a newer attempt. The
     // target binding is idempotent, so the newer worker will reconcile it.
     if(current.status!=='running'||current.lease_token!==claimValue.token) {
       await client.query('COMMIT')
-      return view(claimValue.source,current)
+      return view(claimValue.source,claimValue.step,current)
     }
     if(outcome.status==='succeeded') {
       await client.query(`UPDATE admin_onboarding_provisioning_steps SET
         status='succeeded',lease_token=NULL,lease_expires_at=NULL,last_error_code=NULL,
         result=$3::jsonb,updated_at=NOW() WHERE draft_id=$1::uuid AND step=$2`,
-      [claimValue.source.draftId,STEP,JSON.stringify(outcome.result)])
+      [claimValue.source.draftId,claimValue.step,JSON.stringify(outcome.result)])
     } else {
       await client.query(`UPDATE admin_onboarding_provisioning_steps SET
         status=$3,lease_token=NULL,lease_expires_at=NULL,last_error_code=$4,result=NULL,updated_at=NOW()
         WHERE draft_id=$1::uuid AND step=$2`,
-      [claimValue.source.draftId,STEP,outcome.status,outcome.errorCode])
+      [claimValue.source.draftId,claimValue.step,outcome.status,outcome.errorCode])
     }
-    const row=await selectStep(client,claimValue.source.draftId,true)
+    const row=await selectStep(client,claimValue.source.draftId,claimValue.step,true)
     if(!row) throw unavailable()
     await recordAudit({
       admin,scope:claimValue.source.auditScope,
@@ -257,10 +425,10 @@ async function finish(
       entityType:'onboarding_provisioning_step',entityId:claimValue.source.draftId,
       before:{status:'running',attemptCount:current.attempt_count},
       after:{status:row.status,attemptCount:row.attempt_count},
-      metadata:{step:STEP,...(outcome.status==='succeeded'?outcome.result:{errorCode:outcome.errorCode})},
+      metadata:{step:claimValue.step,...(outcome.status==='succeeded'?outcome.result:{errorCode:outcome.errorCode})},
     },client)
     await client.query('COMMIT')
-    return view(claimValue.source,row)
+    return view(claimValue.source,claimValue.step,row)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     if(error instanceof HttpError) throw error
@@ -278,13 +446,13 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
       try {
         await client.query('BEGIN')
         const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId))
-        const row=await selectStep(client,source.draftId)
+        const row=await selectStep(client,source.draftId,BINDING_STEP)
         if(row&&!matchesSource(row,source)) {
           throw new HttpError(409,'ONBOARDING_PROVISIONING_SOURCE_CHANGED',
             'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
         }
         await client.query('COMMIT')
-        return view(source,row)
+        return view(source,BINDING_STEP,row)
       } catch(error) {
         await client.query('ROLLBACK').catch(()=>undefined)
         if(error instanceof HttpError) throw error
@@ -293,14 +461,53 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
     },
 
     async runRuntimeDatabaseBinding(admin:AdminPrincipal,draftId:string) {
-      const claimed=await claim(options,admin,draftId)
-      if(!claimed.token) return view(claimed.source,claimed.row)
+      const claimed=await claim(options,admin,draftId,BINDING_STEP)
+      if(!claimed.token) return view(claimed.source,BINDING_STEP,claimed.row)
       try {
         const target=await options.resolveTargetDatabase(claimed.source.manifest.runtimeKey)
         if(!target) throw new TargetStepFailure('action_required','TARGET_DATABASE_NOT_REGISTERED')
         const result=await bindTarget(target,claimed.source)
         try {await options.afterTargetCommit?.({draftId:claimed.source.draftId,runtimeKey:claimed.source.manifest.runtimeKey})}
         catch {throw new TargetStepFailure('retryable_error','TARGET_CONFIRMATION_UNCERTAIN')}
+        return await finish(options,admin,claimed,{status:'succeeded',result})
+      } catch(error) {
+        const failure=error instanceof TargetStepFailure?error:
+          new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')
+        return finish(options,admin,claimed,{status:failure.status,errorCode:failure.code})
+      }
+    },
+
+    async getTenantSchemaReadiness(admin:AdminPrincipal,draftId:string) {
+      const client=await connect(options.metadata)
+      try {
+        await client.query('BEGIN')
+        const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId))
+        const dependency=await selectStep(client,source.draftId,BINDING_STEP)
+        if(!dependency||!matchesSource(dependency,source)||dependency.status!=='succeeded') {
+          throw new HttpError(409,'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+            'Сначала подготовьте точную привязку выделенной базы приложения.')
+        }
+        const row=await selectStep(client,source.draftId,SCHEMA_READINESS_STEP)
+        if(row&&!matchesSource(row,source)) {
+          throw new HttpError(409,'ONBOARDING_PROVISIONING_SOURCE_CHANGED',
+            'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
+        }
+        await client.query('COMMIT')
+        return view(source,SCHEMA_READINESS_STEP,row)
+      } catch(error) {
+        await client.query('ROLLBACK').catch(()=>undefined)
+        if(error instanceof HttpError) throw error
+        throw unavailable()
+      } finally {client.release()}
+    },
+
+    async runTenantSchemaReadiness(admin:AdminPrincipal,draftId:string) {
+      const claimed=await claim(options,admin,draftId,SCHEMA_READINESS_STEP)
+      if(!claimed.token) return view(claimed.source,SCHEMA_READINESS_STEP,claimed.row)
+      try {
+        const target=await options.resolveTargetDatabase(claimed.source.manifest.runtimeKey)
+        if(!target) throw new TargetStepFailure('action_required','TARGET_DATABASE_NOT_REGISTERED')
+        const result=await verifyTargetSchema(target,claimed.source)
         return await finish(options,admin,claimed,{status:'succeeded',result})
       } catch(error) {
         const failure=error instanceof TargetStepFailure?error:

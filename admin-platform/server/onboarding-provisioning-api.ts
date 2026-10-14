@@ -30,3 +30,17 @@ export async function runOnboardingRuntimeDatabaseBinding(admin:AdminPrincipal,d
   }
   return provisioning.runRuntimeDatabaseBinding(admin,draftId)
 }
+
+export async function getOnboardingTenantSchemaReadiness(admin:AdminPrincipal,draftId:string) {
+  await requireOnboardingProvisioningAccess(admin)
+  return provisioning.getTenantSchemaReadiness(admin,draftId)
+}
+
+export async function runOnboardingTenantSchemaReadiness(admin:AdminPrincipal,draftId:string,raw:unknown) {
+  await requireOnboardingProvisioningAccess(admin)
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw as Record<string,unknown>).length!==0) {
+    throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID',
+      'Запуск не принимает URL, ключи или область заведения. Используется защищённая серверная регистрация.')
+  }
+  return provisioning.runTenantSchemaReadiness(admin,draftId)
+}

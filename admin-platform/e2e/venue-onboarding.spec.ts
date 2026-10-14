@@ -50,10 +50,17 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await expect(page.getByText('ID '+prepared.company.id+' · создана выключенной',{exact:true})).toBeVisible()
   await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
   const provisioning=page.getByLabel('Подготовка базы приложения')
+  let schemaRequests=0
+  await page.route('**/provisioning/tenant-schema-readiness*',async route=>{schemaRequests++;await route.continue()})
   await expect(provisioning).toBeVisible()
   await expect(provisioning.getByText('Ожидает запуска',{exact:true})).toBeVisible()
   await expect(provisioning.getByText('Не запущено · не опубликовано',{exact:true})).toBeVisible()
   await expect(provisioning.locator('input')).toHaveCount(0)
+  const schemaReadiness=page.getByLabel('Проверка схемы приложения')
+  await expect(schemaReadiness).toBeVisible()
+  await expect(schemaReadiness).toContainText('Read-only проверка станет доступна после точной привязки')
+  await expect(schemaReadiness.getByRole('button',{name:'Сначала подготовьте привязку',exact:true})).toBeDisabled()
+  expect(schemaRequests).toBe(0)
   let provisioningPosts=0
   await page.route('**/provisioning/runtime-database-binding/run',async route=>{
     if(route.request().method()==='POST') {
@@ -74,6 +81,9 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await expect(provisioning.getByText('Нужно действие',{exact:true})).toBeVisible()
   await expect(provisioning.getByText('Попытка 1',{exact:true})).toBeVisible()
   await expect(provisioning).toContainText('URL в браузере не вводится')
+  await expect(schemaReadiness.getByRole('button',{name:'Сначала подготовьте привязку',exact:true})).toBeDisabled()
+  expect(schemaRequests).toBe(0)
+  await page.unroute('**/provisioning/tenant-schema-readiness*')
   const evotor=page.getByLabel('Подключение Эвотора')
   await expect(evotor).toBeVisible()
   await evotor.getByLabel('ID магазина Эвотора',{exact:true}).fill('fixture-'+testInfo.project.name)
