@@ -64,6 +64,9 @@ import {
   prepareOnboardingScope,requireOnboardingAccess,requireOnboardingIntegrationAccess,revokeOnboardingInvite,
   saveOnboardingAppConfig,saveOnboardingEvotorIntegration,updateOnboardingDraft,verifyOnboardingEvotorIntegration,
 } from './venue-onboarding.js'
+import {
+  getOnboardingRuntimeDatabaseBinding,runOnboardingRuntimeDatabaseBinding,
+} from './onboarding-provisioning-api.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -85,6 +88,7 @@ export const sessionCapabilities=()=>({
   onboardingDrafts:config.enableWrites&&config.enableOnboardingDrafts,
   onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
   onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
+  onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -214,6 +218,24 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(isMethod(req,'GET')){json(res,200,await getOnboardingScope(session.admin,onboardingScope[1]!));return true}
     if(isMethod(req,'PUT')){
       json(res,200,await prepareOnboardingScope(session.admin,onboardingScope[1]!,await readJsonBody(req,1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingProvisioningRun=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-database-binding\/run$/.exec(url.pathname)
+  if(onboardingProvisioningRun){
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-provisioning:${session.admin.id}`,20,60_000)
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'POST')){
+      json(res,200,await runOnboardingRuntimeDatabaseBinding(session.admin,onboardingProvisioningRun[1]!,await readJsonBody(req,256)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingProvisioning=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-database-binding$/.exec(url.pathname)
+  if(onboardingProvisioning){
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'GET')){
+      json(res,200,await getOnboardingRuntimeDatabaseBinding(session.admin,onboardingProvisioning[1]!));return true
     }
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }

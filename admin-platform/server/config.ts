@@ -1,5 +1,6 @@
 import { HttpError } from './types.js'
 import { onboardingSecretBox } from './onboarding-secrets.js'
+import { validateOnboardingTargetRegistry } from './onboarding-database-registry.js'
 
 const bool = (name: string, fallback=false) => {
   const raw=String(process.env[name] ?? '').trim().toLowerCase()
@@ -26,6 +27,7 @@ export const config = {
   enableOnboardingDrafts: bool('ADMIN_ENABLE_ONBOARDING_DRAFTS', false),
   enableOnboardingIntegrations: bool('ADMIN_ENABLE_ONBOARDING_INTEGRATIONS', false),
   enableOnboardingInvitations: bool('ADMIN_ENABLE_ONBOARDING_INVITATIONS', false),
+  enableOnboardingProvisioning: bool('ADMIN_ENABLE_ONBOARDING_PROVISIONING', false),
   enableProductionBonusWrites: bool('ADMIN_ENABLE_PRODUCTION_BONUS_WRITES', false),
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),
@@ -40,6 +42,7 @@ export const isProduction = config.nodeEnv === 'production'
 export function validateRuntimeConfig(): void {
   if (!config.databaseUrl) throw new HttpError(500,'ADMIN_DATABASE_URL_MISSING','ADMIN_DATABASE_URL is required.')
   if(config.enableOnboardingIntegrations)onboardingSecretBox()
+  if(config.enableOnboardingProvisioning)validateOnboardingTargetRegistry()
   if (isProduction) {
     if (!process.env.ADMIN_READ_DATABASE_URL) throw new HttpError(500,'ADMIN_READ_DATABASE_URL_MISSING','Dedicated production reader is required.')
     if (!config.publicOrigin) throw new HttpError(500,'ADMIN_PUBLIC_ORIGIN_MISSING','ADMIN_PUBLIC_ORIGIN is required.')

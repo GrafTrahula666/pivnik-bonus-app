@@ -2,11 +2,11 @@
 import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
-import type { PGlite } from '@electric-sql/pglite'
+import { PGlite } from '@electric-sql/pglite'
 import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 
-const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false}))
+const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false,targets:new Map<string,PGlite>()}))
 const nativeFetch=globalThis.fetch
 vi.mock('../db.js',()=>{
   const query=async(text:string,params?:unknown[])=>{
@@ -16,6 +16,25 @@ vi.mock('../db.js',()=>{
   }
   const adapter={query,connect:async()=>({query,release(){}})}
   return {pool:adapter,readPool:adapter,writePool:null,tableExists:async()=>false,productionTableExists:async()=>false}
+})
+vi.mock('../onboarding-database-registry.js',()=>{
+  const database=(db:PGlite)=>{
+    const query=async(text:string,params?:unknown[])=>{
+      const result=await db.query(text,params)
+      return {...result,rowCount:result.rows.length||result.affectedRows||0}
+    }
+    return {connect:async()=>({query,release(){}})}
+  }
+  const onboardingTargetRegistry={
+    validate:()=>({registered:state.targets.size}),
+    resolveTargetDatabase:async(runtimeKey:string)=>{
+      const target=state.targets.get(runtimeKey)
+      return target?database(target):null
+    },
+    close:async()=>undefined,
+  }
+  return {onboardingTargetRegistry,validateOnboardingTargetRegistry:onboardingTargetRegistry.validate,
+    closeOnboardingTargetRegistry:onboardingTargetRegistry.close}
 })
 
 describe('onboarding drafts: actual signed session, HTTP router and migration SQL',()=>{
@@ -29,6 +48,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     process.env.ADMIN_ENABLE_WRITES='true'
     process.env.ADMIN_ENABLE_ONBOARDING_DRAFTS='true'
     process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='true'
+    process.env.ADMIN_ENABLE_ONBOARDING_PROVISIONING='true'
     process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='fixture-v1'
     process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'fixture-v1':Buffer.alloc(32,7).toString('base64')})
     process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS='false'
@@ -50,6 +70,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   },30_000)
   afterAll(async()=>{
     if(server)await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()))
+    for(const target of state.targets.values())await target.close()
     await state.db?.close()
   })
   // No test in this file exercises rate-limiting itself, so clearing counts after each
@@ -116,6 +137,18 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     } finally {config.enableOnboardingIntegrations=true}
   })
 
+  it('separately gates provisioning and reports the capability honestly',async()=>{
+    config.enableOnboardingProvisioning=false
+    try {
+      const path='/'+crypto.randomUUID()+'/provisioning/runtime-database-binding'
+      expect((await request('root','GET',path)).status).toBe(403)
+      expect((await request('root','POST',path+'/run',{})).status).toBe(403)
+      const session=await fetch(origin+'/api/admin/auth/session',{headers:{cookie:sessions.get('root')!.cookie}})
+      expect(await session.json()).toMatchObject({capabilities:{onboardingDrafts:true,onboardingProvisioning:false}})
+      expect(await state.db!.query('SELECT * FROM admin_onboarding_provisioning_steps')).toMatchObject({rows:[]})
+    } finally {config.enableOnboardingProvisioning=true}
+  })
+
   it.each(['owner','trusted'])('denies %s every draft method and preserves credentials/access',async who=>{
     const before=await rows('admin_accounts')
     for(const [method,path,body] of [['GET','',undefined],['POST','',command()],['GET','/'+crypto.randomUUID(),undefined],['PUT','/'+crypto.randomUUID(),{revision:1,data}],
@@ -124,6 +157,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
       ['GET','/'+crypto.randomUUID()+'/integrations/evotor',undefined],
       ['PUT','/'+crypto.randomUUID()+'/integrations/evotor',{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture',token:'synthetic-token-123456'}],
       ['POST','/'+crypto.randomUUID()+'/integrations/evotor/verify',{revision:1}],
+      ['GET','/'+crypto.randomUUID()+'/provisioning/runtime-database-binding',undefined],
+      ['POST','/'+crypto.randomUUID()+'/provisioning/runtime-database-binding/run',{}],
       ['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
       const r=await request(who,method,path,body)
       expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
@@ -309,6 +344,49 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     await request('root','PUT','/'+draft.id+'/scope',{draftRevision:draft.revision,applicationRevision:application.revision})
     return draft
   }
+  const provisioningPath=(draftId:string,suffix='')=>'/'+draftId+'/provisioning/runtime-database-binding'+suffix
+
+  it('exposes creator-scoped status/start, rejects target input and resumes after protected registration',async()=>{
+    const draft=await preparedDraft('Provisioning HTTP')
+    const application=await (await request('root','GET','/'+draft.id+'/application')).json() as {application:{tenantKey:string}}
+    const path=provisioningPath(draft.id)
+    expect(await (await request('root','GET',path)).json()).toMatchObject({
+      draftId:draft.id,runtimeKey:application.application.tenantKey,status:'not_started',attemptCount:0,
+    })
+    expect((await request('owner','GET',path)).status).toBe(403)
+    expect((await request('other-root','GET',path)).status).toBe(404)
+    expect((await request('root','GET',path+'?databaseUrl=postgresql%3A%2F%2Fforbidden')).status).toBe(400)
+    const rejected=await request('root','POST',path+'/run',{databaseUrl:'postgresql://forbidden.invalid/db'})
+    expect(rejected.status).toBe(400);expect(await rejected.json()).toMatchObject({code:'ONBOARDING_PROVISIONING_COMMAND_INVALID'})
+    expect((await state.db!.query('SELECT * FROM admin_onboarding_provisioning_steps')).rows).toEqual([])
+
+    const missing=await (await request('root','POST',path+'/run',{})).json()
+    expect(missing).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_DATABASE_NOT_REGISTERED'})
+
+    const target=new PGlite()
+    for(const file of ['017_spaceverse_runtime_binding.sql','018_spaceverse_runtime_scope_binding.sql']) {
+      await target.exec(await fs.readFile(new URL('../../../migrations/'+file,import.meta.url),'utf8'))
+    }
+    state.targets.set(application.application.tenantKey,target)
+    const completed=await (await request('root','POST',path+'/run',{})).json() as {manifestSha256:string;scope:{companyId:string;venueId:string}}
+    expect(completed).toMatchObject({status:'succeeded',attemptCount:2,errorCode:null,result:{binding:'created'}})
+    expect(await (await request('root','GET',path)).json()).toEqual(completed)
+    expect((await target.query(`SELECT runtime_key,manifest_sha256,company_id,venue_id,status
+      FROM spaceverse_runtime_binding`)).rows).toEqual([{
+      runtime_key:application.application.tenantKey,manifest_sha256:completed.manifestSha256,
+      company_id:completed.scope.companyId,venue_id:completed.scope.venueId,status:'prepared',
+    }])
+    const serialized=JSON.stringify({completed,audit:await rows('admin_audit_log')})
+    expect(serialized).not.toMatch(/postgres:|password|databaseUrl|forbidden\.invalid/i)
+  })
+
+  it('requires a real session, same origin and CSRF to start provisioning',async()=>{
+    const draft=await preparedDraft('Provisioning HTTP security'),path=provisioningPath(draft.id,'/run')
+    expect((await fetch(origin+'/api/admin/onboarding/drafts'+path,{method:'POST',headers:{origin:config.publicOrigin,'content-type':'application/json'},body:'{}'})).status).toBe(401)
+    expect((await request('root','POST',path,{},false)).status).toBe(403)
+    expect((await request('root','POST',path,{},true,'https://foreign.invalid')).status).toBe(403)
+    expect((await state.db!.query(`SELECT * FROM admin_onboarding_provisioning_steps WHERE draft_id=$1::uuid`,[draft.id])).rows).toEqual([])
+  })
   const evotorPath=(draftId:string,suffix='')=>'/'+draftId+'/integrations/evotor'+suffix
 
   it('saves, reopens and idempotently replays only a masked encrypted Evotor credential',async()=>{
