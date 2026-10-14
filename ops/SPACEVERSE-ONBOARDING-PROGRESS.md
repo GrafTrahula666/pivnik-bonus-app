@@ -4,7 +4,7 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт; reviews/threads отсутствуют. Mergeability перепроверять после публикации нового HEAD.
 - Проверенный свежий base: `3d3d1935f6885f6dca49ceb59d55e7af9118096a` (main, получен 2026-10-13; включает merged PR #235/#238/#250). Он влит в рабочую ветку merge-коммитом `e6678123f0f37ccd826e5ac0e5dd11975bfa7855` без конфликтов; оба POS mount, wallet-route extraction и tenant preflight сохранены.
-- Последний опубликованный HEAD перед реализацией этого шага: `7b38a73468f192b91b376e9043f70eac32e6eaeb` (чисто описательная модель owner-facing статусов поверх функционального `94d49e14398e37e2700c7b5529f946dc5562de17`). Все пять workflow `94d49e1` завершились success. Защищённый registry и HTTP status/start опубликованы отдельным implementation commit `780a297d33a5d3176426112b7fdd750ebc4d1b20`, tree `3b6144efd349f52ed1377c122f8a15ebed997633`. Итоговый docs/PR HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
+- Последний опубликованный implementation HEAD: `d3f48cc5722f49fa349f8eab471db67617fb3f1a`, tree `b605619c3ce3904a279ab202c8e01900790db3c8`, parent `563632cd191fe8ee7920521e3aed0b6ffb1c099d`. Он подключает существующий status/start API к текущему мастеру и не меняет production. Итоговый docs/PR HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -15,7 +15,7 @@
 1. **Данные заведения, серверный черновик, повторное открытие** — реализовано и проверено в изолированном окружении.
 2. **Принадлежность tenant и конфигурация guest-приложения** — серверный blueprint, стабильный tenant ID, канонические неактивные company/venue и runtime manifest v2 реализованы. Manifest получает company/venue только из сохранённого scope; выделенная БД обязана подтвердить те же ID и checksum. Dashboard reads, запись новых transactions, чтение customer/wallet и атомарное создание нового customer/identity/wallet/ownership принимают только проверенный server runtime и повторно связывают SQL с той же выделенной БД. Customer/wallet доступны лишь через явную ownership-строку точного runtime/company/venue; исторические строки ПИВНИКА невидимы и не присваиваются новому tenant. Общий Telegram/VK auth/wallet HTTP adapter подключён в обоих runtime только за существующим startup guard; manifest остаётся `not_provisioned`, поэтому tenant-запуск намеренно закрыт.
 3. **Зашифрованные подключения и реальные проверки Telegram/VK/Эвотора** — первый вертикальный срез Эвотора реализован: зашифрованное хранение, маска и реальная проверка чтения документов через существующий адаптер. POS binding/import не включены; Telegram/VK и живая авторизация владельца ещё предстоят.
-4. **Возобновляемое создание ресурсов из того же релизного артефакта** — первый исполняемый шаг реализован: серверный ledger с lease/claim/retry, защищённый registry `runtime key → credential env reference`, creator/scoped status/start API и идемпотентная фиксация exact runtime binding в уже подготовленной выделенной БД. UI-запуск и остальные шаги provisioning ещё предстоят; runtime остаётся выключен.
+4. **Возобновляемое создание ресурсов из того же релизного артефакта** — первый исполняемый шаг реализован: серверный ledger с lease/claim/retry, защищённый registry `runtime key → credential env reference`, creator/scoped status/start API, UI-запуск с reload/recovery и идемпотентная фиксация exact runtime binding в уже подготовленной выделенной БД. Остальные шаги provisioning ещё предстоят; runtime остаётся выключен.
 5. **Приглашения и гибкие права** — одноразовые scoped-приглашения owner/manager/viewer, принятие в существующую или новую `VENUE_ADMIN` учётную запись, отзыв и продолжение сохранённого мастера реализованы. Более узкие полномочия сотрудников и реальная отправка приглашений ещё предстоят.
 6. **Полный сценарий, доказательство изоляции, пакет выпуска/rollback** — предстоит.
 
@@ -73,7 +73,7 @@
 - Целевая БД выбирается только server-side resolver по сохранённому runtime key: URL/host/credential отсутствуют в request, manifest, ledger, audit и ответе. В БД с вручную применёнными migrations 017/018 worker вставляет exact singleton binding, принимает уже точное совпадение после неопределённого ответа и никогда не перезаписывает несовпадение.
 - Cross-database атомарность не симулируется: после target COMMIT metadata-финализация может быть повторена; новый worker сначала сверяет exact binding. Создание БД, автоматический запуск tenant migrations, активация company/venue/runtime и публикация не выполняются.
 - `onboarding-database-registry.ts` принимает только строгую server-side карту `runtime key → SPACEVERSE_TENANT_DATABASE_URL_*`; URL хранится в отдельной защищённой env-переменной. Реестр запрещает Admin/legacy DB, одну БД для двух runtime, embedded URL, повтор credential reference и malformed key. Пулы ограничены, переиспользуются, закрываются при ротации/остановке; секреты и driver errors не выводятся.
-- `GET .../provisioning/runtime-database-binding` возвращает сохранённый статус, `POST .../run` принимает только пустую команду. Query/body с URL, ключом или scope отклоняются; Origin/session/CSRF/rate limit и существующие scoped write-права применяются сервером. Отдельный `ADMIN_ENABLE_ONBOARDING_PROVISIONING` по умолчанию выключен. UI этого шага ещё не подключён.
+- `GET .../provisioning/runtime-database-binding` возвращает сохранённый статус и server-authoritative `startAllowed`, `POST .../run` принимает только пустую команду. Query/body с URL, ключом или scope отклоняются; Origin/session/CSRF/rate limit и существующие scoped write-права применяются сервером. Отдельный `ADMIN_ENABLE_ONBOARDING_PROVISIONING` по умолчанию выключен. Текущий UI перечитывает ledger после открытия/reload, блокирует двойной клик и активную lease, разрешает reclaim только по `startAllowed` и не показывает DB URL/credential.
 
 ## Включение в изолированном окружении
 
@@ -111,7 +111,7 @@
 
 ## Следующий безопасный шаг
 
-После зелёного CI подключить существующие GET/POST status/start к текущему `VenueOnboarding.tsx`: показывать честные состояния и действия без URL/credential в браузере, блокировать повторный клик во время lease и после reload читать серверный ledger. Owner-facing подписи согласовать с `ops/SPACEVERSE-STATUS-MODEL.md`, не выдавая `prepared` binding за активное/опубликованное приложение. Не создавать БД автоматически, не активировать venue/runtime и не подключать историческую БД. Telegram/VK оставить «нужно действие» до отдельного официального OAuth/авторизации владельца.
+После зелёного CI добавить второй фиксированный read-only шаг provisioning — проверку готовности tenant-схемы в той же защищённой выделенной БД. Он должен через тот же registry/ledger подтвердить необходимые manual migrations и ownership-границы, но не применять миграции автоматически, не создавать БД, не активировать venue/runtime и не подключать историческую БД. UI должен сохранить те же честные состояния/retry; Telegram/VK оставить «нужно действие» до отдельного официального OAuth/авторизации владельца.
 
 
 ## Продолжение владельческого сценария — 2026-10-13
@@ -420,3 +420,53 @@ Runbook ops/SPACEVERSE-VENUE-ONBOARDING.md и MODULE-MAP обновлены в �
 - Playwright invitations — 2/2 desktop/mobile; прежний onboarding с Evotor read fixture — 4/4 desktop/mobile. API/SQL настоящие, provider-ответ синтетический. Никаких production/provider/device действий.
 
 Новая модель приглашений использует существующие admin_onboarding_invites (007/008), не вторую таблицу; migration 011 только metadata, без backfill/удаления строк. Тест отсутствия старой таблицы теперь временно переименовывает её и восстанавливает в finally, сохраняя FK и fixture data. Изменения других авторов сохранены; мной CI/main/Railway не менялись. Runtime всё ещё not_provisioned. Публикация этой итерации выполняется обычным fast-forward push в существующий Draft PR #273.
+
+### Шаг 8 — status/start в текущем мастере (2026-10-14)
+
+Опубликован implementation commit
+`d3f48cc5722f49fa349f8eab471db67617fb3f1a`, tree
+`b605619c3ce3904a279ab202c8e01900790db3c8`; локальный проверенный эквивалент
+того же tree — `345a786`. `VenueOnboarding.tsx` теперь после подготовленного
+scope читает существующий server ledger, запускает шаг только пустой командой
+`{}` и восстанавливает состояние после reload. Двойной клик блокируется
+синхронным UI guard. Сервер дополнительно возвращает `startAllowed`, поэтому
+кнопка остаётся закрыта только при реально активной lease, а истёкший claim
+можно безопасно продолжить без вычисления срока по часам браузера.
+
+Owner-facing состояния различают ожидание запуска, выполняющуюся проверку,
+необходимое действие, retryable error и подготовленную точную привязку. Для
+каждого fixed error code показано действие без сырого driver text. Даже при
+успехе мастер сообщает «Не запущено · не опубликовано»: база, миграции,
+company/venue active flags и runtime не создаются и не включаются. В форме нет
+DB URL, host, env name или credential; POST принимает только `{}`. Viewer и
+учётная запись без write capability этот шаг не запускают.
+
+Фактические проверки implementation tree:
+
+- provisioning + signed onboarding HTTP/SQL — 71/71; проверены
+  `startAllowed=true` до запуска/после истёкшей lease и fixed failure,
+  `false` при активной lease/успехе, exact reopen и запрет повторной target work;
+- полный Business — 233 passed, 20 skipped только без отдельного внешнего
+  PostgreSQL test URL; security — 160/160; typecheck, build и lint изменённых
+  файлов — success; Business audit — 0;
+- общий lint остановился только на пришедшем `onboarding-invitations.ts:209`
+  (`no-control-regex`, commit `94d49e1`); 12 остальных сообщений — прежние Fast
+  Refresh warnings. Пересекающийся файл не менялся;
+- materialize ×2 дал одинаковый SHA256 diff
+  `d75a96d9a88aed8a23ea1723bee3e6421c5e3e64a78a910515e91b3985a9cc67`;
+  generated семь runtime-файлов восстановлены и не включены в commit. На
+  materialized root: 581/581, `npm run check`, patch-chain audit и root audit —
+  success/0;
+- локальный Playwright успешно собрал приложение, но не запустил 4
+  desktop/mobile сценария из-за отсутствующего Chromium headless shell v1193.
+  Расширенный сценарий проверяет настоящий UI/router/PGlite: один POST при
+  double click, `action_required`, отсутствие credential-полей и reload ledger.
+  Его результат подтверждается только exact browser CI после публикации;
+  fixture не считается живой PostgreSQL concurrency или provider authorization.
+
+Факты на границе шага: **есть** UI → status/start API → сохранённый ledger и
+безопасный retry первого binding; **нужно сделать** остальные фиксированные
+provisioning steps, tenant schema readiness, сборку/запуск приложения и terminal
+binding; **внешняя авторизация** всё ещё требуется для реальных Telegram, VK и
+Эвотора. Production/main/Railway, реальные БД, env/secrets, webhook, боты,
+кассы и данные не изменялись.

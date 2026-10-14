@@ -134,9 +134,14 @@ references, and safely rotates bounded pools without exposing driver errors.
 run through the existing Business router behind the separate default-off
 `ADMIN_ENABLE_ONBOARDING_PROVISIONING` gate, signed session, Origin, CSRF and
 rate limits. POST accepts only an empty object; query/body scope, URL and
-credentials are invalid. The engine is still not connected to the UI. It does
-not create a database, activate a venue/runtime, run tenant migrations
-automatically or publish an application.
+credentials are invalid. `VenueOnboarding.tsx` now reloads this ledger after a
+prepared scope, starts it with exactly `{}`, blocks double clicks and uses the
+server-authoritative `startAllowed` flag so an active lease cannot be repeated
+while an expired lease can be reclaimed. Owner-facing copy distinguishes
+waiting, verifying, action required, retryable failure and prepared binding;
+even success remains explicitly not started and unpublished. The UI accepts no
+database field or credential. This step does not create a database, activate a
+venue/runtime, run tenant migrations automatically or publish an application.
 
 ## The honest starting picture
 
