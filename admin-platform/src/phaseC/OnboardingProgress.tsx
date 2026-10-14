@@ -11,7 +11,7 @@ interface Workflow{
   runtimeStatus:'not_provisioned';published:false
   report:{state:'unavailable'|'available';netCents:string|null;receiptCount:number|null;code:string}
 }
-export function OnboardingProgress({draftId,canWrite,refreshKey}:{draftId:string;canWrite:boolean;refreshKey:string}){
+export function OnboardingProgress({draftId,canWrite,refreshKey,onSaved}:{draftId:string;canWrite:boolean;refreshKey:string;onSaved?:()=>void}){
   const [saved,setSaved]=useState<Workflow|null>(null),[form,setForm]=useState<Progress|null>(null)
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
   const command=useRef<{revision:number;progress:Progress}|null>(null),inFlight=useRef(false)
@@ -43,6 +43,7 @@ export function OnboardingProgress({draftId,canWrite,refreshKey}:{draftId:string
       const value=await apiPut<Workflow>(path,command.current)
       if(value.draftId!==draftId||value.runtimeStatus!=='not_provisioned'||value.published!==false)throw new Error('Сохранение прогресса не подтверждено.')
       setSaved(value);setForm(value.progress);command.current=null;dirty.current=false;setNotice('Шаг, терминал и выбор модулей сохранены. Связь ещё не подтверждена.')
+      onSaved?.()
     }catch(error){
       setError(error instanceof Error?error.message:'Повторите сохранение прогресса.')
       if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408)command.current=null
@@ -54,7 +55,7 @@ export function OnboardingProgress({draftId,canWrite,refreshKey}:{draftId:string
       <ol className="onboarding-statuses">{saved.steps.map(step=><li key={step.id} data-status={step.status}>
         <div><b>{stepNames[step.id]}</b><span>{statuses[step.status]}</span></div><p>{step.nextAction}</p>
       </li>)}</ol>
-      <p className="onboarding-note">{saved.report.state==='unavailable'?'Отчёт пока недоступен: нет подтверждённой связи. Сумма неизвестна, это не 0 ₽.':`Данные получены · чеков: ${saved.report.receiptCount}.`}</p>
+      <p className="onboarding-note">{saved.report.state==='unavailable'?'Отчёт пока недоступен: нет подтверждённой связи. Сумма неизвестна, это не 0 ₽.':saved.report.receiptCount===0?'0 ₽ · 0 чеков · данные получены за проверенный период.':'Данные получены. Суммы и чеки доступны в отчётах после запуска заведения.'}</p>
     </>}
     {form&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||Boolean(command.current)} onChange={()=>{dirty.current=true;sequence.current++}}>

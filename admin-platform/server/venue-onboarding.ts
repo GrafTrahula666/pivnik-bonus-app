@@ -187,10 +187,10 @@ export function onboardingData(raw: unknown): OnboardingData {
   return {companyId,companyName,venueName:text(value.venueName,120,true),address:text(value.address,300),
     timeZone,venueType:venueType as OnboardingData['venueType'],ownerEmail}
 }
-export async function requireOnboardingAccess(admin: AdminPrincipal,write=false): Promise<void> {
+export async function requireOnboardingAccess(admin: AdminPrincipal,write=false,db:Pick<PoolClient,'query'>=pool): Promise<void> {
   if(!config.enableWrites||!config.enableOnboardingDrafts) throw new HttpError(403,'ONBOARDING_DISABLED','Мастер подключения пока выключен.')
   if(!config.enableOnboardingInvitations){requireSuperAdmin(admin);return}
-  await requireWritableOnboarding(admin,write)
+  await requireWritableOnboarding(admin,write,db)
 }
 export async function requireOnboardingIntegrationAccess(admin:AdminPrincipal,write=false):Promise<void> {
   await requireOnboardingAccess(admin,write)
@@ -659,7 +659,7 @@ export async function loadOwnedOnboardingRuntimeSource(
   id: string,
   lock=false,
 ) {
-  await requireOnboardingAccess(admin,true)
+  await requireOnboardingAccess(admin,lock,client)
   const draftId=uuid(id)
   const scope=await ownedDraftWithPreparedScope(client,admin,draftId,lock)
   const manifest=runtimeManifest({

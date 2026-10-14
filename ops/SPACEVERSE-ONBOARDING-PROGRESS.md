@@ -608,3 +608,83 @@ immutable release SHA/registry, затем отдельный возобновл
 изолированном окружении и terminal binding; **внешняя авторизация** требуется
 для реальных Telegram, VK и Эвотора. Production/main/Railway, реальные БД,
 env/secrets, webhook, боты, кассы, бонусы и данные не изменялись.
+
+### Следующая итерация — проверка native POS proxy v2 (2026-10-14)
+
+Лично добавлены manual root migration 021 (только квитанции тестовых событий),
+shared v2 nonce/MAC contract и native HTTP handler в обоих entrypoint после
+прежнего startup guard. SQL повторно проверяет точную runtime/manifest/company/
+venue привязку и enabled/unrevoked POS device. Требуется X-Pivnik-Device-Key;
+Authorization не заменяет этот заголовок. Event UUID идемпотентен, replay не
+обновляет серверное время. Деньги, receipts, users/wallets/purchases не меняются.
+
+Manual Admin migration 015 хранит зашифрованный ключ и проверку для того же draft.
+Server выбирает HTTPS origin только из защищённой карты env references, UI не
+может подменить адрес или область. Проверка читает status, не создаёт событие
+кассы. SQL lease освобождает connection/transaction перед HTTP; completion
+повторно проверяет access, lease и terminal/source. Key rotation переупаковывает
+сохранённый ключ, audit не содержит raw credential. Flags default-off.
+
+Мастер сохраняет masked key и реально читает native packet. Свежие test event
+(5 минут) и полная provider sync (15 минут) подтверждают связь. Пустой полный
+24-hour период = 0 ₽/0 чеков; отсутствие связи = unavailable/null; документ с
+нулевой суммой = данные. Device key не раскрывает денежные/клиентские строки.
+Workflow проецирует device activity и результат, но runtime остаётся
+not_provisioned/published=false: startup guard не обойдён, deploy не выполнялся.
+
+Лично выполнено, логи /tmp/spaceverse-pos-final-gate:
+
+- materialize ×2 + cmp — идентичны; generated-only diff canonical→materialized
+  370 insertions/83 deletions в прежних 7 файлах, включая server.js,
+  universal-server.js, app.js. Canonical snapshot сохраняет новые mount/import;
+  generated изменения восстановлены и не включаются в commit;
+- node --test --test-concurrency=2 — 587/587, 0 skipped;
+  npm run check; npm run audit:runtime-patches — passed;
+- npm audit; npm audit --omit=dev --audit-level=high; Business npm audit —
+  0 vulnerabilities каждый;
+- Business npm run typecheck; npm test -- --maxWorkers=2 — 246 passed,
+  20 прежних PostgreSQL integration tests skipped (нет отдельного разрешённого
+  URL, их destructive fixture не направлялась на существующие БД);
+  npm run build — passed; npm run lint — 0 errors/12 прежних warnings;
+- native Node HTTP/SQL suite — 5/5, raw+Express, два tenant/две точки компании,
+  scope/Authorization/MAC/nonce, revoked key, lost COMMIT и неизменность wallet;
+- Admin signed HTTP → native HTTP/SQL — 7/7: encryption/replay/audit rollback,
+  permissions/CSRF, pending event/sync, реальный empty sync, stale/foreign key,
+  invalid MAC/nonce, lease и revoke during request; expired lease recoverable;
+- node /tmp/spaceverse-pos-postgres-proof.mjs — PASS, два новых retained
+  синтетических PostgreSQL DB: 6 конкурентных save = 1 row/audit, 4 повторных
+  probes получают 409, HTTP не держит idle SQL transaction, 8 конкурентных
+  native events = 1 квитанция/время; проверенный пустой sync даёт 0, не launch;
+- Playwright invitations/progress/proxy — 4/4 desktop/mobile с реальными
+  signed router и native handler, synthetic SQL/provider/device fixtures.
+  До успешного повтора E2E выявил duplicate React sibling key, исправлен в UI;
+  тесты также явно открывают нужный draft при нескольких точках.
+- прежний onboarding/provider/provisioning UI — Playwright 4/4, лог
+  /tmp/spaceverse-pos-final-gate/legacy-onboarding-e2e.log.
+
+Runbook и MODULE-MAP обновлены в этой итерации. Реальные кассы, provider accounts,
+Railway/env/secrets, production DB, Telegram/VK и deployment не проверялись и не
+менялись. Осталось в #273: owner list/status/attention, общая SPACEVERSE панель,
+мобильные состояния и документированный барьер внешнего runtime provisioning.
+Новый Mobile Integration Hub — отдельный scope: сначала architecture/contract/
+4-step UX, затем отдельный sandbox vertical PR после исходного #273; в этот PR
+не добавляется. Статусы sandbox не будут выдаваться за production подключение.
+
+Перед push remote продвинулся до b499cb1: чужие schema-readiness/runtime-bundle
+изменения d290748/8233f54/9be1c56 и их журналы сохранены rebase, без force.
+Моя неопубликованная Admin migration переименована 013→015; 013/014 чужой работы
+сохранены. Общий progress/UI учитывает обе новые provisioning проверки и POS
+projection. Native test fixture перенесена внутрь Admin test tree; Dockerfile
+копирует native handler для той же тестовой сборки, CI не менялся.
+
+Повторён полный gate на объединённом дереве (2026-10-15), логи
+/tmp/spaceverse-pos-merged-gate: materialize ×2 + cmp passed; node --test
+--test-concurrency=2 — 587/587; npm run check и audit:runtime-patches passed;
+root npm audit, production audit и Business audit — 0 vulnerabilities;
+Business typecheck/build/lint passed (0 errors/12 прежних warnings), vitest
+254 passed/20 прежних skipped; Playwright invitations/proxy 4/4 и прежний
+onboarding/provider/provisioning 4/4; новая retained PostgreSQL proof — PASS.
+Generated runtime diff и E2E screenshots сохранены вне checkout, canonical
+runtime sources восстановлены перед commit; новые POS mounts сохранены.
+Docker image отдельно не собирался; migration/production/device/deploy не
+выполнялись. Публикация проверяется обычным push и git ls-remote.

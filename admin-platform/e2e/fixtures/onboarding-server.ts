@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Pool } from 'pg'
+import {nativePosFixture} from '../../server/tests/native-pos-fixture.mjs'
 
 process.env.NODE_ENV='development'
 process.env.ADMIN_DATABASE_URL=''
@@ -18,6 +19,7 @@ process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='e2e-v1'
 process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'e2e-v1':Buffer.alloc(32,9).toString('base64')})
 process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS=process.env.SPACEVERSE_E2E_INVITATIONS==='true'?'true':'false'
 process.env.ADMIN_ENABLE_ONBOARDING_WORKFLOW=process.env.SPACEVERSE_E2E_WORKFLOW==='true'?'true':'false'
+process.env.ADMIN_ENABLE_ONBOARDING_POS_PROXY=process.env.SPACEVERSE_E2E_POS_PROXY==='true'?'true':'false'
 process.env.ADMIN_PUBLIC_ORIGIN='http://127.0.0.1:5097'
 process.env.ADMIN_CSRF_SECRET='synthetic-loopback-onboarding-csrf-secret-123456'
 process.env.ADMIN_SECURE_COOKIES='false'
@@ -27,8 +29,13 @@ process.env.BUSINESS_INTERNAL_TOKEN=''
 // Deterministic provider fixture: exercises the real adapter without any live token,
 // account, webhook, cash register or network request to Evotor.
 const nativeFetch=globalThis.fetch
+const devices=new Map<string,Awaited<ReturnType<typeof nativePosFixture>>>()
+const proxyOrigins=new Map<string,string>()
+const proxyRegistry:Record<string,string>={}
 globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
   const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url)
+  const deviceOrigin=proxyOrigins.get(target.origin)
+  if(deviceOrigin)return nativeFetch(deviceOrigin+target.pathname+target.search,init)
   if(target.hostname==='api.evotor.ru') {
     return new Response(JSON.stringify({items:[],paging:{}}),{status:200,headers:{'content-type':'application/json'}})
   }
@@ -52,6 +59,24 @@ const root=fileURLToPath(new URL('../../dist/',import.meta.url))
 const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'}
 const server=http.createServer((req,res)=>{void (async()=>{
   const url=new URL(req.url!,'http://127.0.0.1:5097')
+  if(process.env.SPACEVERSE_E2E_POS_PROXY==='true'&&req.method==='POST'&&url.pathname.startsWith('/__fixture/pos/')){
+    // Test-server-only controls, never imported by the Admin API or tenant app.
+    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk))
+    const body=JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    if(url.pathname==='/__fixture/pos/create'){
+      const device=await nativePosFixture(body.manifest,body.terminalId,body.storeId)
+      devices.set(body.manifest.runtimeKey,device)
+      const n=devices.size,reference='SPACEVERSE_TENANT_PROXY_ORIGIN_E2E_'+n,registered='https://proxy-'+n+'.fixture.invalid'
+      proxyOrigins.set(registered,device.origin);proxyRegistry[body.manifest.runtimeKey]=reference
+      process.env[reference]=registered;process.env.ADMIN_ONBOARDING_PROXY_REGISTRY_JSON=JSON.stringify(proxyRegistry)
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({storeId:device.storeId,deviceKey:device.deviceKey}));return
+    }
+    const device=devices.get(body.runtimeKey)
+    if(!device){res.statusCode=404;res.end();return}
+    if(url.pathname==='/__fixture/pos/event'){res.statusCode=(await device.event()).status;res.end('{}');return}
+    if(url.pathname==='/__fixture/pos/sync'){await device.completeSync();res.end('{}');return}
+    res.statusCode=404;res.end();return
+  }
   if(await handleApi(req,res,url)) return
   const relative=url.pathname==='/'?'index.html':url.pathname.slice(1)
   const file=path.resolve(root,relative)
@@ -60,5 +85,5 @@ const server=http.createServer((req,res)=>{void (async()=>{
   res.end(await fs.readFile(file))
 })().catch(error=>sendApiError(res,error,req))})
 server.listen(5097,'127.0.0.1')
-async function close() {server.close();await db.close();await Promise.all([pool.end(),readPool.end()]);process.exit(0)}
+async function close() {server.close();await Promise.all([...devices.values()].map(device=>device.close()));await db.close();await Promise.all([pool.end(),readPool.end()]);process.exit(0)}
 process.on('SIGTERM',()=>void close());process.on('SIGINT',()=>void close())

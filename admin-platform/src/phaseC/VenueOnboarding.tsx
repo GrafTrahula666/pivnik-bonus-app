@@ -3,6 +3,7 @@ import { Building2, Check, Copy, Database, Link2, MapPinned, Plus, RefreshCw, Sa
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, type AdminSession } from '../api'
 import './venue-onboarding.css'
 import { OnboardingProgress } from './OnboardingProgress'
+import { OnboardingPosProxy } from './OnboardingPosProxy'
 
 export interface OnboardingData {
   companyId: string | null
@@ -374,6 +375,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
   const [index,setIndex]=useState<Index>({drafts:[],companies:[]})
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false)
   const [editing,setEditing]=useState(false),[current,setCurrent]=useState<Draft|null>(null)
+  const [connectionRefresh,setConnectionRefresh]=useState(0)
   const canWrite=current?.permissions?.canWrite??session.capabilities.onboardingWrite!==false
   const [data,setData]=useState<OnboardingData>(empty)
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[uncertain,setUncertain]=useState(false)
@@ -795,8 +797,8 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     {error&&<div className="onboarding-feedback error" role="alert">{error}</div>}
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {!canWrite&&<p className="onboarding-feedback">Вам доступен просмотр. Изменения выполняет владелец или управляющий этой точки.</p>}
-    {editing&&current&&session.capabilities.onboardingWorkflow&&<OnboardingProgress key={current.id} draftId={current.id} canWrite={canWrite}
-      refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt].join(':')}/>}
+    {editing&&current&&session.capabilities.onboardingWorkflow&&<OnboardingProgress key={'progress:'+current.id} draftId={current.id} canWrite={canWrite}
+      onSaved={()=>setConnectionRefresh(value=>value+1)} refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt,connectionRefresh].join(':')}/>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
@@ -946,6 +948,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
         </div>
       </>}
     </form>}
+    {editing&&current&&scope&&session.capabilities.onboardingPosProxy&&<OnboardingPosProxy key={'proxy:'+current.id} draftId={current.id} canWrite={canWrite} refreshKey={String(connectionRefresh)} onChanged={()=>setConnectionRefresh(value=>value+1)}/>}
     {legacyInvitesAllowed&&editing&&current&&scope&&<section className="onboarding-invite" aria-label="Приглашение владельцу">
       <div className="onboarding-step"><Link2 size={18}/><b>Приглашение владельцу</b><span>{invites.some(invite=>invite.status==='pending')?'Активная ссылка есть':'Ссылки нет'}</span></div>
       {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}

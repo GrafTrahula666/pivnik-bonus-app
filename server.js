@@ -1,5 +1,6 @@
 import { registerWalletRoutes } from './routes/wallet.js';
 import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
 import { createPosHttp } from './pos/http.js';
 import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
 import { evotorConfig } from './pos/evotor-client.js';
@@ -110,9 +111,13 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false 
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
 app.use((req, res, next) => {
   if (!spaceverseCustomerHttp) return next();
-  spaceverseCustomerHttp(req, res).then(handled => { if (!handled) next(); }).catch(next);
+  (async () => {
+    if (spaceversePosHttp && await spaceversePosHttp(req, res)) return true;
+    return spaceverseCustomerHttp(req, res);
+  })().then(handled => { if (!handled) next(); }).catch(next);
 });
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
@@ -3973,6 +3978,7 @@ try {
     query: (text, params) => pool.query(text, params)
   });
   if (runtime.mode === 'tenant') {
+    spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
     spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
       sessionSecret: process.env.SESSION_SECRET || '', telegramBotToken: botToken,
       vkAppId: process.env.VK_APP_ID || '', vkAppSecret: process.env.VK_APP_SECRET || '' });

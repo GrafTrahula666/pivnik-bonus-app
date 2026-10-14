@@ -54,6 +54,23 @@ off. A configured terminal has no confirmed binding/event yet; its status stays
 pending. Missing connection returns unavailable report data with null amounts,
 never invented zero revenue. A database binding or readable provider documents
 do not mark a venue active or an application published.
+Manual Admin migration 015 adds encrypted POS proxy settings and a leased,
+audited verification result to the same draft. `server/onboarding-pos-proxy.ts`
+resolves its HTTPS origin from protected references in
+`ADMIN_ONBOARDING_PROXY_REGISTRY_JSON`; UI input cannot choose an address,
+runtime or scope. `ADMIN_ENABLE_ONBOARDING_POS_PROXY` defaults off and requires
+the workflow switch. Network work runs outside SQL transactions; completion
+rechecks lease, source revisions, terminal and revocable access.
+`routes/spaceverse-pos.js` mounts behind the existing tenant startup guard in
+both root servers. It rechecks the exact runtime binding and live POS device
+scope in SQL and requires `X-Pivnik-Device-Key`. Manual root migration 021 stores
+only idempotent test-event receipts; no customer/bonus/receipt writes occur.
+`pos/onboarding-proxy.js` defines the v2 nonce/MAC contract shared with Admin.
+Verification requires a fresh terminal event and complete fresh provider sync.
+An empty verified 24-hour report returns 0 receipts/0 cents; unavailable data
+returns null, and a zero-value receipt is still data. Device credentials cannot
+read financial/customer rows. A successful connection probe does not bypass
+`SPACEVERSE_RUNTIME_NOT_PROVISIONED`, deploy or activate a venue.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find

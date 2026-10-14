@@ -58,6 +58,7 @@ import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broad
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
 import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
+import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
 import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
   claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
@@ -92,6 +93,7 @@ export const sessionCapabilities=()=>({
   onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
   onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
   onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
+  onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -197,6 +199,16 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
+  if(posProxy){
+    if(isMethod(req,'GET')&&!posProxy[2]){json(res,200,await getOnboardingPosProxy(session.admin,posProxy[1]!));return true}
+    if((isMethod(req,'PUT')&&!posProxy[2])||(isMethod(req,'POST')&&posProxy[2])){
+      requireCsrf(req,session.rawToken);enforceRateLimit(`onboarding-pos-proxy:${session.admin.id}`,20,60_000)
+      const body=await readJsonBody(req,2048)
+      json(res,200,posProxy[2]?await verifyOnboardingPosProxy(session.admin,posProxy[1]!,body):await saveOnboardingPosProxy(session.admin,posProxy[1]!,body));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }
   const workflow=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/progress$/.exec(url.pathname)
   if(workflow){

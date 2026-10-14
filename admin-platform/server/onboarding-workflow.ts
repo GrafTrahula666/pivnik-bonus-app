@@ -5,6 +5,7 @@ import { recordAudit } from './audit.js'
 import { lockOnboardingDraftAccess,onboardingDraftAccessSql } from './onboarding-access.js'
 import { providerAdvice,requireOnboardingAccess } from './venue-onboarding.js'
 import { HttpError,type AdminPrincipal } from './types.js'
+import { loadOnboardingPosProxyProjection,type OnboardingPosProxyView } from './onboarding-pos-proxy.js'
 
 export const workflowSteps=['organization','venue','application','provider','terminal','modules','provisioning','verification'] as const
 type Step=typeof workflowSteps[number]
@@ -21,6 +22,7 @@ interface WorkflowRow extends QueryResultRow{
   bundle_status:string|null;bundle_code:string|null;bundle_lease_active:boolean|null
   current_step:Step|null;terminal_id:string|null;terminal_label:string|null;cash_reports:boolean|null
   progress_revision:number|null;last_operator_activity_at:string
+  posProxy?:OnboardingPosProxyView|null
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const invalid=()=>new HttpError(400,'ONBOARDING_PROGRESS_INVALID','Проверьте шаг, терминал и настройки модулей. Статусы и ключи задаёт сервер.')
@@ -82,7 +84,9 @@ async function load(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId
     LEFT JOIN admin_onboarding_progress p ON p.draft_id=d.id
     WHERE d.id=$1::uuid AND ${onboardingDraftAccessSql('d','$2',write)}`,[draftId,admin.id])
   if(!result.rows[0])throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
-  return result.rows[0]
+  const resultRow=result.rows[0]
+  if(resultRow.venue_id&&resultRow.app_revision)resultRow.posProxy=await loadOnboardingPosProxyProjection(client,admin,draftId)
+  return resultRow
 }
 function view(row:WorkflowRow){
   const saved=progress(row),scope=Boolean(row.venue_id),steps:{id:Step;status:Status;code:string;nextAction:string}[]=[]
@@ -143,13 +147,23 @@ function view(row:WorkflowRow){
   }
   add('provisioning',provisioning,provisioningCode,provisioningAction)
   add('verification',scope?'pending':'not_configured','terminal_event_not_verified','После развёртывания отправьте тестовое событие с кассы и проверьте ответ провайдера. Чтение документов само по себе не подтверждает терминал.')
+  const pos=row.posProxy
+  if(pos?.credential.present){
+    for(const step of steps){
+      if(step.id==='provider'||step.id==='verification'){step.status=pos.status as Status;step.code=pos.code;step.nextAction=pos.nextAction}
+      if(step.id==='terminal'){
+        step.status=['confirmed','provider_data_pending'].includes(pos.code)?'active':pos.status as Status
+        step.code=pos.code;step.nextAction=pos.nextAction
+      }
+    }
+  }
   const inconsistent=row.venue_active===true
   return {draftId:row.id,revision:row.progress_revision??0,progress:saved,steps,
     status:inconsistent||steps.some(step=>step.status==='failed')?'failed':steps.some(step=>step.status==='degraded')?'degraded':steps.some(step=>step.status==='verifying')?'verifying':'pending',requiresAttention:true,
     attentionCode:inconsistent?'scope_changed':'runtime_not_provisioned',runtimeStatus:'not_provisioned',published:false,
     modules:{loyalty:row.app_config?.loyaltyEnabled??false,shop:row.app_config?.shopEnabled??false,cashReports:saved.cashReports},
-    lastOperatorActivityAt:row.last_operator_activity_at,lastDeviceActivityAt:null,
-    report:{state:'unavailable',netCents:null,receiptCount:null,code:'no_verified_connection'},
+    lastOperatorActivityAt:row.last_operator_activity_at,lastDeviceActivityAt:pos?.lastDeviceActivityAt??null,
+    report:pos?.status==='active'?{...pos.report,code:'verified_proxy'}:{state:'unavailable',netCents:null,receiptCount:null,code:'no_verified_connection'},
   }
 }
 export async function getOnboardingWorkflow(admin:AdminPrincipal,draftId:string){

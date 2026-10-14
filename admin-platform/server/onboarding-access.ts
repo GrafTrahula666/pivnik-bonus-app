@@ -3,12 +3,12 @@ import { config } from './config.js'
 import { pool } from './db.js'
 import { HttpError, type AdminPrincipal } from './types.js'
 
-export async function canUseOnboarding(admin:AdminPrincipal,write=false):Promise<boolean>{
+export async function canUseOnboarding(admin:AdminPrincipal,write=false,db:Pick<PoolClient,'query'>=pool):Promise<boolean>{
   if(!config.enableWrites||!config.enableOnboardingDrafts)return false
   if(admin.role==='SUPER_ADMIN')return true
   if(!config.enableOnboardingInvitations)return false
   const role=write?"AND access.role IN ('owner','manager')":''
-  const result=await pool.query<{allowed:boolean}>(`SELECT (
+  const result=await db.query<{allowed:boolean}>(`SELECT (
     EXISTS(SELECT 1 FROM admin_company_access WHERE admin_id=$1::bigint AND access_kind='owner')
     OR EXISTS(SELECT 1 FROM admin_onboarding_access access WHERE access.admin_id=$1::bigint
       AND access.revoked_at IS NULL ${role})
@@ -24,8 +24,8 @@ export async function canManageOnboardingInvitations(admin:AdminPrincipal):Promi
   ) AS allowed`,[admin.id])
   return result.rows[0]?.allowed===true
 }
-export async function requireWritableOnboarding(admin:AdminPrincipal,write=false):Promise<void>{
-  if(!await canUseOnboarding(admin,write))throw new HttpError(403,'ONBOARDING_ACCESS_REQUIRED','Мастер недоступен или у вас нет прав на этот шаг.')
+export async function requireWritableOnboarding(admin:AdminPrincipal,write=false,db:Pick<PoolClient,'query'>=pool):Promise<void>{
+  if(!await canUseOnboarding(admin,write,db))throw new HttpError(403,'ONBOARDING_ACCESS_REQUIRED','Мастер недоступен или у вас нет прав на этот шаг.')
 }
 // Aliases/placeholders are supplied only by checked-in SQL, never request text.
 export function onboardingDraftAccessSql(alias='admin_onboarding_drafts',actor='$2',write=false):string{

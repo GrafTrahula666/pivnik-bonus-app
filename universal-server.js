@@ -10,6 +10,7 @@ import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } fro
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
 import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
 import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
 import {
   createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
   withVkStartupTrace, traceVkStage
@@ -3152,6 +3153,7 @@ function platformFromRequest(req, fallback = 'unknown') {
 }
 
 let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
 if (!isTestImport) {
   try {
     const runtime = await guardSpaceverseRuntimeStartup({
@@ -3159,6 +3161,7 @@ if (!isTestImport) {
       query: (text, params) => pool.query(text, params)
     });
     if (runtime.mode === 'tenant') {
+      spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
       spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
         sessionSecret: configuredSessionSecret, telegramBotToken, vkAppId, vkAppSecret });
     }
@@ -3216,6 +3219,7 @@ async function serveStartupProfile(req, res, startup) {
 
 const posHttp = createPosHttp(pool);
 export const server = http.createServer(async (req, res) => {
+  if (spaceversePosHttp && await spaceversePosHttp(req, res)) return;
   if (spaceverseCustomerHttp && await spaceverseCustomerHttp(req, res)) return;
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
