@@ -17,6 +17,7 @@ interface WorkflowRow extends QueryResultRow{
   integration_status:string|null;integration_code:string|null;provider_checked_at:string|null
   provider_verified_at:string|null
   provisioning_status:string|null;provisioning_code:string|null;lease_active:boolean|null
+  schema_status:string|null;schema_code:string|null;schema_lease_active:boolean|null
   current_step:Step|null;terminal_id:string|null;terminal_label:string|null;cash_reports:boolean|null
   progress_revision:number|null;last_operator_activity_at:string
 }
@@ -62,8 +63,10 @@ async function load(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId
     integration.verified_at::text AS provider_verified_at,
     provision.status AS provisioning_status,provision.last_error_code AS provisioning_code,
     (provision.lease_expires_at>NOW()) AS lease_active,
+    schema.status AS schema_status,schema.last_error_code AS schema_code,
+    (schema.lease_expires_at>NOW()) AS schema_lease_active,
     p.current_step,p.terminal_id,p.terminal_label,p.cash_reports,p.revision AS progress_revision,
-    GREATEST(d.updated_at,a.updated_at,s.updated_at,integration.updated_at,provision.updated_at,p.updated_at)::text AS last_operator_activity_at
+    GREATEST(d.updated_at,a.updated_at,s.updated_at,integration.updated_at,provision.updated_at,schema.updated_at,p.updated_at)::text AS last_operator_activity_at
     FROM admin_onboarding_drafts d
     LEFT JOIN admin_onboarding_scopes s ON s.draft_id=d.id
     LEFT JOIN companies c ON c.id=COALESCE(s.company_id,d.company_id)
@@ -71,6 +74,7 @@ async function load(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId
     LEFT JOIN admin_onboarding_app_configs a ON a.draft_id=d.id
     LEFT JOIN admin_onboarding_integrations integration ON integration.draft_id=d.id AND integration.provider='evotor'
     LEFT JOIN admin_onboarding_provisioning_steps provision ON provision.draft_id=d.id AND provision.step='runtime_database_binding'
+    LEFT JOIN admin_onboarding_provisioning_steps schema ON schema.draft_id=d.id AND schema.step='tenant_schema_readiness'
     LEFT JOIN admin_onboarding_progress p ON p.draft_id=d.id
     WHERE d.id=$1::uuid AND ${onboardingDraftAccessSql('d','$2',write)}`,[draftId,admin.id])
   if(!result.rows[0])throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
@@ -99,10 +103,30 @@ function view(row:WorkflowRow){
   const modulesDisabled=modulesSaved&&!saved.cashReports&&!row.app_config?.loyaltyEnabled&&!row.app_config?.shopEnabled
   add('modules',modulesDisabled?'suspended':modulesSaved?'pending':'not_configured',modulesDisabled?'modules_disabled':modulesSaved?'modules_saved':'modules_missing',
     modulesDisabled?'Модули выключены в сохранённых настройках.':modulesSaved?'Выбор модулей сохранён. Они включатся после готовности приложения.':'Сохраните выбор модулей.')
-  const provisioning:Status=row.provisioning_status==='running'?(row.lease_active?'verifying':'degraded'):
-    row.provisioning_status==='retryable_error'?'failed':'pending'
-  add('provisioning',provisioning,row.provisioning_code??(row.provisioning_status==='succeeded'?'binding_ready_runtime_pending':'runtime_not_provisioned'),
-    row.provisioning_status==='succeeded'?'Привязка БД подтверждена. Это не запуск приложения.':'Развёртывание не подтверждено. Требуется разрешённый серверный запуск; здесь успех не симулируется.')
+  let provisioning:Status='pending',provisioningCode='runtime_not_provisioned'
+  let provisioningAction='Развёртывание не подтверждено. Требуется разрешённый серверный запуск; здесь успех не симулируется.'
+  if(row.provisioning_status==='running'){
+    provisioning=row.lease_active?'verifying':'degraded';provisioningCode=row.lease_active?'binding_verifying':'binding_lease_expired'
+    provisioningAction=row.lease_active?'Сервер проверяет точную привязку БД.':'Предыдущая проверка привязки не завершилась; безопасно продолжите шаг.'
+  }else if(['retryable_error','action_required'].includes(row.provisioning_status??'')){
+    provisioning='failed';provisioningCode=row.provisioning_code??'binding_failed'
+    provisioningAction='Точная привязка БД не подтверждена. Исправьте указанную причину и повторите шаг.'
+  }else if(row.provisioning_status==='succeeded'){
+    if(row.schema_status==='running'){
+      provisioning=row.schema_lease_active?'verifying':'degraded';provisioningCode=row.schema_lease_active?'schema_verifying':'schema_lease_expired'
+      provisioningAction=row.schema_lease_active?'Сервер читает схему и ownership-границы.':'Предыдущая проверка схемы не завершилась; безопасно продолжите шаг.'
+    }else if(['retryable_error','action_required'].includes(row.schema_status??'')){
+      provisioning='failed';provisioningCode=row.schema_code??'schema_readiness_failed'
+      provisioningAction='Схема или ownership-границы не подтверждены. Мастер не применяет миграции и не присваивает исторические данные.'
+    }else if(row.schema_status==='succeeded'){
+      provisioningCode='schema_ready_runtime_pending'
+      provisioningAction='Привязка, схема и ownership-границы подтверждены. Runtime всё ещё не запущен.'
+    }else{
+      provisioningCode='schema_readiness_pending'
+      provisioningAction='Привязка БД подтверждена. Запустите read-only проверку схемы и ownership-границ.'
+    }
+  }
+  add('provisioning',provisioning,provisioningCode,provisioningAction)
   add('verification',scope?'pending':'not_configured','terminal_event_not_verified','После развёртывания отправьте тестовое событие с кассы и проверьте ответ провайдера. Чтение документов само по себе не подтверждает терминал.')
   const inconsistent=row.venue_active===true
   return {draftId:row.id,revision:row.progress_revision??0,progress:saved,steps,

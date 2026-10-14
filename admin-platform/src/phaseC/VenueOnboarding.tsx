@@ -688,7 +688,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {!canWrite&&<p className="onboarding-feedback">Вам доступен просмотр. Изменения выполняет владелец или управляющий этой точки.</p>}
     {editing&&current&&session.capabilities.onboardingWorkflow&&<OnboardingProgress key={current.id} draftId={current.id} canWrite={canWrite}
-      refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt].join(':')}/>}
+      refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt].join(':')}/>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>

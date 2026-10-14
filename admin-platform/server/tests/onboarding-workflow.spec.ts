@@ -54,6 +54,39 @@ describe('server-owned resumable workflow on canonical scope',()=>{
   await state.db!.exec(await fs.readFile(new URL('../../admin-migrations/012_onboarding_progress.sql',import.meta.url),'utf8'))
   expect((await state.db!.query('SELECT * FROM wallets')).rows).toEqual(before.rows)
  })
+ it('derives provisioning progress from both binding and schema readiness ledgers',async()=>{
+  const source=(await state.db!.query<{tenant_key:string;application_revision:number;company_id:string;venue_id:string}>(`SELECT
+    app.tenant_key,app.revision AS application_revision,scope.company_id::text,scope.venue_id::text
+    FROM admin_onboarding_app_configs app JOIN admin_onboarding_scopes scope ON scope.draft_id=app.draft_id
+    WHERE app.draft_id=$1::uuid`,[drafts[0]])).rows[0]!
+  const common=[drafts[0],source.tenant_key,'a'.repeat(64),source.application_revision,source.company_id,source.venue_id]
+  await state.db!.query(`INSERT INTO admin_onboarding_provisioning_steps(
+    draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,status,attempt_count,result)
+    VALUES($1::uuid,'runtime_database_binding',$2,$3,$4,$5::bigint,$6::bigint,'succeeded',1,$7::jsonb)`,[
+    ...common,JSON.stringify({binding:'created'}),
+  ])
+  const waiting=await (await call('owner','GET',path())).json()
+  expect(waiting.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({
+    status:'pending',code:'schema_readiness_pending',
+  })
+  await state.db!.query(`INSERT INTO admin_onboarding_provisioning_steps(
+    draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,status,attempt_count,last_error_code)
+    VALUES($1::uuid,'tenant_schema_readiness',$2,$3,$4,$5::bigint,$6::bigint,'action_required',1,'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED')`,common)
+  const blocked=await (await call('owner','GET',path())).json()
+  expect(blocked.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({
+    status:'failed',code:'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED',
+  })
+  await state.db!.query(`UPDATE admin_onboarding_provisioning_steps SET
+    status='succeeded',last_error_code=NULL,result=$2::jsonb,updated_at=NOW()
+    WHERE draft_id=$1::uuid AND step='tenant_schema_readiness'`,[
+    drafts[0],JSON.stringify({schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified'}),
+  ])
+  const ready=await (await call('owner','GET',path())).json()
+  expect(ready.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({
+    status:'pending',code:'schema_ready_runtime_pending',
+  })
+  expect(ready).toMatchObject({runtimeStatus:'not_provisioned',published:false})
+ })
  it('saved terminal/modules/checkpoint never imply a provisioned app or a zero report',async()=>{
   const before=await call('owner','GET',path());expect(before.status).toBe(200)
   expect(await before.json()).toMatchObject({revision:0,runtimeStatus:'not_provisioned',published:false,report:{state:'unavailable',netCents:null,receiptCount:null},lastDeviceActivityAt:null})
