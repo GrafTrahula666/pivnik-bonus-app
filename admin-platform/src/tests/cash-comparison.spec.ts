@@ -55,4 +55,16 @@ describe('cash comparison of real report projections',()=>{
   vi.mocked(apiGet).mockRejectedValueOnce(new Error('Other venue failed'));await render(current,'all','b');expect(node.querySelector('input')?.checked).toBe(false)
   await enable();expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/b/pos?from=2026-09-27&to=2026-10-03');expect(node.textContent).toContain('Other venue failed');expect(node.querySelector('.cash-comparison-chart')).toBeNull()
  })
+ it('explains a failed cash sync separately from genuinely missing comparison data',async()=>{
+  vi.mocked(apiGet).mockResolvedValueOnce({...previous,connection:{state:'error',lastSuccessAt:'2026-10-11T01:00:00Z'}} as never)
+  await render();await enable()
+  expect(node.querySelector('.cash-comparison-delta')?.textContent).toContain('ошибка синхронизации кассы')
+  expect(node.querySelector('.cash-comparison-delta')?.textContent).not.toContain('недостаточно данных')
+  expect(node.querySelector('.cash-comparison-chart')?.textContent).toContain('Нет данных')
+  vi.mocked(apiGet).mockResolvedValueOnce({...previous,connection:{state:'error',lastSuccessAt:null}} as never)
+  await render(current,'all','b');await enable()
+  expect(node.querySelector('.cash-comparison-delta')?.textContent).toContain('недостаточно данных')
+  expect(node.querySelector('.cash-comparison-delta')?.textContent).not.toContain('ошибка синхронизации')
+ })
+
 })
