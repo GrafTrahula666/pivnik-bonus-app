@@ -74,5 +74,9 @@ heartbeat/последнего события дольше порога), а н�
 - Общий статус не становится active из-за сохранённого blueprint/terminal ID,
   точной binding БД или documents_readable. Отчёт без сквозной связи содержит
   unavailable/null; настоящий пустой отчёт требуется отдельно подтвердить.
-- Остаются proxy v2, событие терминала, readiness/run tenant runtime и список
+- Provisioning projection отдельно различает pending/error/success для binding,
+  read-only schema readiness и runtime bundle. Проверенный bundle означает
+  только совпадение manifest/checksum/контракта общего артефакта; он сохраняет
+  `not_provisioned`, `published=false` и не считается запущенным runtime.
+- Остаются proxy v2, разрешённый запуск tenant runtime, событие терминала и список
   заведений владельца; см. `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`.

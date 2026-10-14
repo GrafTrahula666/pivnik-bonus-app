@@ -92,6 +92,7 @@ interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';
 type ProvisioningStatus='not_started'|'running'|'retryable_error'|'action_required'|'succeeded'
 type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'
 type SchemaReadinessErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_TENANT_SCHEMA_REQUIRED'|'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED'
+type RuntimeBundleErrorCode='RUNTIME_ARTIFACT_INCOMPATIBLE'
 interface ProvisioningStep {
   draftId:string
   step:'runtime_database_binding'
@@ -117,6 +118,28 @@ interface SchemaReadinessStep {
   attemptCount:number
   errorCode:SchemaReadinessErrorCode|null
   result:{schema:'verified';migrationSet:'009,017-020';ownershipBoundary:'verified'}|null
+  updatedAt:string|null
+  startAllowed:boolean
+}
+interface RuntimeBundleStep {
+  draftId:string
+  step:'runtime_bundle_verification'
+  runtimeKey:string
+  manifestSha256:string
+  applicationRevision:number
+  scope:{companyId:string;venueId:string}
+  status:ProvisioningStatus
+  attemptCount:number
+  errorCode:RuntimeBundleErrorCode|null
+  result:{
+    bundle:'verified'
+    artifact:'pivnik-bonus-app'
+    artifactContract:'tenant-runtime-v1'
+    bundleSha256:string
+    manifestSchemaVersion:2
+    runtimeStatus:'not_provisioned'
+    published:false
+  }|null
   updatedAt:string|null
   startAllowed:boolean
 }
@@ -306,6 +329,42 @@ const schemaReadinessGuidance=(value:SchemaReadinessStep)=>{
   }
   return actions[value.errorCode!]
 }
+function runtimeBundleResponse(raw:unknown):RuntimeBundleStep {
+  const value=raw as Partial<RuntimeBundleStep>|null,scope=value?.scope,result=value?.result
+  const allowed=['draftId','step','runtimeKey','manifestSha256','applicationRevision','scope','status','attemptCount','errorCode','result','updatedAt','startAllowed']
+  const validResult=result!==null&&Boolean(result)&&Object.keys(result!).length===7&&result?.bundle==='verified'&&
+    result.artifact==='pivnik-bonus-app'&&result.artifactContract==='tenant-runtime-v1'&&
+    /^[0-9a-f]{64}$/.test(String(result.bundleSha256))&&result.manifestSchemaVersion===2&&
+    result.runtimeStatus==='not_provisioned'&&result.published===false
+  if(!value||Object.keys(value).some(key=>!allowed.includes(key))||typeof value.draftId!=='string'||value.step!=='runtime_bundle_verification'||
+    !/^sv-[0-9a-f]{32}$/.test(String(value.runtimeKey))||!/^[0-9a-f]{64}$/.test(String(value.manifestSha256))||
+    !Number.isSafeInteger(value.applicationRevision)||Number(value.applicationRevision)<1||!scope||Object.keys(scope).some(key=>!['companyId','venueId'].includes(key))||
+    typeof scope.companyId!=='string'||typeof scope.venueId!=='string'||!/^[1-9]\d*$/.test(scope.companyId)||!/^[1-9]\d*$/.test(scope.venueId)||
+    !['not_started','running','retryable_error','action_required','succeeded'].includes(String(value.status))||
+    !Number.isSafeInteger(value.attemptCount)||Number(value.attemptCount)<0||typeof value.startAllowed!=='boolean'||
+    !(value.updatedAt===null||typeof value.updatedAt==='string')||!(value.errorCode===null||value.errorCode==='RUNTIME_ARTIFACT_INCOMPATIBLE')||
+    !(result===null||validResult)) {
+    throw new Error('Состояние runtime bundle не подтверждено. Обновите его с сервера.')
+  }
+  const noOutcome=value.errorCode===null&&result===null
+  if((value.status==='not_started'&&(value.attemptCount!==0||value.updatedAt!==null||!value.startAllowed||!noOutcome))||
+    (value.status==='running'&&(Number(value.attemptCount)<1||typeof value.updatedAt!=='string'||!noOutcome))||
+    (['retryable_error','action_required'].includes(String(value.status))&&
+      (Number(value.attemptCount)<1||typeof value.updatedAt!=='string'||!value.errorCode||result!==null||!value.startAllowed))||
+    (value.status==='succeeded'&&(Number(value.attemptCount)<1||typeof value.updatedAt!=='string'||value.errorCode!==null||!validResult||value.startAllowed))) {
+    throw new Error('Состояние runtime bundle противоречиво. Обновите его с сервера.')
+  }
+  return value as RuntimeBundleStep
+}
+const runtimeBundleStatusLabel=(value:RuntimeBundleStep)=>value.status==='not_started'?'Ожидает сборки':
+  value.status==='running'?(value.startAllowed?'Можно продолжить':'Проверяем'):
+  value.status==='retryable_error'?'Ошибка проверки':value.status==='action_required'?'Нужно действие':'Bundle проверен'
+const runtimeBundleGuidance=(value:RuntimeBundleStep)=>{
+  if(value.status==='not_started')return 'Сервер соберёт конфигурационный bundle из сохранённого manifest и проверит контракт существующего артефакта.'
+  if(value.status==='running')return value.startAllowed?'Срок предыдущей попытки истёк. Можно безопасно повторить сборку.':'Сервер проверяет checksum и совместимость bundle. Повторный запуск временно заблокирован.'
+  if(value.status==='succeeded')return 'Manifest, checksum bundle и контракт двух server entrypoint подтверждены. Runtime всё ещё не запущен и не опубликован.'
+  return 'Текущий артефакт не подтвердил tenant-runtime-v1. Не запускайте его: требуется совместимая версия существующего приложения.'
+}
 
 export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;initialDraftId?:string|null}) {
   const allowed=(session.admin.role==='SUPER_ADMIN'||session.capabilities.onboardingAccess===true)&&session.capabilities.onboardingDrafts===true
@@ -334,12 +393,15 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
   const [schemaReadiness,setSchemaReadiness]=useState<SchemaReadinessStep|null>(null)
   const [schemaReadinessLoading,setSchemaReadinessLoading]=useState(false),[schemaReadinessBusy,setSchemaReadinessBusy]=useState(false),[schemaReadinessUncertain,setSchemaReadinessUncertain]=useState(false)
   const [schemaReadinessError,setSchemaReadinessError]=useState(''),[schemaReadinessNotice,setSchemaReadinessNotice]=useState('')
+  const [runtimeBundle,setRuntimeBundle]=useState<RuntimeBundleStep|null>(null)
+  const [runtimeBundleLoading,setRuntimeBundleLoading]=useState(false),[runtimeBundleBusy,setRuntimeBundleBusy]=useState(false),[runtimeBundleUncertain,setRuntimeBundleUncertain]=useState(false)
+  const [runtimeBundleError,setRuntimeBundleError]=useState(''),[runtimeBundleNotice,setRuntimeBundleNotice]=useState('')
   const [invites,setInvites]=useState<Invite[]>([]),[inviteLoading,setInviteLoading]=useState(false),[inviteBusy,setInviteBusy]=useState(false)
   const [inviteError,setInviteError]=useState(''),[inviteToken,setInviteToken]=useState('')
   const [inviteCopied,setInviteCopied]=useState(false)
   const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),integrationCommand=useRef<IntegrationCommand|null>(null),createKey=useRef('')
-  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),integrationBusyRef=useRef(false),provisioningBusyRef=useRef(false),schemaReadinessBusyRef=useRef(false),inviteBusyRef=useRef(false)
-  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),integrationSequence=useRef(0),provisioningSequence=useRef(0),schemaReadinessSequence=useRef(0),inviteSequence=useRef(0)
+  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),integrationBusyRef=useRef(false),provisioningBusyRef=useRef(false),schemaReadinessBusyRef=useRef(false),runtimeBundleBusyRef=useRef(false),inviteBusyRef=useRef(false)
+  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),integrationSequence=useRef(0),provisioningSequence=useRef(0),schemaReadinessSequence=useRef(0),runtimeBundleSequence=useRef(0),inviteSequence=useRef(0)
   const checkpoint=`spaceverse:onboarding:create:${session.admin.id}`
   function clearCheckpoint() {
     // An already confirmed server save stays successful even if tab storage becomes unavailable.
@@ -389,6 +451,18 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     } catch(error) {if(run===inviteSequence.current)setInviteError(message(error))}
     finally {if(run===inviteSequence.current)setInviteLoading(false)}
   },[legacyInvitesAllowed])
+  const loadRuntimeBundle=useCallback(async(draft:Draft)=>{
+    if(!provisioningAllowed)return
+    const run=++runtimeBundleSequence.current
+    setRuntimeBundleLoading(true);setRuntimeBundleError('')
+    try {
+      const saved=runtimeBundleResponse(await apiGet(base+'/'+draft.id+'/provisioning/runtime-bundle'))
+      if(run!==runtimeBundleSequence.current)return
+      if(saved.draftId!==draft.id)throw new Error('Runtime bundle относится к другому черновику.')
+      setRuntimeBundle(saved);setRuntimeBundleUncertain(false)
+    } catch(error) {if(run===runtimeBundleSequence.current)setRuntimeBundleError(message(error))}
+    finally {if(run===runtimeBundleSequence.current)setRuntimeBundleLoading(false)}
+  },[provisioningAllowed])
   const loadSchemaReadiness=useCallback(async(draft:Draft)=>{
     if(!provisioningAllowed)return
     const run=++schemaReadinessSequence.current
@@ -398,9 +472,14 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       if(run!==schemaReadinessSequence.current)return
       if(saved.draftId!==draft.id)throw new Error('Проверка схемы относится к другому черновику.')
       setSchemaReadiness(saved);setSchemaReadinessUncertain(false)
+      if(saved.status==='succeeded')void loadRuntimeBundle(draft)
+      else {
+        runtimeBundleSequence.current++;setRuntimeBundle(null);setRuntimeBundleLoading(false)
+        setRuntimeBundleError('');setRuntimeBundleNotice('');setRuntimeBundleUncertain(false)
+      }
     } catch(error) {if(run===schemaReadinessSequence.current)setSchemaReadinessError(message(error))}
     finally {if(run===schemaReadinessSequence.current)setSchemaReadinessLoading(false)}
-  },[provisioningAllowed])
+  },[loadRuntimeBundle,provisioningAllowed])
   const loadProvisioning=useCallback(async(draft:Draft)=>{
     if(!provisioningAllowed)return
     const run=++provisioningSequence.current
@@ -414,6 +493,8 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       else {
         schemaReadinessSequence.current++;setSchemaReadiness(null);setSchemaReadinessLoading(false)
         setSchemaReadinessError('');setSchemaReadinessNotice('');setSchemaReadinessUncertain(false)
+        runtimeBundleSequence.current++;setRuntimeBundle(null);setRuntimeBundleLoading(false)
+        setRuntimeBundleError('');setRuntimeBundleNotice('');setRuntimeBundleUncertain(false)
       }
     } catch(error) {if(run===provisioningSequence.current)setProvisioningError(message(error))}
     finally {if(run===provisioningSequence.current)setProvisioningLoading(false)}
@@ -442,6 +523,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     setIntegrationError('');setIntegrationNotice('');setIntegrationUncertain(false);integrationCommand.current=null
     setProvisioning(null);setProvisioningError('');setProvisioningNotice('');setProvisioningUncertain(false)
     setSchemaReadiness(null);setSchemaReadinessError('');setSchemaReadinessNotice('');setSchemaReadinessUncertain(false)
+    setRuntimeBundle(null);setRuntimeBundleError('');setRuntimeBundleNotice('');setRuntimeBundleUncertain(false)
     setInvites([]);setInviteError('');setInviteToken('')
     void loadApplication(draft);void loadScope(draft)
   },[loadApplication,loadScope])
@@ -473,7 +555,8 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
 
   const invalidateAppLoads=useCallback(()=>{appSequence.current++},[])
   const invalidateIntegrationLoads=useCallback(()=>{integrationSequence.current++},[])
-  const invalidateSchemaReadinessLoads=useCallback(()=>{schemaReadinessSequence.current++},[])
+  const invalidateRuntimeBundleLoads=useCallback(()=>{runtimeBundleSequence.current++},[])
+  const invalidateSchemaReadinessLoads=useCallback(()=>{schemaReadinessSequence.current++;invalidateRuntimeBundleLoads()},[invalidateRuntimeBundleLoads])
   const invalidateProvisioningLoads=useCallback(()=>{provisioningSequence.current++;invalidateSchemaReadinessLoads()},[invalidateSchemaReadinessLoads])
   const invalidateInviteLoads=useCallback(()=>{inviteSequence.current++},[])
   const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++;invalidateIntegrationLoads();invalidateProvisioningLoads();invalidateInviteLoads()},[invalidateIntegrationLoads,invalidateInviteLoads,invalidateProvisioningLoads])
@@ -503,6 +586,12 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     return ()=>clearTimeout(timer)
   },[current,loadSchemaReadiness,provisioningAllowed,schemaReadiness,schemaReadinessBusy])
 
+  useEffect(()=>{
+    if(!provisioningAllowed||!current||runtimeBundle?.status!=='running'||runtimeBundle.startAllowed||runtimeBundleBusy)return
+    const timer=setTimeout(()=>void loadRuntimeBundle(current),2000)
+    return ()=>clearTimeout(timer)
+  },[current,loadRuntimeBundle,provisioningAllowed,runtimeBundle,runtimeBundleBusy])
+
   function begin() {
     if(busyRef.current) return
     try {createKey.current=sessionStorage.getItem(checkpoint)||crypto.randomUUID()}
@@ -514,10 +603,11 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     setIntegrationError('');setIntegrationNotice('');setIntegrationUncertain(false);integrationCommand.current=null
     setProvisioning(null);setProvisioningError('');setProvisioningNotice('');setProvisioningUncertain(false)
     setSchemaReadiness(null);setSchemaReadinessError('');setSchemaReadinessNotice('');setSchemaReadinessUncertain(false)
+    setRuntimeBundle(null);setRuntimeBundleError('');setRuntimeBundleNotice('');setRuntimeBundleUncertain(false)
     setInvites([]);setInviteError('');setInviteToken('')
   }
   async function open(id:string) {
-    if(busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current||provisioningBusyRef.current||schemaReadinessBusyRef.current) return
+    if(busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current||provisioningBusyRef.current||schemaReadinessBusyRef.current||runtimeBundleBusyRef.current) return
     busyRef.current=true;setBusy(true);setError('')
     try {showDraft(draftResponse(await apiGet(base+'/'+id)))}
     catch(error) {setError(message(error))}
@@ -598,11 +688,26 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       const saved=schemaReadinessResponse(await apiPost(base+'/'+current.id+'/provisioning/tenant-schema-readiness/run',{}))
       if(saved.draftId!==current.id)throw new Error('Сервер вернул проверку схемы другого черновика.')
       setSchemaReadiness(saved);setSchemaReadinessUncertain(false);setSchemaReadinessNotice(schemaReadinessGuidance(saved))
+      if(saved.status==='succeeded')void loadRuntimeBundle(current)
     } catch(error) {
       setSchemaReadinessError(message(error))
       if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408)setSchemaReadinessUncertain(false)
       else setSchemaReadinessUncertain(true)
     } finally {schemaReadinessBusyRef.current=false;setSchemaReadinessBusy(false)}
+  }
+  async function startRuntimeBundle() {
+    if(!canWrite||!provisioningAllowed||!current||!scope||schemaReadiness?.status!=='succeeded'||
+      !runtimeBundle?.startAllowed||runtimeBundleBusyRef.current)return
+    runtimeBundleSequence.current++;runtimeBundleBusyRef.current=true;setRuntimeBundleBusy(true);setRuntimeBundleError('');setRuntimeBundleNotice('')
+    try {
+      const saved=runtimeBundleResponse(await apiPost(base+'/'+current.id+'/provisioning/runtime-bundle/run',{}))
+      if(saved.draftId!==current.id)throw new Error('Сервер вернул runtime bundle другого черновика.')
+      setRuntimeBundle(saved);setRuntimeBundleUncertain(false);setRuntimeBundleNotice(runtimeBundleGuidance(saved))
+    } catch(error) {
+      setRuntimeBundleError(message(error))
+      if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408)setRuntimeBundleUncertain(false)
+      else setRuntimeBundleUncertain(true)
+    } finally {runtimeBundleBusyRef.current=false;setRuntimeBundleBusy(false)}
   }
   async function saveIntegration() {
     if(!canWrite||!integrationsAllowed||!current||!scope||integrationBusyRef.current||busyRef.current||scopeBusyRef.current)return
@@ -678,6 +783,9 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
   const schemaReadinessButtonLabel=schemaReadinessBusy?'Проверяем…':schemaReadinessUncertain?'Сначала обновите состояние':!schemaReadiness?'Загрузите состояние':
     schemaReadiness.status==='not_started'?'Проверить схему':schemaReadiness.status==='running'?(schemaReadiness.startAllowed?'Продолжить проверку':'Проверка выполняется…'):
     schemaReadiness.status==='action_required'?'Повторить после исправления':schemaReadiness.status==='retryable_error'?'Повторить проверку':'Схема проверена'
+  const runtimeBundleButtonLabel=runtimeBundleBusy?'Проверяем…':runtimeBundleUncertain?'Сначала обновите состояние':!runtimeBundle?'Загрузите состояние':
+    runtimeBundle.status==='not_started'?'Собрать и проверить bundle':runtimeBundle.status==='running'?(runtimeBundle.startAllowed?'Продолжить проверку':'Проверка выполняется…'):
+    runtimeBundle.status==='action_required'?'Повторить после обновления':runtimeBundle.status==='retryable_error'?'Повторить проверку':'Bundle проверен'
 
   return <section className="card onboarding" aria-label="Подключение заведений">
     <div className="onboarding-head">
@@ -688,7 +796,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {!canWrite&&<p className="onboarding-feedback">Вам доступен просмотр. Изменения выполняет владелец или управляющий этой точки.</p>}
     {editing&&current&&session.capabilities.onboardingWorkflow&&<OnboardingProgress key={current.id} draftId={current.id} canWrite={canWrite}
-      refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt].join(':')}/>}
+      refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt].join(':')}/>}
     {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
@@ -714,8 +822,8 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       </fieldset>
       <div className="onboarding-actions">
         <button className="btn" type="submit" disabled={!canWrite||busy||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
-        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||schemaReadinessBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
-        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain||provisioningBusy||provisioningUncertain||schemaReadinessBusy||schemaReadinessUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('');setProvisioningError('');setProvisioningNotice('');setSchemaReadinessError('');setSchemaReadinessNotice('')}}>Закрыть</button>
+        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||schemaReadinessBusy||runtimeBundleBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
+        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain||provisioningBusy||provisioningUncertain||schemaReadinessBusy||schemaReadinessUncertain||runtimeBundleBusy||runtimeBundleUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('');setProvisioningError('');setProvisioningNotice('');setSchemaReadinessError('');setSchemaReadinessNotice('');setRuntimeBundleError('');setRuntimeBundleNotice('')}}>Закрыть</button>
       </div>
     </form>}
     {editing&&current&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
@@ -793,6 +901,26 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
               <button className="btn secondary" type="button" disabled={schemaReadinessBusy||schemaReadinessLoading} onClick={()=>void loadSchemaReadiness(current)}><RefreshCw size={16}/>Обновить проверку</button>
             </div>
           </>}
+          <div className="onboarding-readiness" aria-label="Проверка runtime bundle">
+            <div className="onboarding-step"><Smartphone size={18}/><b>Runtime bundle</b><span>{schemaReadiness?.status!=='succeeded'?'Сначала проверьте схему':runtimeBundle?runtimeBundleStatusLabel(runtimeBundle):runtimeBundleLoading?'Загружаем…':'Состояние недоступно'}</span></div>
+            {schemaReadiness?.status!=='succeeded'?<>
+              <p className="onboarding-note">Сборка станет доступна после read-only проверки схемы и ownership-границ. До этого сервер не формирует launch-конфигурацию.</p>
+              <div className="onboarding-actions"><button className="btn" type="button" disabled><Smartphone size={16}/>Сначала проверьте схему</button></div>
+            </>:<>
+              {runtimeBundleError&&<div className="onboarding-feedback error" role="alert">{runtimeBundleError}</div>}
+              {runtimeBundleNotice&&<p className="onboarding-feedback" role="status">{runtimeBundleNotice}</p>}
+              {runtimeBundle&&<div className="onboarding-contract" aria-label="Статус runtime bundle">
+                <div><ShieldCheck size={17}/><span><b>Состояние</b><small>{runtimeBundleGuidance(runtimeBundle)}</small></span></div>
+                <div><span><b>Контракт</b><small>{runtimeBundle.result?.artifactContract??'tenant-runtime-v1'} · manifest v2</small></span></div>
+                <div><span><b>Запуск</b><small>Не выполнялся · приложение не опубликовано</small></span></div>
+              </div>}
+              <p className="onboarding-note">Шаг собирает детерминированную конфигурацию из сохранённого manifest, проверяет checksum bundle и контракт общего артефакта для server.js и universal-server.js. Он не передаёт URL базы, не запускает сервис и не меняет Railway.</p>
+              <div className="onboarding-actions">
+                <button className="btn" type="button" disabled={!canWrite||runtimeBundleBusy||runtimeBundleLoading||runtimeBundleUncertain||!runtimeBundle?.startAllowed} onClick={()=>void startRuntimeBundle()}><Smartphone size={16}/>{runtimeBundleButtonLabel}</button>
+                <button className="btn secondary" type="button" disabled={runtimeBundleBusy||runtimeBundleLoading} onClick={()=>void loadRuntimeBundle(current)}><RefreshCw size={16}/>Обновить bundle</button>
+              </div>
+            </>}
+          </div>
         </div>
       </>}
     </section>}
@@ -837,12 +965,12 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
         {invite.status==='pending'&&<button className="btn secondary" disabled={inviteBusy||inviteLoading} onClick={()=>void revokeInvite(invite.id)} aria-label="Отозвать ссылку"><XCircle size={16}/>Отозвать</button>}
       </li>)}</ul>}
     </section>}
-    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||schemaReadinessBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
+    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||schemaReadinessBusy||runtimeBundleBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
     {loading?<p role="status">Загружаем черновики…</p>:<>
       {!index.drafts.length&&<p>Сохранённых черновиков пока нет.</p>}
       <ul className="onboarding-list">{index.drafts.map(draft=><li key={draft.id}>
         <div><b>{draft.data.venueName}</b><small>{draft.data.companyName||index.companies.find(company=>company.id===draft.data.companyId)?.name||'Организация недоступна'} · Черновик</small></div>
-        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||schemaReadinessBusy||uncertain||appUncertain||scopeUncertain||integrationUncertain||provisioningUncertain||schemaReadinessUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
+        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||schemaReadinessBusy||runtimeBundleBusy||uncertain||appUncertain||scopeUncertain||integrationUncertain||provisioningUncertain||schemaReadinessUncertain||runtimeBundleUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
       </li>)}</ul>
       {index.drafts.length===50&&<small>Показаны последние 50 черновиков.</small>}
     </>}

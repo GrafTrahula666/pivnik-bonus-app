@@ -4,12 +4,15 @@ import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { isAutomaticStartupMigration } from '../migration-startup-policy.js';
 import {
+  createSpaceverseRuntimeBundle,
   createSpaceverseRuntimeManifest,
   guardSpaceverseRuntimeStartup,
+  parseSpaceverseRuntimeBundle,
   parseSpaceverseRuntimeManifest,
   requireSpaceverseTenantContext,
   requireSpaceverseTenantRuntime,
   resolveSpaceverseRuntime,
+  runtimeEnvironmentFromSpaceverseBundle,
   runtimeManifestFromEnvironment,
   SPACEVERSE_RUNTIME_BINDING_SQL
 } from '../spaceverse-runtime-manifest.js';
@@ -90,6 +93,41 @@ test('manifest parsing rejects tampering, URLs, tokens and unknown release claim
     assert.throws(() => parseSpaceverseRuntimeManifest(invalid), (error) => (
       String(error?.code || '').startsWith('SPACEVERSE_RUNTIME_MANIFEST_')
       && !String(error?.message || '').includes('synthetic-secret')
+    ));
+  }
+});
+
+test('existing artifact builds one deterministic verified tenant bundle without launch claims', () => {
+  const value = manifest(
+    '99999999-9999-4999-8999-999999999999',
+    'sv-99999999999949998999999999999999'
+  );
+  const bundle = createSpaceverseRuntimeBundle(value);
+  assert.deepEqual(parseSpaceverseRuntimeBundle(JSON.stringify(bundle)), bundle);
+  assert.deepEqual(bundle.artifact, {
+    name: 'pivnik-bonus-app', contract: 'tenant-runtime-v1',
+    entrypoints: ['server.js', 'universal-server.js']
+  });
+  assert.deepEqual(bundle.release, {
+    runtimeStatus: 'not_provisioned', published: false, startAllowed: false
+  });
+  assert.match(bundle.bundleSha256, /^[0-9a-f]{64}$/);
+  assert.equal(createSpaceverseRuntimeBundle(value).bundleSha256, bundle.bundleSha256);
+  const runtimeEnvironment = runtimeEnvironmentFromSpaceverseBundle(bundle);
+  assert.deepEqual(runtimeEnvironment, environment(value));
+  assert.deepEqual(parseSpaceverseRuntimeManifest(runtimeEnvironment.SPACEVERSE_RUNTIME_MANIFEST_JSON), value);
+  assert.doesNotMatch(JSON.stringify(bundle), /token|secret|password|databaseUrl|postgres:|https?:\/\//i);
+
+  for (const invalid of [
+    { ...bundle, artifact: { ...bundle.artifact, name: 'other-artifact' } },
+    { ...bundle, artifact: { ...bundle.artifact, entrypoints: ['server.js'] } },
+    { ...bundle, release: { ...bundle.release, startAllowed: true } },
+    { ...bundle, bundleSha256: '0'.repeat(64) },
+    { ...bundle, databaseUrl: 'postgresql://forbidden.invalid/runtime' }
+  ]) {
+    assert.throws(() => parseSpaceverseRuntimeBundle(invalid), (error) => (
+      String(error?.code || '').startsWith('SPACEVERSE_RUNTIME_BUNDLE_')
+      && !String(error?.message || '').includes('forbidden.invalid')
     ));
   }
 });
@@ -255,14 +293,16 @@ test('binding migration is additive, manual and creates no application or custom
 });
 
 test('both server entrypoints guard before mutation/spawn and VK build receives no server manifest', async () => {
-  const [server, gateway, vkBuilder] = await Promise.all([
+  const [server, gateway, vkBuilder, adminDockerfile] = await Promise.all([
     fs.readFile(new URL('../server.js', import.meta.url), 'utf8'),
     fs.readFile(new URL('../universal-server.js', import.meta.url), 'utf8'),
-    fs.readFile(new URL('../scripts/build-vk-hosting.mjs', import.meta.url), 'utf8')
+    fs.readFile(new URL('../scripts/build-vk-hosting.mjs', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../admin-platform/Dockerfile', import.meta.url), 'utf8')
   ]);
   assert.ok(server.indexOf('guardSpaceverseRuntimeStartup') < server.indexOf('await initDatabase();'));
   assert.ok(gateway.lastIndexOf('guardSpaceverseRuntimeStartup') < gateway.indexOf('const child = isTestImport'));
   assert.match(server, /SPACEVERSE runtime preflight failed:[\s\S]*error\?\.code/);
   assert.match(gateway, /SPACEVERSE runtime preflight failed:[\s\S]*error\?\.code/);
   assert.doesNotMatch(vkBuilder, /SPACEVERSE_RUNTIME_MANIFEST|manifestSha256|spaceverse_runtime_binding/);
+  assert.match(adminDockerfile, /COPY package\.json[^\n]*spaceverse-runtime-manifest\.js spaceverse-runtime-manifest\.d\.ts/);
 });

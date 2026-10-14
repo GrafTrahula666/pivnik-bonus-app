@@ -46,6 +46,22 @@ export interface SpaceverseRuntimeBinding {
   status: 'prepared'
 }
 
+export interface SpaceverseRuntimeBundle {
+  schemaVersion: 1
+  artifact: {
+    name: 'pivnik-bonus-app'
+    contract: 'tenant-runtime-v1'
+    entrypoints: readonly ['server.js', 'universal-server.js']
+  }
+  manifest: SpaceverseRuntimeManifest
+  release: {
+    runtimeStatus: 'not_provisioned'
+    published: false
+    startAllowed: false
+  }
+  bundleSha256: string
+}
+
 export type SpaceverseResolvedRuntime =
   | { mode: 'legacy-pivnik'; manifest: null; binding: null; context: null; startAllowed: true }
   | {
@@ -80,6 +96,15 @@ export function createSpaceverseRuntimeManifest(input: {
 }): SpaceverseRuntimeManifest
 
 export function parseSpaceverseRuntimeManifest(raw: string | unknown): SpaceverseRuntimeManifest
+
+export function createSpaceverseRuntimeBundle(rawManifest: string | SpaceverseRuntimeManifest): SpaceverseRuntimeBundle
+
+export function parseSpaceverseRuntimeBundle(raw: string | unknown): SpaceverseRuntimeBundle
+
+export function runtimeEnvironmentFromSpaceverseBundle(raw: string | unknown): Readonly<{
+  SPACEVERSE_RUNTIME_MODE: 'tenant'
+  SPACEVERSE_RUNTIME_MANIFEST_JSON: string
+}>
 
 export function runtimeManifestFromEnvironment(environment?: Record<string, string | undefined>):
   | { mode: 'legacy-pivnik'; manifest: null }

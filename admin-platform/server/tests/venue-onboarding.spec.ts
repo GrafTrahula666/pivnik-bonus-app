@@ -171,7 +171,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   it('separately gates provisioning and reports the capability honestly',async()=>{
     config.enableOnboardingProvisioning=false
     try {
-      for(const step of ['runtime-database-binding','tenant-schema-readiness']) {
+      for(const step of ['runtime-database-binding','tenant-schema-readiness','runtime-bundle']) {
         const path='/'+crypto.randomUUID()+'/provisioning/'+step
         expect((await request('root','GET',path)).status).toBe(403)
         expect((await request('root','POST',path+'/run',{})).status).toBe(403)
@@ -194,6 +194,8 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
       ['POST','/'+crypto.randomUUID()+'/provisioning/runtime-database-binding/run',{}],
       ['GET','/'+crypto.randomUUID()+'/provisioning/tenant-schema-readiness',undefined],
       ['POST','/'+crypto.randomUUID()+'/provisioning/tenant-schema-readiness/run',{}],
+      ['GET','/'+crypto.randomUUID()+'/provisioning/runtime-bundle',undefined],
+      ['POST','/'+crypto.randomUUID()+'/provisioning/runtime-bundle/run',{}],
       ['DELETE','/'+crypto.randomUUID(),undefined]] as const) {
       const r=await request(who,method,path,body)
       expect(r.status).toBe(403);expect(await r.json()).toMatchObject({code:'SUPER_ADMIN_REQUIRED'})
@@ -381,6 +383,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
   }
   const provisioningPath=(draftId:string,suffix='')=>'/'+draftId+'/provisioning/runtime-database-binding'+suffix
   const schemaReadinessPath=(draftId:string,suffix='')=>'/'+draftId+'/provisioning/tenant-schema-readiness'+suffix
+  const runtimeBundlePath=(draftId:string,suffix='')=>'/'+draftId+'/provisioning/runtime-bundle'+suffix
 
   it('exposes creator-scoped status/start, rejects target input and resumes after protected registration',async()=>{
     const draft=await preparedDraft('Provisioning HTTP')
@@ -429,11 +432,32 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect(await (await request('root','GET',schemaPath)).json()).toEqual(schemaCompleted)
     expect(await (await request('root','POST',schemaPath+'/run',{})).json()).toEqual(schemaCompleted)
     expect(JSON.stringify({schemaCompleted,audit:await rows('admin_audit_log')})).not.toMatch(/postgres:|password|databaseUrl/i)
+
+    const bundlePath=runtimeBundlePath(draft.id)
+    expect(await (await request('root','GET',bundlePath)).json()).toMatchObject({
+      draftId:draft.id,step:'runtime_bundle_verification',status:'not_started',attemptCount:0,startAllowed:true,
+    })
+    expect((await request('owner','GET',bundlePath)).status).toBe(403)
+    expect((await request('other-root','GET',bundlePath)).status).toBe(404)
+    expect((await request('root','GET',bundlePath+'?artifact=forbidden')).status).toBe(400)
+    const bundleRejected=await request('root','POST',bundlePath+'/run',{manifest:{runtimeKey:application.application.tenantKey}})
+    expect(bundleRejected.status).toBe(400);expect(await bundleRejected.json()).toMatchObject({code:'ONBOARDING_PROVISIONING_COMMAND_INVALID'})
+    const bundleCompleted=await (await request('root','POST',bundlePath+'/run',{})).json()
+    expect(bundleCompleted).toMatchObject({
+      status:'succeeded',attemptCount:1,errorCode:null,startAllowed:false,
+      result:{bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
+        bundleSha256:expect.stringMatching(/^[0-9a-f]{64}$/),manifestSchemaVersion:2,
+        runtimeStatus:'not_provisioned',published:false},
+    })
+    expect(await (await request('root','GET',bundlePath)).json()).toEqual(bundleCompleted)
+    expect(await (await request('root','POST',bundlePath+'/run',{})).json()).toEqual(bundleCompleted)
+    expect(JSON.stringify({bundleCompleted,audit:await rows('admin_audit_log')}))
+      .not.toMatch(/postgres:|password|databaseUrl|SPACEVERSE_RUNTIME_MANIFEST_JSON/i)
   })
 
   it('requires a real session, same origin and CSRF to start provisioning',async()=>{
     const draft=await preparedDraft('Provisioning HTTP security')
-    for(const path of [provisioningPath(draft.id,'/run'),schemaReadinessPath(draft.id,'/run')]) {
+    for(const path of [provisioningPath(draft.id,'/run'),schemaReadinessPath(draft.id,'/run'),runtimeBundlePath(draft.id,'/run')]) {
       expect((await fetch(origin+'/api/admin/onboarding/drafts'+path,{method:'POST',headers:{origin:config.publicOrigin,'content-type':'application/json'},body:'{}'})).status).toBe(401)
       expect((await request('root','POST',path,{},false)).status).toBe(403)
       expect((await request('root','POST',path,{},true,'https://foreign.invalid')).status).toBe(403)

@@ -66,8 +66,8 @@ import {
   saveOnboardingAppConfig,saveOnboardingEvotorIntegration,updateOnboardingDraft,verifyOnboardingEvotorIntegration,
 } from './venue-onboarding.js'
 import {
-  getOnboardingRuntimeDatabaseBinding,getOnboardingTenantSchemaReadiness,
-  runOnboardingRuntimeDatabaseBinding,runOnboardingTenantSchemaReadiness,
+  getOnboardingRuntimeBundleVerification,getOnboardingRuntimeDatabaseBinding,getOnboardingTenantSchemaReadiness,
+  runOnboardingRuntimeBundleVerification,runOnboardingRuntimeDatabaseBinding,runOnboardingTenantSchemaReadiness,
 } from './onboarding-provisioning-api.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -266,6 +266,24 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
     if(isMethod(req,'GET')){
       json(res,200,await getOnboardingTenantSchemaReadiness(session.admin,onboardingSchemaReadiness[1]!));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingRuntimeBundleRun=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-bundle\/run$/.exec(url.pathname)
+  if(onboardingRuntimeBundleRun){
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-provisioning:${session.admin.id}`,20,60_000)
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры bundle в URL не принимаются.')
+    if(isMethod(req,'POST')){
+      json(res,200,await runOnboardingRuntimeBundleVerification(session.admin,onboardingRuntimeBundleRun[1]!,await readJsonBody(req,256)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingRuntimeBundle=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-bundle$/.exec(url.pathname)
+  if(onboardingRuntimeBundle){
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры bundle в URL не принимаются.')
+    if(isMethod(req,'GET')){
+      json(res,200,await getOnboardingRuntimeBundleVerification(session.admin,onboardingRuntimeBundle[1]!));return true
     }
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }

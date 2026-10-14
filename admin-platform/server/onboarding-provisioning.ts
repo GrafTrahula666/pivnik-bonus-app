@@ -1,13 +1,20 @@
 import crypto from 'node:crypto'
 import type { Pool, PoolClient, QueryResultRow } from 'pg'
+import {
+  createSpaceverseRuntimeBundle,
+  parseSpaceverseRuntimeBundle,
+  runtimeEnvironmentFromSpaceverseBundle,
+  type SpaceverseRuntimeManifest,
+} from '../../spaceverse-runtime-manifest.js'
 import { recordAudit } from './audit.js'
 import { loadOwnedOnboardingRuntimeSource } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 
 const BINDING_STEP='runtime_database_binding' as const
 const SCHEMA_READINESS_STEP='tenant_schema_readiness' as const
+const RUNTIME_BUNDLE_STEP='runtime_bundle_verification' as const
 const LEASE_SECONDS=30
-type StepName=typeof BINDING_STEP|typeof SCHEMA_READINESS_STEP
+type StepName=typeof BINDING_STEP|typeof SCHEMA_READINESS_STEP|typeof RUNTIME_BUNDLE_STEP
 type StoredStatus='running'|'retryable_error'|'action_required'|'succeeded'
 type VisibleStatus='not_started'|StoredStatus
 type BindingResult={binding:'created'|'verified_existing'}
@@ -16,17 +23,20 @@ type SchemaReadinessResult={
   migrationSet:'009,017-020'
   ownershipBoundary:'verified'
 }
-type TargetResult=BindingResult|SchemaReadinessResult
-
-interface RuntimeManifest {
-  runtimeKey:string
-  manifestSha256:string
-  source:{applicationRevision:number}
-  scope:{companyId:string;venueId:string}
+type RuntimeBundleResult={
+  bundle:'verified'
+  artifact:'pivnik-bonus-app'
+  artifactContract:'tenant-runtime-v1'
+  bundleSha256:string
+  manifestSchemaVersion:2
+  runtimeStatus:'not_provisioned'
+  published:false
 }
+type TargetResult=BindingResult|SchemaReadinessResult|RuntimeBundleResult
+
 interface RuntimeSource {
   draftId:string
-  manifest:RuntimeManifest
+  manifest:SpaceverseRuntimeManifest
   auditScope:VenueScope
 }
 interface StepRow extends QueryResultRow {
@@ -56,6 +66,9 @@ export interface OnboardingProvisioningOptions {
   // key; it can never provide a database URL, host or credential.
   resolveTargetDatabase:(runtimeKey:string)=>Promise<Connectable|null>
   afterTargetCommit?:(context:{draftId:string;runtimeKey:string})=>Promise<void>|void
+  // Tests and a future immutable artifact registry can supply a candidate, but
+  // every candidate is parsed again with the runtime's shared strict contract.
+  assembleRuntimeBundle?:(manifest:SpaceverseRuntimeManifest)=>Promise<unknown>|unknown
 }
 
 class TargetStepFailure extends Error {
@@ -73,7 +86,7 @@ const unavailable=()=>new HttpError(503,'ONBOARDING_PROVISIONING_UNAVAILABLE',
   'Не удалось подтвердить состояние подготовки приложения. Повторите попытку.')
 
 function sourceValue(raw:Awaited<ReturnType<typeof loadOwnedOnboardingRuntimeSource>>):RuntimeSource {
-  const manifest=raw.manifest as RuntimeManifest
+  const manifest=raw.manifest as SpaceverseRuntimeManifest
   if(!manifest||typeof manifest.runtimeKey!=='string'||typeof manifest.manifestSha256!=='string'||
     !manifest.source||!Number.isSafeInteger(manifest.source.applicationRevision)||
     !manifest.scope||typeof manifest.scope.companyId!=='string'||typeof manifest.scope.venueId!=='string') {
@@ -134,11 +147,13 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
   try {
     await client.query('BEGIN')
     const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
-    if(step===SCHEMA_READINESS_STEP) {
-      const dependency=await selectStep(client,source.draftId,BINDING_STEP,true)
+    if(step!==BINDING_STEP) {
+      const dependencyStep=step===SCHEMA_READINESS_STEP?BINDING_STEP:SCHEMA_READINESS_STEP
+      const dependency=await selectStep(client,source.draftId,dependencyStep,true)
       if(!dependency||!matchesSource(dependency,source)||dependency.status!=='succeeded') {
         throw new HttpError(409,'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
-          'Сначала подготовьте точную привязку выделенной базы приложения.')
+          step===SCHEMA_READINESS_STEP?'Сначала подготовьте точную привязку выделенной базы приложения.':
+            'Сначала подтвердите схему и ownership-границы выделенной базы приложения.')
       }
     }
     const initialToken=crypto.randomUUID()
@@ -391,6 +406,28 @@ async function verifyTargetSchema(database:Connectable,source:RuntimeSource):Pro
   } finally {client.release()}
 }
 
+async function verifyRuntimeBundle(
+  options:OnboardingProvisioningOptions,source:RuntimeSource,
+):Promise<RuntimeBundleResult> {
+  try {
+    const candidate=await (options.assembleRuntimeBundle??createSpaceverseRuntimeBundle)(source.manifest)
+    const bundle=parseSpaceverseRuntimeBundle(candidate)
+    const environment=runtimeEnvironmentFromSpaceverseBundle(bundle)
+    if(environment.SPACEVERSE_RUNTIME_MODE!=='tenant'||
+      environment.SPACEVERSE_RUNTIME_MANIFEST_JSON!==JSON.stringify(source.manifest)||
+      bundle.manifest.manifestSha256!==source.manifest.manifestSha256) {
+      throw new Error('Runtime bundle source mismatch')
+    }
+    return {
+      bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
+      bundleSha256:bundle.bundleSha256,manifestSchemaVersion:2,
+      runtimeStatus:'not_provisioned',published:false,
+    }
+  } catch {
+    throw new TargetStepFailure('action_required','RUNTIME_ARTIFACT_INCOMPATIBLE')
+  }
+}
+
 async function finish(
   options:OnboardingProvisioningOptions,admin:AdminPrincipal,claimValue:Claim,
   outcome:{status:'succeeded';result:TargetResult}|{status:'retryable_error'|'action_required';errorCode:string},
@@ -512,6 +549,43 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
       } catch(error) {
         const failure=error instanceof TargetStepFailure?error:
           new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')
+        return finish(options,admin,claimed,{status:failure.status,errorCode:failure.code})
+      }
+    },
+
+    async getRuntimeBundleVerification(admin:AdminPrincipal,draftId:string) {
+      const client=await connect(options.metadata)
+      try {
+        await client.query('BEGIN')
+        const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId))
+        const dependency=await selectStep(client,source.draftId,SCHEMA_READINESS_STEP)
+        if(!dependency||!matchesSource(dependency,source)||dependency.status!=='succeeded') {
+          throw new HttpError(409,'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+            'Сначала подтвердите схему и ownership-границы выделенной базы приложения.')
+        }
+        const row=await selectStep(client,source.draftId,RUNTIME_BUNDLE_STEP)
+        if(row&&!matchesSource(row,source)) {
+          throw new HttpError(409,'ONBOARDING_PROVISIONING_SOURCE_CHANGED',
+            'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
+        }
+        await client.query('COMMIT')
+        return view(source,RUNTIME_BUNDLE_STEP,row)
+      } catch(error) {
+        await client.query('ROLLBACK').catch(()=>undefined)
+        if(error instanceof HttpError) throw error
+        throw unavailable()
+      } finally {client.release()}
+    },
+
+    async runRuntimeBundleVerification(admin:AdminPrincipal,draftId:string) {
+      const claimed=await claim(options,admin,draftId,RUNTIME_BUNDLE_STEP)
+      if(!claimed.token) return view(claimed.source,RUNTIME_BUNDLE_STEP,claimed.row)
+      try {
+        const result=await verifyRuntimeBundle(options,claimed.source)
+        return await finish(options,admin,claimed,{status:'succeeded',result})
+      } catch(error) {
+        const failure=error instanceof TargetStepFailure?error:
+          new TargetStepFailure('action_required','RUNTIME_ARTIFACT_INCOMPATIBLE')
         return finish(options,admin,claimed,{status:failure.status,errorCode:failure.code})
       }
     },

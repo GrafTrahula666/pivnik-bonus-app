@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import type { Pool } from 'pg'
 import { PGlite } from '@electric-sql/pglite'
 import { afterEach,beforeAll,describe,expect,it } from 'vitest'
+import { createSpaceverseRuntimeBundle } from '../../../spaceverse-runtime-manifest.js'
 import type { AdminPrincipal } from '../types.js'
 import { config } from '../config.js'
 import { createOnboardingProvisioningService } from '../onboarding-provisioning.js'
@@ -120,6 +121,17 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     expect(await provisioningRows(db)).toEqual([])
   })
 
+  it('adds runtime bundle verification to the same empty ledger without creating resources',async()=>{
+    const db=await metadata()
+    const sql=await fs.readFile(new URL('../../admin-migrations/014_onboarding_runtime_bundle.sql',import.meta.url),'utf8')
+    expect(sql).toMatch(/runtime_bundle_verification/)
+    expect(sql).not.toMatch(/(?:^|\n)\s*(?:INSERT|UPDATE|DELETE\s+FROM|MERGE|TRUNCATE)\b/i)
+    expect(sql).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|SCHEMA|DATABASE)\b/i)
+    expect(await provisioningRows(db)).toEqual([])
+    await db.exec(sql);await db.exec(sql)
+    expect(await provisioningRows(db)).toEqual([])
+  })
+
   it('requires a successful exact binding before schema readiness can be claimed',async()=>{
     const meta=await metadata(),draft=await preparedDraft(meta,'Readiness dependency')
     let resolutions=0
@@ -128,6 +140,12 @@ describe('onboarding runtime binding provisioning ledger',()=>{
       statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
     })
     await expect(service.runTenantSchemaReadiness(root,draft.draftId)).rejects.toMatchObject({
+      statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+    })
+    await expect(service.getRuntimeBundleVerification(root,draft.draftId)).rejects.toMatchObject({
+      statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+    })
+    await expect(service.runRuntimeBundleVerification(root,draft.draftId)).rejects.toMatchObject({
       statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
     })
     expect(resolutions).toBe(0)
@@ -141,6 +159,9 @@ describe('onboarding runtime binding provisioning ledger',()=>{
       resolutions++;expect(key).toBe(draft.tenantKey);return database(tenant)
     }})
     expect(await service.runRuntimeDatabaseBinding(root,draft.draftId)).toMatchObject({status:'succeeded'})
+    await expect(service.getRuntimeBundleVerification(root,draft.draftId)).rejects.toMatchObject({
+      statusCode:409,code:'ONBOARDING_PROVISIONING_DEPENDENCY_REQUIRED',
+    })
     expect(await service.getTenantSchemaReadiness(root,draft.draftId)).toMatchObject({
       step:'tenant_schema_readiness',status:'not_started',attemptCount:0,result:null,startAllowed:true,
     })
@@ -151,8 +172,20 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     })
     expect(await service.getTenantSchemaReadiness(root,draft.draftId)).toEqual(completed)
     expect(await service.runTenantSchemaReadiness(root,draft.draftId)).toEqual(completed)
+    expect(await service.getRuntimeBundleVerification(root,draft.draftId)).toMatchObject({
+      step:'runtime_bundle_verification',status:'not_started',attemptCount:0,result:null,startAllowed:true,
+    })
+    const bundle=await service.runRuntimeBundleVerification(root,draft.draftId)
+    expect(bundle).toMatchObject({
+      step:'runtime_bundle_verification',status:'succeeded',attemptCount:1,errorCode:null,startAllowed:false,
+      result:{bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
+        bundleSha256:expect.stringMatching(/^[0-9a-f]{64}$/),manifestSchemaVersion:2,
+        runtimeStatus:'not_provisioned',published:false},
+    })
+    expect(await service.getRuntimeBundleVerification(root,draft.draftId)).toEqual(bundle)
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toEqual(bundle)
     expect(resolutions).toBe(2)
-    expect(await provisioningRows(meta)).toHaveLength(2)
+    expect(await provisioningRows(meta)).toHaveLength(3)
     const audits=(await meta.query(`SELECT action,metadata FROM admin_audit_log
       WHERE entity_id=$1 ORDER BY id`,[draft.draftId])).rows
     expect(audits).toEqual([
@@ -160,8 +193,63 @@ describe('onboarding runtime binding provisioning ledger',()=>{
       {action:'onboarding.provisioning_step_succeed',metadata:{
         step:'tenant_schema_readiness',schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified',
       }},
+      {action:'onboarding.provisioning_step_succeed',metadata:{
+        step:'runtime_bundle_verification',bundle:'verified',artifact:'pivnik-bonus-app',
+        artifactContract:'tenant-runtime-v1',bundleSha256:bundle.result.bundleSha256,
+        manifestSchemaVersion:2,runtimeStatus:'not_provisioned',published:false,
+      }},
     ])
     expect(JSON.stringify({completed,audits})).not.toMatch(/database.*url|postgres:|password|secret|first_name/i)
+  })
+
+  it('fails closed on a tampered artifact contract and safely retries the same bundle',async()=>{
+    const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Bundle retry')
+    let tamper=true
+    const service=createOnboardingProvisioningService({
+      metadata:database(meta),resolveTargetDatabase:async()=>database(tenant),
+      assembleRuntimeBundle:manifest=>{
+        const bundle=createSpaceverseRuntimeBundle(manifest)
+        return tamper?{...bundle,bundleSha256:'0'.repeat(64)}:bundle
+      },
+    })
+    await service.runRuntimeDatabaseBinding(root,draft.draftId)
+    await service.runTenantSchemaReadiness(root,draft.draftId)
+    const rejected=await service.runRuntimeBundleVerification(root,draft.draftId)
+    expect(rejected).toMatchObject({
+      status:'action_required',attemptCount:1,errorCode:'RUNTIME_ARTIFACT_INCOMPATIBLE',result:null,startAllowed:true,
+    })
+    tamper=false
+    const recovered=await service.runRuntimeBundleVerification(root,draft.draftId)
+    expect(recovered).toMatchObject({
+      status:'succeeded',attemptCount:2,errorCode:null,result:{bundle:'verified',runtimeStatus:'not_provisioned',published:false},
+    })
+    expect(JSON.stringify({rejected,recovered,rows:await provisioningRows(meta)}))
+      .not.toMatch(/postgres:|password|secret|databaseUrl|SPACEVERSE_RUNTIME_MANIFEST_JSON/i)
+  })
+
+  it('lets one active lease assemble the bundle when the operator double clicks',async()=>{
+    const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Bundle double click')
+    let releaseResolver!:()=>void
+    const gate=new Promise<void>(resolve=>{releaseResolver=resolve})
+    let assemblies=0
+    const service=createOnboardingProvisioningService({
+      metadata:database(meta),resolveTargetDatabase:async()=>database(tenant),
+      assembleRuntimeBundle:async manifest=>{assemblies++;await gate;return createSpaceverseRuntimeBundle(manifest)},
+    })
+    await service.runRuntimeDatabaseBinding(root,draft.draftId)
+    await service.runTenantSchemaReadiness(root,draft.draftId)
+    const first=service.runRuntimeBundleVerification(root,draft.draftId)
+    for(let attempt=0;attempt<50;attempt++) {
+      const rows=await provisioningRows(meta)
+      if(rows.some(row=>row.step==='runtime_bundle_verification'&&row.status==='running'))break
+      await new Promise(resolve=>setTimeout(resolve,2))
+    }
+    const second=await service.runRuntimeBundleVerification(root,draft.draftId)
+    expect(second).toMatchObject({status:'running',attemptCount:1,result:null,startAllowed:false})
+    expect(assemblies).toBe(1)
+    releaseResolver()
+    expect(await first).toMatchObject({status:'succeeded',attemptCount:1,result:{bundle:'verified'}})
+    expect(assemblies).toBe(1)
   })
 
   it('reports fixed actions for an incomplete schema and unowned historical data',async()=>{
@@ -319,6 +407,11 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     expect(await service.runTenantSchemaReadiness(root,b.draftId)).toMatchObject({
       status:'succeeded',runtimeKey:b.tenantKey,scope:{companyId:'10',venueId:b.venueId},
     })
-    expect(await provisioningRows(meta)).toHaveLength(4)
+    const bundleA=await service.runRuntimeBundleVerification(root,a.draftId)
+    const bundleB=await service.runRuntimeBundleVerification(root,b.draftId)
+    expect(bundleA).toMatchObject({status:'succeeded',runtimeKey:a.tenantKey,scope:{companyId:'10',venueId:a.venueId}})
+    expect(bundleB).toMatchObject({status:'succeeded',runtimeKey:b.tenantKey,scope:{companyId:'10',venueId:b.venueId}})
+    expect(bundleA.result.bundleSha256).not.toBe(bundleB.result.bundleSha256)
+    expect(await provisioningRows(meta)).toHaveLength(6)
   })
 })

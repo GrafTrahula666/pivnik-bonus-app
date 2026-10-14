@@ -54,7 +54,7 @@ describe('server-owned resumable workflow on canonical scope',()=>{
   await state.db!.exec(await fs.readFile(new URL('../../admin-migrations/012_onboarding_progress.sql',import.meta.url),'utf8'))
   expect((await state.db!.query('SELECT * FROM wallets')).rows).toEqual(before.rows)
  })
- it('derives provisioning progress from both binding and schema readiness ledgers',async()=>{
+ it('derives provisioning progress from binding, schema and runtime bundle ledgers',async()=>{
   const source=(await state.db!.query<{tenant_key:string;application_revision:number;company_id:string;venue_id:string}>(`SELECT
     app.tenant_key,app.revision AS application_revision,scope.company_id::text,scope.venue_id::text
     FROM admin_onboarding_app_configs app JOIN admin_onboarding_scopes scope ON scope.draft_id=app.draft_id
@@ -83,9 +83,20 @@ describe('server-owned resumable workflow on canonical scope',()=>{
   ])
   const ready=await (await call('owner','GET',path())).json()
   expect(ready.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({
-    status:'pending',code:'schema_ready_runtime_pending',
+    status:'pending',code:'runtime_bundle_pending',
   })
   expect(ready).toMatchObject({runtimeStatus:'not_provisioned',published:false})
+  await state.db!.query(`INSERT INTO admin_onboarding_provisioning_steps(
+    draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,status,attempt_count,result)
+    VALUES($1::uuid,'runtime_bundle_verification',$2,$3,$4,$5::bigint,$6::bigint,'succeeded',1,$7::jsonb)`,[
+    ...common,JSON.stringify({bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
+      bundleSha256:'b'.repeat(64),manifestSchemaVersion:2,runtimeStatus:'not_provisioned',published:false}),
+  ])
+  const bundled=await (await call('owner','GET',path())).json()
+  expect(bundled.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({
+    status:'pending',code:'runtime_bundle_ready_launch_pending',
+  })
+  expect(bundled).toMatchObject({runtimeStatus:'not_provisioned',published:false,requiresAttention:true})
  })
  it('saved terminal/modules/checkpoint never imply a provisioned app or a zero report',async()=>{
   const before=await call('owner','GET',path());expect(before.status).toBe(200)

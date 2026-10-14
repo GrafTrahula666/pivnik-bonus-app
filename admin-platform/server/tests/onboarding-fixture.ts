@@ -7,7 +7,7 @@ export async function onboardingFixture() {
   const db=new PGlite()
   await db.exec(`CREATE TABLE bars(id BIGINT PRIMARY KEY,code TEXT,name TEXT,address TEXT);
     INSERT INTO bars VALUES(1,'pivnik','ПИВНИК','Тестовый адрес');`)
-  for(const file of ['001_admin_core.sql','002_configuration_foundation.sql','003_phase_c_write_safety.sql','004_onboarding_drafts.sql','005_onboarding_app_config.sql','006_onboarding_scope.sql','007_onboarding_invites.sql','008_onboarding_invite_claims.sql','009_onboarding_integrations.sql','010_onboarding_provisioning.sql','011_onboarding_invitation_access.sql','012_onboarding_progress.sql','013_onboarding_schema_readiness.sql']) {
+  for(const file of ['001_admin_core.sql','002_configuration_foundation.sql','003_phase_c_write_safety.sql','004_onboarding_drafts.sql','005_onboarding_app_config.sql','006_onboarding_scope.sql','007_onboarding_invites.sql','008_onboarding_invite_claims.sql','009_onboarding_integrations.sql','010_onboarding_provisioning.sql','011_onboarding_invitation_access.sql','012_onboarding_progress.sql','013_onboarding_schema_readiness.sql','014_onboarding_runtime_bundle.sql']) {
     await db.exec(await fs.readFile(new URL('../../admin-migrations/'+file,import.meta.url),'utf8'))
   }
   const passwordHash=hashPassword(fixturePassword)

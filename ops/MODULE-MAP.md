@@ -171,6 +171,25 @@ until binding succeeds, then restores/retries the server ledger. The shared
 `onboarding-workflow.ts` projection reports schema pending/error/ready while
 keeping runtime `not_provisioned` and publication false.
 
+The third fixed step, `runtime_bundle_verification`, also uses that ledger and
+is added by manual additive admin migration
+`014_onboarding_runtime_bundle.sql`. It is locked until schema readiness
+succeeds. The shared `spaceverse-runtime-manifest.js` now builds and strictly
+parses one deterministic, non-secret bundle contract for the existing
+`pivnik-bonus-app` artifact and its two server entrypoints (`server.js` and
+`universal-server.js`). The bundle checksum covers the canonical manifest plus
+the `tenant-runtime-v1` compatibility contract; it is not a hash or signature
+of deployed binaries. The server reconstructs the tenant environment from the
+verified bundle and persists only its safe checksum/contract/result summary.
+The Admin Docker build now copies the same shared manifest module instead of
+depending on a file absent from its image. GET/POST accept no manifest,
+artifact, path, URL or credential from the browser. Lease/retry prevents double
+assembly, a tampered or incompatible candidate fails closed, and an exact
+reopen returns the saved result. Success still records `not_provisioned`,
+`published=false` and no start permission: it does not launch a process, set
+Railway variables, resolve a database credential, build the VK static client or
+attest a deployed release SHA.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already

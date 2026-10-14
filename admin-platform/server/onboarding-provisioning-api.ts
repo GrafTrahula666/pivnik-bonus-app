@@ -44,3 +44,17 @@ export async function runOnboardingTenantSchemaReadiness(admin:AdminPrincipal,dr
   }
   return provisioning.runTenantSchemaReadiness(admin,draftId)
 }
+
+export async function getOnboardingRuntimeBundleVerification(admin:AdminPrincipal,draftId:string) {
+  await requireOnboardingProvisioningAccess(admin)
+  return provisioning.getRuntimeBundleVerification(admin,draftId)
+}
+
+export async function runOnboardingRuntimeBundleVerification(admin:AdminPrincipal,draftId:string,raw:unknown) {
+  await requireOnboardingProvisioningAccess(admin)
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw as Record<string,unknown>).length!==0) {
+    throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID',
+      'Запуск не принимает manifest, artifact, URL или область заведения. Используется сохранённая серверная конфигурация.')
+  }
+  return provisioning.runRuntimeBundleVerification(admin,draftId)
+}
