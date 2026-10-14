@@ -82,6 +82,8 @@ function matchesSource(row:StepRow,source:RuntimeSource):boolean {
 }
 
 function view(source:RuntimeSource,row?:StepRow) {
+  const startAllowed=!row||row.status==='retryable_error'||row.status==='action_required'||
+    (row.status==='running'&&!row.lease_active)
   return {
     draftId:source.draftId,
     step:STEP,
@@ -94,6 +96,10 @@ function view(source:RuntimeSource,row?:StepRow) {
     errorCode:row?.last_error_code??null,
     result:row?.result??null,
     updatedAt:row?.updated_at??null,
+    // The browser must not guess the server lease window from its own clock.
+    // This flag exposes no target details and permits a retry only when claim()
+    // would actually be allowed to reclaim the same idempotent step.
+    startAllowed,
   }
 }
 

@@ -13,6 +13,7 @@ process.env.ADMIN_PRODUCTION_WRITE_DATABASE_URL=''
 process.env.ADMIN_ENABLE_WRITES='true'
 process.env.ADMIN_ENABLE_ONBOARDING_DRAFTS='true'
 process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='true'
+process.env.ADMIN_ENABLE_ONBOARDING_PROVISIONING='true'
 process.env.ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID='e2e-v1'
 process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'e2e-v1':Buffer.alloc(32,9).toString('base64')})
 process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS=process.env.SPACEVERSE_E2E_INVITATIONS==='true'?'true':'false'

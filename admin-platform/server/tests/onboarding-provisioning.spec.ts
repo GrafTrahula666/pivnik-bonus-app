@@ -93,10 +93,10 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     })
     expect(await service.getRuntimeDatabaseBinding(root,draft.draftId)).toMatchObject({
       draftId:draft.draftId,runtimeKey:draft.tenantKey,status:'not_started',attemptCount:0,
-      scope:{companyId:'10',venueId:draft.venueId},result:null,errorCode:null,
+      scope:{companyId:'10',venueId:draft.venueId},result:null,errorCode:null,startAllowed:true,
     })
     const completed=await service.runRuntimeDatabaseBinding(root,draft.draftId)
-    expect(completed).toMatchObject({status:'succeeded',attemptCount:1,errorCode:null,result:{binding:'created'}})
+    expect(completed).toMatchObject({status:'succeeded',attemptCount:1,errorCode:null,result:{binding:'created'},startAllowed:false})
     const binding=(await tenant.query(`SELECT runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
       FROM spaceverse_runtime_binding`)).rows
     expect(binding).toEqual([{
@@ -130,7 +130,7 @@ describe('onboarding runtime binding provisioning ledger',()=>{
       await new Promise(resolve=>setTimeout(resolve,2))
     }
     const second=await service.runRuntimeDatabaseBinding(root,draft.draftId)
-    expect(second).toMatchObject({status:'running',attemptCount:1,result:null})
+    expect(second).toMatchObject({status:'running',attemptCount:1,result:null,startAllowed:false})
     expect(resolutions).toBe(1)
     releaseResolver()
     expect(await first).toMatchObject({status:'succeeded',attemptCount:1,result:{binding:'created'}})
@@ -153,6 +153,9 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     await meta.query(`UPDATE admin_onboarding_provisioning_steps SET status='running',attempt_count=2,
       lease_token=$2::uuid,lease_expires_at=NOW()-INTERVAL '1 second',last_error_code=NULL,result=NULL
       WHERE draft_id=$1::uuid`,[draft.draftId,crypto.randomUUID()])
+    expect(await service.getRuntimeDatabaseBinding(root,draft.draftId)).toMatchObject({
+      status:'running',attemptCount:2,startAllowed:true,
+    })
     const reclaimed=await service.runRuntimeDatabaseBinding(root,draft.draftId)
     expect(reclaimed).toMatchObject({status:'succeeded',attemptCount:3,result:{binding:'verified_existing'}})
     expect((await tenant.query('SELECT COUNT(*)::integer AS count FROM spaceverse_runtime_binding')).rows[0]).toEqual({count:1})
@@ -167,7 +170,7 @@ describe('onboarding runtime binding provisioning ledger',()=>{
     const targets=new Map<string,Pick<Pool,'connect'>|null>([[conflictDraft.tenantKey,database(conflicting)]])
     const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async key=>targets.get(key)??null})
     const conflict=await service.runRuntimeDatabaseBinding(root,conflictDraft.draftId)
-    expect(conflict).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_BINDING_CONFLICT'})
+    expect(conflict).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_BINDING_CONFLICT',startAllowed:true})
     expect((await conflicting.query('SELECT runtime_key FROM spaceverse_runtime_binding')).rows).toEqual([{runtime_key:'sv-'+'f'.repeat(32)}])
 
     const schemaDraft=await preparedDraft(meta,'Schema missing')

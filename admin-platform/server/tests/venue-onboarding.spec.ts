@@ -351,7 +351,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     const application=await (await request('root','GET','/'+draft.id+'/application')).json() as {application:{tenantKey:string}}
     const path=provisioningPath(draft.id)
     expect(await (await request('root','GET',path)).json()).toMatchObject({
-      draftId:draft.id,runtimeKey:application.application.tenantKey,status:'not_started',attemptCount:0,
+      draftId:draft.id,runtimeKey:application.application.tenantKey,status:'not_started',attemptCount:0,startAllowed:true,
     })
     expect((await request('owner','GET',path)).status).toBe(403)
     expect((await request('other-root','GET',path)).status).toBe(404)
@@ -361,7 +361,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect((await state.db!.query('SELECT * FROM admin_onboarding_provisioning_steps')).rows).toEqual([])
 
     const missing=await (await request('root','POST',path+'/run',{})).json()
-    expect(missing).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_DATABASE_NOT_REGISTERED'})
+    expect(missing).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_DATABASE_NOT_REGISTERED',startAllowed:true})
 
     const target=new PGlite()
     for(const file of ['017_spaceverse_runtime_binding.sql','018_spaceverse_runtime_scope_binding.sql']) {
@@ -369,7 +369,7 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     }
     state.targets.set(application.application.tenantKey,target)
     const completed=await (await request('root','POST',path+'/run',{})).json() as {manifestSha256:string;scope:{companyId:string;venueId:string}}
-    expect(completed).toMatchObject({status:'succeeded',attemptCount:2,errorCode:null,result:{binding:'created'}})
+    expect(completed).toMatchObject({status:'succeeded',attemptCount:2,errorCode:null,result:{binding:'created'},startAllowed:false})
     expect(await (await request('root','GET',path)).json()).toEqual(completed)
     expect((await target.query(`SELECT runtime_key,manifest_sha256,company_id,venue_id,status
       FROM spaceverse_runtime_binding`)).rows).toEqual([{

@@ -49,6 +49,31 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await expect(page.getByLabel('Название заведения',{exact:true})).toBeDisabled()
   await expect(page.getByText('ID '+prepared.company.id+' · создана выключенной',{exact:true})).toBeVisible()
   await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
+  const provisioning=page.getByLabel('Подготовка базы приложения')
+  await expect(provisioning).toBeVisible()
+  await expect(provisioning.getByText('Ожидает запуска',{exact:true})).toBeVisible()
+  await expect(provisioning.getByText('Не запущено · не опубликовано',{exact:true})).toBeVisible()
+  await expect(provisioning.locator('input')).toHaveCount(0)
+  let provisioningPosts=0
+  await page.route('**/provisioning/runtime-database-binding/run',async route=>{
+    if(route.request().method()==='POST') {
+      provisioningPosts++
+      await new Promise(resolve=>setTimeout(resolve,150))
+    }
+    await route.continue()
+  })
+  const provisioningPost=page.waitForResponse(response=>response.url().endsWith('/provisioning/runtime-database-binding/run')&&response.request().method()==='POST')
+  await provisioning.getByRole('button',{name:'Подготовить привязку',exact:true}).dblclick()
+  const provisioningResult=await (await provisioningPost).json() as {status:string;attemptCount:number;errorCode:string;startAllowed:boolean}
+  expect(provisioningResult).toMatchObject({status:'action_required',attemptCount:1,errorCode:'TARGET_DATABASE_NOT_REGISTERED',startAllowed:true})
+  expect(provisioningPosts).toBe(1)
+  expect((await page.request.get('/api/admin/onboarding/drafts/'+created.id+'/provisioning/runtime-database-binding').then(response=>response.json()))).toMatchObject({
+    status:'action_required',attemptCount:1,errorCode:'TARGET_DATABASE_NOT_REGISTERED',startAllowed:true,
+  })
+  await page.unroute('**/provisioning/runtime-database-binding/run')
+  await expect(provisioning.getByText('Нужно действие',{exact:true})).toBeVisible()
+  await expect(provisioning.getByText('Попытка 1',{exact:true})).toBeVisible()
+  await expect(provisioning).toContainText('URL в браузере не вводится')
   const evotor=page.getByLabel('Подключение Эвотора')
   await expect(evotor).toBeVisible()
   await evotor.getByLabel('ID магазина Эвотора',{exact:true}).fill('fixture-'+testInfo.project.name)
@@ -97,6 +122,8 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
   await expect(page.getByText(configured.tenantKey,{exact:true})).toBeVisible()
   await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
+  await expect(page.getByLabel('Подготовка базы приложения').getByText('Нужно действие',{exact:true})).toBeVisible()
+  await expect(page.getByLabel('Подготовка базы приложения').getByText('Попытка 1',{exact:true})).toBeVisible()
   await expect(page.getByLabel('Подключение Эвотора').getByText('Проверено',{exact:true})).toBeVisible()
   await expect(page.getByLabel('Подключение Эвотора').getByText('•••••••• · зашифрован на сервере',{exact:true})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)

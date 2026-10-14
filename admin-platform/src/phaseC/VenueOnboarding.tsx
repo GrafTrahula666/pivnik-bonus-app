@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Check, Copy, Link2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
+import { Building2, Check, Copy, Database, Link2, MapPinned, Plus, RefreshCw, Save, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, type AdminSession } from '../api'
 import './venue-onboarding.css'
 
@@ -88,6 +88,22 @@ interface Integration {
 }
 type IntegrationCommand={requestKey:string;revision:number;storeId:string;token:string}
 interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';expiresAt:string;createdAt:string;revokedAt:string|null;claimedAt:string|null}
+type ProvisioningStatus='not_started'|'running'|'retryable_error'|'action_required'|'succeeded'
+type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'
+interface ProvisioningStep {
+  draftId:string
+  step:'runtime_database_binding'
+  runtimeKey:string
+  manifestSha256:string
+  applicationRevision:number
+  scope:{companyId:string;venueId:string}
+  status:ProvisioningStatus
+  attemptCount:number
+  errorCode:ProvisioningErrorCode|null
+  result:{binding:'created'|'verified_existing'}|null
+  updatedAt:string|null
+  startAllowed:boolean
+}
 const base = '/api/admin/onboarding/drafts'
 const empty = ():OnboardingData=>({companyId:null,companyName:'',venueName:'',address:'',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:''})
 const defaultContract:ApplicationContract={template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}
@@ -186,9 +202,54 @@ function inviteResponse(raw:unknown):Invite {
   return value as Invite
 }
 
+const provisioningErrors:ProvisioningErrorCode[]=[
+  'TARGET_DATABASE_NOT_REGISTERED','TARGET_BINDING_SCHEMA_REQUIRED','TARGET_BINDING_CONFLICT',
+  'TARGET_DATABASE_UNAVAILABLE','TARGET_CONFIRMATION_UNCERTAIN',
+]
+function provisioningResponse(raw:unknown):ProvisioningStep {
+  const value=raw as Partial<ProvisioningStep>|null,scope=value?.scope,result=value?.result
+  const allowed=['draftId','step','runtimeKey','manifestSha256','applicationRevision','scope','status','attemptCount','errorCode','result','updatedAt','startAllowed']
+  if(!value||Object.keys(value).some(key=>!allowed.includes(key))||typeof value.draftId!=='string'||value.step!=='runtime_database_binding'||
+    !/^sv-[0-9a-f]{32}$/.test(String(value.runtimeKey))||!/^[0-9a-f]{64}$/.test(String(value.manifestSha256))||
+    !Number.isSafeInteger(value.applicationRevision)||Number(value.applicationRevision)<1||!scope||Object.keys(scope).some(key=>!['companyId','venueId'].includes(key))||
+    typeof scope.companyId!=='string'||typeof scope.venueId!=='string'||!/^[1-9]\d*$/.test(scope.companyId)||!/^[1-9]\d*$/.test(scope.venueId)||
+    !['not_started','running','retryable_error','action_required','succeeded'].includes(String(value.status))||
+    !Number.isSafeInteger(value.attemptCount)||Number(value.attemptCount)<0||typeof value.startAllowed!=='boolean'||
+    !(value.updatedAt===null||typeof value.updatedAt==='string')||!(value.errorCode===null||provisioningErrors.includes(value.errorCode as ProvisioningErrorCode))||
+    !(result===null||(result&&Object.keys(result).length===1&&['created','verified_existing'].includes(String(result.binding))))) {
+    throw new Error('Состояние подготовки базы не подтверждено. Обновите его с сервера.')
+  }
+  const noOutcome=value.errorCode===null&&result===null
+  if((value.status==='not_started'&&(value.attemptCount!==0||value.updatedAt!==null||!value.startAllowed||!noOutcome))||
+    (value.status==='running'&&(Number(value.attemptCount)<1||typeof value.updatedAt!=='string'||!noOutcome))||
+    (['retryable_error','action_required'].includes(String(value.status))&&
+      (Number(value.attemptCount)<1||typeof value.updatedAt!=='string'||!value.errorCode||result!==null||!value.startAllowed))||
+    (value.status==='succeeded'&&(Number(value.attemptCount)<1||typeof value.updatedAt!=='string'||value.errorCode!==null||!result||value.startAllowed))) {
+    throw new Error('Состояние подготовки базы противоречиво. Обновите его с сервера.')
+  }
+  return value as ProvisioningStep
+}
+const provisioningStatusLabel=(value:ProvisioningStep)=>value.status==='not_started'?'Ожидает запуска':
+  value.status==='running'?(value.startAllowed?'Можно продолжить':'Проверяем'):
+  value.status==='retryable_error'?'Ошибка проверки':value.status==='action_required'?'Нужно действие':'Привязка подготовлена'
+const provisioningGuidance=(value:ProvisioningStep)=>{
+  if(value.status==='not_started')return 'Запуск ещё не выполнялся. Целевая база выбирается только по защищённой серверной регистрации.'
+  if(value.status==='running')return value.startAllowed?'Срок предыдущей попытки истёк. Можно безопасно продолжить тот же шаг.':'Сервер выполняет проверку. Повторный запуск заблокирован, пока действует серверная блокировка.'
+  if(value.status==='succeeded')return value.result?.binding==='verified_existing'?'Существующая точная привязка повторно подтверждена.':'Точная привязка создана в выделенной базе.'
+  const actions:Record<ProvisioningErrorCode,string>={
+    TARGET_DATABASE_NOT_REGISTERED:'Администратору инфраструктуры нужно зарегистрировать выделенную базу для этой точки. URL в браузере не вводится.',
+    TARGET_BINDING_SCHEMA_REQUIRED:'В выделенной базе нужно вручную применить миграции 017 и 018, затем повторить шаг.',
+    TARGET_BINDING_CONFLICT:'Выделенная база уже связана с другой областью. Не перезаписывайте привязку — проверьте защищённый реестр.',
+    TARGET_DATABASE_UNAVAILABLE:'Выделенная база недоступна. Проверьте серверную регистрацию и повторите после восстановления.',
+    TARGET_CONFIRMATION_UNCERTAIN:'Запись могла сохраниться. Повтор безопасно сверит ту же привязку без создания дубля.',
+  }
+  return actions[value.errorCode!]
+}
+
 export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;initialDraftId?:string|null}) {
   const allowed=(session.admin.role==='SUPER_ADMIN'||session.capabilities.onboardingAccess===true)&&session.capabilities.onboardingDrafts===true
   const integrationsAllowed=allowed&&session.capabilities.onboardingIntegrations===true
+  const provisioningAllowed=allowed&&session.capabilities.onboardingProvisioning===true&&session.capabilities.onboardingWrite!==false
   const legacyInvitesAllowed=allowed&&session.admin.role==='SUPER_ADMIN'&&!session.capabilities.onboardingInvitations
   const [index,setIndex]=useState<Index>({drafts:[],companies:[]})
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false)
@@ -206,12 +267,15 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
   const [integrationContract,setIntegrationContract]=useState<IntegrationContract>(defaultIntegrationContract)
   const [integrationLoading,setIntegrationLoading]=useState(false),[integrationBusy,setIntegrationBusy]=useState(false),[integrationUncertain,setIntegrationUncertain]=useState(false)
   const [integrationError,setIntegrationError]=useState(''),[integrationNotice,setIntegrationNotice]=useState('')
+  const [provisioning,setProvisioning]=useState<ProvisioningStep|null>(null)
+  const [provisioningLoading,setProvisioningLoading]=useState(false),[provisioningBusy,setProvisioningBusy]=useState(false),[provisioningUncertain,setProvisioningUncertain]=useState(false)
+  const [provisioningError,setProvisioningError]=useState(''),[provisioningNotice,setProvisioningNotice]=useState('')
   const [invites,setInvites]=useState<Invite[]>([]),[inviteLoading,setInviteLoading]=useState(false),[inviteBusy,setInviteBusy]=useState(false)
   const [inviteError,setInviteError]=useState(''),[inviteToken,setInviteToken]=useState('')
   const [inviteCopied,setInviteCopied]=useState(false)
   const command=useRef<Command|null>(null),appCommand=useRef<ApplicationCommand|null>(null),scopeCommand=useRef<ScopeCommand|null>(null),integrationCommand=useRef<IntegrationCommand|null>(null),createKey=useRef('')
-  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),integrationBusyRef=useRef(false),inviteBusyRef=useRef(false)
-  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),integrationSequence=useRef(0),inviteSequence=useRef(0)
+  const busyRef=useRef(false),appBusyRef=useRef(false),scopeBusyRef=useRef(false),integrationBusyRef=useRef(false),provisioningBusyRef=useRef(false),inviteBusyRef=useRef(false)
+  const sequence=useRef(0),appSequence=useRef(0),scopeSequence=useRef(0),integrationSequence=useRef(0),provisioningSequence=useRef(0),inviteSequence=useRef(0)
   const checkpoint=`spaceverse:onboarding:create:${session.admin.id}`
   function clearCheckpoint() {
     // An already confirmed server save stays successful even if tab storage becomes unavailable.
@@ -261,6 +325,18 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     } catch(error) {if(run===inviteSequence.current)setInviteError(message(error))}
     finally {if(run===inviteSequence.current)setInviteLoading(false)}
   },[legacyInvitesAllowed])
+  const loadProvisioning=useCallback(async(draft:Draft)=>{
+    if(!provisioningAllowed)return
+    const run=++provisioningSequence.current
+    setProvisioningLoading(true);setProvisioningError('')
+    try {
+      const saved=provisioningResponse(await apiGet(base+'/'+draft.id+'/provisioning/runtime-database-binding'))
+      if(run!==provisioningSequence.current)return
+      if(saved.draftId!==draft.id)throw new Error('Подготовка базы относится к другому черновику.')
+      setProvisioning(saved);setProvisioningUncertain(false)
+    } catch(error) {if(run===provisioningSequence.current)setProvisioningError(message(error))}
+    finally {if(run===provisioningSequence.current)setProvisioningLoading(false)}
+  },[provisioningAllowed])
   const loadScope=useCallback(async(draft:Draft)=>{
     const run=++scopeSequence.current
     setScopeLoading(true);setScopeError('')
@@ -271,10 +347,10 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       if(run!==scopeSequence.current)return
       if(saved&&saved.draftId!==draft.id)throw new Error('Область относится к другому черновику.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
-      if(saved) {void loadInvites(draft);void loadIntegration(draft)}
+      if(saved) {void loadInvites(draft);void loadIntegration(draft);void loadProvisioning(draft)}
     } catch(error) {if(run===scopeSequence.current)setScopeError(message(error))}
     finally {if(run===scopeSequence.current)setScopeLoading(false)}
-  },[loadIntegration,loadInvites])
+  },[loadIntegration,loadInvites,loadProvisioning])
   const showDraft=useCallback((draft:Draft)=>{
     setCurrent(draft);setData(draft.data);setEditing(true);command.current=null
     setUncertain(false);setError('');setNotice('Черновик сохранён. Заведение ещё не подключено.')
@@ -283,6 +359,7 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
     setIntegration(null);setIntegrationStoreId('');setIntegrationToken('');setIntegrationContract(defaultIntegrationContract)
     setIntegrationError('');setIntegrationNotice('');setIntegrationUncertain(false);integrationCommand.current=null
+    setProvisioning(null);setProvisioningError('');setProvisioningNotice('');setProvisioningUncertain(false)
     setInvites([]);setInviteError('');setInviteToken('')
     void loadApplication(draft);void loadScope(draft)
   },[loadApplication,loadScope])
@@ -314,8 +391,9 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
 
   const invalidateAppLoads=useCallback(()=>{appSequence.current++},[])
   const invalidateIntegrationLoads=useCallback(()=>{integrationSequence.current++},[])
+  const invalidateProvisioningLoads=useCallback(()=>{provisioningSequence.current++},[])
   const invalidateInviteLoads=useCallback(()=>{inviteSequence.current++},[])
-  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++;invalidateIntegrationLoads();invalidateInviteLoads()},[invalidateIntegrationLoads,invalidateInviteLoads])
+  const invalidateScopeLoads=useCallback(()=>{scopeSequence.current++;invalidateIntegrationLoads();invalidateProvisioningLoads();invalidateInviteLoads()},[invalidateIntegrationLoads,invalidateInviteLoads,invalidateProvisioningLoads])
   const invalidateLoads=useCallback(()=>{sequence.current++;invalidateAppLoads();invalidateScopeLoads()},[invalidateAppLoads,invalidateScopeLoads])
 
   useEffect(()=>{
@@ -330,6 +408,12 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     return ()=>clearTimeout(timer)
   },[inviteCopied])
 
+  useEffect(()=>{
+    if(!provisioningAllowed||!current||provisioning?.status!=='running'||provisioning.startAllowed||provisioningBusy)return
+    const timer=setTimeout(()=>void loadProvisioning(current),2000)
+    return ()=>clearTimeout(timer)
+  },[current,loadProvisioning,provisioning,provisioningAllowed,provisioningBusy])
+
   function begin() {
     if(busyRef.current) return
     try {createKey.current=sessionStorage.getItem(checkpoint)||crypto.randomUUID()}
@@ -339,10 +423,11 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
     setScope(null);setScopeError('');setScopeNotice('');setScopeUncertain(false);scopeCommand.current=null
     setIntegration(null);setIntegrationStoreId('');setIntegrationToken('');setIntegrationContract(defaultIntegrationContract)
     setIntegrationError('');setIntegrationNotice('');setIntegrationUncertain(false);integrationCommand.current=null
+    setProvisioning(null);setProvisioningError('');setProvisioningNotice('');setProvisioningUncertain(false)
     setInvites([]);setInviteError('');setInviteToken('')
   }
   async function open(id:string) {
-    if(busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current) return
+    if(busyRef.current||appBusyRef.current||scopeBusyRef.current||integrationBusyRef.current||provisioningBusyRef.current) return
     busyRef.current=true;setBusy(true);setError('')
     try {showDraft(draftResponse(await apiGet(base+'/'+id)))}
     catch(error) {setError(message(error))}
@@ -394,12 +479,25 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       if(saved.draftId!==current.id)throw new Error('Сервер вернул область другого черновика.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
       setScopeNotice('Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.')
-      void loadInvites(current);void loadIntegration(current)
+      void loadInvites(current);void loadIntegration(current);void loadProvisioning(current)
     } catch(error) {
       setScopeError(message(error))
       if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408){scopeCommand.current=null;setScopeUncertain(false)}
       else setScopeUncertain(true)
     } finally {scopeBusyRef.current=false;setScopeBusy(false)}
+  }
+  async function startProvisioning() {
+    if(!canWrite||!provisioningAllowed||!current||!scope||!provisioning?.startAllowed||provisioningBusyRef.current)return
+    provisioningSequence.current++;provisioningBusyRef.current=true;setProvisioningBusy(true);setProvisioningError('');setProvisioningNotice('')
+    try {
+      const saved=provisioningResponse(await apiPost(base+'/'+current.id+'/provisioning/runtime-database-binding/run',{}))
+      if(saved.draftId!==current.id)throw new Error('Сервер вернул подготовку базы другого черновика.')
+      setProvisioning(saved);setProvisioningUncertain(false);setProvisioningNotice(provisioningGuidance(saved))
+    } catch(error) {
+      setProvisioningError(message(error))
+      if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408)setProvisioningUncertain(false)
+      else setProvisioningUncertain(true)
+    } finally {provisioningBusyRef.current=false;setProvisioningBusy(false)}
   }
   async function saveIntegration() {
     if(!canWrite||!integrationsAllowed||!current||!scope||integrationBusyRef.current||busyRef.current||scopeBusyRef.current)return
@@ -469,6 +567,9 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
   const draftDirty=Boolean(current)&&JSON.stringify(data)!==JSON.stringify(current?.data)
   const appDirty=Boolean(application)&&JSON.stringify(appData)!==JSON.stringify(application?.config)
   const integrationDirty=Boolean(integration)&&(integrationStoreId!==integration?.storeId||Boolean(integrationToken))
+  const provisioningButtonLabel=provisioningBusy?'Проверяем…':provisioningUncertain?'Сначала обновите состояние':!provisioning?'Загрузите состояние':
+    provisioning.status==='not_started'?'Подготовить привязку':provisioning.status==='running'?(provisioning.startAllowed?'Продолжить подготовку':'Подготовка выполняется…'):
+    provisioning.status==='action_required'?'Повторить после исправления':provisioning.status==='retryable_error'?'Повторить подготовку':'Привязка подготовлена'
 
   return <section className="card onboarding" aria-label="Подключение заведений">
     <div className="onboarding-head">
@@ -503,8 +604,8 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
       </fieldset>
       <div className="onboarding-actions">
         <button className="btn" type="submit" disabled={!canWrite||busy||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}><Save size={16}/>{scope?'Область зафиксирована':busy?'Сохраняем…':uncertain?'Повторить сохранение':'Сохранить черновик'}</button>
-        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy||integrationBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
-        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('')}}>Закрыть</button>
+        <button className="btn secondary" type="button" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy} onClick={()=>current?void open(current.id):void load(true)}><RefreshCw size={16}/>Открыть сохранённую версию</button>
+        <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain||provisioningBusy||provisioningUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('');setProvisioningError('');setProvisioningNotice('')}}>Закрыть</button>
       </div>
     </form>}
     {editing&&current&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
@@ -548,6 +649,23 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
       </div>
     </section>}
+    {editing&&current&&scope&&<section className="onboarding-provisioning" aria-label="Подготовка базы приложения">
+      <div className="onboarding-step"><Database size={18}/><b>База приложения</b><span>{provisioningAllowed?(provisioning?provisioningStatusLabel(provisioning):provisioningLoading?'Загружаем…':'Состояние недоступно'):'Недоступно в этой среде'}</span></div>
+      {!provisioningAllowed?<p className="onboarding-note">Серверная подготовка выключена или недоступна для этой учётной записи. Область и остальные необязательные шаги остаются сохранены.</p>:<>
+        {provisioningError&&<div className="onboarding-feedback error" role="alert">{provisioningError}</div>}
+        {provisioningNotice&&<p className="onboarding-feedback" role="status">{provisioningNotice}</p>}
+        {provisioning&&<div className="onboarding-contract" aria-label="Статус подготовки базы">
+          <div><ShieldCheck size={17}/><span><b>Состояние</b><small>{provisioningGuidance(provisioning)}</small></span></div>
+          <div><span><b>Попытки</b><small>{provisioning.attemptCount===0?'Запусков ещё не было':'Попытка '+provisioning.attemptCount}</small></span></div>
+          <div><span><b>Приложение</b><small>Не запущено · не опубликовано</small></span></div>
+        </div>}
+        <p className="onboarding-note">Шаг создаёт или сверяет только точную привязку уже подготовленной выделенной базы. Он не создаёт базу, не запускает миграции, не включает заведение и не публикует приложение.</p>
+        <div className="onboarding-actions">
+          <button className="btn" type="button" disabled={!canWrite||provisioningBusy||provisioningLoading||provisioningUncertain||!provisioning?.startAllowed} onClick={()=>void startProvisioning()}><Database size={16}/>{provisioningButtonLabel}</button>
+          <button className="btn secondary" type="button" disabled={provisioningBusy||provisioningLoading} onClick={()=>void loadProvisioning(current)}><RefreshCw size={16}/>Обновить состояние</button>
+        </div>
+      </>}
+    </section>}
     {editing&&current&&scope&&<form className="onboarding-integration" aria-label="Подключение Эвотора" onSubmit={event=>{event.preventDefault();void saveIntegration()}}>
       <div className="onboarding-step"><Link2 size={18}/><b>Касса · Эвотор</b><span>{integrationsAllowed?integrationStatusLabel(integration):'Недоступно в этой среде'}</span></div>
       {!integrationsAllowed?<p className="onboarding-note">Защищённые подключения выключены. Черновик и остальные шаги можно продолжить без кассы.</p>:<>
@@ -589,12 +707,12 @@ export function VenueOnboarding({session,initialDraftId}:{session:AdminSession;i
         {invite.status==='pending'&&<button className="btn secondary" disabled={inviteBusy||inviteLoading} onClick={()=>void revokeInvite(invite.id)} aria-label="Отозвать ссылку"><XCircle size={16}/>Отозвать</button>}
       </li>)}</ul>}
     </section>}
-    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
+    <div className="onboarding-list-head"><b>Черновики подключения</b><button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||loading} onClick={()=>void load()}><RefreshCw size={14}/>Обновить</button></div>
     {loading?<p role="status">Загружаем черновики…</p>:<>
       {!index.drafts.length&&<p>Сохранённых черновиков пока нет.</p>}
       <ul className="onboarding-list">{index.drafts.map(draft=><li key={draft.id}>
         <div><b>{draft.data.venueName}</b><small>{draft.data.companyName||index.companies.find(company=>company.id===draft.data.companyId)?.name||'Организация недоступна'} · Черновик</small></div>
-        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||uncertain||appUncertain||scopeUncertain||integrationUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
+        <button className="btn secondary" disabled={busy||appBusy||scopeBusy||integrationBusy||provisioningBusy||uncertain||appUncertain||scopeUncertain||integrationUncertain||provisioningUncertain} onClick={()=>void open(draft.id)} aria-label={'Открыть черновик '+draft.data.venueName}>Открыть</button>
       </li>)}</ul>
       {index.drafts.length===50&&<small>Показаны последние 50 черновиков.</small>}
     </>}
