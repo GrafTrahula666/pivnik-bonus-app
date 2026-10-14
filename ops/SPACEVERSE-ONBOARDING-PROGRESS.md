@@ -4,7 +4,7 @@
 
 - Ветка: `spaceverse/venue-onboarding`; один связанный draft PR #273, открыт; reviews/threads отсутствуют. Mergeability перепроверять после публикации нового HEAD.
 - Проверенный свежий base: `3d3d1935f6885f6dca49ceb59d55e7af9118096a` (main, получен 2026-10-13; включает merged PR #235/#238/#250). Он влит в рабочую ветку merge-коммитом `e6678123f0f37ccd826e5ac0e5dd11975bfa7855` без конфликтов; оба POS mount, wallet-route extraction и tenant preflight сохранены.
-- Последний опубликованный implementation HEAD: `d3f48cc5722f49fa349f8eab471db67617fb3f1a`, tree `b605619c3ce3904a279ab202c8e01900790db3c8`, parent `563632cd191fe8ee7920521e3aed0b6ffb1c099d`. Он подключает существующий status/start API к текущему мастеру и не меняет production. Итоговый docs/PR HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
+- Свежий опубликованный HEAD рабочей ветки перед этой итерацией: `1d9c0ed97e3b2f350d217cfdf8c62a6550291ddf`. Он добавляет серверные статусы/сохранённый шаг мастера поверх ранее опубликованного status/start UI; изменения сохранены при rebase. Текущий кандидат добавляет read-only готовность схемы опубликованными объектами `d290748950689ab302dba0b86a7db73d19ad8166` и `8233f54826a144ed444f15f158a53d7011344185`; итоговый docs/PR HEAD нужно читать из GitHub/`git rev-parse` после публикации журнала.
 - Связанный PR искать по head `spaceverse/venue-onboarding`; его CI должен соответствовать текущему опубликованному SHA, а не старому прогону.
 - Текущий HEAD нужно читать из GitHub/`git rev-parse HEAD`, не считать этот исходный SHA актуальным main.
 - Основной checkout `verify/trusted-director-release-20261011` с чужими изменениями сохранён. Работа идёт в отдельном worktree.
@@ -15,7 +15,7 @@
 1. **Данные заведения, серверный черновик, повторное открытие** — реализовано и проверено в изолированном окружении.
 2. **Принадлежность tenant и конфигурация guest-приложения** — серверный blueprint, стабильный tenant ID, канонические неактивные company/venue и runtime manifest v2 реализованы. Manifest получает company/venue только из сохранённого scope; выделенная БД обязана подтвердить те же ID и checksum. Dashboard reads, запись новых transactions, чтение customer/wallet и атомарное создание нового customer/identity/wallet/ownership принимают только проверенный server runtime и повторно связывают SQL с той же выделенной БД. Customer/wallet доступны лишь через явную ownership-строку точного runtime/company/venue; исторические строки ПИВНИКА невидимы и не присваиваются новому tenant. Общий Telegram/VK auth/wallet HTTP adapter подключён в обоих runtime только за существующим startup guard; manifest остаётся `not_provisioned`, поэтому tenant-запуск намеренно закрыт.
 3. **Зашифрованные подключения и реальные проверки Telegram/VK/Эвотора** — первый вертикальный срез Эвотора реализован: зашифрованное хранение, маска и реальная проверка чтения документов через существующий адаптер. POS binding/import не включены; Telegram/VK и живая авторизация владельца ещё предстоят.
-4. **Возобновляемое создание ресурсов из того же релизного артефакта** — первый исполняемый шаг реализован: серверный ledger с lease/claim/retry, защищённый registry `runtime key → credential env reference`, creator/scoped status/start API, UI-запуск с reload/recovery и идемпотентная фиксация exact runtime binding в уже подготовленной выделенной БД. Остальные шаги provisioning ещё предстоят; runtime остаётся выключен.
+4. **Возобновляемое создание ресурсов из того же релизного артефакта** — два фиксированных шага реализованы в одном серверном ledger с lease/claim/retry и тем же защищённым registry: идемпотентная фиксация exact runtime binding и следующая read-only проверка tenant-схемы/ownership. Оба имеют creator/scoped status/start API и UI recovery после reload; миграции не применяются автоматически, runtime остаётся выключен.
 5. **Приглашения и гибкие права** — одноразовые scoped-приглашения owner/manager/viewer, принятие в существующую или новую `VENUE_ADMIN` учётную запись, отзыв и продолжение сохранённого мастера реализованы. Более узкие полномочия сотрудников и реальная отправка приглашений ещё предстоят.
 6. **Полный сценарий, доказательство изоляции, пакет выпуска/rollback** — предстоит.
 
@@ -77,7 +77,7 @@
 
 ## Включение в изолированном окружении
 
-- Additive migrations: `admin-platform/admin-migrations/004_onboarding_drafts.sql`, `005_onboarding_app_config.sql`, `006_onboarding_scope.sql`, `009_onboarding_integrations.sql` и `010_onboarding_provisioning.sql`. Нет запуска из `server/index.ts` и нет изменения исторических миграций. 005 применяется после 004; 006 — после обеих; 009 создаёт только зашифрованное хранилище одного provider; 010 — пустой ledger фиксированного provisioning-шагa без DML, DB credentials или внешних ресурсов. Само выделение неактивных company/venue выполняет защищённый API после явного действия.
+- Additive migrations: `admin-platform/admin-migrations/004_onboarding_drafts.sql`, `005_onboarding_app_config.sql`, `006_onboarding_scope.sql`, `009_onboarding_integrations.sql`, `010_onboarding_provisioning.sql`, `012_onboarding_progress.sql` и `013_onboarding_schema_readiness.sql`. Нет запуска из `server/index.ts` и нет изменения исторических миграций. 005 применяется после 004; 006 — после обеих; 009 создаёт только зашифрованное хранилище одного provider; 010 — пустой ledger фиксированного provisioning-шагa; 012 — серверный прогресс мастера; 013 только разрешает второй фиксированный шаг в том же ledger. В них нет tenant DML, DB credentials или внешних ресурсов. Само выделение неактивных company/venue выполняет защищённый API после явного действия.
 - Migrations 009 и 017–020 не входят в automatic startup allowlist. 009 только добавляет nullable tenant/location к новым transactions без backfill; 018 добавляет к будущей binding-таблице только company/venue ID и проверки формата; 019 создаёт ownership-таблицу; 020 — idempotency ledger без provider/profile данных. В них нет DML/backfill и они не меняют существующие `users`/`wallets`/`user_identities`. Применение допустимо только вручную к новой выделенной тестовой БД; в общей исторической БД ПИВНИКА этот шаг не нужен и не разрешён.
 - Только после подготовки изолированной metadata-БД: `ADMIN_ENABLE_WRITES=true` и `ADMIN_ENABLE_ONBOARDING_DRAFTS=true`. Подключения требуют отдельный выключенный по умолчанию `ADMIN_ENABLE_ONBOARDING_INTEGRATIONS=true`, `ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID` и JSON-keyring `ADMIN_ONBOARDING_SECRET_KEYRING` с 32-байтовыми base64-ключами. Provisioning отдельно требует `ADMIN_ENABLE_ONBOARDING_PROVISIONING=true`, строгую карту `ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON` и по одной защищённой `SPACEVERSE_TENANT_DATABASE_URL_*` на runtime. Без таблицы, ключа или registry entry API fail-closed; остальные шаги мастера продолжают работать.
 - До production-выпуска один и тот же encryption key material должен иметь три независимо защищённые копии: основная sealed-переменная сервиса, зашифрованная резервная копия в управляемом secret manager и offline break-glass копия с отдельным доступом. Они сейчас намеренно не создавались. DB/git/CI/logs не являются хранилищем; старый key ID нельзя удалять до rewrap всех строк и проверенного восстановления из backup.
@@ -111,7 +111,7 @@
 
 ## Следующий безопасный шаг
 
-После зелёного CI добавить второй фиксированный read-only шаг provisioning — проверку готовности tenant-схемы в той же защищённой выделенной БД. Он должен через тот же registry/ledger подтвердить необходимые manual migrations и ownership-границы, но не применять миграции автоматически, не создавать БД, не активировать venue/runtime и не подключать историческую БД. UI должен сохранить те же честные состояния/retry; Telegram/VK оставить «нужно действие» до отдельного официального OAuth/авторизации владельца.
+После зелёного CI добавить следующий ограниченный шаг provisioning: собрать и проверить конфигурацию tenant-runtime из существующего артефакта после успешной schema readiness, но не запускать сервис, не публиковать приложение и не менять Railway. Шаг должен сохранить тот же ledger/retry, сверять exact manifest/checksum и выдавать только проверяемый server-side результат. Telegram/VK оставить «нужно действие» до отдельного официального OAuth/авторизации владельца.
 
 
 ## Продолжение владельческого сценария — 2026-10-13
@@ -492,3 +492,58 @@ Scoped приглашения опубликованы: 94d49e14398e37e2700c7b55
 - прежний onboarding с provider/provisioning UI — 4/4 desktop/mobile, лог onboarding-e2e.log. Провайдер в fixture синтетический, Chromium /usr/bin/chromium.
 
 E2E первоначально обнаружил реальные accessible-name дефекты поля ID терминала и селекта отчётов; исправлены aria-label/aria-describedby и повтор подтверждён 2/2. Не исправлялись попутные favicon и chunk-size предупреждения. Runbook, MODULE-MAP и STATUS-MODEL обновлены вместе с кодом. Осталось: proxy v2 с X-Pivnik-Device-Key, реальное событие терминала/честная проверка, owner venues list и runtime readiness/внешнее развёртывание. Production, реальные credentials/env/устройства/данные не менялись. /mnt/project-files/owner-panel/progress.md всё ещё read-only; журнал ведётся здесь.
+
+### Шаг 9 — read-only готовность tenant-схемы (2026-10-14)
+
+Работа продолжена поверх свежего опубликованного
+`1d9c0ed97e3b2f350d217cfdf8c62a6550291ddf`; конкурентный серверный progress
+и UI сохранены rebase без force-push. Implementation commits кандидата:
+`d290748950689ab302dba0b86a7db73d19ad8166` (schema readiness) и
+`8233f54826a144ed444f15f158a53d7011344185` (проекция общего progress). Вторая
+фиксированная операция `tenant_schema_readiness` использует тот же
+`admin_onboarding_provisioning_steps`, registry, lease/retry и frozen
+draft/application/scope. Migration 013 только расширяет CHECK существующего
+ledger после 010/012; tenant-схему и данные она не меняет.
+
+После успешного `runtime_database_binding` worker открывает целевую БД через
+server-only registry и выполняет `BEGIN READ ONLY`. Он повторно сверяет exact
+binding, обязательные таблицы/колонки/типы, PK/FK/check/unique boundaries для
+manual root migrations 009 и 017–020. Затем одним агрегированным запросом
+проверяет, что users, identities, wallets, transactions и create-request ledger
+не содержат строк вне exact runtime/company/venue ownership. Количество,
+идентификаторы клиентов и driver text не возвращаются. Неполная схема получает
+`TARGET_TENANT_SCHEMA_REQUIRED`, неподтверждённая принадлежность —
+`TARGET_TENANT_DATA_OWNERSHIP_REQUIRED`, недоступная БД — ограниченно
+повторяемый `TARGET_DATABASE_UNAVAILABLE`. Автоматического backfill/adoption нет.
+
+Creator/scoped GET status и POST run принимают прежнюю signed session и пустой
+`{}`; query/body scope, URL и credentials запрещены. До успешной binding UI
+показывает зависимость и не делает schema request. После неё UI восстанавливает
+ledger, блокирует active lease/double click, разрешает server-authoritative retry
+и различает готовую схему, действие владельца и ошибку. Общая progress projection
+теперь различает `schema_readiness_pending`, fixed failure и
+`schema_ready_runtime_pending`; даже успех оставляет runtime `not_provisioned`,
+приложение неопубликованным.
+
+Фактические локальные проверки объединённого дерева:
+
+- профиль provisioning/onboarding/workflow — 82/82;
+- полный Business — 244 passed, 20 прежних PostgreSQL integration tests skipped
+  без отдельного разрешённого test URL; security — 164/164;
+- typecheck, полный build и lint — success; lint содержит только 12 прежних Fast
+  Refresh warnings, 0 errors; Business audit — 0 vulnerabilities;
+- в чистом detached worktree `npm run materialize` выполнен дважды с одинаковым
+  SHA256 diff `ae50df990f6ef99e163a0ad5c9a965e24ab645ccf2ff59a498202794ecf69a37`
+  (7 файлов, 365 insertions/78 deletions); materialized root — 581/581,
+  `npm run check`, patch-chain audit и root audit — success/0;
+- локальный Playwright после этой итерации не считается пройденным: в окружении
+  нет Chromium headless shell v1193. Точный desktop/mobile результат нужно брать
+  только из CI опубликованного HEAD. PGlite/fixture не выдаются за PostgreSQL
+  concurrency, живую авторизацию провайдера или production.
+
+Факты на границе шага: **есть** сохранённая read-only проверка exact tenant-схемы
+и ownership с честным retry/progress; **нужно сделать** сборку/проверку tenant
+runtime из существующего артефакта, его последующий разрешённый запуск и terminal
+binding; **внешняя авторизация** требуется для реальных Telegram, VK и Эвотора.
+Production/main/Railway, реальные БД, env/secrets, webhook, боты, кассы и данные
+не изменялись.

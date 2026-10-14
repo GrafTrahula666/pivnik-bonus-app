@@ -154,6 +154,23 @@ even success remains explicitly not started and unpublished. The UI accepts no
 database field or credential. This step does not create a database, activate a
 venue/runtime, run tenant migrations automatically or publish an application.
 
+The second fixed step, `tenant_schema_readiness`, stays in the same
+`onboarding-provisioning.ts` service and ledger. Manual additive admin migration
+`013_onboarding_schema_readiness.sql` only extends the ledger step constraint
+after migrations 010/012. It cannot connect to or mutate a tenant database.
+After an exact successful binding, the worker resolves the same server-owned
+target and runs one read-only transaction. It verifies the frozen binding,
+required canonical columns, critical PK/FK/check/unique boundaries from root
+migrations 009 and 017–020, and the absence of customer/wallet/identity/
+transaction/create-request rows outside the exact runtime/company/venue
+ownership boundary. Results and errors are fixed non-sensitive codes; there is
+no row count, identifier, driver text, migration execution, backfill or legacy
+adoption. The scoped GET/POST endpoints reuse the same auth, CSRF, Origin, rate
+limit and empty-command contract. `VenueOnboarding.tsx` keeps the step locked
+until binding succeeds, then restores/retries the server ledger. The shared
+`onboarding-workflow.ts` projection reports schema pending/error/ready while
+keeping runtime `not_provisioned` and publication false.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already
