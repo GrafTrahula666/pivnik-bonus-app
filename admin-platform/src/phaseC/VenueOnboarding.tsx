@@ -93,7 +93,7 @@ interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';
 type ProvisioningStatus='not_started'|'running'|'retryable_error'|'action_required'|'succeeded'
 type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'
 type SchemaReadinessErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_TENANT_SCHEMA_REQUIRED'|'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED'
-type RuntimeBundleErrorCode='RUNTIME_ARTIFACT_INCOMPATIBLE'
+type RuntimeBundleErrorCode='RUNTIME_ARTIFACT_INCOMPATIBLE'|'RUNTIME_RELEASE_NOT_REGISTERED'|'RUNTIME_RELEASE_INVALID'|'RUNTIME_RELEASE_UNAVAILABLE'|'RUNTIME_RELEASE_MISMATCH'
 interface ProvisioningStep {
   draftId:string
   step:'runtime_database_binding'
@@ -139,6 +139,7 @@ interface RuntimeBundleStep {
     bundleSha256:string
     manifestSchemaVersion:2
     runtimeStatus:'not_provisioned'
+    codeRelease?:{sourceSha:string;fingerprint:string;coverage:'node_literal_import_closure';moduleCount:number}
     published:false
   }|null
   updatedAt:string|null
@@ -333,7 +334,11 @@ const schemaReadinessGuidance=(value:SchemaReadinessStep)=>{
 function runtimeBundleResponse(raw:unknown):RuntimeBundleStep {
   const value=raw as Partial<RuntimeBundleStep>|null,scope=value?.scope,result=value?.result
   const allowed=['draftId','step','runtimeKey','manifestSha256','applicationRevision','scope','status','attemptCount','errorCode','result','updatedAt','startAllowed']
-  const validResult=result!==null&&Boolean(result)&&Object.keys(result!).length===7&&result?.bundle==='verified'&&
+  const codeRelease=result?.codeRelease
+  const validRelease=!codeRelease||(Object.keys(codeRelease).length===4&&/^[0-9a-f]{40}$/.test(codeRelease.sourceSha)
+    &&/^[0-9a-f]{64}$/.test(codeRelease.fingerprint)&&codeRelease.coverage==='node_literal_import_closure'
+    &&Number.isSafeInteger(codeRelease.moduleCount)&&codeRelease.moduleCount>=5&&codeRelease.moduleCount<=200)
+  const validResult=result!==null&&Boolean(result)&&Object.keys(result!).length===(codeRelease?8:7)&&validRelease&&result?.bundle==='verified'&&
     result.artifact==='pivnik-bonus-app'&&result.artifactContract==='tenant-runtime-v1'&&
     /^[0-9a-f]{64}$/.test(String(result.bundleSha256))&&result.manifestSchemaVersion===2&&
     result.runtimeStatus==='not_provisioned'&&result.published===false
@@ -343,7 +348,7 @@ function runtimeBundleResponse(raw:unknown):RuntimeBundleStep {
     typeof scope.companyId!=='string'||typeof scope.venueId!=='string'||!/^[1-9]\d*$/.test(scope.companyId)||!/^[1-9]\d*$/.test(scope.venueId)||
     !['not_started','running','retryable_error','action_required','succeeded'].includes(String(value.status))||
     !Number.isSafeInteger(value.attemptCount)||Number(value.attemptCount)<0||typeof value.startAllowed!=='boolean'||
-    !(value.updatedAt===null||typeof value.updatedAt==='string')||!(value.errorCode===null||value.errorCode==='RUNTIME_ARTIFACT_INCOMPATIBLE')||
+    !(value.updatedAt===null||typeof value.updatedAt==='string')||!(value.errorCode===null||['RUNTIME_ARTIFACT_INCOMPATIBLE','RUNTIME_RELEASE_NOT_REGISTERED','RUNTIME_RELEASE_INVALID','RUNTIME_RELEASE_UNAVAILABLE','RUNTIME_RELEASE_MISMATCH'].includes(String(value.errorCode)))||
     !(result===null||validResult)) {
     throw new Error('Состояние runtime bundle не подтверждено. Обновите его с сервера.')
   }
@@ -361,9 +366,11 @@ const runtimeBundleStatusLabel=(value:RuntimeBundleStep)=>value.status==='not_st
   value.status==='running'?(value.startAllowed?'Можно продолжить':'Проверяем'):
   value.status==='retryable_error'?'Ошибка проверки':value.status==='action_required'?'Нужно действие':'Bundle проверен'
 const runtimeBundleGuidance=(value:RuntimeBundleStep)=>{
-  if(value.status==='not_started')return 'Сервер соберёт конфигурационный bundle из сохранённого manifest и проверит контракт существующего артефакта.'
+  if(value.status==='not_started')return 'Сервер проверит сохранённую конфигурацию и утверждённую версию серверных модулей.'
   if(value.status==='running')return value.startAllowed?'Срок предыдущей попытки истёк. Можно безопасно повторить сборку.':'Сервер проверяет checksum и совместимость bundle. Повторный запуск временно заблокирован.'
-  if(value.status==='succeeded')return 'Manifest, checksum bundle и контракт двух server entrypoint подтверждены. Runtime всё ещё не запущен и не опубликован.'
+  if(value.status==='succeeded')return value.result?.codeRelease?'Конфигурация и файлы утверждённой версии подтверждены. Приложение ещё не запущено.':'Описание конфигурации проверено. Неизменяемая версия кода пока не подтверждена; приложение не запущено.'
+  if(value.errorCode==='RUNTIME_RELEASE_NOT_REGISTERED')return 'Версия приложения ещё не зарегистрирована платформой. Для продолжения нужна утверждённая сборка; запуск остаётся закрыт.'
+  if(value.errorCode?.startsWith('RUNTIME_RELEASE_'))return 'Файлы или утверждённая версия приложения не совпадают. Требуется проверить сборку; запуск остаётся закрыт.'
   return 'Текущий артефакт не подтвердил tenant-runtime-v1. Не запускайте его: требуется совместимая версия существующего приложения.'
 }
 
@@ -908,7 +915,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
               <button className="btn secondary" type="button" disabled={schemaReadinessBusy||schemaReadinessLoading} onClick={()=>void loadSchemaReadiness(current)}><RefreshCw size={16}/>Обновить проверку</button>
             </div>
           </>}
-          <div className="onboarding-readiness" aria-label="Проверка runtime bundle">
+          <div className="onboarding-readiness" role="region" aria-label="Проверка runtime bundle">
             <div className="onboarding-step"><Smartphone size={18}/><b>Runtime bundle</b><span>{schemaReadiness?.status!=='succeeded'?'Сначала проверьте схему':runtimeBundle?runtimeBundleStatusLabel(runtimeBundle):runtimeBundleLoading?'Загружаем…':'Состояние недоступно'}</span></div>
             {schemaReadiness?.status!=='succeeded'?<>
               <p className="onboarding-note">Сборка станет доступна после read-only проверки схемы и ownership-границ. До этого сервер не формирует launch-конфигурацию.</p>
@@ -921,7 +928,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
                 <div><span><b>Контракт</b><small>{runtimeBundle.result?.artifactContract??'tenant-runtime-v1'} · manifest v2</small></span></div>
                 <div><span><b>Запуск</b><small>Не выполнялся · приложение не опубликовано</small></span></div>
               </div>}
-              <p className="onboarding-note">Шаг собирает детерминированную конфигурацию из сохранённого manifest, проверяет checksum bundle и контракт общего артефакта для server.js и universal-server.js. Он не передаёт URL базы, не запускает сервис и не меняет Railway.</p>
+              <p className="onboarding-note">Шаг проверяет конфигурацию и файлы утверждённой версии серверных модулей. Отсутствующая или изменённая версия требует исправления. Это ещё не запуск приложения.</p>
               <div className="onboarding-actions">
                 <button className="btn" type="button" disabled={!canWrite||runtimeBundleBusy||runtimeBundleLoading||runtimeBundleUncertain||!runtimeBundle?.startAllowed} onClick={()=>void startRuntimeBundle()}><Smartphone size={16}/>{runtimeBundleButtonLabel}</button>
                 <button className="btn secondary" type="button" disabled={runtimeBundleBusy||runtimeBundleLoading} onClick={()=>void loadRuntimeBundle(current)}><RefreshCw size={16}/>Обновить bundle</button>

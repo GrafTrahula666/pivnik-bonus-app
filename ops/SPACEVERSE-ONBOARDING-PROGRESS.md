@@ -751,3 +751,63 @@ release registration, отдельный разрешённый runtime launch, 
 не реализован и не добавлен в #273; сначала отдельная architecture/contract/UX
 итерация, потом sandbox vertical. Production/main/Railway, реальные env/secrets,
 БД/данные/кассы/Telegram/VK, CI и kiosk этой итерацией не менялись.
+
+Owner list/interface шаг опубликован: 9011b2f80497ac5c08f5176af72b7d0f5cd656b2,
+ordinary push d3e5f6f..9011b2f; git ls-remote совпал. PR #273 остаётся Draft.
+
+### Утверждённая версия серверных модулей, bundle v2 (2026-10-15)
+
+Лично добавлен spaceverse-runtime-release.js и явный build-only CLI. Он читает
+два существующих entrypoint и closure literal relative imports/re-exports/
+dynamic imports, package.json/lock, проверяет отсутствие traversal/symlink и
+границы размера; не исполняет код, не запускает сервис/миграции/network.
+CLI проверяет base source SHA против git HEAD, пишет новый non-secret файл
+эксклюзивно (не перезаписывает), fingerprint фиксирует реальные байты.
+
+Server-only assembler принимает file/SHA/fingerprint только из operator env
+references, никогда из браузера, и сравнивает их с фактическими файлами. При
+пустой регистрации нет fallback на description-only bundle. Shared bundle v2
+включает code proof в checksum; v1 остаётся читаемым для совместимости.
+Production Admin provisioning требует code proof. Старый succeeded descriptor
+проецируется как action_required без мутации GET; прежний ledger safely
+reclaims тот же шаг и после утверждения получает v2. Новых tenant/auth/registry
+моделей и миграций нет. Startup guard не ослаблен: not_provisioned/published=false.
+
+Workflow/UI различают проверенное описание и проверенную версию модулей.
+Docker source copy включает нужные файлы для Node closure verification;
+сам Docker image в этой итерации не строился и не деплоился. Image digest,
+frontend assets и вычисляемые импорты не покрываются этим proof — это честно
+указано в coverage/runbook, не выдаётся за готовый hermetic release.
+
+Лично выполнено, /tmp/spaceverse-release-final-gate:
+
+- materialize ×2 + cmp — identical; прежний generated diff 7 файлов
+  365 insertions/78 deletions, включая server.js/universal-server.js/app.js;
+  canonical snapshots восстановлены перед commit, patch-chain не исправлялся;
+- node --test --test-concurrency=2 — 591/591; npm run check и
+  npm run audit:runtime-patches passed; root npm audit и production audit — 0;
+- Business typecheck/build/lint passed (0 errors/12 прежних warnings),
+  npm test -- --maxWorkers=2 — 262 passed/20 прежних skipped, npm audit — 0;
+- root focused release + manifest — 14/14: фактические файлы/dependency changes,
+  modified/omitted/duplicate records, traversal/symlink, wrong SHA/fingerprint,
+  v1 compatibility/v2 tamper и неизменный запрет launch;
+- Business release/provisioning/workflow — 27/27; signed HTTP onboarding suite
+  65/65: без регистрации action_required, с реальным file fingerprint v2;
+  legacy succeeded descriptor нельзя использовать как утверждённый release;
+- явный node scripts/build-spaceverse-runtime-release.mjs с base SHA 9011b2f
+  на materialized tree — success, 45 modules, fingerprint
+  64289ea917188724b251b85620014307742d834de8653e86178f24d0f384a9dc;
+- Playwright invitations/proxy/owner/release — 4/4 desktop/mobile: действительный
+  code proof и signed HTTP/UI. Binding/schema predecessors в этом UI subset
+  явно synthetic; их actual SQL workers отдельно проверены Vitest. Никакой
+  physical device/image/production launch этим не подтверждался;
+- прежний onboarding/provider/provisioning — 4/4 desktop/mobile.
+
+Расширенный E2E выявил burst обновлений owner list до 60/min: добавлен 250ms
+debounce чтения, server rate limit сохранён. Прежние favicon/chunk-size
+предупреждения не исправлялись. Корневой source Docker copy check сохранён.
+Следующий исходный scope: конкретный immutable image/release, resume-safe
+runtime launch и terminal provisioning, затем полная проверка критического
+пути. Реальные deployment/устройства/провайдеры/БД/env по-прежнему не трогались.
+Mobile Integration Hub отдельно: architecture/contract/UX, потом sandbox vertical;
+его реализация не начата и не смешивается с #273.

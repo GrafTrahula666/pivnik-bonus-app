@@ -3,8 +3,10 @@ import type { Pool, PoolClient, QueryResultRow } from 'pg'
 import {
   createSpaceverseRuntimeBundle,
   parseSpaceverseRuntimeBundle,
+  parseSpaceverseRuntimeCodeRelease,
   runtimeEnvironmentFromSpaceverseBundle,
   type SpaceverseRuntimeManifest,
+  type SpaceverseRuntimeCodeRelease,
 } from '../../spaceverse-runtime-manifest.js'
 import { recordAudit } from './audit.js'
 import { loadOwnedOnboardingRuntimeSource } from './venue-onboarding.js'
@@ -31,6 +33,7 @@ type RuntimeBundleResult={
   manifestSchemaVersion:2
   runtimeStatus:'not_provisioned'
   published:false
+  codeRelease?:SpaceverseRuntimeCodeRelease
 }
 type TargetResult=BindingResult|SchemaReadinessResult|RuntimeBundleResult
 
@@ -69,6 +72,7 @@ export interface OnboardingProvisioningOptions {
   // Tests and a future immutable artifact registry can supply a candidate, but
   // every candidate is parsed again with the runtime's shared strict contract.
   assembleRuntimeBundle?:(manifest:SpaceverseRuntimeManifest)=>Promise<unknown>|unknown
+  requireCodeRelease?:boolean
 }
 
 class TargetStepFailure extends Error {
@@ -102,7 +106,14 @@ function matchesSource(row:StepRow,source:RuntimeSource):boolean {
     row.company_id===source.manifest.scope.companyId&&row.venue_id===source.manifest.scope.venueId
 }
 
-function view(source:RuntimeSource,step:StepName,row?:StepRow) {
+function codePinned(row:StepRow){
+  const value=row.result&&'codeRelease' in row.result?row.result.codeRelease:null
+  try{return Boolean(value&&parseSpaceverseRuntimeCodeRelease(value))}catch{return false}
+}
+function view(source:RuntimeSource,step:StepName,row?:StepRow,requireCodeRelease=false) {
+  if(requireCodeRelease&&step===RUNTIME_BUNDLE_STEP&&row?.status==='succeeded'&&!codePinned(row)){
+    row={...row,status:'action_required',last_error_code:'RUNTIME_RELEASE_NOT_REGISTERED',result:null}
+  }
   const startAllowed=!row||row.status==='retryable_error'||row.status==='action_required'||
     (row.status==='running'&&!row.lease_active)
   return {
@@ -175,7 +186,8 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
       await client.query('COMMIT')
       return {source,step,row,token:initialToken}
     }
-    if(row.status==='succeeded'||(row.status==='running'&&row.lease_active)) {
+    const oldDescriptor=options.requireCodeRelease&&step===RUNTIME_BUNDLE_STEP&&row.status==='succeeded'&&!codePinned(row)
+    if((row.status==='succeeded'&&!oldDescriptor)||(row.status==='running'&&row.lease_active)) {
       await client.query('COMMIT')
       return {source,step,row,token:null}
     }
@@ -412,6 +424,9 @@ async function verifyRuntimeBundle(
   try {
     const candidate=await (options.assembleRuntimeBundle??createSpaceverseRuntimeBundle)(source.manifest)
     const bundle=parseSpaceverseRuntimeBundle(candidate)
+    if(options.requireCodeRelease&&!bundle.artifact.codeRelease){
+      throw new TargetStepFailure('action_required','RUNTIME_RELEASE_NOT_REGISTERED')
+    }
     const environment=runtimeEnvironmentFromSpaceverseBundle(bundle)
     if(environment.SPACEVERSE_RUNTIME_MODE!=='tenant'||
       environment.SPACEVERSE_RUNTIME_MANIFEST_JSON!==JSON.stringify(source.manifest)||
@@ -422,8 +437,14 @@ async function verifyRuntimeBundle(
       bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
       bundleSha256:bundle.bundleSha256,manifestSchemaVersion:2,
       runtimeStatus:'not_provisioned',published:false,
+      ...(bundle.artifact.codeRelease?{codeRelease:bundle.artifact.codeRelease}:{}),
     }
-  } catch {
+  } catch(error) {
+    if(error instanceof TargetStepFailure)throw error
+    const code=(error as {code?:string})?.code
+    if(['RUNTIME_RELEASE_NOT_REGISTERED','RUNTIME_RELEASE_INVALID','RUNTIME_RELEASE_UNAVAILABLE','RUNTIME_RELEASE_MISMATCH'].includes(code??'')){
+      throw new TargetStepFailure('action_required',code!)
+    }
     throw new TargetStepFailure('action_required','RUNTIME_ARTIFACT_INCOMPATIBLE')
   }
 }
@@ -441,7 +462,7 @@ async function finish(
     // target binding is idempotent, so the newer worker will reconcile it.
     if(current.status!=='running'||current.lease_token!==claimValue.token) {
       await client.query('COMMIT')
-      return view(claimValue.source,claimValue.step,current)
+      return view(claimValue.source,claimValue.step,current,options.requireCodeRelease)
     }
     if(outcome.status==='succeeded') {
       await client.query(`UPDATE admin_onboarding_provisioning_steps SET
@@ -465,7 +486,7 @@ async function finish(
       metadata:{step:claimValue.step,...(outcome.status==='succeeded'?outcome.result:{errorCode:outcome.errorCode})},
     },client)
     await client.query('COMMIT')
-    return view(claimValue.source,claimValue.step,row)
+    return view(claimValue.source,claimValue.step,row,options.requireCodeRelease)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     if(error instanceof HttpError) throw error
@@ -569,7 +590,7 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
             'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
         }
         await client.query('COMMIT')
-        return view(source,RUNTIME_BUNDLE_STEP,row)
+        return view(source,RUNTIME_BUNDLE_STEP,row,options.requireCodeRelease)
       } catch(error) {
         await client.query('ROLLBACK').catch(()=>undefined)
         if(error instanceof HttpError) throw error
@@ -579,7 +600,7 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
 
     async runRuntimeBundleVerification(admin:AdminPrincipal,draftId:string) {
       const claimed=await claim(options,admin,draftId,RUNTIME_BUNDLE_STEP)
-      if(!claimed.token) return view(claimed.source,RUNTIME_BUNDLE_STEP,claimed.row)
+      if(!claimed.token) return view(claimed.source,RUNTIME_BUNDLE_STEP,claimed.row,options.requireCodeRelease)
       try {
         const result=await verifyRuntimeBundle(options,claimed.source)
         return await finish(options,admin,claimed,{status:'succeeded',result})

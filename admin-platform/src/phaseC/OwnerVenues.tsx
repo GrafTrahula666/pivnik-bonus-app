@@ -38,7 +38,10 @@ export function OwnerVenues({onDraft,onVenue,refreshKey}:{onDraft:(id:string)=>v
   }catch(error){if(run===sequence.current){setResult(null);setError(error instanceof Error?error.message:'Не удалось загрузить состояния.')}}
   finally{if(run===sequence.current)setBusy(false)}
  },[])
- useEffect(()=>{void load();const counter=sequence;return()=>{counter.current++}},[load,refreshKey])
+ useEffect(()=>{
+  const counter=sequence,timer=setTimeout(()=>void load(),250)
+  return()=>{clearTimeout(timer);counter.current++}
+ },[load,refreshKey])
  useEffect(()=>{const timer=setInterval(()=>{if(document.visibilityState==='visible')void load()},60_000);return()=>clearInterval(timer)},[load])
  const date=(value:string|null)=>value?new Date(value).toLocaleString('ru-RU'):'Нет подтверждённой активности'
  return <section className="card owner-venues" aria-label="Все заведения">

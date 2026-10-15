@@ -94,9 +94,14 @@ describe('server-owned resumable workflow on canonical scope',()=>{
   ])
   const bundled=await (await call('owner','GET',path())).json()
   expect(bundled.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({
-    status:'pending',code:'runtime_bundle_ready_launch_pending',
+    status:'pending',code:'runtime_release_not_registered',
   })
   expect(bundled).toMatchObject({runtimeStatus:'not_provisioned',published:false,requiresAttention:true})
+  await state.db!.query(`UPDATE admin_onboarding_provisioning_steps SET result=jsonb_set(result,'{codeRelease}',$2::jsonb)
+    WHERE draft_id=$1::uuid AND step='runtime_bundle_verification'`,[drafts[0],JSON.stringify({sourceSha:'a'.repeat(40),fingerprint:'c'.repeat(64),coverage:'node_literal_import_closure',moduleCount:45})])
+  const pinned=await (await call('owner','GET',path())).json()
+  expect(pinned.steps.find((step:{id:string})=>step.id==='provisioning')).toMatchObject({status:'pending',code:'runtime_bundle_ready_launch_pending'})
+  expect(pinned).toMatchObject({runtimeStatus:'not_provisioned',published:false})
  })
  it('saved terminal/modules/checkpoint never imply a provisioned app or a zero report',async()=>{
   const before=await call('owner','GET',path());expect(before.status).toBe(200)

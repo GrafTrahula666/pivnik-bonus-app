@@ -84,6 +84,17 @@ connection diagnostics only; it neither sends messages nor records a delivered
 ticket. SPACEVERSE branding and general navigation omit legacy PIVNIK-only
 reward/broadcast/content controls while that flow is enabled. Mobile Integration
 Hub/OAuth/sandbox/developer integration grants remain a separate future scope.
+`spaceverse-runtime-release.js` fingerprints the two Node entrypoints, their
+literal relative import/re-export/dynamic-import closure and package/lock files.
+The explicit local builder writes a new non-secret release record; no code is
+executed and no database/service is started. `onboarding-runtime-release.ts`
+uses operator-only file/SHA/fingerprint registration and rechecks actual files.
+Production bundle verification requires this proof; description-only success
+from the earlier ledger is projected as action_required and safely reclaimed
+for verification. Shared bundle v2 includes the code proof in its digest; v1
+remains readable. Neither version authorizes launch. Coverage is Node literal
+imports, not a hermetic image or arbitrary computed imports/frontend assets.
+Immutable deployment image registration/launch still requires a later step.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find

@@ -99,6 +99,31 @@ afterEach(async()=>{
 })
 
 describe('onboarding runtime binding provisioning ledger',()=>{
+  it('immutable policy treats legacy descriptor success as requiring approval and safely retries the same ledger',async()=>{
+    const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Release approval')
+    const legacy=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>database(tenant)})
+    await legacy.runRuntimeDatabaseBinding(root,draft.draftId);await legacy.runTenantSchemaReadiness(root,draft.draftId)
+    expect(await legacy.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'succeeded',attemptCount:1})
+    let approved=false
+    const codeRelease={sourceSha:'a'.repeat(40),fingerprint:'b'.repeat(64),coverage:'node_literal_import_closure' as const,moduleCount:45}
+    const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>database(tenant),requireCodeRelease:true,
+      assembleRuntimeBundle:manifest=>{if(!approved)throw Object.assign(new Error('Synthetic unregistered release'),{code:'RUNTIME_RELEASE_NOT_REGISTERED'});return createSpaceverseRuntimeBundle(manifest,codeRelease)}})
+    expect(await service.getRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'action_required',attemptCount:1,errorCode:'RUNTIME_RELEASE_NOT_REGISTERED',result:null,startAllowed:true})
+    expect((await provisioningRows(meta)).find(row=>row.step==='runtime_bundle_verification')?.status).toBe('succeeded')
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'action_required',attemptCount:2,errorCode:'RUNTIME_RELEASE_NOT_REGISTERED',startAllowed:true})
+    approved=true
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'succeeded',attemptCount:3,result:{codeRelease,runtimeStatus:'not_provisioned',published:false},startAllowed:false})
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'succeeded',attemptCount:3})
+    expect((await tenant.query('SELECT * FROM users')).rows).toEqual([])
+    expect((await tenant.query('SELECT * FROM wallets')).rows).toEqual([])
+  })
+  it('immutable policy refuses a valid description-only candidate without rewriting binding or manufacturing launch readiness',async()=>{
+    const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Description only')
+    const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>database(tenant),requireCodeRelease:true})
+    await service.runRuntimeDatabaseBinding(root,draft.draftId);await service.runTenantSchemaReadiness(root,draft.draftId)
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'action_required',errorCode:'RUNTIME_RELEASE_NOT_REGISTERED',result:null})
+    expect((await tenant.query('SELECT runtime_key FROM spaceverse_runtime_binding')).rows).toEqual([{runtime_key:draft.tenantKey}])
+  })
   it('keeps migration 010 additive, repeatable and empty',async()=>{
     const db=await metadata()
     const sql=await fs.readFile(new URL('../../admin-migrations/010_onboarding_provisioning.sql',import.meta.url),'utf8')

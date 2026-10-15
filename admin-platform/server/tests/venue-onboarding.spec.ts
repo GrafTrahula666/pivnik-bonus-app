@@ -2,9 +2,13 @@
 import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import os from 'node:os'
+import nodePath from 'node:path'
+import {fileURLToPath} from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
+import {createRuntimeRelease} from '../../../spaceverse-runtime-release.js'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false,targets:new Map<string,PGlite>()}))
 const nativeFetch=globalThis.fetch
@@ -442,17 +446,26 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     expect((await request('root','GET',bundlePath+'?artifact=forbidden')).status).toBe(400)
     const bundleRejected=await request('root','POST',bundlePath+'/run',{manifest:{runtimeKey:application.application.tenantKey}})
     expect(bundleRejected.status).toBe(400);expect(await bundleRejected.json()).toMatchObject({code:'ONBOARDING_PROVISIONING_COMMAND_INVALID'})
+    const missingRelease=await (await request('root','POST',bundlePath+'/run',{})).json()
+    expect(missingRelease).toMatchObject({status:'action_required',attemptCount:1,errorCode:'RUNTIME_RELEASE_NOT_REGISTERED',result:null,startAllowed:true})
+    const release=await createRuntimeRelease(fileURLToPath(new URL('../../../',import.meta.url)),'a'.repeat(40))
+    const releaseDirectory=await fs.mkdtemp(nodePath.join(os.tmpdir(),'spaceverse-http-release-'))
+    const releaseFile=nodePath.join(releaseDirectory,'release.json');await fs.writeFile(releaseFile,JSON.stringify(release))
+    const operatorEnv={ADMIN_RUNTIME_RELEASE_SHA:release.sourceSha,ADMIN_RUNTIME_RELEASE_FINGERPRINT:release.fingerprint,ADMIN_RUNTIME_RELEASE_MANIFEST_FILE:releaseFile}
+    const previous=Object.fromEntries(Object.keys(operatorEnv).map(key=>[key,process.env[key]]));Object.assign(process.env,operatorEnv)
+    try{
     const bundleCompleted=await (await request('root','POST',bundlePath+'/run',{})).json()
     expect(bundleCompleted).toMatchObject({
-      status:'succeeded',attemptCount:1,errorCode:null,startAllowed:false,
+      status:'succeeded',attemptCount:2,errorCode:null,startAllowed:false,
       result:{bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
         bundleSha256:expect.stringMatching(/^[0-9a-f]{64}$/),manifestSchemaVersion:2,
-        runtimeStatus:'not_provisioned',published:false},
+        runtimeStatus:'not_provisioned',published:false,codeRelease:{sourceSha:release.sourceSha,fingerprint:release.fingerprint}},
     })
     expect(await (await request('root','GET',bundlePath)).json()).toEqual(bundleCompleted)
     expect(await (await request('root','POST',bundlePath+'/run',{})).json()).toEqual(bundleCompleted)
     expect(JSON.stringify({bundleCompleted,audit:await rows('admin_audit_log')}))
       .not.toMatch(/postgres:|password|databaseUrl|SPACEVERSE_RUNTIME_MANIFEST_JSON/i)
+    }finally{for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value}}
   })
 
   it('requires a real session, same origin and CSRF to start provisioning',async()=>{

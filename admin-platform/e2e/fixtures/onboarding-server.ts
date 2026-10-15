@@ -3,9 +3,11 @@
 import http from 'node:http'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type { Pool } from 'pg'
 import {nativePosFixture} from '../../server/tests/native-pos-fixture.mjs'
+import {createRuntimeRelease} from '../../../spaceverse-runtime-release.js'
 
 process.env.NODE_ENV='development'
 process.env.ADMIN_DATABASE_URL=''
@@ -55,10 +57,34 @@ pool.query=query as Pool['query'];readPool.query=query as Pool['query']
 pool.connect=(async()=>({query,release(){}})) as unknown as Pool['connect']
 readPool.connect=pool.connect
 const {handleApi,sendApiError}=await import('../../server/router.js')
+const {loadSession}=await import('../../server/auth.js')
+const {loadOwnedOnboardingRuntimeSource}=await import('../../server/venue-onboarding.js')
 const root=fileURLToPath(new URL('../../dist/',import.meta.url))
 const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'}
 const server=http.createServer((req,res)=>{void (async()=>{
   const url=new URL(req.url!,'http://127.0.0.1:5097')
+  if(process.env.SPACEVERSE_E2E_INVITATIONS==='true'&&req.method==='POST'&&url.pathname==='/__fixture/release/prepare'){
+    // Synthetic predecessor records isolate the real code verification UI.
+    // Schema/binding workers have separate real SQL tests; this never marks a
+    // launched app, initializes customer data or contacts an external service.
+    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk))
+    const body=JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    const session=await loadSession(req),source=await loadOwnedOnboardingRuntimeSource({query} as unknown as Pool,session.admin,body.draftId,true)
+    for(const [step,result] of [['runtime_database_binding',{binding:'verified_existing'}],['tenant_schema_readiness',{schema:'verified',migrationSet:'009,017-020',ownershipBoundary:'verified'}]] as const){
+      await db.query(`INSERT INTO admin_onboarding_provisioning_steps(draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,status,attempt_count,result)
+        VALUES($1::uuid,$2,$3,$4,$5,$6::bigint,$7::bigint,'succeeded',1,$8::jsonb)
+        ON CONFLICT(draft_id,step) DO NOTHING`,[source.draftId,step,source.manifest.runtimeKey,source.manifest.manifestSha256,source.manifest.source.applicationRevision,source.manifest.scope.companyId,source.manifest.scope.venueId,JSON.stringify(result)])
+    }
+    if(body.approved===true){
+      const release=await createRuntimeRelease(fileURLToPath(new URL('../../../',import.meta.url)),'a'.repeat(40))
+      const directory=await fs.mkdtemp(path.join(os.tmpdir(),'spaceverse-browser-release-')),file=path.join(directory,'release.json')
+      await fs.writeFile(file,JSON.stringify(release))
+      process.env.ADMIN_RUNTIME_RELEASE_SHA=release.sourceSha;process.env.ADMIN_RUNTIME_RELEASE_FINGERPRINT=release.fingerprint;process.env.ADMIN_RUNTIME_RELEASE_MANIFEST_FILE=file
+    }else{
+      delete process.env.ADMIN_RUNTIME_RELEASE_SHA;delete process.env.ADMIN_RUNTIME_RELEASE_FINGERPRINT;delete process.env.ADMIN_RUNTIME_RELEASE_MANIFEST_FILE
+    }
+    res.setHeader('Content-Type','application/json');res.end('{}');return
+  }
   if(process.env.SPACEVERSE_E2E_POS_PROXY==='true'&&req.method==='POST'&&url.pathname.startsWith('/__fixture/pos/')){
     // Test-server-only controls, never imported by the Admin API or tenant app.
     const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk))

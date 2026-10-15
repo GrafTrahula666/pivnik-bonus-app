@@ -4,10 +4,13 @@ import { onboardingTargetRegistry } from './onboarding-database-registry.js'
 import { createOnboardingProvisioningService } from './onboarding-provisioning.js'
 import { requireOnboardingAccess } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal } from './types.js'
+import {assembleApprovedRuntimeBundle} from './onboarding-runtime-release.js'
 
 const provisioning=createOnboardingProvisioningService({
   metadata:pool,
   resolveTargetDatabase:runtimeKey=>onboardingTargetRegistry.resolveTargetDatabase(runtimeKey),
+  assembleRuntimeBundle:assembleApprovedRuntimeBundle,
+  requireCodeRelease:true,
 })
 
 export async function requireOnboardingProvisioningAccess(admin:AdminPrincipal):Promise<void> {

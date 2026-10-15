@@ -179,22 +179,33 @@ export function parseSpaceverseRuntimeManifest(raw) {
   return manifest;
 }
 
-function runtimeBundleCore(rawManifest) {
+export function parseSpaceverseRuntimeCodeRelease(raw) {
+  if(raw===null)return null;
+  const value=exactRecord(raw,['sourceSha','fingerprint','coverage','moduleCount'],'SPACEVERSE_RUNTIME_BUNDLE_INVALID');
+  if(typeof value.sourceSha!=='string'||typeof value.fingerprint!=='string'
+    ||!/^[0-9a-f]{40}$/.test(value.sourceSha)||!/^[0-9a-f]{64}$/.test(value.fingerprint)
+    ||value.coverage!=='node_literal_import_closure'||!Number.isSafeInteger(value.moduleCount)
+    ||value.moduleCount<5||value.moduleCount>200)throw failure('SPACEVERSE_RUNTIME_BUNDLE_INVALID','Runtime code release is invalid.');
+  return Object.freeze({...value});
+}
+function runtimeBundleCore(rawManifest,rawCodeRelease=null) {
   const manifest = parseSpaceverseRuntimeManifest(rawManifest);
+  const codeRelease=parseSpaceverseRuntimeCodeRelease(rawCodeRelease);
   return {
-    schemaVersion: 1,
+    schemaVersion: codeRelease?2:1,
     artifact: {
       name: RUNTIME_BUNDLE_ARTIFACT.name,
       contract: RUNTIME_BUNDLE_ARTIFACT.contract,
-      entrypoints: [...RUNTIME_BUNDLE_ARTIFACT.entrypoints]
+      entrypoints: [...RUNTIME_BUNDLE_ARTIFACT.entrypoints],
+      ...(codeRelease?{codeRelease}:{})
     },
     manifest,
     release: { runtimeStatus: 'not_provisioned', published: false, startAllowed: false }
   };
 }
 
-export function createSpaceverseRuntimeBundle(rawManifest) {
-  const core = runtimeBundleCore(rawManifest);
+export function createSpaceverseRuntimeBundle(rawManifest,codeRelease=null) {
+  const core = runtimeBundleCore(rawManifest,codeRelease);
   return Object.freeze({
     schemaVersion: core.schemaVersion,
     artifact: Object.freeze({
@@ -220,12 +231,12 @@ export function parseSpaceverseRuntimeBundle(raw) {
     'schemaVersion', 'artifact', 'manifest', 'release', 'bundleSha256'
   ], 'SPACEVERSE_RUNTIME_BUNDLE_INVALID');
   const artifact = exactRecord(value.artifact, [
-    'name', 'contract', 'entrypoints'
+    'name', 'contract', 'entrypoints',...(value.schemaVersion===2?['codeRelease']:[])
   ], 'SPACEVERSE_RUNTIME_BUNDLE_INVALID');
   const release = exactRecord(value.release, [
     'runtimeStatus', 'published', 'startAllowed'
   ], 'SPACEVERSE_RUNTIME_BUNDLE_INVALID');
-  if (value.schemaVersion !== 1
+  if (![1,2].includes(value.schemaVersion)
     || artifact.name !== RUNTIME_BUNDLE_ARTIFACT.name
     || artifact.contract !== RUNTIME_BUNDLE_ARTIFACT.contract
     || !Array.isArray(artifact.entrypoints)
@@ -236,7 +247,7 @@ export function parseSpaceverseRuntimeBundle(raw) {
     || release.startAllowed !== false) {
     throw failure('SPACEVERSE_RUNTIME_BUNDLE_INVALID', 'SPACEVERSE runtime bundle is invalid.');
   }
-  const bundle = createSpaceverseRuntimeBundle(value.manifest);
+  const bundle = createSpaceverseRuntimeBundle(value.manifest,value.schemaVersion===2?artifact.codeRelease:null);
   if (value.bundleSha256 !== bundle.bundleSha256) {
     throw failure('SPACEVERSE_RUNTIME_BUNDLE_DIGEST_MISMATCH', 'SPACEVERSE runtime bundle checksum does not match.');
   }
