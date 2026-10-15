@@ -4,6 +4,264 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Business onboarding drafts (2026-10-12, opt-in)
+
+`admin-platform/server/venue-onboarding.ts` and the existing Business router own
+the draft API. With the invitation flag off it remains SUPER_ADMIN-only.
+`server/onboarding-access.ts` adds scoped owner/manager/viewer access through
+existing canonical company/venue IDs and the revocable invitation access ledger;
+it does not introduce another tenant model. Mutations lock their grants until
+COMMIT and recheck exact draft scope. `src/phaseC/VenueOnboarding.tsx` extends the real
+Business App. Additive admin migrations 004, 005 and 006 are separate from
+guest/startup policy; `ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also
+requires the global write switch. Drafts and their standard application blueprint
+are scoped to their creator, versioned, idempotent and audited. Migration 005
+reserves a stable `sv-*` tenant key and requires `dedicated_database`; the API
+contract remains `not_provisioned`, `published=false` and `legacyDataAccess=false`.
+Migration 006 lets an explicit `PUT .../scope` atomically reserve the canonical
+company/venue IDs. A new company and every new venue are created with
+`active=false`; no access row is granted, and source revisions are frozen after
+preparation. The operation is replay-safe and audit failure rolls back the scope
+and both canonical rows. Inactive scope rows remain invisible to the normal venue
+resolver. It does not create an active company/venue, database, bot, webhook or POS link.
+Manual admin migration 011 extends the existing 007/008 invitation table with
+server-owned canonical scope, role and replay fields, and adds revocable access.
+No second invitation or tenant model is introduced.
+`server/onboarding-invitations.ts` owns issuance, exact replay, expiry, acceptance
+and revocation; `ADMIN_ENABLE_ONBOARDING_INVITATIONS` defaults off. Tokens use a
+domain-separated HMAC of the existing strong Admin CSRF secret; only their hash
+is stored. Tokens/passwords are excluded from audit and browser storage. An
+accepted invitation creates an Admin account only when its email is new; an
+existing account must log in. Accepting/revoking access and auditing are atomic.
+`OnboardingInvitations.tsx` and `InviteAcceptance.tsx` connect the owner link to
+the real resumable wizard, with server-provided per-draft write permissions.
+Organization owners can delegate their prepared inactive organization or point;
+a point grant cannot expose another point in that company. No messaging is sent.
+Runbook: `ops/SPACEVERSE-VENUE-ONBOARDING.md`. Browser checks use real signed
+Admin HTTP and SQL fixtures on desktop/mobile (`test:e2e:invitations`). Runtime
+provisioning and live terminal verification remain pending; prepared metadata
+never means an active venue. When the scoped invitation flag is on, legacy
+issuance/claim is disabled and old links require reissue from «Приглашения».
+Legacy rows and independently granted company rights are retained.
+Manual admin migration 012 stores only the operator checkpoint, terminal ID/name
+and cash-report choice for the existing draft. `server/onboarding-workflow.ts`
+derives the eight step statuses from canonical company/venue, frozen application,
+existing provider verification and provisioning ledger; request statuses and
+scope are rejected. `GET/PUT .../progress` share the same revocable read/write
+permissions, revision/replay checks and atomic audit. `OnboardingProgress.tsx`
+restores these choices after reload. `ADMIN_ENABLE_ONBOARDING_WORKFLOW` defaults
+off. A configured terminal has no confirmed binding/event yet; its status stays
+pending. Missing connection returns unavailable report data with null amounts,
+never invented zero revenue. A database binding or readable provider documents
+do not mark a venue active or an application published.
+Manual Admin migration 015 adds encrypted POS proxy settings and a leased,
+audited verification result to the same draft. `server/onboarding-pos-proxy.ts`
+resolves its HTTPS origin from protected references in
+`ADMIN_ONBOARDING_PROXY_REGISTRY_JSON`; UI input cannot choose an address,
+runtime or scope. `ADMIN_ENABLE_ONBOARDING_POS_PROXY` defaults off and requires
+the workflow switch. Network work runs outside SQL transactions; completion
+rechecks lease, source revisions, terminal and revocable access.
+`routes/spaceverse-pos.js` mounts behind the existing tenant startup guard in
+both root servers. It rechecks the exact runtime binding and live POS device
+scope in SQL and requires `X-Pivnik-Device-Key`. Manual root migration 021 stores
+only idempotent test-event receipts; no customer/bonus/receipt writes occur.
+`pos/onboarding-proxy.js` defines the v2 nonce/MAC contract shared with Admin.
+Verification requires a fresh terminal event and complete fresh provider sync.
+An empty verified 24-hour report returns 0 receipts/0 cents; unavailable data
+returns null, and a zero-value receipt is still data. Device credentials cannot
+read financial/customer rows. A successful connection probe does not bypass
+`SPACEVERSE_RUNTIME_NOT_PROVISIONED`, deploy or activate a venue.
+`server/onboarding-venues.ts` provides the authenticated read-only owner list
+(`GET /api/admin/onboarding/venues`, 25 entries/page) under the existing default-off
+workflow switch. It combines the canonical active-venue resolver with scoped
+draft access; inactive prepared points reuse `onboarding-workflow.ts` projection.
+Company/venue/status input cannot choose scope. An existing active metadata row
+without verified connectivity remains pending/unknown, never false connected or
+zero revenue. Device and operator activity are distinct. `OwnerVenues.tsx`
+refreshes results and resumes the selected real wizard, including a repeated
+open of the same draft. Its developer request copies owner text and non-secret
+connection diagnostics only; it neither sends messages nor records a delivered
+ticket. SPACEVERSE branding and general navigation omit legacy PIVNIK-only
+reward/broadcast/content controls while that flow is enabled. Mobile Integration
+Hub/OAuth/sandbox/developer integration grants remain a separate future scope.
+`spaceverse-runtime-release.js` fingerprints the two Node entrypoints, their
+literal relative import/re-export/dynamic-import closure and package/lock files.
+The explicit local builder writes a new non-secret release record; no code is
+executed and no database/service is started. `onboarding-runtime-release.ts`
+uses operator-only file/SHA/fingerprint registration and rechecks actual files.
+Production bundle verification requires this proof; description-only success
+from the earlier ledger is projected as action_required and safely reclaimed
+for verification. Shared bundle v2 includes the code proof in its digest; v1
+remains readable. Neither version authorizes launch. Coverage is Node literal
+imports, not a hermetic image or arbitrary computed imports/frontend assets.
+`scripts/prepare-spaceverse-runtime-image.mjs` creates a new allowlisted local
+image context and verifies its copied release. `ops/spaceverse-runtime.Dockerfile`
+pins the Node base digest and reinstalls locked production dependencies offline
+from a separate public npm cache; cache/logs are tmpfs, host node_modules excluded.
+`spaceverse-runtime-image.js` verifies an independently approved immutable local
+Docker image ID, platform, code labels, non-root user, exact tenant wrapper and
+limited baked environment. The wrapper rechecks bundle/modules and retains the
+startup denial without npm prestart, DB access or legacy fallback. A local image
+ID is not a registry publication or provisioned service. The existing server-only
+assembler now reads protected image ID/inspection-file references, compares image
+config/source against the current approved code proof, and emits shared bundle v3
+with image identity bound into the same checksum and exact tenant scope. Production
+verification requires that proof; v1/v2 ledger success is safely projected/retried
+in the same record. Owner workflow distinguishes missing image from verified image
+and unlaunched runtime. Approved resumable launch and terminal provisioning remain
+pending; no Docker daemon, deployment or image publication is invoked by Admin API.
+`spaceverse-tenant-service.js` is a separate default-off tenant API inside the same
+approved image. The existing two legacy entrypoints retain their startup denial.
+Its container wrapper is now included in the code fingerprint closure, including
+literal imports of this service and the existing customer/POS adapters. Startup
+requires v3, approved image identity, private per-tenant credentials, the same
+verified runtime binding, and an unexpired permission from manual root migration
+022. That permission references the existing binding and stores only a token hash;
+it is not a tenant registry or an active venue. A held session advisory lock admits
+one serving process per runtime. Scope/permission are rechecked before requests;
+revocation, suspension, expiry or a changed binding closes serving access.
+`spaceverse-runtime-readiness.js` signs/verifies a fresh nonce, exact scope, image,
+bundle and permission expiry. Its `tenant-api-only` proof says neither published
+frontend nor active venue. No schema/device provisioning occurs at boot; the API
+reuses the canonical auth/wallet/POS adapters, has no legacy fallback and leaves
+financial routes unavailable. Admin resume orchestration/terminal provisioning
+and the public standard application remain pending.
+`spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
+manifest only after canonical scope exists. It binds draft/application/scope
+revisions plus canonical company/venue IDs. A tenant-mode guest process must find
+the same IDs and checksum in its dedicated database (manual additive migrations
+017 and 018); only then does it receive a verified immutable tenant/location
+context. `dashboard-summary-repository.js` has the first tenant-runtime read
+adapter: the operational query captures that verified context and rejects
+request-supplied scope before SQL. `transaction-persistence.js` now has the
+matching write boundary for new operations: it accepts only transaction data,
+rechecks the exact runtime/database binding in the same parameterized INSERT,
+derives tenant/location from that binding, and uses `request_key` for exact
+replay after an uncertain response. A mismatched payload, tenant, location,
+database or forged runtime returns no write and never falls back to legacy SQL.
+Manual additive migration 019 adds explicit customer ownership without
+backfill: every owned user is tied by a composite foreign key to the exact
+runtime/company/venue binding. `customer-wallet-repository.js` is the matching
+read boundary. It accepts only a canonical user ID plus the privately verified
+runtime, rechecks the same binding inside the read query, and can reach
+`users`/`wallets` only through the ownership row. Unowned historical rows are
+invisible; a different database, tenant or venue is rejected, and request scope
+or a copied runtime never reaches SQL. `customer-provisioning.js` is the single
+write boundary for a **new** tenant customer. Inside one database transaction it
+locks and rechecks the exact binding, records only a UUID/fingerprint in the
+manual additive migration 020 ledger, and creates the existing `users`,
+`user_identities`, `wallets` and ownership rows. An exact retry (including after
+an uncertain COMMIT response) resolves to the same user; a changed payload,
+request-supplied scope, another tenant database, or any historical Telegram/VK
+identity fails closed instead of adopting that row. The ledger stores no
+provider ID or profile data. `spaceverse-customer-auth.js` verifies signed
+Telegram/VK identity, accepts existing customers only through exact ownership,
+and delegates every missing-customer write to that provisioner; there is no
+second auth-specific creation path or ledger. Sessions carry the exact
+runtime/checksum/company/venue and every read rechecks identity, ownership,
+session version and live binding. A missing wallet is an unavailable
+configuration, not a zero balance. `routes/spaceverse-customer.js` is the shared
+auth and wallet HTTP adapter mounted by both guest entrypoints behind the same
+preflight. It rejects request scope and prevents tenant APIs falling through to
+legacy staff, money or PIVNIK-specific handlers. Wallet issuers remain
+`not_configured`. Both
+`universal-server.js` and `server.js` check this before spawning/initializing any
+PIVNIK runtime data. Even an exact binding is deliberately rejected with
+`SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
+and the manifest cannot claim publication. With no tenant manifest, the existing
+legacy PIVNIK startup path is unchanged and performs no binding query. Continue
+from `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store provider keys, database
+URLs or other secrets in draft/application JSON or the runtime manifest.
+
+The first provider slice stays in that same master and reuses
+`pos/evotor-client.js`; it is not a second integration framework. Manual admin
+migration `admin-platform/admin-migrations/009_onboarding_integrations.sql`
+stores the exact prepared draft/provider/store binding plus only an AES-256-GCM
+envelope, key ID, HMAC request fingerprint and verification state. The keyring is
+read only from protected server variables, supports active + previous keys, and a
+verification write rewraps the token under the active key. `GET/PUT
+.../integrations/evotor` and `POST .../integrations/evotor/verify` use the same draft
+read/write permissions behind writes, draft and integration feature flags.
+Invited viewers can read masked state; only scoped owners/managers can save or
+verify, and revocation is rechecked before recording a verification result.
+Responses expose a fixed mask, never ciphertext or plaintext. Verification calls
+the existing fixed-host Evotor document-page adapter and records only
+`configured`, `verified`, `action_required` or `error`; HTTP 200 without the
+expected document shape is an error. This proves read permission only: it does
+not create an Evotor account, install an app, bind POS, import receipts, provision
+runtime or publish the guest application. Telegram/VK remain external-
+authorization work. Do not confuse this admin migration 009 with root
+`migrations/009_spaceverse_transaction_scope.sql`.
+
+The first executable provisioning step is isolated in
+`admin-platform/server/onboarding-provisioning.ts`. Manual additive admin
+migration `010_onboarding_provisioning.sql` stores one
+`runtime_database_binding` ledger row per prepared draft. A transaction claims
+the row with a short lease; an unexpired claim blocks double execution, while an
+expired claim or a recorded safe failure can be retried. The worker reloads the
+manifest from the authorized frozen draft/application/scope and resolves the
+target database only by that server-derived runtime key. Request data never
+contains a database URL or credential. In the already-created dedicated
+database, the action requires manual migrations 017/018, inserts the exact
+singleton binding if absent, accepts an exact existing binding after an
+uncertain response, and refuses to overwrite any mismatch. A successful target
+commit and metadata completion are deliberately reconciled rather than treated
+as one cross-database transaction. The ledger and audit contain only safe IDs,
+checksum, attempts, status and fixed error/result codes.
+`server/onboarding-database-registry.ts` now resolves only the exact frozen
+runtime key through `ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON`, whose values are
+references to separate `SPACEVERSE_TENANT_DATABASE_URL_*` variables. It rejects
+embedded URLs, Admin/legacy databases, duplicate targets and duplicate secret
+references, and safely rotates bounded pools without exposing driver errors.
+`server/onboarding-provisioning-api.ts` mounts creator/scoped GET status and POST
+run through the existing Business router behind the separate default-off
+`ADMIN_ENABLE_ONBOARDING_PROVISIONING` gate, signed session, Origin, CSRF and
+rate limits. POST accepts only an empty object; query/body scope, URL and
+credentials are invalid. `VenueOnboarding.tsx` now reloads this ledger after a
+prepared scope, starts it with exactly `{}`, blocks double clicks and uses the
+server-authoritative `startAllowed` flag so an active lease cannot be repeated
+while an expired lease can be reclaimed. Owner-facing copy distinguishes
+waiting, verifying, action required, retryable failure and prepared binding;
+even success remains explicitly not started and unpublished. The UI accepts no
+database field or credential. This step does not create a database, activate a
+venue/runtime, run tenant migrations automatically or publish an application.
+
+The second fixed step, `tenant_schema_readiness`, stays in the same
+`onboarding-provisioning.ts` service and ledger. Manual additive admin migration
+`013_onboarding_schema_readiness.sql` only extends the ledger step constraint
+after migrations 010/012. It cannot connect to or mutate a tenant database.
+After an exact successful binding, the worker resolves the same server-owned
+target and runs one read-only transaction. It verifies the frozen binding,
+required canonical columns, critical PK/FK/check/unique boundaries from root
+migrations 009 and 017–020, and the absence of customer/wallet/identity/
+transaction/create-request rows outside the exact runtime/company/venue
+ownership boundary. Results and errors are fixed non-sensitive codes; there is
+no row count, identifier, driver text, migration execution, backfill or legacy
+adoption. The scoped GET/POST endpoints reuse the same auth, CSRF, Origin, rate
+limit and empty-command contract. `VenueOnboarding.tsx` keeps the step locked
+until binding succeeds, then restores/retries the server ledger. The shared
+`onboarding-workflow.ts` projection reports schema pending/error/ready while
+keeping runtime `not_provisioned` and publication false.
+
+The third fixed step, `runtime_bundle_verification`, also uses that ledger and
+is added by manual additive admin migration
+`014_onboarding_runtime_bundle.sql`. It is locked until schema readiness
+succeeds. The shared `spaceverse-runtime-manifest.js` now builds and strictly
+parses one deterministic, non-secret bundle contract for the existing
+`pivnik-bonus-app` artifact and its two server entrypoints (`server.js` and
+`universal-server.js`). The bundle checksum covers the canonical manifest plus
+the `tenant-runtime-v1` compatibility contract; it is not a hash or signature
+of deployed binaries. The server reconstructs the tenant environment from the
+verified bundle and persists only its safe checksum/contract/result summary.
+The Admin Docker build now copies the same shared manifest module instead of
+depending on a file absent from its image. GET/POST accept no manifest,
+artifact, path, URL or credential from the browser. Lease/retry prevents double
+assembly, a tampered or incompatible candidate fails closed, and an exact
+reopen returns the saved result. Success still records `not_provisioned`,
+`published=false` and no start permission: it does not launch a process, set
+Railway variables, resolve a database credential, build the VK static client or
+attest a deployed release SHA.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already

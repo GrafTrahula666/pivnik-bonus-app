@@ -17,7 +17,7 @@ import {
 } from './data.js'
 import { recordAudit } from './audit.js'
 import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js'
-import { enforceOrigin, readJsonBody, requestIp, securityHeaders } from './security.js'
+import { enforceOrigin, enforceRateLimit, readJsonBody, requestIp, securityHeaders } from './security.js'
 import {
   listAuthorizedVenues,
   requireVenueAccess,
@@ -56,6 +56,21 @@ import {
 } from './pivnik-app-content.js'
 import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broadcast.js'
 import { getDeveloperOverview,rememberServerError } from './developer.js'
+import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
+import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
+import { listOnboardingVenues } from './onboarding-venues.js'
+import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
+import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
+import {
+  claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
+  getOnboardingEvotorIntegration,getOnboardingInvitePreview,getOnboardingInvites,getOnboardingRequest,getOnboardingScope,
+  prepareOnboardingScope,requireOnboardingAccess,requireOnboardingIntegrationAccess,revokeOnboardingInvite,
+  saveOnboardingAppConfig,saveOnboardingEvotorIntegration,updateOnboardingDraft,verifyOnboardingEvotorIntegration,
+} from './venue-onboarding.js'
+import {
+  getOnboardingRuntimeBundleVerification,getOnboardingRuntimeDatabaseBinding,getOnboardingTenantSchemaReadiness,
+  runOnboardingRuntimeBundleVerification,runOnboardingRuntimeDatabaseBinding,runOnboardingTenantSchemaReadiness,
+} from './onboarding-provisioning-api.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   const body = Buffer.from(JSON.stringify(payload))
@@ -74,7 +89,19 @@ export const sessionCapabilities=()=>({
   productionAchievementWrites:config.enableWrites&&config.enableProductionAchievementWrites,
   productionEntitlementWrites:config.enableWrites&&config.enableProductionEntitlementWrites,
   demo:config.demoEnabled,
+  onboardingDrafts:config.enableWrites&&config.enableOnboardingDrafts,
+  onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
+  onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
+  onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
+  onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
+  onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
 })
+async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
+  const capabilities=sessionCapabilities()
+  if(!capabilities.onboardingInvitations)return capabilities
+  return {...capabilities,onboardingAccess:await canUseOnboarding(admin),onboardingWrite:await canUseOnboarding(admin,true),
+    onboardingInvitationOwner:await canManageOnboardingInvitations(admin)}
+}
 
 export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
   if(!url.pathname.startsWith('/api/admin/')) return false
@@ -102,21 +129,60 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     const body=await readJsonBody<{email?:string;password?:string}>(req)
     const result=await login(req,res,body.email,body.password)
     await recordAudit({admin:result.admin,action:'auth.login',entityType:'admin_session',metadata:{ipHashOnly:true}}).catch(()=>undefined)
+    json(res,200,{...result,capabilities:await capabilitiesFor(result.admin)});return true
+  }
+
+  // Public (unauthenticated) one-time invite redemption — no session exists yet to load.
+  const onboardingInvitePreview=/^\/api\/admin\/onboarding\/invite\/([^/]+)$/.exec(url.pathname)
+  if(isMethod(req,'GET')&&onboardingInvitePreview){
+    json(res,200,await getOnboardingInvitePreview(req,onboardingInvitePreview[1]));return true
+  }
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/onboarding/invite/claim'){
+    const result=await claimOnboardingInvite(req,res,await readJsonBody(req,4*1024))
     json(res,200,{...result,capabilities:sessionCapabilities()});return true
   }
 
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/auth/session'){
     try{
       const session=await loadSession(req)
-      json(res,200,{admin:session.admin,csrfToken:session.csrfToken,capabilities:sessionCapabilities()})
+      json(res,200,{admin:session.admin,csrfToken:session.csrfToken,capabilities:await capabilitiesFor(session.admin)})
     }catch(error){
-      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false,demo:config.demoEnabled})
+      if(error instanceof HttpError&&error.statusCode===401)json(res,200,{authenticated:false,demo:config.demoEnabled,
+        invitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations})
       else throw error
     }
     return true
   }
 
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/onboarding/invitations/preview'){
+    enforceRateLimit(`invitation-preview:${requestIp(req)}`,30,60_000)
+    json(res,200,await previewOnboardingInvitation(await readJsonBody(req,1024)));return true
+  }
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/onboarding/invitations/accept'){
+    enforceRateLimit(`invitation-accept:${requestIp(req)}`,10,60_000)
+    let existing:Awaited<ReturnType<typeof loadSession>>|null=null
+    try{existing=await loadSession(req)}catch(error){if(!(error instanceof HttpError&&error.statusCode===401))throw error}
+    if(existing)requireCsrf(req,existing.rawToken)
+    const body=await readJsonBody<{token?:unknown;email?:unknown;displayName?:unknown;password?:unknown}>(req,4*1024)
+    const accepted=await acceptOnboardingInvitation(existing?.admin||null,body)
+    if(!existing){
+      // New-account password was chosen by this recipient; never reset an existing account.
+      const authenticated=await login(req,res,accepted.admin.email,body.password)
+      json(res,200,{...accepted,...authenticated,capabilities:await capabilitiesFor(authenticated.admin)});return true
+    }
+    json(res,200,{...accepted,csrfToken:existing.csrfToken,capabilities:await capabilitiesFor(existing.admin)});return true
+  }
   const session=await loadSession(req)
+  const invitation=/^\/api\/admin\/onboarding\/invitations(?:\/([^/]+)\/(revoke|link))?$/.exec(url.pathname)
+  if(invitation){
+    if(isMethod(req,'GET')&&!invitation[1]){json(res,200,await listOnboardingInvitations(session.admin));return true}
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`invitation-owner:${session.admin.id}`,30,60_000)
+    if(isMethod(req,'POST')){
+      json(res,200,invitation[1]?invitation[2]==='link'?await reopenOnboardingInvitation(session.admin,invitation[1]):await revokeOnboardingInvitation(session.admin,invitation[1]):await createOnboardingInvitation(session.admin,await readJsonBody(req,2048)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
   if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/logout'){
     requireCsrf(req,session.rawToken)
     await recordAudit({admin:session.admin,action:'auth.logout',entityType:'admin_session',metadata:{ipPresent:Boolean(requestIp(req))}}).catch(()=>undefined)
@@ -134,6 +200,173 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  if(url.pathname==='/api/admin/onboarding/venues'){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+    if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1)throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
+    enforceRateLimit(`onboarding-venues:${session.admin.id}`,60,60_000)
+    json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset')));return true
+  }
+  const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
+  if(posProxy){
+    if(isMethod(req,'GET')&&!posProxy[2]){json(res,200,await getOnboardingPosProxy(session.admin,posProxy[1]!));return true}
+    if((isMethod(req,'PUT')&&!posProxy[2])||(isMethod(req,'POST')&&posProxy[2])){
+      requireCsrf(req,session.rawToken);enforceRateLimit(`onboarding-pos-proxy:${session.admin.id}`,20,60_000)
+      const body=await readJsonBody(req,2048)
+      json(res,200,posProxy[2]?await verifyOnboardingPosProxy(session.admin,posProxy[1]!,body):await saveOnboardingPosProxy(session.admin,posProxy[1]!,body));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const workflow=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/progress$/.exec(url.pathname)
+  if(workflow){
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingWorkflow(session.admin,workflow[1]!));return true}
+    if(isMethod(req,'PUT')){
+      requireCsrf(req,session.rawToken);enforceRateLimit(`onboarding-progress:${session.admin.id}`,60,60_000)
+      json(res,200,await saveOnboardingWorkflow(session.admin,workflow[1]!,await readJsonBody(req,2048)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingApp=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/application$/.exec(url.pathname)
+  if(onboardingApp){
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-application:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingAppConfig(session.admin,onboardingApp[1]!));return true}
+    if(isMethod(req,'PUT')){
+      json(res,200,await saveOnboardingAppConfig(session.admin,onboardingApp[1]!,await readJsonBody(req,4*1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingScope=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/scope$/.exec(url.pathname)
+  if(onboardingScope){
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-scope:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingScope(session.admin,onboardingScope[1]!));return true}
+    if(isMethod(req,'PUT')){
+      json(res,200,await prepareOnboardingScope(session.admin,onboardingScope[1]!,await readJsonBody(req,1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingProvisioningRun=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-database-binding\/run$/.exec(url.pathname)
+  if(onboardingProvisioningRun){
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-provisioning:${session.admin.id}`,20,60_000)
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'POST')){
+      json(res,200,await runOnboardingRuntimeDatabaseBinding(session.admin,onboardingProvisioningRun[1]!,await readJsonBody(req,256)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingProvisioning=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-database-binding$/.exec(url.pathname)
+  if(onboardingProvisioning){
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'GET')){
+      json(res,200,await getOnboardingRuntimeDatabaseBinding(session.admin,onboardingProvisioning[1]!));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingSchemaReadinessRun=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/tenant-schema-readiness\/run$/.exec(url.pathname)
+  if(onboardingSchemaReadinessRun){
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-provisioning:${session.admin.id}`,20,60_000)
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'POST')){
+      json(res,200,await runOnboardingTenantSchemaReadiness(session.admin,onboardingSchemaReadinessRun[1]!,await readJsonBody(req,256)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingSchemaReadiness=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/tenant-schema-readiness$/.exec(url.pathname)
+  if(onboardingSchemaReadiness){
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры подключения в URL не принимаются.')
+    if(isMethod(req,'GET')){
+      json(res,200,await getOnboardingTenantSchemaReadiness(session.admin,onboardingSchemaReadiness[1]!));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingRuntimeBundleRun=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-bundle\/run$/.exec(url.pathname)
+  if(onboardingRuntimeBundleRun){
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-provisioning:${session.admin.id}`,20,60_000)
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры bundle в URL не принимаются.')
+    if(isMethod(req,'POST')){
+      json(res,200,await runOnboardingRuntimeBundleVerification(session.admin,onboardingRuntimeBundleRun[1]!,await readJsonBody(req,256)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingRuntimeBundle=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/provisioning\/runtime-bundle$/.exec(url.pathname)
+  if(onboardingRuntimeBundle){
+    if(url.searchParams.size)throw new HttpError(400,'ONBOARDING_PROVISIONING_COMMAND_INVALID','Параметры bundle в URL не принимаются.')
+    if(isMethod(req,'GET')){
+      json(res,200,await getOnboardingRuntimeBundleVerification(session.admin,onboardingRuntimeBundle[1]!));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingEvotorVerify=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/evotor\/verify$/.exec(url.pathname)
+  if(onboardingEvotorVerify){
+    await requireOnboardingIntegrationAccess(session.admin,!isMethod(req,'GET'))
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-evotor-verify:${session.admin.id}`,20,60_000)
+    if(isMethod(req,'POST')){
+      json(res,200,await verifyOnboardingEvotorIntegration(session.admin,onboardingEvotorVerify[1]!,await readJsonBody(req,1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingEvotor=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/evotor$/.exec(url.pathname)
+  if(onboardingEvotor){
+    await requireOnboardingIntegrationAccess(session.admin,!isMethod(req,'GET'))
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-evotor:${session.admin.id}`,30,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingEvotorIntegration(session.admin,onboardingEvotor[1]!));return true}
+    if(isMethod(req,'PUT')){
+      json(res,200,await saveOnboardingEvotorIntegration(session.admin,onboardingEvotor[1]!,await readJsonBody(req,8*1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingInvite=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/invites\/([^/]+)$/.exec(url.pathname)
+  if(onboardingInvite){
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-invite:${session.admin.id}`,60,60_000)
+    if(isMethod(req,'DELETE')){json(res,200,await revokeOnboardingInvite(session.admin,onboardingInvite[1]!,onboardingInvite[2]!));return true}
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboardingInvites=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/invites$/.exec(url.pathname)
+  if(onboardingInvites){
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding-invite:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){json(res,200,await getOnboardingInvites(session.admin,onboardingInvites[1]!));return true}
+    if(isMethod(req,'POST')){json(res,200,await createOnboardingInvite(session.admin,onboardingInvites[1]!));return true}
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  const onboarding=/^\/api\/admin\/onboarding\/drafts(?:\/([^/]+))?$/.exec(url.pathname)
+  if(onboarding){
+    await requireOnboardingAccess(session.admin,!isMethod(req,'GET'))
+    const id=onboarding[1]
+    if(!isMethod(req,'GET')){
+      requireCsrf(req,session.rawToken)
+      enforceRateLimit(`onboarding:${session.admin.id}`,60,60_000)
+    }
+    if(isMethod(req,'GET')){
+      const requestKey=url.searchParams.get('requestKey')
+      json(res,200,id?await getOnboardingDraft(session.admin,id):requestKey?await getOnboardingRequest(session.admin,requestKey):await getOnboardingIndex(session.admin));return true
+    }
+    if(!id&&isMethod(req,'POST')){
+      json(res,200,await createOnboardingDraft(session.admin,await readJsonBody(req,8*1024)));return true
+    }
+    if(id&&isMethod(req,'PUT')){
+      json(res,200,await updateOnboardingDraft(session.admin,id,await readJsonBody(req,8*1024)));return true
+    }
+    throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/venues'){
     json(res,200,{venues:await listAuthorizedVenues(session.admin)});return true

@@ -3,8 +3,12 @@
 FROM node:22-bookworm-slim
 
 WORKDIR /app
-COPY package.json platform-core.js qr-resolver.js ./
+COPY package.json platform-core.js qr-resolver.js spaceverse-runtime-manifest.js spaceverse-runtime-manifest.d.ts ./
+COPY *.js package-lock.json spaceverse-runtime-release.d.ts spaceverse-runtime-image.d.ts ./
+COPY scripts/spaceverse-runtime-container-entrypoint.mjs ./scripts/
 COPY pos ./pos
+# Synthetic Admin integration tests exercise the real native proxy handler.
+COPY routes ./routes
 # The cash report test builds the POS tables from the app's own migrations.
 COPY migrations ./migrations
 
