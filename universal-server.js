@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
+import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
 import {
   createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
   withVkStartupTrace, traceVkStage
@@ -3149,6 +3152,26 @@ function platformFromRequest(req, fallback = 'unknown') {
   return signedPlatform;
 }
 
+let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
+if (!isTestImport) {
+  try {
+    const runtime = await guardSpaceverseRuntimeStartup({
+      environment: process.env,
+      query: (text, params) => pool.query(text, params)
+    });
+    if (runtime.mode === 'tenant') {
+      spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
+      spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
+        sessionSecret: configuredSessionSecret, telegramBotToken, vkAppId, vkAppSecret });
+    }
+  } catch (error) {
+    console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+    await pool.end().catch(() => {});
+    process.exit(1);
+  }
+}
+
 function isConsentExempt(pathname) {
   return pathname === '/api/health'
     || pathname === '/api/platform-health'
@@ -3196,6 +3219,8 @@ async function serveStartupProfile(req, res, startup) {
 
 const posHttp = createPosHttp(pool);
 export const server = http.createServer(async (req, res) => {
+  if (spaceversePosHttp && await spaceversePosHttp(req, res)) return;
+  if (spaceverseCustomerHttp && await spaceverseCustomerHttp(req, res)) return;
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
