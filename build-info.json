@@ -1,0 +1,20 @@
+{
+  "version": "1.0.10",
+  "versionCode": 14,
+  "package": "ru.pivnik.evotor.bridge",
+  "minSdk": 23,
+  "targetSdk": 30,
+  "debuggable": false,
+  "sha256": "4fc88c107fa226848d93b08ed5c01d7b810af197d9c3cee0bd314ddcb664ccbe",
+  "certificateSha256": "36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663",
+  "sourceCommit": "a8f08eeb700b450be08609a26781600ad4b1443e",
+  "apkBuildRun": 38707728700,
+  "unsignedArtifact": 11958789277,
+  "oneTimeReinstallRequiredFrom": [
+    "1.0.8",
+    "1.0.9"
+  ],
+  "hardwareVerified": false,
+  "bonusRedemptionImplemented": false,
+  "backupRestorationAndSigningVerified": true
+}
