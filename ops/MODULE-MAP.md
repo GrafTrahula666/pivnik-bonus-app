@@ -590,6 +590,21 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Foreground scanner draft (2026-10-15): `evotor-bridge` opens
+  `CustomerScanActivity`, subscribes to the SDK scanner broadcast only while
+  resumed, and passes recognised customer QR through the existing `Bridge`
+  receipt-specific resolve/bind policy. `core/ForegroundScan` prevents queued
+  double scans and stale customer messages after leaving the window.
+  `core/ProxyDiagnostic` classifies proxy 2003 by its structured reason.
+  `core/ConnectionCheck` separates the explicit keyless network check from the
+  saved-device-key check, accepting only the actual POS refusal envelope.
+  The encrypted credential store is unchanged. APK publication requires the
+  existing certificate of the supplied installed 1.0.8; no throwaway fallback.
+  This
+  changes no server mount, monetary rule or DB schema; real proxy connectivity,
+  compatible signing and device behaviour remain unverified. Evidence and
+  current blockers: `ops/EVOTOR-AUDIT-20261015.md`.
+
 - `pos/http.js` is the shared dispatcher for native POS device and scoped POS admin
   routes in `server.js` and `universal-server.js`; preserve both mounts on changes.
 - `pos/scope.js`, `devices.js`, `repository.js`, `analytics.js`, `service.js` and

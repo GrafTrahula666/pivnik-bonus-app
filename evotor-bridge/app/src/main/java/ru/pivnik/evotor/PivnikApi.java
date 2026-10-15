@@ -14,6 +14,8 @@ import javax.net.ssl.HttpsURLConnection;
 import org.json.JSONException;
 import org.json.JSONObject;
 import ru.pivnik.evotor.core.ResolveResult;
+import ru.pivnik.evotor.core.ProxyDiagnostic;
+import ru.pivnik.evotor.core.ConnectionCheck;
 
 /**
  * Device-key calls: POST /api/device/pos/qr/resolve (who is this QR) and
@@ -40,7 +42,15 @@ final class PivnikApi {
      * Setup-screen diagnostics: the same request as a scan, but the answer is a short text with the
      * real reason (HTTP status or the exception), so a till that cannot reach the server can be debugged.
      */
-    static String diagnose(BridgeSettings settings) {
+    static String diagnoseNetwork(BridgeSettings settings) {
+        return diagnose(settings, false);
+    }
+
+    static String diagnoseKey(BridgeSettings settings) {
+        return diagnose(settings, true);
+    }
+
+    private static String diagnose(BridgeSettings settings, boolean withKey) {
         HttpURLConnection connection = null;
         String stage = "подключение";
         try {
@@ -53,8 +63,8 @@ final class PivnikApi {
             connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            // Works before a key is entered too: then a 401 already proves the server is reachable.
-            String token = settings.deviceToken();
+            // The network check must not read, send, require or overwrite the saved device key.
+            String token = withKey ? settings.deviceToken() : "";
             if (!token.isEmpty()) setKey(connection, token);
             byte[] body = "{\"payload\":\"PIVNIK-CONNECTION-CHECK\"}".getBytes(StandardCharsets.UTF_8);
             connection.setDoOutput(true);
@@ -66,13 +76,10 @@ final class PivnikApi {
             stage = "ожидание ответа";
             int status = connection.getResponseCode();
             String errorText = null;
-            if (status == 404) {
-                try { errorText = read(connection.getErrorStream()); } catch (Exception ignored) {}
-                // Only our own "QR not found" answer proves the right server replied; any other 404 is a stranger.
-                if (errorText != null && (errorText.contains("qr_not_found") || errorText.contains("QR не найден"))) return "OK";
-            }
-            if (status == 401 && token.isEmpty()) return "NOKEY";
-            if (status == 401 || status == 403 || status == 428) return "KEY";
+            try { errorText = read(status >= 200 && status < 300
+                    ? connection.getInputStream() : connection.getErrorStream()); } catch (Exception ignored) {}
+            String classified = ConnectionCheck.classify(withKey, status, errorText);
+            if (classified != null) return classified;
             // Unexpected answer: say who answered (Railway or something on the till's network).
             StringBuilder details = new StringBuilder("HTTP " + status);
             appendHeader(details, connection, "Server");
@@ -93,9 +100,10 @@ final class PivnikApi {
             try {
                 String text = errorText != null ? errorText : read(connection.getErrorStream());
                 if (text != null && !text.trim().isEmpty()) {
+                    String hint = ProxyDiagnostic.hint(text);
                     text = text.replaceAll("\\s+", " ").trim();
                     details.append("\nОтвет: ").append(text.length() > 160 ? text.substring(0, 160) : text);
-                    if (text.contains("2003")) details.append("\nЭвотор не пропускает запрос: на dev.evotor.ru, вкладка «Интеграция», включите «Проксирование запросов… (ver. 2)» с адресом сервера и переустановите приложение через Личный кабинет.");
+                    if (!hint.isEmpty()) details.append("\n").append(hint);
                 }
             } catch (Exception ignored) {}
             details.append("\nПроверка /api/health: ").append(health(settings));

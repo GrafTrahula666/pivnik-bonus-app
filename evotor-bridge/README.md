@@ -1,5 +1,42 @@
 # PIVNIK Evotor bridge — integration draft
 
+## Foreground scan draft 1.0.10 (not installed or released)
+
+The owner authorized preparing and publishing the update on 2026-10-15. The
+connection screen now has a **network check without a key** first, and a separate
+saved-key check. Network diagnostics neither read nor send the saved key.
+`ConnectionCheck` accepts only the actual POS JSON refusal as proof of connectivity,
+not an arbitrary proxy 401. The encrypted credential store and preference names
+are unchanged; a compatible in-place update preserves the existing key.
+
+`.github/workflows/evotor-bridge-apk.yml` tests/builds an unsigned release first,
+without creating an APK signing key. Publishing then requires existing signing
+secrets and the exact certificate fingerprint of the supplied installed 1.0.8.
+Missing/mismatched signing identity blocks publication. Unsigned artifacts are
+explicitly labelled **not for installation**. A compatible signed APK is published
+on a new versioned `evotor-apk-1.0.10` branch without replacing older APKs or using
+force-push. This does not upload or install the app through the Evotor portal.
+
+The launcher opens `CustomerScanActivity`: add goods in Evotor, open PIVNIK,
+scan the guest's QR with the register scanner, wait for confirmation, then use
+“Вернуться к продаже” to return to the open SELL receipt. The activity receives
+`ru.evotor.devices.ScannedCode` only while resumed, requires
+`ru.evotor.devices.SCANNER_RECEIVER`, and restricts senders with
+`ScannerBroadcastReceiver.SENDER_PERMISSION`. It uses the existing resolve/bind
+and receipt UUID checks; it adds no product, discount or wallet operation.
+One scan runs at a time. Results from a window left during the request do not
+show a previous customer when the window is reopened.
+
+The existing SELL barcode service is retained for compatibility, but returning
+empty positions is **not** a documented way to stop Evotor's product lookup.
+Neither supplied 1.0.8 nor 1.0.9 has a foreground scanner receiver. This draft
+does not establish that network proxying works and does not implement spending.
+
+Proxy diagnostics distinguish the two known code-2003 reasons: application not
+applied to device versus destination unreachable. A timeout no longer tells the
+owner to reinstall the application. No portal setting, production server, key,
+database or installed application was changed. See `ops/EVOTOR-AUDIT-20261015.md`.
+
 Ported selectively from `feature/evotor-pivnik-bridge` at
 `2f6388a5ba04f8f95758eb31c1dc6ae0cbccdb18`. Not production-ready.
 
@@ -29,15 +66,15 @@ integration branch or manual run) runs the same JVM tests and uploads a
 **debug APK for a test install** as artifact `pivnik-evotor-debug-apk`.
 Java 17, Gradle 8.9, Android SDK 35, Evotor integration-library `v0.6.40`.
 
-The debug APK is signed with a throwaway key generated in that run, so it
-cannot update the installed 0.1.0 prototype in place: remove the prototype
-first (it holds no data worth keeping; it was never configured), then install
-1.0.7 (versionCode 11) and enter the `pvpos_…` key (the production HTTPS address is
-pre-filled). Old terminal firmware that does not trust ISRG Root X1 still connects:
+When permanent signing secrets are absent, the workflow uses a throwaway debug
+key. The uploaded 1.0.8 and 1.0.9 have different signing certificates and cannot
+update each other normally. Preserve the installed app and find its existing
+signing key before planning an update; do not uninstall a working register app
+to work around signing. Old terminal firmware has an additional trust fallback:
 the app bundles ISRG X1/X2 and GTS R1/R3/R4 roots (`res/raw/pivnik_roots.pem`) as a
 fallback to the system roots.
-A permanent release signing key is a separate, later step; until then every
-new test build is installed the same way.
+The fallback is not proof of connectivity through the Evotor proxy. A permanent
+compatible release signing key and real-device checks remain release gates.
 
 ## Hardware/external proof still required
 

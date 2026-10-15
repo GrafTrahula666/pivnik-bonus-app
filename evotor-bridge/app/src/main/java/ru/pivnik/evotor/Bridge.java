@@ -21,6 +21,10 @@ import ru.pivnik.evotor.core.ResolveResult;
 final class Bridge {
     static final String TAG = "PivnikEvotor";
 
+    interface ScanCallback {
+        void onResult(String message);
+    }
+
     private static Bridge instance;
 
     final Context app;
@@ -43,33 +47,40 @@ final class Bridge {
 
     /** Called from the barcode event with a code already recognised as a PIVNIK customer code. */
     void onPivnikCodeScanned(final String payload) {
+        onPivnikCodeScanned(payload, null);
+    }
+
+    void onPivnikCodeScanned(final String payload, final ScanCallback callback) {
         worker.execute(new Runnable() {
             @Override public void run() {
+                String message;
                 try {
-                    handleScan(payload);
+                    message = handleScan(payload);
                 } catch (RuntimeException error) {
                     Log.w(TAG, "scan handling failed; sale continues without PIVNIK");
-                    notifyBartender(IndicatorText.forFailure(ResolveResult.Kind.UNAVAILABLE));
+                    message = IndicatorText.forFailure(ResolveResult.Kind.UNAVAILABLE);
                 }
+                final String result = message;
+                if (callback == null) notifyBartender(result);
+                else main.post(new Runnable() {
+                    @Override public void run() { callback.onResult(result); }
+                });
             }
         });
     }
 
-    private void handleScan(String payload) {
+    private String handleScan(String payload) {
         Receipt.Header scanned = ReceiptApi.getReceiptHeader(app, Receipt.Type.SELL);
         if (scanned == null) {
-            notifyBartender(IndicatorText.noOpenReceipt());
-            return;
+            return IndicatorText.noOpenReceipt();
         }
         if (!settings.isConfigured()) {
-            notifyBartender(IndicatorText.notConfigured());
-            return;
+            return IndicatorText.notConfigured();
         }
         ResolveResult result = PivnikApi.resolve(settings, payload);
         if (result.kind != ResolveResult.Kind.FOUND) {
             settings.recordStatus("resolve " + result.kind);
-            notifyBartender(IndicatorText.forFailure(result.kind));
-            return;
+            return IndicatorText.forFailure(result.kind);
         }
         // The receipt may have been closed/deleted while the backend answered: re-check it.
         Receipt.Header current = ReceiptApi.getReceiptHeader(app, Receipt.Type.SELL);
@@ -83,13 +94,12 @@ final class Bridge {
             settings.recordStatus("bind " + outcome + " " + bound.kind + " receipt " + scanned.getUuid());
             if (bound.kind != ResolveResult.Kind.FOUND) {
                 policy.onReceiptFinished(scanned.getUuid());
-                notifyBartender(IndicatorText.bindFailed(bound.kind));
-                return;
+                return IndicatorText.bindFailed(bound.kind);
             }
         } else {
             settings.recordStatus("bind " + outcome + " receipt " + scanned.getUuid());
         }
-        notifyBartender(IndicatorText.forBinding(outcome, result.client, previous == null ? "" : previous.displayName));
+        return IndicatorText.forBinding(outcome, result.client, previous == null ? "" : previous.displayName);
     }
 
     void notifyBartender(final String text) {

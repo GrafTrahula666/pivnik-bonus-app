@@ -24,6 +24,8 @@ public final class SettingsActivity extends Activity {
     private TextView status;
     private TextView connection;
     private Button check;
+    private Button keyCheck;
+    private boolean checking;
     private static final int KEY_LENGTH = 49;
 
     @Override
@@ -42,10 +44,19 @@ public final class SettingsActivity extends Activity {
         root.addView(title);
 
         TextView note = new TextView(this);
-        note.setText("Введите ключ кассы pvpos_… от администратора (или отсканируйте его QR, если сканер "
-                + "печатает в поле) и нажмите «Сохранить». Адрес сервера задан в приложении. "
-                + "Ключ позволяет только узнать клиента по QR и отметить его в чеке.");
+        note.setText("1. Проверьте связь с сервером — ключ для этого не нужен.\n"
+                + "2. Когда связь работает, сохраните ключ кассы pvpos_… один раз. "
+                + "При совместимом обновлении он сохраняется. Адрес сервера задан в приложении.");
         root.addView(note);
+
+        check = new Button(this);
+        check.setText("Проверить связь без ключа");
+        check.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { runCheck(settings, false); }
+        });
+        root.addView(check);
+        connection = new TextView(this);
+        root.addView(connection);
 
         session = new EditText(this);
         session.setHint(settings.isConfigured() ? "Ключ сохранён. Введите для замены" : "pvpos_…");
@@ -102,38 +113,19 @@ public final class SettingsActivity extends Activity {
                 session.setHint("Ключ сохранён. Введите для замены");
                 refreshStatus(settings);
                 Toast.makeText(SettingsActivity.this, "Сохранено", Toast.LENGTH_SHORT).show();
-                check.performClick();
+                keyCheck.setEnabled(true);
+                keyCheck.performClick();
             }
         });
         root.addView(save);
 
-        check = new Button(this);
-        check.setText("Проверить подключение");
-        check.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View view) {
-                if (!PosConfiguration.validBase(settings.apiBaseUrl())) {
-                    connection.setText("Адрес сервера не задан.");
-                    return;
-                }
-                check.setEnabled(false);
-                connection.setText("Проверяем…");
-                new Thread(new Runnable() {
-                    @Override public void run() {
-                        final String result = PivnikApi.diagnose(settings);
-                        runOnUiThread(new Runnable() {
-                            @Override public void run() {
-                                check.setEnabled(true);
-                                connection.setText(describe(result));
-                            }
-                        });
-                    }
-                }).start();
-            }
+        keyCheck = new Button(this);
+        keyCheck.setText("Проверить сохранённый ключ");
+        keyCheck.setEnabled(settings.isConfigured());
+        keyCheck.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { runCheck(settings, true); }
         });
-        root.addView(check);
-
-        connection = new TextView(this);
-        root.addView(connection);
+        root.addView(keyCheck);
 
         status = new TextView(this);
         root.addView(status);
@@ -142,7 +134,33 @@ public final class SettingsActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
         setContentView(scroll);
-        if (!settings.isConfigured()) session.requestFocus();
+        check.requestFocus();
+    }
+
+    private void runCheck(final BridgeSettings settings, final boolean withKey) {
+        if (checking) return;
+        if (withKey && !settings.isConfigured()) {
+            connection.setText("Ключ ещё не сохранён. Связь можно проверить без ключа.");
+            return;
+        }
+        checking = true;
+        check.setEnabled(false);
+        keyCheck.setEnabled(false);
+        connection.setText(withKey ? "Проверяем сохранённый ключ…" : "Проверяем связь без ключа…");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final String answer = withKey ? PivnikApi.diagnoseKey(settings) : PivnikApi.diagnoseNetwork(settings);
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (isFinishing()) return;
+                        checking = false;
+                        check.setEnabled(true);
+                        keyCheck.setEnabled(settings.isConfigured());
+                        connection.setText(describe(answer));
+                    }
+                });
+            }
+        }).start();
     }
 
     private String versionName() {
@@ -152,8 +170,9 @@ public final class SettingsActivity extends Activity {
 
     private static String describe(String result) {
         if ("OK".equals(result)) return "Подключено: сервер отвечает, ключ принят.";
-        if ("NOKEY".equals(result)) return "Сервер отвечает. Осталось ввести ключ кассы и нажать «Сохранить».";
-        if ("KEY".equals(result)) return "Сервер отвечает, но ключ кассы не подходит. Выпустите новый и введите его.";
+        if ("NETWORK_OK".equals(result)) return "Связь с сервером есть. Проверка выполнена без ключа. "
+                + "Если ключ уже сохранён, нажмите «Проверить сохранённый ключ».";
+        if ("KEY".equals(result)) return "Сервер отвечает, но сохранённый ключ не принят. Проверьте его действительность у администратора.";
         if (result.startsWith("HTTP ")) return "Сервер ответил неожиданно. Пришлите этот текст разработчику:\n" + result;
         String hint = result.contains("SSL") || result.contains("Certificate") || result.contains("Trust")
                 ? "\nПохоже на проблему с сертификатом или временем на кассе. Время на кассе: "
@@ -167,7 +186,7 @@ public final class SettingsActivity extends Activity {
     private void refreshStatus(BridgeSettings settings) {
         String last = settings.lastStatus();
         status.setText("Версия " + versionName() + ". "
-                + (settings.isConfigured() ? "Настроено." : "Не настроено.")
+                + (settings.isConfigured() ? "Ключ сохранён." : "Ключ не сохранён. Связь можно проверить без ключа.")
                 + (last.isEmpty() ? "" : "\nПоследнее событие: " + last));
     }
 }

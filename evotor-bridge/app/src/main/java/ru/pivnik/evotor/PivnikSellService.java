@@ -8,8 +8,9 @@ import ru.pivnik.evotor.core.PivnikQr;
 
 /**
  * Receives every barcode scanned while a SELL receipt is being formed
- * (action ru.evotor.event.sell.BARCODE_RECEIVED). A PIVNIK code is consumed without adding
- * anything to the receipt; the client is reported to the server against the open receipt UUID.
+ * (action ru.evotor.event.sell.BARCODE_RECEIVED). No product is added for a PIVNIK code;
+ * the client is reported to the server against the open receipt UUID. Empty positions do not
+ * guarantee suppression of the POS product lookup. Use CustomerScanActivity for customer scans.
  *
  * <p>Payback receipts never reach this service, so a refund is never attributed to a customer.
  */
@@ -23,7 +24,7 @@ public final class PivnikSellService extends SellIntegrationService {
             String payload = PivnikQr.detect(event.getBarcode());
             if (payload == null) return null; // not ours: the till handles the product code as usual
             Bridge.get(this).onPivnikCodeScanned(payload);
-            // Claim the PIVNIK code without adding anything to the receipt.
+            // No fictitious product. The POS may still display its own "product not found" message.
             return new ReturnPositionsForBarcodeRequestedEvent.Result(
                     false, Collections.emptyList(), Collections.emptyList());
         } catch (RuntimeException error) {

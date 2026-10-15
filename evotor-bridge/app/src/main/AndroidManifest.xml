@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- SellIntegrationService.PERMISSION -->
     <uses-permission android:name="ru.evotor.permission.SELL_INTEGRATION_SERVICE" />
+    <uses-permission android:name="ru.evotor.devices.SCANNER_RECEIVER" />
 
     <queries>
         <!-- ReceiptApi.AUTHORITY / AUTHORITY_V2: read the open and closed sell receipt -->
@@ -28,7 +29,7 @@
             android:value="${evotorAppUuid}" />
 
         <activity
-            android:name=".SettingsActivity"
+            android:name=".CustomerScanActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -45,6 +46,8 @@
                 android:name="ru.evotor.launcher.BACKGROUND_COLOR"
                 android:value="#08040E" />
         </activity>
+
+        <activity android:name=".SettingsActivity" android:exported="false" />
 
         <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
         <!-- Evotor's barcode-event page lists category EVOTOR and this permission; the generic manifest page lists DEFAULT, so both filters are declared. -->
