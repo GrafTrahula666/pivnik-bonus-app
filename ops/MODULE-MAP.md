@@ -94,7 +94,16 @@ from the earlier ledger is projected as action_required and safely reclaimed
 for verification. Shared bundle v2 includes the code proof in its digest; v1
 remains readable. Neither version authorizes launch. Coverage is Node literal
 imports, not a hermetic image or arbitrary computed imports/frontend assets.
-Immutable deployment image registration/launch still requires a later step.
+`scripts/prepare-spaceverse-runtime-image.mjs` creates a new allowlisted local
+image context and verifies its copied release. `ops/spaceverse-runtime.Dockerfile`
+pins the Node base digest and reinstalls locked production dependencies offline
+from a separate public npm cache; cache/logs are tmpfs, host node_modules excluded.
+`spaceverse-runtime-image.js` verifies an independently approved immutable local
+Docker image ID, platform, code labels, non-root user, exact tenant wrapper and
+limited baked environment. The wrapper rechecks bundle/modules and retains the
+startup denial without npm prestart, DB access or legacy fallback. A local image
+ID is not a registry publication or provisioned service. Operator-only image
+registration, approved resumable launch and terminal provisioning remain pending.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find

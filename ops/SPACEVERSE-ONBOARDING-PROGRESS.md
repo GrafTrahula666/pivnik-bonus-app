@@ -811,3 +811,71 @@ runtime launch и terminal provisioning, затем полная проверк�
 пути. Реальные deployment/устройства/провайдеры/БД/env по-прежнему не трогались.
 Mobile Integration Hub отдельно: architecture/contract/UX, потом sandbox vertical;
 его реализация не начата и не смешивается с #273.
+
+### Локальный immutable runtime image, без запуска сервиса (2026-10-15)
+
+Лично добавлены build-only `scripts/prepare-spaceverse-runtime-image.mjs`,
+`ops/spaceverse-runtime.Dockerfile`, strict image inspection verifier и отдельный
+tenant entrypoint. Работа поверх 05778c4; прежние авторы onboarding/provisioning
+не приписываются этой итерации. Ни tenant model, ни ledger не дублируются,
+миграций нет. Новый production API не включён.
+
+Контекст копирует actual release closure, tracked public root assets и manual
+SQL; исключает .git/.env/.npmrc/Business/test/node_modules. Он повторно проверяет
+скопированную closure и не перезаписывает существующий каталог. Image base Node
+22 закреплён digest; dependencies устанавливаются по lockfile внутри Docker
+offline, ignore-scripts, network=none. Публичный npm cache и logs доступны только
+через build mounts/tmpfs, host dependencies/proxy/CA не встраиваются. Контракт
+требует independently expected immutable local image ID, linux/amd64, совпадающие
+source SHA/fingerprint, user node, exact tenant wrapper и ограниченные baked env.
+Mutable tag, root/legacy/prestart, чужой source/ID и неизвестные env запрещены.
+
+Wrapper перепроверяет bundle v2 и файлы, затем сохраняет существующий запрет
+старта, без npm prestart, подключения к реальной БД или legacy fallback.
+Локальный image ID не является registry publication или работающим приложением.
+runtime остаётся not_provisioned/published=false. Server-side image registration,
+resume-safe разрешённый runner/activation и terminal provisioning ещё нужны;
+критический путь целиком готовым не считается. Mobile Integration Hub по-прежнему
+отдельная последующая работа после исходного scope #273.
+
+Лично выполнено, логи /tmp/spaceverse-image-final-gate:
+
+- materialize дважды + cmp — identical; исходный generated diff 7 файлов
+  365 insertions/78 deletions, включая server.js/universal-server.js/app.js,
+  отдельно сохранён и не исправлялся как побочная задача;
+- node --test --test-concurrency=2 — 595/595; npm run check и
+  npm run audit:runtime-patches passed; root npm audit и production audit — 0;
+- Business npm run typecheck/build/lint — passed, 0 errors/12 прежних warnings;
+  npm test -- --maxWorkers=2 — 262 passed/20 прежних skipped; npm audit — 0;
+- node --test test/spaceverse-runtime-image.test.js — 4/4: настоящий allowlisted
+  context, повторное чтение/проверка copied release, отсутствие приватных файлов,
+  запрет overwrite, readable non-root permissions, смена image/source/config,
+  duplicate/unknown baked env, actual child process denial до загрузки БД;
+- node scripts/prepare-spaceverse-runtime-image.mjs --output
+  /tmp/spaceverse-runtime-image-readable-context — success, 159 source files,
+  45 modules, 12 152 487 bytes; source 05778c4, actual materialized fingerprint
+  b16703aacfc7ae9917c8cf636269bf39a5b89d0701c03ec54ab687ff7a4ce160;
+- docker build --build-context npm-cache=/tmp/spaceverse-runtime-npm-cache
+  с exact release build args — exit 0; actual local image
+  sha256:fa61dd588d07beb5aacb81fb816343725a8c24ef79ddd0c27e4fa046ceeb3f00;
+- node /tmp/spaceverse-image-final-gate/image-smoke.mjs — 4/4 actual Docker
+  containers, network none/read-only/cap-drop ALL/no-new-privileges: missing bundle,
+  legacy mode, valid synthetic bundle без разрешённого binding/launch,
+  неверный code proof; все exit 78, stdout пустой, только безопасный error code.
+  Контейнеры/образ сохранены, реальных пользователей/денег/устройств нет;
+- npx playwright test --config /tmp/spaceverse-invitations-playwright.config.mjs
+  и /tmp/spaceverse-onboarding-playwright.config.mjs — 4/4 + 4/4 desktop/mobile.
+  Это прежние signed Admin HTTP/SQL/UI scenarios, не production launch;
+  новый image gate отдельно проверен настоящими локальными контейнерами.
+
+Первая online npm Docker install завершалась exit-handler error; frozen host
+npm ci успешно заполнил public cache, offline Docker install прошёл. Первый
+smoke обнаружил влияние host umask 077 на permissions: исправлены только public
+context file/directory modes, context root остался 0700; повтор подтвердил node
+user и readable files. Binding guard корректно маскирует synthetic denied query
+как SPACEVERSE_RUNTIME_BINDING_UNAVAILABLE, без доступа к реальному PostgreSQL.
+Прежние favicon/chunk-size/lint предупреждения не исправлялись. Production,
+Railway, CI, реальные device/provider настройки и данные не менялись.
+Запрошенный /mnt/project-files/owner-panel/progress.md остаётся недоступным для
+записи; журнал ведётся здесь. Canonical runtime files и E2E screenshots
+восстанавливаются перед commit, generated diff не публикуется.

@@ -143,6 +143,34 @@ variables не меняются. Покрытие не является пров
 frontend assets или вычисляемых импортов; следующий шаг — конкретный immutable
 image и разрешённый возобновляемый запуск. Сервис этим скриптом не стартует.
 
+Для локального образа существует отдельный build-only путь:
+
+1. `node scripts/prepare-spaceverse-runtime-image.mjs --output /tmp/sv-image-context`
+   создаёт новый allowlisted контекст и повторно проверяет скопированные модули.
+   `.git`, `.env`, `.npmrc`, Business, tests и host `node_modules` не копируются.
+   Повтор с тем же каталогом отвергается, существующие файлы не перезаписываются.
+2. В этом временном контексте выполните
+   `npm ci --omit=dev --ignore-scripts --cache /tmp/sv-image-npm-cache`.
+   Это заполнение публичного кеша по lockfile, без lifecycle scripts. Сборка
+   заново устанавливает dependencies внутри образа; host node_modules исключён.
+3. Используя SHA/fingerprint из созданного release record, выполните
+   `docker build --build-context npm-cache=/tmp/sv-image-npm-cache --build-arg SOURCE_RELEASE_SHA=<SHA из record> --build-arg SOURCE_RELEASE_FINGERPRINT=<fingerprint из record> -t spaceverse-runtime-candidate:local /tmp/sv-image-context`.
+   Node base закреплён digest, npm install внутри Docker работает offline с
+   проверкой lockfile integrity. Кеш и логи находятся в tmpfs; proxy, CA и
+   credentials в образ не включаются. Tag служит только локальной меткой.
+4. Получите `docker image inspect spaceverse-runtime-candidate:local` и
+   проверьте его через `verifyRuntimeImageInspection` с независимо утверждённым
+   `sha256:…` image ID и code proof. Mutable tag, другой digest/source,
+   root user, legacy entrypoint, неверный режим и неизвестные baked env запрещены.
+
+Идентичность локального Docker image не является registry digest или доказательством
+публикации. Образ запускается пользователем `node` через отдельный tenant wrapper,
+без npm prestart, автоприменения миграций или legacy fallback. Wrapper перепроверяет
+bundle v2 и фактические модули, затем сохраняет прежний запрет старта. Даже
+валидный образ остаётся `not_provisioned`: разрешённый runner, server-side
+регистрация image ID, activation и terminal provisioning ещё не реализованы.
+Не используйте эту инструкцию как разрешение на deploy или изменение Railway.
+
 При включённом новом flag старые ссылки `/invite/…` требуют перевыдачи в
 «Приглашениях». Их записи и ранее выданные независимые права сохраняются.
 Новая migration 011 расширяет существующую таблицу 007/008, без второй модели.
