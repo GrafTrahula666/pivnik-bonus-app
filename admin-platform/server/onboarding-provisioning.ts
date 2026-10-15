@@ -4,9 +4,11 @@ import {
   createSpaceverseRuntimeBundle,
   parseSpaceverseRuntimeBundle,
   parseSpaceverseRuntimeCodeRelease,
+  parseSpaceverseRuntimeImageRelease,
   runtimeEnvironmentFromSpaceverseBundle,
   type SpaceverseRuntimeManifest,
   type SpaceverseRuntimeCodeRelease,
+  type SpaceverseRuntimeImageRelease,
 } from '../../spaceverse-runtime-manifest.js'
 import { recordAudit } from './audit.js'
 import { loadOwnedOnboardingRuntimeSource } from './venue-onboarding.js'
@@ -34,6 +36,7 @@ type RuntimeBundleResult={
   runtimeStatus:'not_provisioned'
   published:false
   codeRelease?:SpaceverseRuntimeCodeRelease
+  imageRelease?:SpaceverseRuntimeImageRelease
 }
 type TargetResult=BindingResult|SchemaReadinessResult|RuntimeBundleResult
 
@@ -73,6 +76,7 @@ export interface OnboardingProvisioningOptions {
   // every candidate is parsed again with the runtime's shared strict contract.
   assembleRuntimeBundle?:(manifest:SpaceverseRuntimeManifest)=>Promise<unknown>|unknown
   requireCodeRelease?:boolean
+  requireImageRelease?:boolean
 }
 
 class TargetStepFailure extends Error {
@@ -110,9 +114,19 @@ function codePinned(row:StepRow){
   const value=row.result&&'codeRelease' in row.result?row.result.codeRelease:null
   try{return Boolean(value&&parseSpaceverseRuntimeCodeRelease(value))}catch{return false}
 }
-function view(source:RuntimeSource,step:StepName,row?:StepRow,requireCodeRelease=false) {
-  if(requireCodeRelease&&step===RUNTIME_BUNDLE_STEP&&row?.status==='succeeded'&&!codePinned(row)){
-    row={...row,status:'action_required',last_error_code:'RUNTIME_RELEASE_NOT_REGISTERED',result:null}
+function missingProof(row:StepRow,options:OnboardingProvisioningOptions){
+  if((options.requireCodeRelease||options.requireImageRelease)&&!codePinned(row))return 'RUNTIME_RELEASE_NOT_REGISTERED'
+  if(options.requireImageRelease){
+    const value=row.result&&'imageRelease' in row.result?row.result.imageRelease:null
+    try{if(value&&parseSpaceverseRuntimeImageRelease(value))return null}catch{/* invalid persisted image proof */}
+    return 'RUNTIME_IMAGE_NOT_REGISTERED'
+  }
+  return null
+}
+function view(source:RuntimeSource,step:StepName,row?:StepRow,options?:OnboardingProvisioningOptions) {
+  const errorCode=options&&step===RUNTIME_BUNDLE_STEP&&row?.status==='succeeded'?missingProof(row,options):null
+  if(errorCode){
+    row={...row!,status:'action_required',last_error_code:errorCode,result:null}
   }
   const startAllowed=!row||row.status==='retryable_error'||row.status==='action_required'||
     (row.status==='running'&&!row.lease_active)
@@ -186,7 +200,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
       await client.query('COMMIT')
       return {source,step,row,token:initialToken}
     }
-    const oldDescriptor=options.requireCodeRelease&&step===RUNTIME_BUNDLE_STEP&&row.status==='succeeded'&&!codePinned(row)
+    const oldDescriptor=step===RUNTIME_BUNDLE_STEP&&row.status==='succeeded'&&Boolean(missingProof(row,options))
     if((row.status==='succeeded'&&!oldDescriptor)||(row.status==='running'&&row.lease_active)) {
       await client.query('COMMIT')
       return {source,step,row,token:null}
@@ -424,8 +438,11 @@ async function verifyRuntimeBundle(
   try {
     const candidate=await (options.assembleRuntimeBundle??createSpaceverseRuntimeBundle)(source.manifest)
     const bundle=parseSpaceverseRuntimeBundle(candidate)
-    if(options.requireCodeRelease&&!bundle.artifact.codeRelease){
+    if((options.requireCodeRelease||options.requireImageRelease)&&!bundle.artifact.codeRelease){
       throw new TargetStepFailure('action_required','RUNTIME_RELEASE_NOT_REGISTERED')
+    }
+    if(options.requireImageRelease&&!bundle.artifact.imageRelease){
+      throw new TargetStepFailure('action_required','RUNTIME_IMAGE_NOT_REGISTERED')
     }
     const environment=runtimeEnvironmentFromSpaceverseBundle(bundle)
     if(environment.SPACEVERSE_RUNTIME_MODE!=='tenant'||
@@ -438,11 +455,13 @@ async function verifyRuntimeBundle(
       bundleSha256:bundle.bundleSha256,manifestSchemaVersion:2,
       runtimeStatus:'not_provisioned',published:false,
       ...(bundle.artifact.codeRelease?{codeRelease:bundle.artifact.codeRelease}:{}),
+      ...(bundle.artifact.imageRelease?{imageRelease:bundle.artifact.imageRelease}:{}),
     }
   } catch(error) {
     if(error instanceof TargetStepFailure)throw error
     const code=(error as {code?:string})?.code
-    if(['RUNTIME_RELEASE_NOT_REGISTERED','RUNTIME_RELEASE_INVALID','RUNTIME_RELEASE_UNAVAILABLE','RUNTIME_RELEASE_MISMATCH'].includes(code??'')){
+    if(['RUNTIME_RELEASE_NOT_REGISTERED','RUNTIME_RELEASE_INVALID','RUNTIME_RELEASE_UNAVAILABLE','RUNTIME_RELEASE_MISMATCH',
+      'RUNTIME_IMAGE_NOT_REGISTERED','RUNTIME_IMAGE_MISMATCH','RUNTIME_IMAGE_CONTRACT_INVALID'].includes(code??'')){
       throw new TargetStepFailure('action_required',code!)
     }
     throw new TargetStepFailure('action_required','RUNTIME_ARTIFACT_INCOMPATIBLE')
@@ -462,7 +481,7 @@ async function finish(
     // target binding is idempotent, so the newer worker will reconcile it.
     if(current.status!=='running'||current.lease_token!==claimValue.token) {
       await client.query('COMMIT')
-      return view(claimValue.source,claimValue.step,current,options.requireCodeRelease)
+      return view(claimValue.source,claimValue.step,current,options)
     }
     if(outcome.status==='succeeded') {
       await client.query(`UPDATE admin_onboarding_provisioning_steps SET
@@ -486,7 +505,7 @@ async function finish(
       metadata:{step:claimValue.step,...(outcome.status==='succeeded'?outcome.result:{errorCode:outcome.errorCode})},
     },client)
     await client.query('COMMIT')
-    return view(claimValue.source,claimValue.step,row,options.requireCodeRelease)
+    return view(claimValue.source,claimValue.step,row,options)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     if(error instanceof HttpError) throw error
@@ -590,7 +609,7 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
             'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
         }
         await client.query('COMMIT')
-        return view(source,RUNTIME_BUNDLE_STEP,row,options.requireCodeRelease)
+        return view(source,RUNTIME_BUNDLE_STEP,row,options)
       } catch(error) {
         await client.query('ROLLBACK').catch(()=>undefined)
         if(error instanceof HttpError) throw error
@@ -600,7 +619,7 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
 
     async runRuntimeBundleVerification(admin:AdminPrincipal,draftId:string) {
       const claimed=await claim(options,admin,draftId,RUNTIME_BUNDLE_STEP)
-      if(!claimed.token) return view(claimed.source,RUNTIME_BUNDLE_STEP,claimed.row,options.requireCodeRelease)
+      if(!claimed.token) return view(claimed.source,RUNTIME_BUNDLE_STEP,claimed.row,options)
       try {
         const result=await verifyRuntimeBundle(options,claimed.source)
         return await finish(options,admin,claimed,{status:'succeeded',result})

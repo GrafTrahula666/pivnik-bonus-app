@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import type { Pool } from 'pg'
 import {nativePosFixture} from '../../server/tests/native-pos-fixture.mjs'
 import {createRuntimeRelease} from '../../../spaceverse-runtime-release.js'
+import {syntheticImageId,syntheticImageInspection} from '../../server/tests/runtime-image-fixture.js'
 
 process.env.NODE_ENV='development'
 process.env.ADMIN_DATABASE_URL=''
@@ -76,12 +77,25 @@ const server=http.createServer((req,res)=>{void (async()=>{
         ON CONFLICT(draft_id,step) DO NOTHING`,[source.draftId,step,source.manifest.runtimeKey,source.manifest.manifestSha256,source.manifest.source.applicationRevision,source.manifest.scope.companyId,source.manifest.scope.venueId,JSON.stringify(result)])
     }
     if(body.approved===true){
-      const release=await createRuntimeRelease(fileURLToPath(new URL('../../../',import.meta.url)),'a'.repeat(40))
+      // The optional actual local image evidence is test-process-only. Without
+      // it this fixture uses explicitly synthetic inspection metadata.
+      const imageFile=process.env.SPACEVERSE_E2E_IMAGE_INSPECTION_FILE
+      const actualImage=imageFile?JSON.parse(await fs.readFile(imageFile,'utf8')):null
+      const sourceSha=actualImage?.[0]?.Config?.Labels?.['org.opencontainers.image.revision']??'a'.repeat(40)
+      const release=await createRuntimeRelease(fileURLToPath(new URL('../../../',import.meta.url)),sourceSha)
       const directory=await fs.mkdtemp(path.join(os.tmpdir(),'spaceverse-browser-release-')),file=path.join(directory,'release.json')
       await fs.writeFile(file,JSON.stringify(release))
       process.env.ADMIN_RUNTIME_RELEASE_SHA=release.sourceSha;process.env.ADMIN_RUNTIME_RELEASE_FINGERPRINT=release.fingerprint;process.env.ADMIN_RUNTIME_RELEASE_MANIFEST_FILE=file
+      delete process.env.ADMIN_RUNTIME_IMAGE_ID;delete process.env.ADMIN_RUNTIME_IMAGE_INSPECTION_FILE
+      if(body.imageApproved===true){
+        const inspectionFile=path.join(directory,'image.json')
+        await fs.writeFile(inspectionFile,JSON.stringify(actualImage??syntheticImageInspection(release)))
+        process.env.ADMIN_RUNTIME_IMAGE_ID=actualImage?.[0]?.Id??syntheticImageId
+        process.env.ADMIN_RUNTIME_IMAGE_INSPECTION_FILE=inspectionFile
+      }
     }else{
       delete process.env.ADMIN_RUNTIME_RELEASE_SHA;delete process.env.ADMIN_RUNTIME_RELEASE_FINGERPRINT;delete process.env.ADMIN_RUNTIME_RELEASE_MANIFEST_FILE
+      delete process.env.ADMIN_RUNTIME_IMAGE_ID;delete process.env.ADMIN_RUNTIME_IMAGE_INSPECTION_FILE
     }
     res.setHeader('Content-Type','application/json');res.end('{}');return
   }

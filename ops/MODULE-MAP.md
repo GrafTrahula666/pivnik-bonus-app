@@ -102,8 +102,14 @@ from a separate public npm cache; cache/logs are tmpfs, host node_modules exclud
 Docker image ID, platform, code labels, non-root user, exact tenant wrapper and
 limited baked environment. The wrapper rechecks bundle/modules and retains the
 startup denial without npm prestart, DB access or legacy fallback. A local image
-ID is not a registry publication or provisioned service. Operator-only image
-registration, approved resumable launch and terminal provisioning remain pending.
+ID is not a registry publication or provisioned service. The existing server-only
+assembler now reads protected image ID/inspection-file references, compares image
+config/source against the current approved code proof, and emits shared bundle v3
+with image identity bound into the same checksum and exact tenant scope. Production
+verification requires that proof; v1/v2 ledger success is safely projected/retried
+in the same record. Owner workflow distinguishes missing image from verified image
+and unlaunched runtime. Approved resumable launch and terminal provisioning remain
+pending; no Docker daemon, deployment or image publication is invoked by Admin API.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find

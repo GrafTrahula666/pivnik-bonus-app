@@ -99,6 +99,26 @@ afterEach(async()=>{
 })
 
 describe('onboarding runtime binding provisioning ledger',()=>{
+  it('image policy upgrades v2 success in the same ledger and only v3 can confirm image identity without implying launch',async()=>{
+    const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Image approval')
+    const codeRelease={sourceSha:'a'.repeat(40),fingerprint:'b'.repeat(64),coverage:'node_literal_import_closure' as const,moduleCount:45}
+    const v2=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>database(tenant),requireCodeRelease:true,assembleRuntimeBundle:manifest=>createSpaceverseRuntimeBundle(manifest,codeRelease)})
+    await v2.runRuntimeDatabaseBinding(root,draft.draftId);await v2.runTenantSchemaReadiness(root,draft.draftId)
+    expect(await v2.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'succeeded',attemptCount:1})
+    let imageApproved=false
+    const imageRelease={imageId:'sha256:'+'1'.repeat(64),platform:'linux/amd64' as const,contract:'tenant-runtime-v1' as const}
+    const service=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>database(tenant),requireImageRelease:true,
+      assembleRuntimeBundle:manifest=>createSpaceverseRuntimeBundle(manifest,codeRelease,imageApproved?imageRelease:null)})
+    expect(await service.getRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'action_required',attemptCount:1,errorCode:'RUNTIME_IMAGE_NOT_REGISTERED',result:null,startAllowed:true})
+    expect((await provisioningRows(meta)).find(row=>row.step==='runtime_bundle_verification')?.status).toBe('succeeded')
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toMatchObject({status:'action_required',attemptCount:2,errorCode:'RUNTIME_IMAGE_NOT_REGISTERED',result:null,startAllowed:true})
+    imageApproved=true
+    const completed=await service.runRuntimeBundleVerification(root,draft.draftId)
+    expect(completed).toMatchObject({status:'succeeded',attemptCount:3,result:{codeRelease,imageRelease,runtimeStatus:'not_provisioned',published:false},startAllowed:false})
+    expect(await service.runRuntimeBundleVerification(root,draft.draftId)).toEqual(completed)
+    expect((await provisioningRows(meta)).filter(row=>row.step==='runtime_bundle_verification')).toHaveLength(1)
+    expect((await tenant.query('SELECT * FROM users')).rows).toEqual([]);expect((await tenant.query('SELECT * FROM wallets')).rows).toEqual([])
+  })
   it('immutable policy treats legacy descriptor success as requiring approval and safely retries the same ledger',async()=>{
     const meta=await metadata(),tenant=await readyTarget(),draft=await preparedDraft(meta,'Release approval')
     const legacy=createOnboardingProvisioningService({metadata:database(meta),resolveTargetDatabase:async()=>database(tenant)})

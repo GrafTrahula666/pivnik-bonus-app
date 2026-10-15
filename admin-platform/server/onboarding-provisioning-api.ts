@@ -11,6 +11,7 @@ const provisioning=createOnboardingProvisioningService({
   resolveTargetDatabase:runtimeKey=>onboardingTargetRegistry.resolveTargetDatabase(runtimeKey),
   assembleRuntimeBundle:assembleApprovedRuntimeBundle,
   requireCodeRelease:true,
+  requireImageRelease:true,
 })
 
 export async function requireOnboardingProvisioningAccess(admin:AdminPrincipal):Promise<void> {

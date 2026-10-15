@@ -6,7 +6,7 @@ import { lockOnboardingDraftAccess,onboardingDraftAccessSql } from './onboarding
 import { providerAdvice,requireOnboardingAccess } from './venue-onboarding.js'
 import { HttpError,type AdminPrincipal } from './types.js'
 import { loadOnboardingPosProxyProjection,type OnboardingPosProxyView } from './onboarding-pos-proxy.js'
-import {parseSpaceverseRuntimeCodeRelease} from '../../spaceverse-runtime-manifest.js'
+import {parseSpaceverseRuntimeCodeRelease,parseSpaceverseRuntimeImageRelease} from '../../spaceverse-runtime-manifest.js'
 
 export const workflowSteps=['organization','venue','application','provider','terminal','modules','provisioning','verification'] as const
 type Step=typeof workflowSteps[number]
@@ -22,6 +22,7 @@ interface WorkflowRow extends QueryResultRow{
   schema_status:string|null;schema_code:string|null;schema_lease_active:boolean|null
   bundle_status:string|null;bundle_code:string|null;bundle_lease_active:boolean|null
   bundle_code_release:unknown
+  bundle_image_release:unknown
   current_step:Step|null;terminal_id:string|null;terminal_label:string|null;cash_reports:boolean|null
   progress_revision:number|null;last_operator_activity_at:string
   posProxy?:OnboardingPosProxyView|null
@@ -72,6 +73,7 @@ async function load(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId
     (schema.lease_expires_at>NOW()) AS schema_lease_active,
     bundle.status AS bundle_status,bundle.last_error_code AS bundle_code,
     bundle.result->'codeRelease' AS bundle_code_release,
+    bundle.result->'imageRelease' AS bundle_image_release,
     (bundle.lease_expires_at>NOW()) AS bundle_lease_active,
     p.current_step,p.terminal_id,p.terminal_label,p.cash_reports,p.revision AS progress_revision,
     GREATEST(d.updated_at,a.updated_at,s.updated_at,integration.updated_at,provision.updated_at,schema.updated_at,bundle.updated_at,p.updated_at)::text AS last_operator_activity_at
@@ -139,8 +141,10 @@ function view(row:WorkflowRow){
       }else if(row.bundle_status==='succeeded'){
         let pinned=false
         try{pinned=Boolean(row.bundle_code_release&&parseSpaceverseRuntimeCodeRelease(row.bundle_code_release))}catch{pinned=false}
-        provisioningCode=pinned?'runtime_bundle_ready_launch_pending':'runtime_release_not_registered'
-        provisioningAction=pinned?'Конфигурация и версия серверных модулей проверены. Приложение ещё не запущено.':'Описание конфигурации проверено. Зарегистрируйте и проверьте утверждённую версию серверных модулей перед запуском.'
+        let imagePinned=false
+        try{imagePinned=Boolean(row.bundle_image_release&&parseSpaceverseRuntimeImageRelease(row.bundle_image_release))}catch{imagePinned=false}
+        provisioningCode=!pinned?'runtime_release_not_registered':!imagePinned?'runtime_image_not_registered':'runtime_bundle_ready_launch_pending'
+        provisioningAction=!pinned?'Описание конфигурации проверено. Зарегистрируйте и проверьте утверждённую версию серверных модулей перед запуском.':!imagePinned?'Файлы проверены. Зарегистрируйте и проверьте образ приложения перед запуском.':'Конфигурация, файлы и образ проверены. Приложение ещё не запущено.'
       }else{
         provisioningCode='runtime_bundle_pending'
         provisioningAction='Схема готова. Соберите и проверьте tenant runtime bundle без запуска сервиса.'

@@ -879,3 +879,66 @@ Railway, CI, реальные device/provider настройки и данные
 Запрошенный /mnt/project-files/owner-panel/progress.md остаётся недоступным для
 записи; журнал ведётся здесь. Canonical runtime files и E2E screenshots
 восстанавливаются перед commit, generated diff не публикуется.
+
+### Регистрация образа в существующем мастере, bundle v3 (2026-10-15)
+
+Предыдущий локальный image step опубликован лично как a931aa9 в том же Draft
+PR #273; эта итерация поверх него подключает проверку к существующему assembler,
+runtime_bundle_verification ledger, workflow и UI. Новых tenant/auth/registry
+таблиц или миграций нет. Включение по-прежнему закрыто прежним default-off
+ADMIN_ENABLE_ONBOARDING_PROVISIONING; Admin не вызывает Docker, deployment или
+публикацию image.
+
+Server-only references ADMIN_RUNTIME_IMAGE_ID/ADMIN_RUNTIME_IMAGE_INSPECTION_FILE
+сверяют independently expected local image identity и inspection config/source с
+actual текущим code proof. Browser не передаёт image ID, file или metadata.
+Bundle v3 включает image ID/platform/contract в общий checksum вместе с exact
+manifest scope и code proof; v1/v2 читаются, но production verifier требует v3.
+Null proofs не позволяют подменить schema version при старом checksum.
+Прежний v2 success без image proof GET проецирует как action_required без записи
+в БД; retry безопасно использует тот же ledger/lease и увеличивает attempt.
+UI показывает отдельные причины missing code/missing image/image mismatch и
+«Образ проверен; приложение ещё не запущено». Workflow остаётся pending, runtime
+not_provisioned/published=false/startAllowed=false. Успех является сохранённым
+результатом проверки артефакта на updatedAt, не свидетельством живого запуска.
+
+Лично выполнено, /tmp/spaceverse-image-registration-final-gate:
+
+- materialize ×2 + cmp — identical; прежний generated diff 7 файлов 365/78,
+  включая server.js/universal-server.js/app.js, отдельно сохранён;
+- node --test --test-concurrency=2 — 596/596; npm run check и
+  npm run audit:runtime-patches passed; root/full/production npm audit — 0;
+- Business typecheck/build/lint passed, 0 errors/12 прежних warnings;
+  npm test -- --maxWorkers=2 — 263 passed/20 прежних skipped, npm audit — 0;
+- focused root release/image — 9/9; focused Business release/provisioning/
+  workflow/signed HTTP — 93/93: v2 upgrade в той же записи, exact replay,
+  mutable/wrong image ID, mismatched source/config, symlink/invalid file,
+  запрет browser image selection, отсутствие users/wallets writes;
+- явный context builder и offline docker build — success; actual source base
+  a931aa9, 45 modules/160 files, fingerprint
+  7e694da519326b998e35b8a9412ae16ec710ba745bb9d77ef9f4828c96e0390e;
+  local image sha256:3f7e6c888eeaa26a7c0731d5354be2767be0750b454c54641de8c2f2385e3c8f;
+- node /tmp/spaceverse-image-registration-final-gate/image-smoke.mjs — 4/4
+  actual containers с synthetic scope: network none/read-only/cap-drop ALL,
+  missing bundle/legacy denied/valid v3 launch denied/wrong code proof;
+  все exit 78, безопасные codes, containers retained, no external actions;
+- SPACEVERSE_E2E_IMAGE_INSPECTION_FILE=/tmp/spaceverse-image-registration-final-gate/image-inspection.json
+  npx playwright test --config /tmp/spaceverse-invitations-playwright.config.mjs
+  — 4/4 desktop/mobile, с actual built image evidence. E2E явно сравнивает
+  возвращённые ID/fingerprint с docker inspect, проверяет missing code → missing
+  image → v3 verified и сохраняющийся текст «Заведение ещё не запущено»;
+- npx playwright test --config /tmp/spaceverse-onboarding-playwright.config.mjs
+  — 4/4 прежних desktop/mobile scenarios. Binding/schema predecessor rows в
+  image UI subset по-прежнему явно synthetic; отдельные workers проверены SQL
+  tests. Unit/HTTP fixtures используют synthetic inspection metadata и не
+  выдаются за доказательство deployment.
+
+Runbook/MODULE-MAP и Docker copy declarations обновлены с кодом. Canonical
+runtime sources/screenshots восстанавливаются перед commit; generated outputs
+не публикуются. CI status через запрещённый GitHub API не подтверждён; сами CI
+files не менялись. Production/Railway/реальные БД, устройства и providers не
+трогались. Следом нужен default-off resume-safe runner/activation с повторной
+проверкой текущей image регистрации и terminal provisioning, затем полный E2E
+критического пути. Mobile Hub не начат: отдельная architecture/contract/UX
+итерация после исходного scope #273. Журнал остаётся в репозитории, поскольку
+/mnt/project-files/owner-panel/progress.md недоступен для записи.

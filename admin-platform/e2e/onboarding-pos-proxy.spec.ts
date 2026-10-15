@@ -1,4 +1,5 @@
 import {expect,test} from '@playwright/test'
+import fs from 'node:fs/promises'
 
 test('manager configures native proxy: no event, incomplete sync, then confirmed empty report; resume keeps masked key and pending deployment',async({page,request,context})=>{
  await context.grantPermissions(['clipboard-read','clipboard-write'])
@@ -77,8 +78,16 @@ test('manager configures native proxy: no event, incomplete sync, then confirmed
  await expect(release.getByLabel('Статус runtime bundle',{exact:true}).getByText('Версия приложения ещё не зарегистрирована платформой.',{exact:false})).toBeVisible()
  expect((await page.request.post('/__fixture/release/prepare',{data:{draftId:draft.id,approved:true}})).status()).toBe(200)
  await release.getByRole('button',{name:'Повторить после обновления',exact:true}).click()
- await expect(release.getByLabel('Статус runtime bundle',{exact:true}).getByText('Конфигурация и файлы утверждённой версии подтверждены.',{exact:false})).toBeVisible()
+ await expect(release.getByLabel('Статус runtime bundle',{exact:true}).getByText('Образ приложения ещё не зарегистрирован платформой.',{exact:false})).toBeVisible()
+ expect((await page.request.post('/__fixture/release/prepare',{data:{draftId:draft.id,approved:true,imageApproved:true}})).status()).toBe(200)
+ await release.getByRole('button',{name:'Повторить после обновления',exact:true}).click()
+ await expect(release.getByLabel('Статус runtime bundle',{exact:true}).getByText('Конфигурация, файлы и образ приложения проверены.',{exact:false})).toBeVisible()
  const checked=await (await page.request.get('/api/admin/onboarding/drafts/'+draft.id+'/provisioning/runtime-bundle')).json()
- expect(checked).toMatchObject({status:'succeeded',result:{codeRelease:{sourceSha:'a'.repeat(40)},runtimeStatus:'not_provisioned',published:false}})
+ expect(checked).toMatchObject({status:'succeeded',result:{codeRelease:{sourceSha:expect.stringMatching(/^[0-9a-f]{40}$/)},imageRelease:{imageId:expect.stringMatching(/^sha256:[0-9a-f]{64}$/)},runtimeStatus:'not_provisioned',published:false}})
+ if(process.env.SPACEVERSE_E2E_IMAGE_INSPECTION_FILE){
+   const actual=JSON.parse(await fs.readFile(process.env.SPACEVERSE_E2E_IMAGE_INSPECTION_FILE,'utf8'))[0]
+   expect(checked.result.imageRelease.imageId).toBe(actual.Id)
+   expect(checked.result.codeRelease.fingerprint).toBe(actual.Config.Labels['spaceverse.runtime.code-fingerprint'])
+ }
  await expect(progress.getByText('Заведение ещё не запущено',{exact:true})).toBeVisible()
 })

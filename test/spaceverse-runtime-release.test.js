@@ -51,3 +51,21 @@ test('bundle v2 pins the code proof and preserves not_provisioned; v1 remains re
  assert.throws(()=>parseSpaceverseRuntimeBundle({...bundle,artifact:{...bundle.artifact,codeRelease:{...proof,fingerprint:'f'.repeat(64)}}}),{code:'SPACEVERSE_RUNTIME_BUNDLE_DIGEST_MISMATCH'});
  assert.throws(()=>parseSpaceverseRuntimeBundle({...bundle,release:{...bundle.release,startAllowed:true}}),{code:'SPACEVERSE_RUNTIME_BUNDLE_INVALID'});
 });
+test('bundle v3 binds immutable image ID to code and tenant scope; mutable tags, metadata changes and launch changes fail closed',async()=>{
+ const f=await fixture(),proof=await verifyRuntimeRelease(f.release,{root:f.root,expectedSourceSha:sourceSha,expectedFingerprint:f.release.fingerprint});
+ const manifest=createSpaceverseRuntimeManifest({draftId:crypto.randomUUID(),runtimeKey:'sv-'+'3'.repeat(32),draftRevision:1,applicationRevision:1,scopeRevision:1,scope:{companyId:'10',venueId:'11'},config:{displayName:'Image fixture',theme:'light',primaryColor:'#112233',secondaryColor:'#445566',shopEnabled:false,loyaltyEnabled:true}});
+ const image={imageId:'sha256:'+'1'.repeat(64),platform:'linux/amd64',contract:'tenant-runtime-v1'};
+ const bundle=createSpaceverseRuntimeBundle(manifest,proof,image);assert.equal(parseSpaceverseRuntimeBundle(JSON.stringify(bundle)).schemaVersion,3);
+ assert.deepEqual(bundle.artifact.imageRelease,image);assert.deepEqual(bundle.release,{runtimeStatus:'not_provisioned',published:false,startAllowed:false});
+ assert.throws(()=>createSpaceverseRuntimeBundle(manifest,null,image),{code:'SPACEVERSE_RUNTIME_BUNDLE_INVALID'});
+ const v2=createSpaceverseRuntimeBundle(manifest,proof);
+ assert.throws(()=>parseSpaceverseRuntimeBundle({...v2,schemaVersion:3,artifact:{...v2.artifact,imageRelease:null}}),{code:'SPACEVERSE_RUNTIME_BUNDLE_INVALID'});
+ const v1=createSpaceverseRuntimeBundle(manifest);
+ assert.throws(()=>parseSpaceverseRuntimeBundle({...v1,schemaVersion:2,artifact:{...v1.artifact,codeRelease:null}}),{code:'SPACEVERSE_RUNTIME_BUNDLE_INVALID'});
+ for(const patch of [{imageId:'spaceverse:latest'},{platform:'linux/arm64'},{credential:'forbidden'}])assert.throws(()=>createSpaceverseRuntimeBundle(manifest,proof,{...image,...patch}),{code:'SPACEVERSE_RUNTIME_BUNDLE_INVALID'});
+ assert.throws(()=>parseSpaceverseRuntimeBundle({...bundle,artifact:{...bundle.artifact,imageRelease:{...image,imageId:'sha256:'+'2'.repeat(64)}}}),{code:'SPACEVERSE_RUNTIME_BUNDLE_DIGEST_MISMATCH'});
+ const {template:_template,qrEnabled:_qrEnabled,...config}=manifest.application;
+ const other=createSpaceverseRuntimeManifest({...manifest.source,runtimeKey:manifest.runtimeKey,scope:{companyId:'10',venueId:'12'},config});
+ assert.throws(()=>parseSpaceverseRuntimeBundle({...bundle,manifest:other}),{code:'SPACEVERSE_RUNTIME_BUNDLE_DIGEST_MISMATCH'});
+ assert.throws(()=>parseSpaceverseRuntimeBundle({...bundle,release:{...bundle.release,startAllowed:true}}),{code:'SPACEVERSE_RUNTIME_BUNDLE_INVALID'});
+});

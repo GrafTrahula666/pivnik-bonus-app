@@ -9,6 +9,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 import { parseSpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 import {createRuntimeRelease} from '../../../spaceverse-runtime-release.js'
+import {syntheticImageId,syntheticImageInspection} from './runtime-image-fixture.js'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false,targets:new Map<string,PGlite>()}))
 const nativeFetch=globalThis.fetch
@@ -451,15 +452,21 @@ describe('onboarding drafts: actual signed session, HTTP router and migration SQ
     const release=await createRuntimeRelease(fileURLToPath(new URL('../../../',import.meta.url)),'a'.repeat(40))
     const releaseDirectory=await fs.mkdtemp(nodePath.join(os.tmpdir(),'spaceverse-http-release-'))
     const releaseFile=nodePath.join(releaseDirectory,'release.json');await fs.writeFile(releaseFile,JSON.stringify(release))
-    const operatorEnv={ADMIN_RUNTIME_RELEASE_SHA:release.sourceSha,ADMIN_RUNTIME_RELEASE_FINGERPRINT:release.fingerprint,ADMIN_RUNTIME_RELEASE_MANIFEST_FILE:releaseFile}
+    const imageFile=nodePath.join(releaseDirectory,'image.json');await fs.writeFile(imageFile,JSON.stringify(syntheticImageInspection(release)))
+    const operatorEnv={ADMIN_RUNTIME_RELEASE_SHA:release.sourceSha,ADMIN_RUNTIME_RELEASE_FINGERPRINT:release.fingerprint,ADMIN_RUNTIME_RELEASE_MANIFEST_FILE:releaseFile,ADMIN_RUNTIME_IMAGE_ID:syntheticImageId,ADMIN_RUNTIME_IMAGE_INSPECTION_FILE:imageFile}
     const previous=Object.fromEntries(Object.keys(operatorEnv).map(key=>[key,process.env[key]]));Object.assign(process.env,operatorEnv)
     try{
+    delete process.env.ADMIN_RUNTIME_IMAGE_ID;delete process.env.ADMIN_RUNTIME_IMAGE_INSPECTION_FILE
+    const missingImage=await (await request('root','POST',bundlePath+'/run',{})).json()
+    expect(missingImage).toMatchObject({status:'action_required',attemptCount:2,errorCode:'RUNTIME_IMAGE_NOT_REGISTERED',result:null,startAllowed:true})
+    expect((await request('root','POST',bundlePath+'/run',{imageId:syntheticImageId})).status).toBe(400)
+    Object.assign(process.env,operatorEnv)
     const bundleCompleted=await (await request('root','POST',bundlePath+'/run',{})).json()
     expect(bundleCompleted).toMatchObject({
-      status:'succeeded',attemptCount:2,errorCode:null,startAllowed:false,
+      status:'succeeded',attemptCount:3,errorCode:null,startAllowed:false,
       result:{bundle:'verified',artifact:'pivnik-bonus-app',artifactContract:'tenant-runtime-v1',
         bundleSha256:expect.stringMatching(/^[0-9a-f]{64}$/),manifestSchemaVersion:2,
-        runtimeStatus:'not_provisioned',published:false,codeRelease:{sourceSha:release.sourceSha,fingerprint:release.fingerprint}},
+        runtimeStatus:'not_provisioned',published:false,codeRelease:{sourceSha:release.sourceSha,fingerprint:release.fingerprint},imageRelease:{imageId:syntheticImageId}},
     })
     expect(await (await request('root','GET',bundlePath)).json()).toEqual(bundleCompleted)
     expect(await (await request('root','POST',bundlePath+'/run',{})).json()).toEqual(bundleCompleted)

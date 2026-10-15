@@ -53,13 +53,20 @@ export interface SpaceverseRuntimeCodeRelease {
   moduleCount:number
 }
 export function parseSpaceverseRuntimeCodeRelease(raw:unknown):SpaceverseRuntimeCodeRelease|null
+export interface SpaceverseRuntimeImageRelease {
+  imageId:string
+  platform:'linux/amd64'
+  contract:'tenant-runtime-v1'
+}
+export function parseSpaceverseRuntimeImageRelease(raw:unknown):SpaceverseRuntimeImageRelease|null
 export interface SpaceverseRuntimeBundle {
-  schemaVersion: 1|2
+  schemaVersion: 1|2|3
   artifact: {
     name: 'pivnik-bonus-app'
     contract: 'tenant-runtime-v1'
     entrypoints: readonly ['server.js', 'universal-server.js']
     codeRelease?:SpaceverseRuntimeCodeRelease
+    imageRelease?:SpaceverseRuntimeImageRelease
   }
   manifest: SpaceverseRuntimeManifest
   release: {
@@ -105,7 +112,7 @@ export function createSpaceverseRuntimeManifest(input: {
 
 export function parseSpaceverseRuntimeManifest(raw: string | unknown): SpaceverseRuntimeManifest
 
-export function createSpaceverseRuntimeBundle(rawManifest: string | SpaceverseRuntimeManifest,codeRelease?:SpaceverseRuntimeCodeRelease|null): SpaceverseRuntimeBundle
+export function createSpaceverseRuntimeBundle(rawManifest: string | SpaceverseRuntimeManifest,codeRelease?:SpaceverseRuntimeCodeRelease|null,imageRelease?:SpaceverseRuntimeImageRelease|null): SpaceverseRuntimeBundle
 
 export function parseSpaceverseRuntimeBundle(raw: string | unknown): SpaceverseRuntimeBundle
 
