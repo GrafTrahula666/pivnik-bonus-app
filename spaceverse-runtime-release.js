@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export const RUNTIME_RELEASE_ENTRYPOINTS=Object.freeze(['server.js','universal-server.js']);
-const extra=Object.freeze(['package.json','package-lock.json','spaceverse-runtime-manifest.js','routes/spaceverse-customer.js','routes/spaceverse-pos.js']);
+const extra=Object.freeze(['package.json','package-lock.json','spaceverse-runtime-manifest.js','routes/spaceverse-customer.js','routes/spaceverse-pos.js','scripts/spaceverse-runtime-container-entrypoint.mjs']);
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const fail=code=>Object.assign(new Error('Runtime release cannot be verified.'),{code});
 const exact=(raw,keys)=>raw&&typeof raw==='object'&&!Array.isArray(raw)&&Object.keys(raw).length===keys.length&&Object.keys(raw).every(key=>keys.includes(key));

@@ -942,3 +942,90 @@ files не менялись. Production/Railway/реальные БД, устр�
 критического пути. Mobile Hub не начат: отдельная architecture/contract/UX
 итерация после исходного scope #273. Журнал остаётся в репозитории, поскольку
 /mnt/project-files/owner-panel/progress.md недоступен для записи.
+
+### Default-off tenant API: настоящий запуск, отзыв и продолжение (2026-10-15)
+
+Лично реализован узкий tenant API внутри прежнего image, поверх 1662b8b.
+Он переиспользует существующие verified runtime binding, customer auth/wallet
+и POS adapters. Их прежняя реализация не выдаётся за работу этой итерации.
+Новая permission таблица ссылается на canonical binding; второй tenant/auth
+registry нет. Shared startAllowed=false и guard обоих legacy entrypoint
+сохранены. Новое разрешение позволяет только отдельный tenant API, не legacy
+bootstrap, не публикацию приложения и не активацию company/venue.
+
+Добавлены spaceverse-tenant-service.js, protocol readiness и manual additive
+root migration 022. Migration создаёт пустую таблицу разрешений, не выдаёт их,
+не меняет users/wallets/purchases и не входит в automatic startup. Permission
+хранит только hash server-only ключа, привязана к manifest/bundle/image, срок
+не более 24 часов. На каждый запрос проверяются прежний exact binding, срок и
+state; revoke/suspend/expiry/смена binding закрывают доступ. Session advisory
+lock допускает один serving процесс runtime, без открытой транзакции на время
+HTTP. Новый разрешённый процесс использует прежние customer/session/wallet.
+
+Image wrapper требует отдельный default-off SPACEVERSE_ENABLE_TENANT_SERVICE,
+v3, operator image ID, dedicated DB/session/launch credentials. Нет fallback
+на PIVNIK DATABASE_URL или глобальные auth secrets. Dynamic service imports
+исполняются после проверки code proof; wrapper и его literal import closure
+теперь входят в release fingerprint. .env.example/env.example и Docker copies
+синхронизированы. Новые реальные environment bindings/секреты не менялись.
+
+Readiness подписывает nonce, exact company/venue/runtime/checksum, image/bundle,
+source/fingerprint, authorization ID/expiry. Проверяются MAC, nonce и свежесть
+до 30 сек. Proof обозначает tenant-api-only/published=false, не active venue.
+Обычный /health тоже сохраняет runtimeStatus=not_provisioned. Frontend не
+публикуется, финансовые endpoints недоступны, POS/касса отдельно требуют своих
+проверок. Admin orchestration/выдача разрешения через мастер ещё не подключены:
+запуск проверялся исключительно в локальной synthetic test среде.
+
+Лично выполнено, логи /tmp/spaceverse-tenant-service-final-gate:
+
+- materialize ×2 + cmp — identical. Прежний generated diff 7 файлов 365/78,
+  включая server.js/universal-server.js/app.js, сохранён отдельно и не чинился;
+- node --test --test-concurrency=2 — 602/602; npm run check и
+  npm run audit:runtime-patches passed; root/full/production npm audit — 0;
+- Business typecheck/build/lint passed, 0 errors/12 прежних warnings;
+  npm test -- --maxWorkers=2 — 263 passed/20 прежних skipped; npm audit — 0;
+- focused root tenant service/release/image — 15/15; focused Business
+  release/provisioning/workflow/signed HTTP — 93/93;
+- PGlite/real HTTP: 3 isolated venue databases in 2 companies; signed identity,
+  actual zero wallet/hasData, foreign session and client scope rejection,
+  unavailable financial route, expiry/revoke/wrong image/bundle denial,
+  signed nonce/MAC/freshness checks и продолжение после нового разрешения;
+- actual child process в скопированном image context не использует legacy
+  DATABASE_URL при отсутствии dedicated URL: exit 78 CONFIGURATION_REQUIRED;
+- node scripts/prepare-spaceverse-runtime-image.mjs --output
+  /tmp/spaceverse-runtime-tenant-service-context и offline docker build — success;
+  source base 1662b8b, 49 modules/162 files, fingerprint
+  9f444cb2722d1f1e48a390bb1cdac64cd10406f58fe70384745e9f5a186088f7,
+  local image sha256:e6d9e20a5daec7ec82b379a4708db336f9fc284a63a50280a3bf5ce0b77b226a;
+- node /tmp/spaceverse-tenant-service-final-gate/container-proof.mjs — success:
+  настоящий PostgreSQL 17, новая сохранённая synthetic DB, 3 независимых Docker
+  процесса одного immutable image, read-only/cap-drop ALL/no-new-privileges,
+  публикация порта только на loopback. Signed readiness и настоящий auth/wallet
+  HTTP дают 0/hasData=true. Второй процесс отвергнут exit 78 ALREADY_SERVING;
+  pg_stat_activity подтверждает отсутствие idle in transaction. Отзыв даёт
+  503 и остановку первого процесса; новое разрешение запускает процесс заново,
+  прежняя сессия работает, exact auth replay сохраняет 1 customer/1 wallet.
+  Собственные тестовые API остановлены после proof, контейнеры/данные сохранены;
+- Playwright с SPACEVERSE_E2E_IMAGE_INSPECTION_FILE текущего actual image:
+  invitations/proxy/owner/image — 4/4 desktop/mobile; прежний onboarding — 4/4.
+  Fixture predecessor binding/schema в UI subset остаются synthetic. Ни этот
+  UI E2E, ни локальный API proof не выдаются за полную production цепочку.
+
+После возобновления среды локальный PostgreSQL был остановлен, private npm cache
+и временные Playwright configs отсутствовали: поднят прежний тестовый контейнер,
+cache восстановлен frozen npm ci без scripts, configs восстановлены вне checkout.
+Первые regex assertions слишком широко учитывали FK ON DELETE RESTRICT; проверка
+исправлена на DML statements, actual repeatable migration/данные подтверждены.
+Прежние favicon/chunk-size/lint предупреждения не исправлялись. Canonical
+runtime files/screenshots восстанавливаются перед commit; generated diff не
+публикуется. CI не подтверждён из-за ограничения GitHub API. Production,
+Railway, реальные устройства/провайдеры/данные/секреты и CI files не менялись.
+
+Следующий минимальный шаг: существующий Admin provisioning ledger должен
+безопасно выдать/возобновить scoped launch permission и получить actual readiness
+через разрешённый runner. Затем terminal provisioning и полный критический E2E.
+Самостоятельное подключение целиком пока не готово, master/venue остаются pending.
+Mobile Integration Hub — отдельная следующая работа после исходного scope #273;
+не начат в этой итерации. Журнал остаётся в репозитории: запрошенный /mnt/project-files
+недоступен для записи. MD-отчёт владельцу сохранён отдельно в /workspace.

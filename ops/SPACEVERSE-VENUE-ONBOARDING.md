@@ -189,6 +189,46 @@ v3: прежний ledger success без image proof виден как «Нуж�
 Даже проверенный v3 остаётся not_provisioned/published=false/startAllowed=false;
 мастер явно отделяет «файлы проверены», «образ проверен» и будущий запуск.
 
+Дополнительно подготовлен default-off tenant API внутри того же образа. Это
+серверная часть, не опубликованное приложение гостей и не активное заведение.
+Существующие server.js/universal-server.js по-прежнему не разрешают tenant boot.
+Новый путь не запускает legacy bootstrap/prestart и не применяет SQL при старте.
+Build release теперь включает container wrapper и его literal imports, поэтому
+прежнюю code/image регистрацию нужно обновлять после сборки новой версии.
+
+Только в разрешённой изолированной тестовой среде оператор вручную подготавливает
+root migration 022 после существующих binding/customer migrations. Она создаёт
+пустую таблицу ограниченных разрешений, ссылающуюся на прежний binding. Ключ
+разрешения хранится в БД только как SHA256, срок — не более 24 часов. Сам migration
+не выдаёт разрешение и ничего не запускает. Автоматическая выдача через Admin
+provisioning ещё не подключена; в этой итерации разрешения создавались только
+для синтетических локальных тестов.
+
+Tenant API требует `SPACEVERSE_ENABLE_TENANT_SERVICE=true`, exact v3 bundle,
+`SPACEVERSE_RUNTIME_APPROVED_IMAGE_ID`, отдельные `SPACEVERSE_RUNTIME_DATABASE_URL`
+и `SPACEVERSE_RUNTIME_SESSION_SECRET`, а также private
+`SPACEVERSE_RUNTIME_LAUNCH_AUTHORIZATION_ID`/`SPACEVERSE_RUNTIME_LAUNCH_KEY`.
+Нет fallback на PIVNIK DATABASE_URL или общие auth secrets. Если нужен прежний
+signed Telegram/VK adapter, используются только отдельные tenant references
+`SPACEVERSE_TELEGRAM_BOT_TOKEN` / `SPACEVERSE_VK_APP_ID` / `SPACEVERSE_VK_APP_SECRET`.
+Это серверные credentials; они не предназначены для браузера/APK/IPA.
+
+Один runtime удерживает session advisory lock. Повторный процесс возвращает
+`SPACEVERSE_RUNTIME_ALREADY_SERVING`; будущий runner должен проверить уже
+работающий экземпляр перед повтором, а не создавать дубликат. GET `/health`
+подтверждает только serving tenant API, сохраняя runtimeStatus=not_provisioned
+и published=false. Защищённый GET `/internal/spaceverse/runtime/readiness?challenge=<UUID>`
+с `X-Spaceverse-Launch-Key` даёт HMAC proof точных manifest/scope/image/bundle,
+authorization ID и её срока. Получатель проверяет nonce, MAC и свежесть до 30 сек.
+Runner также обязан сверять immutable ID фактически запускаемого контейнера;
+ответ readiness не заменяет эту проверку. На каждом запросе сервер перепроверяет
+binding/разрешение; при expiry/suspend/revoke доступ закрывается. Новый
+разрешённый запуск продолжает использовать прежних клиентов и кошельки.
+
+Это не разрешение на production deployment. В мастере остаются pending до
+связки с возобновляемым Admin runner, терминалом, полной проверкой подключения
+и публикацией стандартного приложения.
+
 При включённом новом flag старые ссылки `/invite/…` требуют перевыдачи в
 «Приглашениях». Их записи и ранее выданные независимые права сохраняются.
 Новая migration 011 расширяет существующую таблицу 007/008, без второй модели.

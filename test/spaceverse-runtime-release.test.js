@@ -10,14 +10,16 @@ const sourceSha='a'.repeat(40);
 async function fixture(){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'spaceverse-release-'));
  await fs.mkdir(path.join(root,'routes'));
+ await fs.mkdir(path.join(root,'scripts'));
  for(const file of ['server.js','universal-server.js','spaceverse-runtime-manifest.js','routes/spaceverse-customer.js','routes/spaceverse-pos.js'])await fs.writeFile(path.join(root,file),"import './"+(file.startsWith('routes/')?'../':'')+"dependency.js';\n");
  await fs.writeFile(path.join(root,'dependency.js'),'export const safe=true;\n');
+ await fs.writeFile(path.join(root,'scripts/spaceverse-runtime-container-entrypoint.mjs'),"import '../dependency.js';\n");
  await fs.writeFile(path.join(root,'package.json'),JSON.stringify({type:'module'}));await fs.writeFile(path.join(root,'package-lock.json'),'{}');
  return {root,release:await createRuntimeRelease(root,sourceSha)};
 }
 test('release verifies actual Node dependencies and requires operator-approved SHA/fingerprint without executing code',async()=>{
  const f=await fixture(),expected={root:f.root,expectedSourceSha:sourceSha,expectedFingerprint:f.release.fingerprint};
- const proof=await verifyRuntimeRelease(JSON.stringify(f.release),expected);assert.equal(proof.moduleCount,8);
+ const proof=await verifyRuntimeRelease(JSON.stringify(f.release),expected);assert.equal(proof.moduleCount,9);
  await assert.rejects(verifyRuntimeRelease(f.release,{...expected,expectedFingerprint:''}),{code:'RUNTIME_RELEASE_NOT_REGISTERED'});
  await assert.rejects(verifyRuntimeRelease(f.release,{...expected,expectedSourceSha:'b'.repeat(40)}),{code:'RUNTIME_RELEASE_MISMATCH'});
  await fs.writeFile(path.join(f.root,'dependency.js'),'throw new Error("Never executed");\n');

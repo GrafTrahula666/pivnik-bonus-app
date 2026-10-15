@@ -110,6 +110,22 @@ verification requires that proof; v1/v2 ledger success is safely projected/retri
 in the same record. Owner workflow distinguishes missing image from verified image
 and unlaunched runtime. Approved resumable launch and terminal provisioning remain
 pending; no Docker daemon, deployment or image publication is invoked by Admin API.
+`spaceverse-tenant-service.js` is a separate default-off tenant API inside the same
+approved image. The existing two legacy entrypoints retain their startup denial.
+Its container wrapper is now included in the code fingerprint closure, including
+literal imports of this service and the existing customer/POS adapters. Startup
+requires v3, approved image identity, private per-tenant credentials, the same
+verified runtime binding, and an unexpired permission from manual root migration
+022. That permission references the existing binding and stores only a token hash;
+it is not a tenant registry or an active venue. A held session advisory lock admits
+one serving process per runtime. Scope/permission are rechecked before requests;
+revocation, suspension, expiry or a changed binding closes serving access.
+`spaceverse-runtime-readiness.js` signs/verifies a fresh nonce, exact scope, image,
+bundle and permission expiry. Its `tenant-api-only` proof says neither published
+frontend nor active venue. No schema/device provisioning occurs at boot; the API
+reuses the canonical auth/wallet/POS adapters, has no legacy fallback and leaves
+financial routes unavailable. Admin resume orchestration/terminal provisioning
+and the public standard application remain pending.
 `spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
 manifest only after canonical scope exists. It binds draft/application/scope
 revisions plus canonical company/venue IDs. A tenant-mode guest process must find
