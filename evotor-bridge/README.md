@@ -1,6 +1,6 @@
 # PIVNIK Evotor bridge — integration draft
 
-## Foreground scan draft 1.0.10 (not installed or released)
+## Foreground scan 1.0.10 (hardware verification pending)
 
 The owner authorized preparing and publishing the update on 2026-10-15. The
 connection screen now has a **network check without a key** first, and a separate
@@ -11,9 +11,10 @@ are unchanged; a compatible in-place update preserves the existing key.
 
 `.github/workflows/evotor-bridge-apk.yml` tests/builds an unsigned release first,
 without creating an APK signing key. Publishing then requires existing signing
-secrets and the exact certificate fingerprint of the supplied installed 1.0.8.
+secrets and the approved permanent certificate fingerprint:
+`36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663`.
 Missing/mismatched signing identity blocks publication. Unsigned artifacts are
-explicitly labelled **not for installation**. A compatible signed APK is published
+explicitly labelled **not for installation**. A permanent signed APK is published
 on a new versioned `evotor-apk-1.0.10` branch without replacing older APKs or using
 force-push. This does not upload or install the app through the Evotor portal.
 
@@ -61,20 +62,45 @@ removed, so an approved app update requires explicit device provisioning.
 ## Build verification
 
 `.github/workflows/evotor-integration.yml` runs JVM tests and compiles an
-unsigned release. `.github/workflows/evotor-bridge-apk.yml` (push to the
-integration branch or manual run) runs the same JVM tests and uploads a
-**debug APK for a test install** as artifact `pivnik-evotor-debug-apk`.
-Java 17, Gradle 8.9, Android SDK 35, Evotor integration-library `v0.6.40`.
+unsigned release. `.github/workflows/evotor-bridge-apk.yml` builds the unsigned
+release, then requires all four permanent EVOTOR signing secrets and the pinned
+certificate. It never generates a fallback debug key. Java 17, Gradle 8.9,
+Android SDK 35, Evotor integration-library `v0.6.40`.
 
-When permanent signing secrets are absent, the workflow uses a throwaway debug
-key. The uploaded 1.0.8 and 1.0.9 have different signing certificates and cannot
-update each other normally. Preserve the installed app and find its existing
-signing key before planning an update; do not uninstall a working register app
-to work around signing. Old terminal firmware has an additional trust fallback:
-the app bundles ISRG X1/X2 and GTS R1/R3/R4 roots (`res/raw/pivnik_roots.pem`) as a
-fallback to the system roots.
-The fallback is not proof of connectivity through the Evotor proxy. A permanent
-compatible release signing key and real-device checks remain release gates.
+The supplied 1.0.8 and 1.0.9 used different disposable debug certificates.
+Their old CI run had no signing secrets and exported no keystore backup.
+After checking the available backups, the owner authorized a new permanent key
+and one reinstall on 2026-10-15. The new encrypted keystore and credentials are
+backed up privately outside Git; downloading that backup and signing with the
+restored key has been verified. The owner should also retain an independent
+offline/password-manager copy and configure the same key in GitHub Secrets.
+
+`node scripts/configure-evotor-signing-secrets.mjs --keystore FILE --credentials JSON`
+checks the approved certificate before setting the four secrets using an
+owner-authenticated GitHub CLI. Add `--check-only` for a local certificate check.
+No secret is printed or passed on a command line. This connector cannot set
+GitHub Actions secrets directly; successful private backup is not CI provisioning.
+
+### One-time installation from 1.0.8 / 1.0.9
+
+The new certificate cannot update either supplied old APK in place. First ensure
+the POS device key is available for re-entry; removing the Android application
+removes its local preferences and encrypted credential. Remove only **PIVNIK для
+Эвотора**, then install the signed 1.0.10 APK through the terminal's supported
+installation/distribution method. The package remains `ru.pivnik.evotor.bridge`.
+A GitHub merge does not install an APK. Subsequent higher-version APKs signed
+with this permanent key can use the ordinary update path.
+
+Open PIVNIK and use **Проверить связь без ключа** before entering a POS key.
+A network timeout is still a connectivity failure. After connectivity succeeds,
+save the POS key and check it separately; then use the foreground scan flow above.
+This is a diagnostic/scanner build with no real-device proof yet; bonus spending
+is not implemented. Do not interpret successful signature verification as a
+working network, closed-receipt accrual or completed cash-register integration.
+
+Old terminal firmware has an additional trust fallback: the app bundles ISRG
+X1/X2 and GTS R1/R3/R4 roots (`res/raw/pivnik_roots.pem`) alongside system roots.
+This fallback is not proof of connectivity through the Evotor proxy.
 
 ## Hardware/external proof still required
 

@@ -52,22 +52,22 @@ jobs:
           if-no-files-found: ignore
 
   publish:
-    name: Verify installed 1.0.8 signing identity and publish update
+    name: Verify permanent signing identity and publish APK
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     env:
-      # Public certificate fingerprint read from the owner's supplied 1.0.8 APK.
-      EXPECTED_CERT_SHA256: 3EE4BE58E006C0608BF36E1F9DFEDB5C69899F2335BA96AF94CAA2857FD4C953
+      # Permanent certificate created after owner-authorized one-time reinstall; never regenerate in CI.
+      EXPECTED_CERT_SHA256: 36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Require the existing compatible signing key
+      - name: Require the backed-up permanent signing key
         env:
           KEYSTORE_B64: ${{ secrets.EVOTOR_KEYSTORE_B64 }}
           EVOTOR_KEYSTORE_PASSWORD: ${{ secrets.EVOTOR_KEYSTORE_PASSWORD }}
@@ -76,15 +76,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$KEYSTORE_B64" ] || [ -z "$EVOTOR_KEYSTORE_PASSWORD" ] || [ -z "$EVOTOR_KEY_ALIAS" ] || [ -z "$EVOTOR_KEY_PASSWORD" ]; then
-            echo '::error title=Compatible signing key unavailable::The existing EVOTOR signing secrets are incomplete. No new key was generated. Installation over 1.0.8 is blocked; the unsigned build is retained for review only.'
+            echo '::error title=Permanent signing key unavailable::The permanent EVOTOR signing secrets are incomplete. No key is generated in CI; the unsigned artifact is not for installation.'
             exit 1
           fi
           umask 077
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/evotor-existing.jks"
-          keytool -exportcert -keystore "$RUNNER_TEMP/evotor-existing.jks" -alias "$EVOTOR_KEY_ALIAS" -storepass:env EVOTOR_KEYSTORE_PASSWORD -file "$RUNNER_TEMP/existing-cert.der"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/evotor-permanent.jks"
+          keytool -exportcert -keystore "$RUNNER_TEMP/evotor-permanent.jks" -alias "$EVOTOR_KEY_ALIAS" -storepass:env EVOTOR_KEYSTORE_PASSWORD -file "$RUNNER_TEMP/existing-cert.der"
           actual=$(openssl x509 -inform DER -in "$RUNNER_TEMP/existing-cert.der" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')
           if [ "${actual^^}" != "$EXPECTED_CERT_SHA256" ]; then
-            echo '::error title=Signing identity mismatch::The configured key cannot update the supplied 1.0.8 APK. No new key was generated and no APK will be published.'
+            echo '::error title=Signing identity mismatch::The configured key does not match the approved permanent certificate. No key was generated and no APK will be published.'
             exit 1
           fi
       - uses: android-actions/setup-android@v3
@@ -95,7 +95,7 @@ jobs:
         with:
           name: pivnik-evotor-1.0.10-unsigned-not-for-installation
           path: unsigned
-      - name: Sign and verify the update with the existing key
+      - name: Sign and verify the APK with the permanent key
         env:
           EVOTOR_KEYSTORE_PASSWORD: ${{ secrets.EVOTOR_KEYSTORE_PASSWORD }}
           EVOTOR_KEY_ALIAS: ${{ secrets.EVOTOR_KEY_ALIAS }}
@@ -104,15 +104,15 @@ jobs:
           set -euo pipefail
           mkdir release
           signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          "$signer" sign --ks "$RUNNER_TEMP/evotor-existing.jks" --ks-key-alias "$EVOTOR_KEY_ALIAS" --ks-pass env:EVOTOR_KEYSTORE_PASSWORD --key-pass env:EVOTOR_KEY_PASSWORD --out release/pivnik-evotor-1.0.10.apk unsigned/app-release-unsigned.apk
+          "$signer" sign --ks "$RUNNER_TEMP/evotor-permanent.jks" --ks-key-alias "$EVOTOR_KEY_ALIAS" --ks-pass env:EVOTOR_KEYSTORE_PASSWORD --key-pass env:EVOTOR_KEY_PASSWORD --out release/pivnik-evotor-1.0.10.apk unsigned/app-release-unsigned.apk
           "$signer" verify --verbose --print-certs release/pivnik-evotor-1.0.10.apk > release/signature.txt
           actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/signature.txt | tr '[:lower:]' '[:upper:]')
           test "$actual" = "$EXPECTED_CERT_SHA256"
           (cd release && sha256sum pivnik-evotor-1.0.10.apk) > release/SHA256SUMS
-          printf 'version=1.0.10\nversionCode=14\nsource_commit=%s\ncertificate_sha256=%s\nhardware_verified=false\n' "$GITHUB_SHA" "$EXPECTED_CERT_SHA256" > release/build-info.txt
+          printf 'version=1.0.10\nversionCode=14\nsource_commit=%s\ncertificate_sha256=%s\nrequires_reinstall_from_1_0_8=true\nhardware_verified=false\n' "$GITHUB_SHA" "$EXPECTED_CERT_SHA256" > release/build-info.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: pivnik-evotor-1.0.10-compatible-update
+          name: pivnik-evotor-1.0.10-permanent-signed
           path: release/
           if-no-files-found: error
       - name: Publish versioned APK without replacing older builds
@@ -129,8 +129,8 @@ jobs:
           fi
           cp "$RUNNER_TEMP/evotor-publish/"* .
           git add pivnik-evotor-1.0.10.apk signature.txt SHA256SUMS build-info.txt
-          if ! git diff --cached --quiet; then git commit -m "Evotor 1.0.10 compatible update from ${GITHUB_SHA}"; fi
+          if ! git diff --cached --quiet; then git commit -m "Evotor 1.0.10 permanent signed APK from ${GITHUB_SHA}"; fi
           git push origin HEAD:refs/heads/evotor-apk-1.0.10
       - name: Remove temporary signing material
         if: always()
-        run: rm -f "$RUNNER_TEMP/evotor-existing.jks" "$RUNNER_TEMP/existing-cert.der"
+        run: rm -f "$RUNNER_TEMP/evotor-permanent.jks" "$RUNNER_TEMP/existing-cert.der"

@@ -857,10 +857,12 @@ isolation.
   `core/ConnectionCheck` separates the explicit keyless network check from the
   saved-device-key check, accepting only the actual POS refusal envelope.
   The encrypted credential store is unchanged. APK publication requires the
-  existing certificate of the supplied installed 1.0.8; no throwaway fallback.
+  approved backed-up permanent certificate; no throwaway fallback.
+  The owner authorized one reinstall from the disposable 1.0.8 signature;
+  local settings require re-entry. The backup restoration/signing test passed.
   This
   changes no server mount, monetary rule or DB schema; real proxy connectivity,
-  compatible signing and device behaviour remain unverified. Evidence and
+  CI secret provisioning and device behaviour remain unverified. Evidence and
   current blockers: `ops/EVOTOR-AUDIT-20261015.md`.
 
 - `pos/http.js` is the shared dispatcher for native POS device and scoped POS admin
