@@ -1,0 +1,37 @@
+{
+  "version": "1.0.11",
+  "versionCode": 15,
+  "package": "ru.pivnik.evotor.bridge",
+  "minSdk": 23,
+  "targetSdk": 30,
+  "debuggable": false,
+  "sha256": "41298bd99002220b81f8ccd2e1cd4cc61b6989a0a6ccd6979971e87e0b642c2c",
+  "certificateSha256": "36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663",
+  "sourceCommit": "f2405f6137f36ef557317b09c58f73bd31e4ef68",
+  "sourceTree": "bc2623ecd75577d7aa68892dbad5380010d38c38",
+  "apkBuildRun": 38873683338,
+  "unsignedArtifact": 12034038019,
+  "unsignedArchiveSha256": "6741df9d67bafba5d82502ac88fc47f9e2a1d950505f21be869a4e50dd6b149d",
+  "compatibleUpdateFrom": [
+    "1.0.10"
+  ],
+  "oneTimeReinstallRequiredFrom": [
+    "1.0.8",
+    "1.0.9"
+  ],
+  "hardwareVerified": false,
+  "networkFixVerified": false,
+  "bonusRedemptionImplemented": false,
+  "backupRestorationAndSigningVerified": true,
+  "testedMergeCommit": "9307fff3ee5475d9cfd407ec2e7b521f1f0c3f0f",
+  "localNodeTestsPassed": 602,
+  "jvmTestsPassed": 36,
+  "releaseGateRun": 38873683274,
+  "androidCompileVerified": true,
+  "apksignerSchemesVerified": [
+    "v1",
+    "v2",
+    "v3"
+  ],
+  "zipalignVerified": true
+}
