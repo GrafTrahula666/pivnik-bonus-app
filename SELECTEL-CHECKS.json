@@ -1,0 +1,54 @@
+{
+  "sourceCommit": "d396226d8876e46b50c8fb217e79287be833a337",
+  "installerCommit": "ee637bcdeea436af7cb2e30568df10c3e0d10f84",
+  "installerSha256": "8e0ed9b211d64596906b4e9dfe0e48fe411117f0bbe502478dad58f9a97a82e6",
+  "routing": {
+    "passed": 14,
+    "checks": [
+      "VK liveness preserved",
+      "VK upstream readiness preserved",
+      "VK static fallback preserved",
+      "VK allowed production origin preserved",
+      "VK missing-origin restriction preserved",
+      "VK foreign-origin restriction preserved",
+      "VK write platform requirement preserved",
+      "VK production CORS preserved",
+      "Evotor health uses isolated route",
+      "Evotor keyless backend refusal preserved",
+      "Evotor prefix stripping, receipt bytes and backend status preserved",
+      "Only device identity reaches POS upstream",
+      "Evotor cannot expose admin routes",
+      "Evotor HTTP method restrictions preserved"
+    ],
+    "productionDeployed": false,
+    "caddyImage": "caddy@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17",
+    "entryImage": "pivnik-evotor-entry:20261016",
+    "caddySha256": "c2a9f5b6303f86f7bea7f87f40f20f2ae113c16a0a7ff03458d79ce5b7a5d5da",
+    "vkGatewaySha256": "5bbb11259b3b016b9cbc80f9d315859c35d5446d31ee0407dceff5cfe1e6d127"
+  },
+  "transaction": {
+    "passed": 9,
+    "checks": [
+      "Corrupt downloaded source rejected before changing the live configuration",
+      "Full installer commits success only after actual entry and VK checks",
+      "Installation preserves the inode of the running Caddy bind mount",
+      "Existing Compose file unchanged",
+      "Manual rollback refuses to overwrite a later operator configuration change",
+      "Manual rollback restores the original route and healthy VK service",
+      "Rollback removes only its own isolated sidecar",
+      "Failed post-reload route verification automatically restores the original live route",
+      "Success, failure and rollback never restart Caddy or VK containers"
+    ],
+    "productionDeployed": false,
+    "installerSha256": "8e0ed9b211d64596906b4e9dfe0e48fe411117f0bbe502478dad58f9a97a82e6",
+    "scope": "Real local Docker/Caddy reload, entry TLS, file/inode and rollback. External downloads/build are fixture adapters."
+  },
+  "productionDeployed": false,
+  "physicalEvotorVerified": false,
+  "additionalChecks": [
+    "Python syntax",
+    "Pinned source digests",
+    "Exact Caddy candidate bytes",
+    "Localized/code POS refusal acceptance; arbitrary401 refusal rejection"
+  ]
+}
