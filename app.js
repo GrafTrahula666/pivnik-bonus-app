@@ -1307,8 +1307,24 @@ async function applyHalloweenCode() {
 }
 
 // Full-screen promo banner: shown on every app open at most once an hour, only after the app has fully loaded, the terms are accepted and no other
-// window is open. The art is set in HALLOWEEN_BANNER.src; its drawn "Войти в сезон" button opens the cauldrons tab.
-const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=2', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+// window is open. The art is set in HALLOWEEN_BANNER.src; the days and the ticket count are written over its two windows.
+const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-nights-countdown.webp?v=1', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+// The night starts at 19:00 Moscow time, as the art says; the left window counts whole days to it.
+const HALLOWEEN_EVENT_START = '2026-10-31T19:00:00+03:00';
+function daysWord(n) {
+  const last2 = n % 100;
+  const last = n % 10;
+  if (last === 1 && last2 !== 11) return 'день';
+  if (last >= 2 && last <= 4 && (last2 < 12 || last2 > 14)) return 'дня';
+  return 'дней';
+}
+function fillPromoBanner(tickets) {
+  const days = Math.max(0, Math.floor((Date.parse(HALLOWEEN_EVENT_START) - Date.now()) / 86400000));
+  const daysEl = $('#promoBannerDays');
+  const ticketsEl = $('#promoBannerTickets');
+  if (daysEl) daysEl.textContent = days > 0 ? `${days} ${daysWord(days)}` : 'сегодня';
+  if (ticketsEl) ticketsEl.textContent = tickets == null ? '–' : String(Math.max(0, Number(tickets) || 0));
+}
 let promoBannerTimer = 0;
 function promoBannerDue() {
   if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
@@ -1324,15 +1340,19 @@ function schedulePromoBanner(delayMs = 1200) {
     if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
     const image = $('#promoBannerImage');
     if (!image) return;
-    const show = () => {
+    // The ticket count is read fresh on every open, so the banner never shows last session's number.
+    const ticketsReady = api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }).then((s) => s?.tickets).catch(() => null);
+    const show = async () => {
       image.onload = null;
       image.onerror = null;
+      const tickets = await ticketsReady;
       // The image may take a moment; never open over a window the user opened meanwhile.
       if (!promoBannerDue()) return;
       if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
       safeStorage.set(`pivnik_banner_${HALLOWEEN_BANNER.key}`, String(Date.now()));
       const banner = $('#promoBanner');
       if (!banner) return;
+      fillPromoBanner(tickets);
       banner.hidden = false;
       banner.classList.add('open');
       banner.setAttribute('aria-hidden', 'false');
@@ -3837,7 +3857,6 @@ $('#halloweenShareCode')?.addEventListener('click', () => { void shareHalloweenI
 $('#halloweenApplyCode')?.addEventListener('click', () => { void applyHalloweenCode(); });
 $('#halloweenCodeInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void applyHalloweenCode(); });
 $('#promoBannerClose')?.addEventListener('click', closePromoBanner);
-$('#promoBannerCta')?.addEventListener('click', () => { closePromoBanner(); void openHalloweenPage(); });
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
