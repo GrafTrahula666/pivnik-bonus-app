@@ -24,8 +24,10 @@ import ru.pivnik.evotor.core.ConnectionCheck;
  * Always runs off the Evotor binder thread.
  */
 final class PivnikApi {
-    // Requests go through the Evotor cloud proxy, which adds a round trip.
-    private static final int TIMEOUT_MS = 10000;
+    private static final int CONNECT_TIMEOUT_MS = 10_000;
+    // Evotor allows 5 s to connect upstream and 10 s to wait for its answer.
+    // The client must leave time to receive that answer, including proxy errors.
+    private static final int READ_TIMEOUT_MS = 30_000;
     private static final int MAX_RESPONSE_CHARS = 64 * 1024;
 
     private PivnikApi() {}
@@ -53,15 +55,18 @@ final class PivnikApi {
     private static String diagnose(BridgeSettings settings, boolean withKey) {
         HttpURLConnection connection = null;
         String stage = "подключение";
+        String peer = "";
+        long startedAt = System.nanoTime();
         try {
             URL url = new URL(settings.apiBaseUrl() + "/api/device/pos/qr/resolve");
             connection = (HttpURLConnection) url.openConnection();
             PivnikTls.apply(connection);
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
             connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             // The network check must not read, send, require or overwrite the saved device key.
             String token = withKey ? settings.deviceToken() : "";
@@ -74,6 +79,9 @@ final class PivnikApi {
                 out.write(body);
             }
             stage = "ожидание ответа";
+            // The POST output stream has already completed the TLS handshake.
+            // Preserve the peer certificate even when no HTTP response arrives.
+            peer = peerCertificate(connection);
             int status = connection.getResponseCode();
             String errorText = null;
             try { errorText = read(status >= 200 && status < 300
@@ -87,14 +95,7 @@ final class PivnikApi {
             appendHeader(details, connection, "Allow");
             appendHeader(details, connection, "X-Railway-Request-Id");
             appendHeader(details, connection, "X-Railway-Edge");
-            if (connection instanceof HttpsURLConnection) {
-                try {
-                    java.security.cert.Certificate[] certs = ((HttpsURLConnection) connection).getServerCertificates();
-                    if (certs.length > 0 && certs[0] instanceof X509Certificate) {
-                        details.append("\nСертификат: ").append(((X509Certificate) certs[0]).getIssuerX500Principal().getName());
-                    }
-                } catch (Exception ignored) {}
-            }
+            details.append(peer);
             try { details.append("\nIP: ").append(InetAddress.getByName(url.getHost()).getHostAddress()); }
             catch (Exception ignored) {}
             try {
@@ -106,14 +107,20 @@ final class PivnikApi {
                     if (!hint.isEmpty()) details.append("\n").append(hint);
                 }
             } catch (Exception ignored) {}
+            connection.disconnect();
+            connection = null;
             details.append("\nПроверка /api/health: ").append(health(settings));
             return details.toString();
         } catch (Exception error) {
             String message = error.getMessage();
             if (message != null && message.length() > 160) message = message.substring(0, 160);
+            // Do not hold a failed proxy connection open during the second probe.
+            if (connection != null) connection.disconnect();
+            connection = null;
             // Any failure: say at which step it broke and whether the lighter /api/health route gets through.
             return "ERR " + error.getClass().getSimpleName() + (message == null ? "" : ": " + message)
-                    + "\nЭтап: " + stage + "\nПроверка /api/health: " + health(settings);
+                    + "\nЭтап: " + stage + "\nОжидание: " + elapsedMillis(startedAt) + " мс"
+                    + peer + "\nПроверка /api/health: " + health(settings);
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -130,19 +137,49 @@ final class PivnikApi {
         if (value != null) out.append("\n").append(name).append(": ").append(value.length() > 80 ? value.substring(0, 80) : value);
     }
 
+    private static String peerCertificate(HttpURLConnection connection) {
+        if (!(connection instanceof HttpsURLConnection)) return "";
+        try {
+            java.security.cert.Certificate[] certs = ((HttpsURLConnection) connection).getServerCertificates();
+            if (certs.length > 0 && certs[0] instanceof X509Certificate) {
+                String issuer = ((X509Certificate) certs[0]).getIssuerX500Principal().getName();
+                return "\nСертификат: " + (issuer.length() > 160 ? issuer.substring(0, 160) : issuer);
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private static long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
+    }
+
     private static String health(BridgeSettings settings) {
         HttpURLConnection connection = null;
+        long startedAt = System.nanoTime();
         try {
             connection = (HttpURLConnection) new URL(settings.apiBaseUrl() + "/api/health").openConnection();
             PivnikTls.apply(connection);
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
-            long started = System.currentTimeMillis();
+            connection.setRequestProperty("Accept", "application/json");
             int code = connection.getResponseCode();
-            return "HTTP " + code + " за " + (System.currentTimeMillis() - started) + " мс";
+            String result = "HTTP " + code + " за " + elapsedMillis(startedAt) + " мс";
+            if (code >= 400) {
+                try {
+                    String body = read(connection.getErrorStream());
+                    if (body != null && !body.trim().isEmpty()) {
+                        String hint = ProxyDiagnostic.hint(body);
+                        body = body.replaceAll("\\s+", " ").trim();
+                        result += "\nОтвет health: " + (body.length() > 160 ? body.substring(0, 160) : body);
+                        if (!hint.isEmpty()) result += "\n" + hint;
+                    }
+                } catch (Exception ignored) {}
+            }
+            return result;
         } catch (Exception error) {
-            return error.getClass().getSimpleName();
+            return error.getClass().getSimpleName() + " за " + elapsedMillis(startedAt) + " мс";
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -165,8 +202,8 @@ final class PivnikApi {
             connection = (HttpURLConnection) url.openConnection();
             PivnikTls.apply(connection);
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(TIMEOUT_MS);
-            connection.setReadTimeout(TIMEOUT_MS);
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
             connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");

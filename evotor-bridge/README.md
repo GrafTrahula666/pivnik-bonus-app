@@ -1,5 +1,22 @@
 # PIVNIK Evotor bridge — integration draft
 
+## Proxy response budget 1.0.11 (hardware verification pending)
+
+The HTTP client now allows 10 seconds to connect and 30 seconds for the response.
+The [Evotor transport contract](https://developer.evotor.ru/docs/doc_java_third_party_service_communication.html)
+allows the cloud proxy 5 seconds to connect upstream and 10 seconds to read its
+answer; the previous 10-second client read timeout could hide the proxy's own
+structured failure. Diagnostics preserve the TLS peer issuer after the POST
+handshake and show elapsed time even when the HTTP response times out. The failed
+primary connection is closed before the independent `/api/health` request. Health
+errors also expose the bounded proxy response and its structured hint. The screen
+asks the operator to allow up to 90 seconds for both probes.
+
+This does not establish the root cause of the terminal's timeout or working
+connectivity. VersionCode 15 retains the 1.0.10 permanent certificate and existing
+encrypted preferences, so it can update signed 1.0.10 in place. Scanner and money
+contracts are unchanged; spending remains unimplemented.
+
 ## Foreground scan 1.0.10 (hardware verification pending)
 
 The owner authorized preparing and publishing the update on 2026-10-15. The
@@ -15,7 +32,7 @@ secrets and the approved permanent certificate fingerprint:
 `36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663`.
 Missing/mismatched signing identity blocks publication. Unsigned artifacts are
 explicitly labelled **not for installation**. A permanent signed APK is published
-on a new versioned `evotor-apk-1.0.10` branch without replacing older APKs or using
+on a new versioned `evotor-apk-1.0.11` branch without replacing older APKs or using
 force-push. This does not upload or install the app through the Evotor portal.
 
 The launcher opens `CustomerScanActivity`: add goods in Evotor, open PIVNIK,
@@ -55,7 +72,7 @@ failures never block sales.
 
 Authorization is now a separate device key, not a staff Bearer session.
 See [BACKEND-CONTRACT.md](BACKEND-CONTRACT.md). HTTPS only, no redirects,
-3-second network timeouts. Server token is stored encrypted with Android
+10-second connect and 30-second read timeouts. Server token is stored encrypted with Android
 Keystore; raw saved token is never displayed. Existing staff preference is
 removed, so an approved app update requires explicit device provisioning.
 

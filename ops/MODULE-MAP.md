@@ -848,6 +848,14 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Proxy response budget (2026-10-16, 1.0.11/code15): `PivnikApi` uses 10-second
+  connect and 30-second read timeouts, allowing Evotor's 5+10-second upstream
+  budget. Diagnostics retain the POST TLS issuer and elapsed wait on timeout,
+  close the failed connection before health, and surface bounded health errors.
+  `SettingsActivity` classifies TLS failures by the error line, not issuer names.
+  Existing permanent signing identity and encrypted settings are preserved.
+  This is a diagnostic update, not proof of terminal connectivity or redemption.
+
 - Foreground scanner draft (2026-10-15): `evotor-bridge` opens
   `CustomerScanActivity`, subscribes to the SDK scanner broadcast only while
   resumed, and passes recognised customer QR through the existing `Bridge`

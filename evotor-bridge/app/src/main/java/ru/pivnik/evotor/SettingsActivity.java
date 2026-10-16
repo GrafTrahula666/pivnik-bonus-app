@@ -146,7 +146,8 @@ public final class SettingsActivity extends Activity {
         checking = true;
         check.setEnabled(false);
         keyCheck.setEnabled(false);
-        connection.setText(withKey ? "Проверяем сохранённый ключ…" : "Проверяем связь без ключа…");
+        connection.setText((withKey ? "Проверяем сохранённый ключ…" : "Проверяем связь без ключа…")
+                + "\nПодождите до 90 секунд.");
         new Thread(new Runnable() {
             @Override public void run() {
                 final String answer = withKey ? PivnikApi.diagnoseKey(settings) : PivnikApi.diagnoseNetwork(settings);
@@ -174,7 +175,10 @@ public final class SettingsActivity extends Activity {
                 + "Если ключ уже сохранён, нажмите «Проверить сохранённый ключ».";
         if ("KEY".equals(result)) return "Сервер отвечает, но сохранённый ключ не принят. Проверьте его действительность у администратора.";
         if (result.startsWith("HTTP ")) return "Сервер ответил неожиданно. Пришлите этот текст разработчику:\n" + result;
-        String hint = result.contains("SSL") || result.contains("Certificate") || result.contains("Trust")
+        // Issuer names (for example Google Trust Services) are diagnostic data,
+        // not evidence that a timeout was a certificate validation failure.
+        String errorLine = result.split("\n", 2)[0];
+        String hint = errorLine.contains("SSL") || errorLine.contains("Certificate") || errorLine.contains("Trust")
                 ? "\nПохоже на проблему с сертификатом или временем на кассе. Время на кассе: "
                         + new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).format(new Date())
                         + ". Если дата неверная, исправьте её в настройках кассы."

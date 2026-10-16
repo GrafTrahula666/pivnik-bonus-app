@@ -36,4 +36,9 @@ jobs:
           name: evotor-jvm-reports
           path: evotor-bridge/app/build/reports/tests/
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-evotor-1.0.11-pr-unsigned-not-for-installation
+          path: evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
 # No APK is published, no signing secrets, no device install or production action.
