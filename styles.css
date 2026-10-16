@@ -10883,8 +10883,8 @@ html.theme-halloween .promo-banner-value {
   white-space: nowrap;
   container-type: inline-size;
 }
-html.theme-halloween .promo-banner-days { left: 9.6%; width: 34.6%; }
-html.theme-halloween .promo-banner-tickets { left: 55.3%; width: 34.6%; }
+html.theme-halloween .promo-banner-days { left: 8.4%; width: 37.6%; }
+html.theme-halloween .promo-banner-tickets { left: 54.2%; width: 38%; }
 html.theme-halloween .halloween-invite-sheet :is(#halloweenShareCode, #halloweenApplyCode) {
   border: 0;
   background: linear-gradient(180deg, #f4cf82, #b97916);
