@@ -10838,8 +10838,8 @@ html.theme-halloween .promo-banner {
 html.theme-halloween .promo-banner.open { display: flex; }
 html.theme-halloween .promo-banner-card {
   position: relative;
-  width: min(100%, 480px, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px) * 1080 / 2149));
-  aspect-ratio: 1080 / 2149;
+  width: min(100%, 480px, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px) * 941 / 1672));
+  aspect-ratio: 941 / 1672;
 }
 html.theme-halloween .promo-banner-image {
   display: block;
@@ -10863,20 +10863,28 @@ html.theme-halloween .promo-banner-close {
   font-size: 26px;
   line-height: 1;
 }
-/* The "Войти в сезон" button is drawn in the art; this is a transparent tap area over it. */
-html.theme-halloween .promo-banner-cta {
+/* The two value windows are drawn in the art; the numbers sit over them, on a dark plate that hides the placeholder marks. */
+html.theme-halloween .promo-banner-value {
   position: absolute;
-  left: 22%;
-  top: 91.3%;
-  width: 56%;
-  height: 8.2%;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: transparent;
-  font-size: 0;
+  top: 44.2%;
+  height: 6.6%;
+  display: grid;
+  place-items: center;
+  padding: 0 4%;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #1a1030, #0b0716);
+  border: 1px solid rgba(244,207,130,.55);
+  color: #ffe2b0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 800;
+  font-size: clamp(16px, 5.4cqw, 26px);
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0,0,0,.6);
+  white-space: nowrap;
+  container-type: inline-size;
 }
-html.theme-halloween .promo-banner-cta:focus-visible { outline: 2px solid #ffe2b0; outline-offset: 2px; }
+html.theme-halloween .promo-banner-days { left: 9.6%; width: 34.6%; }
+html.theme-halloween .promo-banner-tickets { left: 55.3%; width: 34.6%; }
 html.theme-halloween .halloween-invite-sheet :is(#halloweenShareCode, #halloweenApplyCode) {
   border: 0;
   background: linear-gradient(180deg, #f4cf82, #b97916);
