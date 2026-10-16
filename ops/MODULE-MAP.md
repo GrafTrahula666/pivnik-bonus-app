@@ -848,6 +848,16 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Selectel ingress draft (2026-10-16,1.0.12/code16): `BridgeSettings` uses the
+  verified separate `/evotor` ingress on the existing Selectel hostname.
+  `DeviceCredentialStore` explicitly migrates only the old production AAD into
+  separate encrypted slots, preserving the original record and Keystore alias.
+  Existing/corrupted current records never fall back to a previous identity.
+  Optional personal-APK provisioning (`core/ProvisionedKey`) only initializes an
+  empty credential store; real keys are absent from Git/public artifacts. The
+  permanent certificate is retained. Server route checks passed on the owner's
+  VM; real Evotor proxy permissions/device flows and redemption remain pending.
+
 - Proxy response budget (2026-10-16, 1.0.11/code15): `PivnikApi` uses 10-second
   connect and 30-second read timeouts, allowing Evotor's 5+10-second upstream
   budget. Diagnostics retain the POST TLS issuer and elapsed wait on timeout,

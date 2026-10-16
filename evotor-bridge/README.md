@@ -1,5 +1,32 @@
 # PIVNIK Evotor bridge — integration draft
 
+## Selectel ingress 1.0.12 (physical till acceptance pending)
+
+The fixed base is now `https://139.100.238.159.nip.io/evotor`. The owner ran the
+guarded server installer: the live health returned200, keyless resolve/bind401,
+and old VK checks passed. The till must still permit the three exact prefixed
+URLs in Evotor's proxy settings; terminal connectivity is not yet established.
+VersionCode16 retains the permanent certificate and updates signed1.0.10/1.0.11
+in place, without uninstalling or clearing data.
+
+The old device credential uses the full old base as AES-GCM AAD. The new store
+decrypts only that exact historical base and promotes a valid `pvpos_` key into
+new encrypted slots, using the same Android Keystore alias. Original encrypted
+slots remain intact even if durable commit fails. A present but damaged current
+record fails closed instead of silently restoring a previous identity. No
+plaintext preference, staff session or arbitrary-origin migration is supported.
+
+At the owner's request a personal APK may contain the optional asset
+`assets/pivnik-device-key.txt`. It imports one bounded valid POS credential into
+an entirely empty store; existing or damaged credentials are never replaced.
+The key is extractable from that personal APK, which must be delivered privately.
+The real asset is never committed or included in public CI artifacts/releases.
+Generic builds retain the manual key field. The network probe sends no key.
+
+This separate draft branch does not implement redemption or alter backend money,
+database, QR identity or receipt-binding policy. Real scanning, a closed receipt's
+unique accrual, redemption, cancellation and refund still require acceptance.
+
 ## Proxy response budget 1.0.11 (hardware verification pending)
 
 The HTTP client now allows 10 seconds to connect and 30 seconds for the response.
@@ -32,7 +59,7 @@ secrets and the approved permanent certificate fingerprint:
 `36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663`.
 Missing/mismatched signing identity blocks publication. Unsigned artifacts are
 explicitly labelled **not for installation**. A permanent signed APK is published
-on a new versioned `evotor-apk-1.0.11` branch without replacing older APKs or using
+on a new versioned `evotor-apk-1.0.12` branch without replacing older APKs or using
 force-push. This does not upload or install the app through the Evotor portal.
 
 The launcher opens `CustomerScanActivity`: add goods in Evotor, open PIVNIK,
