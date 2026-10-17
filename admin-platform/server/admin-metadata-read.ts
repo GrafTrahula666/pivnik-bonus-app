@@ -15,8 +15,8 @@ export async function getAdminAudit(scope:VenueScope|null,limit=100){
   const params:Array<string|number>=[safeLimit]
   let tenantClause=''
   if(scope){
-    params.push(scope.companyId)
-    tenantClause='WHERE al.company_id=$2::bigint'
+    params.push(scope.companyId,scope.id)
+    tenantClause='WHERE al.company_id=$2::bigint AND al.venue_id=$3::bigint'
   }
   const result=await pool.query(
     `SELECT
