@@ -4,6 +4,18 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Business venue audit isolation (2026-10-17)
+
+`admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit
+by both the resolved company ID and venue ID; company-level and other-venue
+entries are excluded. The existing `/api/admin/venues/:venueId/audit` router
+resolves current account access before reading. Query parameters cannot replace
+that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
+`server/tests/audit-venue-scope.spec.ts` covers SQL isolation;
+`server/tests/audit-http.spec.ts` exercises signed sessions, both routes,
+same-company venues, cross-company denial and access revocation through actual
+HTTP and disposable PGlite. No schema or write-path change is required.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
