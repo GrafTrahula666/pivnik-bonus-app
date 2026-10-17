@@ -3,8 +3,8 @@ import { createPosDeviceService } from './devices.js';
 import { evotorConfig } from './evotor-client.js';
 import { posError } from './scope.js';
 
-export function createPosHttp(pool, config = evotorConfig(), clock = Date.now) {
-  const sales = createPosService(pool, config), devices = createPosDeviceService(pool, config);
+export function createPosHttp(pool, config = evotorConfig(), clock = Date.now, loyaltyPolicy) {
+  const sales = createPosService(pool, config), devices = createPosDeviceService(pool, config, loyaltyPolicy);
   // Tills are limited per device after the key is checked; failed keys per client address in a
   // separate map, so anonymous traffic can never use up a till's budget.
   const deviceWindows = new Map(), failedWindows = new Map();
@@ -33,7 +33,8 @@ export function createPosHttp(pool, config = evotorConfig(), clock = Date.now) {
   };
   return {
     async device({ method, pathname, authorization, deviceKey, body, address }) {
-      const routes = { '/api/device/pos/qr/resolve': 'resolveFor', '/api/device/pos/receipts/bind': 'bindFor' };
+      const routes = { '/api/device/pos/qr/resolve': 'resolveFor', '/api/device/pos/receipts/bind': 'bindFor',
+        '/api/device/pos/redemptions': 'redemptionFor' };
       if (method !== 'POST' || !Object.hasOwn(routes, pathname)) throw posError(404, 'pos_route_not_found', 'POS API не найден.');
       boundedBody(body);
       let device;

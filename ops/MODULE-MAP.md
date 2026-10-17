@@ -848,17 +848,95 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
+  `qr/resolve` caller can explicitly request `includeWallet: true`.
+  `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
+  live QR, using the serving runtime's existing unlimited policy injected into
+  both `createPosHttp` mounts. Legacy requests retain their exact response.
+  Missing/invalid wallets fail unavailable, not as a zero balance. Android retains the
+  optional balance with the exact receipt binding, expires/clears it with that
+  identity and does not treat it as authority to spend. The settings screen
+  checks a saved key automatically and shows an explicit successful connection;
+  the keyless button moves into diagnostics.
+- Native sale loyalty (1.0.13/code17 candidate): `NativeCustomerActivity` is
+  launched from the native barcode integration and displays the guest/balance.
+  `RedemptionService` declares the native **Списать баллы** receipt-discount tile.
+  `RedemptionActivity`, `ReceiptBasket`, `RedemptionJournal` and the pure
+  `core/RedemptionOperation` persist an idempotent request before network/SDK
+  effects, check exact UUID/basket again, and return a real discount, never a
+  fake payment/product. Unresolved redemption prevents replacing the guest;
+  the before-positions-edit hook requests cancellation first. It refuses to
+  stack over other document discounts or partially paid receipts. No arbitrary
+  overlay or permanent native sale widget is installed. Actual POS handling
+  of an empty barcode result and all physical till flows remain unverified.
+- `pos/redemption.js` adds the guarded financial lifecycle. New reservations
+  default off (`PIVNIK_POS_REDEMPTION_ENABLED`). They debit available funds under
+  the existing user/wallet and receipt locks, recording a non-purchase adjustment.
+  Receipt/client/device and idempotency identity are immutable. Explicit cancel
+  requires removal of the receipt effect; a cancel-before-reserve tombstone
+  rejects delayed requests. Holds never expire on a timer. The cloud worker
+  commits only a matching own-app `extras.pivnikLoyaltyV1` marker plus actual
+  discount/net amount, or releases a matching marker with zero document discount.
+  Unknown/mismatched effects stay in review. PAYBACK restores spent points by a
+  cumulative capped proportion, independently of the ordinary cashback reversal.
+- The canonical endpoint is `POST /api/device/pos/redemptions`. The installed
+  proxy masks also support the same actions over `receipts/bind` with
+  `operation: "redemption"`; ordinary `{receiptUuid,payload}` binds stay nonfinancial.
+  The gateway forwards both financial transports to the main runtime to use the
+  cloud worker's monetary policy, rather than its legacy display/owner policy.
+  No new external URL/whitelist or Selectel routing is necessary for the APK.
+- Manual additive migration023 and `scripts/evotor-redemption-setup.mjs` prepare
+  reservations, cancellation tombstones and refunds. Neither runs on startup.
+  `scripts/check-evotor-redemption-concurrency.mjs` is restricted to a fresh local
+  `evotor_redemption_test` DB; the integration workflow runs it against PostgreSQL17.
+
+- Selectel ingress draft (2026-10-16,1.0.12/code16): `BridgeSettings` uses the
+  verified separate `/evotor` ingress on the existing Selectel hostname.
+  `DeviceCredentialStore` explicitly migrates only the old production AAD into
+  separate encrypted slots, preserving the original record and Keystore alias.
+  Existing/corrupted current records never fall back to a previous identity.
+  Optional personal-APK provisioning (`core/ProvisionedKey`) only initializes an
+  empty credential store; real keys are absent from Git/public artifacts. The
+  permanent certificate is retained. Server route checks passed on the owner's
+  VM; real Evotor proxy permissions/device flows and redemption remain pending.
+
+- Proxy response budget (2026-10-16, 1.0.11/code15): `PivnikApi` uses 10-second
+  connect and 30-second read timeouts, allowing Evotor's 5+10-second upstream
+  budget. Diagnostics retain the POST TLS issuer and elapsed wait on timeout,
+  close the failed connection before health, and surface bounded health errors.
+  `SettingsActivity` classifies TLS failures by the error line, not issuer names.
+  Existing permanent signing identity and encrypted settings are preserved.
+  This is a diagnostic update, not proof of terminal connectivity or redemption.
+
+- Foreground scanner draft (2026-10-15): `evotor-bridge` opens
+  `CustomerScanActivity`, subscribes to the SDK scanner broadcast only while
+  resumed, and passes recognised customer QR through the existing `Bridge`
+  receipt-specific resolve/bind policy. `core/ForegroundScan` prevents queued
+  double scans and stale customer messages after leaving the window.
+  `core/ProxyDiagnostic` classifies proxy 2003 by its structured reason.
+  `core/ConnectionCheck` separates the explicit keyless network check from the
+  saved-device-key check, accepting only the actual POS refusal envelope.
+  The encrypted credential store is unchanged. APK publication requires the
+  approved backed-up permanent certificate; no throwaway fallback.
+  The owner authorized one reinstall from the disposable 1.0.8 signature;
+  local settings require re-entry. The backup restoration/signing test passed.
+  This
+  changes no server mount, monetary rule or DB schema; real proxy connectivity,
+  CI secret provisioning and device behaviour remain unverified. Evidence and
+  current blockers: `ops/EVOTOR-AUDIT-20261015.md`.
+
 - `pos/http.js` is the shared dispatcher for native POS device and scoped POS admin
   routes in `server.js` and `universal-server.js`; preserve both mounts on changes.
 - `pos/scope.js`, `devices.js`, `repository.js`, `analytics.js`, `service.js` and
   `sync.js` isolate explicit store access, device identity and cash projections.
 - `pos-admin.js` / `pos-admin.css` are served by both runtimes and copied by the
   existing VK Hosting builder. Existing staff transactions stay in app operations.
-- Migrations 012/013/014 are opt-in manual migrations, never part of startup policy.
-- `pos/bonus.js` is the only POS code that writes wallets/transactions: device
+- Migrations 012/013/014/023 are opt-in manual migrations, never part of startup policy.
+- `pos/bonus.js` and `pos/redemption.js` are the POS wallet/transaction writers: device
   `receipts/bind` claims plus the `server.js` worker (`startPosBonusWorker`,
   off unless `PIVNIK_POS_BONUS_ENABLED=true`) settle closed SELL/PAYBACK documents
-  once each through `pos_bonus_accruals`. Its ledger hooks sit just above
+  once each through `pos_bonus_accruals`; reservation/refund reconciliation runs
+  before cashback using the same ledger policy. Its ledger hooks sit just above
   `createPosHttp` in `server.js`, outside the slice `evotor-http-boundary` evals.
 - `pos/setup.js` + `scripts/evotor-setup.mjs`: the owner's one-off store setup
   (migrations 012–014, binding, operator access, till key). Never on startup.

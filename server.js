@@ -2865,7 +2865,9 @@ function startPosBonusWorker() {
   setTimeout(tick, 5000).unref();
   console.log(`Evotor bonus worker: every ${bonus.syncSeconds}s for store ${config.storeId}`);
 }
-const posHttp = createPosHttp(pool);
+const posHttp = createPosHttp(pool, undefined, Date.now, {
+  isUnlimited: hasUnlimitedBonus, unlimitedBalance: UNLIMITED_BONUS_BALANCE
+});
 app.use('/api/device/pos', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,

@@ -40,6 +40,17 @@ public class BindingPolicyTest {
     }
 
     @Test
+    public void repeatScanRefreshesBalanceWithoutRenewingIdentityOrLeakingToNextReceipt() {
+        policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, new ResolvedClient("101", "Кирилл", 123L, false), 1_000);
+        policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, new ResolvedClient("101", "Кирилл", 100L, false), 2_000);
+        assertEquals(Long.valueOf(100), policy.bindingFor(RECEIPT_A, 3_000).bonusBalance);
+        assertEquals(1_000, policy.bindingFor(RECEIPT_A, 3_000).boundAtMillis);
+        assertNull(policy.bindingFor(RECEIPT_B, 3_000));
+        policy.onReceiptFinished(RECEIPT_A);
+        assertNull(policy.storedBinding());
+    }
+
+    @Test
     public void secondCustomerNeedsAConfirmingSecondScan() {
         policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, KIRILL, 1_000);
         assertEquals(BindingPolicy.Outcome.REPLACE_NEEDS_CONFIRMATION,
