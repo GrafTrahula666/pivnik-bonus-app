@@ -1,5 +1,18 @@
 # PIVNIK Evotor bridge — integration draft
 
+## Barcode completion candidate (1.0.14/code18, 2026-10-17)
+
+The owner confirmed that1.0.13 opens the guest card on a native Sale scan,
+then reports a product-not-found error. This candidate changes the SDK result
+from zero groups to one empty position group only for recognized loyalty codes.
+It adds no product and preserves ordinary product fallback. Actual SDK
+Bundle/Parcel tests are separate from physical POS acceptance, which remains
+pending. Grouped results require POS above6.35; native empty-group consumption
+is not documented. See `ops/EVOTOR-BARCODE-RESULT-20261017.md`.
+
+The permanent signature, encrypted settings and saved key are retained; install
+in place over1.0.13. Redemption stays default off pending its own acceptance.
+
 ## Sale loyalty preparation (unshipped draft, 2026-10-17)
 
 The owner has now confirmed real keyless connectivity and «Ключ принят» on
@@ -22,8 +35,9 @@ The new default-off financial lifecycle reserves once and reconciles/refunds
 from closed cloud documents. See BACKEND-CONTRACT.md and
 `ops/EVOTOR-SALE-LOYALTY-20261017.md` for the exact contract and limits.
 
-The candidate is not yet installed or hardware accepted. In particular, empty
-barcode-result handling (no native product error), the receipt-edit guard, SDK
+The owner installed1.0.13 and confirmed the guest card opens, followed by a
+native product-not-found error (the1.0.14 candidate above addresses that result
+shape). Remaining hardware gates include suppression of that error, the receipt-edit guard, SDK
 receipt extras and cash/card/fiscal behaviour need physical acceptance. It
 installs no permanent overlay/widget. Other document discounts and partial
 payments must be removed before selecting a new redemption. Remove PIVNIK's
