@@ -41,7 +41,7 @@ jobs:
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: pivnik-evotor-1.0.13-unsigned-not-for-installation
+          name: pivnik-evotor-1.0.14-unsigned-not-for-installation
           path: evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -93,7 +93,7 @@ jobs:
       - run: sdkmanager 'build-tools;35.0.0'
       - uses: actions/download-artifact@v4
         with:
-          name: pivnik-evotor-1.0.13-unsigned-not-for-installation
+          name: pivnik-evotor-1.0.14-unsigned-not-for-installation
           path: unsigned
       - name: Sign and verify the APK with the permanent key
         env:
@@ -104,15 +104,15 @@ jobs:
           set -euo pipefail
           mkdir release
           signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          "$signer" sign --ks "$RUNNER_TEMP/evotor-permanent.jks" --ks-key-alias "$EVOTOR_KEY_ALIAS" --ks-pass env:EVOTOR_KEYSTORE_PASSWORD --key-pass env:EVOTOR_KEY_PASSWORD --out release/pivnik-evotor-1.0.13.apk unsigned/app-release-unsigned.apk
-          "$signer" verify --verbose --print-certs release/pivnik-evotor-1.0.13.apk > release/signature.txt
+          "$signer" sign --ks "$RUNNER_TEMP/evotor-permanent.jks" --ks-key-alias "$EVOTOR_KEY_ALIAS" --ks-pass env:EVOTOR_KEYSTORE_PASSWORD --key-pass env:EVOTOR_KEY_PASSWORD --out release/pivnik-evotor-1.0.14.apk unsigned/app-release-unsigned.apk
+          "$signer" verify --verbose --print-certs release/pivnik-evotor-1.0.14.apk > release/signature.txt
           actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/signature.txt | tr '[:lower:]' '[:upper:]')
           test "$actual" = "$EXPECTED_CERT_SHA256"
-          (cd release && sha256sum pivnik-evotor-1.0.13.apk) > release/SHA256SUMS
-          printf 'version=1.0.13\nversionCode=17\nsource_commit=%s\ncertificate_sha256=%s\nrequires_reinstall_from_1_0_8=true\nrequires_reinstall_from_1_0_10=false\nhardware_verified=false\n' "$GITHUB_SHA" "$EXPECTED_CERT_SHA256" > release/build-info.txt
+          (cd release && sha256sum pivnik-evotor-1.0.14.apk) > release/SHA256SUMS
+          printf 'version=1.0.14\nversionCode=18\nsource_commit=%s\ncertificate_sha256=%s\nrequires_reinstall_from_1_0_8=true\nrequires_reinstall_from_1_0_10=false\nhardware_verified=false\n' "$GITHUB_SHA" "$EXPECTED_CERT_SHA256" > release/build-info.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: pivnik-evotor-1.0.13-permanent-signed
+          name: pivnik-evotor-1.0.14-permanent-signed
           path: release/
           if-no-files-found: error
       - name: Publish versioned APK without replacing older builds
@@ -121,16 +121,16 @@ jobs:
           cp -R release "$RUNNER_TEMP/evotor-publish"
           git config user.name 'github-actions'
           git config user.email 'actions@users.noreply.github.com'
-          if git ls-remote --exit-code --heads origin evotor-apk-1.0.13 > /dev/null; then
-            git fetch origin evotor-apk-1.0.13
+          if git ls-remote --exit-code --heads origin evotor-apk-1.0.14 > /dev/null; then
+            git fetch origin evotor-apk-1.0.14
             git switch -c evotor-apk-publish FETCH_HEAD
           else
             git switch --orphan evotor-apk-publish
           fi
           cp "$RUNNER_TEMP/evotor-publish/"* .
-          git add pivnik-evotor-1.0.13.apk signature.txt SHA256SUMS build-info.txt
-          if ! git diff --cached --quiet; then git commit -m "Evotor 1.0.13 permanent signed APK from ${GITHUB_SHA}"; fi
-          git push origin HEAD:refs/heads/evotor-apk-1.0.13
+          git add pivnik-evotor-1.0.14.apk signature.txt SHA256SUMS build-info.txt
+          if ! git diff --cached --quiet; then git commit -m "Evotor 1.0.14 permanent signed APK from ${GITHUB_SHA}"; fi
+          git push origin HEAD:refs/heads/evotor-apk-1.0.14
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/evotor-permanent.jks" "$RUNNER_TEMP/existing-cert.der"

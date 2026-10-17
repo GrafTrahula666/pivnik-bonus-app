@@ -4,13 +4,14 @@ import android.os.Bundle;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.util.Collections;
 import ru.evotor.framework.core.IntegrationActivity;
 import ru.evotor.framework.receipt.formation.event.ReturnPositionsForBarcodeRequestedEvent;
 import ru.pivnik.evotor.core.PivnikQr;
 
 /** Guest card launched by the native sale barcode event, not by the app launcher. */
 public final class NativeCustomerActivity extends IntegrationActivity {
+    private String sourceBarcode;
+
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         int pad=(int)(24*getResources().getDisplayMetrics().density);
@@ -20,7 +21,8 @@ public final class NativeCustomerActivity extends IntegrationActivity {
         TextView note=new TextView(this); note.setText("После привязки клиента просто оплатите чек — бонусы начислятся после оплаты. Для списания выберите «Списать баллы» на экране оплаты."); root.addView(note);
         Button back=new Button(this); back.setText("Продолжить продажу"); back.setOnClickListener(v -> finish()); root.addView(back); setContentView(root);
         ReturnPositionsForBarcodeRequestedEvent event=ReturnPositionsForBarcodeRequestedEvent.from(getSourceBundle());
-        String payload=event==null ? null : PivnikQr.detect(event.getBarcode());
+        sourceBarcode=event==null ? null : event.getBarcode();
+        String payload=PivnikQr.detect(sourceBarcode);
         String receipt=getIntent().getStringExtra("pivnik_receipt_uuid");
         if (payload==null || receipt==null) { status.setText("Чек изменился. Отсканируйте QR клиента в открытой продаже."); return; }
         Bridge.get(this).onPivnikCodeScanned(payload,receipt,message -> {
@@ -29,9 +31,7 @@ public final class NativeCustomerActivity extends IntegrationActivity {
     }
 
     @Override public void finish() {
-        // The actual POS handling of an empty product result requires hardware acceptance.
-        // There is deliberately no fabricated product or zero-price receipt line.
-        setIntegrationResult(new ReturnPositionsForBarcodeRequestedEvent.Result(false,Collections.emptyList(),Collections.emptyList()));
+        setIntegrationResult(LoyaltyBarcodeResult.forBarcode(sourceBarcode));
         super.finish();
     }
 }

@@ -860,6 +860,14 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Barcode completion (1.0.14/code18 candidate, 2026-10-17): the owner confirmed
+  the native guest card opens on1.0.13, followed by the native product-not-found
+  error. `LoyaltyBarcodeResult` returns one empty SDK position group only for
+  recognized PIVNIK codes, preserving ordinary product fallback. Robolectric
+  tests check actual Bundle/Parcel transport. Native consumption of an empty
+  group is not documented and remains a physical acceptance gate; grouped
+  results require modern POS (above6.35). No receipt line or financial change.
+  Details: `ops/EVOTOR-BARCODE-RESULT-20261017.md`.
 - Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
   `qr/resolve` caller can explicitly request `includeWallet: true`.
   `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
