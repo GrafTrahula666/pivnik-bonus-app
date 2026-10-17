@@ -41,13 +41,14 @@ async function fixture(){
 }
 async function mount(kind,pool){
  const pos=createPosHttp(pool,config);
- const globals={pool,Buffer,URL,MAX_BODY_BYTES:8192,verifySession:t=>verifySession(t,secret),effectiveRoleForAuthenticatedIdentity,ownerTelegramId:'fixture-owner',ownerVkId:'fixture-owner-vk',TERMS_VERSION:terms,createPosHttp:()=>pos};
+ const globals={pool,Buffer,URL,MAX_BODY_BYTES:8192,verifySession:t=>verifySession(t,secret),effectiveRoleForAuthenticatedIdentity,ownerTelegramId:'fixture-owner',ownerVkId:'fixture-owner-vk',TERMS_VERSION:terms,createPosHttp:()=>pos,
+  hasUnlimitedBonus:()=>false,UNLIMITED_BONUS_BALANCE:9_999_999_999_999};
  let server,dropNextLink=false;
  if(kind==='express'){
    const text=await source('server.js'),app=express();app.use(express.json());
    app.use((req,res,next)=>{const json=res.json.bind(res);res.json=payload=>{if(dropNextLink&&req.originalUrl==='/api/admin/pos/link'&&payload.ok){dropNextLink=false;req.socket.destroy();return res;}return json(payload);};next();});
    const getProfile=async(id)=>{const row=(await pool.query('SELECT * FROM users WHERE id=$1',[id])).rows[0];return row&&{id:String(row.id),role:row.role,termsAccepted:Boolean(row.terms_accepted_at&&row.terms_version===terms)};};
-   vm.runInNewContext(between(text,'async function authRequired(', '\nfunction requireRole(')+between(text,'const posHttp = createPosHttp(pool);',"\napp.get('/api/admin/summary'")+"\napp.get('/api/staff/fixture',authRequired,(_req,res)=>res.json({ok:true}));",{...globals,app,getProfile});
+   vm.runInNewContext(between(text,'async function authRequired(', '\nfunction requireRole(')+between(text,'const posHttp = createPosHttp(',"\napp.get('/api/admin/summary'")+"\napp.get('/api/staff/fixture',authRequired,(_req,res)=>res.json({ok:true}));",{...globals,app,getProfile});
    app.use((error,_req,res,_next)=>res.status(error.statusCode||500).json({error:error.message}));server=http.createServer(app);
  }else{
    const text=await source('universal-server.js');

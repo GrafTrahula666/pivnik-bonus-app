@@ -17,6 +17,26 @@ function identifier(value) {
 
 function unpack(value, key) { return value?.[key] || value; }
 
+// REST returns the requesting application's own context in TOP-LEVEL extras:
+// https://developer.evotor.ru/docs/rest_api_get_store_documents.html
+// Read only our versioned marker; never retain arbitrary extras/contact data.
+function redemptionEvidence(document) {
+  const marker = document.extras?.pivnikLoyaltyV1;
+  if (!marker || typeof marker !== 'object' || Array.isArray(marker) || marker.version !== 1
+      || typeof marker.operationId !== 'string'
+      || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(marker.operationId)
+      || !Number.isSafeInteger(marker.points) || marker.points < 1 || marker.points > 90071992547409) return null;
+  let discount = null;
+  try {
+    const discounts = document.body.doc_discounts;
+    if (Array.isArray(discounts) && discounts.length <= 1000) {
+      discount = discounts.reduce((sum, value) => sum + scaledInteger(unpack(value, 'doc_discount').discount_sum), 0);
+      if (!Number.isSafeInteger(discount)) discount = null;
+    }
+  } catch { discount = null; }
+  return { operationId: marker.operationId, points: marker.points, documentDiscountCents: discount };
+}
+
 export function normalizeEvotorDocument(document, storeId) {
   if (!['SELL', 'PAYBACK'].includes(document?.type)) return null;
   if (document.store_id !== storeId) throw new Error('Документ другого магазина.');
@@ -44,13 +64,17 @@ export function normalizeEvotorDocument(document, storeId) {
   const groups = (body.print_groups || []).map((entry) => unpack(entry, 'print_group'));
   // Fiscal details may be missing in old/non-fiscal documents: never invent a receipt count.
   const receiptCount = prints.length || null;
+  const redemption = redemptionEvidence(document);
   return {
     source: 'evotor', storeId: identifier(storeId), documentId: identifier(document.id),
     type: document.type, closedAt: date.toISOString(),
     number: String(document.number ?? ''), deviceId: String(document.device_id || ''),
     baseDocumentId: body.base_document_id || null, amountCents, positions, payments,
     receiptCount, linkable: prints.length === 1 && groups.length <= 1,
-    // Minimal financial snapshot. No contact data, token, extras or arbitrary raw payload.
+    // Legacy documents retain their byte-compatible snapshot. Only our narrowly
+    // parsed own-app marker is included for a redemption document.
+    ...(redemption ? { pivnikRedemption: redemption } : {}),
+    // Minimal financial snapshot. No contact data, token or arbitrary raw payload.
     fiscal: prints.map((p) => ({
       number: p.fiscal_document_number ?? p.document_number ?? null,
       receiptNumber: p.receipt_number ?? null,

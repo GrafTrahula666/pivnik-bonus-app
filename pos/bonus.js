@@ -1,5 +1,6 @@
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
 import { posError } from './scope.js';
+import { guardRedemptionClaim, processPosRedemptions } from './redemption.js';
 
 // The till may only say WHO was scanned into WHICH open receipt. How much was paid
 // comes exclusively from the closed cloud document, so a leaked device key can at
@@ -38,6 +39,7 @@ export async function claimReceipt(pool, device, body) {
       WHERE id=$1 AND deleted_at IS NULL AND merged_into_user_id IS NULL`, [record.id])).rows[0];
     if (!user) throw posError(404, 'qr_not_found', 'QR не найден или отозван.');
     await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`pos-bonus:${device.store_id}:${body.receiptUuid}`]);
+    await guardRedemptionClaim(db, device, body.receiptUuid, user.id);
     const decided = (await db.query(`SELECT client_id FROM pos_bonus_accruals
       WHERE source='evotor' AND store_id=$1 AND document_id=$2`, [device.store_id, body.receiptUuid])).rows[0];
     if (decided && String(decided.client_id) !== String(user.id)) {
@@ -193,6 +195,12 @@ async function returnedSoFar(db, storeId, baseDocumentId) {
  */
 export async function processPosBonuses(pool, { storeId, ledger, limit = 50 }) {
   await requirePosBonusSchema(pool);
+  // Reservations/refunds are independent of cashback (including zero cashback
+  // or a subsequently unavailable profile). Reconcile only from cloud documents.
+  const redemptions = await processPosRedemptions(pool, { storeId, policy: ledger, limit });
+  for (const item of redemptions) {
+    if (item.state === 'review' || item.state === 'error') console.warn('POS redemption reconciliation:', item.state, item.documentId);
+  }
   const results = [];
   for (const candidate of await pendingDocuments(pool, storeId, limit)) {
     const db = await pool.connect();
