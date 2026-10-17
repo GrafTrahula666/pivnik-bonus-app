@@ -8,15 +8,20 @@ public final class IndicatorText {
         switch (outcome) {
             case BOUND:
             case ALREADY_BOUND:
-                return "PIVNIK ✓ " + client.displayName;
+                return "PIVNIK ✓ " + client.displayName + balance(client);
             case REPLACED:
-                return "PIVNIK ✓ " + client.displayName + " (замена)";
+                return "PIVNIK ✓ " + client.displayName + " (замена)" + balance(client);
             case REPLACE_NEEDS_CONFIRMATION:
                 return "PIVNIK: чек уже за " + boundName + ". Для замены отсканируйте QR ещё раз";
             case RECEIPT_CHANGED:
             default:
                 return "PIVNIK: чек сменился — отсканируйте QR снова";
         }
+    }
+
+    private static String balance(ResolvedClient client) {
+        if (client.bonusBalance == null) return " • баланс недоступен";
+        return client.unlimitedBonus ? " • баллы: без лимита" : " • баллы: " + client.bonusBalance;
     }
 
     public static String forFailure(ResolveResult.Kind kind) {

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config, validateRuntimeConfig } from './config.js'
 import { closePool } from './db.js'
+import { closeOnboardingTargetRegistry } from './onboarding-database-registry.js'
 import { purgeExpiredSessions } from './auth.js'
 import { handleApi, sendApiError } from './router.js'
 import { securityHeaders } from './security.js'
@@ -108,7 +109,7 @@ async function shutdown(signal: string) {
   console.log(`${signal}: shutting down Admin Platform`)
   clearInterval(sessionCleanupTimer)
   server.close(async () => {
-    await closePool().catch(() => undefined)
+    await Promise.allSettled([closeOnboardingTargetRegistry(),closePool()])
     process.exit(0)
   })
   setTimeout(() => process.exit(1), 10_000).unref()

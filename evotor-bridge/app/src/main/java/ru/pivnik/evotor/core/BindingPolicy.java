@@ -43,7 +43,8 @@ public final class BindingPolicy {
             return Outcome.RECEIPT_CHANGED;
         }
         ReceiptBinding existing = activeBinding(currentReceiptUuid, nowMillis);
-        ReceiptBinding candidate = new ReceiptBinding(currentReceiptUuid, client.userId, client.displayName, nowMillis);
+        ReceiptBinding candidate = new ReceiptBinding(currentReceiptUuid, client.userId, client.displayName, nowMillis,
+                client.bonusBalance, client.unlimitedBonus);
         if (existing == null) {
             store.clearPendingReplacement();
             store.saveBinding(candidate);
@@ -51,6 +52,9 @@ public final class BindingPolicy {
         }
         if (existing.userId.equals(client.userId)) {
             store.clearPendingReplacement();
+            // Refresh display data without extending the identity's original lifetime.
+            store.saveBinding(new ReceiptBinding(currentReceiptUuid, client.userId, client.displayName,
+                    existing.boundAtMillis, client.bonusBalance, client.unlimitedBonus));
             return Outcome.ALREADY_BOUND;
         }
         ReceiptBinding pending = store.loadPendingReplacement();

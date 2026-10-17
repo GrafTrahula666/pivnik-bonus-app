@@ -5,3 +5,5 @@ node_modules/
 npm-debug.log*
 .DS_Store
 .pivnik-materialized
+# Personal till provisioning is injected only into a privately delivered APK.
+evotor-bridge/app/src/main/assets/pivnik-device-key.txt

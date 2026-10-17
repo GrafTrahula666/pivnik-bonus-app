@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
+import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
 import {
   createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
   withVkStartupTrace, traceVkStage
@@ -35,6 +38,7 @@ import {
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
 import { grantTickets as grantHalloweenTickets } from './halloween-raffle.js';
+import { issueRunTicket, readRunTicket, plausibleScore, normalizeRunChar, submitRunScore, runBoard } from './run-leaderboard.js';
 import {
   HALLOWEEN_TICKET_PRIZE,
   HALLOWEEN_TICKET_PRIZE_CODE,
@@ -3148,6 +3152,26 @@ function platformFromRequest(req, fallback = 'unknown') {
   return signedPlatform;
 }
 
+let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
+if (!isTestImport) {
+  try {
+    const runtime = await guardSpaceverseRuntimeStartup({
+      environment: process.env,
+      query: (text, params) => pool.query(text, params)
+    });
+    if (runtime.mode === 'tenant') {
+      spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
+      spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
+        sessionSecret: configuredSessionSecret, telegramBotToken, vkAppId, vkAppSecret });
+    }
+  } catch (error) {
+    console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+    await pool.end().catch(() => {});
+    process.exit(1);
+  }
+}
+
 function isConsentExempt(pathname) {
   return pathname === '/api/health'
     || pathname === '/api/platform-health'
@@ -3193,15 +3217,32 @@ async function serveStartupProfile(req, res, startup) {
   }
 }
 
-const posHttp = createPosHttp(pool);
+const posHttp = createPosHttp(pool, undefined, Date.now, {
+  isUnlimited: hasUnlimitedBonus, unlimitedBalance: UNLIMITED_BONUS_BALANCE
+});
 export const server = http.createServer(async (req, res) => {
+  if (spaceversePosHttp && await spaceversePosHttp(req, res)) return;
+  if (spaceverseCustomerHttp && await spaceverseCustomerHttp(req, res)) return;
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+    // New wallet mutations use the same financial authority as the cloud bonus
+    // worker. The gateway's legacy display/owner policy is not a second ledger.
+    if (url.pathname === '/api/device/pos/redemptions') {
+      const body = req.method === 'POST' ? await readRequestBody(req, 8192) : null;
+      return await proxyRequest(req, res, body);
+    }
     if (url.pathname === '/api/device/pos' || url.pathname.startsWith('/api/device/pos/')) {
-      const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
+      const rawBody = req.method === 'POST' ? await readRequestBody(req, 8192) : null;
+      const body = rawBody === null ? undefined : parseJsonBody(rawBody);
+      // Keep the working terminal/proxy URL; monetary operations still reach the
+      // canonical financial runtime rather than the gateway's display policy.
+      if (url.pathname === '/api/device/pos/receipts/bind' && body?.operation === 'redemption') {
+        return await proxyRequest(req, res, rawBody);
+      }
       return sendJson(res, 200, await posHttp.device({ method: req.method, pathname: url.pathname,
-        authorization: req.headers.authorization, body, address: requestAddress(req) }));
+        authorization: req.headers.authorization, deviceKey: req.headers['x-pivnik-device-key'],
+        body, address: requestAddress(req) }));
     }
     if (url.pathname === '/api/admin/pos' || url.pathname.startsWith('/api/admin/pos/')) {
       const user = await requireGatewayUser(req);
@@ -3469,6 +3510,31 @@ export const server = http.createServer(async (req, res) => {
         return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
       }
       return sendJson(res, 200, await getUnifiedMonthlyLeaderboard(user.id));
+    }
+
+    if (url.pathname === '/api/run/start' || url.pathname === '/api/run/score' || url.pathname === '/api/run/leaderboard') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      const canonical = await canonicalUserId(pool, user.id);
+      if (!canonical) return sendJson(res, 404, { error: 'Пользователь не найден.' });
+      if (req.method === 'GET' && url.pathname === '/api/run/leaderboard') {
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/start') {
+        return sendJson(res, 200, { ticket: issueRunTicket(sessionSecret, canonical) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/score') {
+        const body = parseJsonBody(await readRequestBody(req));
+        const run = readRunTicket(sessionSecret, body.ticket, canonical);
+        const score = Number(body.score);
+        if (!run || !plausibleScore(score, Date.now() - run.startedAt)) {
+          return sendJson(res, 422, { error: 'Результат не принят.' });
+        }
+        if (score > 0) await submitRunScore(pool, canonical, score, normalizeRunChar(body.character));
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
     }
 
     if (req.method === 'GET' && url.pathname === '/api/admin/users') {

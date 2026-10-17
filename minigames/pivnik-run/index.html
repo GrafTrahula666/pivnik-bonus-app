@@ -23,6 +23,18 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .pw{flex-direction:column;gap:0;padding:4px 10px 5px;min-width:46px}
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px 16px calc(env(safe-area-inset-bottom) + 24px);background:radial-gradient(120% 80% at 50% 30%,rgba(20,8,30,.35),rgba(6,2,10,.88))}
 .hide{display:none!important}
+#snd{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;z-index:5;width:38px;height:34px;border-radius:999px;background:rgba(10,4,24,.7);color:#ffe2b0;font-size:16px;line-height:1;border:1px solid rgba(255,150,45,.55);cursor:pointer;padding:0}
+#score.pop{animation:scorePop .22s ease-out}@keyframes scorePop{0%{transform:scale(1)}40%{transform:scale(1.16)}100%{transform:scale(1)}}
+.lbs{margin-top:-10px;border:0;cursor:pointer;display:flex;align-items:center;gap:8px;max-width:92%;padding:8px 14px;border-radius:999px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);color:#f3e6d2;font:700 13px/1.2 system-ui,sans-serif;white-space:nowrap;overflow:hidden}
+.lbs b{color:#ffd27a;font-variant-numeric:tabular-nums}.lbs span{overflow:hidden;text-overflow:ellipsis}
+#lbBox{z-index:30;background:rgba(6,2,10,.97);justify-content:flex-start;gap:12px;padding-top:calc(env(safe-area-inset-top) + 18px)}
+#lbBox h2{margin:0;font-size:26px;font-weight:900;letter-spacing:1px;color:#ffd27a}
+#lbList{width:100%;max-width:420px;flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:6px}
+.lbr{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:var(--glass);font-weight:700;font-size:15px}
+.lbr i{font-style:normal;width:30px;color:#ffd27a;font-variant-numeric:tabular-nums}.lbr span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lbr b{font-variant-numeric:tabular-nums}
+.lbr.me{box-shadow:0 0 0 1.5px var(--or);background:rgba(255,150,40,.16)}
+.lbe{color:#e9d9c6;text-align:center;padding:24px 8px;font-size:15px}
+
 #menu{justify-content:flex-start;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0) 22%,rgba(0,0,0,0) 70%,rgba(0,0,0,.55)),url(loc/menu-bg.webp) center 75%/cover no-repeat #120904}
 #menu h1{margin-top:calc(env(safe-area-inset-top) + 2vh)}
 #exitApp{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:12px;z-index:5;padding:7px 12px;border-radius:999px;background:rgba(10,4,24,.7);color:#ffe2b0;font:700 13px system-ui;text-decoration:none;border:1px solid rgba(255,150,45,.55)}
@@ -30,7 +42,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #menu .car{flex:1;min-height:0;height:auto;max-height:420px;margin-top:auto}
 #menu .cname{margin-top:0}
 #menu .cdesc{margin-top:-6px}
-h1{margin:0;font-size:52px;line-height:.95;font-weight:900;text-align:center;letter-spacing:2px;background:linear-gradient(180deg,#fff2c9,var(--or2) 45%,var(--or));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,140,30,.55)) drop-shadow(0 3px 0 #3a1404)}
+h1{position:relative;z-index:3;margin:0;font-size:52px;line-height:.95;font-weight:900;text-align:center;letter-spacing:2px;background:linear-gradient(180deg,#fff2c9,var(--or2) 45%,var(--or));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(255,140,30,.55)) drop-shadow(0 3px 0 #3a1404)}
 h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .car{position:relative;width:100%;max-width:420px;height:min(46vh,380px);touch-action:none}
 .slot{position:absolute;left:50%;bottom:0;width:62%;aspect-ratio:1;max-width:100%;transform:translateX(-50%);transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .32s,filter .32s;pointer-events:none}
@@ -51,6 +63,11 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 @keyframes sway{0%,100%{transform:rotate(-3deg) translateY(0)}25%{transform:rotate(0) translateY(-2%)}50%{transform:rotate(3deg) translateY(0)}75%{transform:rotate(0) translateY(-2%)}}
 .slot.c.a-turn img{animation:turn 4s ease-in-out infinite}
 @keyframes turn{0%,40%,100%{transform:none}55%,80%{transform:perspective(600px) rotateY(62deg) rotate(-3deg);filter:drop-shadow(0 14px 18px rgba(0,0,0,.6)) brightness(.75)}}
+/* the guardian demon: art has a dark smoky backdrop, so it is screened in and its edges fade out */
+.slot .guard{position:absolute;left:-10.5%;width:121%;bottom:0;z-index:-1;opacity:0;transform:translateY(14%) scale(.82);transform-origin:50% 100%;mix-blend-mode:screen;-webkit-mask-image:radial-gradient(closest-side,#000 58%,transparent 100%);mask-image:radial-gradient(closest-side,#000 58%,transparent 100%);transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.slot .guard img{display:block;width:100%;height:auto;object-fit:fill;filter:none;animation:none!important;transform:none!important}
+.slot.c .guard{opacity:.9;transform:none;animation:guardBreath 4.2s ease-in-out .8s infinite}
+@keyframes guardBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.035) translateY(-1%)}}
 .slot.c.a-trick img{animation:trick 3.2s cubic-bezier(.3,.7,.4,1) infinite}
 @keyframes trick{0%,60%,100%{transform:none}70%{transform:translateY(-22%) rotate(-10deg)}80%{transform:translateY(-26%) rotate(350deg)}90%{transform:translateY(0) rotate(360deg) scale(1.04,.96)}}
 .slot.c.a-drink img{animation:drink 3.4s ease-in-out infinite}
@@ -78,6 +95,10 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .rec{color:var(--or2);font-weight:900;font-size:18px;letter-spacing:2px;margin-top:-18px}
 .best{color:#e9d9c6;font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;margin-top:-10px}
 #flash{position:absolute;inset:0;pointer-events:none;opacity:0}
+#rage{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;background:radial-gradient(ellipse at 50% 55%,rgba(255,30,20,.18) 0,rgba(210,0,10,.5) 70%,rgba(120,0,0,.78) 100%);mix-blend-mode:multiply}
+#rage::after{content:'';position:absolute;inset:0;background:rgba(255,40,30,.22);mix-blend-mode:screen}
+#rage.on{opacity:1;animation:ragePulse .9s ease-in-out infinite alternate}
+@keyframes ragePulse{from{filter:brightness(.9)}to{filter:brightness(1.25)}}
 #fog{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.5) 0 1.5%,transparent 2.5%) 0 0/90px 110px,radial-gradient(circle at 70% 60%,rgba(255,255,255,.4) 0 1%,transparent 2%) 0 0/70px 80px,radial-gradient(ellipse at 50% 55%,rgba(205,212,218,.55),rgba(225,230,235,.95) 75%)}
 .pw img,.pill img{width:26px;height:26px;display:block}
 .pw{padding:3px 6px 5px;min-width:0}
@@ -93,6 +114,9 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 #sup.full small{opacity:1}
 @keyframes supp{50%{transform:scale(1.1);box-shadow:0 0 22px var(--sc,#ffc247)}}
 .cname{font-weight:900;font-size:24px;letter-spacing:1px;margin-top:-10px;text-shadow:0 2px 8px #000}
+.cskin{display:flex;align-items:center;gap:10px;margin-top:-14px;padding:3px 6px;border-radius:999px;background:var(--glass);box-shadow:0 0 0 1px rgba(255,194,71,.25);font:700 14px/1 system-ui,sans-serif;color:#f3e6d2;backdrop-filter:blur(6px)}
+.cskin button{width:30px;height:28px;border:0;border-radius:999px;background:rgba(255,194,71,.18);color:#ffd27a;font-size:20px;line-height:1;cursor:pointer;padding:0}
+.cskin span{min-width:120px;text-align:center}
 .cname img.gedo{width:28px;height:28px;vertical-align:-5px;margin-left:8px}
 .cdesc{max-width:320px;margin-top:-12px;padding:10px 14px;border-radius:14px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);font-size:14px;line-height:1.35;text-align:center;color:#f3e6d2}
 .cdesc b{color:#ffd27a}
@@ -103,6 +127,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
   <canvas id="cv"></canvas>
   <div id="flash"></div>
   <div id="fog"></div>
+  <div id="rage"></div>
   <div id="hud">
     <div id="prog"><i></i></div>
     <div id="score">0</div>
@@ -112,19 +137,28 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
   <div id="toast"></div>
   <div class="screen" id="menu">
     <a id="exitApp" href="/" >‹ В приложение</a>
+    <button id="snd" type="button" aria-label="Звук"></button>
     <h1>PIVNIK<small>RUN</small></h1>
     <div class="car" id="car">
       <button class="arr l" id="prev" aria-label="Предыдущий персонаж">‹</button>
       <button class="arr r" id="next" aria-label="Следующий персонаж">›</button>
     </div>
     <div class="cname" id="cname"></div>
+    <div class="cskin hide" id="cskin"><button type="button" id="skPrev" aria-label="Предыдущий костюм">‹</button><span id="skName"></span><button type="button" id="skNext" aria-label="Следующий костюм">›</button></div>
     <div class="cdesc" id="cdesc"></div>
     <button class="btn" id="play">Играть</button>
+    <button class="lbs hide" id="lbStrip" type="button"></button>
+  </div>
+  <div class="screen hide" id="lbBox">
+    <h2>🏆 Рейтинг</h2>
+    <div id="lbList"></div>
+    <button class="ghost" id="lbClose" type="button">Закрыть</button>
   </div>
   <div class="screen hide" id="over">
     <div class="big" id="final">0</div>
     <div class="rec hide" id="rec">★ РЕКОРД ★</div>
     <div class="best" id="best"></div>
+    <div class="best hide" id="place"></div>
     <button class="btn" id="again">Заново</button>
     <button class="ghost" id="tomenu">Сменить персонажа</button>
   </div>
@@ -162,9 +196,9 @@ const TUNNELS = [
 TUNNELS.forEach(l => { const i = new Image(); i.src = l.img; l.im = i; });
 
 const CHARS = [
-  { id: 'vitaliy', run: 2, name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
-  { id: 'anya',    name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
-  { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'turn', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
+  { id: 'vitaliy', run: 2, skins: [{ n: 'Классика' }, { n: 'Кратос', img: 'chars/vitaliy-warrior-front.webp', back: 'chars/vitaliy-warrior-back.webp', key: 'vitaliy-warrior', run: 2, desc: 'Спартанская Ярость. Двойной тап раз в 3 минуты: Виталий впадает в ярость, на 10 секунд становится неуязвимым, а экран заливает красным.', sup: { kind: 'rage', name: 'Спартанская Ярость', dur: 10, cd: 180 } }], name: 'Виталий', desc: 'Таран. Двойной тап раз в 3 минуты, и первое препятствие на пути разлетается в щепки.', anim: 'flex', img: 'chars/vitaliy-front.webp', back: 'chars/vitaliy-back.webp', em: '🍺', col: '#3f7fe0', sup: { kind: 'smash', name: 'Таран', dur: 0, cd: 180 } },
+  { id: 'anya',    skins: [{ n: 'Классика' }, { n: 'Красное платье', img: 'chars/anya-red-front.webp', back: 'chars/anya-red-back.webp', key: 'anya-red', run: 2, hover: false, desc: 'Супер-прыжки. Двойной тап раз в минуту: на 5 секунд Аня прыгает почти до потолка.', sup: { kind: 'jump', name: 'Супер-прыжки', dur: 5, cd: 60 } }], name: 'Аня',     desc: 'Полёт. Двойной тап раз в 3 минуты, и Аня взлетает над дорожкой. Пока летит, ей ничего не страшно.', anim: 'sway', img: 'chars/anya-front.webp',    back: 'chars/anya-back.webp',    em: '🔥', col: '#e8306a', tall: 1.95, cut: .62, hover: true, sup: { kind: 'fly', name: 'Полёт', dur: 5, cd: 180 } },
+  { id: 'kirill', run: 4, name: 'Кирилл',  desc: 'Замедление времени. Двойной тап раз в минуту: мир замедляется на 5 секунд, а очки текут рекой.', anim: 'sway', img: 'chars/kirill-front.webp',  back: 'chars/kirill-back.webp',  em: '🍥', col: '#8a4dff', cut: .6, gedo: true, guardian: true, sup: { kind: 'slow', name: 'Замедление времени', dur: 5, cd: 60 } },
   { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
   { id: 'vlad', run: 3, name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
   { id: 'dima', run: 2, name: 'Дима',    desc: 'Магнитофон. Двойной тап раз в 3 минуты включает музыку и приносит случайный бонус.', anim: 'music', img: 'chars/dima-front.webp',    back: 'chars/dima-back.webp',    em: '🎵', col: '#ff8a1a', cut: .6, noFlip: true, sup: { kind: 'boombox', name: 'Магнитофон', dur: 0, cd: 180 } },
@@ -181,7 +215,19 @@ const CHARS = [
 const SUPER = () => ({ kind: 'ghost', name: 'Суперсила', dur: 5, cd: 0, ...CHARS[store.char].sup });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 LOCS.forEach(l => { if (l.img) l.im = loadImg(l.img); });
-CHARS.forEach(c => { c.im = loadImg(c.img); if (c.back) c.bk = loadImg(c.back); if (c.run) c.rf = Array.from({ length: c.run }, (_, i) => loadImg(`chars/${c.id}-run${i + 1}.webp`)); });
+// every character has one look (the art above) and some have more (c.skins); each look carries its own pictures and run frames
+CHARS.forEach(c => {
+  const looks = c.skins || [{}];
+  c.looks = looks.map(k => {
+    const img = k.img || c.img, back = k.back || c.back, run = 'run' in k ? k.run : c.run, key = k.key || c.id;
+    return { n: k.n || '', img, hover: 'hover' in k ? k.hover : c.hover, sup: k.sup || c.sup, desc: k.desc || c.desc, im: loadImg(img), bk: back ? loadImg(back) : null, rf: run ? Array.from({ length: run }, (_, i) => loadImg(`chars/${key}-run${i + 1}.webp`)) : null };
+  });
+});
+// make look #idx the one the rest of the game reads (c.img, c.im, c.bk, c.rf)
+function applyLook(c, idx) {
+  const k = c.looks[idx] || c.looks[0];
+  c.img = k.img; c.im = k.im; c.bk = k.bk; c.rf = k.rf; c.hover = k.hover; c.sup = k.sup; c.desc = k.desc;
+}
 
 // ---------- bonus icons: glossy HD badges, drawn once ----------
 function badge(c1, c2, draw) {
@@ -244,9 +290,12 @@ const SK = 'pivnik-run-v2';
 function loadStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(SK)); } catch (e) {}
-  return { char: 0, best: 0, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
+  const skin = {};
+  if (s && s.skin && typeof s.skin === 'object') CHARS.forEach(c => { const v = s.skin[c.id] | 0; if (v > 0 && v < c.looks.length) skin[c.id] = v; });
+  return { char: 0, best: 0, skin, ...(s && typeof s === 'object' ? { char: (s.char | 0) % CHARS.length, best: s.best | 0 } : {}) };
 }
 const store = loadStore();
+CHARS.forEach(c => applyLook(c, store.skin[c.id] | 0));
 const save = () => { try { localStorage.setItem(SK, JSON.stringify(store)); } catch (e) {} };
 
 // ---------- canvas / projection ----------
@@ -393,17 +442,17 @@ function doTurn() {
 function act(a) {
   if (state !== 'run' || g.dead) return;
   if (a === 'R' && turnWindow()) { doTurn(); return; }
-  if (a === 'L') g.lane = Math.max(0, g.lane - 1);
-  else if (a === 'R') g.lane = Math.min(g.n - 1, g.lane + 1);
-  else if (a === 'U') { if (g.y <= .001) { g.vy = 9.4; g.slide = 0; } }
-  else if (a === 'D') { if (g.y > .001) g.vy = -16; g.slide = .62; }
+  if (a === 'L') { if (g.lane > 0) { sfx('swoosh'); haptic('light'); } g.lane = Math.max(0, g.lane - 1); }
+  else if (a === 'R') { if (g.lane < g.n - 1) { sfx('swoosh'); haptic('light'); } g.lane = Math.min(g.n - 1, g.lane + 1); }
+  else if (a === 'U') { if (g.y <= .001) { g.vy = g.superT > 0 && SUPER().kind === 'jump' ? 14.5 : 9.4; g.slide = 0; sfx('jump'); haptic('light'); } }
+  else if (a === 'D') { if (g.y > .001) g.vy = -16; else sfx('slide'); g.slide = .62; }
   g.hint = Math.min(g.hint, .4);
 }
 
 function die() {
   if (GOD) return;
   g.dead = 1; g.shake = .45; g.flash = 1; g.flashCol = '#ff2a3a';
-  if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {}
+  sfx('crash'); haptic('bad');
   setTimeout(showOver, 750);
 }
 
@@ -441,7 +490,7 @@ function update(dt) {
   // lanes & body
   const tx = laneX(g.lane, g.n), k = 1 - Math.exp(-dt * 16 * Math.max(1, g.speed / 16));
   g.px += (tx - g.px) * k;
-  if (g.y > 0 || g.vy > 0) { g.vy -= 26 * dt; g.y = Math.max(0, g.y + g.vy * dt); if (g.y === 0) { g.vy = 0; puff(10, 1); } }
+  if (g.y > 0 || g.vy > 0) { g.vy -= 26 * dt; g.y = Math.max(0, g.y + g.vy * dt); if (g.y === 0) { g.vy = 0; puff(10, 1); sfx('land'); haptic('light'); } }
   if (g.slide > 0) { g.slide = Math.max(0, g.slide - dt); puff(3, 0); }
   g.step += dt * Math.min(4.2, 2.4 + g.speed * .05); // stride cycles per second, quicker as the run speeds up
   g.dust = g.dust.filter(p => (p.t += dt) < p.life);
@@ -499,10 +548,10 @@ function update(dt) {
     else if (it.k === 'bar') hit = standing || g.y > 0;
     if (hit) {
       it.hit = 1;
-      if ((g.superT > 0 && sp.kind === 'ghost') || g.flyH > 0 || g.inv > 0) continue;
+      if ((g.superT > 0 && (sp.kind === 'ghost' || sp.kind === 'rage')) || g.flyH > 0 || g.inv > 0) continue;
       if (g.armed) { smash(it, x, d); continue; }
-      if (g.lives > 0) { g.lives--; g.inv = 2; g.flash = .8; g.flashCol = '#4dffb0'; toast('life', 'Жизнь сгорела'); continue; }
-      if (CHARS[store.char].gedo && !g.gedoUsed) { g.gedoUsed = true; g.inv = 2.5; g.flash = 1; g.flashCol = '#9b5cff'; toast('gedo', 'Внешний Путь'); continue; } // one revive per run
+      if (g.lives > 0) { g.lives--; g.inv = 2; g.flash = .8; g.flashCol = '#4dffb0'; toast('life', 'Жизнь сгорела'); sfx('life'); haptic('medium'); continue; }
+      if (CHARS[store.char].gedo && !g.gedoUsed) { g.gedoUsed = true; g.inv = 2.5; g.flash = 1; g.flashCol = '#9b5cff'; toast('gedo', 'Внешний Путь'); sfx('gedo'); haptic('heavy'); continue; } // one revive per run
       die(); break;
     }
   }
@@ -516,8 +565,13 @@ function puff(n, land) {
     g.dust.push({ x: b[0] + side * rnd(.05, .35) * u, y: b[1] - rnd(0, .1) * u, vx: side * rnd(.6, 2.2) * u * (land ? .8 : 1), vy: -rnd(.6, 1.8) * u, r: rnd(.06, .13) * u, t: 0, life: rnd(.35, .6) });
   }
 }
+// a little burst of glints where something was picked up
+function sparkle(p, n, col) {
+  const u = unitAt(0);
+  for (let i = 0; i < n; i++) g.dust.push({ x: p[0], y: p[1], vx: rnd(-2.2, 2.2) * u, vy: -rnd(.4, 2.6) * u, r: rnd(.03, .07) * u, t: 0, life: rnd(.3, .55), col });
+}
 function smash(it, x, d) {
-  g.armed = false; it.gone = 1; g.shake = .3;
+  g.armed = false; it.gone = 1; g.shake = .3; sfx('smash'); haptic('heavy');
   const p = pr(x, it.k === 'bar' ? 1.2 : .6, Math.max(d, .2)), u = unitAt(0);
   const cols = ['#e9ecef', '#d8283a', '#2f6fd0', '#9aa3ad', '#7a4622', '#ffd23a'];
   for (let i = 0; i < 18; i++) g.dust.push({ x: p[0] + rnd(-.3, .3) * u, y: p[1] + rnd(-.3, .3) * u, vx: rnd(-3, 3) * u, vy: -rnd(1.5, 4) * u, r: rnd(.05, .12) * u, t: 0, life: rnd(.5, .9), col: pick(cols) });
@@ -533,9 +587,14 @@ function collect(it, x) {
     g.bonus += v; g.coins++;
     g.fl.push({ t: 0, x: p[0], y: p[1], txt: '+' + v, col: g.x2 > 0 ? '#7bff9a' : '#ffd27a' });
     if (!SUPER().cd) g.charge = Math.min(1, g.charge + 1 / 30);
-  } else if (it.k === 'mag') { g.mag = 8; toast('mag', 'Магнит'); }
-  else if (it.k === 'x2') { g.x2 = 10; toast('x2', 'Очки ×2'); }
-  else { g.lives = 1; toast('life', 'Вторая жизнь'); }
+    sfx('coin'); sparkle(p, 7, '#ffd23a');
+    const sc = $('#score'); sc.classList.remove('pop'); void sc.offsetWidth; sc.classList.add('pop');
+  } else {
+    sfx('power'); haptic('medium'); sparkle(p, 16, it.k === 'x2' ? '#7bff9a' : it.k === 'mag' ? '#6fb8ff' : '#4dffb0');
+    if (it.k === 'mag') { g.mag = 8; toast('mag', 'Магнит'); }
+    else if (it.k === 'x2') { g.x2 = 10; toast('x2', 'Очки ×2'); }
+    else { g.lives = 1; toast('life', 'Вторая жизнь'); }
+  }
 }
 const PICKUPS = new Set(['coin', 'mag', 'x2', 'life']);
 let toastT = 0;
@@ -551,12 +610,13 @@ function superpower() {
   if (sp.kind === 'boombox') { g.charge = 0; g.music = 2.5; rollGift('Магнитофон'); return; }
   if (sp.kind === 'beer') {
     if (g.beers.length >= sp.max) return;
-    g.beers.push(sp.life); g.charge = 0; g.drink = 1.3;
+    g.beers.push(sp.life); g.charge = 0; g.drink = 1.3; sfx('gulp'); haptic('medium');
     toast('super', `${sp.name} ×${g.beers.length}`);
     return;
   }
-  g.charge = 0; g.superT = sp.dur;
+  g.charge = 0; g.superT = sp.dur; sfx('super'); haptic('heavy');
   if (sp.kind === 'smash') g.armed = true;
+  if (sp.kind === 'rage') { sfx('gedo'); g.shake = .35; }
   g.flash = .7; g.flashCol = CHARS[store.char].col;
   toast('super', sp.name);
 }
@@ -1213,6 +1273,44 @@ function drawHint() {
   ctx.restore();
 }
 
+// ---------- atmosphere: warm vignette, drifting embers and speed streaks, drawn over the finished frame ----------
+let vigC = null;
+function vignette() {
+  if (!vigC || vigC.width !== W || vigC.height !== H) {
+    vigC = document.createElement('canvas'); vigC.width = W; vigC.height = H;
+    const x = vigC.getContext('2d'), gr = x.createRadialGradient(W / 2, H * .52, Math.min(W, H) * .34, W / 2, H * .52, Math.max(W, H) * .78);
+    gr.addColorStop(0, 'rgba(14,4,22,0)'); gr.addColorStop(1, 'rgba(14,4,22,.62)');
+    x.fillStyle = gr; x.fillRect(0, 0, W, H);
+  }
+  ctx.drawImage(vigC, 0, 0);
+}
+const EMBERS = Array.from({ length: 34 }, () => ({ x: Math.random(), y: Math.random(), s: .02 + Math.random() * .05, r: 1 + Math.random() * 2.4, ph: Math.random() * 6.28, w: .01 + Math.random() * .03 }));
+function drawEmbers() {
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const e of EMBERS) {
+    const y = (((e.y - g.t * e.s) % 1) + 1) % 1, x = e.x + Math.sin(g.t * .8 + e.ph) * e.w;
+    const a = (.45 + .35 * Math.sin(g.t * 2.4 + e.ph)) * Math.min(1, y * 4);
+    const gx = x * W, gy = y * H, r = e.r * (W / 390) * 4;
+    const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
+    gr.addColorStop(0, `rgba(255,190,90,${a})`); gr.addColorStop(1, 'rgba(255,120,30,0)');
+    ctx.fillStyle = gr; ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
+  }
+  ctx.restore();
+}
+function drawStreaks() {
+  const k = clamp((g.speed - 30) / 180, 0, 1);
+  if (k <= 0) return;
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineCap = 'round';
+  const cx = W / 2, cy = H * .5, n = 16;
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? 1 : -1, a = ((i * 0.618 + g.t * (.6 + k)) % 1), ang = side * (.35 + ((i * 37) % 17) / 17 * .75) + (side > 0 ? 0 : Math.PI) + (side > 0 ? 0 : 0);
+    const dx = Math.cos(side > 0 ? -.5 + ((i * 37) % 17) / 17 : Math.PI + .5 - ((i * 37) % 17) / 17), dy = Math.sin(side > 0 ? -.5 + ((i * 37) % 17) / 17 : Math.PI + .5 - ((i * 37) % 17) / 17) * .6;
+    const r0 = (.45 + a * .55) * W * .8, r1 = r0 + (.05 + k * .18) * W;
+    ctx.globalAlpha = (1 - a) * .22 * k; ctx.lineWidth = 1 + k * 1.6;
+    ctx.beginPath(); ctx.moveTo(cx + dx * r0, cy + dy * r0 + H * .1); ctx.lineTo(cx + dx * r1, cy + dy * r1 + H * .1); ctx.stroke();
+  }
+  ctx.restore();
+}
 function render() {
   YAW = g.yaw || 0;
   ctx.save();
@@ -1244,6 +1342,7 @@ function render() {
     ctx.drawImage(cv, 0, 0, cv.width, cv.height, Math.sin(g.t * 1.1) * 14 * Math.min(2, dk), Math.cos(g.t * .8) * 6, W, H);
     ctx.globalAlpha = 1;
   }
+  if (!g.demo) { drawStreaks(); drawEmbers(); vignette(); }
   drunkCss(dk);
   const fl = $('#flash');
   if (g.slowK > 0) { // slowed time: cool violet tint and dark edges
@@ -1254,6 +1353,7 @@ function render() {
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   }
   fl.style.opacity = g.flash * .3; fl.style.background = g.flashCol;
+  $('#rage').classList.toggle('on', g.superT > 0 && SUPER().kind === 'rage' && state === 'run');
 }
 
 // ---------- HUD / screens ----------
@@ -1292,7 +1392,7 @@ const slots = CHARS.map((c, i) => {
   const d = document.createElement('div');
   d.className = 'slot'; d.style.setProperty('--c', c.col);
   const PROPS = { flex: '<i class="prop">💪</i>', drink: '<i class="prop">🍺</i>', music: '<i class="prop">♫</i>', guitar: '<i class="prop g">🎸</i><i class="prop n">🐍</i>' };
-  d.innerHTML = `<img alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
+  d.innerHTML = `${c.guardian ? '<div class="guard"><img alt="" src="chars/kirill-guardian.webp"></div>' : ''}<img class="sk" alt="" src="${c.img}">${PROPS[c.anim] || ''}<span>${c.em}</span>`;
   $('#car').appendChild(d);
   return d;
 });
@@ -1306,10 +1406,21 @@ function renderCar() {
   $('#cname').textContent = ch.name;
   if (ch.gedo) { const e = document.createElement('img'); e.src = ICONS.gedo.url; e.alt = ''; e.className = 'gedo'; $('#cname').append(e); }
   $('#cdesc').innerHTML = ''; // superpower name in bold, then what it does
+  const many = ch.looks.length > 1;
+  $('#cskin').classList.toggle('hide', !many);
+  if (many) $('#skName').textContent = 'Костюм: ' + ch.looks[store.skin[ch.id] | 0].n;
   const b = document.createElement('b'); b.textContent = ch.desc.slice(0, dot + 1);
   $('#cdesc').append(b, ' ' + ch.desc.slice(dot + 2));
 }
 function pickChar(step) { store.char = ((store.char + step) % CHARS.length + CHARS.length) % CHARS.length; save(); renderCar(); }
+function pickLook(step) {
+  const c = CHARS[store.char], n = c.looks.length; if (n < 2) return;
+  const v = (((store.skin[c.id] | 0) + step) % n + n) % n;
+  if (v) store.skin[c.id] = v; else delete store.skin[c.id];
+  applyLook(c, v); slots[store.char].querySelector('img.sk').src = c.img; save(); renderCar(); sfx('tap');
+}
+$('#skPrev').onclick = () => pickLook(-1);
+$('#skNext').onclick = () => pickLook(1);
 $('#prev').onclick = () => pickChar(-1);
 $('#next').onclick = () => pickChar(1);
 
@@ -1323,7 +1434,10 @@ function showOver() {
   $('#final').textContent = s.toLocaleString('ru-RU');
   $('#rec').classList.toggle('hide', !isRec);
   $('#best').textContent = isRec ? '' : '★ ' + store.best.toLocaleString('ru-RU');
+  $('#place').classList.add('hide');
   $('#over').classList.remove('hide');
+  sfx(isRec && s > 0 ? 'record' : 'over'); if (isRec && s > 0) haptic('ok');
+  lbFinish(s);
 }
 // blur → muddy colours → fogged-up glass, stacking with the number of beers
 let lastFilter = '';
@@ -1337,7 +1451,117 @@ function drunkCss(dk) {
 function toMenu() {
   state = 'menu'; lockSwipes(false); g = newGame(true); drunkCss(0);
   $('#over').classList.add('hide'); $('#menu').classList.remove('hide');
+  lbRefresh();
   renderCar();
+}
+
+// ---------- sound + haptics: every effect is synthesised with WebAudio, so there are no audio files to load ----------
+const SND = { ctx: null, on: true, master: null, noise: null, coinT: 0, coinN: 0 };
+try { SND.on = localStorage.getItem('pivnik-run-snd') !== '0'; } catch (e) {}
+function sndInit() {
+  if (SND.ctx) { if (SND.ctx.state === 'suspended') SND.ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  try {
+    const c = SND.ctx = new AC();
+    SND.master = c.createGain(); SND.master.gain.value = .5; SND.master.connect(c.destination);
+    const b = c.createBuffer(1, c.sampleRate * .6, c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    SND.noise = b;
+  } catch (e) { SND.ctx = null; }
+}
+// one oscillator note: frequency, length, wave, volume, slide target and start delay
+function tone(f, dur, type, vol, to, delay) {
+  const c = SND.ctx; if (!c) return;
+  const t = c.currentTime + (delay || 0), o = c.createOscillator(), g2 = c.createGain();
+  o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vol || .3, t + .008); g2.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g2); g2.connect(SND.master); o.start(t); o.stop(t + dur + .02);
+}
+function hiss(dur, vol, f0, f1, delay) {
+  const c = SND.ctx; if (!c || !SND.noise) return;
+  const t = c.currentTime + (delay || 0), n = c.createBufferSource(), fl = c.createBiquadFilter(), g2 = c.createGain();
+  n.buffer = SND.noise; fl.type = 'bandpass'; fl.Q.value = .9;
+  fl.frequency.setValueAtTime(f0, t); fl.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g2.gain.setValueAtTime(vol, t); g2.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  n.connect(fl); fl.connect(g2); g2.connect(SND.master); n.start(t); n.stop(t + dur + .02);
+}
+const SFX = {
+  tap: () => tone(520, .06, 'triangle', .18, 780),
+  start: () => { tone(330, .12, 'square', .12); tone(494, .12, 'square', .12, 0, .1); tone(660, .22, 'square', .14, 0, .2); },
+  swoosh: () => hiss(.14, .22, 900, 3200),
+  jump: () => { tone(260, .2, 'sine', .3, 620); hiss(.12, .08, 600, 2400); },
+  land: () => { tone(120, .12, 'sine', .35, 55); hiss(.08, .12, 700, 300); },
+  slide: () => hiss(.28, .18, 2600, 700),
+  coin: () => {
+    const n = performance.now(); SND.coinN = n - SND.coinT < 700 ? Math.min(SND.coinN + 1, 8) : 0; SND.coinT = n;
+    const k = Math.pow(2, SND.coinN / 12) * 988;
+    tone(k, .09, 'square', .12); tone(k * 1.5, .16, 'square', .12, 0, .06);
+  },
+  power: () => { tone(523, .1, 'triangle', .22); tone(659, .1, 'triangle', .22, 0, .08); tone(784, .1, 'triangle', .22, 0, .16); tone(1046, .24, 'triangle', .22, 0, .24); },
+  life: () => { tone(700, .3, 'sawtooth', .16, 180); hiss(.25, .12, 2400, 500); },
+  gedo: () => { tone(110, .6, 'sawtooth', .2, 440); tone(220, .6, 'sine', .25, 880); },
+  smash: () => { hiss(.3, .5, 1800, 200); tone(180, .22, 'square', .2, 50); },
+  crash: () => { hiss(.5, .6, 1500, 120); tone(150, .45, 'sawtooth', .3, 38); },
+  super: () => { tone(220, .5, 'sawtooth', .16, 880); tone(330, .5, 'square', .1, 1320); hiss(.45, .1, 600, 4000); },
+  gulp: () => { tone(300, .1, 'sine', .3, 160); tone(260, .12, 'sine', .3, 140, .12); },
+  over: () => { tone(392, .18, 'triangle', .22); tone(330, .18, 'triangle', .22, 0, .18); tone(262, .4, 'triangle', .22, 0, .36); },
+  record: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .16, 'triangle', .22, 0, i * .09)); }
+};
+function sfx(name) { if (!SND.on || !SND.ctx) return; try { SFX[name] && SFX[name](); } catch (e) {} }
+const HAPTIC = { light: ['impact', 'light', 8], medium: ['impact', 'medium', 16], heavy: ['impact', 'heavy', 40], ok: ['notification', 'success', 20], bad: ['notification', 'error', 120] };
+function haptic(kind) {
+  if (!SND.on) return;
+  const h = HAPTIC[kind]; if (!h) return;
+  const hf = TGW && TGW.HapticFeedback;
+  try {
+    if (hf) { h[0] === 'impact' ? hf.impactOccurred(h[1]) : hf.notificationOccurred(h[1]); }
+    else if (navigator.vibrate) navigator.vibrate(h[2]);
+  } catch (e) {}
+}
+function sndPaint() { $('#snd').textContent = SND.on ? '🔊' : '🔇'; }
+$('#snd').onclick = e => { e.stopPropagation(); SND.on = !SND.on; try { localStorage.setItem('pivnik-run-snd', SND.on ? '1' : '0'); } catch (x) {} sndPaint(); sndInit(); sfx('tap'); };
+$('#snd').addEventListener('pointerdown', e => e.stopPropagation());
+sndPaint();
+// browsers only allow audio after a touch, so wake it on the first one
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, sndInit, { passive: true }));
+
+// ---------- all-time leaderboard (server side; needs the guest's app session, so it is simply hidden without one) ----------
+const LB = { ticket: null, board: null };
+const lbToken = () => { try { return localStorage.getItem('pivnik_tg_session') || ''; } catch (e) { return ''; } };
+async function lbApi(path, body) {
+  const token = lbToken();
+  if (!token) return null;
+  try {
+    const r = await fetch('/api/run/' + path, {
+      method: body ? 'POST' : 'GET',
+      headers: { authorization: 'Bearer ' + token, ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    return r.ok ? await r.json() : null;
+  } catch (e) { return null; }
+}
+const fmtN = n => Number(n).toLocaleString('ru-RU');
+function lbPaint() {
+  const b = LB.board, strip = $('#lbStrip');
+  if (!b) { strip.classList.add('hide'); return; }
+  const top = b.leaders[0];
+  strip.innerHTML = '<span>🏆 ' + (top ? '1. ' + esc(top.name) + ' <b>' + fmtN(top.score) + '</b>' : 'Рейтинг пока пуст') + '</span>' + (b.me ? '<span>· ты <b>№' + b.me.rank + '</b></span>' : '');
+  strip.classList.remove('hide');
+  $('#lbList').innerHTML = b.leaders.length ? b.leaders.map(l => '<div class="lbr' + (l.isMe ? ' me' : '') + '"><i>' + l.rank + '</i><span>' + esc(l.name) + '</span><b>' + fmtN(l.score) + '</b></div>').join('') + (b.me && b.me.rank > b.leaders.length ? '<div class="lbr me"><i>' + b.me.rank + '</i><span>Ты</span><b>' + fmtN(b.me.score) + '</b></div>' : '') : '<div class="lbe">Пока никто не бегал. Стань первым!</div>';
+}
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function lbRefresh() { const b = await lbApi('leaderboard'); if (b) LB.board = b; lbPaint(); }
+$('#lbStrip').onclick = () => { $('#lbBox').classList.remove('hide'); lbRefresh(); };
+$('#lbClose').onclick = () => $('#lbBox').classList.add('hide');
+async function lbBegin() { LB.ticket = null; const r = await lbApi('start', {}); LB.ticket = r && r.ticket || null; }
+async function lbFinish(score) {
+  const ticket = LB.ticket; LB.ticket = null;
+  if (!ticket) return;
+  const b = await lbApi('score', { ticket, score, character: CHARS[store.char].id });
+  if (!b) return;
+  LB.board = b; lbPaint();
+  if (b.me && state === 'over') { const p = $('#place'); p.textContent = '🏆 Твоё место: ' + b.me.rank + ' из ' + b.total; p.classList.remove('hide'); }
 }
 
 function start() {
@@ -1349,8 +1573,10 @@ function start() {
   $('#hud').style.display = 'block';
   document.querySelectorAll('#row .pw').forEach(e => e.remove());
   state = 'run'; lockSwipes(true);
+  lbBegin(); sfx('start'); haptic('light');
 }
 
+lbRefresh();
 $('#play').onclick = start;
 $('#again').onclick = start;
 $('#tomenu').onclick = toMenu;
