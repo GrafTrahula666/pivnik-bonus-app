@@ -190,3 +190,9 @@ this candidate must not be described as a 100% completed cash-register setup.
 No new server deployment, migration, APK installation or customer reservation
 activation is established by this local verification record. Record final CI,
 artifact identity, release and hardware observations separately.
+
+Additional identity-credit check:13/13 focused money tests pass, including
+release and spent-point refund after an explicit profile merge. Credits follow
+the recorded canonical wallet, while the operation identity remains immutable.
+This does not change platform merge policy or the pre-existing cashback merge
+behaviour. Final CI must run the exact candidate head.

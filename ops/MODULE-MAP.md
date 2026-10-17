@@ -879,6 +879,9 @@ isolation.
   discount/net amount, or releases a matching marker with zero document discount.
   Unknown/mismatched effects stay in review. PAYBACK restores spent points by a
   cumulative capped proportion, independently of the ordinary cashback reversal.
+  Cancellation/refund credits follow explicit merged_into_user_id edges to the
+  surviving wallet without recreating an old wallet; new reservations still
+  require the exact active client of the current verified receipt claim.
 - The canonical endpoint is `POST /api/device/pos/redemptions`. The installed
   proxy masks also support the same actions over `receipts/bind` with
   `operation: "redemption"`; ordinary `{receiptUuid,payload}` binds stay nonfinancial.

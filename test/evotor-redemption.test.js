@@ -235,3 +235,23 @@ test('unlimited policy is injected, never inferred from QR and never mints a fin
     assert.equal(await f.balance(), 1000);
   } finally { await f.close(); }
 });
+
+test('release and cloud refund follow an explicit account merge to the surviving wallet, never recreate the old wallet',async t=>{
+  for(const action of ['release','refund'])await t.test(action,async()=>{
+    const f=await fixture();
+    try {
+      await f.bind();const body=f.reserveBody();await f.request(body);
+      if(action==='refund'){await f.importDoc(closed(body));await f.process();}
+      await f.db.exec(`UPDATE users SET merged_into_user_id=2 WHERE id=1;
+        UPDATE wallets SET balance=balance+(SELECT balance FROM wallets WHERE user_id=1) WHERE user_id=2;
+        DELETE FROM wallets WHERE user_id=1; UPDATE transactions SET client_id=2 WHERE client_id=1;`);
+      if(action==='release')await f.request({action:'cancel',receiptUuid:receipt,operationId:body.operationId,effectRemoved:true});
+      else {
+        await f.importDoc(sale({id:'merged-return',type:'PAYBACK',body:{base_document_id:receipt,result_sum:700,positions:[],payments:[]}}));
+        await f.process();
+      }
+      assert.deepEqual((await f.db.query('SELECT user_id,balance FROM wallets ORDER BY user_id')).rows.map(row=>[Number(row.user_id),Number(row.balance)]),[[2,1500]]);
+      assert.equal(Number((await f.db.query('SELECT client_id FROM transactions ORDER BY id DESC LIMIT 1')).rows[0].client_id),2);
+    }finally{await f.close();}
+  });
+});

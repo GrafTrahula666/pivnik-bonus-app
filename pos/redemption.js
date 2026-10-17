@@ -33,11 +33,18 @@ async function lockReceipt(db, storeId, receiptUuid) {
 
 async function wallet(db, clientId, policy, activeOnly = true) {
   if (!policy || typeof policy.isUnlimited !== 'function') throw unavailable();
-  const user = (await db.query(`SELECT id,telegram_id,role,unlimited_bonus FROM users WHERE id=$1
-    ${activeOnly ? 'AND deleted_at IS NULL AND merged_into_user_id IS NULL' : ''} FOR UPDATE`, [clientId])).rows[0];
-  const row = user && (await db.query('SELECT balance FROM wallets WHERE user_id=$1 FOR UPDATE', [clientId])).rows[0];
+  const user = (await db.query(activeOnly ? `SELECT id,telegram_id,role,unlimited_bonus FROM users WHERE id=$1
+    AND deleted_at IS NULL AND merged_into_user_id IS NULL FOR UPDATE` : `WITH RECURSIVE identity_path AS (
+      SELECT id,merged_into_user_id,ARRAY[id] AS visited FROM users WHERE id=$1
+      UNION ALL SELECT u.id,u.merged_into_user_id,p.visited||u.id FROM users u
+        JOIN identity_path p ON u.id=p.merged_into_user_id
+        WHERE cardinality(p.visited)<32 AND NOT u.id=ANY(p.visited)
+    ) SELECT u.id,u.telegram_id,u.role,u.unlimited_bonus FROM users u
+      WHERE u.id=(SELECT id FROM identity_path WHERE merged_into_user_id IS NULL LIMIT 1)
+        AND u.merged_into_user_id IS NULL FOR UPDATE OF u`, [clientId])).rows[0];
+  const row = user && (await db.query('SELECT balance FROM wallets WHERE user_id=$1 FOR UPDATE', [user.id])).rows[0];
   if (!row || !safe(Number(row.balance))) throw unavailable();
-  return { balance: Number(row.balance), unlimited: Boolean(policy.isUnlimited(user)) };
+  return { userId:user.id, balance: Number(row.balance), unlimited: Boolean(policy.isUnlimited(user)) };
 }
 
 function view(row) {
@@ -62,8 +69,8 @@ async function release(db, row, policy, reason) {
   const credited = row.wallet_debited ? Number(row.points) : 0;
   const after = funds.balance + credited;
   if (!safe(after)) throw unavailable();
-  await adjustment(db, row, funds.unlimited ? policy.unlimitedBalance : after, true, 'release', reason);
-  if (credited) await db.query('UPDATE wallets SET balance=$1,updated_at=NOW() WHERE user_id=$2', [after, row.client_id]);
+  await adjustment(db, { ...row, client_id:funds.userId }, funds.unlimited ? policy.unlimitedBalance : after, true, 'release', reason);
+  if (credited) await db.query('UPDATE wallets SET balance=$1,updated_at=NOW() WHERE user_id=$2', [after, funds.userId]);
   await db.query("UPDATE pos_redemptions SET state='released',review_reason=NULL,updated_at=NOW() WHERE id=$1", [row.id]);
   return { ...row, state: 'released' };
 }
@@ -196,9 +203,9 @@ async function refund(db, row, doc, policy) {
     const funds = await wallet(db, row.client_id, policy, false);
     const after = funds.balance + (row.wallet_debited ? due : 0);
     if (!safe(after)) throw unavailable();
-    txId = await adjustment(db, { ...row, points: due }, funds.unlimited ? policy.unlimitedBalance : after,
+    txId = await adjustment(db, { ...row, client_id:funds.userId, points: due }, funds.unlimited ? policy.unlimitedBalance : after,
       true, `refund:${doc.document_id}`, 'Возврат списанных баллов по чеку Эвотора');
-    if (row.wallet_debited) await db.query('UPDATE wallets SET balance=$1,updated_at=NOW() WHERE user_id=$2', [after, row.client_id]);
+    if (row.wallet_debited) await db.query('UPDATE wallets SET balance=$1,updated_at=NOW() WHERE user_id=$2', [after, funds.userId]);
   }
   await db.query(`INSERT INTO pos_redemption_refunds(store_id,document_id,redemption_id,returned_cents,points,transaction_id)
     VALUES($1,$2,$3,$4,$5,$6)`, [doc.store_id, doc.document_id, row.id, doc.amount_cents, due, txId]);
