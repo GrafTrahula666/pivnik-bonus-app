@@ -8,3 +8,4 @@
 .tenant-crm-row:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .tenant-crm-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .tenant-crm-card{margin-top:16px;padding:16px;border:1px solid #80808050;border-radius:12px;overflow-wrap:anywhere}
+.tenant-crm-sections{display:grid;gap:16px}.tenant-crm-checks{padding-left:20px}.tenant-crm-checks li{padding:12px 0;overflow-wrap:anywhere}.tenant-crm-checks p{margin:6px 0}

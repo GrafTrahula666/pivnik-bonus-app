@@ -7,6 +7,8 @@ import { recordAudit } from './audit.js'
 import { pool } from './db.js'
 import { onboardingDraftAccessSql } from './onboarding-access.js'
 import { onboardingTargetRegistry } from './onboarding-database-registry.js'
+import { getOnboardingPosProxy } from './onboarding-pos-proxy.js'
+import { tenantCrmReadiness } from './tenant-crm-readiness.js'
 import { loadOwnedOnboardingRuntimeSource, requireOnboardingAccess } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal } from './types.js'
 
@@ -99,9 +101,21 @@ export function createTenantCrmReadService(options: {
     return verifiedRead(admin,draftId,context=>createSpaceverseCustomerDirectoryRepository(context)({q,limit,offset}),
       {action:'crm.customer_directory_read',entityType:'onboarding_draft',entityId:draftId})
   }
-  return Object.assign(readCustomer,{listCustomers})
+  async function checkReadiness(admin:AdminPrincipal,draftId:string) {
+    validateDraft(draftId)
+    return verifiedRead(admin,draftId,async context=>{
+      // A real scoped read proves connectivity even when the count is zero.
+      // Return no customer PII; this is readiness, not another customer API.
+      const {total}=await createSpaceverseCustomerDirectoryRepository(context)({limit:1})
+      const provider=config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy
+        ?await getOnboardingPosProxy(admin,draftId):null
+      return tenantCrmReadiness(total,provider)
+    },{action:'crm.readiness_check',entityType:'onboarding_draft',entityId:draftId})
+  }
+  return Object.assign(readCustomer,{listCustomers,checkReadiness})
 }
 
 export const readTenantCrmCustomer = createTenantCrmReadService({ metadata: pool,
   resolveTargetDatabase: runtimeKey => onboardingTargetRegistry.resolveTargetDatabase(runtimeKey) })
 export const listTenantCrmCustomers=readTenantCrmCustomer.listCustomers
+export const checkTenantCrmReadiness=readTenantCrmCustomer.checkReadiness

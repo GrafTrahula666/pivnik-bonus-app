@@ -1,5 +1,6 @@
 // @vitest-environment node
 import http from 'node:http'
+import crypto from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { type SpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 import { config } from '../config.js'
@@ -51,7 +52,7 @@ vi.mock('../onboarding-database-registry.js', () => {
 
 describe('tenant CRM preparation read: signed HTTP, canonical metadata and isolated customer SQL', () => {
   let server: http.Server | undefined, origin = '', viewerInvite = ''
-  const sessions = new Map<string, string>()
+  const sessions = new Map<string, string>(),csrfTokens=new Map<string,string>()
   const manifests: SpaceverseRuntimeManifest[] = [], targets: TenantCrmFixtureDatabase[] = []
   const application=tenantCrmApplication
 
@@ -73,12 +74,13 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
       const response = await fetch(origin + '/api/admin/auth/login', { method: 'POST', headers: {
         origin: config.publicOrigin, 'content-type': 'application/json' },
       body: JSON.stringify({ email: who + '@fixture.invalid', password: fixturePassword }) })
-      expect(response.status).toBe(200); await response.json()
+      expect(response.status).toBe(200);csrfTokens.set(who,(await response.json()).csrfToken)
       sessions.set(who, response.headers.get('set-cookie')!.split(';')[0]!)
     }
   }, 30_000)
 
   afterEach(async () => {
+    config.enableOnboardingWorkflow=false;config.enableOnboardingPosProxy=false;vi.unstubAllEnvs()
     config.enableTenantCrmReads = true; state.afterRead = null; state.failConnect = false; state.failAudit = false
     manifests.forEach((manifest, index) => state.targets.set(manifest.runtimeKey, targets[index]!))
     state.queries = []; state.readOnly = []; state.resolutions = 0
@@ -279,6 +281,107 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
     }
     expect((await request('owner',directory())).status).toBe(429)
     expect(state.resolutions).toBe(0)
+  })
+  const readiness=(index=0)=>path(index).replace(/customers\/1$/,'readiness')
+  it('checks readiness with a real session and leaves all activation gates pending by default',async()=>{
+    expect((await request(null,readiness())).status).toBe(401)
+    config.enableTenantCrmReads=false
+    expect((await request('owner',readiness())).status).toBe(403)
+    expect(state.resolutions).toBe(0)
+    config.enableTenantCrmReads=true
+    const response=await request('owner',readiness());expect(response.status).toBe(200)
+    const body=await response.json()
+    expect(body).toMatchObject({scope:manifests[0]!.scope,readStatus:'verified',status:'pending',activationAllowed:false,
+      crmStatus:'not_provisioned',runtimeStatus:'not_provisioned',guestApplicationRequired:false})
+    expect(body.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({id:'customer_data',customerCount:'355',dataState:'available',status:'active'}),
+      expect.objectContaining({id:'subscription',status:'not_configured',code:'market_contract_not_configured'}),
+      expect.objectContaining({id:'activation',status:'pending'}),
+    ]))
+    expect(JSON.stringify(body)).not.toMatch(/Owned|Historical|9007199254740993|photoUrl|username/)
+  })
+  it('reads readiness for exactly the authorized company and venue',async()=>{
+    for(const [index,who] of ['owner','owner','south'].entries()){
+      const response=await request(who,readiness(index));expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({scope:manifests[index]!.scope,activationAllowed:false})
+    }
+    expect((await request('trusted',readiness())).status).toBe(200)
+    expect((await request('trusted',readiness(1))).status).toBe(404)
+    expect((await request('owner',readiness(2))).status).toBe(404)
+    expect((await request('other-root',readiness())).status).toBe(404)
+  })
+  it('reports an accessible empty database without activating the canonical venue',async()=>{
+    const db=targets[1]!,ids=[1,3,6,7]
+    try{
+      await db.query("UPDATE users SET role='staff' WHERE id=ANY($1::bigint[])",[ids])
+      const response=await request('owner',readiness(1));expect(response.status).toBe(200)
+      const body=await response.json()
+      expect(body.checks[0]).toMatchObject({status:'active',dataState:'empty',customerCount:'0'})
+      expect(body.activationAllowed).toBe(false)
+      expect((await state.metadata!.query('SELECT active FROM venues WHERE id=$1',[manifests[1]!.scope.venueId])).rows[0]?.active).toBe(false)
+    }finally{await db.query("UPDATE users SET role='client' WHERE id=ANY($1::bigint[])",[ids])}
+  })
+  it('rejects client activation/scope/license parameters and mutation methods before contacting a target',async()=>{
+    for(const suffix of ['?companyId=20','?venueId=1','?status=active','?license=paid','?providerVerified=true'])
+      expect((await request('owner',readiness()+suffix)).status).toBe(400)
+    expect((await request('owner',readiness(),'POST')).status).toBe(405)
+    expect(state.resolutions).toBe(0)
+  })
+  it('does not replace failed connectivity or a wrong binding with a zero readiness count',async()=>{
+    state.targets.clear()
+    expect((await request('owner',readiness())).status).toBe(409)
+    state.targets.set(manifests[0]!.runtimeKey,targets[1]!)
+    const response=await request('owner',readiness());expect(response.status).toBe(503)
+    const body=await response.json();expect(body.customerCount).toBeUndefined();expect(body.checks).toBeUndefined()
+  })
+  it('suppresses readiness after authorization or manifest changes during the real database probe',async()=>{
+    state.afterRead=async()=>{await state.metadata!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=11")}
+    expect((await request('owner',readiness())).status).toBe(403)
+    await state.metadata!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=11")
+    state.afterRead=async()=>{await state.metadata!.query(`UPDATE admin_onboarding_app_configs SET config=jsonb_set(config,'{displayName}','"Changed"') WHERE draft_id=$1`,[manifests[0]!.source.draftId])}
+    expect((await request('owner',readiness())).status).toBe(503)
+  })
+  it('requires durable readiness auditing without logging count, provider secrets or customer PII',async()=>{
+    state.failAudit=true
+    expect((await request('owner',readiness())).status).toBe(503)
+    state.failAudit=false
+    expect((await request('owner',readiness())).status).toBe(200)
+    const audit=(await state.metadata!.query(`SELECT metadata,after_value FROM admin_audit_log
+      WHERE action='crm.readiness_check' ORDER BY id DESC LIMIT 1`)).rows[0]
+    expect(audit).toEqual({metadata:{purpose:'onboarding_read_diagnostic'},after_value:null})
+  })
+  it('shares rate limits with customer and directory reads',async()=>{
+    for(let count=0;count<30;count++)expect((await request('owner',path(0,'0'))).status).toBe(400)
+    expect((await request('owner',readiness())).status).toBe(429)
+    expect(state.resolutions).toBe(0)
+  })
+  it('uses existing encrypted provider settings and rejects stale events and unreadable secrets',async()=>{
+    config.enableOnboardingWorkflow=config.enableOnboardingPosProxy=true
+    vi.stubEnv('ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID','crm-readiness-fixture')
+    vi.stubEnv('ADMIN_ONBOARDING_SECRET_KEYRING',JSON.stringify({'crm-readiness-fixture':Buffer.alloc(32,7).toString('base64')}))
+    const base='/api/admin/onboarding/drafts/'+manifests[0]!.source.draftId
+    const put=(suffix:string,body:unknown)=>fetch(origin+base+suffix,{method:'PUT',headers:{origin:config.publicOrigin,
+      cookie:sessions.get('owner')!,'x-csrf-token':csrfTokens.get('owner')!,'content-type':'application/json'},body:JSON.stringify(body)})
+    expect((await put('/progress',{revision:0,progress:{currentStep:'verification',terminal:{id:'fixture-terminal',label:'Касса'},cashReports:true}})).status).toBe(200)
+    const deviceKey='pvpos_'+('A'.repeat(43))
+    expect((await put('/integrations/pos-proxy',{requestKey:crypto.randomUUID(),revision:0,storeId:'fixture-store',deviceKey})).status).toBe(200)
+    let body=await (await request('owner',readiness())).json()
+    expect(body.checks[1]).toMatchObject({status:'pending',code:'not_verified',evidence:'last_saved_verification'})
+    // Synthetic stored evidence at the external-provider boundary. This endpoint
+    // must report it as a previous check, not claim a new live provider request.
+    await state.metadata!.query(`UPDATE admin_onboarding_pos_proxy SET status='active',last_code='confirmed',
+      checked_at=NOW(),verified_at=NOW(),last_device_event_at=NOW(),report=$2 WHERE draft_id=$1`,
+      [manifests[0]!.source.draftId,JSON.stringify({state:'available',empty:true,netCents:'0',receiptCount:0,
+        period:{from:'2026-10-18T00:00:00.000Z',until:'2026-10-19T00:00:00.000Z'}})])
+    const response=await request('owner',readiness());expect(response.status).toBe(200);body=await response.json()
+    expect(body.checks[1]).toMatchObject({status:'active',code:'confirmed'})
+    expect(body).toMatchObject({activationAllowed:false,status:'pending'})
+    expect(JSON.stringify(body)).not.toMatch(new RegExp(deviceKey+'|secret_ciphertext|fixture-store'))
+    await state.metadata!.query("UPDATE admin_onboarding_pos_proxy SET last_device_event_at=NOW()-INTERVAL '10 minutes' WHERE draft_id=$1",[manifests[0]!.source.draftId])
+    body=await (await request('owner',readiness())).json()
+    expect(body.checks[1]).toMatchObject({status:'degraded',code:'provider_evidence_stale'})
+    await state.metadata!.query("UPDATE admin_onboarding_pos_proxy SET secret_ciphertext=decode('00','hex') WHERE draft_id=$1",[manifests[0]!.source.draftId])
+    expect((await request('owner',readiness())).status).toBe(503)
   })
   it('uses a read-only snapshot, rejects mutations, and keeps metadata legacy balances unchanged', async () => {
     expect((await request('owner', path(), 'POST')).status).toBe(405)

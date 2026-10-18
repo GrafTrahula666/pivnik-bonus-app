@@ -16,8 +16,14 @@ async function open(page:Page,name:string){
 }
 
 test('built panel reads and searches real isolated customer SQL with precise balances',async({page})=>{
-  await login(page)
+  await login(page,'owner')
   const section=await open(page,'CRM 1')
+  const readiness=page.getByRole('region',{name:'Готовность CRM к запуску',exact:true})
+  await readiness.getByRole('button',{name:'Проверить готовность CRM',exact:true}).click()
+  await expect(readiness.getByRole('status')).toHaveText('CRM ещё не запущена. Ниже указано, что нужно завершить.')
+  await expect(readiness).toContainText('Клиентов в базе: 355.')
+  await expect(readiness).toContainText('Подписка Эвотор.Маркета ещё не подключена.')
+  await expect(readiness).toContainText('Запуск CRM ожидает подтверждения подписки')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('status')).toHaveText('Доступ к клиентской базе проверен. Найдено клиентов: 355.')
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toBeVisible()
@@ -63,9 +69,13 @@ test('changing venue clears customers and the server denies another company owne
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
   await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
   await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Баланс: 101 бонусов')
+  const readiness=page.getByRole('region',{name:'Готовность CRM к запуску',exact:true})
+  await readiness.getByRole('button',{name:'Проверить готовность CRM',exact:true}).click()
+  await expect(readiness).toContainText('Клиентов в базе: 355.')
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
   const second=await open(page,'CRM 2')
   await expect(page.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
+  await expect(page.getByRole('region',{name:'Готовность CRM к запуску',exact:true}).getByRole('status')).toHaveCount(0)
   await second.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(second.getByRole('button',{name:'Owned 102 бонусов',exact:true})).toBeVisible()
   await expect(second.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
@@ -89,8 +99,15 @@ test('late real customer response cannot reopen a card from the previous venue',
     const response=await route.fetch();received();await pending
     await route.fulfill({response}).catch(()=>undefined)
   })
+  let readyReceived!:()=>void
+  const readyArrived=new Promise<void>(resolve=>{readyReceived=resolve})
+  await page.route('**/crm/readiness',async route=>{
+    const response=await route.fetch();readyReceived();await pending
+    await route.fulfill({response}).catch(()=>undefined)
+  })
+  await page.getByRole('region',{name:'Готовность CRM к запуску',exact:true}).getByRole('button',{name:'Проверить готовность CRM',exact:true}).click()
   await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
-  await arrived
+  await arrived;await readyArrived
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
   const second=await open(page,'CRM 2')
   release()
@@ -98,4 +115,5 @@ test('late real customer response cannot reopen a card from the previous venue',
   await expect(second.getByRole('button',{name:'Owned 102 бонусов',exact:true})).toBeVisible()
   await expect(page.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
   await expect(second.getByText('101 бонусов',{exact:true})).toHaveCount(0)
+  await expect(page.getByRole('region',{name:'Готовность CRM к запуску',exact:true}).getByRole('status')).toHaveCount(0)
 })
