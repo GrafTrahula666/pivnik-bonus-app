@@ -4,7 +4,15 @@ import { hashPassword } from '../security.js'
 
 export const fixturePassword='Synthetic-Onboarding-Only-2026!'
 export async function onboardingFixture() {
-  const db=new PGlite()
+  return seedOnboardingFixture(new PGlite())
+}
+
+// The same schema/seed runs against PGlite locally and isolated native pg in
+// the opt-in CRM transport check. It never selects a production connection.
+export async function seedOnboardingFixture<T extends {
+  exec:(text:string)=>Promise<unknown>
+  query:<Row=Record<string,unknown>>(text:string,params?:unknown[])=>Promise<{rows:Row[]}>
+}>(db:T):Promise<T> {
   await db.exec(`CREATE TABLE bars(id BIGINT PRIMARY KEY,code TEXT,name TEXT,address TEXT);
     INSERT INTO bars VALUES(1,'pivnik','ПИВНИК','Тестовый адрес');`)
   for(const file of ['001_admin_core.sql','002_configuration_foundation.sql','003_phase_c_write_safety.sql','004_onboarding_drafts.sql','005_onboarding_app_config.sql','006_onboarding_scope.sql','007_onboarding_invites.sql','008_onboarding_invite_claims.sql','009_onboarding_integrations.sql','010_onboarding_provisioning.sql','011_onboarding_invitation_access.sql','012_onboarding_progress.sql','013_onboarding_schema_readiness.sql','014_onboarding_runtime_bundle.sql','015_onboarding_pos_proxy.sql']) {

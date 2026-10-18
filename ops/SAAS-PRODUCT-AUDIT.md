@@ -55,7 +55,7 @@
 | R06 | P1 | [migrate.ts](../admin-platform/server/migrate.ts) требует `public.bars` | Явный проверенный bootstrap standalone CRM с существующими canonical tables; не ослаблять legacy preflight и не создавать вторую tenant-модель |
 | R07 | P1 | Поиск без UI-пагинации; static LivePill заявляет обновление без привязки к ответу | Серверная пагинация в UI, источник/дата/freshness, различение ошибок и пустых результатов |
 | R08 | P1 | Общие роли, consent/retention, support и мониторинг неполны | Permission matrix, аудит, обработка персональных данных, тест восстановления, реальные support tickets |
-| R09 | P1 | PostgreSQL integration suite требует отдельную тестовую БД | Проверить native pg-driver/transactions в изолированной БД; skipped не считать passed |
+| R09 | P1, локально проверено в #284 | PostgreSQL integration suite требует отдельную тестовую БД | Изолированный PostgreSQL 16: 20 прежних + 19 новых HTTP cases passed; production-mode image smoke с real registry passed. CI без test URL по-прежнему пропускает 20; внешняя TLS/CA и коммерческий сценарий остаются отдельными gates |
 
 ## Что уже ведётся в других ветках
 
