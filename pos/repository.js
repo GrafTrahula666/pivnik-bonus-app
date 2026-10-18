@@ -1,10 +1,10 @@
 import { normalizeEvotorDocument } from './evotor-document.js';
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
 
-export async function importEvotorPage(db, storeId, page, { until, cursor }) {
-  // Caller owns a transaction: documents and cursor must commit together.
+export async function importEvotorDocuments(db, storeId, items) {
+  // Caller owns the transaction. The same immutable-document guard serves all ingestion.
   let imported = 0;
-  for (const raw of page.items) {
+  for (const raw of items) {
     const doc = normalizeEvotorDocument(raw, storeId);
     if (!doc) continue;
     const saved = await db.query(`INSERT INTO pos_documents(source,store_id,document_id,type,closed_at,amount_cents,snapshot)
@@ -21,6 +21,12 @@ export async function importEvotorPage(db, storeId, page, { until, cursor }) {
     if (!saved.rows.length) throw Object.assign(new Error('Конфликт финансовых данных закрытого документа.'), { code: 'document_conflict', statusCode: 409 });
     imported++;
   }
+  return { imported };
+}
+
+export async function importEvotorPage(db, storeId, page, { until, cursor }) {
+  // Historical document page and cursor must still commit in the same transaction.
+  const { imported } = await importEvotorDocuments(db, storeId, page.items);
   const next = page.paging?.next_cursor || null;
   if (next && next === cursor) throw Object.assign(new Error('Курсор Эвотора не продвинулся.'), { code: 'invalid_cursor' });
   await db.query(`INSERT INTO pos_sync_state(store_id,cursor,scan_until,last_success_at,last_error_code)
