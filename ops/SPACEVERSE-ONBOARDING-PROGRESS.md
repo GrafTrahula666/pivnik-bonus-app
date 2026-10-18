@@ -1266,3 +1266,79 @@ Docker image build не запускался: выполнены npm build + com
 это не заменяет проверку release image перед включением функции. Новый код не
 merge/deploy, flags в production не включались. Разрешение #283 уже исполнено
 и не относится к следующему Draft PR.
+
+## 2026-10-18 — постоянная цель: работать до проверяемой готовности к Маркету
+
+Владелец прямо повторил: «Не останавливайся!! Работай до момента, когда ты
+сможешь сказать на 100%: всё, я готов — выкладывай меня на Эватор Маркет».
+Это постоянная цель следующих итераций: green foundation PR не считается
+завершением SaaS. Продолжать доступную реализацию и проверки по roadmap;
+фактическую готовность связывать с полным owner onboarding/CRM/POS/license
+сценарием, эксплуатационными проверками и официальными требованиями, а не
+числом тестов. Прежние отдельные запреты merge/deploy, production data/keys/CI
+и внешние договоры/модерация сохраняются, пока владелец явно их не изменит.
+
+В рамках существующего #284 закрываются оставленные мной пробелы проверки:
+поднят отдельный Docker PostgreSQL 16, только loopback port и собственные
+synthetic databases/role; реальные URLs/данные не использовались. Прежние
+20 native pg integration tests прошли. Для новых 19 HTTP cases общий seed
+вынесен без изменения данных в seedOnboardingFixture; opt-in native backend
+создаёт отдельные physical databases для metadata и трёх target runtime,
+пиннит pg client на транзакцию и проверяет SHOW transaction_read_only=on.
+Native URL допускается только с local host/test database prefix/crm_fixture.
+Fixture databases сохраняются для инспекции; чужие данные не удаляются.
+
+Первый Docker build был заблокирован read-only buildx cache; BUILDX_CONFIG
+перенесён в writable /tmp, DOCKER_CONFIG/auth/proxy не менялись. Временный
+verification Dockerfile добавляет только session CA secret mount для npm ci
+(strict-ssl=true) и build ARG VITEST_MAX_WORKERS. Прежний default-parallel
+прогон дал 3 существующих 5000ms timeout в provisioning tests; повтор с
+поддерживаемым VITEST_MAX_WORKERS=1 выполняет все прежние assertions/timeouts.
+Production Dockerfile/CI test commands ради проверки не меняются. Полные
+результаты и image smoke фиксируются после завершения.
+
+Уточнение сборки после воспроизведения timeout: в production Dockerfile
+добавлен build-only `ARG VITEST_MAX_WORKERS=1`, чтобы штатный build не зависел
+от скрытой локальной настройки concurrency. Literal test commands, assertions,
+5000ms timeouts и CI workflow не меняются; ARG не попадает в runtime ENV.
+Временный Dockerfile теперь добавляет только session CA mount к npm ci.
+Первый успешный image sha256:4b6b0d9e5e43677bf2d088b0c0dced663ce9b5e42d462f4f74dd12bfc5170247:
+typecheck/lint, 291 passed +20 native skipped, security subset 170 passed,
+build passed. Исходники для финальной повторной image сборки сверены с
+веткой после восстановления семи generated outputs, не с посторонним diff.
+
+Реальный production-mode image smoke с synthetic PostgreSQL прошёл в двух
+контейнерах: default-off 403 после настоящего login; opt-in с реальным registry,
+тремя physical target DB, company/venue/manager boundary, wallet null/zero/bigint,
+scope/POST refusal. HTML/health и secure HttpOnly cookie проверены. API-контейнеры
+после smoke остановлены, test PostgreSQL оставлен для повторяемых проверок;
+нет production deploy, реальных accounts/keys/POS/API модели. Script/logs в
+/tmp/spaceverse-crm-release-verification-20261018. Параллельный host PGlite
+focused run во время Docker дал один прежний provisioning timeout; после
+завершения Docker изолированный повтор тех же 35 cases — 35 passed.
+
+Полный Business запуск с обеими isolated native test URL: **311 passed / 0
+skipped**, 32 suites passed. Ранее пропущенные 20 теперь выполнены, а новые
+19 дополнительно используют pg-driver/pinned transactions. В GitHub CI без
+включения test URL прежние 20 остаются skipped; настройки CI не менялись.
+Повторные root tests после materialize ×2: 622 passed / 0 failed/skipped.
+Дополнительный runtime-manifest root suite проверяется после Docker ARG change.
+Внешний DB TLS/CA, реальный Маркет/касса/подписка и browser UI нового API
+по-прежнему не подтверждены; эти результаты не объявляют CRM коммерчески готовой.
+
+Итог второй проверки #284: финальный image
+sha256:0235d39b9baa80c538a2c800f3c1f0860b21f06eb2ddccc3e4b94b4b4ee10c7b
+с production Dockerfile `ARG VITEST_MAX_WORKERS=1` (без CLI override) собран:
+typecheck/lint, 291 passed +20 native skipped, 170 security passed, build
+успешны. Для proxy trust добавлен только временный CA secret mount; CA secret
+проверенно отсутствует в runtime image. Повторный real-image startup/login/
+default-off и opt-in/native-target HTTP smoke — оба exit 0, API-контейнеры
+остановлены. Postgres fixture container остаётся локальным, 127.0.0.1 port.
+
+Перед обновлением PR: root 622/0; отдельный root runtime-manifest suite 10/0
+после Docker ARG change; materialize ×2 idempotent, 7 generated outputs
+восстановлены по SHA-256; full native Business 311/0 skipped; root check,
+root/Business audit (0 vulnerabilities), changed fixture ESLint — exit 0;
+Playwright 12 + onboarding 4 passed. Свежие logs/gates в
+/tmp/spaceverse-crm-release-verification-20261018; повторно перезаписанные
+собственным E2E onboarding PNG восстановлены. `git diff --check` passed.

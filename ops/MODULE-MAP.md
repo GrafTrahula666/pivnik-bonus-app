@@ -14,7 +14,11 @@ requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
 permissions/source are rechecked, and successful access is audited in metadata.
 It works on prepared/inactive drafts and explicitly returns not_provisioned.
 It does not activate a venue, replace the active CRM reader or check a POS/license.
-Signed HTTP/PGlite regression is in `server/tests/tenant-crm-http.spec.ts`.
+Signed HTTP regression is in `server/tests/tenant-crm-http.spec.ts`, using the
+same seed in PGlite or opt-in native PostgreSQL. The native fixture requires a
+local test database/role, creates dedicated databases, and pins pool clients
+through the real read-only transaction. Production-mode image/real registry
+smoke and native checks are documented in the runbook/progress.
 
 Current source-backed product status, competitor evidence, external publication
 gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,

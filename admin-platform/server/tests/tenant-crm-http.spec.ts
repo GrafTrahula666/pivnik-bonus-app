@@ -2,22 +2,26 @@
 import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
-import { PGlite } from '@electric-sql/pglite'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createSpaceverseRuntimeManifest, type SpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 import { config } from '../config.js'
-import { onboardingFixture, fixturePassword } from './onboarding-fixture.js'
+import { seedOnboardingFixture, fixturePassword } from './onboarding-fixture.js'
+import { tenantCrmFixtureDatabase, type TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
 
-const state = vi.hoisted(() => ({ metadata: null as PGlite | null,
-  targets: new Map<string, PGlite>(), queries: [] as string[], resolutions: 0,
+const state = vi.hoisted(() => ({ metadata: null as TenantCrmFixtureDatabase | null,
+  targets: new Map<string, TenantCrmFixtureDatabase>(), queries: [] as string[], readOnly: [] as unknown[], resolutions: 0,
   afterRead: null as (() => Promise<void>) | null, failConnect: false, failAudit: false }))
 vi.mock('../db.js', () => {
-  const query = async (text: string, params?: unknown[]) => {
+  const execute = async (db: Pick<TenantCrmFixtureDatabase, 'query'>, text: string, params?: unknown[]) => {
     if (state.failAudit && text.startsWith('INSERT INTO admin_audit_log')) throw new Error('Synthetic private audit failure')
-    const result = await state.metadata!.query(text, params)
+    const result = await db.query(text, params)
     return { ...result, rowCount: result.rows.length || result.affectedRows || 0 }
   }
-  const db = { query, connect: async () => ({ query, release() {} }) }
+  const query = (text: string, params?: unknown[]) => execute(state.metadata!, text, params)
+  const db = { query, connect: async () => {
+    const connection = state.metadata!.connect ? await state.metadata!.connect() : { query: state.metadata!.query.bind(state.metadata!), release() {} }
+    return { query: (text: string, params?: unknown[]) => execute(connection, text, params), release: () => connection.release() }
+  } }
   return { pool: db, readPool: db, writePool: null, tableExists: async () => false, productionTableExists: async () => false }
 })
 vi.mock('../onboarding-database-registry.js', () => {
@@ -28,9 +32,13 @@ vi.mock('../onboarding-database-registry.js', () => {
       if (!db) return null
       return { async connect() {
         if (state.failConnect) throw new Error('postgres://synthetic:secret@fixture.invalid/private')
-        return { release() {}, async query(text: string, params?: unknown[]) {
+        const connection = db.connect ? await db.connect() : { query: db.query.bind(db), release() {} }
+        return { release: () => connection.release(), async query(text: string, params?: unknown[]) {
           state.queries.push(text)
-          const result = await db.query(text, params)
+          const result = await connection.query(text, params)
+          if (text.includes('WITH verified_binding AS')) {
+            state.readOnly.push((await connection.query('SHOW transaction_read_only')).rows[0]?.transaction_read_only)
+          }
           if (text.includes('WITH verified_binding AS') && state.afterRead) {
             const action = state.afterRead; state.afterRead = null; await action()
           }
@@ -45,7 +53,7 @@ vi.mock('../onboarding-database-registry.js', () => {
 describe('tenant CRM preparation read: signed HTTP, canonical metadata and isolated customer SQL', () => {
   let server: http.Server | undefined, origin = '', viewerInvite = ''
   const sessions = new Map<string, string>()
-  const manifests: SpaceverseRuntimeManifest[] = [], targets: PGlite[] = []
+  const manifests: SpaceverseRuntimeManifest[] = [], targets: TenantCrmFixtureDatabase[] = []
   const application = { displayName: 'Synthetic CRM', theme: 'premium-dark' as const,
     primaryColor: '#73bcd9', secondaryColor: '#172c36', shopEnabled: true, loyaltyEnabled: true }
 
@@ -55,7 +63,7 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
     config.enableTenantCrmReads = true
     config.publicOrigin = 'https://tenant-crm.fixture.invalid'
     config.csrfSecret = 'fixture-only-tenant-crm-secret-1234567890'
-    state.metadata = await onboardingFixture()
+    state.metadata = await seedOnboardingFixture(await tenantCrmFixtureDatabase())
     const passwordHash = (await state.metadata.query<{ password_hash: string }>('SELECT password_hash FROM admin_accounts WHERE id=11')).rows[0]!.password_hash
     await state.metadata.query(`INSERT INTO admin_accounts(id,email,display_name,role,password_hash)
       VALUES(21,'south@fixture.invalid','south','VENUE_ADMIN',$1)`, [passwordHash])
@@ -73,7 +81,7 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
       const manifest = createSpaceverseRuntimeManifest({ draftId, runtimeKey, draftRevision: 1,
         applicationRevision: 1, scopeRevision: 1, scope: { companyId: company, venueId: venue.id }, config: application })
       manifests.push(manifest)
-      const db = new PGlite(); targets.push(db)
+      const db = await tenantCrmFixtureDatabase(); targets.push(db)
       for (const file of ['017_spaceverse_runtime_binding.sql', '018_spaceverse_runtime_scope_binding.sql'])
         await db.exec(await fs.readFile(new URL('../../../migrations/' + file, import.meta.url), 'utf8'))
       await db.exec(`CREATE TABLE users(id BIGINT PRIMARY KEY,username TEXT,first_name TEXT,last_name TEXT,photo_url TEXT,
@@ -112,7 +120,7 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
   afterEach(async () => {
     config.enableTenantCrmReads = true; state.afterRead = null; state.failConnect = false; state.failAudit = false
     manifests.forEach((manifest, index) => state.targets.set(manifest.runtimeKey, targets[index]!))
-    state.queries = []; state.resolutions = 0
+    state.queries = []; state.readOnly = []; state.resolutions = 0
     await state.metadata!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=11")
     await state.metadata!.query("UPDATE admin_onboarding_access SET role='manager',revoked_at=NULL WHERE invitation_id=$1", [viewerInvite])
     await state.metadata!.query('UPDATE admin_onboarding_app_configs SET config=$1 WHERE draft_id=$2',
@@ -217,6 +225,7 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
     expect((await request('owner')).status).toBe(200)
     expect(state.queries[0]).toBe('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
     expect(state.queries.at(-1)).toBe('COMMIT')
+    expect(state.readOnly).toEqual(['on'])
     expect(state.queries.every(text => /^(BEGIN|SELECT|WITH|COMMIT|ROLLBACK)\b/.test(text))).toBe(true)
     expect((await state.metadata!.query('SELECT balance::text FROM wallets WHERE id=1')).rows).toEqual([{ balance: '100' }])
     const audit = (await state.metadata!.query(`SELECT company_id::text,venue_id::text,metadata,after_value

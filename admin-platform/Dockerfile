@@ -18,6 +18,8 @@ RUN npm ci
 
 COPY admin-platform/ ./
 
+# Keep build-time tests within small builder CPU quotas; not a runtime setting.
+ARG VITEST_MAX_WORKERS=1
 RUN npm run typecheck \
   && npm run lint \
   && npm test \
