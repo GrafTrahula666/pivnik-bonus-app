@@ -1564,3 +1564,68 @@ image-smoke-results.json, source hashes и полные логи, включая
 DSN/CA/staging/rollback; локальные успехи её не заменяют. По критическому пути
 ожидаются прежние merge #284 approval и актуальные App ID/Market contract;
 subscription/activation пока pending, коммерческий релиз не заявляется готовым.
+
+### 2026-10-18 — разрешённое объединение, финальная проверка #284
+
+Владелец явно разрешил merge проверенных подготовленных SPACEVERSE изменений;
+существующий main autodeploy включён в согласованный сценарий. Чужие PR, CI,
+Railway settings/secrets и ручные production DB/device операции не затрагиваются.
+До объединения обновлён origin/main: abbe089, тот же base #284.
+
+Два первых полных Business повтора дали 310 passed/1 timeout (5000ms) в первом
+image-policy тесте onboarding-provisioning.spec.ts. Отдельный suite был зелёным.
+Создание двух свежих PGlite SQL fixtures перенесено в scoped beforeEach;
+все 104 строки assertions сохранены побайтово после снятия отступов,
+стандартный 5s test timeout не изменён. Каждому сценарию остаются отдельные БД,
+исходные SQL/negative cases и afterEach cleanup. Production код не менялся.
+
+На окончательном коде: materialize ×2 idempotent, 7 известных generated outputs
+(включая server.js/universal-server.js/app.js) записаны и восстановлены по SHA-256.
+Root node --test: 622 passed/0 skipped; check, root audits: exit 0/0 vulnerabilities.
+VK parity и bundle (CI fixture origin, без публикации): exit 0.
+Business full native: 311 passed/0 skipped, typecheck/lint/build/audits: exit 0.
+Playwright cash/CRM 12 + onboarding 4 passed, desktop/mobile; PNG восстановлены.
+Два исходных сбоя не скрыты, thresholds/assertions не ослаблялись.
+Новый GitHub CI будет проверен на обновлённом head перед merge без admin bypass.
+Доступ к classic branch-protection settings через API — 403; applicable rulesets
+endpoint вернул []; наличие/отсутствие classic protection по этому не заявляется.
+
+Артефакты: /tmp/spaceverse-crm-merges-20261018/reader-284.
+Текущий Admin public HTML/health: оба HTTP 200, health ok=true. Это не proof
+версии отдельного сайта. Merge/deploy результаты по exact SHA будут записаны
+следом; подписка/активация Маркета по-прежнему не подтверждены.
+
+### 2026-10-18 — три проверенных шага объединены, финальная TLS-интеграция
+
+- #284: Изолированное чтение клиента и баланса; merge 26b99b91098e31d799e4cf6d8486ebbd55d76e83. Local gates и GitHub CI проверены перед merge.
+- #285: Список, поиск и карточка клиентов; merge 812edabf54a9f97300d0d29fdbedaa548cc27249. Local gates и GitHub CI проверены перед merge.
+- #286: Проверка готовности CRM и честные pending-статусы; merge 0aeef0781f3b83102cc26836778d1bd83451e182. Local gates и GitHub CI проверены перед merge.
+
+Для #284 повторены 622 root/311 native Business/16 E2E; #285 — 625/322/24;
+#286 — 625/343/24, все без failed/skipped в full native suites. Перед каждым
+push materialize ×2/idempotency/SHA-256, check/audit, Business typecheck/lint/build,
+VK parity/bundle; CI проверял exact head. Рабочие generated files/PNG восстановлены.
+Автодеплои #284 и #285, public/accounts/signed-session smoke и VK parity SUCCESS
+на exact merge SHA; #286 только что запущен, результат фиксируется отдельно.
+Merge не использует --admin, force push, branch deletion или CI bypass.
+
+Конфликты при подтягивании main были только append-only в этом журнале;
+сохранены полные записи обеих сторон, runtime source не менялся при разрешении.
+Полный список open PR обнаружил исторические SPACEVERSE #96/#101 вне текущей
+цепочки. Они и другие чужие PR не закрывались/не объединялись. Прежнее выражение
+«один SPACEVERSE PR» относилось к текущей подготовленной цепочке, не ко всем
+историческим работам репозитория; ограничение одного открытого PR этой цепочки
+сохранено. Разрешение владельца получено на проверенные SPACEVERSE merge с
+существующим main autodeploy; Railway settings/secrets, CI и ручные prod DB/
+device операции остаются вне scope.
+
+TLS ветка интегрирована с main 0aeef0781f3b83102cc26836778d1bd83451e182.
+Следуют полный повтор обязательных gates, fresh TLS handshake/native PostgreSQL
+и desktop/mobile E2E перед её merge. Новый Admin image не пересобирается в
+почти заполненном vfs окружении: production code/lock/Dockerfile соответствует
+ранее проверенному TLS image, различия — fixture setup и документация;
+соответствие source проверяется отдельно. Это не утверждение версии Admin сайта.
+Актуальные exact head/merge SHA, CI и deployment outcomes сохраняются в
+/workspace/SPACEVERSE-CRM-MERGE-RESULT-2026-10-18.md и артефактах
+/tmp/spaceverse-crm-merges-20261018. Market contract/test app/install/pay/revoke,
+active CRM lifecycle, production CA и коммерческая готовность остаются gates.

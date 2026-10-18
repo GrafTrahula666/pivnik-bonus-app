@@ -6,8 +6,8 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 
 ## SaaS readiness research and CRM scope lifecycle (2026-10-18)
 
-The separate `spaceverse/crm-database-tls-20261018` slice addresses the external
-Admin pool certificate-validation risk with `server/database-transport.ts`.
+`server/database-transport.ts` addresses the external Admin pool certificate-
+validation risk in the CRM TLS slice.
 All three pools in `db.ts` and the existing onboarding target registry share
 this policy: exact private/local host exceptions, verified public TLS, explicit
 IP identity checking, and removal of pg URL TLS overrides before pool creation.
@@ -29,7 +29,7 @@ requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
 permissions/source are rechecked, and successful access is audited in metadata.
 It works on prepared/inactive drafts and explicitly returns not_provisioned.
 It does not activate a venue, replace the active CRM reader or check a POS/license.
-The separate local directory iteration adds `customer-directory-repository.js`
+The customer-directory slice (#285) adds `customer-directory-repository.js`
 with the wallet repository's shared verified-binding SQL and an optional
 collection suffix at the same draft URL (q/limit/offset only). It shares the
 read-only/source-revalidation/audit service and actor rate limit with detail
@@ -37,8 +37,8 @@ reads. `TenantCustomerDirectory.tsx` is gated by the default-off session
 capability inside the existing `VenueOnboarding`; it does not activate a venue.
 `playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
 on three dedicated local native PostgreSQL targets, including disabled mode.
-This iteration is on separate `spaceverse/crm-directory-20261018`, not in #284.
-A further slice on `spaceverse/crm-readiness-20261018` adds GET
+The directory/UI was merged in #285 after the read diagnostic #284.
+The readiness slice #286 adds GET
 `.../crm/readiness` with the same read/access/audit boundary. It uses a real
 scoped DB count and the existing encrypted POS projection; saved provider
 checks are not new live probes. `tenant-crm-readiness.ts` rejects stale/future
