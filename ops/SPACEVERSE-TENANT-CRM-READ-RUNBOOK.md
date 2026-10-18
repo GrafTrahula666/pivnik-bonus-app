@@ -1,6 +1,6 @@
 # SPACEVERSE: проверка чтения клиента при подготовке CRM
 
-18 октября 2026. Это первый Admin API adapter на существующий tenant customer/wallet repository, **не завершённая CRM и не активация заведения**. Точки существующего мастера должны оставаться `prepared`/неактивными. Новый endpoint работает только в этом контуре; активный CRM reader, список/поиск и UI — следующие шаги. Защита legacy reader ПИВНИКА не снимается.
+18 октября 2026. Это первый Admin API adapter на существующий tenant customer/wallet repository, **не завершённая CRM и не активация заведения**. Точки существующего мастера должны оставаться `prepared`/неактивными. Endpoints работают только в этом контуре. Отдельная следующая итерация добавляет список/поиск и карточку в существующий мастер; активный CRM reader и активация ещё не готовы. Защита legacy reader ПИВНИКА не снимается.
 
 ## Предварительные условия
 
@@ -49,3 +49,53 @@
 На PostgreSQL 16 выполнены `server/tests/postgres.integration.spec.ts` + `server/tests/tenant-crm-http.spec.ts`: **39 passed / 0 skipped**. Новый case дополнительно подтверждает `SHOW transaction_read_only=on` на том же соединении. Docker build с session CA mount (strict-ssl=true) и `VITEST_MAX_WORKERS=1` выполнил typecheck/lint, 291 tests (+20 native skipped внутри image build), 170 security tests и build. Команды/assertions/timeouts production Dockerfile и CI не менялись; worker env нужен для CPU-квоты среды. Отдельные 39 native tests покрывают pg-driver, пропущенный внутри герметичной image сборки.
 
 Собранный image проверен в production mode на собственном PostgreSQL: HTML/health, настоящий login/secure cookie, default-off 403; затем opt-in — настоящий registry и три target DB, границы company/venue/manager, 0/null/bigint и запреты scope/POST. Это тестовый запуск внутри среды разработки, не production deploy и не кассовая проверка. Настоящий TLS/CA внешнего DB endpoint, касса/Маркет, browser flow нового endpoint и коммерческая CRM ещё не проверены. Следующий срез — безопасный список/поиск и интеграция в существующий UI; активация требует отдельного изменения существующего lifecycle.
+
+## Следующая итерация: список и поиск в существующем мастере
+
+Локальная ветка `spaceverse/crm-directory-20261018` строится поверх #284; второй
+PR не открыт, разрешение на merge #284 ещё ожидается. Изменения этой секции не
+входят в опубликованный #284 и пока не развернуты.
+
+`GET /api/admin/onboarding/drafts/{draftId}/crm/customers?q={text}&limit=25&offset=0`
+возвращает v1 envelope с теми же scope/readStatus/runtimeStatus и полями
+`q`, `total` (точная десятичная строка), `limit`, `offset`, `hasMore`,
+`items: [{customer,wallet}]`. Поиск — подстрока имени, фамилии, username или ID;
+`%`, `_` и обратная косая черта — буквальные символы. `q` до 100 символов;
+`limit` 1–100, `offset` 0–1000000, целые в канонической записи. Прочие или
+повторяющиеся параметры запрещены. Пустой успешный список — `total:"0"`,
+`items:[]`; недоступный источник возвращает ошибку, а не нули.
+
+Два read adapters используют общий сервис доступа/транзакции/аудита и общий
+SQL binding CTE из `customer-wallet-repository.js`. COUNT и страница читаются
+одним statement из явного ownership; wallet/photo подгружаются после отбора
+страницы. На read-only транзакции действует `SET LOCAL statement_timeout='5s'`.
+Список и карточка делят существующий лимит 30/min/actor. Успешный список пишет
+`crm.customer_directory_read`: actor/company/venue/draft и purpose, без
+поискового текста, имён и балансов. Никаких новых таблиц/миграций не требуется.
+
+После подготовки canonical scope мастер показывает «Клиентская база», если
+сервер сообщил `capabilities.tenantCrmReads=true` и доступен owner/manager grant.
+Первое чтение запускает человек кнопкой «Проверить клиентскую базу»; далее
+доступны поиск, страницы по 25 строк, обновление и отдельная карточка. Смена
+draft/company/venue/actor очищает строки, поиск и карточку; запоздалые ответы
+не возвращают прежние данные. Ответ проверяется на ожидаемые scope и страницу.
+Нулевой баланс, отсутствие кошелька, пустой поиск и ошибка связи различаются.
+Наличие клиентских данных не включает кассу и не активирует заведение.
+
+Для built-panel E2E требуется собственный loopback PostgreSQL с ролью
+`crm_fixture` и database prefix `codex_admin_test`; URL передаётся через
+`SPACEVERSE_TEST_NATIVE_POSTGRES_URL` в окружении тестового процесса.
+Из `admin-platform/`:
+
+```sh
+npm test -- --maxWorkers=1 server/tests/tenant-crm-http.spec.ts
+npx playwright test -c playwright.tenant-crm.config.ts
+SPACEVERSE_E2E_CRM_READS=false npx playwright test -c playwright.tenant-crm.config.ts
+```
+
+Браузерный server строит настоящий App, seed-процесс создаёт только новые
+synthetic metadata + три target DB и закрывает соединения. HTTP использует
+обычный signed login и неизменённый frozen target registry с настоящими pg
+pools. Подмены API/SQL/provider нет; один race test задерживает настоящий
+HTTP-ответ. Disabled suite отдельно проверяет скрытый UI и серверный 403.
+Никакие внешние credentials или живые устройства для этих тестов не нужны.
