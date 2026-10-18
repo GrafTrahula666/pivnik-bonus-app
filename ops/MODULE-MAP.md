@@ -22,7 +22,15 @@ reads. `TenantCustomerDirectory.tsx` is gated by the default-off session
 capability inside the existing `VenueOnboarding`; it does not activate a venue.
 `playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
 on three dedicated local native PostgreSQL targets, including disabled mode.
-This iteration is on local `spaceverse/crm-directory-20261018`, not in #284.
+This iteration is on separate `spaceverse/crm-directory-20261018`, not in #284.
+A further slice on `spaceverse/crm-readiness-20261018` adds GET
+`.../crm/readiness` with the same read/access/audit boundary. It uses a real
+scoped DB count and the existing encrypted POS projection; saved provider
+checks are not new live probes. `tenant-crm-readiness.ts` rejects stale/future
+or incomplete evidence and leaves subscription/activation unconfigured/pending.
+`TenantCrmReadiness.tsx` shows these gates in the existing wizard, default-off;
+no canonical active flag or guest runtime changes. Contract and verification
+are in `ops/SPACEVERSE-CRM-READINESS-RUNBOOK.md`.
 Signed HTTP regression is in `server/tests/tenant-crm-http.spec.ts`, using the
 same seed in PGlite or opt-in native PostgreSQL. The native fixture requires a
 local test database/role, creates dedicated databases, and pins pool clients

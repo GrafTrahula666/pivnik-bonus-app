@@ -1425,6 +1425,73 @@ snapshot пользователь должен сохранить и опубл�
 обновлялись в 2018; архив documentation-api — 2017. Они не подтверждают
 актуальный install/subscription/revoke contract 2026 и не снимают Market gate.
 
+### 2026-10-18 — готовность именно CRM-сайта, следующая локальная итерация
+
+Ветка `spaceverse/crm-readiness-20261018` поверх локального directory-коммита
+`3a18a17`. #284 не изменён и не объединён; единственный открытый Draft, свежие
+GitHub checks SUCCESS, head 9f34d2d. Отдельный merge approval ещё ожидается.
+Также запрошены наличие зарегистрированного SPACEVERSE app, App ID и актуальный
+Market contract; секреты в чат не запрашиваются.
+
+Реализованы GET /api/admin/onboarding/drafts/:id/crm/readiness и блок
+«Что осталось для запуска CRM» внутри существующего мастера. Используются
+тот же default-off flag, owner/manager access, frozen source, target registry,
+SQL ownership boundary, read-only snapshot, 5s timeout, общий actor rate limit
+и обязательный audit. Нет новой tenant-модели, миграций или изменений active
+flags. Подписка остаётся not_configured, запуск pending/activationAllowed=false:
+текущий код не активирует venue и не подменяет отсутствующий Market adapter.
+
+Клиентский источник проверяется настоящим SQL; count=0 с верной binding —
+доступная пустая база. Ошибка источника не возвращает успешный count=0.
+PII/кошельки/отчёт/credentials в readiness payload не выдаются. Состояние кассы
+читается через прежний getOnboardingPosProxy с проверкой encrypted secret;
+это last_saved_verification, не новый сетевой вызов. Свежий active дополнительно
+требует confirmed, available report (допускает нули), свежие check/device-event
+timestamps; >5 минут в прошлом, >5 секунд в будущем и неполный report не
+становятся успехом. Активная касса сама по себе не активирует CRM.
+
+Лично выполнено: focused HTTP+rules 51 passed (39+12). HTTP проверяет real signed
+session/SQL/шифрование через существующие endpoints; synthetic stored provider
+evidence помечено как fixture внешней границы, не как реальная касса.
+Новые built-panel native E2E 6 + disabled 2 passed. Полные повторные root
+materialize ×2 idempotent; **625 passed /0 skipped**, check/audit/production audit
+exit 0. Все 7 известных generated outputs, включая server.js/universal-server.js/
+app.js, сохранены в proof и восстановлены с SHA-256. Патч-цепочка не менялась.
+Полный Business native **343 passed /0 skipped**, 33 suites; typecheck/lint/build
+и оба Business audit exit 0, vulnerabilities 0. Дополнительные browser assertions
+на очистку readiness при смене точки/задержке и отдельная image сборка выполняются;
+старый image directory не объявляется image нового среза.
+
+Контракт: ops/SPACEVERSE-CRM-READINESS-RUNBOOK.md; карта модулей обновлена.
+Логи: /tmp/spaceverse-crm-readiness-verification-20261018.
+
+Финал readiness-среза: image
+`sha256:13cb7ecbd2e5a8b7b8089d7aa9b05ec998343b3ccfb98ea128a20609be599c54`
+собран. Внутри typecheck/lint, **323 passed +20 native skipped**, security
+**170 passed**, build — exit 0. Затем полный host/native повтор **343 passed,
+0 skipped** и built-panel native E2E **6 passed** на последнем коде. Disabled
+browser **2 passed**, прежние cash/CRM **12 passed**, onboarding **4 passed**.
+Границы source/company/venue/account, задержанный readiness/card response и
+пустые/ошибочные состояния проверены на телефоне/компьютере. Freshness использует
+общую POS_EVENT_FRESH_MS константу существующего proxy, не второй контракт.
+
+Production-mode real-image HTTP smoke обоих режимов (disabled/enabled) —
+exit 0: startup/login, настоящий pg registry и три target DB, directory +
+readiness, точные scoped counts, pending подписка/активация, запрет client
+license/status/scope/POST. Readiness не возвращает PII/кошельки/device secrets.
+CA build secret и worker ARG в runtime image отсутствуют. Собственные image
+API containers остановлены; test PG оставлен. Никаких live provider/касса/Market
+или production deploy эти проверки не выполняли.
+
+Directory-коммит **3a18a17045f4041c507c0be40a5af9b498c7915d** отправлен в
+`origin/spaceverse/crm-directory-20261018` после своих gates. Это сохранение
+проверенного кода в отдельной ветке; второго PR нет. Проверены существующие
+workflow triggers: этот branch push не запускает main production deploy;
+CI/workflow files не менялись. Readiness сохраняется отдельным следующим
+коммитом/веткой по тому же правилу. По свежему gh pr list единственный открытый
+SPACEVERSE Draft — **#284**; merge и новая публикация не выполняются без ответа
+на уже заданный вопрос владельцу.
+
 ### 2026-10-18 — разрешённое объединение, финальная проверка #284
 
 Владелец явно разрешил merge проверенных подготовленных SPACEVERSE изменений;
