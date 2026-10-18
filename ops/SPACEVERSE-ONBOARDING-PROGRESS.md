@@ -1342,3 +1342,33 @@ root/Business audit (0 vulnerabilities), changed fixture ESLint — exit 0;
 Playwright 12 + onboarding 4 passed. Свежие logs/gates в
 /tmp/spaceverse-crm-release-verification-20261018; повторно перезаписанные
 собственным E2E onboarding PNG восстановлены. `git diff --check` passed.
+
+### 2026-10-18 — разрешённое объединение, финальная проверка #284
+
+Владелец явно разрешил merge проверенных подготовленных SPACEVERSE изменений;
+существующий main autodeploy включён в согласованный сценарий. Чужие PR, CI,
+Railway settings/secrets и ручные production DB/device операции не затрагиваются.
+До объединения обновлён origin/main: abbe089, тот же base #284.
+
+Два первых полных Business повтора дали 310 passed/1 timeout (5000ms) в первом
+image-policy тесте onboarding-provisioning.spec.ts. Отдельный suite был зелёным.
+Создание двух свежих PGlite SQL fixtures перенесено в scoped beforeEach;
+все 104 строки assertions сохранены побайтово после снятия отступов,
+стандартный 5s test timeout не изменён. Каждому сценарию остаются отдельные БД,
+исходные SQL/negative cases и afterEach cleanup. Production код не менялся.
+
+На окончательном коде: materialize ×2 idempotent, 7 известных generated outputs
+(включая server.js/universal-server.js/app.js) записаны и восстановлены по SHA-256.
+Root node --test: 622 passed/0 skipped; check, root audits: exit 0/0 vulnerabilities.
+VK parity и bundle (CI fixture origin, без публикации): exit 0.
+Business full native: 311 passed/0 skipped, typecheck/lint/build/audits: exit 0.
+Playwright cash/CRM 12 + onboarding 4 passed, desktop/mobile; PNG восстановлены.
+Два исходных сбоя не скрыты, thresholds/assertions не ослаблялись.
+Новый GitHub CI будет проверен на обновлённом head перед merge без admin bypass.
+Доступ к classic branch-protection settings через API — 403; applicable rulesets
+endpoint вернул []; наличие/отсутствие classic protection по этому не заявляется.
+
+Артефакты: /tmp/spaceverse-crm-merges-20261018/reader-284.
+Текущий Admin public HTML/health: оба HTTP 200, health ok=true. Это не proof
+версии отдельного сайта. Merge/deploy результаты по exact SHA будут записаны
+следом; подписка/активация Маркета по-прежнему не подтверждены.
