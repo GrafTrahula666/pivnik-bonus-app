@@ -1,6 +1,9 @@
 # PIVNIK Evotor bridge — integration draft
 
-## Unified bonus window (1.0.15/code19, agreed 2026-10-18)
+## Unified bonus window (1.0.16/code20, agreed 2026-10-18)
+
+The bonus window opens with the soft keyboard hidden and focus on the window.
+Tapping a customer-code or points field still allows explicit manual input.
 
 The native payment tile is **PIVNIK — БОНУСЫ**. Open it after «К оплате»,
 scan the customer QR inside this window (or enter the short code), review the

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -48,11 +49,14 @@ public final class RedemptionActivity extends IntegrationActivity {
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         bridge=Bridge.get(this); journal=new RedemptionJournal(this);
         ReceiptDiscountEvent event=ReceiptDiscountEvent.create(getSourceBundle());
         receiptUuid=event==null ? null : event.getReceiptUuid();
         int pad=(int)(20*getResources().getDisplayMetrics().density);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(pad,pad,pad,pad);
+        root.setFocusableInTouchMode(true);
         TextView title=new TextView(this); title.setText("PIVNIK — БОНУСЫ"); title.setTextSize(24); root.addView(title);
         TextView note=new TextView(this); note.setText("Отсканируйте QR клиента здесь. Можно списать баллы или нажать «К оплате» для обычной оплаты и начисления бонусов. Клиент выбирается заново для каждого чека."); root.addView(note);
         customer=new TextView(this); customer.setTextSize(22); customer.setPadding(0,pad,0,pad); root.addView(customer);
@@ -67,6 +71,7 @@ public final class RedemptionActivity extends IntegrationActivity {
         refresh=new Button(this); refresh.setText("Обновить"); refresh.setOnClickListener(v -> load()); root.addView(refresh);
         back=new Button(this); back.setText("К оплате"); back.setOnClickListener(v -> { if (!busy) leaveCheckout(); }); root.addView(back);
         ScrollView scroll=new ScrollView(this); scroll.addView(root); setContentView(scroll);
+        root.requestFocus();
         load();
     }
 

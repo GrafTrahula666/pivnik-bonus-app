@@ -8,6 +8,12 @@ never credit the previous customer.
 
 ## Implementation
 
+- 1.0.16/code20 opens with the keyboard hidden and initial focus on the bonus
+  window, so neither customer-code nor points input steals the checkout screen.
+  Tapping an editable field still allows manual entry; explicit entry resizes
+  the window. Both the Activity and built manifest set the initial keyboard
+  policy. Scanner callbacks, receipt binding, credentials and money are unchanged.
+
 - The existing official receipt-discount tile is renamed; there is one tile.
   `RedemptionActivity` accepts permission-restricted scanner broadcasts only
   while resumed. Manual short-code/QR input uses the same narrow parser and

@@ -48,7 +48,8 @@
         </activity>
 
         <activity android:name=".SettingsActivity" android:exported="false" />
-        <activity android:name=".RedemptionActivity" android:exported="true" />
+        <activity android:name=".RedemptionActivity" android:exported="true"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
 
         <!-- Official receipt-discount integration: native tile beside payment options. -->
         <service android:name=".RedemptionService" android:enabled="true" android:exported="true"

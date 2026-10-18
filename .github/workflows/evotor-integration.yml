@@ -79,7 +79,7 @@ jobs:
           info={'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),
                 'unsignedSha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
-                'version':'1.0.15','versionCode':19,'hardwareVerified':False}
+                'version':'1.0.16','versionCode':20,'hardwareVerified':False}
           (root/'build-provenance.json').write_text(json.dumps(info,indent=2)+'\n')
           print(json.dumps(info))
           PY
@@ -91,7 +91,7 @@ jobs:
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: pivnik-evotor-1.0.15-pr-unsigned-not-for-installation
+          name: pivnik-evotor-1.0.16-pr-unsigned-not-for-installation
           path: |
             evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
             evotor-bridge/app/build/outputs/apk/release/build-provenance.json

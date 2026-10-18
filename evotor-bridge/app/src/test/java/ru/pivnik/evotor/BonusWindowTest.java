@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -122,6 +123,26 @@ public final class BonusWindowTest {
         assertNotNull(field); field.setText("4601234567890");
         button(activity.getWindow().getDecorView(),"Найти клиента").performClick();
         assertTrue(allText(activity.getWindow().getDecorView()).contains("Нужен QR клиента"));
+        assertTrue(replies.isEmpty());
+    }
+
+    @Test @Config(sdk={23,28})
+    public void windowStartsWithoutEditableFocusAndManualCodeRemainsAvailable() throws Exception {
+        RedemptionActivity activity=open();
+        controller.visible(); settle();
+        int mode=activity.getWindow().getAttributes().softInputMode;
+        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN,
+                mode & WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE);
+        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+                mode & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
+        assertNotNull(activity.getCurrentFocus());
+        assertFalse(activity.getCurrentFocus() instanceof EditText);
+        EditText code=edit(activity.getWindow().getDecorView(),"Код клиента PVK-XXXX-XXXX или QR-код");
+        assertTrue(code.isEnabled());
+        assertTrue(code.requestFocus());
+        assertSame(code,activity.getCurrentFocus());
+        code.setText("PVK-AAAA-2222");
+        assertEquals("PVK-AAAA-2222",code.getText().toString());
         assertTrue(replies.isEmpty());
     }
 

@@ -4,6 +4,26 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## SaaS readiness research and CRM scope lifecycle (2026-10-18)
+
+Current source-backed product status, competitor evidence, external publication
+gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,
+`ops/SAAS-COMPETITOR-RESEARCH.md`, `ops/EVOTOR-MARKET-REQUIREMENTS.md`,
+`ops/SAAS-PRODUCT-ROADMAP.md` and `ops/SAAS-ANALYTICS-AI-ARCHITECTURE.md`.
+Marketplace terms remain unverified after official-site HTTP 403; AI is a future
+independent add-on whose architecture is specified, with no adapter implemented
+or external AI calls in this iteration. Neither research
+nor the existing onboarding artifacts mean a commercially activated tenant.
+
+`admin-platform/src/App.tsx` keys the production CRM by actor/company/venue;
+changing scope immediately discards its list, filters, selected customer and
+forms while the next request is pending. `ProductionCRM.tsx` keys its drawer by
+scope/customer and ignores obsolete detail responses. This is a UI lifecycle
+boundary, not a replacement for existing server authorization. Browser fixtures
+in `e2e/crm-scope.spec.ts` reproduce same-company venue and cross-company switches
+and delayed responses; `playwright.evotor.config.ts` runs them on desktop/mobile
+alongside existing cash dashboard checks. No production APIs are called by them.
+
 ## Business venue audit isolation (2026-10-17)
 
 `admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit
@@ -860,7 +880,7 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
-- Unified window (1.0.15/code19, approved 2026-10-18): the native
+- Unified window (1.0.16/code20, approved 2026-10-18): the native
   receipt-discount tile is **PIVNIK — БОНУСЫ**. `RedemptionActivity` receives
   foreground scanner/manual codes in the same window, pins resolve/bind to the
   source receipt UUID, and displays identity independently of quote availability.
@@ -871,6 +891,9 @@ isolation.
   Existing receipt cleanup and exact-UUID persistent binding remain. No server,
   schema, feature flag or monetary-policy change. Native/fiscal acceptance is
   required. Details: `ops/EVOTOR-BONUS-WINDOW-20261018.md`.
+  The 1.0.16 UI fix starts with focus on the window and the soft keyboard hidden;
+  manual customer/points fields remain editable on explicit selection. It does
+  not change scanner callbacks, receipt state, credentials or monetary rules.
 - Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
   `qr/resolve` caller can explicitly request `includeWallet: true`.
   `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
