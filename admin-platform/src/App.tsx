@@ -117,7 +117,7 @@ export default function App(){
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}
 
           {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} onCashView={setCashView} spaceverse={spaceversePanel}/>}
-          {selected&&page==='clients'&&<ProductionCRM venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
+          {selected&&page==='clients'&&<ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
           {selected&&!isTrusted&&page==='loyalty'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppLoyaltyManager venue={selected} session={session}/>:<LoyaltyManager venue={selected} session={session}/>)}

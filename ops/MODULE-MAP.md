@@ -4,6 +4,26 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## SaaS readiness research and CRM scope lifecycle (2026-10-18)
+
+Current source-backed product status, competitor evidence, external publication
+gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,
+`ops/SAAS-COMPETITOR-RESEARCH.md`, `ops/EVOTOR-MARKET-REQUIREMENTS.md`,
+`ops/SAAS-PRODUCT-ROADMAP.md` and `ops/SAAS-ANALYTICS-AI-ARCHITECTURE.md`.
+Marketplace terms remain unverified after official-site HTTP 403; AI is a future
+independent add-on whose architecture is specified, with no adapter implemented
+or external AI calls in this iteration. Neither research
+nor the existing onboarding artifacts mean a commercially activated tenant.
+
+`admin-platform/src/App.tsx` keys the production CRM by actor/company/venue;
+changing scope immediately discards its list, filters, selected customer and
+forms while the next request is pending. `ProductionCRM.tsx` keys its drawer by
+scope/customer and ignores obsolete detail responses. This is a UI lifecycle
+boundary, not a replacement for existing server authorization. Browser fixtures
+in `e2e/crm-scope.spec.ts` reproduce same-company venue and cross-company switches
+and delayed responses; `playwright.evotor.config.ts` runs them on desktop/mobile
+alongside existing cash dashboard checks. No production APIs are called by them.
+
 ## Business venue audit isolation (2026-10-17)
 
 `admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit
