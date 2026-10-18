@@ -14,6 +14,15 @@ requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
 permissions/source are rechecked, and successful access is audited in metadata.
 It works on prepared/inactive drafts and explicitly returns not_provisioned.
 It does not activate a venue, replace the active CRM reader or check a POS/license.
+The separate local directory iteration adds `customer-directory-repository.js`
+with the wallet repository's shared verified-binding SQL and an optional
+collection suffix at the same draft URL (q/limit/offset only). It shares the
+read-only/source-revalidation/audit service and actor rate limit with detail
+reads. `TenantCustomerDirectory.tsx` is gated by the default-off session
+capability inside the existing `VenueOnboarding`; it does not activate a venue.
+`playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
+on three dedicated local native PostgreSQL targets, including disabled mode.
+This iteration is on local `spaceverse/crm-directory-20261018`, not in #284.
 Signed HTTP regression is in `server/tests/tenant-crm-http.spec.ts`, using the
 same seed in PGlite or opt-in native PostgreSQL. The native fixture requires a
 local test database/role, creates dedicated databases, and pins pool clients

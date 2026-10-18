@@ -3,6 +3,7 @@ import { PGlite } from '@electric-sql/pglite'
 import pg from 'pg'
 
 export interface TenantCrmFixtureDatabase {
+  readonly connectionString?:string
   query<Row=Record<string,unknown>>(text:string,params?:unknown[]):Promise<{rows:Row[];affectedRows?:number}>
   exec(text:string):Promise<unknown>
   close():Promise<unknown>
@@ -30,6 +31,7 @@ export async function tenantCrmFixtureDatabase():Promise<TenantCrmFixtureDatabas
   url.pathname='/'+name
   const pool=new pg.Pool({connectionString:url.href,ssl:false,max:2})
   return {
+    connectionString:url.href,
     async query<Row=Record<string,unknown>>(text:string,params?:unknown[]) {
       const result=await pool.query(text,params)
       return {rows:result.rows as Row[],affectedRows:result.rowCount??0}

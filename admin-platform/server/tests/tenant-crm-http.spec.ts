@@ -1,12 +1,11 @@
 // @vitest-environment node
 import http from 'node:http'
-import crypto from 'node:crypto'
-import fs from 'node:fs/promises'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createSpaceverseRuntimeManifest, type SpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
+import { type SpaceverseRuntimeManifest } from '../../../spaceverse-runtime-manifest.js'
 import { config } from '../config.js'
-import { seedOnboardingFixture, fixturePassword } from './onboarding-fixture.js'
-import { tenantCrmFixtureDatabase, type TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
+import {fixturePassword} from './onboarding-fixture.js'
+import {tenantCrmFixture,tenantCrmApplication} from './tenant-crm-fixture.js'
+import { type TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
 
 const state = vi.hoisted(() => ({ metadata: null as TenantCrmFixtureDatabase | null,
   targets: new Map<string, TenantCrmFixtureDatabase>(), queries: [] as string[], readOnly: [] as unknown[], resolutions: 0,
@@ -54,8 +53,7 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
   let server: http.Server | undefined, origin = '', viewerInvite = ''
   const sessions = new Map<string, string>()
   const manifests: SpaceverseRuntimeManifest[] = [], targets: TenantCrmFixtureDatabase[] = []
-  const application = { displayName: 'Synthetic CRM', theme: 'premium-dark' as const,
-    primaryColor: '#73bcd9', secondaryColor: '#172c36', shopEnabled: true, loyaltyEnabled: true }
+  const application=tenantCrmApplication
 
   beforeAll(async () => {
     expect(config.enableTenantCrmReads).toBe(false)
@@ -63,47 +61,10 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
     config.enableTenantCrmReads = true
     config.publicOrigin = 'https://tenant-crm.fixture.invalid'
     config.csrfSecret = 'fixture-only-tenant-crm-secret-1234567890'
-    state.metadata = await seedOnboardingFixture(await tenantCrmFixtureDatabase())
-    const passwordHash = (await state.metadata.query<{ password_hash: string }>('SELECT password_hash FROM admin_accounts WHERE id=11')).rows[0]!.password_hash
-    await state.metadata.query(`INSERT INTO admin_accounts(id,email,display_name,role,password_hash)
-      VALUES(21,'south@fixture.invalid','south','VENUE_ADMIN',$1)`, [passwordHash])
-    await state.metadata.exec("INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES(21,20,'owner')")
-    for (const [index, company] of ['10', '10', '20'].entries()) {
-      const draftId = crypto.randomUUID(), runtimeKey = 'sv-' + draftId.replaceAll('-', '')
-      const venue = (await state.metadata.query<{ id: string }>(`INSERT INTO venues(company_id,code,name,active)
-        VALUES($1,$2,'Synthetic CRM',FALSE) RETURNING id::text`, [company, runtimeKey])).rows[0]!
-      await state.metadata.query(`INSERT INTO admin_onboarding_drafts(id,admin_id,company_id,request_key,initial_hash,data)
-        VALUES($1,1,$2,$3,$4,'{}')`, [draftId, company, crypto.randomUUID(), 'a'.repeat(64)])
-      await state.metadata.query('INSERT INTO admin_onboarding_app_configs(draft_id,tenant_key,config) VALUES($1,$2,$3)',
-        [draftId, runtimeKey, JSON.stringify(application)])
-      await state.metadata.query(`INSERT INTO admin_onboarding_scopes(draft_id,company_id,venue_id,
-        company_created_by_onboarding,draft_revision,application_revision) VALUES($1,$2,$3,FALSE,1,1)`, [draftId, company, venue.id])
-      const manifest = createSpaceverseRuntimeManifest({ draftId, runtimeKey, draftRevision: 1,
-        applicationRevision: 1, scopeRevision: 1, scope: { companyId: company, venueId: venue.id }, config: application })
-      manifests.push(manifest)
-      const db = await tenantCrmFixtureDatabase(); targets.push(db)
-      for (const file of ['017_spaceverse_runtime_binding.sql', '018_spaceverse_runtime_scope_binding.sql'])
-        await db.exec(await fs.readFile(new URL('../../../migrations/' + file, import.meta.url), 'utf8'))
-      await db.exec(`CREATE TABLE users(id BIGINT PRIMARY KEY,username TEXT,first_name TEXT,last_name TEXT,photo_url TEXT,
-        role TEXT DEFAULT 'client',deleted_at TIMESTAMPTZ,merged_into_user_id BIGINT);
-        CREATE TABLE wallets(user_id BIGINT PRIMARY KEY REFERENCES users(id),balance BIGINT,updated_at TIMESTAMPTZ DEFAULT NOW());
-        INSERT INTO users(id,first_name) VALUES(1,'Owned'),(2,'Historical'),(3,'No wallet'),(4,'Deleted'),(5,'Staff'),(6,'Zero'),(7,'Large');
-        UPDATE users SET deleted_at=NOW() WHERE id=4; UPDATE users SET role='staff' WHERE id=5;`)
-      await db.exec(await fs.readFile(new URL('../../../migrations/019_spaceverse_customer_ownership.sql', import.meta.url), 'utf8'))
-      await db.query(`INSERT INTO spaceverse_runtime_binding(singleton,runtime_key,manifest_sha256,manifest_revision,
-        company_id,venue_id,isolation_policy,status) VALUES(TRUE,$1,$2,1,$3,$4,'dedicated_database','prepared')`,
-      [runtimeKey, manifest.manifestSha256, company, venue.id])
-      for (const id of [1, 3, 4, 5, 6, 7]) await db.query(`INSERT INTO spaceverse_customer_ownership(user_id,runtime_key,company_id,venue_id)
-        VALUES($1,$2,$3,$4)`, [id, runtimeKey, company, venue.id])
-      await db.query('INSERT INTO wallets(user_id,balance) VALUES(1,$1),(2,999),(6,0),(7,9007199254740993)', [String(101 + index)])
-      state.targets.set(runtimeKey, db)
-    }
-    viewerInvite = crypto.randomUUID()
-    const first = manifests[0]!
-    await state.metadata.query(`INSERT INTO admin_onboarding_invites(id,draft_id,token_hash,created_by_admin_id,expires_at)
-      VALUES($1,$2,$3,1,NOW()+INTERVAL '1 day')`, [viewerInvite, first.source.draftId, 'b'.repeat(64)])
-    await state.metadata.query(`INSERT INTO admin_onboarding_access(invitation_id,admin_id,company_id,venue_id,draft_id,role)
-      VALUES($1,12,10,$2,$3,'manager')`, [viewerInvite, first.scope.venueId, first.source.draftId])
+    const fixture=await tenantCrmFixture()
+    state.metadata=fixture.metadata;viewerInvite=fixture.viewerInvite
+    manifests.push(...fixture.manifests);targets.push(...fixture.targets)
+    for(const [key,db] of fixture.registry)state.targets.set(key,db)
     const { handleApi, sendApiError } = await import('../router.js')
     server = http.createServer((req, res) => { void handleApi(req, res, new URL(req.url!, origin)).catch(error => sendApiError(res, error, req)) })
     await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
@@ -220,13 +181,113 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
     expect((await request('owner', path(0, '0'))).status).toBe(429)
     expect(state.resolutions).toBe(0)
   })
+  const directory=(index=0,query='')=>path(index).slice(0,-2)+query
+  it('requires a session and the feature flag for directory reads',async()=>{
+    expect((await request(null,directory())).status).toBe(401)
+    config.enableTenantCrmReads=false
+    expect((await request('owner',directory())).status).toBe(403)
+    const session=await request('owner','/api/admin/auth/session')
+    expect((await session.json()).capabilities.tenantCrmReads).toBe(false)
+    expect(state.resolutions).toBe(0)
+  })
+  it('paginates all 350 matching customers without truncation or duplicates',async()=>{
+    const ids:string[]=[]
+    for(let offset=0;offset<350;offset+=100){
+      const response=await request('owner',directory(0,'?q=Pagination%20fixture&limit=100&offset='+offset))
+      expect(response.status).toBe(200)
+      const body=await response.json()
+      expect(body).toMatchObject({q:'Pagination fixture',total:'350',limit:100,offset,hasMore:offset<300,
+        scope:manifests[0]!.scope,readStatus:'verified',runtimeStatus:'not_provisioned'})
+      ids.push(...body.items.map((item:{customer:{id:string}})=>item.customer.id))
+    }
+    expect(ids).toHaveLength(350);expect(new Set(ids).size).toBe(350)
+    expect(ids[0]).toBe('1000');expect(ids.at(-1)).toBe('1349')
+  })
+  it('supports literal wildcard, Cyrillic and ID search without SQL injection',async()=>{
+    for(const q of ['Анна','_100%','8']){
+      const response=await request('owner',directory(0,'?q='+encodeURIComponent(q)))
+      expect(response.status).toBe(200)
+      const body=await response.json();expect(body.items.some((row:{customer:{id:string}})=>row.customer.id==='8')).toBe(true)
+      if(q!=='8')expect(body).toMatchObject({total:'1'})
+    }
+    const injection=await request('owner',directory(0,'?q='+encodeURIComponent("' OR TRUE --")))
+    expect(await injection.json()).toMatchObject({total:'0',items:[],hasMore:false})
+  })
+  it('keeps empty results, missing wallets, zero and exact bigint balances distinct',async()=>{
+    const response=await request('owner',directory(0,'?limit=100'))
+    expect(response.status).toBe(200)
+    const rows=(await response.json()).items as {customer:{id:string};wallet:{balance:string}|null}[]
+    expect(rows.find(row=>row.customer.id==='3')?.wallet).toBeNull()
+    expect(rows.find(row=>row.customer.id==='6')?.wallet?.balance).toBe('0')
+    expect(rows.find(row=>row.customer.id==='7')?.wallet?.balance).toBe('9007199254740993')
+    expect(rows.some(row=>['2','4','5'].includes(row.customer.id))).toBe(false)
+    expect(await (await request('owner',directory(0,'?q=Definitely%20not%20found'))).json()).toMatchObject({total:'0',items:[],hasMore:false,readStatus:'verified'})
+  })
+  it('isolates directory reads across two companies and two venues, including invited managers',async()=>{
+    for(const [index,who] of ['owner','owner','south'].entries()){
+      const response=await request(who,directory(index,'?q=Owned'))
+      expect(response.status).toBe(200)
+      expect((await response.json()).items[0].wallet.balance).toBe(String(101+index))
+    }
+    expect((await request('owner',directory(2))).status).toBe(404)
+    expect((await request('other-root',directory())).status).toBe(404)
+    expect((await request('trusted',directory())).status).toBe(200)
+    expect((await request('trusted',directory(1))).status).toBe(404)
+    await state.metadata!.query("UPDATE admin_onboarding_access SET role='viewer' WHERE invitation_id=$1",[viewerInvite])
+    expect((await request('trusted',directory())).status).toBe(403)
+  })
+  it('rejects scope, duplicate and noncanonical pagination parameters before target resolution',async()=>{
+    for(const query of ['companyId=20','venueId=20','runtimeKey=foreign','databaseUrl=postgres://fixture.invalid',
+      'q=a&q=b','limit=1&limit=2','offset=0&offset=1','limit=0','limit=101','limit=01','limit=1e2','limit=-1',
+      'offset=1000001','offset=00','offset=0.5','q='+('x'.repeat(101))])
+      expect((await request('owner',directory(0,'?'+query))).status).toBe(400)
+    expect(state.resolutions).toBe(0)
+  })
+  it('refuses directory mutations and missing or wrongly registered target databases',async()=>{
+    expect((await request('owner',directory(),'POST')).status).toBe(405)
+    state.targets.clear()
+    expect((await request('owner',directory())).status).toBe(409)
+    state.targets.set(manifests[0]!.runtimeKey,targets[1]!)
+    const mismatch=await request('owner',directory());expect(mismatch.status).toBe(503)
+    expect(JSON.stringify(await mismatch.json())).not.toContain('Owned')
+  })
+  it('suppresses directory PII after an access revocation during the target read',async()=>{
+    state.afterRead=async()=>{await state.metadata!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=11")}
+    const response=await request('owner',directory());expect(response.status).toBe(403)
+    expect(JSON.stringify(await response.json())).not.toContain('Owned')
+    expect(state.queries.at(-1)).toBe('ROLLBACK')
+  })
+  it('suppresses directory PII when the frozen manifest changes during the read',async()=>{
+    state.afterRead=async()=>{await state.metadata!.query(`UPDATE admin_onboarding_app_configs SET config=jsonb_set(config,'{displayName}','"Changed"') WHERE draft_id=$1`,[manifests[0]!.source.draftId])}
+    const response=await request('owner',directory());expect(response.status).toBe(503)
+    expect(JSON.stringify(await response.json())).not.toContain('Owned')
+  })
+  it('fails closed on directory audit errors and does not log names, search text or balances',async()=>{
+    state.failAudit=true
+    const failed=await request('owner',directory());expect(failed.status).toBe(503)
+    expect(JSON.stringify(await failed.json())).not.toContain('Owned')
+    state.failAudit=false
+    expect((await request('owner',directory(0,'?q=Owned'))).status).toBe(200)
+    const audit=(await state.metadata!.query(`SELECT metadata,after_value FROM admin_audit_log
+      WHERE action='crm.customer_directory_read' ORDER BY id DESC LIMIT 1`)).rows[0]
+    expect(audit).toEqual({metadata:{purpose:'onboarding_read_diagnostic'},after_value:null})
+  })
+  it('shares the actor rate limit between directory and individual customer reads',async()=>{
+    for(let index=0;index<15;index++){
+      expect((await request('owner',directory(0,'?limit=0'))).status).toBe(400)
+      expect((await request('owner',path(0,'0'))).status).toBe(400)
+    }
+    expect((await request('owner',directory())).status).toBe(429)
+    expect(state.resolutions).toBe(0)
+  })
   it('uses a read-only snapshot, rejects mutations, and keeps metadata legacy balances unchanged', async () => {
     expect((await request('owner', path(), 'POST')).status).toBe(405)
     expect((await request('owner')).status).toBe(200)
     expect(state.queries[0]).toBe('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
     expect(state.queries.at(-1)).toBe('COMMIT')
     expect(state.readOnly).toEqual(['on'])
-    expect(state.queries.every(text => /^(BEGIN|SELECT|WITH|COMMIT|ROLLBACK)\b/.test(text))).toBe(true)
+    expect(state.queries[1]).toBe("SET LOCAL statement_timeout='5s'")
+    expect(state.queries.every(text => text==="SET LOCAL statement_timeout='5s'"||/^(BEGIN|SELECT|WITH|COMMIT|ROLLBACK)\b/.test(text))).toBe(true)
     expect((await state.metadata!.query('SELECT balance::text FROM wallets WHERE id=1')).rows).toEqual([{ balance: '100' }])
     const audit = (await state.metadata!.query(`SELECT company_id::text,venue_id::text,metadata,after_value
       FROM admin_audit_log WHERE action='crm.customer_read' ORDER BY id DESC LIMIT 1`)).rows[0]

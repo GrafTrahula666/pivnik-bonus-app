@@ -3,7 +3,7 @@
 FROM node:22-bookworm-slim
 
 WORKDIR /app
-COPY package.json platform-core.js qr-resolver.js spaceverse-runtime-manifest.js spaceverse-runtime-manifest.d.ts customer-wallet-repository.d.ts ./
+COPY package.json platform-core.js qr-resolver.js spaceverse-runtime-manifest.js spaceverse-runtime-manifest.d.ts customer-wallet-repository.d.ts customer-directory-repository.d.ts ./
 COPY *.js package-lock.json spaceverse-runtime-release.d.ts spaceverse-runtime-image.d.ts ./
 COPY scripts/spaceverse-runtime-container-entrypoint.mjs ./scripts/
 COPY pos ./pos

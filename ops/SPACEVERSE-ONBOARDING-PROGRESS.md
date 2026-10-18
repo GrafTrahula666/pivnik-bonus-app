@@ -1343,6 +1343,88 @@ Playwright 12 + onboarding 4 passed. Свежие logs/gates в
 /tmp/spaceverse-crm-release-verification-20261018; повторно перезаписанные
 собственным E2E onboarding PNG восстановлены. `git diff --check` passed.
 
+### 2026-10-18 — следующий срез CRM, отдельная локальная ветка
+
+`spaceverse/crm-directory-20261018`, основана на head #284. Сам #284 остаётся
+Draft `9f34d2d1f40b448fee73fb6ef9228bc650018f6f`; оба GitHub checks SUCCESS,
+merge не выполнен: отдельное разрешение владельца ещё ожидается. Второй PR
+не открыт, текущий #284 новым scope не расширялся. Локальная работа продолжается.
+
+Сделано: коллекция клиентов с буквальным поиском и серверной пагинацией;
+общий binding CTE с исходным wallet repository; общий verified-source/read-only/
+audit adapter, 5s statement timeout, прежний actor rate limit. Список, поиск,
+обновление и карточка встроены в существующий VenueOnboarding, включаются
+только прежним default-off CRM flag через session capability и owner/manager
+access. Нет новых tenant-моделей, миграций, активированных точек или касс.
+UI не предлагает функции Telegram/VK; источники компаний/точек не смешиваются.
+
+Лично выполнено на этой ветке:
+- materialize ×2: idempotent. Чистый materialize вновь меняет 7 прежних файлов,
+  включая server.js, universal-server.js, app.js. Patch и SHA-256 до/после в
+  /tmp/spaceverse-crm-directory-verification-20261018; восстановлены ровно эти
+  собственные generated outputs, каждый hash совпал. Патч-цепочка не менялась.
+- node --test: **625 passed, 0 failed/skipped**; npm run check, npm audit и
+  npm audit --omit=dev --audit-level=high — exit 0, vulnerabilities 0.
+- npm test -- --maxWorkers=1 с двумя локальными native PG test URL:
+  **322 passed, 0 skipped**, 32 suites. Из них 30 signed-HTTP CRM tests:
+  350 matching клиентов без truncation/дубликатов, literal Cyrillic/%/_ search,
+  null/0/bigint, две компании/две точки, revoked grant/manifest race,
+  чужая binding, закрытый audit failure, request scope и rate limit.
+- npx playwright test -c playwright.tenant-crm.config.ts на собственном
+  PostgreSQL: **6 passed**, desktop/mobile, built App + signed login + настоящий
+  frozen registry/pg pools/SQL. Поиск, страницы, точный баланс, смена точки и
+  аккаунта, задержанный настоящий HTTP-ответ. API/SQL не подменены.
+- SPACEVERSE_E2E_CRM_READS=false с той же командой: **2 passed**, desktop/mobile;
+  UI отсутствует, автоматического чтения нет, серверный endpoint даёт 403.
+- changed TS/TSX/E2E files ESLint — exit 0. Общая image сборка/проверки следующего
+  среза продолжаются; результат image #284 нельзя приписывать новой ветке.
+
+Неудачные попытки не скрыты: первая E2E fixture пыталась менять frozen registry
+и была отклонена. Исправлена на отдельный seed process и настоящий реестр.
+Следующий startup поймал ошибку trailing slash в test-only static root (404);
+исправлено path.resolve. Два E2E затем ждали скрытую кнопку logout: исправлен
+сценарий открытия штатного profile menu; добавлены недостающие synthetic
+metadata tables для platform summary. После исправлений все 6+2 прошли.
+Production код реестра/меню/схемы ради тестов не менялся, assertions не ослаблены.
+
+Осталось: отдельный PR этого среза после разрешённого merge #284; активация
+canonical venue без обхода текущего prepared-only guard; полный самостоятельный
+путь установки/лицензии/провайдера, backup/restore/TLS/load gates и Market
+модерация. Эти проверки не означают готовность коммерческого релиза.
+
+Финальная проверка локального directory-среза: Docker image
+`sha256:d1e9dd6365cd041ba35ebbf4c0b38fffe6d66c9138009d98b493b9e9c4254cd7`
+собран с текущим production Dockerfile (только временный public CA secret mount
+для npm ci, strict TLS). Внутри typecheck/lint, **302 passed +20 native skipped**,
+security **170 passed**, build — exit 0. Отдельный native full suite выше выполняет
+все **322 без skip**. Real-image production-mode startup/login/default-off и
+opt-in collection/detail smoke с настоящим registry/PG — оба exit 0: 350 matching
+клиентов четырьмя страницами, literal search, точные отдельные балансы, manager/
+company/venue boundaries, 0/null/bigint и запрет scope. Проверено отсутствие
+build CA secret и build-only worker ENV в runtime image. Собственные image API
+containers остановлены; локальный test PostgreSQL сохранён.
+
+В финальные 6 native built-panel E2E добавлен транспортный сбой обновления:
+старые данные очищаются, ошибка не становится пустым успешным списком,
+повторное обновление восстанавливает чтение. Первая попытка вынести это в
+дополнительные независимые E2E честно упёрлась в действующий login rate limit
+6/15min на fixture root. Проверка объединена с тем же пользовательским сценарием;
+лимиты не отключались и не ослаблялись. Повтор: **6 passed**, disabled suite
+**2 passed**; прежние cash/CRM scope E2E **12 passed**, onboarding **4 passed**.
+Последние ESLint и git diff --check — exit 0; собственные перезаписанные PNG
+восстановлены байтово. Все логи в /tmp/spaceverse-crm-directory-verification-20261018.
+
+Cloud setup: helper /workspace/spaceverse-dev-tools/start-native-postgres.py
+проверен дважды, реальный SELECT 1 прошёл. Обновлён start_skill в черновике
+настроек среды; install_script/network/credentials не менялись. Для будущего
+snapshot пользователь должен сохранить и опубликовать настройки среды;
+восстановление в новой задаче ещё не проверено, это не production publication.
+
+Подготовлена отдельная техническая записка следующего activation-среза вне
+репозитория, чтобы не расширять этот change. Официальные public Evotor SDK
+обновлялись в 2018; архив documentation-api — 2017. Они не подтверждают
+актуальный install/subscription/revoke contract 2026 и не снимают Market gate.
+
 ### 2026-10-18 — разрешённое объединение, финальная проверка #284
 
 Владелец явно разрешил merge проверенных подготовленных SPACEVERSE изменений;
