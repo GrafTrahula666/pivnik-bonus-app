@@ -1491,3 +1491,76 @@ CI/workflow files не менялись. Readiness сохраняется отд
 коммитом/веткой по тому же правилу. По свежему gh pr list единственный открытый
 SPACEVERSE Draft — **#284**; merge и новая публикация не выполняются без ответа
 на уже заданный вопрос владельцу.
+
+### 2026-10-18 — TLS PostgreSQL, самостоятельный следующий срез
+
+Режим: автономная разработка SPACEVERSE в отдельной ветке
+`spaceverse/crm-database-tls-20261018`, база `3009662` readiness. Main остаётся
+`abbe089`; #284 — OPEN/Draft, head `9f34d2d`, merge CLEAN. Чужие PR не менялись.
+Решается ранее записанный R05; production DSN/CA не исследовались и настройки
+Railway/CI, живые БД, устройства, Telegram/VK не менялись. Дополнительного PR нет.
+
+Лично реализована общая `server/database-transport.ts` политика для трёх Admin
+pools и существующего tenant database registry. Внешний адрес требует проверки
+цепочки и имени; IP проверяется явно. Local/private исключения определяются
+только parsed host, не строкой пароля или имени базы. URL TLS overrides удалены
+перед pg parser; insecure/повторные/противоречивые параметры, query host/credential
+overrides, encoded hostname и certificate file paths отвергаются до pool creation.
+Дополнительные CA — стандартный Node trust через NODE_EXTRA_CA_CERTS, без новых
+настроек пользователя в UI. Read-only reader option, pool limits и default-off
+write/CRM flags сохранены. Миграций и второй tenant-модели нет.
+
+Проверки последнего неизменяемого кода, команды и результаты:
+
+- `npm run materialize` дважды: idempotent. Чистый materialize снова дал прежний
+  diff по achievements.js, app.js, index.html, red-cosmos-v2.js,
+  scripts/v22-data-audit-and-repair.mjs, server.js и universal-server.js.
+  Сохранены байты/SHA-256; root gates выполнены на materialized состоянии,
+  собственные generated outputs восстановлены и побайтово проверены. Патч-цепочка
+  не исправлялась молча.
+- Root `node --test`: **625 passed, 0 failed/skipped**; `npm run check`,
+  `npm audit`, `npm audit --omit=dev --audit-level=high`: exit 0, vulnerabilities 0.
+- Business `npm test -- --maxWorkers=1` с обоими dedicated native test URL:
+  **395 passed, 0 failed/skipped, 35 suites**. `npm run typecheck`, `npm run lint`,
+  `npm run build`, оба audit: exit 0. У lint прежние 12 warnings/0 errors;
+  build сохраняет прежнее предупреждение размера JS chunk.
+- `node scripts/verify-database-tls.mjs` после API build: **6 passed** настоящих
+  TLS handshake, SSLRequest/direct ALPN, доверенный/недоверенный CA, чужое имя/IP.
+  Ошибочные сертификаты не достигли startup message. Стенд синтетический,
+  полноценный PostgreSQL login этим скриптом не заявляется.
+- `python3 /tmp/spaceverse-crm-database-tls-verification-20261018/native-tls-proof.py`:
+  **3 passed** на отдельном собственном PostgreSQL 16: login + `pg_stat_ssl`
+  SELECT с TLS 1.3, UNABLE_TO_VERIFY_LEAF_SIGNATURE без CA и
+  ERR_TLS_CERT_ALTNAME_INVALID при неверном имени. Контейнер с проверенным label
+  остановлен, тестовые данные сохранены. Это не production TLS proof.
+- `npx playwright test -c playwright.tenant-crm.config.ts`: **6 passed**;
+  с SPACEVERSE_E2E_CRM_READS=false — **2 passed**. `playwright.evotor.config.ts`:
+  **12 passed**; `playwright.onboarding.config.ts`: **4 passed**. Итого **24 E2E**,
+  desktop/mobile, реальные signed sessions/PG/registry там, где предусмотрены
+  fixtures. Собственные перезаписанные PNG восстановлены с проверкой SHA-256.
+- Admin Docker build: typecheck/lint, **375 passed +20 native skipped**,
+  security **174 passed**, build — exit 0. Host/native прогон выше выполняет
+  все **395 без skip**. Image:
+  `sha256:6433143f58159be5a2320fae23519509b862e5994b12211515b6b975e9b7906d`.
+- Real-image production-mode HTTP smoke disabled/enabled: оба exit 0, startup/
+  login/SQL/registry, directory/readiness, scope boundaries, no client overrides.
+  В vfs среде использован один собственный контейнер и два последовательных новых
+  API процесса для экономии диска; оба процесса и контейнер остановлены.
+  Build CA secret/worker ENV в runtime отсутствуют. Никаких live provider calls.
+
+Первый полный Business прогон пересёкся с моей последней encoded-host правкой:
+393 passed/2 failed, импортированный helper ещё был старым. Результат сохранён,
+не объявлен зелёным. После фиксации source snapshot полный повтор — 395/0/0;
+хеши production/test source сверены перед image smoke. Первый native TLS setup
+остановился на unsupported host chown (EINVAL); права синтетического ключа
+подготовлены внутри своего тестового контейнера, затем все 3 cases прошли.
+Лимиты, assertions, timeouts и TLS verification не ослаблялись.
+
+Контракт: `ops/SPACEVERSE-DATABASE-TLS-RUNBOOK.md`, MODULE-MAP и audit R05 обновлены.
+Артефакты: `/tmp/spaceverse-crm-database-tls-verification-20261018`:
+gate-results.json, followup-results.json, native-tls-results.json,
+image-smoke-results.json, source hashes и полные логи, включая первый сбой.
+Для будущего production выпуска ещё обязательна разрешённая проверка реальных
+DSN/CA/staging/rollback; локальные успехи её не заменяют. По критическому пути
+ожидаются прежние merge #284 approval и актуальные App ID/Market contract;
+subscription/activation пока pending, коммерческий релиз не заявляется готовым.

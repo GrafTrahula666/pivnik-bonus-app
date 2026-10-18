@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import pg, { type PoolConfig, type Pool as PgPool } from 'pg'
 import { HttpError } from './types.js'
+import { databaseConnectionOptions } from './database-transport.js'
 
 const { Pool } = pg
 const runtimeKeyPattern=/^sv-[0-9a-f]{32}$/
@@ -64,12 +65,6 @@ function parseEntries(raw:string):Map<string,RegistryEntry> {
   return entries
 }
 
-function sslFor(raw:string):false|{rejectUnauthorized:true} {
-  const host=new URL(raw).hostname.toLowerCase()
-  return host==='localhost'||host==='127.0.0.1'||host.endsWith('.railway.internal')
-    ? false:{rejectUnauthorized:true}
-}
-
 export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryOptions={}) {
   const env=options.env??process.env
   const entries=parseEntries(String(env.ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON??''))
@@ -87,6 +82,8 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
     const url=String(env[entry.credentialEnv]??'').trim()
     if(!url) return null
     const identity=databaseIdentity(url)
+    // Validate transport during startup validation too, before any pool opens.
+    try {databaseConnectionOptions(url)}catch {throw invalidRegistry()}
     if(reservedIdentities().has(identity)) throw invalidRegistry()
     return {url,identity,fingerprint:crypto.createHash('sha256').update(url).digest('hex')}
   }
@@ -114,7 +111,7 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
     const existing=pools.get(runtimeKey)
     if(existing?.fingerprint===current.fingerprint) return existing.pool
     const target=poolFactory({
-      connectionString:current.url,ssl:sslFor(current.url),max:2,
+      ...databaseConnectionOptions(current.url),max:2,
       idleTimeoutMillis:30_000,connectionTimeoutMillis:10_000,
       application_name:'spaceverse-onboarding-provisioner',
     })

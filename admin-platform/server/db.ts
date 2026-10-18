@@ -1,23 +1,21 @@
 import pg from 'pg'
 import { config } from './config.js'
+import { databaseConnectionOptions } from './database-transport.js'
 const { Pool } = pg
-const ssl = (url:string): false | {rejectUnauthorized:false} =>
-  !url || url.includes('localhost') || url.includes('127.0.0.1') || url.includes('railway.internal')
-    ? false : {rejectUnauthorized:false}
 
 export const pool = new Pool({
-  connectionString: config.databaseUrl, ssl: ssl(config.databaseUrl), max: 6,
+  ...databaseConnectionOptions(config.databaseUrl), max: 6,
   idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000,
   application_name: 'codex-admin-metadata',
 })
 export const readPool = new Pool({
-  connectionString: config.readDatabaseUrl, ssl: ssl(config.readDatabaseUrl), max: 8,
+  ...databaseConnectionOptions(config.readDatabaseUrl), max: 8,
   idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000,
   application_name: 'codex-admin-production-read',
   options: '-c default_transaction_read_only=on',
 })
 export const writePool = config.productionWriteDatabaseUrl ? new Pool({
-  connectionString: config.productionWriteDatabaseUrl, ssl: ssl(config.productionWriteDatabaseUrl), max: 4,
+  ...databaseConnectionOptions(config.productionWriteDatabaseUrl), max: 4,
   idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000,
   application_name: 'codex-admin-production-write',
 }) : null

@@ -6,6 +6,21 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 
 ## SaaS readiness research and CRM scope lifecycle (2026-10-18)
 
+The separate `spaceverse/crm-database-tls-20261018` slice addresses the external
+Admin pool certificate-validation risk with `server/database-transport.ts`.
+All three pools in `db.ts` and the existing onboarding target registry share
+this policy: exact private/local host exceptions, verified public TLS, explicit
+IP identity checking, and removal of pg URL TLS overrides before pool creation.
+Unsafe query host/credential/TLS/file overrides fail closed without logging
+credentials. Existing read-only options, scope guards and default-off writes
+remain. `server/tests/database-transport.spec.ts`, `database-pools.spec.ts` and
+registry tests inspect the actual pg parser; `scripts/verify-database-tls.mjs`
+uses synthetic loopback certificates and real pg TLS handshakes, not a live DB.
+An additional isolated native PostgreSQL 16 smoke verifies authenticated TLS 1.3
+and CA/hostname rejection; its owned container is stopped after the proof.
+See `ops/SPACEVERSE-DATABASE-TLS-RUNBOOK.md`; actual production CA/connectivity
+and deployment approval remain external gates.
+
 The next default-off Admin diagnostic is documented in
 `ops/SPACEVERSE-TENANT-CRM-READ-RUNBOOK.md`: `server/tenant-crm-read.ts` composes
 the existing customer-wallet repository, onboarding access/runtime source and
