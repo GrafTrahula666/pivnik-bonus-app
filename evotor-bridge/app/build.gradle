@@ -11,8 +11,8 @@ android {
         // integration-library v0.6.40: minSdkVersion 23, targetSdkVersion 30.
         minSdk 23
         targetSdk 30
-        versionCode 17
-        versionName '1.0.13'
+        versionCode 19
+        versionName '1.0.15'
         // app_uuid issued for "PIVNIK для Эвотора" in the Evotor developer account (not a secret:
         // it ships in the manifest). Override with -PevotorAppUuid=... or EVOTOR_APP_UUID.
         manifestPlaceholders = [
@@ -73,4 +73,5 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     // Real org.json for JVM unit tests (Android's copy is a stub off-device).
     testImplementation 'org.json:json:20240303'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
 }

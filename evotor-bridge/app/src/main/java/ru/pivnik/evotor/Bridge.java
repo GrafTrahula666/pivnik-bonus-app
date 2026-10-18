@@ -55,15 +55,16 @@ final class Bridge {
     }
 
     void onPivnikCodeScanned(final String payload, final String expectedReceipt, final ScanCallback callback) {
+        final BindingPolicy.ScanTicket scanTicket = policy.beginScan(expectedReceipt);
         worker.execute(new Runnable() {
             @Override public void run() {
                 String message;
                 try {
-                    message = handleScan(payload, expectedReceipt);
+                    message = handleScan(payload, expectedReceipt, scanTicket);
                 } catch (RuntimeException error) {
                     Log.w(TAG, "scan handling failed; sale continues without PIVNIK");
                     message = IndicatorText.forFailure(ResolveResult.Kind.UNAVAILABLE);
-                }
+                } finally { policy.endScan(scanTicket); }
                 final String result = message;
                 if (callback == null) notifyBartender(result);
                 else main.post(new Runnable() {
@@ -73,11 +74,13 @@ final class Bridge {
         });
     }
 
-    private String handleScan(String payload, String expectedReceipt) {
+    private String handleScan(String payload, String expectedReceipt, BindingPolicy.ScanTicket scanTicket) {
+        if (!policy.isScanCurrent(scanTicket)) return "Чек изменился. Отсканируйте QR клиента в новом чеке.";
         Receipt.Header scanned = ReceiptApi.getReceiptHeader(app, Receipt.Type.SELL);
         if (scanned == null) {
             return IndicatorText.noOpenReceipt();
         }
+        if (!policy.acceptScanReceipt(scanTicket, scanned.getUuid())) return "Чек изменился. Выберите клиента в новом чеке.";
         if (expectedReceipt != null && !expectedReceipt.equals(scanned.getUuid())) {
             return "Чек изменился. Отсканируйте QR клиента заново в нужном чеке.";
         }
@@ -97,7 +100,7 @@ final class Bridge {
             return "В чеке уже есть списание. Сначала отмените его на экране оплаты, затем смените клиента.";
         }
         BindingPolicy.Outcome outcome = policy.onCustomerResolved(
-                scanned.getUuid(), current == null ? null : current.getUuid(), result.client, System.currentTimeMillis());
+                scanned.getUuid(), current == null ? null : current.getUuid(), result.client, System.currentTimeMillis(), scanTicket);
         if (outcome == BindingPolicy.Outcome.BOUND || outcome == BindingPolicy.Outcome.REPLACED
                 || outcome == BindingPolicy.Outcome.ALREADY_BOUND) {
             // The server accrues only for receipts it was told about, so the bind must land.
@@ -108,7 +111,7 @@ final class Bridge {
                 return IndicatorText.bindFailed(bound.kind);
             }
             Receipt.Header afterBind = ReceiptApi.getReceiptHeader(app, Receipt.Type.SELL);
-            if (afterBind == null || !scanned.getUuid().equals(afterBind.getUuid())) {
+            if (afterBind == null || !scanned.getUuid().equals(afterBind.getUuid()) || !policy.isScanCurrent(scanTicket)) {
                 policy.onReceiptFinished(scanned.getUuid());
                 return IndicatorText.forBinding(BindingPolicy.Outcome.RECEIPT_CHANGED, result.client, "");
             }

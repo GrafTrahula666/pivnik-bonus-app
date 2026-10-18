@@ -3,6 +3,8 @@ package ru.pivnik.evotor.core;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -98,6 +100,67 @@ public class BindingPolicyTest {
         policy.onReceiptFinished(RECEIPT_A);
         assertNull(policy.bindingFor(RECEIPT_B, 2_000));
         assertNull(policy.storedBinding());
+    }
+
+    @Test public void lateLookupCannotResurrectClosedOrCancelledReceiptEvenWithStaleHeader() {
+        BindingPolicy.ScanTicket scan = policy.beginScan(RECEIPT_A);
+        assertTrue(policy.acceptScanReceipt(scan, RECEIPT_A));
+        policy.onReceiptFinished(RECEIPT_A);
+        assertEquals(BindingPolicy.Outcome.RECEIPT_CHANGED,
+                policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, KIRILL, 1000, scan));
+        assertNull(policy.storedBinding());
+        policy.endScan(scan);
+    }
+
+    @Test public void nextCustomerWithoutAnAppNeverInheritsPreviousCustomerOrPendingReplacement() {
+        policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, KIRILL, 1000);
+        policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, ANNA, 1100);
+        policy.onReceiptFinished(RECEIPT_A);
+        policy.onReceiptOpened(RECEIPT_B);
+        assertNull(policy.bindingFor(RECEIPT_B, 2000));
+        assertNull(policy.storedBinding());
+        assertNull(store.loadPendingReplacement());
+        policy.onReceiptFinished(RECEIPT_B);
+        assertNull(policy.storedBinding());
+    }
+
+    @Test public void newReceiptInvalidatesOldLookupButLateOldCloseDoesNotInvalidateNewLookup() {
+        BindingPolicy.ScanTicket oldScan = policy.beginScan(RECEIPT_A);
+        policy.onReceiptOpened(RECEIPT_B);
+        BindingPolicy.ScanTicket nextScan = policy.beginScan(RECEIPT_B);
+        policy.onReceiptFinished(RECEIPT_A);
+        assertFalse(policy.isScanCurrent(oldScan));
+        assertTrue(policy.acceptScanReceipt(nextScan, RECEIPT_B));
+        assertEquals(BindingPolicy.Outcome.BOUND,
+                policy.onCustomerResolved(RECEIPT_B, RECEIPT_B, ANNA, 2000, nextScan));
+        policy.endScan(oldScan); policy.endScan(nextScan);
+        assertEquals("202", policy.bindingFor(RECEIPT_B, 2001).userId);
+    }
+
+    @Test public void queuedLauncherScanCannotMoveToAReceiptOpenedAfterAdmission() {
+        BindingPolicy.ScanTicket queued = policy.beginScan(null);
+        policy.onReceiptOpened(RECEIPT_B);
+        assertFalse(policy.acceptScanReceipt(queued, RECEIPT_B));
+        policy.endScan(queued);
+        assertNull(policy.storedBinding());
+    }
+
+    @Test public void restartAndMissedCloseStillCannotReturnOldCustomerForNextReceipt() {
+        policy.onCustomerResolved(RECEIPT_A, RECEIPT_A, KIRILL, 1000);
+        BindingPolicy restarted = new BindingPolicy(store);
+        assertNull(restarted.bindingFor(RECEIPT_B, 2000));
+        restarted.onReceiptOpened(RECEIPT_B);
+        assertNull(restarted.storedBinding());
+        assertNull(restarted.bindingFor(RECEIPT_B, 2000));
+    }
+
+    @Test public void finishedOrForeignTicketCannotBeReused() {
+        BindingPolicy.ScanTicket scan = policy.beginScan(RECEIPT_A);
+        assertFalse(policy.acceptScanReceipt(scan, RECEIPT_B));
+        BindingPolicy other = new BindingPolicy(new MemoryBindingStore());
+        assertFalse(other.acceptScanReceipt(scan, RECEIPT_A));
+        policy.endScan(scan);
+        assertFalse(policy.acceptScanReceipt(scan, RECEIPT_A));
     }
 
     @Test

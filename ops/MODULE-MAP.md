@@ -860,6 +860,17 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Unified window (1.0.15/code19, approved 2026-10-18): the native
+  receipt-discount tile is **PIVNIK — БОНУСЫ**. `RedemptionActivity` receives
+  foreground scanner/manual codes in the same window, pins resolve/bind to the
+  source receipt UUID, and displays identity independently of quote availability.
+  Return without redemption uses `IntegrationExit`/KEY_SKIP, preserving discounts,
+  positions and payments. The failed product-barcode service/card are removed.
+  `BindingPolicy` tracks only live scan tickets, invalidates them on that receipt's
+  completion/cancellation or another receipt opening; Bridge releases in finally.
+  Existing receipt cleanup and exact-UUID persistent binding remain. No server,
+  schema, feature flag or monetary-policy change. Native/fiscal acceptance is
+  required. Details: `ops/EVOTOR-BONUS-WINDOW-20261018.md`.
 - Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
   `qr/resolve` caller can explicitly request `includeWallet: true`.
   `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
