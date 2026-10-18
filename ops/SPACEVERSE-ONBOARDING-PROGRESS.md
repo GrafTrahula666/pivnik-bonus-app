@@ -1103,3 +1103,86 @@ MODULE-MAP дополнен этим контрактом. Изменений с
 для стороннего tenant и простой мастер источников, затем поиск и мобильные
 сценарии, AI отдельным небольшим PR. PR в main не объединялся, deploy не
 выполнялся; production-БД, Railway, секреты, CI и реальные устройства не менялись.
+
+## 2026-10-18 — SaaS-аудит, roadmap и lifecycle CRM
+
+Новое ТЗ владельца: существующий сайт — коммерческая CRM SaaS с публикацией в
+Эвотор.Маркете; AI пока только архитектура/тестовый контур без платных API.
+Ранее #270 был объединён в 5230083 и прошёл существующий автодеплой Telegram/VK
+по отдельному разрешению владельца. Это разрешение не относится к новой ветке
+`spaceverse/saas-product-roadmap-20261018`: merge/deploy здесь не выполняются.
+
+Read-only проверены свежий origin/main 5230083, 330 origin refs и 58 открытых PR.
+Изучены относящиеся к задаче main modules/Do not break, документация, конфигурации
+и реализации в AI/CRM/pilot/integration ветках. #101 содержит legacy AI shell,
+#115/#197/#212 — отдельную работу Customer 360; #280–282 затрагивают живой Evotor
+bridge/sync и не импортировались. Имя старой remount-ветки не доказывает фикса:
+эта ветка является предком main, а актуальный App оставался без CRM scope key.
+
+Созданы SAAS-PRODUCT-AUDIT.md, SAAS-COMPETITOR-RESEARCH.md,
+EVOTOR-MARKET-REQUIREMENTS.md, SAAS-PRODUCT-ROADMAP.md,
+SAAS-ANALYTICS-AI-ARCHITECTURE.md в ops/. Есть readiness/risk matrix, P0–P3,
+приёмка и зависимости, источники/даты/оговорки тарифов, proposed START/BUSINESS/
+PRO + независимый AI add-on, metric definitions/DSL/export и безопасный AI
+interface/usage/tools. Это спецификация; mock adapter/AI feature flags пока
+не реализованы, paid model/API не подключались. Склад/поставщики/инвентаризация/
+производство/киоск исключены. Маркетинговые заявления конкурентов не выдаются
+за результаты собственного тестирования или доказанную причинность.
+
+Официальные материалы iiko, Quick Resto, UDS, Mindbox, MAXMA получены; база
+знаний r_keeper доступна несмотря на 403 основного сайта; дополнительно изучена
+главная RetailCRM. Для Poster основной/developer/help ресурсы — 403. Официальные
+Эвотор developer/market/main — 403, поэтому комиссии/договоры/лицензирование и
+модерация остаются UNKNOWN, с проверяемым чек-листом и внешними задачами владельца.
+Числа не придуманы; истёкшая 30.09 акция iiko не считается текущей ценой.
+Файлы/manifest HTTP-исследования сохранены в /tmp/spaceverse-saas-research-20261018.
+
+Первое исправление: при смене actor/company/venue CRM теперь немедленно
+размонтирует старые таблицу, фильтры, выбранного клиента и формы. Drawer
+привязан к scope/customer; очистка и cancellation guard игнорируют поздние
+detail responses. На неизменённом main browser воспроизвёл 3 ошибки: другая
+точка той же компании, другая компания, поздний ответ старой карточки.
+После исправления 6/6 desktop/mobile проходят. Новый бизнес в API-фикстуре
+честно возвращает 409 «источник ещё не подключён», старые данные при этом
+исчезают. Это UI lifecycle, не новое server authorization и не готовый tenant
+CRM adapter. Backend, деньги, модели, migrations и CI workflows не менялись.
+MODULE-MAP обновлён в той же ветке.
+
+Лично выполнены проверки; логи /tmp/spaceverse-saas-research-20261018/gates:
+
+- frozen npm ci root/Business с --cache /tmp/spaceverse-npm-cache успешны;
+  Playwright Chromium установлен в /tmp/spaceverse-playwright, integrity/TLS
+  не отключались. Первоначальная CLI-команда Playwright ошибочно передала путь
+  как второе имя project; после `--project=desktop` тесты реально выполнились;
+- npm run materialize ×2: tracked bytes идентичны между прогонами. Чистый
+  materialize снова дал 7 generated файлов, 365 insertions / 78 deletions:
+  server.js, universal-server.js, app.js, achievements.js, index.html,
+  red-cosmos-v2.js, scripts/v22-data-audit-and-repair.mjs. Patch/SHA-256 сохранены,
+  собственные generated outputs восстановлены, в PR они не входят;
+- node --test --test-concurrency=2: 622 passed / 0 failed/skipped;
+- npm run check: exit 0; root/Business npm audit: 0 vulnerabilities;
+- Business npm test -- --maxWorkers=1: 272 passed / 20 прежних PostgreSQL skipped;
+  root и Business полные прогоны выполнялись последовательно;
+- Business npm run typecheck, npm run build: exit 0; прежний chunk warning Vite;
+  ESLint затронутых App/ProductionCRM/new E2E: exit 0;
+- playwright --config=playwright.evotor.config.ts --workers=2: 12 passed
+  (6 CRM scope/race и 6 прежних cash desktop/mobile);
+- npm run test:e2e:onboarding: 4 passed desktop/mobile;
+- git diff --check и проверка локальных ссылок пяти документов: passed.
+
+Read-only публичный CRM: HTML/health HTTP 200, ok=true, session без cookie
+authenticated=false/demo=true/invitations=false. Закрытые реальные owner screens,
+native PostgreSQL suite, живая касса/Маркет, реальные ключи/оплата/AI не проверены.
+Новые регистрации, заявки/сообщения продавцам, merge, production deploy, правки
+Railway/секретов/CI и обновления устройств не выполнялись. Следующий P0 —
+standalone CRM adapter и активация поверх существующих canonical ownership и
+onboarding; правила Маркета, TLS/CA и лицензии остаются отдельными блокерами.
+
+По cloud-environment-onboarding:setup сохранены install_script/start_skill в
+черновике конфигурации среды: frozen installs, writable npm/browser caches,
+Chromium, последовательные suites и startup/readiness. Обновлена цель SaaS +
+Маркет; AI только architecture/synthetic. status=saved, requires_publish=true;
+для будущих задач владелец проверяет/сохраняет настройки и публикует именно
+среду разработки. Это не production deploy и не подтверждение fresh-task
+restoration. Secrets/network/repository membership не менялись. Два tracked
+onboarding PNG, перезаписанные собственным E2E, восстановлены и не входят в PR.
