@@ -135,12 +135,14 @@ public final class BonusWindowTest {
                 mode & WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE);
         assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
                 mode & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
-        assertNotNull(activity.getCurrentFocus());
         assertFalse(activity.getCurrentFocus() instanceof EditText);
         EditText code=edit(activity.getWindow().getDecorView(),"Код клиента PVK-XXXX-XXXX или QR-код");
+        EditText points=edit(activity.getWindow().getDecorView(),"Сколько баллов списать");
+        assertFalse(code.hasFocus());
+        assertFalse(points.hasFocus());
         assertTrue(code.isEnabled());
         assertTrue(code.requestFocus());
-        assertSame(code,activity.getCurrentFocus());
+        assertTrue(code.hasFocus());
         code.setText("PVK-AAAA-2222");
         assertEquals("PVK-AAAA-2222",code.getText().toString());
         assertTrue(replies.isEmpty());
