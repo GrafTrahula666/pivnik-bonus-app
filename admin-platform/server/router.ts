@@ -59,6 +59,7 @@ import { getDeveloperOverview,rememberServerError } from './developer.js'
 import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
 import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
 import { listOnboardingVenues } from './onboarding-venues.js'
+import { readTenantCrmCustomer } from './tenant-crm-read.js'
 import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
 import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
@@ -206,6 +207,13 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1)throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
     enforceRateLimit(`onboarding-venues:${session.admin.id}`,60,60_000)
     json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset')));return true
+  }
+  const tenantCustomer=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/customers\/([^/]+)$/.exec(url.pathname)
+  if(tenantCustomer){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступно только чтение клиента.')
+    if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и источник клиента определяются сервером; параметры запроса не принимаются.')
+    enforceRateLimit(`tenant-crm-read:${session.admin.id}`,30,60_000)
+    json(res,200,await readTenantCrmCustomer(session.admin,tenantCustomer[1]!,tenantCustomer[2]!));return true
   }
   const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
   if(posProxy){

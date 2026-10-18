@@ -6,6 +6,16 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 
 ## SaaS readiness research and CRM scope lifecycle (2026-10-18)
 
+The next default-off Admin diagnostic is documented in
+`ops/SPACEVERSE-TENANT-CRM-READ-RUNBOOK.md`: `server/tenant-crm-read.ts` composes
+the existing customer-wallet repository, onboarding access/runtime source and
+target registry. `GET /api/admin/onboarding/drafts/:id/crm/customers/:userId`
+requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
+permissions/source are rechecked, and successful access is audited in metadata.
+It works on prepared/inactive drafts and explicitly returns not_provisioned.
+It does not activate a venue, replace the active CRM reader or check a POS/license.
+Signed HTTP/PGlite regression is in `server/tests/tenant-crm-http.spec.ts`.
+
 Current source-backed product status, competitor evidence, external publication
 gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,
 `ops/SAAS-COMPETITOR-RESEARCH.md`, `ops/EVOTOR-MARKET-REQUIREMENTS.md`,
