@@ -30,6 +30,7 @@ export const config = {
   enableOnboardingProvisioning: bool('ADMIN_ENABLE_ONBOARDING_PROVISIONING', false),
   enableOnboardingWorkflow: bool('ADMIN_ENABLE_ONBOARDING_WORKFLOW', false),
   enableOnboardingPosProxy: bool('ADMIN_ENABLE_ONBOARDING_POS_PROXY', false),
+  enableTenantCrmReads: bool('ADMIN_ENABLE_TENANT_CRM_READS', false),
   enableProductionBonusWrites: bool('ADMIN_ENABLE_PRODUCTION_BONUS_WRITES', false),
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),
@@ -44,7 +45,7 @@ export const isProduction = config.nodeEnv === 'production'
 export function validateRuntimeConfig(): void {
   if (!config.databaseUrl) throw new HttpError(500,'ADMIN_DATABASE_URL_MISSING','ADMIN_DATABASE_URL is required.')
   if(config.enableOnboardingIntegrations)onboardingSecretBox()
-  if(config.enableOnboardingProvisioning)validateOnboardingTargetRegistry()
+  if(config.enableOnboardingProvisioning||config.enableTenantCrmReads)validateOnboardingTargetRegistry()
   if (isProduction) {
     if (!process.env.ADMIN_READ_DATABASE_URL) throw new HttpError(500,'ADMIN_READ_DATABASE_URL_MISSING','Dedicated production reader is required.')
     if (!config.publicOrigin) throw new HttpError(500,'ADMIN_PUBLIC_ORIGIN_MISSING','ADMIN_PUBLIC_ORIGIN is required.')

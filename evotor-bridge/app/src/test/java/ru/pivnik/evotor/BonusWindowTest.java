@@ -81,7 +81,7 @@ public final class BonusWindowTest {
         Bridge bridge=Bridge.get(RuntimeEnvironment.getApplication());
         bridge.policy.onCustomerResolved(A,A,new ResolvedClient("101","Гость",90L,false),System.currentTimeMillis());
         RedemptionActivity activity=open();
-        button(activity.getWindow().getDecorView(),"К оплате").performClick();
+        button(activity.getWindow().getDecorView(),"Перейти к оплате").performClick();
         activity.finish();
         assertEquals(1,replies.size());
         Bundle reply=replies.get(0);
@@ -162,6 +162,32 @@ public final class BonusWindowTest {
             assertNull(bridge.policy.bindingFor(B,System.currentTimeMillis()));
             assertFalse(bridge.policy.isScanCurrent(late)); bridge.policy.endScan(late);
         }
+    }
+
+    @Test public void volumeButtonsSelectTheTotalRatherThanAddingAndZeroClearsIt() throws Exception {
+        RedemptionActivity activity=open();
+        Field guest=RedemptionActivity.class.getDeclaredField("guest"); guest.setAccessible(true);
+        guest.set(activity,new ru.pivnik.evotor.core.ReceiptBinding(A,"101","Гость",System.currentTimeMillis()));
+        java.lang.reflect.Method controls=RedemptionActivity.class.getDeclaredMethod("controls",boolean.class); controls.setAccessible(true); controls.invoke(activity,false);
+        View root=activity.getWindow().getDecorView();
+        Button half=button(root,"0,5 л"); assertNotNull(half); assertTrue(half.isEnabled()); half.performClick();
+        assertTrue(allText(root).contains("Оплаченный объём: 0,5 л"));
+        button(root,"1,5 л").performClick();
+        assertTrue(allText(root).contains("Оплаченный объём: 1,5 л"));
+        button(root,"✓ 1,5 л").performClick();
+        assertTrue(allText(root).contains("Оплаченный объём: 1,5 л"));
+        button(root,"0 л").performClick();
+        assertTrue(allText(root).contains("Оплаченный объём: 0 л"));
+        assertTrue(replies.isEmpty());
+    }
+
+    @Test public void ordinaryCheckoutAndRedemptionHaveSeparateButtonsAndVolumeNeedsACustomer() throws Exception {
+        RedemptionActivity activity=open(); View root=activity.getWindow().getDecorView();
+        assertNotNull(button(root,"Перейти к оплате"));
+        assertFalse(button(root,"Оплата").isEnabled());
+        assertFalse(button(root,"0,5 л").isEnabled());
+        assertTrue(allText(root).contains("Списание баллов"));
+        assertTrue(allText(root).contains("Отсканируйте QR-код клиента"));
     }
 
     private static Button button(View view,String text) {

@@ -6,6 +6,52 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 
 ## SaaS readiness research and CRM scope lifecycle (2026-10-18)
 
+`server/database-transport.ts` addresses the external Admin pool certificate-
+validation risk in the CRM TLS slice.
+All three pools in `db.ts` and the existing onboarding target registry share
+this policy: exact private/local host exceptions, verified public TLS, explicit
+IP identity checking, and removal of pg URL TLS overrides before pool creation.
+Unsafe query host/credential/TLS/file overrides fail closed without logging
+credentials. Existing read-only options, scope guards and default-off writes
+remain. `server/tests/database-transport.spec.ts`, `database-pools.spec.ts` and
+registry tests inspect the actual pg parser; `scripts/verify-database-tls.mjs`
+uses synthetic loopback certificates and real pg TLS handshakes, not a live DB.
+An additional isolated native PostgreSQL 16 smoke verifies authenticated TLS 1.3
+and CA/hostname rejection; its owned container is stopped after the proof.
+See `ops/SPACEVERSE-DATABASE-TLS-RUNBOOK.md`; actual production CA/connectivity
+and deployment approval remain external gates.
+
+The next default-off Admin diagnostic is documented in
+`ops/SPACEVERSE-TENANT-CRM-READ-RUNBOOK.md`: `server/tenant-crm-read.ts` composes
+the existing customer-wallet repository, onboarding access/runtime source and
+target registry. `GET /api/admin/onboarding/drafts/:id/crm/customers/:userId`
+requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
+permissions/source are rechecked, and successful access is audited in metadata.
+It works on prepared/inactive drafts and explicitly returns not_provisioned.
+It does not activate a venue, replace the active CRM reader or check a POS/license.
+The customer-directory slice (#285) adds `customer-directory-repository.js`
+with the wallet repository's shared verified-binding SQL and an optional
+collection suffix at the same draft URL (q/limit/offset only). It shares the
+read-only/source-revalidation/audit service and actor rate limit with detail
+reads. `TenantCustomerDirectory.tsx` is gated by the default-off session
+capability inside the existing `VenueOnboarding`; it does not activate a venue.
+`playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
+on three dedicated local native PostgreSQL targets, including disabled mode.
+The directory/UI was merged in #285 after the read diagnostic #284.
+The readiness slice #286 adds GET
+`.../crm/readiness` with the same read/access/audit boundary. It uses a real
+scoped DB count and the existing encrypted POS projection; saved provider
+checks are not new live probes. `tenant-crm-readiness.ts` rejects stale/future
+or incomplete evidence and leaves subscription/activation unconfigured/pending.
+`TenantCrmReadiness.tsx` shows these gates in the existing wizard, default-off;
+no canonical active flag or guest runtime changes. Contract and verification
+are in `ops/SPACEVERSE-CRM-READINESS-RUNBOOK.md`.
+Signed HTTP regression is in `server/tests/tenant-crm-http.spec.ts`, using the
+same seed in PGlite or opt-in native PostgreSQL. The native fixture requires a
+local test database/role, creates dedicated databases, and pins pool clients
+through the real read-only transaction. Production-mode image/real registry
+smoke and native checks are documented in the runbook/progress.
+
 Current source-backed product status, competitor evidence, external publication
 gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,
 `ops/SAAS-COMPETITOR-RESEARCH.md`, `ops/EVOTOR-MARKET-REQUIREMENTS.md`,
@@ -1008,3 +1054,28 @@ isolation.
 - `test/wallet-routes.test.js` exercises the actual mount, existing signed-session
   middleware and gateway consent/proxy source on loopback with fixture DB/profile
   adapters. Evidence and limits: `ops/WALLET-ROUTES-EXTRACTION-20261010.md`.
+
+## Evotor paid draft-beer volume (2026-10-19)
+
+`pos/beer.js` accepts an explicit `operation: "beer"` on the existing device
+receipt-bind transport. Selection is pending metadata, fenced by store, receipt,
+client, device and QR-claim timestamp. Manual additive migration **024** creates
+only selection/audit tables; it is never a startup migration. Old APKs and
+cashback continue without 024; new volume writes return 503 until prepared.
+
+Closed paid cloud positions measured in liters cap the selected volume; pieces,
+kg and zero-price gifts are excluded. `pos/bonus.js` settles the canonical
+`beer_loyalty` row and original transaction beer fields in the same transaction
+as cashback: 14 paid liters earn 1 gift liter. No second loyalty counter or staff
+purchase is created. Partial refunds proportionally reverse only the original
+purchase's attributed beer/reward, retain a remaining original transaction, and
+cap cumulative removals. A previously spent gift becomes an audited shortfall
+for owner review. Full canonical cancellation must not reverse beer twice.
+
+The native window has a horizontally scrolling row of total-volume choices,
+ordinary checkout, and separate reserve / payment controls for redemption.
+Initial keyboard focus remains on the non-editable root. Volume saves must be
+acknowledged before checkout; actual accrual still waits for the cloud document.
+Receipt close/clear/new UUID invalidates customer identity; no global volume is
+stored. Do not enable redemption, alter Evotor URL masks, or change the existing
+VK/Selectel services as part of this feature.

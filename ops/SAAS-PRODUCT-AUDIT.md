@@ -51,11 +51,11 @@
 | R02 | P0 | Новый scope inactive; registry требует ручных DB/env references | Одобренный resumable provisioning/activation для CRM, без обязательного гостевого приложения; real source verification и повтор после сбоя |
 | R03 | P0 | Нет проверенного install/license контракта Маркета | Подтверждённые официальные правила, подлинность событий, lifecycle/idempotency, серверные entitlement gates |
 | R04 | P0, исправлено в ветке | CRM сохраняла таблицу/карточку при смене scope | Воспроизведены 3 browser failures на неизменённом UI: соседняя точка, другая компания, поздний ответ. После исправления 6/6 desktop/mobile проходят. Серверный обход авторизации этим не доказан; merge/deploy ещё не выполнялись |
-| R05 | P0 перед коммерческим запуском через публичный DB endpoint | [db.ts](../admin-platform/server/db.ts) использует `rejectUnauthorized:false` для внешних Admin pools | Отдельная проверенная TLS/CA политика и интеграционный тест с проверкой сертификата. Фактический production DSN/CA не исследован; текущие настройки не переключать вслепую |
+| R05 | P0 перед коммерческим запуском через публичный DB endpoint; кодовое исправление проверено в TLS-срезе; production CA не подтверждён | В исследованном main [db.ts](../admin-platform/server/db.ts) использует `rejectUnauthorized:false`; TLS-срез применяет общий строгий transport к трём Admin pools и tenant registry | [Политика и TLS handshake smoke](SPACEVERSE-DATABASE-TLS-RUNBOOK.md). Фактический production DSN/CA не исследован; настройки не переключать вслепую. Branch/local proofs не подтверждают production TLS |
 | R06 | P1 | [migrate.ts](../admin-platform/server/migrate.ts) требует `public.bars` | Явный проверенный bootstrap standalone CRM с существующими canonical tables; не ослаблять legacy preflight и не создавать вторую tenant-модель |
 | R07 | P1 | Поиск без UI-пагинации; static LivePill заявляет обновление без привязки к ответу | Серверная пагинация в UI, источник/дата/freshness, различение ошибок и пустых результатов |
 | R08 | P1 | Общие роли, consent/retention, support и мониторинг неполны | Permission matrix, аудит, обработка персональных данных, тест восстановления, реальные support tickets |
-| R09 | P1 | PostgreSQL integration suite требует отдельную тестовую БД | Проверить native pg-driver/transactions в изолированной БД; skipped не считать passed |
+| R09 | P1, локально проверено в #284 | PostgreSQL integration suite требует отдельную тестовую БД | Изолированный PostgreSQL 16: 20 прежних + 19 новых HTTP cases passed; production-mode image smoke с real registry passed. CI без test URL по-прежнему пропускает 20; внешняя TLS/CA и коммерческий сценарий остаются отдельными gates |
 
 ## Что уже ведётся в других ветках
 

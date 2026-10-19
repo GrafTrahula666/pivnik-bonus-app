@@ -8,6 +8,7 @@ import {
   customerWalletRepositoryContract
 } from '../customer-wallet-repository.js';
 import { isAutomaticStartupMigration } from '../migration-startup-policy.js';
+import { createSpaceverseCustomerDirectoryRepository } from '../customer-directory-repository.js';
 import {
   createSpaceverseRuntimeManifest,
   resolveSpaceverseRuntime
@@ -296,4 +297,48 @@ test('database failures and malformed rows are sanitized and fail closed', async
   } finally {
     await fixture.db.close();
   }
+});
+
+test('directory uses explicit ownership, literal search and exact wallet values in one read-only statement', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '910', venueId: '911', ownedBalance: '9007199254740993' });
+  try {
+    await fixture.db.query("UPDATE users SET first_name='Анна_100%',last_name='Иванова' WHERE id=11");
+    const calls=[];
+    const list=createSpaceverseCustomerDirectoryRepository({runtime:fixture.runtime,query:async(sql,params)=>{
+      calls.push(sql);return fixture.db.query(sql,params);
+    }});
+    for(const q of ['Анна','_100%','Иванова']) {
+      const result=await list({q,limit:1});
+      assert.equal(result.total,'1');assert.equal(result.items[0].wallet.balance,'9007199254740993');
+    }
+    assert.equal((await list({q:"' OR TRUE --"})).total,'0');
+    assert.equal((await list({q:'Legacy'})).items.length,0);
+    assert.deepEqual((await list({offset:100})).items,[]);
+    assert.ok(calls.every(sql=>!READ_ONLY_PATTERN.test(sql)));
+  } finally {await fixture.db.close();}
+});
+
+test('directory rejects request scope and unverified runtime objects before querying customer data', async () => {
+  const fixture=await tenantDatabase({seed:'e',companyId:'920',venueId:'921',ownedBalance:0});
+  try {
+    let calls=0;
+    const query=async()=>{calls++;throw new Error('must not query');};
+    const list=createSpaceverseCustomerDirectoryRepository({runtime:fixture.runtime,query});
+    await assert.rejects(list({companyId:'930'}),{code:'SPACEVERSE_DIRECTORY_REQUEST_SCOPE_FORBIDDEN'});
+    for(const options of [{limit:0},{limit:101},{offset:-1},{offset:1000001},{q:'x'.repeat(101)}])
+      await assert.rejects(list(options),TypeError);
+    assert.throws(()=>createSpaceverseCustomerDirectoryRepository({runtime:{...fixture.runtime},query}),
+      {code:'SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED'});
+    assert.equal(calls,0);
+  } finally {await fixture.db.close();}
+});
+
+test('directory refuses a changed binding even when the runtime was previously verified', async () => {
+  const fixture=await tenantDatabase({seed:'f',companyId:'930',venueId:'931',ownedBalance:42});
+  try {
+    const list=createSpaceverseCustomerDirectoryRepository({runtime:fixture.runtime,query:fixture.db.query.bind(fixture.db)});
+    assert.equal((await list()).items[0].wallet.balance,'42');
+    await fixture.db.query('UPDATE spaceverse_runtime_binding SET manifest_sha256=$1',['0'.repeat(64)]);
+    await assert.rejects(list(),{code:'SPACEVERSE_DIRECTORY_BINDING_REJECTED'});
+  } finally {await fixture.db.close();}
 });

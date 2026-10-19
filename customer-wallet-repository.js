@@ -6,7 +6,7 @@ import {
 const CANONICAL_BIGINT_PATTERN = /^[1-9]\d{0,18}$/;
 const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
 
-export const SPACEVERSE_CUSTOMER_WALLET_SQL = `WITH verified_binding AS (
+export const SPACEVERSE_VERIFIED_CUSTOMER_BINDING_SQL = `verified_binding AS (
   SELECT runtime_key,company_id,venue_id
   FROM spaceverse_runtime_binding
   WHERE singleton=TRUE
@@ -18,7 +18,9 @@ export const SPACEVERSE_CUSTOMER_WALLET_SQL = `WITH verified_binding AS (
     AND isolation_policy='dedicated_database'
     AND status='prepared'
   LIMIT 1
-), owned_customer AS (
+)`;
+
+export const SPACEVERSE_CUSTOMER_WALLET_SQL = `WITH ${SPACEVERSE_VERIFIED_CUSTOMER_BINDING_SQL}, owned_customer AS (
   SELECT
     ownership.user_id::text AS ownership_user_id,
     ownership.runtime_key AS ownership_runtime_key,

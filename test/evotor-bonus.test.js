@@ -237,3 +237,89 @@ test('returns take back proportional bonus, a full return cancels the purchase, 
     });
   } finally { await f.close(); }
 });
+
+test('cashier liters use canonical beer loyalty only after a paid cloud receipt; no duplicates or carry-over', async (t) => {
+  const f=await fixture();
+  try {
+    await f.db.exec(`CREATE TABLE beer_loyalty(user_id BIGINT PRIMARY KEY REFERENCES users(id),paid_ml_total BIGINT NOT NULL DEFAULT 0,
+      gift_ml_balance INTEGER NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ DEFAULT NOW());
+      INSERT INTO beer_loyalty(user_id,paid_ml_total,gift_ml_balance) VALUES(1,13000,0),(2,0,0);`);
+    const sql=await readFile(new URL('../migrations/024_evotor_beer_volume.sql',import.meta.url),'utf8');
+    await f.db.exec(sql); await f.db.exec(sql);
+    assert.equal(isAutomaticStartupMigration('024_evotor_beer_volume.sql'),false);
+    const beer=async (id='1') => (await f.db.query('SELECT paid_ml_total,gift_ml_balance FROM beer_loyalty WHERE user_id=$1',[id])).rows[0];
+    const select=(receiptUuid,beerMl,clientId='1',action='save',auth=f.auth) => f.devices.bind(auth,{operation:'beer',action,receiptUuid,clientId,beerMl});
+    const draft=(id,liters,rubles=liters*100,type='SELL',base) => sale({id,type,close_date:new Date(Date.now()+60000).toISOString(),body:{result_sum:rubles,
+      base_document_id:base,positions:[{product_name:'Разливное пиво',measure_name:'л',quantity:liters,result_sum:rubles}],
+      payments:[{payment:{type:'CASH',sum:rubles}}]}});
+    await t.test('selection is scoped, bounded, repeatable and never changes counters before payment',async () => {
+      await assert.rejects(select('not-claimed',500),denied(409));
+      await f.devices.bind(f.auth,{receiptUuid:'beer-sale',payload:'PVK-AAAA-2222'});
+      for (const n of [-500,250,100500,1.5,'500']) await assert.rejects(select('beer-sale',n),denied(400));
+      await assert.rejects(select('beer-sale',500,'2'),denied(409));
+      const other=await f.devices.issue(owner,{storeId:'bar',externalDeviceId:'other-terminal',label:'Other'});
+      await assert.rejects(select('beer-sale',500,'1','save','Device '+other.deviceToken),denied(409));
+      assert.equal((await select('beer-sale',1000)).beerMl,1000);
+      assert.equal((await select('beer-sale',1000)).beerMl,1000);
+      assert.equal((await select('beer-sale',0,'1','status')).beerMl,1000);
+      assert.deepEqual(await beer(),{paid_ml_total:13000,gift_ml_balance:0});
+      assert.equal((await f.db.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n,0);
+      assert.deepEqual(await run(f),[]);
+    });
+    await t.test('14th paid liter earns one gift, official volume caps a forged selection',async () => {
+      await select('beer-sale',100000);
+      await f.importDocs([draft('beer-sale',1)]);
+      const [result]=await run(f); assert.equal(result.status,'applied'); assert.equal(result.beerMl,1000);
+      assert.equal(result.bonus,5);
+      assert.deepEqual(await beer(),{paid_ml_total:14000,gift_ml_balance:1000});
+      assert.deepEqual(await run(f),[]);
+      const tx=(await f.db.query("SELECT beer_ml,beer_gift_earned_ml FROM transactions WHERE request_key='evotor:bar:beer-sale'")).rows;
+      assert.deepEqual(tx,[{beer_ml:1000,beer_gift_earned_ml:1000}]);
+      await assert.rejects(select('beer-sale',500),denied(409));
+      assert.equal((await select('beer-sale',100000)).beerMl,100000,'lost save response can be retried identically after settlement');
+    });
+    await t.test('another customer and a new receipt never inherit the old volume',async () => {
+      await f.devices.bind(f.auth,{receiptUuid:'replace-client',payload:'PVK-AAAA-2222'});
+      await select('replace-client',1500);
+      await f.devices.bind(f.auth,{receiptUuid:'replace-client',payload:'PVK-BBBB-3333'});
+      assert.equal((await select('replace-client',0,'2','status')).beerMl,null);
+      await f.devices.bind(f.auth,{receiptUuid:'replace-client',payload:'PVK-AAAA-2222'});
+      assert.equal((await select('replace-client',0,'1','status')).beerMl,null);
+      await f.devices.bind(f.auth,{receiptUuid:'next-sale',payload:'PVK-AAAA-2222'});
+      assert.equal((await select('next-sale',0,'1','status')).beerMl,null);
+      await f.importDocs([draft('replace-client',2),draft('next-sale',2)]); await run(f);
+      assert.deepEqual(await beer(),{paid_ml_total:14000,gift_ml_balance:1000});
+    });
+    await t.test('snacks, free gifts and explicit zero add no paid liters',async () => {
+      for (const [id,unit,price,chosen] of [['snack','кг',100,1000],['gift','л',0,1000],['zero','л',100,0]]) {
+        await f.devices.bind(f.auth,{receiptUuid:id,payload:'PVK-AAAA-2222'}); await select(id,chosen);
+        const doc=draft(id,1,price); doc.body.positions[0].measure_name=unit;
+        await f.importDocs([doc]); await run(f);
+      }
+      assert.deepEqual(await beer(),{paid_ml_total:14000,gift_ml_balance:1000});
+    });
+    await t.test('partial returns remove volume and the original gift once, never below zero',async () => {
+      await f.importDocs([draft('beer-partial',0.5,50,'PAYBACK','beer-sale')]);
+      await run(f);
+      assert.deepEqual(await beer(),{paid_ml_total:13500,gift_ml_balance:500});
+      await f.importDocs([draft('beer-rest',0.5,50,'PAYBACK','beer-sale')]);
+      await run(f); await run(f);
+      assert.deepEqual(await beer(),{paid_ml_total:13000,gift_ml_balance:0});
+      const original=(await f.db.query("SELECT beer_ml,beer_gift_earned_ml FROM transactions WHERE request_key='evotor:bar:beer-sale'")).rows[0];
+      assert.deepEqual(original,{beer_ml:0,beer_gift_earned_ml:0});
+      await f.importDocs([draft('excess-refund',1,100,'PAYBACK','beer-sale')]); await run(f);
+      assert.deepEqual(await beer(),{paid_ml_total:13000,gift_ml_balance:0});
+    });
+    await t.test('zero cashback still counts beer; spent gifts on refunds are audited for owner review',async () => {
+      await f.devices.bind(f.auth,{receiptUuid:'small-beer',payload:'PVK-AAAA-2222'}); await select('small-beer',1000);
+      await f.importDocs([draft('small-beer',1,1)]); await run(f);
+      assert.deepEqual(await beer(),{paid_ml_total:14000,gift_ml_balance:1000});
+      await f.db.query('UPDATE beer_loyalty SET gift_ml_balance=0 WHERE user_id=1');
+      await f.importDocs([draft('small-refund',1,1,'PAYBACK','small-beer')]); await run(f);
+      assert.deepEqual(await beer(),{paid_ml_total:13000,gift_ml_balance:0});
+      const audit=(await f.db.query("SELECT paid_ml_delta,gift_ml_delta,gift_shortfall_ml FROM pos_beer_settlements WHERE document_id='small-refund'")).rows[0];
+      assert.deepEqual(audit,{paid_ml_delta:-1000,gift_ml_delta:0,gift_shortfall_ml:1000});
+      assert.deepEqual(await run(f),[]);
+    });
+  } finally { await f.close(); }
+});

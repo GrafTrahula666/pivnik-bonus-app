@@ -3,6 +3,7 @@ import { resolvePersonalQrRecord } from '../qr-resolver.js';
 import { posError, posIdentifier, requirePosSchema, resolveOperatorStore } from './scope.js';
 import { claimReceipt, posBonusConfig } from './bonus.js';
 import { readPosLoyaltyView } from './loyalty-view.js';
+import { selectReceiptBeer } from './beer.js';
 import { deviceRedemption } from './redemption.js';
 
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -53,6 +54,7 @@ export function createPosDeviceService(pool, config, loyaltyPolicy) {
       // A claim is a promise to accrue: refuse it while accrual is off, so the till never
       // shows a bonus that will not come and re-enabling cannot pay out a backlog.
       if (!bonusEnabled()) throw posError(503, 'pos_bonus_disabled', 'Начисление бонусов по кассе выключено.');
+      if (body?.operation === 'beer') return selectReceiptBeer(pool, device, body);
       return claimReceipt(pool, device, body);
     },
     async redemptionFor(device, body) {
