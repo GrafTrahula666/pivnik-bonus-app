@@ -1834,3 +1834,62 @@ outputs снова восстановлены побайтово; Admin source h
 проверка CI точного head и ранее разрешённый владельцем checked merge с
 существующим автодеплоем. Market activation и production flags остаются вне
 этого шага. Полный итог после GitHub checks — отдельным Markdown-файлом.
+
+## 2026-10-19 — поиск по всем магазинам владельца
+
+Preflight: origin/main `93dd65dafab77c62674bde2bf09bc47996249311`, #291 MERGED,
+рабочее дерево было чистым. Проверены открытые PR, origin branches, актуальная
+MODULE-MAP/invariants. #96/#101 и старые CRM ветки не содержат этого поиска;
+в старой pagination-ветке даже отсутствует нынешний React App. Старые PR не
+импортировались и не закрывались. Weekly digest в ops не найден.
+
+Новая ветка `spaceverse/owner-venue-search-20261019`. Лично добавлен поиск в
+существующий owner list: буквальное имя заведения/компании, разрешённый union
+перед пагинацией, query validation/echo, пустое состояние и reset/refresh.
+Новая tenant-модель, миграции, настройки CI/production и действия устройств
+не нужны. Обычный владелец сохраняет все магазины своих компаний.
+
+Новый мандат пользователя: «Продакшен и устройства не трогай» имеет приоритет
+над прежним разрешением merge с автодеплоем. Поэтому готовится только Draft PR;
+его merge запускает production workflow и сейчас не выполняется. Секреты и
+production DB не читаются/не меняются. Локальный synthetic PG16 SELECT 1 прошёл.
+Риск: P2 для этого поиска; P0 коммерческого выпуска — прежний неподтверждённый
+контракт/test App ID Маркета — сохраняется. Следующий независимый шаг этого PR
+ограничен поиском заведения для продолжения подключения.
+
+Focused native HTTP/SQL activation+workflow: 45 passed. Добавлены проверки
+двух компаний одного владельца, чужой компании, scoped manager, q validation,
+301 совпадения/13 страниц, буквальных %/_, SQL-подобного текста и reset.
+Полные обязательные проверки и browser E2E выполняются перед push; артефакты:
+`/tmp/spaceverse-owner-venue-search-20261019`. Сканирование metadata имён до
+фильтрации существовало и сохраняется; load-test тысяч клиентов не заявляется.
+
+Окончательные checks на базе 93dd65d:
+- `npm run materialize` дважды: SHA256 idempotent; прежние 7 generated diffs
+  (achievements.js, app.js, index.html, red-cosmos-v2.js,
+  scripts/v22-data-audit-and-repair.mjs, server.js, universal-server.js)
+  сохранены в artifact patch. После root gates исходные файлы восстановлены
+  побайтово/SHA256; исправление этих старых diff не входит в задачу.
+- `node --test`: 632 passed /0 failed/skipped; `npm run check`, отдельные
+  VK parity/bundle, root audit и production audit: exit 0, 0 vulnerabilities.
+- Business native `npm test -- --maxWorkers=1`: 430 passed /36 files,
+  0 failed/skipped. `npm run typecheck`, `npm run lint`: exit 0,
+  только прежние 12 Fast Refresh warnings. Оба Business audit: 0 vulnerabilities.
+- Focused native activation+workflow: 45 passed; тот же activation/search suite
+  без native env на PGlite: 35 passed. Первый lint обнаружил no-control-regex
+  в новой проверке q; заменена запись на проверку code point. Правило не
+  отключалось, окончательные проверки выполнены после правки.
+- Playwright: 38 passed /0 failed/skipped: новый owner search 4, activation 10,
+  native CRM 6, disabled 2, cash/CRM 12, onboarding 4. Реальный built App,
+  desktop/mobile, только isolated synthetic fixtures; PNG восстановлены SHA256.
+  Включены reset/refresh/load-more, поиск точки после первой страницы,
+  две компании владельца, поздний ответ и отказ при неверном query echo.
+
+SHA256 Admin source до/после проверок совпадают. Production/устройства не
+задействованы; CI не менялся. До публикации в Маркете остаются прежние внешние
+gates install/pay/revoke и разрешённый test contour. Следующий шаг — push и
+один Draft PR, проверка его CI; merge/production deploy не выполняются.
+
+Финальный отдельный `npm run build`: exit 0, только прежнее предупреждение
+chunk >500KB. Перед push origin/main всё ещё 93dd65d; итоговый diff ограничен
+owner search, его тестами и ops-документацией. Источник проверки/код не менялся.

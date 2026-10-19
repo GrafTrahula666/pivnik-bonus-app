@@ -207,9 +207,9 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
   }
   if(url.pathname==='/api/admin/onboarding/venues'){
     if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
-    if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1)throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
+    if([...url.searchParams.keys()].some(key=>!['offset','q'].includes(key))||['offset','q'].some(key=>url.searchParams.getAll(key).length>1))throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
     enforceRateLimit(`onboarding-venues:${session.admin.id}`,60,60_000)
-    json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset')));return true
+    json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset'),url.searchParams.get('q')));return true
   }
   const crmActivationCheck=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/activation-check$/.exec(url.pathname)
   if(crmActivationCheck){
