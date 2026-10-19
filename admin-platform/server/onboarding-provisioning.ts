@@ -550,24 +550,33 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
   if(!options?.metadata||typeof options.metadata.connect!=='function'||
     typeof options.resolveTargetDatabase!=='function') throw new TypeError('Invalid onboarding provisioning options')
 
+  async function getCrmState(admin:AdminPrincipal,draftId:string,write:boolean){
+    const client=await connect(options.metadata)
+    try{
+      await client.query('BEGIN')
+      await lockCrmActor(client,admin)
+      const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,write))
+      const row=await selectStep(client,source.draftId,CRM_ACTIVATION_STEP)
+      if(row&&!matchesSource(row,source))throw unavailable()
+      if(row?.status==='succeeded')throw unavailable()
+      if(!write){
+        const current=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId))
+        if(current.manifest.manifestSha256!==source.manifest.manifestSha256)throw unavailable()
+      }
+      await client.query('COMMIT')
+      return view(source,CRM_ACTIVATION_STEP,row)
+    }catch(error){
+      await client.query('ROLLBACK').catch(()=>undefined)
+      if(error instanceof HttpError)throw error
+      throw unavailable()
+    }finally{client.release()}
+  }
+
   return Object.freeze({
-    async getCrmActivationCheck(admin:AdminPrincipal,draftId:string){
-      const client=await connect(options.metadata)
-      try{
-        await client.query('BEGIN')
-        await lockCrmActor(client,admin)
-        const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
-        const row=await selectStep(client,source.draftId,CRM_ACTIVATION_STEP)
-        if(row&&!matchesSource(row,source))throw unavailable()
-        if(row?.status==='succeeded')throw unavailable()
-        await client.query('COMMIT')
-        return view(source,CRM_ACTIVATION_STEP,row)
-      }catch(error){
-        await client.query('ROLLBACK').catch(()=>undefined)
-        if(error instanceof HttpError)throw error
-        throw unavailable()
-      }finally{client.release()}
-    },
+    getCrmActivationCheck:(admin:AdminPrincipal,draftId:string)=>getCrmState(admin,draftId,true),
+    // Read-only metadata state for the owner list; viewers keep their exact read
+    // grant and cannot obtain a write capability. No target DB/provider calls.
+    readCrmActivationState:(admin:AdminPrincipal,draftId:string)=>getCrmState(admin,draftId,false),
 
     async runCrmActivationCheck(admin:AdminPrincipal,draftId:string){
       // Depends on schema readiness only: a guest bundle/image is optional for

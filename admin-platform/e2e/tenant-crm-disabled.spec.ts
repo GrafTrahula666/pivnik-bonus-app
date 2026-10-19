@@ -22,4 +22,6 @@ test('disabled customer diagnostic exposes neither a UI control nor a working AP
   expect((await page.request.get(`/api/admin/onboarding/drafts/${draft.id}/crm/readiness`)).status()).toBe(403)
   expect((await page.request.get(`/api/admin/onboarding/drafts/${draft.id}/crm/activation-check`)).status()).toBe(403)
   expect(automaticReads).toBe(0)
+  const venues=await page.request.get('/api/admin/onboarding/venues').then(response=>response.json())
+  expect(venues.venues.every((row:Record<string,unknown>)=>!Object.hasOwn(row,'crmActivation'))).toBe(true)
 })

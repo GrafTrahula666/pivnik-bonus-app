@@ -11,11 +11,14 @@ import { type TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
 
 const state = vi.hoisted(() => ({ metadata: null as TenantCrmFixtureDatabase | null,
   targets: new Map<string, TenantCrmFixtureDatabase>(), queries: [] as string[], readOnly: [] as unknown[], resolutions: 0,
-  afterRead: null as (() => Promise<void>) | null, hold: null as Promise<void>|null, failConnect: false, failAudit: false }))
+  afterRead: null as (() => Promise<void>) | null, hold: null as Promise<void>|null, summaryReads:0,afterSummary:null as (()=>Promise<void>)|null,failSummary:false, failConnect: false, failAudit: false }))
 vi.mock('../db.js', () => {
   const execute = async (db: Pick<TenantCrmFixtureDatabase, 'query'>, text: string, params?: unknown[]) => {
+    const summary=text.startsWith('SELECT')&&text.includes('FROM admin_onboarding_provisioning_steps')&&params?.[1]==='crm_activation_check'
+    if(summary){state.summaryReads++;if(state.failSummary)throw new Error('Synthetic private ledger failure')}
     if (state.failAudit && text.startsWith('INSERT INTO admin_audit_log')) throw new Error('Synthetic private audit failure')
     const result = await db.query(text, params)
+    if(summary&&state.afterSummary){const action=state.afterSummary;state.afterSummary=null;await action()}
     return { ...result, rowCount: result.rows.length || result.affectedRows || 0 }
   }
   const query = (text: string, params?: unknown[]) => execute(state.metadata!, text, params)
@@ -71,7 +74,7 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
     server = http.createServer((req, res) => { void handleApi(req, res, new URL(req.url!, origin)).catch(error => sendApiError(res, error, req)) })
     await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
     origin = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`
-    for (const who of ['root', 'other-root', 'owner', 'trusted', 'south']) {
+    for (const who of ['root', 'other-root', 'owner', 'trusted', 'south','network-owner']) {
       const response = await fetch(origin + '/api/admin/auth/login', { method: 'POST', headers: {
         origin: config.publicOrigin, 'content-type': 'application/json' },
       body: JSON.stringify({ email: who + '@fixture.invalid', password: fixturePassword }) })
@@ -83,8 +86,9 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
   afterEach(async()=>{
     config.enableWrites=config.enableOnboardingDrafts=config.enableTenantCrmActivationChecks=true
     config.enableOnboardingWorkflow=config.enableOnboardingPosProxy=false
+    config.enableTenantCrmReads=false
     vi.unstubAllEnvs();state.failConnect=state.failAudit=false;state.afterRead=null;state.hold=null
-    state.queries=[];state.readOnly=[];state.resolutions=0
+    state.queries=[];state.readOnly=[];state.resolutions=0;state.summaryReads=0;state.afterSummary=null;state.failSummary=false
     manifests.forEach((manifest,index)=>state.targets.set(manifest.runtimeKey,targets[index]!))
     await state.metadata!.query('UPDATE admin_accounts SET active=TRUE WHERE id=11')
     await state.metadata!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=11")
@@ -289,6 +293,145 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
     vi.stubEnv('ADMIN_ONBOARDING_SECRET_KEYRING',JSON.stringify({'other-key':Buffer.alloc(32,8).toString('base64')}))
     response=await request('owner','POST');expect(response.status).toBe(503)
     expect(JSON.stringify(await response.json())).not.toMatch(/pvpos_|secret_ciphertext|fixture-store|first_name/)
+  })
+  const ownerList=(who='owner',suffix='')=>fetch(origin+'/api/admin/onboarding/venues'+suffix,{headers:{cookie:sessions.get(who)!}})
+  async function savedCheck(status='action_required',code:string|null='CRM_MARKET_CONTRACT_REQUIRED',index=0){
+    const manifest=manifests[index]!,running=status==='running'
+    await state.metadata!.query(`INSERT INTO admin_onboarding_provisioning_steps(
+      draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,status,attempt_count,
+      lease_token,lease_expires_at,last_error_code)
+      VALUES($1,'crm_activation_check',$2,$3,1,$4,$5,$6,2,$7,$8,$9)
+      ON CONFLICT(draft_id,step) DO UPDATE SET status=EXCLUDED.status,attempt_count=2,
+      lease_token=EXCLUDED.lease_token,lease_expires_at=EXCLUDED.lease_expires_at,
+      last_error_code=EXCLUDED.last_error_code,result=NULL,updated_at=NOW()`,
+      [manifest.source.draftId,manifest.runtimeKey,manifest.manifestSha256,manifest.scope.companyId,manifest.scope.venueId,
+        status,running?crypto.randomUUID():null,running?new Date(Date.now()+30000).toISOString():null,code])
+  }
+  it('shows the saved CRM blocker in the owner list without guest bundle requirements, target reads or new audit',async()=>{
+    config.enableOnboardingWorkflow=true;await savedCheck()
+    state.targets.clear();const before=await auditCount()
+    const response=await ownerList();expect(response.status).toBe(200)
+    const row=(await response.json()).venues.find((row:{id:string})=>row.id===manifests[0]!.source.draftId)
+    expect(row).toMatchObject({status:'pending',requiresAttention:true,attentionCode:'CRM_MARKET_CONTRACT_REQUIRED',
+      crmActivation:{schemaVersion:1,draftId:manifests[0]!.source.draftId,scope:manifests[0]!.scope,
+        status:'pending',code:'CRM_MARKET_CONTRACT_REQUIRED',attemptCount:2,evidence:'saved_activation_check',
+        crmStatus:'not_provisioned',activationAllowed:false,guestApplicationRequired:false}})
+    expect(row.nextAction).toContain('Подписка Эвотор.Маркета ещё не подключена.')
+    expect(row.lastOperatorActivityAt).toBe(row.crmActivation.updatedAt)
+    expect(JSON.stringify(row)).not.toMatch(/runtimeKey|manifestSha256|secret_ciphertext|Owned|balance/)
+    expect(await auditCount()).toBe(before);expect(state.resolutions).toBe(0);expect(state.queries).toEqual([])
+    expect((await rows())[0]).toMatchObject({attempt_count:2,status:'action_required'})
+  })
+  it('keeps two same-company venues and a second company isolated in saved CRM summaries',async()=>{
+    config.enableOnboardingWorkflow=true
+    await savedCheck();await savedCheck('retryable_error','TARGET_DATABASE_UNAVAILABLE',1)
+    await savedCheck('action_required','CRM_PROVIDER_VERIFICATION_REQUIRED',2)
+    const north=(await (await ownerList()).json()).venues.filter((row:{kind:string})=>row.kind==='draft')
+    expect(north.map((row:{id:string})=>row.id).sort()).toEqual(manifests.slice(0,2).map(row=>row.source.draftId).sort())
+    expect(north.find((row:{id:string})=>row.id===manifests[1]!.source.draftId)).toMatchObject({status:'failed',attentionCode:'TARGET_DATABASE_UNAVAILABLE'})
+    const south=(await (await ownerList('south')).json()).venues.filter((row:{kind:string})=>row.kind==='draft')
+    expect(south).toHaveLength(1);expect(south[0]).toMatchObject({id:manifests[2]!.source.draftId,
+      crmActivation:{scope:manifests[2]!.scope,code:'CRM_PROVIDER_VERIFICATION_REQUIRED'}})
+    for(const row of north)expect(row.crmActivation.scope.companyId).toBe('10')
+    expect(state.resolutions).toBe(0)
+  })
+  it('gives a network owner all stores across both owned companies, including per-store CRM reads and checks',async()=>{
+    config.enableOnboardingWorkflow=config.enableTenantCrmReads=true
+    const response=await ownerList('network-owner');expect(response.status).toBe(200)
+    const own=(await response.json()).venues.filter((row:{kind:string})=>row.kind==='draft')
+    expect(own.map((row:{id:string})=>row.id).sort()).toEqual(manifests.map(row=>row.source.draftId).sort())
+    expect(state.resolutions).toBe(0)
+    for(const [index,manifest] of manifests.entries()){
+      const customers=await fetch(origin+`/api/admin/onboarding/drafts/${manifest.source.draftId}/crm/customers/1`,{headers:{cookie:sessions.get('network-owner')!}})
+      expect(customers.status).toBe(200)
+      expect(await customers.json()).toMatchObject({scope:manifest.scope,wallet:{balance:String(101+index)}})
+      const check=await request('network-owner','POST',index);expect(check.status).toBe(200)
+      expect(await check.json()).toMatchObject({scope:manifest.scope,activationAllowed:false})
+    }
+    expect((await state.metadata!.query('SELECT role FROM admin_accounts WHERE id=31')).rows).toEqual([{role:'VENUE_ADMIN'}])
+    expect((await state.metadata!.query("SELECT company_id::text FROM admin_company_access WHERE admin_id=31 AND access_kind='owner' ORDER BY company_id")).rows).toEqual([{company_id:'10'},{company_id:'20'}])
+  })
+  it('allows a scoped viewer to read only their saved summary, never to run a check or get manager-only details',async()=>{
+    config.enableOnboardingWorkflow=true;await savedCheck()
+    await state.metadata!.query("UPDATE admin_onboarding_access SET role='viewer' WHERE invitation_id=$1",[viewerInvite])
+    const response=await ownerList('trusted');expect(response.status).toBe(200)
+    const drafts=(await response.json()).venues.filter((row:{kind:string})=>row.kind==='draft')
+    expect(drafts).toHaveLength(1);expect(drafts[0].id).toBe(manifests[0]!.source.draftId)
+    expect(drafts[0].crmActivation.code).toBe('CRM_MARKET_CONTRACT_REQUIRED')
+    expect((await request('trusted','POST')).status).toBe(403);expect((await request('trusted')).status).toBe(403)
+    await state.metadata!.query('UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',[viewerInvite])
+    const revoked=await ownerList('trusted');expect(revoked.status).toBe(403)
+    expect(state.resolutions).toBe(0)
+  })
+  it('omits a draft when its read grant is revoked between list projection and summary completion',async()=>{
+    config.enableOnboardingWorkflow=true;await savedCheck()
+    state.afterSummary=async()=>{await state.metadata!.query('UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',[viewerInvite])}
+    const response=await ownerList('trusted');expect(response.status).toBe(200)
+    expect((await response.json()).venues.filter((row:{kind:string})=>row.kind==='draft')).toEqual([])
+  })
+  it('fails closed per venue when the saved ledger no longer matches the frozen manifest',async()=>{
+    config.enableOnboardingWorkflow=true;await savedCheck()
+    await state.metadata!.query(`UPDATE admin_onboarding_app_configs SET config=jsonb_set(config,'{displayName}','"Changed"') WHERE draft_id=$1`,[manifests[0]!.source.draftId])
+    const response=await ownerList();expect(response.status).toBe(200)
+    const row=(await response.json()).venues.find((row:{id:string})=>row.id===manifests[0]!.source.draftId)
+    expect(row).toMatchObject({status:'degraded',attentionCode:'CRM_ACTIVATION_STATE_UNAVAILABLE',
+      crmActivation:{status:'degraded',evidence:'unavailable',attemptCount:null,updatedAt:null}})
+    expect(state.resolutions).toBe(0)
+  })
+  it('does not treat a ledger read failure as no previous checks or fabricate zero attempts',async()=>{
+    config.enableOnboardingWorkflow=true;state.failSummary=true
+    const response=await ownerList();expect(response.status).toBe(200)
+    const rows=(await response.json()).venues.filter((row:{kind:string})=>row.kind==='draft')
+    expect(rows).toHaveLength(2)
+    expect(rows.every((row:{crmActivation:{status:string;attemptCount:unknown;evidence:string}})=>
+      row.crmActivation.status==='degraded'&&row.crmActivation.attemptCount===null&&row.crmActivation.evidence==='unavailable')).toBe(true)
+    expect(state.resolutions).toBe(0)
+  })
+  it('projects an active lease as verifying and an expired lease as requiring attention without reclaiming it',async()=>{
+    config.enableOnboardingWorkflow=true;await savedCheck('running',null)
+    let response=await ownerList();expect(response.status).toBe(200)
+    let row=(await response.json()).venues.find((row:{id:string})=>row.id===manifests[0]!.source.draftId)
+    expect(row).toMatchObject({status:'verifying',crmActivation:{status:'verifying',code:'CRM_ACTIVATION_CHECK_RUNNING',attemptCount:2}})
+    await state.metadata!.query("UPDATE admin_onboarding_provisioning_steps SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE draft_id=$1 AND step='crm_activation_check'",[manifests[0]!.source.draftId])
+    response=await ownerList();expect(response.status).toBe(200)
+    row=(await response.json()).venues.find((row:{id:string})=>row.id===manifests[0]!.source.draftId)
+    expect(row).toMatchObject({status:'degraded',crmActivation:{status:'degraded',code:'CRM_ACTIVATION_CHECK_EXPIRED',attemptCount:2}})
+    expect((await rows())[0]).toMatchObject({status:'running',attempt_count:2,leased:true})
+    expect(state.resolutions).toBe(0)
+  })
+  it('keeps a current cash failure visible even when the saved CRM reason concerns the subscription',async()=>{
+    config.enableOnboardingWorkflow=config.enableOnboardingPosProxy=true
+    vi.stubEnv('ADMIN_ONBOARDING_SECRET_ACTIVE_KEY_ID','crm-activation-fixture')
+    vi.stubEnv('ADMIN_ONBOARDING_SECRET_KEYRING',JSON.stringify({'crm-activation-fixture':Buffer.alloc(32,7).toString('base64')}))
+    const base='/api/admin/onboarding/drafts/'+manifests[0]!.source.draftId
+    const headers={origin:config.publicOrigin,cookie:sessions.get('owner')!,'x-csrf-token':csrfTokens.get('owner')!,'content-type':'application/json'}
+    const previous=await fetch(origin+base+'/progress',{headers}).then(response=>response.json())
+    const progressResponse=await fetch(origin+base+'/progress',{method:'PUT',headers,body:JSON.stringify({revision:previous.revision,
+      progress:{currentStep:'verification',terminal:{id:'fixture-terminal',label:'Касса'},cashReports:true}})})
+    expect(progressResponse.status).toBe(200)
+    const proxy=await fetch(origin+base+'/integrations/pos-proxy',{headers}).then(response=>response.json())
+    const save=await fetch(origin+base+'/integrations/pos-proxy',{method:'PUT',headers,body:JSON.stringify({
+      requestKey:crypto.randomUUID(),revision:proxy.revision,storeId:'fixture-store',deviceKey:'pvpos_'+('A'.repeat(43))})})
+    expect(save.status).toBe(200)
+    await state.metadata!.query("UPDATE admin_onboarding_pos_proxy SET status='failed',last_code='device_key_rejected' WHERE draft_id=$1",[manifests[0]!.source.draftId])
+    await savedCheck()
+    const response=await ownerList();expect(response.status).toBe(200)
+    const row=(await response.json()).venues.find((row:{id:string})=>row.id===manifests[0]!.source.draftId)
+    expect(row).toMatchObject({status:'failed',attentionCode:'device_key_rejected',
+      crmActivation:{status:'pending',code:'CRM_MARKET_CONTRACT_REQUIRED',evidence:'saved_activation_check'}})
+    await savedCheck('running',null)
+    await state.metadata!.query("UPDATE admin_onboarding_provisioning_steps SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE draft_id=$1 AND step='crm_activation_check'",[manifests[0]!.source.draftId])
+    const expired=await ownerList();expect(expired.status).toBe(200)
+    const stillFailed=(await expired.json()).venues.find((row:{id:string})=>row.id===manifests[0]!.source.draftId)
+    expect(stillFailed).toMatchObject({status:'failed',attentionCode:'device_key_rejected',
+      crmActivation:{status:'degraded',code:'CRM_ACTIVATION_CHECK_EXPIRED'}})
+    expect(state.resolutions).toBe(0)
+  })
+  it('leaves the previous owner-list contract untouched and never reads CRM state while its switch is off',async()=>{
+    config.enableOnboardingWorkflow=true;config.enableTenantCrmActivationChecks=false
+    const response=await ownerList();expect(response.status).toBe(200)
+    expect((await response.json()).venues.every((row:Record<string,unknown>)=>!Object.hasOwn(row,'crmActivation'))).toBe(true)
+    expect(state.summaryReads).toBe(0);expect(state.resolutions).toBe(0)
   })
   it('the manual metadata constraint rejects successful activation even if application code attempts it',async()=>{
     expect((await request('owner','POST')).status).toBe(200)

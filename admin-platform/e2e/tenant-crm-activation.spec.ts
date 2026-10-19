@@ -1,9 +1,9 @@
 import {test,expect,type Page} from '@playwright/test'
 import {fixturePassword} from '../server/tests/onboarding-fixture'
 
-async function login(page:Page){
+async function login(page:Page,who='owner'){
   await page.goto('/')
-  await page.getByLabel('Email',{exact:true}).fill('owner@fixture.invalid')
+  await page.getByLabel('Email',{exact:true}).fill(who+'@fixture.invalid')
   await page.getByLabel('Пароль',{exact:true}).fill(fixturePassword)
   await page.getByRole('button',{name:'Войти',exact:true}).click()
   await expect(page.getByRole('button',{name:'Добавить заведение',exact:true})).toBeVisible()
@@ -72,4 +72,61 @@ test('the UI refuses an unverified active response and restores actual server st
   await region.getByRole('button',{name:'Обновить состояние запуска',exact:true}).click()
   await expect(region.getByRole('button',{name:'Проверить запуск CRM',exact:true})).toBeEnabled()
   await expect(region.getByRole('status')).toHaveText('CRM ещё не запущена.')
+})
+
+test('the owner list resumes the saved CRM reason and refreshes without starting another check',async({page})=>{
+  await login(page,'network-owner')
+  const list=page.getByRole('region',{name:'Все заведения',exact:true})
+  const summary=list.getByRole('region',{name:'Запуск CRM: CRM 1',exact:true})
+  await expect(list.getByRole('region',{name:'Запуск CRM: CRM 2',exact:true})).toBeVisible()
+  await expect(list.getByRole('region',{name:'Запуск CRM: CRM 3',exact:true})).toBeVisible()
+  await expect(summary).toContainText('CRM ещё не запущена')
+  await expect(summary).toContainText('Последняя сохранённая проверка.')
+  const before=Number((await summary.getByText(/^Попыток проверки CRM:/).textContent())!.split(':')[1])
+  await list.getByRole('button',{name:'Обновить заведения',exact:true}).click()
+  await expect(summary).toContainText('Попыток проверки CRM: '+before)
+  const item=list.locator('li').filter({has:page.getByRole('region',{name:'Запуск CRM: CRM 1',exact:true})})
+  await expect(item).toContainText('Свежая связь с кассой не подтверждена.')
+  await expect(item).not.toContainText('runtime bundle')
+  await item.getByRole('button',{name:'Продолжить подключение',exact:true}).click()
+  const check=page.getByRole('region',{name:'Проверка запуска CRM',exact:true})
+  await check.getByRole('button',{name:'Проверить запуск CRM',exact:true}).click()
+  await expect(check.getByRole('status')).toHaveText('CRM ещё не запущена.')
+  await page.getByRole('button',{name:'Закрыть',exact:true}).click()
+  await list.getByRole('button',{name:'Обновить заведения',exact:true}).click()
+  await expect(summary).toContainText('Попыток проверки CRM: '+(before+1))
+  await expect(item).toContainText('Свежая связь с кассой не подтверждена.')
+  await item.getByText('Нужна помощь разработчика?',{exact:true}).click()
+  await expect(item.getByLabel('Текст обращения',{exact:true})).toHaveValue(/Проверка CRM: CRM_PROVIDER_VERIFICATION_REQUIRED/)
+  const otherCompany=list.locator('li').filter({has:page.getByRole('region',{name:'Запуск CRM: CRM 3',exact:true})})
+  await otherCompany.getByRole('button',{name:'Продолжить подключение',exact:true}).click()
+  await expect(page.getByRole('region',{name:'Проверка запуска CRM',exact:true})
+    .getByRole('button',{name:'Проверить запуск CRM',exact:true})).toBeEnabled()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+})
+
+test('the owner list rejects fabricated activation and a summary from another venue',async({page})=>{
+  await login(page,'network-owner')
+  const list=page.getByRole('region',{name:'Все заведения',exact:true})
+  await expect(list.getByRole('region',{name:'Запуск CRM: CRM 1',exact:true})).toBeVisible()
+  let mode='active'
+  await page.route('**/api/admin/onboarding/venues**',async route=>{
+    const response=await route.fetch(),body=await response.json()
+    if(mode!=='valid'){
+      const first=body.venues.find((row:{crmActivation?:unknown})=>row.crmActivation)
+      if(mode==='active')first.crmActivation.activationAllowed=true
+      else if(mode==='top_active')first.status='active'
+      else first.crmActivation.scope.venueId='999999'
+    }
+    await route.fulfill({response,json:body})
+  })
+  for(const corrupt of ['active','foreign','top_active']){
+    mode=corrupt
+    await list.getByRole('button',{name:'Обновить заведения',exact:true}).click()
+    await expect(list.getByRole('alert')).toHaveText('Сервер не подтвердил состояния заведений.')
+    await expect(list.getByRole('region',{name:'Запуск CRM: CRM 1',exact:true})).toHaveCount(0)
+    mode='valid'
+    await list.getByRole('button',{name:'Обновить заведения',exact:true}).click()
+    await expect(list.getByRole('region',{name:'Запуск CRM: CRM 1',exact:true})).toBeVisible()
+  }
 })
