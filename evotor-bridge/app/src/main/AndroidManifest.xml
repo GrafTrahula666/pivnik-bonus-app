@@ -48,13 +48,12 @@
         </activity>
 
         <activity android:name=".SettingsActivity" android:exported="false" />
-        <activity android:name=".NativeCustomerActivity" android:exported="true"
-            android:theme="@android:style/Theme.Material.Dialog.Alert" />
-        <activity android:name=".RedemptionActivity" android:exported="true" />
+        <activity android:name=".RedemptionActivity" android:exported="true"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
 
         <!-- Official receipt-discount integration: native tile beside payment options. -->
         <service android:name=".RedemptionService" android:enabled="true" android:exported="true"
-            android:icon="@mipmap/ic_launcher_round" android:label="Списать баллы">
+            android:icon="@mipmap/ic_launcher_round" android:label="PIVNIK — БОНУСЫ">
             <meta-data android:name="ru.evotor.sales_screen.BACKGROUND_COLOR" android:value="#272135" />
             <intent-filter>
                 <action android:name="evo.v2.receipt.sell.receiptDiscount" />
@@ -62,22 +61,6 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="evo.v2.receipt.sell.beforePositionsEdited" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </service>
-
-        <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
-        <!-- Evotor's barcode-event page lists category EVOTOR and this permission; the generic manifest page lists DEFAULT, so both filters are declared. -->
-        <service
-            android:name=".PivnikSellService"
-            android:exported="true"
-            android:permission="ru.evotor.permission.SELL_INTEGRATION_SERVICE">
-            <intent-filter>
-                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
-                <category android:name="android.intent.category.EVOTOR" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>

@@ -950,6 +950,20 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Unified window (1.0.16/code20, approved 2026-10-18): the native
+  receipt-discount tile is **PIVNIK — БОНУСЫ**. `RedemptionActivity` receives
+  foreground scanner/manual codes in the same window, pins resolve/bind to the
+  source receipt UUID, and displays identity independently of quote availability.
+  Return without redemption uses `IntegrationExit`/KEY_SKIP, preserving discounts,
+  positions and payments. The failed product-barcode service/card are removed.
+  `BindingPolicy` tracks only live scan tickets, invalidates them on that receipt's
+  completion/cancellation or another receipt opening; Bridge releases in finally.
+  Existing receipt cleanup and exact-UUID persistent binding remain. No server,
+  schema, feature flag or monetary-policy change. Native/fiscal acceptance is
+  required. Details: `ops/EVOTOR-BONUS-WINDOW-20261018.md`.
+  The 1.0.16 UI fix starts with focus on the window and the soft keyboard hidden;
+  manual customer/points fields remain editable on explicit selection. It does
+  not change scanner callbacks, receipt state, credentials or monetary rules.
 - Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
   `qr/resolve` caller can explicitly request `includeWallet: true`.
   `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
@@ -1064,3 +1078,28 @@ isolation.
 - `test/wallet-routes.test.js` exercises the actual mount, existing signed-session
   middleware and gateway consent/proxy source on loopback with fixture DB/profile
   adapters. Evidence and limits: `ops/WALLET-ROUTES-EXTRACTION-20261010.md`.
+
+## Evotor paid draft-beer volume (2026-10-19)
+
+`pos/beer.js` accepts an explicit `operation: "beer"` on the existing device
+receipt-bind transport. Selection is pending metadata, fenced by store, receipt,
+client, device and QR-claim timestamp. Manual additive migration **024** creates
+only selection/audit tables; it is never a startup migration. Old APKs and
+cashback continue without 024; new volume writes return 503 until prepared.
+
+Closed paid cloud positions measured in liters cap the selected volume; pieces,
+kg and zero-price gifts are excluded. `pos/bonus.js` settles the canonical
+`beer_loyalty` row and original transaction beer fields in the same transaction
+as cashback: 14 paid liters earn 1 gift liter. No second loyalty counter or staff
+purchase is created. Partial refunds reverse only the original
+purchase's attributed beer/reward (whole gift liters from its original threshold crossings), retain a remaining original transaction, and
+cap cumulative removals. A previously spent gift becomes an audited shortfall
+for owner review. Full canonical cancellation must not reverse beer twice.
+
+The native window has a horizontally scrolling row of total-volume choices,
+ordinary checkout, and separate reserve / payment controls for redemption.
+Initial keyboard focus remains on the non-editable root. Volume saves must be
+acknowledged before checkout; actual accrual still waits for the cloud document.
+Receipt close/clear/new UUID invalidates customer identity; no global volume is
+stored. Do not enable redemption, alter Evotor URL masks, or change the existing
+VK/Selectel services as part of this feature.
