@@ -32,6 +32,7 @@ export const config = {
   enableOnboardingPosProxy: bool('ADMIN_ENABLE_ONBOARDING_POS_PROXY', false),
   enableTenantCrmReads: bool('ADMIN_ENABLE_TENANT_CRM_READS', false),
   enableTenantCrmActivationChecks: bool('ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS', false),
+  enableCrmOnboarding: bool('ADMIN_ENABLE_CRM_ONBOARDING', false),
   enableProductionBonusWrites: bool('ADMIN_ENABLE_PRODUCTION_BONUS_WRITES', false),
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),

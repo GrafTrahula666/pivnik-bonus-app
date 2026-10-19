@@ -65,7 +65,7 @@ import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInv
 import {
   claimOnboardingInvite,createOnboardingDraft,createOnboardingInvite,getOnboardingAppConfig,getOnboardingDraft,getOnboardingIndex,
   getOnboardingEvotorIntegration,getOnboardingInvitePreview,getOnboardingInvites,getOnboardingRequest,getOnboardingScope,
-  prepareOnboardingScope,requireOnboardingAccess,requireOnboardingIntegrationAccess,revokeOnboardingInvite,
+  prepareOnboardingScope,prepareCrmOnboardingScope,requireOnboardingAccess,requireOnboardingIntegrationAccess,revokeOnboardingInvite,
   saveOnboardingAppConfig,saveOnboardingEvotorIntegration,updateOnboardingDraft,verifyOnboardingEvotorIntegration,
 } from './venue-onboarding.js'
 import {
@@ -99,6 +99,7 @@ export const sessionCapabilities=()=>({
   onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
   tenantCrmReads:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmReads,
   tenantCrmActivationChecks:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmActivationChecks,
+  crmOnboarding:config.enableWrites&&config.enableOnboardingDrafts&&config.enableCrmOnboarding,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -204,6 +205,14 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       metadata:{revokedSessions:result.revokedSessions,passwordNeverLogged:true},
     }).catch(()=>undefined)
     json(res,200,result);return true
+  }
+  const crmPreparation=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/prepare$/.exec(url.pathname)
+  if(crmPreparation){
+    if(!isMethod(req,'POST'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Подготовка CRM выполняется отдельной командой.')
+    if(url.search)throw new HttpError(400,'ONBOARDING_SCOPE_COMMAND_INVALID','Настройки и область CRM определяются сервером.')
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`crm-preparation:${session.admin.id}`,20,60_000)
+    json(res,200,await prepareCrmOnboardingScope(session.admin,crmPreparation[1]!,await readJsonBody(req,256)));return true
   }
   if(url.pathname==='/api/admin/onboarding/venues'){
     if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
