@@ -4,8 +4,7 @@ import {POS_EVENT_FRESH_MS} from '../../pos/onboarding-proxy.js'
 // A saved provider check is evidence of that check, never a new live probe.
 // Activation remains blocked until an actual Market adapter and activation
 // operation exist. A database count of zero does not change these requirements.
-export function tenantCrmReadiness(total:string,provider:OnboardingPosProxyView|null,now=Date.now()){
-  const checkedAt=new Date(now).toISOString()
+export function tenantCrmProviderReadiness(provider:OnboardingPosProxyView|null,now=Date.now()){
   let providerStatus=provider?.status??'not_configured'
   let providerCode=provider?.code??'provider_verifier_disabled'
   const advice:Record<string,string>={
@@ -34,12 +33,17 @@ export function tenantCrmReadiness(total:string,provider:OnboardingPosProxyView|
       nextAction='Свежая связь с кассой не подтверждена. Отправьте тестовое событие с кассы и повторите проверку связи.'
     }else nextAction='Последняя серверная проверка подтвердила кассу и получение документов. Перед запуском повторите проверку связи.'
   }
+  return {id:'provider' as const,status:providerStatus,code:providerCode,checkedAt:provider?.checkedAt??null,nextAction,
+    evidence:'last_saved_verification' as const}
+}
+
+export function tenantCrmReadiness(total:string,provider:OnboardingPosProxyView|null,now=Date.now()){
+  const checkedAt=new Date(now).toISOString()
   const checks=[
     {id:'customer_data' as const,status:'active' as const,code:'customer_source_verified',checkedAt,
       nextAction:'Доступ к клиентской базе подтверждён.',customerCount:total,
       dataState:total==='0'?'empty' as const:'available' as const},
-    {id:'provider' as const,status:providerStatus,code:providerCode,checkedAt:provider?.checkedAt??null,nextAction,
-      evidence:'last_saved_verification' as const},
+    tenantCrmProviderReadiness(provider,now),
     {id:'subscription' as const,status:'not_configured' as const,code:'market_contract_not_configured',checkedAt:null,
       nextAction:'Подписка Эвотор.Маркета ещё не подключена. Подтверждение установки и оплаты пока недоступно.'},
     {id:'activation' as const,status:'pending' as const,code:'crm_activation_pending',checkedAt:null,

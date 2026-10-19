@@ -101,11 +101,12 @@ function view(src:Source,stored?:ProxyRow){
   runtimeStatus:'not_provisioned',published:false}
 }
 export type OnboardingPosProxyView=ReturnType<typeof view>
-export async function loadOnboardingPosProxyProjection(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId:string){
+export async function loadOnboardingPosProxyProjection(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId:string,verifyCredential=false){
  if(!config.enableOnboardingPosProxy)return null
  const ready=await client.query<{ready:boolean}>("SELECT to_regclass('public.admin_onboarding_pos_proxy') IS NOT NULL AS ready")
  if(!ready.rows[0]?.ready)throw unavailable()
  const src=await source(client,admin,draftId),stored=await row(client,src.draftId)
+ if(verifyCredential&&stored)key(stored)
  return view(src,stored)
 }
 export async function getOnboardingPosProxy(admin:AdminPrincipal,draftId:string){

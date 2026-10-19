@@ -6,6 +6,7 @@ import { OnboardingProgress } from './OnboardingProgress'
 import { OnboardingPosProxy } from './OnboardingPosProxy'
 import { TenantCustomerDirectory } from './TenantCustomerDirectory'
 import { TenantCrmReadiness } from './TenantCrmReadiness'
+import { TenantCrmActivationCheck } from './TenantCrmActivationCheck'
 
 export interface OnboardingData {
   companyId: string | null
@@ -853,6 +854,8 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         <TenantCrmReadiness actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
         <TenantCustomerDirectory actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
       </div>}
+    {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmActivationChecks&&
+      <TenantCrmActivationCheck actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>}
     {editing&&current&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
       <div className="onboarding-step"><Smartphone size={18}/><b>Приложение</b><span>{application?'Конфигурация сохранена':'Не настроено'} · приложение ещё не опубликовано</span></div>
       {appError&&<div className="onboarding-feedback error" role="alert">{appError}</div>}

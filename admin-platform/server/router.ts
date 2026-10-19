@@ -71,6 +71,7 @@ import {
 import {
   getOnboardingRuntimeBundleVerification,getOnboardingRuntimeDatabaseBinding,getOnboardingTenantSchemaReadiness,
   runOnboardingRuntimeBundleVerification,runOnboardingRuntimeDatabaseBinding,runOnboardingTenantSchemaReadiness,
+  getCrmActivationCheck,runCrmActivationCheck,
 } from './onboarding-provisioning-api.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -97,6 +98,7 @@ export const sessionCapabilities=()=>({
   onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
   onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
   tenantCrmReads:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmReads,
+  tenantCrmActivationChecks:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmActivationChecks,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -208,6 +210,16 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1)throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
     enforceRateLimit(`onboarding-venues:${session.admin.id}`,60,60_000)
     json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset')));return true
+  }
+  const crmActivationCheck=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/activation-check$/.exec(url.pathname)
+  if(crmActivationCheck){
+    if(!isMethod(req,'GET')&&!isMethod(req,'POST'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступны чтение состояния и запуск проверки CRM.')
+    if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и статусы проверки определяются сервером.')
+    if(isMethod(req,'POST'))requireCsrf(req,session.rawToken)
+    enforceRateLimit(`crm-activation-check:${session.admin.id}`,20,60_000)
+    const result=isMethod(req,'GET')?await getCrmActivationCheck(session.admin,crmActivationCheck[1]!):
+      await runCrmActivationCheck(session.admin,crmActivationCheck[1]!,await readJsonBody(req))
+    json(res,200,result);return true
   }
   const tenantCrmReadiness=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/readiness$/.exec(url.pathname)
   if(tenantCrmReadiness){
