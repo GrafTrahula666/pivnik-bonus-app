@@ -4,6 +4,30 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Standalone CRM activation check (2026-10-19, default off)
+
+`ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` exposes GET/POST
+`/api/admin/onboarding/drafts/:id/crm/activation-check` in the existing router and
+`TenantCrmActivationCheck.tsx` in the same wizard. POST accepts only `{}`;
+session, Origin/CSRF and actor rate limits remain mandatory. Manual Admin
+migration 016 extends the existing provisioning ledger with `crm_activation_check`
+and forbids its `succeeded` status. No second tenant/registry/invitation model.
+`onboarding-provisioning.ts` reuses its claim/lease/token/retry mechanism, depends
+on schema readiness only, then rechecks real target binding/schema/ownership in
+bounded REPEATABLE READ READ ONLY SQL. Guest bundle/image is not required for
+the standalone CRM. Completion rechecks active account, current scoped grants,
+frozen source and lease, and atomically audits its blocked result. Lost leases
+and audit failures cannot publish completed evidence. Existing guest step guards
+are unchanged. `tenant-crm-readiness.ts:tenantCrmProviderReadiness` shares saved
+POS evidence freshness validation; the local projection can require credential
+decryption before use. A fresh provider still ends in Market-contract-required.
+No network provider verification, license adapter, canonical activation or active
+CRM resolver is introduced. UI resumes the server operation after reload and
+rejects purported success/scope changes. See
+`ops/SPACEVERSE-CRM-ACTIVATION-CHECK-RUNBOOK.md`, signed HTTP/native SQL tests in
+`server/tests/tenant-crm-activation.spec.ts` and the built desktop/mobile scenario
+selected by `SPACEVERSE_E2E_CRM_ACTIVATION=true` in `playwright.tenant-crm.config.ts`.
+
 ## SaaS readiness research and CRM scope lifecycle (2026-10-18)
 
 `server/database-transport.ts` addresses the external Admin pool certificate-

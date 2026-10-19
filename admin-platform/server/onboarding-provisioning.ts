@@ -13,12 +13,15 @@ import {
 import { recordAudit } from './audit.js'
 import { loadOwnedOnboardingRuntimeSource } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
+import { tenantCrmProviderReadiness } from './tenant-crm-readiness.js'
+import type { OnboardingPosProxyView } from './onboarding-pos-proxy.js'
 
 const BINDING_STEP='runtime_database_binding' as const
 const SCHEMA_READINESS_STEP='tenant_schema_readiness' as const
 const RUNTIME_BUNDLE_STEP='runtime_bundle_verification' as const
+const CRM_ACTIVATION_STEP='crm_activation_check' as const
 const LEASE_SECONDS=30
-type StepName=typeof BINDING_STEP|typeof SCHEMA_READINESS_STEP|typeof RUNTIME_BUNDLE_STEP
+type StepName=typeof BINDING_STEP|typeof SCHEMA_READINESS_STEP|typeof RUNTIME_BUNDLE_STEP|typeof CRM_ACTIVATION_STEP
 type StoredStatus='running'|'retryable_error'|'action_required'|'succeeded'
 type VisibleStatus='not_started'|StoredStatus
 type BindingResult={binding:'created'|'verified_existing'}
@@ -77,6 +80,8 @@ export interface OnboardingProvisioningOptions {
   assembleRuntimeBundle?:(manifest:SpaceverseRuntimeManifest)=>Promise<unknown>|unknown
   requireCodeRelease?:boolean
   requireImageRelease?:boolean
+  // A local metadata projection, never a network call under a metadata lock.
+  readCrmProvider?:(client:PoolClient,admin:AdminPrincipal,draftId:string)=>Promise<OnboardingPosProxyView|null>
 }
 
 class TargetStepFailure extends Error {
@@ -154,10 +159,17 @@ async function connect(database:Connectable):Promise<Client> {
 }
 
 async function selectStep(client:Pick<PoolClient,'query'>,draftId:string,step:StepName,lock=false):Promise<StepRow|undefined> {
-  const result=await client.query<StepRow>(`SELECT ${stepColumns}
+  const columns=step===CRM_ACTIVATION_STEP?stepColumns.replace('lease_expires_at>NOW()','lease_expires_at>clock_timestamp()'):stepColumns
+  const result=await client.query<StepRow>(`SELECT ${columns}
     FROM admin_onboarding_provisioning_steps
     WHERE draft_id=$1::uuid AND step=$2${lock?' FOR UPDATE':''}`,[draftId,step])
   return result.rows[0]
+}
+
+async function lockCrmActor(client:Client,admin:AdminPrincipal){
+  const actor=await client.query(`SELECT id FROM admin_accounts
+    WHERE id=$1::bigint AND role=$2 AND active=TRUE FOR SHARE`,[admin.id,admin.role])
+  if(!actor.rows.length)throw new HttpError(403,'ONBOARDING_ACCESS_REQUIRED','Учётная запись больше не имеет доступа к этому шагу.')
 }
 
 interface Claim {
@@ -171,6 +183,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
+    if(step===CRM_ACTIVATION_STEP)await lockCrmActor(client,admin)
     const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
     if(step!==BINDING_STEP) {
       const dependencyStep=step===SCHEMA_READINESS_STEP?BINDING_STEP:SCHEMA_READINESS_STEP
@@ -196,6 +209,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
       throw new HttpError(409,'ONBOARDING_PROVISIONING_SOURCE_CHANGED',
         'Подготовка уже связана с другой версией приложения. Проверьте сохранённую область.')
     }
+    if(step===CRM_ACTIVATION_STEP&&row.status==='succeeded')throw unavailable()
     if(inserted.rows.length===1) {
       await client.query('COMMIT')
       return {source,step,row,token:initialToken}
@@ -327,12 +341,13 @@ function hasUniqueIndex(rows:SchemaIndexRow[],table:string,columns:string):boole
     normalizedSql(row.indexdef).includes(`(${columns})`))
 }
 
-async function verifyTargetSchema(database:Connectable,source:RuntimeSource):Promise<SchemaReadinessResult> {
+async function verifyTargetSchema(database:Connectable,source:RuntimeSource,bounded=false):Promise<SchemaReadinessResult> {
   let client:Client
   try {client=await database.connect()}
   catch {throw new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')}
   try {
-    await client.query('BEGIN READ ONLY')
+    await client.query(bounded?'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY':'BEGIN READ ONLY')
+    if(bounded)await client.query("SET LOCAL statement_timeout='5s'")
     const binding=await client.query<BindingRow>(`SELECT
       runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
       FROM spaceverse_runtime_binding WHERE singleton=TRUE`)
@@ -475,13 +490,31 @@ async function finish(
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
+    if(claimValue.step===CRM_ACTIVATION_STEP){
+      // Same lock order as claim(): current grant -> draft -> operation. The
+      // frozen prepared source guard is unchanged; this cannot activate rows.
+      await lockCrmActor(client,admin)
+      const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,claimValue.source.draftId,true))
+      if(source.manifest.manifestSha256!==claimValue.source.manifest.manifestSha256)throw unavailable()
+    }
     const current=await selectStep(client,claimValue.source.draftId,claimValue.step,true)
     if(!current) throw unavailable()
     // A worker that lost its lease can never overwrite a newer attempt. The
     // target binding is idempotent, so the newer worker will reconcile it.
-    if(current.status!=='running'||current.lease_token!==claimValue.token) {
+    if(current.status!=='running'||current.lease_token!==claimValue.token||
+      (claimValue.step===CRM_ACTIVATION_STEP&&!current.lease_active)) {
       await client.query('COMMIT')
       return view(claimValue.source,claimValue.step,current,options)
+    }
+    if(claimValue.step===CRM_ACTIVATION_STEP){
+      // No trusted Market adapter exists yet. Even fresh provider/schema proof
+      // must end in action_required. Neither a browser nor a callback can grant
+      // a subscription or write canonical active flags.
+      if(outcome.status==='succeeded')throw unavailable()
+      if(outcome.errorCode==='CRM_MARKET_CONTRACT_REQUIRED'){
+        const provider=tenantCrmProviderReadiness(await options.readCrmProvider?.(client,admin,claimValue.source.draftId)??null)
+        if(provider.status!=='active')outcome={status:'action_required',errorCode:'CRM_PROVIDER_VERIFICATION_REQUIRED'}
+      }
     }
     if(outcome.status==='succeeded') {
       await client.query(`UPDATE admin_onboarding_provisioning_steps SET
@@ -518,6 +551,43 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
     typeof options.resolveTargetDatabase!=='function') throw new TypeError('Invalid onboarding provisioning options')
 
   return Object.freeze({
+    async getCrmActivationCheck(admin:AdminPrincipal,draftId:string){
+      const client=await connect(options.metadata)
+      try{
+        await client.query('BEGIN')
+        await lockCrmActor(client,admin)
+        const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
+        const row=await selectStep(client,source.draftId,CRM_ACTIVATION_STEP)
+        if(row&&!matchesSource(row,source))throw unavailable()
+        if(row?.status==='succeeded')throw unavailable()
+        await client.query('COMMIT')
+        return view(source,CRM_ACTIVATION_STEP,row)
+      }catch(error){
+        await client.query('ROLLBACK').catch(()=>undefined)
+        if(error instanceof HttpError)throw error
+        throw unavailable()
+      }finally{client.release()}
+    },
+
+    async runCrmActivationCheck(admin:AdminPrincipal,draftId:string){
+      // Depends on schema readiness only: a guest bundle/image is optional for
+      // the standalone CRM website. Recheck the actual target, not saved success.
+      const claimed=await claim(options,admin,draftId,CRM_ACTIVATION_STEP)
+      if(!claimed.token)return view(claimed.source,CRM_ACTIVATION_STEP,claimed.row)
+      let outcome:{status:'retryable_error'|'action_required';errorCode:string}
+      try{
+        const target=await options.resolveTargetDatabase(claimed.source.manifest.runtimeKey)
+        if(!target)throw new TargetStepFailure('action_required','TARGET_DATABASE_NOT_REGISTERED')
+        await verifyTargetSchema(target,claimed.source,true)
+        outcome={status:'action_required',errorCode:'CRM_MARKET_CONTRACT_REQUIRED'}
+      }catch(error){
+        const failure=error instanceof TargetStepFailure?error:new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')
+        outcome={status:failure.status,errorCode:failure.code}
+      }
+      // Completion/audit errors must propagate, not become a second completion.
+      return finish(options,admin,claimed,outcome)
+    },
+
     async getRuntimeDatabaseBinding(admin:AdminPrincipal,draftId:string) {
       const client=await connect(options.metadata)
       try {

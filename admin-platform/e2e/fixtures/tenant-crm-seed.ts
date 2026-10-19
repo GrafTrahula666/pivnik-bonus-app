@@ -2,7 +2,8 @@
 // to the loopback test server; they are not printed in Playwright output.
 if(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)throw new Error('Dedicated local PostgreSQL is required.')
 const {tenantCrmFixture}=await import('../../server/tests/tenant-crm-fixture.js')
-const fixture=await tenantCrmFixture()
+const fixture=process.env.SPACEVERSE_E2E_CRM_ACTIVATION==='true'
+  ?await (await import('../../server/tests/tenant-crm-activation-fixture.js')).tenantCrmActivationFixture():await tenantCrmFixture()
 try{
   await fixture.metadata.exec(`CREATE TABLE users(id BIGINT PRIMARY KEY,role TEXT,merged_into_user_id BIGINT,deleted_at TIMESTAMPTZ);
     CREATE TABLE bar_customers(bar_id BIGINT,user_id BIGINT,status TEXT)`)

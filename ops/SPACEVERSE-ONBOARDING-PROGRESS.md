@@ -1629,3 +1629,79 @@ TLS ветка интегрирована с main 0aeef0781f3b83102cc26836778d1b
 /workspace/SPACEVERSE-CRM-MERGE-RESULT-2026-10-18.md и артефактах
 /tmp/spaceverse-crm-merges-20261018. Market contract/test app/install/pay/revoke,
 active CRM lifecycle, production CA и коммерческая готовность остаются gates.
+
+## 2026-10-19 — самостоятельная CRM: сохраняемая проверка запуска
+
+Ветка `spaceverse/crm-activation-check-20261019`, база main
+`ba522b1383bcb06206280fbc065165e60fe94cad` (#284–#287 уже объединены ранее).
+Мандат владельца — продолжать CRM и объединять проверенные изменения;
+действия с prod DB/settings/secrets/devices и публикация Маркета не разрешены
+этим шагом. Исторические Draft #96/#101 вне этой цепочки не изменялись.
+
+Лично добавлены GET/POST `.../crm/activation-check`, default-off
+`ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS`, UI «Запуск CRM» с возобновлением,
+новая ручная Admin migration 016 и runbook
+`ops/SPACEVERSE-CRM-ACTIVATION-CHECK-RUNBOOK.md`. Миграция переиспользует
+`admin_onboarding_provisioning_steps`: одна строка на draft/venue/step,
+прежние lease/token/retry и frozen binding, без второй модели tenant.
+Для CRM dependency только schema readiness; guest bundle/image не нужен.
+Реальная повторная проверка target schema/binding/ownership выполняется
+REPEATABLE READ READ ONLY с timeout 5 секунд. Metadata completion заново
+проверяет/блокирует активную учётную запись, scoped grant и frozen source;
+потерявший lease worker не перезаписывает новый результат. Результат и аудит
+сохраняются атомарно. У управляющего не появляются права владельца компании.
+
+Свежесть сохранённой POS-проверки разделяет helper с `/crm/readiness`.
+Ключ должен оставаться доступен для расшифровки; новый сетевой запрос к кассе
+не выполняется. Пока нет проверенного Market adapter, даже свежая касса
+оставляет `CRM_MARKET_CONTRACT_REQUIRED`. SQL migration 016 отдельно запрещает
+`succeeded` для этого шага. Canonical active flags, старые guest guards,
+users/wallets/purchases, деньги и живые устройства не меняются. Это проверка
+возможности запуска, НЕ реализованная платная активация и НЕ коммерческий релиз.
+
+Проверки текущей итерации (артефакты `/tmp/spaceverse-crm-activation-20261019`):
+- `npm run materialize` ×2: байтовые SHA256 snapshots совпали. Те же 7 generated
+  файлов, включая server.js/universal-server.js/app.js, дали ожидаемый diff;
+  сохранён patch, исходные байты восстановлены и SHA256 сверены. Patch-chain
+  не исправлялся и generated diff в PR не включён.
+- `node --test`: 625 passed, 0 failed/skipped; `npm run check`: exit 0.
+- `node --test test/vk-native-hosting-main-parity.test.js` и
+  `PIVNIK_VK_API_BASE=https://vk-gateway.invalid node scripts/build-vk-hosting.mjs`:
+  exit 0; только локальный bundle, не deploy.
+- `npm audit` и `npm audit --omit=dev --audit-level=high`, root и Business:
+  exit 0 / 0 vulnerabilities.
+- Business `npm run typecheck`, `npm run lint`, `npm test -- --maxWorkers=1`,
+  `npm run build`: exit 0. Native PostgreSQL: **417 passed, 0 failed/skipped**.
+  Новые HTTP/SQL тесты: **22 passed**; тот же focused файл на PGlite: 22 passed.
+  Изоляция двух компаний/двух точек одной компании, signed session/CSRF/Origin,
+  подмена scope/license/status, readonly SQL, drift schema/binding/manifest,
+  отзыв grant и отключение аккаунта во время probe, lost lease/newer worker,
+  audit rollback, fresh/stale POS evidence и unreadable key проверены.
+- Built-panel Playwright: новый activation desktop/mobile — 6 passed;
+  существующий native CRM — 6 passed, disabled — 2 passed, legacy CRM/cash —
+  12 passed, onboarding — 4 passed. Tracked PNG восстановлены по исходным SHA.
+- Первый новый E2E прогон: 4 passed/2 failed из-за моего обращения к
+  `scope.venue` вместо фактического `scope.scope.venue` в тесте; исправлен
+  test assertion, следующий полный новый сценарий 6/6. Исходный лог сохранён.
+- Общий lint сначала дал новое предупреждение cleanup ref; исправлен стабильным
+  invalidate callback, без suppression. Финальный lint: 0 errors и прежние
+  12 Fast Refresh warnings. После callback повторяются typecheck/build и новые
+  E2E; результаты окончательного прогона будут добавлены перед публикацией.
+
+Среда: почти заполненный root disk (119 МБ при старте). Без удаления данных
+перенесены только установленные Admin dependencies в /tmp; 17 900 file SHA256
+совпали, локальная ссылка исключена из Git. Новый тестовый PG16 запущен на /tmp
+из бинарных файлов существующего официального image, RepoDigest
+`sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4`;
+SHA256 postgres binary до/после копирования совпал. Loopback/SCRAM, только
+синтетическая роль crm_fixture; старый Docker cluster/data сохранён. Startup
+helper дважды выполнил SELECT 1. Обновлён start_skill draft облачной среды;
+это сохранённая конфигурация, не её публикация и не проверка новой машины.
+Новый Docker image не собирался из-за ограниченного root/vfs storage; native
+SQL + реальная HTTP-сессия и built App не выдаются за container image proof.
+
+Осталось: актуальный Market contract и тестовое приложение, реальная проверка
+install/payment/revoke, trusted subscription evidence, canonical activation и
+resolver активной CRM, end-to-end платный путь, эксплуатационные release gates.
+Старые guest provisioning steps вне CRM не расширялись; их completion guards
+следует отдельно проверить перед разрешением реального guest provisioning.
