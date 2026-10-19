@@ -1,10 +1,16 @@
 package ru.pivnik.evotor;
 
+import android.content.Context;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.HorizontalScrollView;
+import java.util.ArrayList;
+import java.util.List;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.math.BigDecimal;
@@ -15,41 +21,79 @@ import ru.evotor.framework.core.IntegrationActivity;
 import ru.evotor.framework.core.action.event.receipt.changes.receipt.SetExtra;
 import ru.evotor.framework.core.action.event.receipt.discount.ReceiptDiscountEvent;
 import ru.evotor.framework.core.action.event.receipt.discount.ReceiptDiscountEventResult;
+import ru.evotor.framework.device.scanner.event.BarcodeReceivedEvent;
+import ru.evotor.framework.device.scanner.event.handler.receiver.ScannerBroadcastReceiver;
 import ru.evotor.framework.receipt.AppliedLoyaltyData;
 import ru.evotor.framework.receipt.Receipt;
 import ru.evotor.framework.receipt.ReceiptApi;
 import ru.pivnik.evotor.core.ReceiptBinding;
 import ru.pivnik.evotor.core.RedemptionOperation;
+import ru.pivnik.evotor.core.PivnikQr;
 
 /** Explicit cashier-selected native discount tile. Never creates a fictitious payment/product. */
 public final class RedemptionActivity extends IntegrationActivity {
     private Bridge bridge;
     private RedemptionJournal journal;
     private String receiptUuid;
-    private TextView status;
-    private EditText amount;
-    private Button apply, remove, refresh, back;
+    private TextView status, customer, scanStatus, volumeStatus;
+    private final List<Button> volumeButtons=new ArrayList<>();
+    private int beerMl;
+    private String beerClient;
+    private long beerBoundAt;
+    private EditText amount, customerCode;
+    private Button apply, remove, refresh, back, findCustomer, pay;
     private boolean busy;
+    private boolean foreground, registered, returningEffect, callbackCompleted;
     private ReceiptBasket basket;
     private ReceiptBinding guest;
     private RedemptionOperation operation;
     private long maxPoints;
+    private final ScannerBroadcastReceiver scanner = new ScannerBroadcastReceiver() {
+        @Override protected void handleBarcodeReceivedEvent(Context context, BarcodeReceivedEvent event) {
+            scanCustomer(event.getBarcode());
+        }
+    };
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         bridge=Bridge.get(this); journal=new RedemptionJournal(this);
         ReceiptDiscountEvent event=ReceiptDiscountEvent.create(getSourceBundle());
         receiptUuid=event==null ? null : event.getReceiptUuid();
         int pad=(int)(20*getResources().getDisplayMetrics().density);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(pad,pad,pad,pad);
-        TextView title=new TextView(this); title.setText("PIVNIK · Списать баллы"); title.setTextSize(24); root.addView(title);
-        status=new TextView(this); status.setTextSize(20); status.setPadding(0,pad,0,pad); root.addView(status);
+        root.setFocusableInTouchMode(true);
+        TextView title=new TextView(this); title.setText("PIVNIK — БОНУСЫ"); title.setTextSize(24); root.addView(title);
+        TextView note=new TextView(this); note.setText("Отсканируйте QR-код клиента"); note.setTextSize(22); root.addView(note);
+        customer=new TextView(this); customer.setTextSize(22); customer.setPadding(0,pad,0,pad); root.addView(customer);
+        customerCode=new EditText(this); customerCode.setSingleLine(true); customerCode.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        customerCode.setHint("Код клиента PVK-XXXX-XXXX или QR-код"); root.addView(customerCode);
+        findCustomer=new Button(this); findCustomer.setText("Найти клиента"); findCustomer.setOnClickListener(v -> scanCustomer(customerCode.getText().toString())); root.addView(findCustomer);
+        scanStatus=new TextView(this); root.addView(scanStatus);
+        volumeStatus=new TextView(this); volumeStatus.setTextSize(18); root.addView(volumeStatus);
+        HorizontalScrollView volumes=new HorizontalScrollView(this);
+        LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+        int width=(int)(72*getResources().getDisplayMetrics().density);
+        for (int ml=0;ml<=20000;ml+=500) {
+            final int choice=ml;
+            Button button=new Button(this); button.setText(ml==0 ? "0 л" : liters(ml)+" л");
+            button.setOnClickListener(v -> { beerMl=choice; showVolume(); });
+            row.addView(button,new LinearLayout.LayoutParams(width,LinearLayout.LayoutParams.WRAP_CONTENT)); volumeButtons.add(button);
+        }
+        volumes.addView(row); root.addView(volumes);
+        TextView rule=new TextView(this); rule.setText("Выберите общий оплаченный объём разливного пива в чеке. 14 л → 1 л в подарок. Литры и бонусы учитываются после оплаты. Ряд можно прокрутить вправо."); root.addView(rule);
+        back=new Button(this); back.setText("Перейти к оплате"); back.setOnClickListener(v -> checkoutOrdinary()); root.addView(back);
+        TextView spending=new TextView(this); spending.setText("Списание баллов"); spending.setTextSize(24); spending.setPadding(0,pad,0,0); root.addView(spending);
+        status=new TextView(this); status.setTextSize(18); status.setPadding(0,pad/2,0,pad/2); root.addView(status);
         amount=new EditText(this); amount.setInputType(InputType.TYPE_CLASS_NUMBER); amount.setHint("Сколько баллов списать"); root.addView(amount);
         apply=new Button(this); apply.setText("Списать баллы"); apply.setOnClickListener(v -> reserve()); root.addView(apply);
         remove=new Button(this); remove.setText("Отменить списание"); remove.setOnClickListener(v -> cancel()); root.addView(remove);
         refresh=new Button(this); refresh.setText("Обновить"); refresh.setOnClickListener(v -> load()); root.addView(refresh);
-        back=new Button(this); back.setText("Вернуться к оплате"); back.setOnClickListener(v -> { if (!busy) leaveCheckout(); }); root.addView(back);
+        pay=new Button(this); pay.setText("Оплата"); pay.setOnClickListener(v -> payReserved()); root.addView(pay);
+        TextView paymentNote=new TextView(this); paymentNote.setText("«Оплата» — для выбранного списания. Без списания используйте «Перейти к оплате» выше. Клиент и объём выбираются заново в каждом чеке."); root.addView(paymentNote);
         ScrollView scroll=new ScrollView(this); scroll.addView(root); setContentView(scroll);
+        root.requestFocus();
         load();
     }
 
@@ -66,8 +110,66 @@ public final class RedemptionActivity extends IntegrationActivity {
 
     private void controls(boolean waiting) {
         busy=waiting; apply.setEnabled(!waiting && basket!=null && (operation!=null || maxPoints>0));
-        remove.setEnabled(!waiting && operation!=null); amount.setEnabled(!waiting && operation==null);
-        refresh.setEnabled(!waiting); back.setEnabled(!waiting);
+        remove.setEnabled(!waiting && operation!=null); amount.setEnabled(!waiting && operation==null && guest!=null && maxPoints>0);
+        findCustomer.setEnabled(!waiting && operation==null && receiptUuid!=null);
+        customerCode.setEnabled(!waiting && operation==null && receiptUuid!=null);
+        refresh.setEnabled(!waiting); back.setEnabled(!waiting && operation==null);
+        pay.setEnabled(!waiting && operation!=null && ("reserved".equals(operation.phase) || "offered".equals(operation.phase)));
+        for (Button button:volumeButtons) button.setEnabled(!waiting && guest!=null && operation==null);
+        showVolume();
+    }
+
+    private static String liters(int ml) {
+        return BigDecimal.valueOf(ml,3).stripTrailingZeros().toPlainString().replace('.',',');
+    }
+
+    private void showVolume() {
+        volumeStatus.setText("Оплаченный объём: "+liters(beerMl)+" л");
+        for (int i=0;i<volumeButtons.size();i++) {
+            Button button=volumeButtons.get(i); boolean selected=i*500==beerMl;
+            button.setSelected(selected); button.setText((selected ? "✓ " : "")+(i==0 ? "0" : liters(i*500))+" л");
+        }
+    }
+
+    private void loadVolume(ReceiptBinding active) throws Exception {
+        if (active==null) {
+            beerMl=0; beerClient=null; beerBoundAt=0; runOnUiThread(this::showVolume); return;
+        }
+        if (active.userId.equals(beerClient) && active.boundAtMillis==beerBoundAt) return;
+        beerMl=0; beerClient=active.userId; beerBoundAt=active.boundAtMillis;
+        runOnUiThread(this::showVolume);
+        JSONObject answer=PivnikApi.beer(bridge.settings,request("status").put("clientId",active.userId));
+        if (!receiptUuid.equals(answer.getString("receiptUuid")) || !active.userId.equals(answer.getString("clientId"))) throw new IllegalStateException("Обновите клиента в этом чеке.");
+        if (!answer.isNull("beerMl")) {
+            long value=RedemptionOperation.integer(answer,"beerMl");
+            if (value>100000 || value%500!=0) throw new IllegalStateException("Некорректный объём.");
+            beerMl=(int)value;
+        }
+        runOnUiThread(this::showVolume);
+    }
+
+    private void saveVolume(int selected, ReceiptBinding expected) throws Exception {
+        ReceiptBasket before=current();
+        ReceiptBinding live=bridge.policy.bindingFor(receiptUuid,System.currentTimeMillis());
+        if (live==null || expected==null || !live.userId.equals(expected.userId) || live.boundAtMillis!=expected.boundAtMillis
+                || before.hasPayment) throw new IllegalStateException("Клиент или чек изменился. Откройте бонусы снова.");
+        JSONObject answer=PivnikApi.beer(bridge.settings,request("save").put("clientId",live.userId).put("beerMl",selected));
+        if (!receiptUuid.equals(answer.getString("receiptUuid")) || !live.userId.equals(answer.getString("clientId"))
+                || RedemptionOperation.integer(answer,"beerMl")!=selected) throw new IllegalStateException("Нет подтверждения выбранного объёма.");
+        ReceiptBasket after=current();
+        ReceiptBinding still=bridge.policy.bindingFor(receiptUuid,System.currentTimeMillis());
+        if (!after.hash.equals(before.hash) || after.hasPayment || still==null || !still.userId.equals(live.userId)
+                || still.boundAtMillis!=live.boundAtMillis) throw new IllegalStateException("Чек изменился. Проверьте клиента и объём заново.");
+    }
+
+    private void checkoutOrdinary() {
+        if (busy || operation!=null) return;
+        if (guest==null) { leaveCheckout(); return; }
+        final int selected=beerMl; final ReceiptBinding expected=guest;
+        work(() -> {
+            saveVolume(selected,expected);
+            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) leaveCheckout(); });
+        });
     }
 
     private interface Work { void run() throws Exception; }
@@ -82,12 +184,66 @@ public final class RedemptionActivity extends IntegrationActivity {
 
     private void show(String text) { runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) status.setText(text); }); }
 
+    private void showCustomer(ReceiptBinding value) {
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            try {
+                current();
+                ReceiptBinding live=bridge.policy.bindingFor(receiptUuid,System.currentTimeMillis());
+                if (value==null || live==null || !value.userId.equals(live.userId)) {
+                    customer.setText("Клиент не выбран"); return;
+                }
+                String balance=value.unlimitedBonus ? "без лимита" : value.bonusBalance==null ? "недоступен" : value.bonusBalance+" баллов";
+                customer.setText(value.displayName+"\nБаланс: "+balance);
+            } catch (Exception changed) { customer.setText("Чек изменился. Откройте бонусы в новом чеке."); }
+        });
+    }
+
+    private void scanCustomer(String raw) {
+        if (!foreground || busy || isFinishing() || receiptUuid==null) return;
+        if (operation!=null) { scanStatus.setText("Сначала отмените сохранённое списание, затем выбирайте клиента."); return; }
+        String payload=PivnikQr.detect(raw);
+        if (payload==null) { scanStatus.setText("Нужен QR клиента PIVNIK или короткий код PVK-XXXX-XXXX."); return; }
+        customerCode.setText("");
+        scanStatus.setText("Определяем клиента и привязываем к этому чеку…");
+        controls(true);
+        bridge.onPivnikCodeScanned(payload,receiptUuid,message -> {
+            if (isFinishing() || isDestroyed()) return;
+            controls(false);
+            scanStatus.setText(message);
+            load();
+        });
+    }
+
+    @Override protected void onResume() {
+        super.onResume(); foreground=true;
+        try {
+            registerReceiver(scanner,new IntentFilter(ScannerBroadcastReceiver.ACTION_BARCODE_RECEIVED),
+                    ScannerBroadcastReceiver.SENDER_PERMISSION,null);
+            registered=true;
+        } catch (RuntimeException error) { scanStatus.setText("Сканер недоступен. Можно ввести короткий код клиента вручную."); }
+        if (!busy) load();
+    }
+
+    @Override protected void onPause() {
+        foreground=false;
+        if (registered) { unregisterReceiver(scanner); registered=false; }
+        super.onPause();
+    }
+
     private void load() {
         if (busy) return;
-        basket=null; maxPoints=0;
+        basket=null; maxPoints=0; guest=null;
+        customer.setText("Клиент не выбран"); amount.setText("");
         work(() -> {
             basket=current(); operation=journal.get(receiptUuid);
             guest=bridge.policy.bindingFor(receiptUuid,System.currentTimeMillis());
+            showCustomer(guest);
+            try { loadVolume(guest); }
+            catch (Exception unavailable) {
+                beerClient=null; // a later refresh retries; never mistake a failed read for a saved selection.
+                runOnUiThread(() -> scanStatus.setText("Объём пока не подтверждён. При переходе к оплате повторим сохранение."));
+            }
             if (operation!=null) {
                 JSONObject row=PivnikApi.redemption(bridge.settings,request("status")).optJSONObject("redemption");
                 if (row!=null && !operation.matchesServer(row)) throw new IllegalStateException("На сервере другая операция. Не применяйте скидку повторно.");
@@ -101,7 +257,7 @@ public final class RedemptionActivity extends IntegrationActivity {
                     showOperation(); return;
                 }
             }
-            if (guest==null) throw new IllegalStateException("Клиент к этому чеку не прикреплён. Вернитесь в продажу и отсканируйте QR клиента.");
+            if (guest==null) { show("Отсканируйте QR клиента или введите его короткий код в этом окне."); return; }
             if (basket.hasPayment) throw new IllegalStateException("В чеке уже есть оплата. Списание выбирается до начала оплаты.");
             if (basket.foreignLoyalty) throw new IllegalStateException("В чеке уже выбрана другая программа лояльности. Сначала отмените её штатным способом.");
             if (basket.documentDiscountCents!=0) throw new IllegalStateException("В чеке уже есть скидка. Сначала отмените её штатным способом, затем откройте списание.");
@@ -111,7 +267,7 @@ public final class RedemptionActivity extends IntegrationActivity {
             long balance=RedemptionOperation.integer(answer,"balance"); maxPoints=RedemptionOperation.integer(answer,"maxPoints");
             if (maxPoints>balance || maxPoints>basket.beforeDocumentDiscountCents*30L/10000L) throw new IllegalStateException("Некорректный ответ сервиса.");
             current();
-            show(guest.displayName+"\nБаланс: "+balance+" баллов\nМожно списать: "+maxPoints+" (до 30% чека).\n1 балл = 1 ₽. Остаток — наличными или картой.");
+            show("Можно списать: "+maxPoints+" баллов (до 30% чека).\n1 балл = 1 ₽. Остаток — наличными или картой.");
             runOnUiThread(() -> amount.setText(Long.toString(maxPoints)));
         });
     }
@@ -151,12 +307,31 @@ public final class RedemptionActivity extends IntegrationActivity {
             operation=pending.phase("reserved"); journal.save(operation);
             ReceiptBasket after=current();
             if (!after.matches(operation) || after.documentDiscountCents!=0) throw new IllegalStateException("Чек изменился во время запроса. Резерв сохранён; отмените его перед новым списанием.");
-            JSONObject marker=new JSONObject().put("version",1).put("operationId",operation.operationId).put("points",operation.points);
+            showOperation();
+            show("Зарезервировано: "+operation.points+" баллов. Нажмите «Оплата» ниже, чтобы применить списание и оплатить остаток.");
+        });
+    }
+
+    private void payReserved() {
+        if (busy || operation==null) return;
+        final int selected=beerMl; final ReceiptBinding expected=guest;
+        work(() -> {
+            RedemptionOperation saved=journal.get(receiptUuid);
+            ReceiptBasket after=current();
+            if (saved==null || !after.matches(saved)) throw new IllegalStateException("Чек изменился. Проверьте сохранённое списание.");
+            saveVolume(selected,expected);
+            if (after.ownMarker(saved) && after.documentDiscountCents==saved.points*100L) {
+                runOnUiThread(this::leaveCheckout); return;
+            }
+            if (after.documentDiscountCents!=0) throw new IllegalStateException("В чеке уже есть скидка. Проверьте сохранённое списание.");
+            JSONObject confirmed=PivnikApi.redemption(bridge.settings,saved.toJson().put("action","reserve")).getJSONObject("redemption");
+            if (!saved.matchesServer(confirmed) || !"reserved".equals(confirmed.getString("state"))) throw new IllegalStateException("Резерв больше не подтверждён. Нажмите «Обновить».");
+            JSONObject marker=new JSONObject().put("version",1).put("operationId",saved.operationId).put("points",saved.points);
             after.extras.put("pivnikLoyaltyV1",marker);
             JSONObject data=new JSONObject().put("loyaltyAppId","70110ab9-7265-4a13-8320-fa164642b321")
-                .put("loyaltyServicePackage",getPackageName()).put("loyaltyServiceClass",RedemptionService.class.getName()).put("spentBonusAmount",operation.points);
-            RedemptionOperation offered=operation.phase("offered"); journal.save(offered);
-            finishDiscount(BigDecimal.valueOf(operation.points),after.extras,new AppliedLoyaltyData(operation.clientId,null,data.toString()),offered);
+                .put("loyaltyServicePackage",getPackageName()).put("loyaltyServiceClass",RedemptionService.class.getName()).put("spentBonusAmount",saved.points);
+            RedemptionOperation offered=saved.phase("offered"); journal.save(offered);
+            finishDiscount(BigDecimal.valueOf(saved.points),after.extras,new AppliedLoyaltyData(saved.clientId,null,data.toString()),offered);
         });
     }
 
@@ -199,6 +374,7 @@ public final class RedemptionActivity extends IntegrationActivity {
                     throw new IllegalStateException("Чек изменился. Резерв сохранён; откройте списание снова.");
                 }
                 setIntegrationResult(new ReceiptDiscountEventResult(discount,new SetExtra(extras),Collections.emptyList(),null,null,loyalty));
+                returningEffect=true;
                 finish();
                 if (discount.signum()==0) bridge.retryRemovedRedemption(expected.receiptUuid);
             } catch (Exception error) { status.setText(error.getMessage()); }
@@ -218,11 +394,20 @@ public final class RedemptionActivity extends IntegrationActivity {
                     .put("points",saved.points).put("removed",true));
                 setIntegrationResult(new ReceiptDiscountEventResult(BigDecimal.ZERO,new SetExtra(live.extras),
                     Collections.emptyList(),null,null,new AppliedLoyaltyData(null,null,null)));
+                returningEffect=true;
                 finish(); bridge.retryRemovedRedemption(receiptUuid); return;
             }
         } catch (Exception ignored) { /* changed receipt: never write into the next sale */ }
         finish();
     }
 
-    @Override public void onBackPressed() { if (!busy) leaveCheckout(); }
+    @Override public void onBackPressed() { if (!busy) { if (operation==null) checkoutOrdinary(); else leaveCheckout(); } }
+
+    @Override public void finish() {
+        if (!callbackCompleted) {
+            callbackCompleted=true;
+            if (!returningEffect) IntegrationExit.withoutChanges(getIntent());
+        }
+        super.finish();
+    }
 }

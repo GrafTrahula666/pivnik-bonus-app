@@ -1,5 +1,30 @@
 # PIVNIK Evotor bridge — integration draft
 
+## Unified bonus window (1.0.16/code20, agreed 2026-10-18)
+
+The bonus window opens with the soft keyboard hidden and focus on the window.
+Tapping a customer-code or points field still allows explicit manual input.
+
+The native payment tile is **PIVNIK — БОНУСЫ**. Open it after «К оплате»,
+scan the customer QR inside this window (or enter the short code), review the
+actual customer/balance, then redeem points or choose «К оплате» for normal
+cash/card payment and after-close cashback. There is one payment-screen tile.
+The former product-barcode service and guest activity are removed; the owner
+reported the1.0.14 empty-group attempt retained the product-not-found error.
+
+Identity belongs only to the exact receipt UUID. Close/clear removes identity
+and pending replacement; opening another receipt removes stale identity. Live
+scan tickets reject late replies after close/cancel/change, even with a stale
+provider header. Another receipt's late close does not invalidate this receipt.
+Persistent bindings cannot answer for a different receipt after a restart or
+missed close. Normal return uses SDK KEY_SKIP and preserves discounts/positions/
+payments; this unpaid receipt keeps its identity for after-close accrual.
+Historical server claims remain per UUID for reconciliation, never a default
+customer for future sales. The permanent certificate/key remain compatible with
+1.0.13/1.0.14. New real redemptions remain default off pending controlled native
+acceptance. See `ops/EVOTOR-BONUS-WINDOW-20261018.md`.
+
+
 ## Sale loyalty preparation (unshipped draft, 2026-10-17)
 
 The owner has now confirmed real keyless connectivity and «Ключ принят» on

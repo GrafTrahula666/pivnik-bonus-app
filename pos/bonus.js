@@ -1,4 +1,5 @@
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
+import { accrueReceiptBeer, reverseReceiptBeer } from './beer.js';
 import { posError } from './scope.js';
 import { guardRedemptionClaim, processPosRedemptions } from './redemption.js';
 
@@ -112,10 +113,11 @@ async function accrueSale(db, doc, ledger) {
     VALUES($1,$2,NULL,'accrue','completed',$3,0,0,$4,$3,$5,$6,0,0,$7,NOW()) RETURNING *`,
   [`evotor:${doc.store_id}:${doc.document_id}`, user.id, amountCents, bonus, balanceAfter,
     amountCents > ledger.suspiciousThresholdCents, `Касса Эвотор: чек${number}`])).rows[0];
+  const beerMl = await accrueReceiptBeer(db, doc, transaction);
   if (!unlimited) await db.query('UPDATE wallets SET balance=$1,updated_at=NOW() WHERE user_id=$2', [balanceAfter, user.id]);
   await db.query(`INSERT INTO pos_bonus_accruals(source,store_id,document_id,kind,client_id,transaction_id,bonus_delta,status)
     VALUES('evotor',$1,$2,'accrue',$3,$4,$5,'applied')`, [doc.store_id, doc.document_id, user.id, transaction.id, bonus]);
-  return { documentId: doc.document_id, kind: 'accrue', status: 'applied', bonus, balanceAfter, amountCents, user, transaction };
+  return { documentId: doc.document_id, kind: 'accrue', status: 'applied', bonus, beerMl, balanceAfter, amountCents, user, transaction };
 }
 
 async function reverseReturn(db, doc, ledger) {
@@ -141,6 +143,8 @@ async function reverseReturn(db, doc, ledger) {
   const reduceSpend = () => db.query(`UPDATE transactions SET cash_paid_cents=GREATEST(0,cash_paid_cents-$1)
     WHERE id=$2 AND status='completed'`, [returned, base.transaction_id]);
   if (!(due > 0)) {
+    const beer = await reverseReceiptBeer(db, doc, base);
+    if (beer?.beerGiftShortfallMl) console.warn('POS beer refund requires owner review:', doc.document_id, beer.beerGiftShortfallMl);
     await reduceSpend();
     return keepTickets(await skip(db, doc, 'reverse', base.client_id, 'nothing_to_reverse', baseId));
   }
@@ -156,6 +160,7 @@ async function reverseReturn(db, doc, ledger) {
       const cancelled = await ledger.cancel(db, base.transaction_id, reason, `evotor-return:${doc.store_id}:${doc.document_id}`);
       await db.query(`INSERT INTO pos_bonus_accruals(source,store_id,document_id,kind,client_id,transaction_id,base_document_id,bonus_delta,status)
         VALUES('evotor',$1,$2,'reverse',$3,$4,$5,$6,'applied')`, [doc.store_id, doc.document_id, user.id, cancelled.id, baseId, -earned]);
+      await reverseReceiptBeer(db, doc, base, true);
       const balanceAfter = ledger.isUnlimited(user) ? ledger.unlimitedBalance : Number(wallet.balance || 0) - earned;
       return { documentId: doc.document_id, kind: 'reverse', status: 'applied', removed: earned, shortfall: 0, balanceAfter, user, cancelledTransactionId: cancelled.id };
     } catch (error) {
@@ -163,6 +168,8 @@ async function reverseReturn(db, doc, ledger) {
     }
   }
 
+  const beer = await reverseReceiptBeer(db, doc, base);
+  if (beer?.beerGiftShortfallMl) console.warn('POS beer refund requires owner review:', doc.document_id, beer.beerGiftShortfallMl);
   await reduceSpend();
   const unlimited = ledger.isUnlimited(user);
   const balance = unlimited ? ledger.unlimitedBalance : Number(wallet.balance || 0);

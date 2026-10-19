@@ -59,7 +59,14 @@ jobs:
           set -euo pipefail
           apk=evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/evotor-manifest.txt"
-          for value in 'NativeCustomerActivity' 'RedemptionActivity' 'RedemptionService' 'evo.v2.receipt.sell.receiptDiscount' 'evo.v2.receipt.sell.beforePositionsEdited'; do
+          for value in 'RedemptionActivity' 'RedemptionService' 'evo.v2.receipt.sell.receiptDiscount' 'evo.v2.receipt.sell.beforePositionsEdited'; do
+            grep -Fq "$value" "$RUNNER_TEMP/evotor-manifest.txt"
+          done
+          if grep -Fq 'ru.evotor.event.sell.BARCODE_RECEIVED' "$RUNNER_TEMP/evotor-manifest.txt"; then
+            echo '::error::Customer QR must be handled in the bonus window, not product lookup.'
+            exit 1
+          fi
+          for value in 'evotor.intent.action.receipt.sell.OPENED' 'evotor.intent.action.receipt.sell.CLEARED' 'evotor.intent.action.receipt.sell.RECEIPT_CLOSED'; do
             grep -Fq "$value" "$RUNNER_TEMP/evotor-manifest.txt"
           done
       - name: Record the exact source and unsigned APK identity
@@ -72,7 +79,7 @@ jobs:
           info={'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),
                 'unsignedSha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
-                'version':'1.0.13','versionCode':17,'hardwareVerified':False}
+                'version':'1.0.17','versionCode':21,'hardwareVerified':False}
           (root/'build-provenance.json').write_text(json.dumps(info,indent=2)+'\n')
           print(json.dumps(info))
           PY
@@ -84,7 +91,7 @@ jobs:
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: pivnik-evotor-1.0.13-pr-unsigned-not-for-installation
+          name: pivnik-evotor-1.0.17-pr-unsigned-not-for-installation
           path: |
             evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
             evotor-bridge/app/build/outputs/apk/release/build-provenance.json
