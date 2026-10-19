@@ -120,6 +120,7 @@ h1 small{display:block;font-size:22px;letter-spacing:10px;margin-top:6px}
 .cname img.gedo{width:28px;height:28px;vertical-align:-5px;margin-left:8px}
 .cdesc{max-width:320px;margin-top:-12px;padding:10px 14px;border-radius:14px;background:var(--glass);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,194,71,.25);font-size:14px;line-height:1.35;text-align:center;color:#f3e6d2}
 .cdesc b{color:#ffd27a}
+.cdesc .cnote{margin-top:6px;font-size:12px;color:#ffd27a;opacity:.9}
 </style>
 </head>
 <body>
@@ -202,7 +203,7 @@ const CHARS = [
   { id: 'hristina', run: 2, name: 'Христина', desc: 'Порталы. Каждый портал дарит Христине случайный бонус.', anim: 'guitar', img: 'chars/hristina-front.webp', back: 'chars/hristina-back.webp', em: '🍒', col: '#ff4a1a', cut: .58, sup: { kind: 'portal' } },
   { id: 'vlad', run: 3, name: 'Влад',    desc: 'Пивной берсерк. Двойной тап, и Влад открывает литр «Чешского барного». Чем больше выпил, тем сильнее всё плывёт. Чистый хардкор.', anim: 'drink', img: 'chars/vlad-front.webp',    back: 'chars/vlad-back.webp',    em: '🍟', col: '#ffd21a', cut: .63, sup: { kind: 'beer', name: 'Пивной берсерк', dur: 0, cd: 30, max: 5, life: 300 } },
   { id: 'dima', run: 2, name: 'Дима',    desc: 'Магнитофон. Двойной тап раз в 3 минуты включает музыку и приносит случайный бонус.', anim: 'music', img: 'chars/dima-front.webp',    back: 'chars/dima-back.webp',    em: '🎵', col: '#ff8a1a', cut: .6, noFlip: true, sup: { kind: 'boombox', name: 'Магнитофон', dur: 0, cd: 180 } },
-  { id: 'sema',    name: 'Сёма',    desc: 'Скейтер. Всегда набирает больше очков, чем остальные.', anim: 'trick', img: 'chars/sema-front.webp',    back: 'chars/sema-back.webp',    em: '👻', col: '#2aa3b8', ride: true, sup: { kind: 'mult', mult: 1.5 } },
+  { id: 'sema',    name: 'Сёма',    desc: 'Скейтер. Всегда набирает больше очков, чем остальные.', anim: 'trick', img: 'chars/sema-front.webp',    back: 'chars/sema-back.webp',    em: '👻', col: '#2aa3b8', ride: true, note: 'Патч 1.1: скорость была уменьшена', sup: { kind: 'mult', mult: 1.25 } },
 ];
 // Superpowers (double tap). Default: 5 s of passing through obstacles, charged by 30 treats.
 // Characters override it and recharge on a timer (cd seconds):
@@ -1411,6 +1412,7 @@ function renderCar() {
   if (many) $('#skName').textContent = 'Костюм: ' + ch.looks[store.skin[ch.id] | 0].n;
   const b = document.createElement('b'); b.textContent = ch.desc.slice(0, dot + 1);
   $('#cdesc').append(b, ' ' + ch.desc.slice(dot + 2));
+  if (ch.note) { const n = document.createElement('div'); n.className = 'cnote'; n.textContent = ch.note; $('#cdesc').append(n); }
 }
 function pickChar(step) { store.char = ((store.char + step) % CHARS.length + CHARS.length) % CHARS.length; save(); renderCar(); }
 function pickLook(step) {
