@@ -301,7 +301,7 @@ test('cashier liters use canonical beer loyalty only after a paid cloud receipt;
     await t.test('partial returns remove volume and the original gift once, never below zero',async () => {
       await f.importDocs([draft('beer-partial',0.5,50,'PAYBACK','beer-sale')]);
       await run(f);
-      assert.deepEqual(await beer(),{paid_ml_total:13500,gift_ml_balance:500});
+      assert.deepEqual(await beer(),{paid_ml_total:13500,gift_ml_balance:0});
       await f.importDocs([draft('beer-rest',0.5,50,'PAYBACK','beer-sale')]);
       await run(f); await run(f);
       assert.deepEqual(await beer(),{paid_ml_total:13000,gift_ml_balance:0});

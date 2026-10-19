@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS pos_beer_settlements (
   store_id TEXT NOT NULL,
   document_id TEXT NOT NULL,
   base_document_id TEXT,
+  paid_ml_before BIGINT CHECK(paid_ml_before >= 0),
   paid_ml_delta INTEGER NOT NULL,
   gift_ml_delta INTEGER NOT NULL,
   gift_shortfall_ml INTEGER NOT NULL DEFAULT 0 CHECK(gift_shortfall_ml >= 0),

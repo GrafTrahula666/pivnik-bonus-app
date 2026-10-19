@@ -1067,8 +1067,8 @@ Closed paid cloud positions measured in liters cap the selected volume; pieces,
 kg and zero-price gifts are excluded. `pos/bonus.js` settles the canonical
 `beer_loyalty` row and original transaction beer fields in the same transaction
 as cashback: 14 paid liters earn 1 gift liter. No second loyalty counter or staff
-purchase is created. Partial refunds proportionally reverse only the original
-purchase's attributed beer/reward, retain a remaining original transaction, and
+purchase is created. Partial refunds reverse only the original
+purchase's attributed beer/reward (whole gift liters from its original threshold crossings), retain a remaining original transaction, and
 cap cumulative removals. A previously spent gift becomes an audited shortfall
 for owner review. Full canonical cancellation must not reverse beer twice.
 

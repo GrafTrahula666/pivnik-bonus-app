@@ -11,7 +11,7 @@ async function ready(db) {
 
 /** No balance changes here. Money and the maximum eligible volume come from Evotor cloud. */
 export async function selectReceiptBeer(pool, device, body) {
-  if (!RECEIPT_UUID.test(body?.receiptUuid || '') || !/^[1-9][0-9]*$/.test(String(body?.clientId || ''))
+  if (typeof body?.receiptUuid !== 'string' || !RECEIPT_UUID.test(body.receiptUuid) || !/^[1-9][0-9]{0,17}$/.test(String(body?.clientId || ''))
       || !['save', 'status'].includes(body?.action)) throw posError(400, 'invalid_beer_selection', 'Нужны чек и выбранный клиент.');
   if (body.action === 'save' && (!Number.isSafeInteger(body.beerMl) || body.beerMl < 0 || body.beerMl > 100_000 || body.beerMl % 500)) {
     throw posError(400, 'invalid_beer_volume', 'Выберите объём с шагом 0,5 л, до 100 л.');
@@ -82,13 +82,13 @@ export async function accrueReceiptBeer(db, doc, transaction) {
     [after, gift, transaction.client_id]);
   await db.query('UPDATE transactions SET beer_ml=$1,beer_gift_earned_ml=$2 WHERE id=$3', [ml, gift, transaction.id]);
   transaction.beer_ml=ml; transaction.beer_gift_earned_ml=gift;
-  await db.query(`INSERT INTO pos_beer_settlements(store_id,document_id,paid_ml_delta,gift_ml_delta) VALUES($1,$2,$3,$4)`,
-    [doc.store_id, doc.document_id, ml, gift]);
+  await db.query(`INSERT INTO pos_beer_settlements(store_id,document_id,paid_ml_before,paid_ml_delta,gift_ml_delta) VALUES($1,$2,$3,$4,$5)`,
+    [doc.store_id, doc.document_id, before, ml, gift]);
   return ml;
 }
 
 /** Undo only this purchase's remaining volume/reward, never a later purchase's gift.
- * Partial returns use actual cloud liter quantities; cumulative rounding is capped
+ * Partial returns use actual cloud liter quantities; cumulative volume is capped
  * by the original purchase. A spent gift is recorded for owner review.
  * cancelled=true means the canonical full-cancel already changed beer_loyalty.
  */
@@ -110,7 +110,11 @@ export async function reverseReceiptBeer(db, doc, base, cancelled = false) {
   const ratio = returnedAmount >= Number(base.amount_cents) ? 1 : Math.min(1, returnedMl / Math.max(1, paidLiquidMl(initial.snapshot)));
   const target = Math.min(totalMl, Math.ceil(totalMl * ratio));
   const ml = Math.max(0, target - previous.paid);
-  const giftDue = Math.max(0, Math.ceil(totalGift * target / totalMl) - previous.gift);
+  // Re-evaluate THIS purchase's original threshold crossings with its remaining
+  // paid volume. Gifts remain whole liters; a partial refund never invents half a gift.
+  const paidBefore = Number(initial.paid_ml_before);
+  const remainingGift = (Math.floor((paidBefore + totalMl - target) / PAID_TARGET_ML) - Math.floor(paidBefore / PAID_TARGET_ML)) * GIFT_ML;
+  const giftDue = Math.max(0, totalGift - remainingGift - previous.gift);
   let removedGift = giftDue;
   if (!cancelled) {
     const beer = await lockedBeer(db, base.client_id);
