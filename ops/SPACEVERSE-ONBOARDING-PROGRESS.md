@@ -1705,3 +1705,28 @@ install/payment/revoke, trusted subscription evidence, canonical activation и
 resolver активной CRM, end-to-end платный путь, эксплуатационные release gates.
 Старые guest provisioning steps вне CRM не расширялись; их completion guards
 следует отдельно проверить перед разрешением реального guest provisioning.
+
+### Финальная интеграция перед PR
+
+Перед push обнаружен новый main `1764765194c53f88932a9b6202e541e9d49dd767`:
+чужой PR #288 по кассовому приложению. Его реализация не моя и не входит в diff
+этой CRM-задачи. Подтянут обычным merge без конфликтов; правки карты модулей
+сохранены обе. Итоговый diff относительно main не меняет CI, кассу, root
+migrations, денежные обработчики, root entrypoints и dependency locks.
+
+Повторены все обязательные checks на итоговом коде после интеграции:
+materialize ×2 с теми же 7 generated outputs/побайтовым восстановлением,
+`node --test` **632 passed / 0 failed / 0 skipped**, check, VK parity/build,
+root+Business audit full/production — 0 vulnerabilities; Business typecheck,
+lint (только прежние 12 warnings), native tests **417 passed / 0 failed /
+0 skipped**, build — success. Built App desktop/mobile: **30 passed**
+(activation 6 + existing tenant CRM 6 + disabled 2 + legacy CRM/cash 12 +
+onboarding 4), tracked PNG restored/SHA256 verified. Это включает финальный
+invalidate callback; дополнительных warnings нет. Подробные commands/logs/JSON:
+`/tmp/spaceverse-crm-activation-20261019/integrated`.
+
+Каталог `/mnt/project-files/owner-panel` в этой среде не смонтирован; журнал
+сохранён здесь, в versioned ops, а итоговый .MD будет в /workspace.
+Запрошены App ID тестового приложения и актуальная спецификация Маркета;
+секреты в чат не запрашиваются. До их получения реальная платная активация
+остаётся внешним блокером; synthetic evidence не выдаётся за subscription.
