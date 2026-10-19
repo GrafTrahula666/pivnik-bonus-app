@@ -34,11 +34,14 @@ export async function selectReceiptBeer(pool, device, body) {
     [device.store_id, body.receiptUuid])).rows[0];
     if (body.action === 'save') {
       if (claim.settled && choice?.beer_ml !== body.beerMl) throw posError(409, 'beer_already_settled', 'Этот чек уже обработан.');
+      // Copy timestamp inside PostgreSQL: JS Date would truncate claim microseconds.
       if (!claim.settled) await db.query(`INSERT INTO pos_receipt_beer(store_id,receipt_uuid,client_id,device_id,claimed_at,beer_ml)
-        VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(source,store_id,receipt_uuid) DO UPDATE SET
+        SELECT store_id,receipt_uuid,client_id,device_id,claimed_at,$3 FROM pos_receipt_claims
+        WHERE source='evotor' AND store_id=$1 AND receipt_uuid=$2
+        ON CONFLICT(source,store_id,receipt_uuid) DO UPDATE SET
         client_id=EXCLUDED.client_id,device_id=EXCLUDED.device_id,claimed_at=EXCLUDED.claimed_at,
         beer_ml=EXCLUDED.beer_ml,selected_at=NOW()`,
-      [device.store_id, body.receiptUuid, claim.client_id, device.id, claim.claimed_at, body.beerMl]);
+      [device.store_id, body.receiptUuid, body.beerMl]);
     }
     await db.query('COMMIT');
     return { receiptUuid: body.receiptUuid, clientId: String(claim.client_id),
