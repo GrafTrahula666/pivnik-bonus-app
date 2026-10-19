@@ -1730,3 +1730,107 @@ invalidate callback; дополнительных warnings нет. Подроб�
 Запрошены App ID тестового приложения и актуальная спецификация Маркета;
 секреты в чат не запрашиваются. До их получения реальная платная активация
 остаётся внешним блокером; synthetic evidence не выдаётся за subscription.
+
+## 2026-10-19 — сохранённая проверка CRM в списке заведений
+
+Ветка `spaceverse/crm-owner-activation-status-20261019`, база main
+`e2cbe8b433be0b7dadcdda1a6dabb4734a696ad3`. Ранее мой #289 объединён и прошёл
+main deploy; новый #290 по Pivnik Run — чужая работа, взята только как база.
+Пользователь поручил продолжать; разрешение объединять проверенное сохраняется.
+`Вноси` не интерпретировано как отдельное разрешение production migration/env.
+На присланном скриншоте показана именно публикация рабочей среды Codex; владельцу
+указана кнопка «Сохранить и опубликовать». Она не означает публикацию CRM/Маркета.
+
+Лично добавляю optional `crmActivation` в существующий owner list и UI карточки.
+Тот же default-off flag, ledger и prepared-source guard; без новой модели tenant,
+миграций, денежных/target writes, CI или production settings. Перенесена общая
+проекция состояний из provisioning API в `tenant-crm-activation-state.ts`, без
+изменения write/read прав прежнего индивидуального endpoint. Новая metadata
+read-проекция позволяет scoped viewer видеть историю своей точки, не запускать
+проверку; перед возвратом повторно сверяются grant/manifest. Никаких target DB/
+provider connections и новых attempts/audit от обновления списка.
+
+Основное действие CRM больше не выбирается по optional guest bundle/image.
+Более серьёзная текущая ошибка кассы остаётся приоритетной, сохранённая CRM
+причина показывается отдельно. Отсутствие проверки, running/expired lease,
+сохранённый результат и недоступное состояние различаются. При недоступности
+число попыток null, не ложный 0. Код/время добавлены только в копируемую
+диагностику; сообщения автоматически не отправляются. UI проверяет scope,
+запрещает выдуманную activation и противоречивую active карточку.
+
+Focused native SQL/HTTP до финального расширения assertions: 41 passed.
+Новые проверки покрывают два tenant/две точки одной компании, viewer без write
+эскалации, grant revoke во время чтения metadata, manifest mismatch, недоступный
+ledger, lease expiry, отсутствие target resolutions и дополнительных writes,
+приоритет ошибки кассы и default-off compatibility. Первый focused прогон:
+39 pass/1 fail из-за моего ожидания 200 после полного отзыва доступа — фактически
+правильно возвращался 403; исправлено ожидание, защита не ослаблялась.
+
+Первый новый browser прогон: 6 pass/4 fail — fixture давала всем canonical
+venues одинаковое имя Synthetic CRM при разных именах drafts. Для activation
+fixture canonical имена согласованы с draft CRM 1/2/3; production code имён не
+менялся. Следующий прогон 10/10 desktop/mobile. Добавлен также отказ при
+поддельном top-level active, финальная регрессия ещё выполняется.
+
+Полные обязательные checks выполняются перед push. Logs/JSON/SHA256 в
+`/tmp/spaceverse-crm-owner-status-20261019`. Root/vfs почти заполнен; используются
+существующие locked dependencies и isolated loopback native PostgreSQL 16 в /tmp.
+Старая тестовая БД/данные сохранены, новый Docker image не собирается. Новых
+изменений setup draft не требуется, startup helper подтвердил SELECT 1.
+
+Остаются Market App ID/актуальный contract/test contour, real install/pay/revoke,
+canonical active CRM lifecycle и commercial E2E. История попыток в owner list —
+не подтверждение текущей связи и не commercial activation. Данные реального
+тестового приложения пока не предоставлены. Масштабирование bounded metadata
+проекций owner-list и target registry требует отдельного load-test; готовность
+на тысячи клиентов этим шагом не заявляется.
+
+Уточнение владельца: доступ к другим собственным магазинам не закрывать.
+Существующие company owner grants сохранены. Добавлен отдельный обычный
+VENUE_ADMIN-владелец двух компаний/трёх заведений, без SUPER_ADMIN. Реальный
+signed HTTP/SQL подтверждает список всех трёх, чтение клиентов с балансами
+101/102/103 из соответствующих БД и запуск проверки каждого заведения.
+В browser fixture используется тот же владелец; ограничение сотрудника одной
+точкой не ограничивает собственника компаний. Production права не менялись.
+
+Обязательная проверка на текущей базе e2cbe8b:
+- materialize ×2: idempotent SHA256; прежний diff по achievements.js, app.js,
+  index.html, red-cosmos-v2.js, scripts/v22-data-audit-and-repair.mjs, server.js,
+  universal-server.js сохранён в artifact patch. Root checks на materialized
+  состоянии; все 7 исходных файлов восстановлены побайтово с SHA256.
+- `node --test`: 632 passed, 0 failed/skipped; `npm run check`, отдельные
+  VK parity/bundle checks, root `npm audit` и production audit: exit 0.
+- Business `npm run typecheck`, `npm run lint`, `npm run build`: exit 0;
+  lint: прежние 12 Fast Refresh warnings, build: прежнее предупреждение chunk >500KB.
+- Business `npm test -- --maxWorkers=1` с isolated native PostgreSQL 16:
+  427 passed, 36 files, 0 failed/skipped. Focused activation+workflow: 42 passed.
+- `npx vitest run server/tests/tenant-crm-activation.spec.ts --maxWorkers=1`
+  без native env: 32 passed на PGlite. Business оба audit: 0 vulnerabilities.
+
+Первый полный build и следующий browser-native prestart обнаружили TS2532 в
+новом сравнении severity (`noUncheckedIndexedAccess` серверного tsconfig).
+Добавлен безопасный fallback отсутствующего ключа; окончательный build exit 0,
+полный native набор перепроверен. Проверки не ослаблялись. Финальный browser
+набор выполняется после этой правки; оба старых неуспешных лога сохранены.
+
+Финальный Playwright: 34 passed, 0 failed/skipped: activation 10, native CRM 6,
+default-off 2, cash/CRM regression 12, onboarding 4. Desktop 1440×1000 и mobile
+390×844. Владелец двух компаний видит CRM 1/2/3 и открывает мастер CRM 3 второй
+компании; поддельный active/чужой scope отвергается, refresh восстанавливает
+ответ сервера. Tracked PNG outputs восстановлены с SHA256. Дополнительный
+eslint изменённых E2E файлов: exit 0. SHA256 всех 244 Admin source files совпали
+с записанными перед окончательными проверками.
+
+Прежний onboarding browser test с названием «venue owners cannot ...» проверяет
+legacy fixture с выключенным invitation mode. Он не означает запрет владельцу
+сети: новый multi-company native/built E2E проверяет включённый onboarding с
+company owner grants. Production feature flags этим PR не включаются.
+
+После всех правок повторно перед push выполнен полный root набор на финальном
+дереве (`final-root/`): materialize ×2 idempotent, node --test 632 passed /0 skipped,
+check/VK parity/VK bundle/root audit/production audit exit 0. Те же 7 generated
+outputs снова восстановлены побайтово; Admin source hashes не изменились.
+Все локальные обязательные проверки зелёные; следующий шаг — один Draft PR,
+проверка CI точного head и ранее разрешённый владельцем checked merge с
+существующим автодеплоем. Market activation и production flags остаются вне
+этого шага. Полный итог после GitHub checks — отдельным Markdown-файлом.

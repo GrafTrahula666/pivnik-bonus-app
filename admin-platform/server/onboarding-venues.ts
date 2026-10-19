@@ -4,10 +4,14 @@ import {listAuthorizedVenues} from './tenant.js'
 import {getOnboardingWorkflow,requireWorkflow} from './onboarding-workflow.js'
 import {onboardingDraftAccessSql} from './onboarding-access.js'
 import {HttpError,type AdminPrincipal} from './types.js'
+import {config} from './config.js'
+import {readCrmActivationSummary} from './onboarding-provisioning-api.js'
+import {unavailableCrmActivationSummary} from './tenant-crm-activation-state.js'
 
 interface DraftRow extends QueryResultRow{
  id:string;venue_id:string|null;company_id:string|null;company_name:string;venue_name:string;updated_at:string
 }
+const severity:Record<string,number>={failed:5,degraded:4,suspended:3,verifying:2,pending:1,not_configured:0}
 export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string|null){
  await requireWorkflow(admin)
  if(rawOffset!==null&&!/^(0|[1-9][0-9]{0,5})$/.test(rawOffset))throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Откройте список заведений заново.')
@@ -41,12 +45,31 @@ export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string
    }
    try{
     const workflow=await getOnboardingWorkflow(admin,entry.id)
+    let crmActivation:Awaited<ReturnType<typeof readCrmActivationSummary>>|ReturnType<typeof unavailableCrmActivationSummary>|undefined
+    if(config.enableTenantCrmActivationChecks){
+      if(!entry.venueId)crmActivation=unavailableCrmActivationSummary(entry.id,{companyId:entry.companyId,venueId:null},true)
+      else try{
+        crmActivation=await readCrmActivationSummary(admin,entry.id)
+        if(crmActivation.scope.companyId!==entry.companyId||crmActivation.scope.venueId!==entry.venueId)throw new Error('CRM source changed')
+      }catch(error){
+        if(error instanceof HttpError&&[403,404].includes(error.statusCode))throw error
+        crmActivation=unavailableCrmActivationSummary(entry.id,{companyId:entry.companyId,venueId:entry.venueId})
+      }
+    }
     const attention=workflow.steps.find(step=>['failed','degraded'].includes(step.status))
       ??workflow.steps.find(step=>step.id==='provisioning'&&step.status!=='active')
       ??workflow.steps.find(step=>step.status!=='active')
-    page.push({...entry,draftId:entry.id,status:workflow.status,requiresAttention:workflow.requiresAttention,
-      attentionCode:attention?.code??workflow.attentionCode,nextAction:attention?.nextAction??'Продолжите подключение.',
-      currentStep:workflow.progress.currentStep,lastOperatorActivityAt:workflow.lastOperatorActivityAt,
+    // CRM is independent of optional guest bundle/image readiness. Keep current
+    // cash failures visible alongside the explicitly historical CRM check.
+    const cash=workflow.steps.find(step=>['provider','terminal','verification'].includes(step.id)&&
+      ['failed','degraded','suspended'].includes(step.status))
+    const primary=crmActivation&&(cash&&(severity[cash.status]??0)>(severity[crmActivation.status]??0)?cash:crmActivation)
+    const lastActivity=crmActivation?.updatedAt&&Date.parse(crmActivation.updatedAt)>Date.parse(workflow.lastOperatorActivityAt)
+      ?crmActivation.updatedAt:workflow.lastOperatorActivityAt
+    page.push({...entry,draftId:entry.id,status:primary?.status??workflow.status,requiresAttention:workflow.requiresAttention,
+      attentionCode:primary?.code??attention?.code??workflow.attentionCode,nextAction:primary?.nextAction??attention?.nextAction??'Продолжите подключение.',
+      ...(crmActivation?{crmActivation}:{}),
+      currentStep:workflow.progress.currentStep,lastOperatorActivityAt:lastActivity,
       lastDeviceActivityAt:workflow.lastDeviceActivityAt,runtimeStatus:workflow.runtimeStatus,published:workflow.published,report:workflow.report})
    }catch(error){
     // A grant revoked between listing and projection must not expose its draft.

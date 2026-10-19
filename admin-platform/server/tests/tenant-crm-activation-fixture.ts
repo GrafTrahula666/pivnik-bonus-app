@@ -5,8 +5,15 @@ import {tenantCrmFixture} from './tenant-crm-fixture.js'
 // to the existing physically isolated CRM fixtures, without guest artifacts.
 export async function tenantCrmActivationFixture(){
   const fixture=await tenantCrmFixture()
+  const password=(await fixture.metadata.query<{password_hash:string}>('SELECT password_hash FROM admin_accounts WHERE id=11')).rows[0]!.password_hash
+  await fixture.metadata.query(`INSERT INTO admin_accounts(id,email,display_name,role,password_hash)
+    VALUES(31,'network-owner@fixture.invalid','Network owner','VENUE_ADMIN',$1)`,[password])
+  await fixture.metadata.exec("INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES(31,10,'owner'),(31,20,'owner'); SELECT setval('admin_accounts_id_seq',(SELECT MAX(id) FROM admin_accounts))")
   for(const [index,db] of fixture.targets.entries()){
     const manifest=fixture.manifests[index]!
+    // Canonical venue labels are what the owner list displays; keep them
+    // distinct and aligned with the corresponding resumable draft labels.
+    await fixture.metadata.query('UPDATE venues SET name=$1 WHERE id=$2',['CRM '+(index+1),manifest.scope.venueId])
     await db.exec(`ALTER TABLE users ADD COLUMN telegram_id BIGINT UNIQUE;
       ALTER TABLE users ADD COLUMN session_version BIGINT NOT NULL DEFAULT 1;
       CREATE TABLE user_identities(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,11 +1,13 @@
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {apiGet} from '../api'
+import {validCrmActivationSummary,type CrmActivationSummary} from './tenant-crm-activation-summary'
 const statuses={not_configured:'Не настроено',pending:'Ожидает подключения',verifying:'Проверяется',active:'Активно',degraded:'Требует внимания',suspended:'Приостановлено',failed:'Ошибка'}
 interface Venue{
- kind:'draft'|'existing';id:string;venueId:string|null;companyName:string;name:string
+ kind:'draft'|'existing';id:string;venueId:string|null;companyId:string|null;companyName:string;name:string
  status:keyof typeof statuses;requiresAttention:boolean;attentionCode:string;nextAction:string
  lastOperatorActivityAt:string|null;lastDeviceActivityAt:string|null;currentStep:string|null
  report:{state:'available'|'unavailable';netCents:string|null;receiptCount:number|null}
+ crmActivation?:CrmActivationSummary
 }
 interface Page{venues:Venue[];total:number;nextOffset:number|null}
 function DeveloperRequest({venue}:{venue:Venue}){
@@ -13,6 +15,8 @@ function DeveloperRequest({venue}:{venue:Venue}){
  const diagnostic=['SPACEVERSE · помощь с подключением','Организация: '+venue.companyName,'Заведение: '+venue.name,
   (venue.kind==='draft'?'ID подключения: ':'ID точки: ')+venue.id,'Статус: '+statuses[venue.status],
   'Код состояния: '+venue.attentionCode,'Следующий шаг: '+venue.nextAction,
+  ...(venue.crmActivation?['Проверка CRM: '+venue.crmActivation.code,
+    'Сохранена: '+(venue.crmActivation.updatedAt??'проверка не подтверждена')]:[]),
   'Событие устройства: '+(venue.lastDeviceActivityAt??'не подтверждено'),'Настройка: '+(venue.lastOperatorActivityAt??'не подтверждена')].join('\n')
  const text=(message?message+'\n\n':'')+diagnostic
  async function copy(){
@@ -33,7 +37,8 @@ export function OwnerVenues({onDraft,onVenue,refreshKey}:{onDraft:(id:string)=>v
   const run=++sequence.current;setBusy(true);setError('')
   try{const value=await apiGet<Page>('/api/admin/onboarding/venues?offset='+offset)
    if(run!==sequence.current)return
-   if(!Array.isArray(value.venues)||value.venues.some(venue=>!Object.hasOwn(statuses,venue.status)))throw new Error('Сервер не подтвердил состояния заведений.')
+   if(!Array.isArray(value.venues)||value.venues.some(venue=>!Object.hasOwn(statuses,venue.status)||
+     (venue.crmActivation!==undefined&&!validCrmActivationSummary(venue.crmActivation,venue))))throw new Error('Сервер не подтвердил состояния заведений.')
    setResult(before=>({...value,venues:offset&&before?[...before.venues,...value.venues].filter((venue,index,rows)=>rows.findIndex(row=>row.kind===venue.kind&&row.id===venue.id)===index):value.venues}))
   }catch(error){if(run===sequence.current){setResult(null);setError(error instanceof Error?error.message:'Не удалось загрузить состояния.')}}
   finally{if(run===sequence.current)setBusy(false)}
@@ -53,6 +58,14 @@ export function OwnerVenues({onDraft,onVenue,refreshKey}:{onDraft:(id:string)=>v
    <ul className="owner-venue-list">{result.venues.map(venue=><li key={venue.kind+':'+venue.id} data-status={venue.status}>
     <div className="owner-venue-title"><div><b>{venue.name}</b><small>{venue.companyName}</small></div><span>{statuses[venue.status]}</span></div>
     {venue.requiresAttention&&<p className="onboarding-note"><b>Требует внимания: </b>{venue.nextAction}</p>}
+    {venue.crmActivation&&<div className="onboarding-note" role="region" aria-label={'Запуск CRM: '+venue.name}>
+     <b>CRM ещё не запущена</b>
+     <p>{venue.crmActivation.evidence==='saved_activation_check'?'Последняя сохранённая проверка. Текущее подключение заново не проверялось.':
+       venue.crmActivation.evidence==='unavailable'?'Состояние запуска CRM не подтверждено.':'Проверка запуска CRM ещё не выполнена.'}</p>
+     {venue.crmActivation.nextAction!==venue.nextAction&&<p>{venue.crmActivation.nextAction}</p>}
+     {venue.crmActivation.attemptCount!==null&&<p>Попыток проверки CRM: {venue.crmActivation.attemptCount}</p>}
+     {venue.crmActivation.updatedAt&&<small>Состояние проверки сохранено: {date(venue.crmActivation.updatedAt)}</small>}
+    </div>}
     <dl><div><dt>Последнее событие устройства</dt><dd>{date(venue.lastDeviceActivityAt)}</dd></div><div><dt>Изменение настройки</dt><dd>{date(venue.lastOperatorActivityAt)}</dd></div></dl>
     <p>{venue.report.state==='unavailable'?'Отчёт недоступен · сумма неизвестна':venue.report.receiptCount===0?'0 ₽ · 0 чеков · данные получены':'Данные получены · откройте отчёты для просмотра сумм'}</p>
     <button className="btn secondary" onClick={()=>venue.kind==='draft'?onDraft(venue.id):onVenue(venue.venueId!)}>{venue.kind==='draft'?'Продолжить подключение':'Открыть заведение'}</button>

@@ -4,6 +4,30 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Owner list: saved CRM activation state (2026-10-19, default off)
+
+`onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary
+under the existing `ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` switch. It reuses
+the provisioning service's prepared source/ledger checks, revalidates the read
+grant and frozen manifest, and exposes no target credentials or customer data.
+Company owners retain all stores of every company they own; a store-scoped
+employee invitation does not replace or narrow those company grants. Tests use
+a regular VENUE_ADMIN owning two companies and three stores, without SUPER_ADMIN.
+Scoped viewers can read a summary without gaining check/run permission. Refresh
+reads metadata only; it neither probes the target/provider nor claims an attempt.
+The shared projection in `tenant-crm-activation-state.ts` distinguishes saved
+results, no check and unavailable state (unknown attempt count, never false zero).
+An expired lease requires attention, and a more severe current cash failure takes
+precedence over a saved CRM blocker. Optional guest bundle/image failures do not
+select the CRM action. No summary can report active/approved; the existing
+migration 016 and activation defaults remain unchanged.
+`OwnerVenues.tsx` and `tenant-crm-activation-summary.ts` validate draft/company/
+venue and reject unverified activation, including a contradictory active row.
+The old list contract remains unchanged when the switch is off. Existing active
+venues without an onboarding binding retain their previous unknown connection.
+Native signed HTTP/SQL and built desktop/mobile checks extend the same activation
+fixtures; no new API, migration, tenant model, write capability or CI settings.
+
 ## Standalone CRM activation check (2026-10-19, default off)
 
 `ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` exposes GET/POST
