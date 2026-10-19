@@ -79,7 +79,7 @@ try {
   const beerChoice=(receiptUuid)=>devices.bind(beerAuth,{operation:'beer',action:'save',receiptUuid,clientId:'1',beerMl:500});
   for (const id of ['beer-a','beer-b']) {
     await beerBind(id); await Promise.all([beerChoice(id),beerChoice(id),beerChoice(id)]);
-    await importEvotorPage(pool,'beerbar',{items:[sale({id,close_date:new Date(Date.now()+60000).toISOString(),
+    await importEvotorPage(pool,'beerbar',{items:[sale({id,store_id:'beerbar',close_date:new Date(Date.now()+60000).toISOString(),
       body:{result_sum:100,positions:[{product_name:'Draft',measure_name:'л',quantity:0.5,result_sum:100}],
       payments:[{payment:{type:'CARD',sum:100}}]}})],paging:{}},{until:new Date().toISOString()});
   }
@@ -100,7 +100,7 @@ try {
   assert.deepEqual((await pool.query('SELECT paid_ml_total,gift_ml_balance FROM beer_loyalty WHERE user_id=1')).rows[0],{paid_ml_total:'14000',gift_ml_balance:1000});
   assert.equal(Number((await pool.query("SELECT COUNT(*) AS n FROM transactions WHERE request_key LIKE 'evotor:beerbar:%'")).rows[0].n),2);
   checks.push('concurrent beer selections and three settlement workers: two real sales, one threshold gift');
-  for (const id of ['beer-a','beer-b']) await importEvotorPage(pool,'beerbar',{items:[sale({id:id+'-return',type:'PAYBACK',
+  for (const id of ['beer-a','beer-b']) await importEvotorPage(pool,'beerbar',{items:[sale({id:id+'-return',store_id:'beerbar',type:'PAYBACK',
     close_date:new Date().toISOString(),body:{base_document_id:id,result_sum:100,
     positions:[{product_name:'Draft',measure_name:'л',quantity:0.5,result_sum:100}],payments:[{payment:{type:'CARD',sum:100}}]}})],paging:{}},{until:new Date().toISOString()});
   await Promise.all([beerRun(),beerRun(),beerRun()]);
