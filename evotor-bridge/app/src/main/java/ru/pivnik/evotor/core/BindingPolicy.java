@@ -26,9 +26,42 @@ public final class BindingPolicy {
     }
 
     private final BindingStore store;
+    private final java.util.Set<ScanTicket> scans = new java.util.HashSet<>();
+
+    public static final class ScanTicket {
+        private String receiptUuid;
+        private boolean current = true;
+        private ScanTicket(String receiptUuid) { this.receiptUuid = receiptUuid; }
+    }
 
     public BindingPolicy(BindingStore store) {
         this.store = store;
+    }
+
+    /** Only live requests are retained; Bridge releases each ticket in finally. */
+    public synchronized ScanTicket beginScan(String receiptUuid) {
+        ScanTicket ticket = new ScanTicket(receiptUuid);
+        scans.add(ticket);
+        return ticket;
+    }
+
+    public synchronized boolean acceptScanReceipt(ScanTicket ticket, String actualReceiptUuid) {
+        if (!isScanCurrent(ticket) || actualReceiptUuid == null
+                || (ticket.receiptUuid != null && !ticket.receiptUuid.equals(actualReceiptUuid))) return false;
+        ticket.receiptUuid = actualReceiptUuid;
+        return true;
+    }
+
+    public synchronized boolean isScanCurrent(ScanTicket ticket) {
+        return ticket != null && scans.contains(ticket) && ticket.current;
+    }
+
+    public synchronized void endScan(ScanTicket ticket) { scans.remove(ticket); }
+
+    public synchronized Outcome onCustomerResolved(String scannedReceiptUuid, String currentReceiptUuid,
+                                                   ResolvedClient client, long nowMillis, ScanTicket ticket) {
+        if (!isScanCurrent(ticket) || !scannedReceiptUuid.equals(ticket.receiptUuid)) return Outcome.RECEIPT_CHANGED;
+        return onCustomerResolved(scannedReceiptUuid, currentReceiptUuid, client, nowMillis);
     }
 
     /**
@@ -85,6 +118,9 @@ public final class BindingPolicy {
 
     /** A receipt was closed or deleted: its binding must not leak into the next sale. */
     public synchronized void onReceiptFinished(String receiptUuid) {
+        for (ScanTicket ticket : scans) {
+            if (ticket.receiptUuid == null || ticket.receiptUuid.equals(receiptUuid)) ticket.current = false;
+        }
         ReceiptBinding binding = store.loadBinding();
         if (binding != null && binding.receiptUuid.equals(receiptUuid)) store.clearBinding();
         ReceiptBinding pending = store.loadPendingReplacement();
@@ -93,6 +129,9 @@ public final class BindingPolicy {
 
     /** A new receipt was opened: anything bound to a different receipt is stale. */
     public synchronized void onReceiptOpened(String receiptUuid) {
+        for (ScanTicket ticket : scans) {
+            if (ticket.receiptUuid == null || !ticket.receiptUuid.equals(receiptUuid)) ticket.current = false;
+        }
         ReceiptBinding binding = store.loadBinding();
         if (binding != null && !binding.receiptUuid.equals(receiptUuid)) store.clearBinding();
         ReceiptBinding pending = store.loadPendingReplacement();

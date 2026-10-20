@@ -37,6 +37,7 @@ describe('protected onboarding database registry',()=>{
     expect(await registry.resolveTargetDatabase(runtimeA)).toBe(first)
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({max:2,application_name:'spaceverse-onboarding-provisioner'})
+    expect(calls[0].ssl).toEqual({rejectUnauthorized:true})
 
     env[referenceA]='postgresql://tenant:synthetic-two@tenant-b.internal:5432/spaceverse_b'
     const rotated=await registry.resolveTargetDatabase(runtimeA)
@@ -104,4 +105,29 @@ describe('protected onboarding database registry',()=>{
     expect(error).toMatchObject({code:'ONBOARDING_DATABASE_REGISTRY_INVALID',statusCode:500})
     expect(JSON.stringify(error)).not.toContain(secret)
   })
+
+  it('retains verified TLS after a URL requests libpq require semantics',async()=>{
+    const calls:PoolConfig[]=[]
+    const registry=createOnboardingTargetRegistry({env:{
+      ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON:JSON.stringify({[runtimeA]:{credentialEnv:referenceA}}),
+      [referenceA]:'postgresql://tenant:synthetic@tenant.example/spaceverse?sslmode=require&uselibpqcompat=true',
+    },poolFactory:fakeFactory(calls,[])})
+    await registry.resolveTargetDatabase(runtimeA)
+    expect(calls[0].ssl).toEqual({rejectUnauthorized:true})
+    expect(calls[0].connectionString).not.toContain('sslmode')
+    expect(calls[0].connectionString).not.toContain('uselibpqcompat')
+    await registry.close()
+  })
+
+  it.each(['sslmode=disable','sslmode=no-verify','host=another.example'])(
+    'refuses an unsafe tenant transport before creating a pool: %s',async query=>{
+      const calls:PoolConfig[]=[]
+      const registry=createOnboardingTargetRegistry({env:{
+        ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON:JSON.stringify({[runtimeA]:{credentialEnv:referenceA}}),
+        [referenceA]:`postgresql://tenant:must-not-leak@tenant.example/spaceverse?${query}`,
+      },poolFactory:fakeFactory(calls,[])})
+      expect(()=>registry.validate()).toThrowError(expect.objectContaining({code:'ONBOARDING_DATABASE_REGISTRY_INVALID'}))
+      await expect(registry.resolveTargetDatabase(runtimeA)).rejects.toMatchObject({code:'ONBOARDING_DATABASE_REGISTRY_INVALID'})
+      expect(calls).toHaveLength(0)
+    })
 })

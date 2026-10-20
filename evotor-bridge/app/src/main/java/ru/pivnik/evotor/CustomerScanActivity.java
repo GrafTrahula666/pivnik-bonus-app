@@ -38,9 +38,9 @@ public final class CustomerScanActivity extends Activity {
         title.setTextSize(22);
         root.addView(title);
         TextView note = new TextView(this);
-        note.setText("Отсканируйте QR клиента в продаже Эвотора или в этом окне. "
+        note.setText("Для работы с бонусами нажмите «К оплате» → «PIVNIK — БОНУСЫ». В этом окне также можно отсканировать QR клиента. "
                 + "После подтверждения оплатите чек — бонусы начислятся после оплаты. "
-                + "Для списания выберите «Списать баллы» на экране оплаты.");
+                + "Списание и обычная оплата доступны через «PIVNIK — БОНУСЫ» на экране оплаты.");
         root.addView(note);
         result = new TextView(this);
         result.setTextSize(20);

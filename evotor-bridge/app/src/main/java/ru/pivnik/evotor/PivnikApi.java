@@ -196,12 +196,20 @@ final class PivnikApi {
 
     /** Same bounded HTTPS transport, with structured errors for the checkout activity. */
     static JSONObject redemption(BridgeSettings settings, JSONObject body) throws Exception {
+        return receiptOperation(settings,body,"redemption");
+    }
+
+    static JSONObject beer(BridgeSettings settings, JSONObject body) throws Exception {
+        return receiptOperation(settings,body,"beer");
+    }
+
+    private static JSONObject receiptOperation(BridgeSettings settings, JSONObject body, String operation) throws Exception {
         HttpURLConnection connection=null;
         try {
             // Existing installed proxy masks already allow this receipt route.
             // No wildcard, another server, or portal reconfiguration is needed.
             URL url=new URL(settings.apiBaseUrl()+"/api/device/pos/receipts/bind");
-            body.put("operation","redemption");
+            body.put("operation",operation);
             if (!"https".equalsIgnoreCase(url.getProtocol()) || !settings.isConfigured()) throw new IOException("Касса не подключена.");
             connection=(HttpURLConnection)url.openConnection();
             PivnikTls.apply(connection);
@@ -218,8 +226,10 @@ final class PivnikApi {
             String raw=read(status==200 ? connection.getInputStream() : connection.getErrorStream());
             if (status!=200) {
                 // Do not display arbitrary proxy/server response text or credentials.
+                if (status==409 && "beer".equals(operation)) throw new IOException("Объём не сохранён: чек или клиент изменился. Откройте бонусы снова.");
                 if (status==409) throw new IOException("Списание не подтверждено: проверьте баланс, лимит и сохранённую операцию. Нажмите «Обновить».");
                 if (status==401 || status==403) throw new IOException("Ключ кассы не принят. Откройте подключение кассы.");
+                if ((status==503 || status==404) && "beer".equals(operation)) throw new IOException("Учёт литров ещё не доступен. Объём не сохранён; повторите проверку позже.");
                 if (status==503 || status==404) throw new IOException("Сервис списания ещё не доступен. Можно оплатить чек без списания.");
                 throw new IOException("Сервис списания вернул HTTP "+status+". Нажмите «Обновить».");
             }

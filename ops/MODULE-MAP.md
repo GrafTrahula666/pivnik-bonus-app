@@ -4,6 +4,120 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Owner list: saved CRM activation state (2026-10-19, default off)
+
+`onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary
+under the existing `ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` switch. It reuses
+the provisioning service's prepared source/ledger checks, revalidates the read
+grant and frozen manifest, and exposes no target credentials or customer data.
+Company owners retain all stores of every company they own; a store-scoped
+employee invitation does not replace or narrow those company grants. Tests use
+a regular VENUE_ADMIN owning two companies and three stores, without SUPER_ADMIN.
+Scoped viewers can read a summary without gaining check/run permission. Refresh
+reads metadata only; it neither probes the target/provider nor claims an attempt.
+The shared projection in `tenant-crm-activation-state.ts` distinguishes saved
+results, no check and unavailable state (unknown attempt count, never false zero).
+An expired lease requires attention, and a more severe current cash failure takes
+precedence over a saved CRM blocker. Optional guest bundle/image failures do not
+select the CRM action. No summary can report active/approved; the existing
+migration 016 and activation defaults remain unchanged.
+`OwnerVenues.tsx` and `tenant-crm-activation-summary.ts` validate draft/company/
+venue and reject unverified activation, including a contradictory active row.
+The old list contract remains unchanged when the switch is off. Existing active
+venues without an onboarding binding retain their previous unknown connection.
+Native signed HTTP/SQL and built desktop/mobile checks extend the same activation
+fixtures; no new API, migration, tenant model, write capability or CI settings.
+
+## Standalone CRM activation check (2026-10-19, default off)
+
+`ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` exposes GET/POST
+`/api/admin/onboarding/drafts/:id/crm/activation-check` in the existing router and
+`TenantCrmActivationCheck.tsx` in the same wizard. POST accepts only `{}`;
+session, Origin/CSRF and actor rate limits remain mandatory. Manual Admin
+migration 016 extends the existing provisioning ledger with `crm_activation_check`
+and forbids its `succeeded` status. No second tenant/registry/invitation model.
+`onboarding-provisioning.ts` reuses its claim/lease/token/retry mechanism, depends
+on schema readiness only, then rechecks real target binding/schema/ownership in
+bounded REPEATABLE READ READ ONLY SQL. Guest bundle/image is not required for
+the standalone CRM. Completion rechecks active account, current scoped grants,
+frozen source and lease, and atomically audits its blocked result. Lost leases
+and audit failures cannot publish completed evidence. Existing guest step guards
+are unchanged. `tenant-crm-readiness.ts:tenantCrmProviderReadiness` shares saved
+POS evidence freshness validation; the local projection can require credential
+decryption before use. A fresh provider still ends in Market-contract-required.
+No network provider verification, license adapter, canonical activation or active
+CRM resolver is introduced. UI resumes the server operation after reload and
+rejects purported success/scope changes. See
+`ops/SPACEVERSE-CRM-ACTIVATION-CHECK-RUNBOOK.md`, signed HTTP/native SQL tests in
+`server/tests/tenant-crm-activation.spec.ts` and the built desktop/mobile scenario
+selected by `SPACEVERSE_E2E_CRM_ACTIVATION=true` in `playwright.tenant-crm.config.ts`.
+
+## SaaS readiness research and CRM scope lifecycle (2026-10-18)
+
+`server/database-transport.ts` addresses the external Admin pool certificate-
+validation risk in the CRM TLS slice.
+All three pools in `db.ts` and the existing onboarding target registry share
+this policy: exact private/local host exceptions, verified public TLS, explicit
+IP identity checking, and removal of pg URL TLS overrides before pool creation.
+Unsafe query host/credential/TLS/file overrides fail closed without logging
+credentials. Existing read-only options, scope guards and default-off writes
+remain. `server/tests/database-transport.spec.ts`, `database-pools.spec.ts` and
+registry tests inspect the actual pg parser; `scripts/verify-database-tls.mjs`
+uses synthetic loopback certificates and real pg TLS handshakes, not a live DB.
+An additional isolated native PostgreSQL 16 smoke verifies authenticated TLS 1.3
+and CA/hostname rejection; its owned container is stopped after the proof.
+See `ops/SPACEVERSE-DATABASE-TLS-RUNBOOK.md`; actual production CA/connectivity
+and deployment approval remain external gates.
+
+The next default-off Admin diagnostic is documented in
+`ops/SPACEVERSE-TENANT-CRM-READ-RUNBOOK.md`: `server/tenant-crm-read.ts` composes
+the existing customer-wallet repository, onboarding access/runtime source and
+target registry. `GET /api/admin/onboarding/drafts/:id/crm/customers/:userId`
+requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
+permissions/source are rechecked, and successful access is audited in metadata.
+It works on prepared/inactive drafts and explicitly returns not_provisioned.
+It does not activate a venue, replace the active CRM reader or check a POS/license.
+The customer-directory slice (#285) adds `customer-directory-repository.js`
+with the wallet repository's shared verified-binding SQL and an optional
+collection suffix at the same draft URL (q/limit/offset only). It shares the
+read-only/source-revalidation/audit service and actor rate limit with detail
+reads. `TenantCustomerDirectory.tsx` is gated by the default-off session
+capability inside the existing `VenueOnboarding`; it does not activate a venue.
+`playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
+on three dedicated local native PostgreSQL targets, including disabled mode.
+The directory/UI was merged in #285 after the read diagnostic #284.
+The readiness slice #286 adds GET
+`.../crm/readiness` with the same read/access/audit boundary. It uses a real
+scoped DB count and the existing encrypted POS projection; saved provider
+checks are not new live probes. `tenant-crm-readiness.ts` rejects stale/future
+or incomplete evidence and leaves subscription/activation unconfigured/pending.
+`TenantCrmReadiness.tsx` shows these gates in the existing wizard, default-off;
+no canonical active flag or guest runtime changes. Contract and verification
+are in `ops/SPACEVERSE-CRM-READINESS-RUNBOOK.md`.
+Signed HTTP regression is in `server/tests/tenant-crm-http.spec.ts`, using the
+same seed in PGlite or opt-in native PostgreSQL. The native fixture requires a
+local test database/role, creates dedicated databases, and pins pool clients
+through the real read-only transaction. Production-mode image/real registry
+smoke and native checks are documented in the runbook/progress.
+
+Current source-backed product status, competitor evidence, external publication
+gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,
+`ops/SAAS-COMPETITOR-RESEARCH.md`, `ops/EVOTOR-MARKET-REQUIREMENTS.md`,
+`ops/SAAS-PRODUCT-ROADMAP.md` and `ops/SAAS-ANALYTICS-AI-ARCHITECTURE.md`.
+Marketplace terms remain unverified after official-site HTTP 403; AI is a future
+independent add-on whose architecture is specified, with no adapter implemented
+or external AI calls in this iteration. Neither research
+nor the existing onboarding artifacts mean a commercially activated tenant.
+
+`admin-platform/src/App.tsx` keys the production CRM by actor/company/venue;
+changing scope immediately discards its list, filters, selected customer and
+forms while the next request is pending. `ProductionCRM.tsx` keys its drawer by
+scope/customer and ignores obsolete detail responses. This is a UI lifecycle
+boundary, not a replacement for existing server authorization. Browser fixtures
+in `e2e/crm-scope.spec.ts` reproduce same-company venue and cross-company switches
+and delayed responses; `playwright.evotor.config.ts` runs them on desktop/mobile
+alongside existing cash dashboard checks. No production APIs are called by them.
+
 ## Business venue audit isolation (2026-10-17)
 
 `admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit
@@ -860,6 +974,21 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Unified window (1.0.16/code20, approved 2026-10-18): the native
+  receipt-discount tile is **PIVNIK — БОНУСЫ**. `RedemptionActivity` receives
+  foreground scanner/manual codes in the same window, pins resolve/bind to the
+  source receipt UUID, and displays identity independently of quote availability.
+  Return without redemption uses `IntegrationExit`/KEY_SKIP, preserving discounts,
+  positions and payments. The failed product-barcode service/card are removed.
+  `BindingPolicy` tracks only live scan tickets, invalidates them on that receipt's
+  completion/cancellation or another receipt opening; Bridge releases in finally.
+  Existing receipt cleanup and exact-UUID persistent binding remain. No server,
+  schema, feature flag or monetary-policy change. Native/fiscal acceptance is
+  required. Details: `ops/EVOTOR-BONUS-WINDOW-20261018.md`.
+  The 1.0.16 UI fix starts with focus on the window and the soft keyboard hidden;
+  manual customer/points fields remain editable on explicit selection. It does
+  not change scanner callbacks, receipt state, credentials or monetary rules.
+
 - Fresh closed documents (2026-10-18): `pos/recent-sync.js` reads an overlapping
   two-day API window before historical synchronization. It reuses the exact
   immutable-document importer extracted as `importEvotorDocuments`, has a bounded
@@ -984,3 +1113,28 @@ isolation.
 - `test/wallet-routes.test.js` exercises the actual mount, existing signed-session
   middleware and gateway consent/proxy source on loopback with fixture DB/profile
   adapters. Evidence and limits: `ops/WALLET-ROUTES-EXTRACTION-20261010.md`.
+
+## Evotor paid draft-beer volume (2026-10-19)
+
+`pos/beer.js` accepts an explicit `operation: "beer"` on the existing device
+receipt-bind transport. Selection is pending metadata, fenced by store, receipt,
+client, device and QR-claim timestamp. Manual additive migration **024** creates
+only selection/audit tables; it is never a startup migration. Old APKs and
+cashback continue without 024; new volume writes return 503 until prepared.
+
+Closed paid cloud positions measured in liters cap the selected volume; pieces,
+kg and zero-price gifts are excluded. `pos/bonus.js` settles the canonical
+`beer_loyalty` row and original transaction beer fields in the same transaction
+as cashback: 14 paid liters earn 1 gift liter. No second loyalty counter or staff
+purchase is created. Partial refunds reverse only the original
+purchase's attributed beer/reward (whole gift liters from its original threshold crossings), retain a remaining original transaction, and
+cap cumulative removals. A previously spent gift becomes an audited shortfall
+for owner review. Full canonical cancellation must not reverse beer twice.
+
+The native window has a horizontally scrolling row of total-volume choices,
+ordinary checkout, and separate reserve / payment controls for redemption.
+Initial keyboard focus remains on the non-editable root. Volume saves must be
+acknowledged before checkout; actual accrual still waits for the cloud document.
+Receipt close/clear/new UUID invalidates customer identity; no global volume is
+stored. Do not enable redemption, alter Evotor URL masks, or change the existing
+VK/Selectel services as part of this feature.

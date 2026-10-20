@@ -2,7 +2,7 @@ export type AdminRole='SUPER_ADMIN'|'VENUE_ADMIN'
 export interface AdminSession {
   admin:{id:string;email:string;displayName:string;role:AdminRole}
   csrfToken:string
-  capabilities:{writes:boolean;productionBonusWrites:boolean;productionAchievementWrites:boolean;productionEntitlementWrites:boolean;demo:boolean;onboardingDrafts?:boolean;onboardingIntegrations?:boolean;onboardingInvitations?:boolean;onboardingProvisioning?:boolean;onboardingAccess?:boolean;onboardingWrite?:boolean;onboardingInvitationOwner?:boolean;onboardingWorkflow?:boolean;onboardingPosProxy?:boolean}
+  capabilities:{writes:boolean;productionBonusWrites:boolean;productionAchievementWrites:boolean;productionEntitlementWrites:boolean;demo:boolean;onboardingDrafts?:boolean;onboardingIntegrations?:boolean;onboardingInvitations?:boolean;onboardingProvisioning?:boolean;onboardingAccess?:boolean;onboardingWrite?:boolean;onboardingInvitationOwner?:boolean;onboardingWorkflow?:boolean;onboardingPosProxy?:boolean;tenantCrmReads?:boolean;tenantCrmActivationChecks?:boolean}
 }
 interface GuestSession {authenticated:false;demo?:boolean;invitations?:boolean}
 export interface ApiVenue {

@@ -5,6 +5,8 @@ import { createOnboardingProvisioningService } from './onboarding-provisioning.j
 import { requireOnboardingAccess } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal } from './types.js'
 import {assembleApprovedRuntimeBundle} from './onboarding-runtime-release.js'
+import {crmCheckView,crmActivationSummary} from './tenant-crm-activation-state.js'
+import {loadOnboardingPosProxyProjection} from './onboarding-pos-proxy.js'
 
 const provisioning=createOnboardingProvisioningService({
   metadata:pool,
@@ -12,7 +14,29 @@ const provisioning=createOnboardingProvisioningService({
   assembleRuntimeBundle:assembleApprovedRuntimeBundle,
   requireCodeRelease:true,
   requireImageRelease:true,
+  readCrmProvider:(client,admin,draftId)=>config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy
+    ?loadOnboardingPosProxyProjection(client,admin,draftId,true):Promise.resolve(null),
 })
+
+async function requireCrmActivationCheckAccess(admin:AdminPrincipal){
+  await requireOnboardingAccess(admin,true)
+  if(!config.enableTenantCrmActivationChecks)throw new HttpError(403,'CRM_ACTIVATION_CHECK_DISABLED','Проверка запуска CRM пока выключена.')
+}
+export async function getCrmActivationCheck(admin:AdminPrincipal,draftId:string){
+  await requireCrmActivationCheckAccess(admin)
+  return crmCheckView(await provisioning.getCrmActivationCheck(admin,draftId))
+}
+export async function readCrmActivationSummary(admin:AdminPrincipal,draftId:string){
+  await requireOnboardingAccess(admin)
+  if(!config.enableTenantCrmActivationChecks)throw new HttpError(403,'CRM_ACTIVATION_CHECK_DISABLED','Проверка запуска CRM пока выключена.')
+  return crmActivationSummary(await provisioning.readCrmActivationState(admin,draftId))
+}
+export async function runCrmActivationCheck(admin:AdminPrincipal,draftId:string,raw:unknown){
+  await requireCrmActivationCheckAccess(admin)
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).length!==0)
+    throw new HttpError(400,'CRM_ACTIVATION_COMMAND_INVALID','Проверка принимает только пустую команду. Область, подписку и статусы определяет сервер.')
+  return crmCheckView(await provisioning.runCrmActivationCheck(admin,draftId))
+}
 
 export async function requireOnboardingProvisioningAccess(admin:AdminPrincipal):Promise<void> {
   await requireOnboardingAccess(admin,true)

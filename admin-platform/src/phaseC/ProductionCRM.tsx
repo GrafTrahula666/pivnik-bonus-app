@@ -69,14 +69,21 @@ export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;sessio
       </tr>)}</tbody>
     </table></div></div>}
     {data&&data.rows.length===0&&<EmptyState title="Клиенты не найдены" sub="Измените поисковый запрос или сегмент."/>}
-    {selected&&<CustomerDrawer venue={venue} session={session} userId={selected} onClose={()=>setSelected(null)} onChanged={reload}/>}
+    {selected&&<CustomerDrawer key={`${venue.companyId}:${venue.id}:${selected}`} venue={venue} session={session} userId={selected} onClose={()=>setSelected(null)} onChanged={reload}/>}
   </div>
 }
 
 function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue;session:AdminSession;userId:string;onClose:()=>void;onChanged:()=>void}){
   const [client,setClient]=useState<DetailResponse|null>(null),[error,setError]=useState(''),[reload,setReload]=useState(0)
   const [bonusMode,setBonusMode]=useState<'credit'|'debit'|null>(null),[achievementOpen,setAchievementOpen]=useState(false),[cashbackOpen,setCashbackOpen]=useState(false),[entitlementOpen,setEntitlementOpen]=useState(false)
-  useEffect(()=>{setError('');apiGet<DetailResponse>(`/api/admin/venues/${venue.id}/clients/${userId}`).then(setClient).catch(e=>setError(e instanceof Error?e.message:'Ошибка клиента'))},[venue.id,userId,reload])
+  useEffect(()=>{
+    let cancelled=false
+    setClient(null);setError('')
+    apiGet<DetailResponse>(`/api/admin/venues/${venue.id}/clients/${userId}`)
+      .then(value=>{if(!cancelled)setClient(value)})
+      .catch(error=>{if(!cancelled)setError(error instanceof Error?error.message:'Ошибка клиента')})
+    return()=>{cancelled=true}
+  },[venue.id,userId,reload])
   const refresh=()=>{setReload(v=>v+1);onChanged()}
   // In the PIVNIK app achievements and frames are given through the app (GuestRewardsPanel).
   const linked=isPivnikAppVenue(venue)

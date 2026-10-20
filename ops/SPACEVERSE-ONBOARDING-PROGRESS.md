@@ -1103,3 +1103,734 @@ MODULE-MAP дополнен этим контрактом. Изменений с
 для стороннего tenant и простой мастер источников, затем поиск и мобильные
 сценарии, AI отдельным небольшим PR. PR в main не объединялся, deploy не
 выполнялся; production-БД, Railway, секреты, CI и реальные устройства не менялись.
+
+## 2026-10-18 — SaaS-аудит, roadmap и lifecycle CRM
+
+Новое ТЗ владельца: существующий сайт — коммерческая CRM SaaS с публикацией в
+Эвотор.Маркете; AI пока только архитектура/тестовый контур без платных API.
+Ранее #270 был объединён в 5230083 и прошёл существующий автодеплой Telegram/VK
+по отдельному разрешению владельца. Это разрешение не относится к новой ветке
+`spaceverse/saas-product-roadmap-20261018`: merge/deploy здесь не выполняются.
+
+Read-only проверены свежий origin/main 5230083, 330 origin refs и 58 открытых PR.
+Изучены относящиеся к задаче main modules/Do not break, документация, конфигурации
+и реализации в AI/CRM/pilot/integration ветках. #101 содержит legacy AI shell,
+#115/#197/#212 — отдельную работу Customer 360; #280–282 затрагивают живой Evotor
+bridge/sync и не импортировались. Имя старой remount-ветки не доказывает фикса:
+эта ветка является предком main, а актуальный App оставался без CRM scope key.
+
+Созданы SAAS-PRODUCT-AUDIT.md, SAAS-COMPETITOR-RESEARCH.md,
+EVOTOR-MARKET-REQUIREMENTS.md, SAAS-PRODUCT-ROADMAP.md,
+SAAS-ANALYTICS-AI-ARCHITECTURE.md в ops/. Есть readiness/risk matrix, P0–P3,
+приёмка и зависимости, источники/даты/оговорки тарифов, proposed START/BUSINESS/
+PRO + независимый AI add-on, metric definitions/DSL/export и безопасный AI
+interface/usage/tools. Это спецификация; mock adapter/AI feature flags пока
+не реализованы, paid model/API не подключались. Склад/поставщики/инвентаризация/
+производство/киоск исключены. Маркетинговые заявления конкурентов не выдаются
+за результаты собственного тестирования или доказанную причинность.
+
+Официальные материалы iiko, Quick Resto, UDS, Mindbox, MAXMA получены; база
+знаний r_keeper доступна несмотря на 403 основного сайта; дополнительно изучена
+главная RetailCRM. Для Poster основной/developer/help ресурсы — 403. Официальные
+Эвотор developer/market/main — 403, поэтому комиссии/договоры/лицензирование и
+модерация остаются UNKNOWN, с проверяемым чек-листом и внешними задачами владельца.
+Числа не придуманы; истёкшая 30.09 акция iiko не считается текущей ценой.
+Файлы/manifest HTTP-исследования сохранены в /tmp/spaceverse-saas-research-20261018.
+
+Первое исправление: при смене actor/company/venue CRM теперь немедленно
+размонтирует старые таблицу, фильтры, выбранного клиента и формы. Drawer
+привязан к scope/customer; очистка и cancellation guard игнорируют поздние
+detail responses. На неизменённом main browser воспроизвёл 3 ошибки: другая
+точка той же компании, другая компания, поздний ответ старой карточки.
+После исправления 6/6 desktop/mobile проходят. Новый бизнес в API-фикстуре
+честно возвращает 409 «источник ещё не подключён», старые данные при этом
+исчезают. Это UI lifecycle, не новое server authorization и не готовый tenant
+CRM adapter. Backend, деньги, модели, migrations и CI workflows не менялись.
+MODULE-MAP обновлён в той же ветке.
+
+Лично выполнены проверки; логи /tmp/spaceverse-saas-research-20261018/gates:
+
+- frozen npm ci root/Business с --cache /tmp/spaceverse-npm-cache успешны;
+  Playwright Chromium установлен в /tmp/spaceverse-playwright, integrity/TLS
+  не отключались. Первоначальная CLI-команда Playwright ошибочно передала путь
+  как второе имя project; после `--project=desktop` тесты реально выполнились;
+- npm run materialize ×2: tracked bytes идентичны между прогонами. Чистый
+  materialize снова дал 7 generated файлов, 365 insertions / 78 deletions:
+  server.js, universal-server.js, app.js, achievements.js, index.html,
+  red-cosmos-v2.js, scripts/v22-data-audit-and-repair.mjs. Patch/SHA-256 сохранены,
+  собственные generated outputs восстановлены, в PR они не входят;
+- node --test --test-concurrency=2: 622 passed / 0 failed/skipped;
+- npm run check: exit 0; root/Business npm audit: 0 vulnerabilities;
+- Business npm test -- --maxWorkers=1: 272 passed / 20 прежних PostgreSQL skipped;
+  root и Business полные прогоны выполнялись последовательно;
+- Business npm run typecheck, npm run build: exit 0; прежний chunk warning Vite;
+  ESLint затронутых App/ProductionCRM/new E2E: exit 0;
+- playwright --config=playwright.evotor.config.ts --workers=2: 12 passed
+  (6 CRM scope/race и 6 прежних cash desktop/mobile);
+- npm run test:e2e:onboarding: 4 passed desktop/mobile;
+- git diff --check и проверка локальных ссылок пяти документов: passed.
+
+Read-only публичный CRM: HTML/health HTTP 200, ok=true, session без cookie
+authenticated=false/demo=true/invitations=false. Закрытые реальные owner screens,
+native PostgreSQL suite, живая касса/Маркет, реальные ключи/оплата/AI не проверены.
+Новые регистрации, заявки/сообщения продавцам, merge, production deploy, правки
+Railway/секретов/CI и обновления устройств не выполнялись. Следующий P0 —
+standalone CRM adapter и активация поверх существующих canonical ownership и
+onboarding; правила Маркета, TLS/CA и лицензии остаются отдельными блокерами.
+
+По cloud-environment-onboarding:setup сохранены install_script/start_skill в
+черновике конфигурации среды: frozen installs, writable npm/browser caches,
+Chromium, последовательные suites и startup/readiness. Обновлена цель SaaS +
+Маркет; AI только architecture/synthetic. status=saved, requires_publish=true;
+для будущих задач владелец проверяет/сохраняет настройки и публикует именно
+среду разработки. Это не production deploy и не подтверждение fresh-task
+restoration. Secrets/network/repository membership не менялись. Два tracked
+onboarding PNG, перезаписанные собственным E2E, восстановлены и не входят в PR.
+
+## 2026-10-18 — #283 merged по разрешению; первый Admin tenant customer read
+
+Владелец отдельно разрешил «merge #283 и существующий автодеплой Telegram/VK».
+После свежей проверки head 472837a / обоих green checks PR #283 переведён из
+Draft и squash merged с match-head-commit. Main: abbe089490aafd7984de402c4f80c243bcdafee4.
+Release workflow 39138360840 SUCCESS: exact commit deploy обоих сервисов,
+public/account/signed-session probes прошли. VK parity 39138360836 SUCCESS.
+Версию размещённого Admin сайта этот Telegram/VK workflow не подтверждает.
+Repair/unify DB steps skipped по прежним условиям. CI/Railway settings/keys и
+устройства вручную не менялись. Разрешение относится только к #283.
+
+Новая ветка spaceverse/crm-tenant-reader-20261018 от этого main. Первый
+самодостаточный шаг — default-off GET diagnostic
+`/api/admin/onboarding/drafts/:draftId/crm/customers/:userId`, а не готовая
+CRM/активация. При исследовании адаптера подтверждено: прежний runtime source
+принимает только prepared/inactive scope, а обычный venue resolver — только
+active. Нельзя соединить их снятием одной проверки: поэтому пока используется
+существующий draft route/access и честный runtimeStatus=not_provisioned.
+
+tenant-crm-read.ts композирует исходный customer-wallet-repository.js,
+loadOwnedOnboardingRuntimeSource и прежний target registry. Новых моделей,
+миграций, target DML и fallback в ПИВНИК нет. Source и grants проверяются до
+и после target read; запрещены client-supplied company/venue/runtime/credentials.
+Target transaction REPEATABLE READ READ ONLY, SQL repository повторно проверяет
+exact binding + ownership. Успешное чтение оставляет scoped metadata audit без
+имени/баланса; ошибка аудита fail-closed. Лимит 30/min/actor. Flag
+ADMIN_ENABLE_TENANT_CRM_READS default false, при opt-in startup валидирует
+registry. Для чтения PII нужен owner/manager; viewer/trusted без grant запрещены.
+Wallet null / balance "0" / bigint decimal string различаются.
+
+Добавлена .d.ts для существующего shared repository и её COPY в Dockerfile:
+JS уже попадал в image через прежний COPY *.js; без декларации новая API
+сборка внутри image не разрешила бы TypeScript import. CI workflow и runtime
+JS ПИВНИКА не меняются. Runbook описывает реальный contract v1/flags/errors,
+ограничения и тестовый сценарий; MODULE-MAP обновлён.
+
+Первые signed HTTP/PGlite tests: 14 passed / 1 failed из-за POST без Origin
+(ожидали method 405, получили штатный Origin 403). Запрос исправлен, защита
+не ослаблялась. Расширенный focused прогон: 18 passed; затем добавлен второй
+вариант misbound target и явная проверка отсутствия DSN в ошибке.
+
+Первый полный root прогон ошибочно был после слишком раннего восстановления
+generated outputs: 603 passed / 19 failed. Это ошибка порядка моей проверки,
+не основание менять root tests/исходники. Повторные materialize ×2 подтверждают
+идемпотентность; generated state оставлен на время тестов. Отдельный прежний
+diff 7 files / 365 insertions / 78 deletions сохранён с hashes/backups в
+/tmp/spaceverse-crm-reader-20261018/gates; перед commit outputs будут восстановлены.
+
+Следующие блокеры остаются: список/поиск и UI сторонней CRM, жизненный цикл
+активации, официальный Market/license contract, native PG/TLS и production
+readiness. Для тысяч клиентов текущий onboarding registry max=200 и по два
+соединения на runtime требуют отдельного bounded-pool/capacity решения;
+это зафиксировано, но не расширяет текущую реализацию. AI/API моделей,
+кассы/Маркет, новые production env/settings и реальные данные не подключались.
+
+Итоговые проверки этой ветки (логи /tmp/spaceverse-crm-reader-20261018/gates):
+
+- materialize ×2 побайтово идемпотентен; 7 generated outputs восстановлены
+  только после проверок с SHA-256 сверкой backups/current; generated diff в PR нет;
+- `node --test --test-concurrency=2`: 622 passed / 0 failed/skipped;
+- `npm run check`: exit 0; root/Business `npm audit --cache /tmp/spaceverse-npm-cache`: 0 vulnerabilities;
+- Business `npm test -- --maxWorkers=1`: 291 passed / 20 прежних PostgreSQL skipped,
+  в том числе 19 новых signed HTTP/PGlite tests; root и Business выполнялись последовательно;
+- Business `npm run typecheck`, `npm run build`: exit 0, прежний Vite chunk warning;
+- ESLint изменённых server/config/router/new service/new tests: exit 0;
+- `node /tmp/spaceverse-crm-reader-20261018/compiled-smoke.mjs`: compiled API import
+  и default-off 403 PASS, без запросов к БД;
+- Playwright `--config=playwright.evotor.config.ts --workers=2`: 12 passed;
+  `npm run test:e2e:onboarding`: 4 passed; использован
+  PLAYWRIGHT_BROWSERS_PATH=/tmp/spaceverse-playwright. Собственные перезаписанные
+  onboarding PNG восстановлены; browser artifacts не входят в PR;
+- `git diff --check`: passed. MODULE-MAP и runbook в той же ветке.
+
+Непроверенное: native PostgreSQL/TLS без выделенной тестовой БД, реальный Market/
+провайдер/оплата, browser flow нового diagnostic endpoint и коммерческая CRM.
+Docker image build не запускался: выполнены npm build + compiled runtime smoke,
+это не заменяет проверку release image перед включением функции. Новый код не
+merge/deploy, flags в production не включались. Разрешение #283 уже исполнено
+и не относится к следующему Draft PR.
+
+## 2026-10-18 — постоянная цель: работать до проверяемой готовности к Маркету
+
+Владелец прямо повторил: «Не останавливайся!! Работай до момента, когда ты
+сможешь сказать на 100%: всё, я готов — выкладывай меня на Эватор Маркет».
+Это постоянная цель следующих итераций: green foundation PR не считается
+завершением SaaS. Продолжать доступную реализацию и проверки по roadmap;
+фактическую готовность связывать с полным owner onboarding/CRM/POS/license
+сценарием, эксплуатационными проверками и официальными требованиями, а не
+числом тестов. Прежние отдельные запреты merge/deploy, production data/keys/CI
+и внешние договоры/модерация сохраняются, пока владелец явно их не изменит.
+
+В рамках существующего #284 закрываются оставленные мной пробелы проверки:
+поднят отдельный Docker PostgreSQL 16, только loopback port и собственные
+synthetic databases/role; реальные URLs/данные не использовались. Прежние
+20 native pg integration tests прошли. Для новых 19 HTTP cases общий seed
+вынесен без изменения данных в seedOnboardingFixture; opt-in native backend
+создаёт отдельные physical databases для metadata и трёх target runtime,
+пиннит pg client на транзакцию и проверяет SHOW transaction_read_only=on.
+Native URL допускается только с local host/test database prefix/crm_fixture.
+Fixture databases сохраняются для инспекции; чужие данные не удаляются.
+
+Первый Docker build был заблокирован read-only buildx cache; BUILDX_CONFIG
+перенесён в writable /tmp, DOCKER_CONFIG/auth/proxy не менялись. Временный
+verification Dockerfile добавляет только session CA secret mount для npm ci
+(strict-ssl=true) и build ARG VITEST_MAX_WORKERS. Прежний default-parallel
+прогон дал 3 существующих 5000ms timeout в provisioning tests; повтор с
+поддерживаемым VITEST_MAX_WORKERS=1 выполняет все прежние assertions/timeouts.
+Production Dockerfile/CI test commands ради проверки не меняются. Полные
+результаты и image smoke фиксируются после завершения.
+
+Уточнение сборки после воспроизведения timeout: в production Dockerfile
+добавлен build-only `ARG VITEST_MAX_WORKERS=1`, чтобы штатный build не зависел
+от скрытой локальной настройки concurrency. Literal test commands, assertions,
+5000ms timeouts и CI workflow не меняются; ARG не попадает в runtime ENV.
+Временный Dockerfile теперь добавляет только session CA mount к npm ci.
+Первый успешный image sha256:4b6b0d9e5e43677bf2d088b0c0dced663ce9b5e42d462f4f74dd12bfc5170247:
+typecheck/lint, 291 passed +20 native skipped, security subset 170 passed,
+build passed. Исходники для финальной повторной image сборки сверены с
+веткой после восстановления семи generated outputs, не с посторонним diff.
+
+Реальный production-mode image smoke с synthetic PostgreSQL прошёл в двух
+контейнерах: default-off 403 после настоящего login; opt-in с реальным registry,
+тремя physical target DB, company/venue/manager boundary, wallet null/zero/bigint,
+scope/POST refusal. HTML/health и secure HttpOnly cookie проверены. API-контейнеры
+после smoke остановлены, test PostgreSQL оставлен для повторяемых проверок;
+нет production deploy, реальных accounts/keys/POS/API модели. Script/logs в
+/tmp/spaceverse-crm-release-verification-20261018. Параллельный host PGlite
+focused run во время Docker дал один прежний provisioning timeout; после
+завершения Docker изолированный повтор тех же 35 cases — 35 passed.
+
+Полный Business запуск с обеими isolated native test URL: **311 passed / 0
+skipped**, 32 suites passed. Ранее пропущенные 20 теперь выполнены, а новые
+19 дополнительно используют pg-driver/pinned transactions. В GitHub CI без
+включения test URL прежние 20 остаются skipped; настройки CI не менялись.
+Повторные root tests после materialize ×2: 622 passed / 0 failed/skipped.
+Дополнительный runtime-manifest root suite проверяется после Docker ARG change.
+Внешний DB TLS/CA, реальный Маркет/касса/подписка и browser UI нового API
+по-прежнему не подтверждены; эти результаты не объявляют CRM коммерчески готовой.
+
+Итог второй проверки #284: финальный image
+sha256:0235d39b9baa80c538a2c800f3c1f0860b21f06eb2ddccc3e4b94b4b4ee10c7b
+с production Dockerfile `ARG VITEST_MAX_WORKERS=1` (без CLI override) собран:
+typecheck/lint, 291 passed +20 native skipped, 170 security passed, build
+успешны. Для proxy trust добавлен только временный CA secret mount; CA secret
+проверенно отсутствует в runtime image. Повторный real-image startup/login/
+default-off и opt-in/native-target HTTP smoke — оба exit 0, API-контейнеры
+остановлены. Postgres fixture container остаётся локальным, 127.0.0.1 port.
+
+Перед обновлением PR: root 622/0; отдельный root runtime-manifest suite 10/0
+после Docker ARG change; materialize ×2 idempotent, 7 generated outputs
+восстановлены по SHA-256; full native Business 311/0 skipped; root check,
+root/Business audit (0 vulnerabilities), changed fixture ESLint — exit 0;
+Playwright 12 + onboarding 4 passed. Свежие logs/gates в
+/tmp/spaceverse-crm-release-verification-20261018; повторно перезаписанные
+собственным E2E onboarding PNG восстановлены. `git diff --check` passed.
+
+### 2026-10-18 — следующий срез CRM, отдельная локальная ветка
+
+`spaceverse/crm-directory-20261018`, основана на head #284. Сам #284 остаётся
+Draft `9f34d2d1f40b448fee73fb6ef9228bc650018f6f`; оба GitHub checks SUCCESS,
+merge не выполнен: отдельное разрешение владельца ещё ожидается. Второй PR
+не открыт, текущий #284 новым scope не расширялся. Локальная работа продолжается.
+
+Сделано: коллекция клиентов с буквальным поиском и серверной пагинацией;
+общий binding CTE с исходным wallet repository; общий verified-source/read-only/
+audit adapter, 5s statement timeout, прежний actor rate limit. Список, поиск,
+обновление и карточка встроены в существующий VenueOnboarding, включаются
+только прежним default-off CRM flag через session capability и owner/manager
+access. Нет новых tenant-моделей, миграций, активированных точек или касс.
+UI не предлагает функции Telegram/VK; источники компаний/точек не смешиваются.
+
+Лично выполнено на этой ветке:
+- materialize ×2: idempotent. Чистый materialize вновь меняет 7 прежних файлов,
+  включая server.js, universal-server.js, app.js. Patch и SHA-256 до/после в
+  /tmp/spaceverse-crm-directory-verification-20261018; восстановлены ровно эти
+  собственные generated outputs, каждый hash совпал. Патч-цепочка не менялась.
+- node --test: **625 passed, 0 failed/skipped**; npm run check, npm audit и
+  npm audit --omit=dev --audit-level=high — exit 0, vulnerabilities 0.
+- npm test -- --maxWorkers=1 с двумя локальными native PG test URL:
+  **322 passed, 0 skipped**, 32 suites. Из них 30 signed-HTTP CRM tests:
+  350 matching клиентов без truncation/дубликатов, literal Cyrillic/%/_ search,
+  null/0/bigint, две компании/две точки, revoked grant/manifest race,
+  чужая binding, закрытый audit failure, request scope и rate limit.
+- npx playwright test -c playwright.tenant-crm.config.ts на собственном
+  PostgreSQL: **6 passed**, desktop/mobile, built App + signed login + настоящий
+  frozen registry/pg pools/SQL. Поиск, страницы, точный баланс, смена точки и
+  аккаунта, задержанный настоящий HTTP-ответ. API/SQL не подменены.
+- SPACEVERSE_E2E_CRM_READS=false с той же командой: **2 passed**, desktop/mobile;
+  UI отсутствует, автоматического чтения нет, серверный endpoint даёт 403.
+- changed TS/TSX/E2E files ESLint — exit 0. Общая image сборка/проверки следующего
+  среза продолжаются; результат image #284 нельзя приписывать новой ветке.
+
+Неудачные попытки не скрыты: первая E2E fixture пыталась менять frozen registry
+и была отклонена. Исправлена на отдельный seed process и настоящий реестр.
+Следующий startup поймал ошибку trailing slash в test-only static root (404);
+исправлено path.resolve. Два E2E затем ждали скрытую кнопку logout: исправлен
+сценарий открытия штатного profile menu; добавлены недостающие synthetic
+metadata tables для platform summary. После исправлений все 6+2 прошли.
+Production код реестра/меню/схемы ради тестов не менялся, assertions не ослаблены.
+
+Осталось: отдельный PR этого среза после разрешённого merge #284; активация
+canonical venue без обхода текущего prepared-only guard; полный самостоятельный
+путь установки/лицензии/провайдера, backup/restore/TLS/load gates и Market
+модерация. Эти проверки не означают готовность коммерческого релиза.
+
+Финальная проверка локального directory-среза: Docker image
+`sha256:d1e9dd6365cd041ba35ebbf4c0b38fffe6d66c9138009d98b493b9e9c4254cd7`
+собран с текущим production Dockerfile (только временный public CA secret mount
+для npm ci, strict TLS). Внутри typecheck/lint, **302 passed +20 native skipped**,
+security **170 passed**, build — exit 0. Отдельный native full suite выше выполняет
+все **322 без skip**. Real-image production-mode startup/login/default-off и
+opt-in collection/detail smoke с настоящим registry/PG — оба exit 0: 350 matching
+клиентов четырьмя страницами, literal search, точные отдельные балансы, manager/
+company/venue boundaries, 0/null/bigint и запрет scope. Проверено отсутствие
+build CA secret и build-only worker ENV в runtime image. Собственные image API
+containers остановлены; локальный test PostgreSQL сохранён.
+
+В финальные 6 native built-panel E2E добавлен транспортный сбой обновления:
+старые данные очищаются, ошибка не становится пустым успешным списком,
+повторное обновление восстанавливает чтение. Первая попытка вынести это в
+дополнительные независимые E2E честно упёрлась в действующий login rate limit
+6/15min на fixture root. Проверка объединена с тем же пользовательским сценарием;
+лимиты не отключались и не ослаблялись. Повтор: **6 passed**, disabled suite
+**2 passed**; прежние cash/CRM scope E2E **12 passed**, onboarding **4 passed**.
+Последние ESLint и git diff --check — exit 0; собственные перезаписанные PNG
+восстановлены байтово. Все логи в /tmp/spaceverse-crm-directory-verification-20261018.
+
+Cloud setup: helper /workspace/spaceverse-dev-tools/start-native-postgres.py
+проверен дважды, реальный SELECT 1 прошёл. Обновлён start_skill в черновике
+настроек среды; install_script/network/credentials не менялись. Для будущего
+snapshot пользователь должен сохранить и опубликовать настройки среды;
+восстановление в новой задаче ещё не проверено, это не production publication.
+
+Подготовлена отдельная техническая записка следующего activation-среза вне
+репозитория, чтобы не расширять этот change. Официальные public Evotor SDK
+обновлялись в 2018; архив documentation-api — 2017. Они не подтверждают
+актуальный install/subscription/revoke contract 2026 и не снимают Market gate.
+
+### 2026-10-18 — готовность именно CRM-сайта, следующая локальная итерация
+
+Ветка `spaceverse/crm-readiness-20261018` поверх локального directory-коммита
+`3a18a17`. #284 не изменён и не объединён; единственный открытый Draft, свежие
+GitHub checks SUCCESS, head 9f34d2d. Отдельный merge approval ещё ожидается.
+Также запрошены наличие зарегистрированного SPACEVERSE app, App ID и актуальный
+Market contract; секреты в чат не запрашиваются.
+
+Реализованы GET /api/admin/onboarding/drafts/:id/crm/readiness и блок
+«Что осталось для запуска CRM» внутри существующего мастера. Используются
+тот же default-off flag, owner/manager access, frozen source, target registry,
+SQL ownership boundary, read-only snapshot, 5s timeout, общий actor rate limit
+и обязательный audit. Нет новой tenant-модели, миграций или изменений active
+flags. Подписка остаётся not_configured, запуск pending/activationAllowed=false:
+текущий код не активирует venue и не подменяет отсутствующий Market adapter.
+
+Клиентский источник проверяется настоящим SQL; count=0 с верной binding —
+доступная пустая база. Ошибка источника не возвращает успешный count=0.
+PII/кошельки/отчёт/credentials в readiness payload не выдаются. Состояние кассы
+читается через прежний getOnboardingPosProxy с проверкой encrypted secret;
+это last_saved_verification, не новый сетевой вызов. Свежий active дополнительно
+требует confirmed, available report (допускает нули), свежие check/device-event
+timestamps; >5 минут в прошлом, >5 секунд в будущем и неполный report не
+становятся успехом. Активная касса сама по себе не активирует CRM.
+
+Лично выполнено: focused HTTP+rules 51 passed (39+12). HTTP проверяет real signed
+session/SQL/шифрование через существующие endpoints; synthetic stored provider
+evidence помечено как fixture внешней границы, не как реальная касса.
+Новые built-panel native E2E 6 + disabled 2 passed. Полные повторные root
+materialize ×2 idempotent; **625 passed /0 skipped**, check/audit/production audit
+exit 0. Все 7 известных generated outputs, включая server.js/universal-server.js/
+app.js, сохранены в proof и восстановлены с SHA-256. Патч-цепочка не менялась.
+Полный Business native **343 passed /0 skipped**, 33 suites; typecheck/lint/build
+и оба Business audit exit 0, vulnerabilities 0. Дополнительные browser assertions
+на очистку readiness при смене точки/задержке и отдельная image сборка выполняются;
+старый image directory не объявляется image нового среза.
+
+Контракт: ops/SPACEVERSE-CRM-READINESS-RUNBOOK.md; карта модулей обновлена.
+Логи: /tmp/spaceverse-crm-readiness-verification-20261018.
+
+Финал readiness-среза: image
+`sha256:13cb7ecbd2e5a8b7b8089d7aa9b05ec998343b3ccfb98ea128a20609be599c54`
+собран. Внутри typecheck/lint, **323 passed +20 native skipped**, security
+**170 passed**, build — exit 0. Затем полный host/native повтор **343 passed,
+0 skipped** и built-panel native E2E **6 passed** на последнем коде. Disabled
+browser **2 passed**, прежние cash/CRM **12 passed**, onboarding **4 passed**.
+Границы source/company/venue/account, задержанный readiness/card response и
+пустые/ошибочные состояния проверены на телефоне/компьютере. Freshness использует
+общую POS_EVENT_FRESH_MS константу существующего proxy, не второй контракт.
+
+Production-mode real-image HTTP smoke обоих режимов (disabled/enabled) —
+exit 0: startup/login, настоящий pg registry и три target DB, directory +
+readiness, точные scoped counts, pending подписка/активация, запрет client
+license/status/scope/POST. Readiness не возвращает PII/кошельки/device secrets.
+CA build secret и worker ARG в runtime image отсутствуют. Собственные image
+API containers остановлены; test PG оставлен. Никаких live provider/касса/Market
+или production deploy эти проверки не выполняли.
+
+Directory-коммит **3a18a17045f4041c507c0be40a5af9b498c7915d** отправлен в
+`origin/spaceverse/crm-directory-20261018` после своих gates. Это сохранение
+проверенного кода в отдельной ветке; второго PR нет. Проверены существующие
+workflow triggers: этот branch push не запускает main production deploy;
+CI/workflow files не менялись. Readiness сохраняется отдельным следующим
+коммитом/веткой по тому же правилу. По свежему gh pr list единственный открытый
+SPACEVERSE Draft — **#284**; merge и новая публикация не выполняются без ответа
+на уже заданный вопрос владельцу.
+
+### 2026-10-18 — TLS PostgreSQL, самостоятельный следующий срез
+
+Режим: автономная разработка SPACEVERSE в отдельной ветке
+`spaceverse/crm-database-tls-20261018`, база `3009662` readiness. Main остаётся
+`abbe089`; #284 — OPEN/Draft, head `9f34d2d`, merge CLEAN. Чужие PR не менялись.
+Решается ранее записанный R05; production DSN/CA не исследовались и настройки
+Railway/CI, живые БД, устройства, Telegram/VK не менялись. Дополнительного PR нет.
+
+Лично реализована общая `server/database-transport.ts` политика для трёх Admin
+pools и существующего tenant database registry. Внешний адрес требует проверки
+цепочки и имени; IP проверяется явно. Local/private исключения определяются
+только parsed host, не строкой пароля или имени базы. URL TLS overrides удалены
+перед pg parser; insecure/повторные/противоречивые параметры, query host/credential
+overrides, encoded hostname и certificate file paths отвергаются до pool creation.
+Дополнительные CA — стандартный Node trust через NODE_EXTRA_CA_CERTS, без новых
+настроек пользователя в UI. Read-only reader option, pool limits и default-off
+write/CRM flags сохранены. Миграций и второй tenant-модели нет.
+
+Проверки последнего неизменяемого кода, команды и результаты:
+
+- `npm run materialize` дважды: idempotent. Чистый materialize снова дал прежний
+  diff по achievements.js, app.js, index.html, red-cosmos-v2.js,
+  scripts/v22-data-audit-and-repair.mjs, server.js и universal-server.js.
+  Сохранены байты/SHA-256; root gates выполнены на materialized состоянии,
+  собственные generated outputs восстановлены и побайтово проверены. Патч-цепочка
+  не исправлялась молча.
+- Root `node --test`: **625 passed, 0 failed/skipped**; `npm run check`,
+  `npm audit`, `npm audit --omit=dev --audit-level=high`: exit 0, vulnerabilities 0.
+- Business `npm test -- --maxWorkers=1` с обоими dedicated native test URL:
+  **395 passed, 0 failed/skipped, 35 suites**. `npm run typecheck`, `npm run lint`,
+  `npm run build`, оба audit: exit 0. У lint прежние 12 warnings/0 errors;
+  build сохраняет прежнее предупреждение размера JS chunk.
+- `node scripts/verify-database-tls.mjs` после API build: **6 passed** настоящих
+  TLS handshake, SSLRequest/direct ALPN, доверенный/недоверенный CA, чужое имя/IP.
+  Ошибочные сертификаты не достигли startup message. Стенд синтетический,
+  полноценный PostgreSQL login этим скриптом не заявляется.
+- `python3 /tmp/spaceverse-crm-database-tls-verification-20261018/native-tls-proof.py`:
+  **3 passed** на отдельном собственном PostgreSQL 16: login + `pg_stat_ssl`
+  SELECT с TLS 1.3, UNABLE_TO_VERIFY_LEAF_SIGNATURE без CA и
+  ERR_TLS_CERT_ALTNAME_INVALID при неверном имени. Контейнер с проверенным label
+  остановлен, тестовые данные сохранены. Это не production TLS proof.
+- `npx playwright test -c playwright.tenant-crm.config.ts`: **6 passed**;
+  с SPACEVERSE_E2E_CRM_READS=false — **2 passed**. `playwright.evotor.config.ts`:
+  **12 passed**; `playwright.onboarding.config.ts`: **4 passed**. Итого **24 E2E**,
+  desktop/mobile, реальные signed sessions/PG/registry там, где предусмотрены
+  fixtures. Собственные перезаписанные PNG восстановлены с проверкой SHA-256.
+- Admin Docker build: typecheck/lint, **375 passed +20 native skipped**,
+  security **174 passed**, build — exit 0. Host/native прогон выше выполняет
+  все **395 без skip**. Image:
+  `sha256:6433143f58159be5a2320fae23519509b862e5994b12211515b6b975e9b7906d`.
+- Real-image production-mode HTTP smoke disabled/enabled: оба exit 0, startup/
+  login/SQL/registry, directory/readiness, scope boundaries, no client overrides.
+  В vfs среде использован один собственный контейнер и два последовательных новых
+  API процесса для экономии диска; оба процесса и контейнер остановлены.
+  Build CA secret/worker ENV в runtime отсутствуют. Никаких live provider calls.
+
+Первый полный Business прогон пересёкся с моей последней encoded-host правкой:
+393 passed/2 failed, импортированный helper ещё был старым. Результат сохранён,
+не объявлен зелёным. После фиксации source snapshot полный повтор — 395/0/0;
+хеши production/test source сверены перед image smoke. Первый native TLS setup
+остановился на unsupported host chown (EINVAL); права синтетического ключа
+подготовлены внутри своего тестового контейнера, затем все 3 cases прошли.
+Лимиты, assertions, timeouts и TLS verification не ослаблялись.
+
+Контракт: `ops/SPACEVERSE-DATABASE-TLS-RUNBOOK.md`, MODULE-MAP и audit R05 обновлены.
+Артефакты: `/tmp/spaceverse-crm-database-tls-verification-20261018`:
+gate-results.json, followup-results.json, native-tls-results.json,
+image-smoke-results.json, source hashes и полные логи, включая первый сбой.
+Для будущего production выпуска ещё обязательна разрешённая проверка реальных
+DSN/CA/staging/rollback; локальные успехи её не заменяют. По критическому пути
+ожидаются прежние merge #284 approval и актуальные App ID/Market contract;
+subscription/activation пока pending, коммерческий релиз не заявляется готовым.
+
+### 2026-10-18 — разрешённое объединение, финальная проверка #284
+
+Владелец явно разрешил merge проверенных подготовленных SPACEVERSE изменений;
+существующий main autodeploy включён в согласованный сценарий. Чужие PR, CI,
+Railway settings/secrets и ручные production DB/device операции не затрагиваются.
+До объединения обновлён origin/main: abbe089, тот же base #284.
+
+Два первых полных Business повтора дали 310 passed/1 timeout (5000ms) в первом
+image-policy тесте onboarding-provisioning.spec.ts. Отдельный suite был зелёным.
+Создание двух свежих PGlite SQL fixtures перенесено в scoped beforeEach;
+все 104 строки assertions сохранены побайтово после снятия отступов,
+стандартный 5s test timeout не изменён. Каждому сценарию остаются отдельные БД,
+исходные SQL/negative cases и afterEach cleanup. Production код не менялся.
+
+На окончательном коде: materialize ×2 idempotent, 7 известных generated outputs
+(включая server.js/universal-server.js/app.js) записаны и восстановлены по SHA-256.
+Root node --test: 622 passed/0 skipped; check, root audits: exit 0/0 vulnerabilities.
+VK parity и bundle (CI fixture origin, без публикации): exit 0.
+Business full native: 311 passed/0 skipped, typecheck/lint/build/audits: exit 0.
+Playwright cash/CRM 12 + onboarding 4 passed, desktop/mobile; PNG восстановлены.
+Два исходных сбоя не скрыты, thresholds/assertions не ослаблялись.
+Новый GitHub CI будет проверен на обновлённом head перед merge без admin bypass.
+Доступ к classic branch-protection settings через API — 403; applicable rulesets
+endpoint вернул []; наличие/отсутствие classic protection по этому не заявляется.
+
+Артефакты: /tmp/spaceverse-crm-merges-20261018/reader-284.
+Текущий Admin public HTML/health: оба HTTP 200, health ok=true. Это не proof
+версии отдельного сайта. Merge/deploy результаты по exact SHA будут записаны
+следом; подписка/активация Маркета по-прежнему не подтверждены.
+
+### 2026-10-18 — три проверенных шага объединены, финальная TLS-интеграция
+
+- #284: Изолированное чтение клиента и баланса; merge 26b99b91098e31d799e4cf6d8486ebbd55d76e83. Local gates и GitHub CI проверены перед merge.
+- #285: Список, поиск и карточка клиентов; merge 812edabf54a9f97300d0d29fdbedaa548cc27249. Local gates и GitHub CI проверены перед merge.
+- #286: Проверка готовности CRM и честные pending-статусы; merge 0aeef0781f3b83102cc26836778d1bd83451e182. Local gates и GitHub CI проверены перед merge.
+
+Для #284 повторены 622 root/311 native Business/16 E2E; #285 — 625/322/24;
+#286 — 625/343/24, все без failed/skipped в full native suites. Перед каждым
+push materialize ×2/idempotency/SHA-256, check/audit, Business typecheck/lint/build,
+VK parity/bundle; CI проверял exact head. Рабочие generated files/PNG восстановлены.
+Автодеплои #284 и #285, public/accounts/signed-session smoke и VK parity SUCCESS
+на exact merge SHA; #286 только что запущен, результат фиксируется отдельно.
+Merge не использует --admin, force push, branch deletion или CI bypass.
+
+Конфликты при подтягивании main были только append-only в этом журнале;
+сохранены полные записи обеих сторон, runtime source не менялся при разрешении.
+Полный список open PR обнаружил исторические SPACEVERSE #96/#101 вне текущей
+цепочки. Они и другие чужие PR не закрывались/не объединялись. Прежнее выражение
+«один SPACEVERSE PR» относилось к текущей подготовленной цепочке, не ко всем
+историческим работам репозитория; ограничение одного открытого PR этой цепочки
+сохранено. Разрешение владельца получено на проверенные SPACEVERSE merge с
+существующим main autodeploy; Railway settings/secrets, CI и ручные prod DB/
+device операции остаются вне scope.
+
+TLS ветка интегрирована с main 0aeef0781f3b83102cc26836778d1bd83451e182.
+Следуют полный повтор обязательных gates, fresh TLS handshake/native PostgreSQL
+и desktop/mobile E2E перед её merge. Новый Admin image не пересобирается в
+почти заполненном vfs окружении: production code/lock/Dockerfile соответствует
+ранее проверенному TLS image, различия — fixture setup и документация;
+соответствие source проверяется отдельно. Это не утверждение версии Admin сайта.
+Актуальные exact head/merge SHA, CI и deployment outcomes сохраняются в
+/workspace/SPACEVERSE-CRM-MERGE-RESULT-2026-10-18.md и артефактах
+/tmp/spaceverse-crm-merges-20261018. Market contract/test app/install/pay/revoke,
+active CRM lifecycle, production CA и коммерческая готовность остаются gates.
+
+## 2026-10-19 — самостоятельная CRM: сохраняемая проверка запуска
+
+Ветка `spaceverse/crm-activation-check-20261019`, база main
+`ba522b1383bcb06206280fbc065165e60fe94cad` (#284–#287 уже объединены ранее).
+Мандат владельца — продолжать CRM и объединять проверенные изменения;
+действия с prod DB/settings/secrets/devices и публикация Маркета не разрешены
+этим шагом. Исторические Draft #96/#101 вне этой цепочки не изменялись.
+
+Лично добавлены GET/POST `.../crm/activation-check`, default-off
+`ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS`, UI «Запуск CRM» с возобновлением,
+новая ручная Admin migration 016 и runbook
+`ops/SPACEVERSE-CRM-ACTIVATION-CHECK-RUNBOOK.md`. Миграция переиспользует
+`admin_onboarding_provisioning_steps`: одна строка на draft/venue/step,
+прежние lease/token/retry и frozen binding, без второй модели tenant.
+Для CRM dependency только schema readiness; guest bundle/image не нужен.
+Реальная повторная проверка target schema/binding/ownership выполняется
+REPEATABLE READ READ ONLY с timeout 5 секунд. Metadata completion заново
+проверяет/блокирует активную учётную запись, scoped grant и frozen source;
+потерявший lease worker не перезаписывает новый результат. Результат и аудит
+сохраняются атомарно. У управляющего не появляются права владельца компании.
+
+Свежесть сохранённой POS-проверки разделяет helper с `/crm/readiness`.
+Ключ должен оставаться доступен для расшифровки; новый сетевой запрос к кассе
+не выполняется. Пока нет проверенного Market adapter, даже свежая касса
+оставляет `CRM_MARKET_CONTRACT_REQUIRED`. SQL migration 016 отдельно запрещает
+`succeeded` для этого шага. Canonical active flags, старые guest guards,
+users/wallets/purchases, деньги и живые устройства не меняются. Это проверка
+возможности запуска, НЕ реализованная платная активация и НЕ коммерческий релиз.
+
+Проверки текущей итерации (артефакты `/tmp/spaceverse-crm-activation-20261019`):
+- `npm run materialize` ×2: байтовые SHA256 snapshots совпали. Те же 7 generated
+  файлов, включая server.js/universal-server.js/app.js, дали ожидаемый diff;
+  сохранён patch, исходные байты восстановлены и SHA256 сверены. Patch-chain
+  не исправлялся и generated diff в PR не включён.
+- `node --test`: 625 passed, 0 failed/skipped; `npm run check`: exit 0.
+- `node --test test/vk-native-hosting-main-parity.test.js` и
+  `PIVNIK_VK_API_BASE=https://vk-gateway.invalid node scripts/build-vk-hosting.mjs`:
+  exit 0; только локальный bundle, не deploy.
+- `npm audit` и `npm audit --omit=dev --audit-level=high`, root и Business:
+  exit 0 / 0 vulnerabilities.
+- Business `npm run typecheck`, `npm run lint`, `npm test -- --maxWorkers=1`,
+  `npm run build`: exit 0. Native PostgreSQL: **417 passed, 0 failed/skipped**.
+  Новые HTTP/SQL тесты: **22 passed**; тот же focused файл на PGlite: 22 passed.
+  Изоляция двух компаний/двух точек одной компании, signed session/CSRF/Origin,
+  подмена scope/license/status, readonly SQL, drift schema/binding/manifest,
+  отзыв grant и отключение аккаунта во время probe, lost lease/newer worker,
+  audit rollback, fresh/stale POS evidence и unreadable key проверены.
+- Built-panel Playwright: новый activation desktop/mobile — 6 passed;
+  существующий native CRM — 6 passed, disabled — 2 passed, legacy CRM/cash —
+  12 passed, onboarding — 4 passed. Tracked PNG восстановлены по исходным SHA.
+- Первый новый E2E прогон: 4 passed/2 failed из-за моего обращения к
+  `scope.venue` вместо фактического `scope.scope.venue` в тесте; исправлен
+  test assertion, следующий полный новый сценарий 6/6. Исходный лог сохранён.
+- Общий lint сначала дал новое предупреждение cleanup ref; исправлен стабильным
+  invalidate callback, без suppression. Финальный lint: 0 errors и прежние
+  12 Fast Refresh warnings. После callback повторяются typecheck/build и новые
+  E2E; результаты окончательного прогона будут добавлены перед публикацией.
+
+Среда: почти заполненный root disk (119 МБ при старте). Без удаления данных
+перенесены только установленные Admin dependencies в /tmp; 17 900 file SHA256
+совпали, локальная ссылка исключена из Git. Новый тестовый PG16 запущен на /tmp
+из бинарных файлов существующего официального image, RepoDigest
+`sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4`;
+SHA256 postgres binary до/после копирования совпал. Loopback/SCRAM, только
+синтетическая роль crm_fixture; старый Docker cluster/data сохранён. Startup
+helper дважды выполнил SELECT 1. Обновлён start_skill draft облачной среды;
+это сохранённая конфигурация, не её публикация и не проверка новой машины.
+Новый Docker image не собирался из-за ограниченного root/vfs storage; native
+SQL + реальная HTTP-сессия и built App не выдаются за container image proof.
+
+Осталось: актуальный Market contract и тестовое приложение, реальная проверка
+install/payment/revoke, trusted subscription evidence, canonical activation и
+resolver активной CRM, end-to-end платный путь, эксплуатационные release gates.
+Старые guest provisioning steps вне CRM не расширялись; их completion guards
+следует отдельно проверить перед разрешением реального guest provisioning.
+
+### Финальная интеграция перед PR
+
+Перед push обнаружен новый main `1764765194c53f88932a9b6202e541e9d49dd767`:
+чужой PR #288 по кассовому приложению. Его реализация не моя и не входит в diff
+этой CRM-задачи. Подтянут обычным merge без конфликтов; правки карты модулей
+сохранены обе. Итоговый diff относительно main не меняет CI, кассу, root
+migrations, денежные обработчики, root entrypoints и dependency locks.
+
+Повторены все обязательные checks на итоговом коде после интеграции:
+materialize ×2 с теми же 7 generated outputs/побайтовым восстановлением,
+`node --test` **632 passed / 0 failed / 0 skipped**, check, VK parity/build,
+root+Business audit full/production — 0 vulnerabilities; Business typecheck,
+lint (только прежние 12 warnings), native tests **417 passed / 0 failed /
+0 skipped**, build — success. Built App desktop/mobile: **30 passed**
+(activation 6 + existing tenant CRM 6 + disabled 2 + legacy CRM/cash 12 +
+onboarding 4), tracked PNG restored/SHA256 verified. Это включает финальный
+invalidate callback; дополнительных warnings нет. Подробные commands/logs/JSON:
+`/tmp/spaceverse-crm-activation-20261019/integrated`.
+
+Каталог `/mnt/project-files/owner-panel` в этой среде не смонтирован; журнал
+сохранён здесь, в versioned ops, а итоговый .MD будет в /workspace.
+Запрошены App ID тестового приложения и актуальная спецификация Маркета;
+секреты в чат не запрашиваются. До их получения реальная платная активация
+остаётся внешним блокером; synthetic evidence не выдаётся за subscription.
+
+## 2026-10-19 — сохранённая проверка CRM в списке заведений
+
+Ветка `spaceverse/crm-owner-activation-status-20261019`, база main
+`e2cbe8b433be0b7dadcdda1a6dabb4734a696ad3`. Ранее мой #289 объединён и прошёл
+main deploy; новый #290 по Pivnik Run — чужая работа, взята только как база.
+Пользователь поручил продолжать; разрешение объединять проверенное сохраняется.
+`Вноси` не интерпретировано как отдельное разрешение production migration/env.
+На присланном скриншоте показана именно публикация рабочей среды Codex; владельцу
+указана кнопка «Сохранить и опубликовать». Она не означает публикацию CRM/Маркета.
+
+Лично добавляю optional `crmActivation` в существующий owner list и UI карточки.
+Тот же default-off flag, ledger и prepared-source guard; без новой модели tenant,
+миграций, денежных/target writes, CI или production settings. Перенесена общая
+проекция состояний из provisioning API в `tenant-crm-activation-state.ts`, без
+изменения write/read прав прежнего индивидуального endpoint. Новая metadata
+read-проекция позволяет scoped viewer видеть историю своей точки, не запускать
+проверку; перед возвратом повторно сверяются grant/manifest. Никаких target DB/
+provider connections и новых attempts/audit от обновления списка.
+
+Основное действие CRM больше не выбирается по optional guest bundle/image.
+Более серьёзная текущая ошибка кассы остаётся приоритетной, сохранённая CRM
+причина показывается отдельно. Отсутствие проверки, running/expired lease,
+сохранённый результат и недоступное состояние различаются. При недоступности
+число попыток null, не ложный 0. Код/время добавлены только в копируемую
+диагностику; сообщения автоматически не отправляются. UI проверяет scope,
+запрещает выдуманную activation и противоречивую active карточку.
+
+Focused native SQL/HTTP до финального расширения assertions: 41 passed.
+Новые проверки покрывают два tenant/две точки одной компании, viewer без write
+эскалации, grant revoke во время чтения metadata, manifest mismatch, недоступный
+ledger, lease expiry, отсутствие target resolutions и дополнительных writes,
+приоритет ошибки кассы и default-off compatibility. Первый focused прогон:
+39 pass/1 fail из-за моего ожидания 200 после полного отзыва доступа — фактически
+правильно возвращался 403; исправлено ожидание, защита не ослаблялась.
+
+Первый новый browser прогон: 6 pass/4 fail — fixture давала всем canonical
+venues одинаковое имя Synthetic CRM при разных именах drafts. Для activation
+fixture canonical имена согласованы с draft CRM 1/2/3; production code имён не
+менялся. Следующий прогон 10/10 desktop/mobile. Добавлен также отказ при
+поддельном top-level active, финальная регрессия ещё выполняется.
+
+Полные обязательные checks выполняются перед push. Logs/JSON/SHA256 в
+`/tmp/spaceverse-crm-owner-status-20261019`. Root/vfs почти заполнен; используются
+существующие locked dependencies и isolated loopback native PostgreSQL 16 в /tmp.
+Старая тестовая БД/данные сохранены, новый Docker image не собирается. Новых
+изменений setup draft не требуется, startup helper подтвердил SELECT 1.
+
+Остаются Market App ID/актуальный contract/test contour, real install/pay/revoke,
+canonical active CRM lifecycle и commercial E2E. История попыток в owner list —
+не подтверждение текущей связи и не commercial activation. Данные реального
+тестового приложения пока не предоставлены. Масштабирование bounded metadata
+проекций owner-list и target registry требует отдельного load-test; готовность
+на тысячи клиентов этим шагом не заявляется.
+
+Уточнение владельца: доступ к другим собственным магазинам не закрывать.
+Существующие company owner grants сохранены. Добавлен отдельный обычный
+VENUE_ADMIN-владелец двух компаний/трёх заведений, без SUPER_ADMIN. Реальный
+signed HTTP/SQL подтверждает список всех трёх, чтение клиентов с балансами
+101/102/103 из соответствующих БД и запуск проверки каждого заведения.
+В browser fixture используется тот же владелец; ограничение сотрудника одной
+точкой не ограничивает собственника компаний. Production права не менялись.
+
+Обязательная проверка на текущей базе e2cbe8b:
+- materialize ×2: idempotent SHA256; прежний diff по achievements.js, app.js,
+  index.html, red-cosmos-v2.js, scripts/v22-data-audit-and-repair.mjs, server.js,
+  universal-server.js сохранён в artifact patch. Root checks на materialized
+  состоянии; все 7 исходных файлов восстановлены побайтово с SHA256.
+- `node --test`: 632 passed, 0 failed/skipped; `npm run check`, отдельные
+  VK parity/bundle checks, root `npm audit` и production audit: exit 0.
+- Business `npm run typecheck`, `npm run lint`, `npm run build`: exit 0;
+  lint: прежние 12 Fast Refresh warnings, build: прежнее предупреждение chunk >500KB.
+- Business `npm test -- --maxWorkers=1` с isolated native PostgreSQL 16:
+  427 passed, 36 files, 0 failed/skipped. Focused activation+workflow: 42 passed.
+- `npx vitest run server/tests/tenant-crm-activation.spec.ts --maxWorkers=1`
+  без native env: 32 passed на PGlite. Business оба audit: 0 vulnerabilities.
+
+Первый полный build и следующий browser-native prestart обнаружили TS2532 в
+новом сравнении severity (`noUncheckedIndexedAccess` серверного tsconfig).
+Добавлен безопасный fallback отсутствующего ключа; окончательный build exit 0,
+полный native набор перепроверен. Проверки не ослаблялись. Финальный browser
+набор выполняется после этой правки; оба старых неуспешных лога сохранены.
+
+Финальный Playwright: 34 passed, 0 failed/skipped: activation 10, native CRM 6,
+default-off 2, cash/CRM regression 12, onboarding 4. Desktop 1440×1000 и mobile
+390×844. Владелец двух компаний видит CRM 1/2/3 и открывает мастер CRM 3 второй
+компании; поддельный active/чужой scope отвергается, refresh восстанавливает
+ответ сервера. Tracked PNG outputs восстановлены с SHA256. Дополнительный
+eslint изменённых E2E файлов: exit 0. SHA256 всех 244 Admin source files совпали
+с записанными перед окончательными проверками.
+
+Прежний onboarding browser test с названием «venue owners cannot ...» проверяет
+legacy fixture с выключенным invitation mode. Он не означает запрет владельцу
+сети: новый multi-company native/built E2E проверяет включённый onboarding с
+company owner grants. Production feature flags этим PR не включаются.
+
+После всех правок повторно перед push выполнен полный root набор на финальном
+дереве (`final-root/`): materialize ×2 idempotent, node --test 632 passed /0 skipped,
+check/VK parity/VK bundle/root audit/production audit exit 0. Те же 7 generated
+outputs снова восстановлены побайтово; Admin source hashes не изменились.
+Все локальные обязательные проверки зелёные; следующий шаг — один Draft PR,
+проверка CI точного head и ранее разрешённый владельцем checked merge с
+существующим автодеплоем. Market activation и production flags остаются вне
+этого шага. Полный итог после GitHub checks — отдельным Markdown-файлом.

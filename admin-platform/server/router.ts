@@ -59,6 +59,7 @@ import { getDeveloperOverview,rememberServerError } from './developer.js'
 import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
 import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
 import { listOnboardingVenues } from './onboarding-venues.js'
+import { readTenantCrmCustomer, listTenantCrmCustomers, checkTenantCrmReadiness } from './tenant-crm-read.js'
 import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
 import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
@@ -70,6 +71,7 @@ import {
 import {
   getOnboardingRuntimeBundleVerification,getOnboardingRuntimeDatabaseBinding,getOnboardingTenantSchemaReadiness,
   runOnboardingRuntimeBundleVerification,runOnboardingRuntimeDatabaseBinding,runOnboardingTenantSchemaReadiness,
+  getCrmActivationCheck,runCrmActivationCheck,
 } from './onboarding-provisioning-api.js'
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -95,6 +97,8 @@ export const sessionCapabilities=()=>({
   onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
   onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
   onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
+  tenantCrmReads:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmReads,
+  tenantCrmActivationChecks:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmActivationChecks,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -206,6 +210,43 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1)throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Область списка определяется вашей учётной записью.')
     enforceRateLimit(`onboarding-venues:${session.admin.id}`,60,60_000)
     json(res,200,await listOnboardingVenues(session.admin,url.searchParams.get('offset')));return true
+  }
+  const crmActivationCheck=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/activation-check$/.exec(url.pathname)
+  if(crmActivationCheck){
+    if(!isMethod(req,'GET')&&!isMethod(req,'POST'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступны чтение состояния и запуск проверки CRM.')
+    if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и статусы проверки определяются сервером.')
+    if(isMethod(req,'POST'))requireCsrf(req,session.rawToken)
+    enforceRateLimit(`crm-activation-check:${session.admin.id}`,20,60_000)
+    const result=isMethod(req,'GET')?await getCrmActivationCheck(session.admin,crmActivationCheck[1]!):
+      await runCrmActivationCheck(session.admin,crmActivationCheck[1]!,await readJsonBody(req))
+    json(res,200,result);return true
+  }
+  const tenantCrmReadiness=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/readiness$/.exec(url.pathname)
+  if(tenantCrmReadiness){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступна только проверка готовности CRM.')
+    if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и статусы проверки определяются сервером.')
+    enforceRateLimit(`tenant-crm-read:${session.admin.id}`,30,60_000)
+    json(res,200,await checkTenantCrmReadiness(session.admin,tenantCrmReadiness[1]!));return true
+  }
+  const tenantCustomer=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/customers(?:\/([^/]+))?$/.exec(url.pathname)
+  if(tenantCustomer){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступно только чтение клиента.')
+    enforceRateLimit(`tenant-crm-read:${session.admin.id}`,30,60_000)
+    if(tenantCustomer[2]){
+      if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и источник клиента определяются сервером; параметры запроса не принимаются.')
+      json(res,200,await readTenantCrmCustomer(session.admin,tenantCustomer[1]!,tenantCustomer[2]));return true
+    }
+    if([...url.searchParams.keys()].some(key=>!['q','limit','offset'].includes(key)||url.searchParams.getAll(key).length!==1))
+      throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и источник клиентов определяются сервером.')
+    const integer=(name:string,fallback:number)=>{
+      const raw=url.searchParams.get(name)
+      if(raw===null)return fallback
+      if(!/^(0|[1-9]\d{0,6})$/.test(raw))throw new HttpError(400,'TENANT_CRM_PAGE_INVALID','Некорректный размер или номер страницы.')
+      return Number(raw)
+    }
+    json(res,200,await listTenantCrmCustomers(session.admin,tenantCustomer[1]!,{
+      q:url.searchParams.get('q')??'',limit:integer('limit',25),offset:integer('offset',0),
+    }));return true
   }
   const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
   if(posProxy){
