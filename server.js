@@ -5,6 +5,7 @@ import { createPosHttp } from './pos/http.js';
 import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
 import { evotorConfig } from './pos/evotor-client.js';
 import { syncEvotor } from './pos/sync.js';
+import { syncEvotorRecent } from './pos/recent-sync.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -1383,8 +1384,8 @@ async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
       status: response.status,
       messageId: payload?.result?.message_id ?? null
     };
-  } catch (error) {
-    console.error('Telegram sendMessage error:', error.message);
+  } catch {
+    console.error('Telegram sendMessage error:', 'telegram_network_error');
     return { ok: false, status: 0, error: 'telegram_network_error' };
   }
 }
@@ -2836,6 +2837,11 @@ const posBonusLedger = {
 };
 
 async function runPosBonusCycle(config, storeId) {
+  try {
+    await syncEvotorRecent({ pool, config });
+  } catch (error) {
+    console.warn('Evotor recent sync skipped:', error.code || error.name);
+  }
   try {
     await syncEvotor({ pool, config, maxPages: 5 });
   } catch (error) {
