@@ -4,6 +4,390 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Owner list: saved CRM activation state (2026-10-19, default off)
+
+`onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary
+under the existing `ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` switch. It reuses
+the provisioning service's prepared source/ledger checks, revalidates the read
+grant and frozen manifest, and exposes no target credentials or customer data.
+Company owners retain all stores of every company they own; a store-scoped
+employee invitation does not replace or narrow those company grants. Tests use
+a regular VENUE_ADMIN owning two companies and three stores, without SUPER_ADMIN.
+Scoped viewers can read a summary without gaining check/run permission. Refresh
+reads metadata only; it neither probes the target/provider nor claims an attempt.
+The shared projection in `tenant-crm-activation-state.ts` distinguishes saved
+results, no check and unavailable state (unknown attempt count, never false zero).
+An expired lease requires attention, and a more severe current cash failure takes
+precedence over a saved CRM blocker. Optional guest bundle/image failures do not
+select the CRM action. No summary can report active/approved; the existing
+migration 016 and activation defaults remain unchanged.
+`OwnerVenues.tsx` and `tenant-crm-activation-summary.ts` validate draft/company/
+venue and reject unverified activation, including a contradictory active row.
+The old list contract remains unchanged when the switch is off. Existing active
+venues without an onboarding binding retain their previous unknown connection.
+Native signed HTTP/SQL and built desktop/mobile checks extend the same activation
+fixtures; no new API, migration, tenant model, write capability or CI settings.
+
+## Standalone CRM activation check (2026-10-19, default off)
+
+`ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS` exposes GET/POST
+`/api/admin/onboarding/drafts/:id/crm/activation-check` in the existing router and
+`TenantCrmActivationCheck.tsx` in the same wizard. POST accepts only `{}`;
+session, Origin/CSRF and actor rate limits remain mandatory. Manual Admin
+migration 016 extends the existing provisioning ledger with `crm_activation_check`
+and forbids its `succeeded` status. No second tenant/registry/invitation model.
+`onboarding-provisioning.ts` reuses its claim/lease/token/retry mechanism, depends
+on schema readiness only, then rechecks real target binding/schema/ownership in
+bounded REPEATABLE READ READ ONLY SQL. Guest bundle/image is not required for
+the standalone CRM. Completion rechecks active account, current scoped grants,
+frozen source and lease, and atomically audits its blocked result. Lost leases
+and audit failures cannot publish completed evidence. Existing guest step guards
+are unchanged. `tenant-crm-readiness.ts:tenantCrmProviderReadiness` shares saved
+POS evidence freshness validation; the local projection can require credential
+decryption before use. A fresh provider still ends in Market-contract-required.
+No network provider verification, license adapter, canonical activation or active
+CRM resolver is introduced. UI resumes the server operation after reload and
+rejects purported success/scope changes. See
+`ops/SPACEVERSE-CRM-ACTIVATION-CHECK-RUNBOOK.md`, signed HTTP/native SQL tests in
+`server/tests/tenant-crm-activation.spec.ts` and the built desktop/mobile scenario
+selected by `SPACEVERSE_E2E_CRM_ACTIVATION=true` in `playwright.tenant-crm.config.ts`.
+
+## SaaS readiness research and CRM scope lifecycle (2026-10-18)
+
+`server/database-transport.ts` addresses the external Admin pool certificate-
+validation risk in the CRM TLS slice.
+All three pools in `db.ts` and the existing onboarding target registry share
+this policy: exact private/local host exceptions, verified public TLS, explicit
+IP identity checking, and removal of pg URL TLS overrides before pool creation.
+Unsafe query host/credential/TLS/file overrides fail closed without logging
+credentials. Existing read-only options, scope guards and default-off writes
+remain. `server/tests/database-transport.spec.ts`, `database-pools.spec.ts` and
+registry tests inspect the actual pg parser; `scripts/verify-database-tls.mjs`
+uses synthetic loopback certificates and real pg TLS handshakes, not a live DB.
+An additional isolated native PostgreSQL 16 smoke verifies authenticated TLS 1.3
+and CA/hostname rejection; its owned container is stopped after the proof.
+See `ops/SPACEVERSE-DATABASE-TLS-RUNBOOK.md`; actual production CA/connectivity
+and deployment approval remain external gates.
+
+The next default-off Admin diagnostic is documented in
+`ops/SPACEVERSE-TENANT-CRM-READ-RUNBOOK.md`: `server/tenant-crm-read.ts` composes
+the existing customer-wallet repository, onboarding access/runtime source and
+target registry. `GET /api/admin/onboarding/drafts/:id/crm/customers/:userId`
+requires `ADMIN_ENABLE_TENANT_CRM_READS`; target transactions are read-only,
+permissions/source are rechecked, and successful access is audited in metadata.
+It works on prepared/inactive drafts and explicitly returns not_provisioned.
+It does not activate a venue, replace the active CRM reader or check a POS/license.
+The customer-directory slice (#285) adds `customer-directory-repository.js`
+with the wallet repository's shared verified-binding SQL and an optional
+collection suffix at the same draft URL (q/limit/offset only). It shares the
+read-only/source-revalidation/audit service and actor rate limit with detail
+reads. `TenantCustomerDirectory.tsx` is gated by the default-off session
+capability inside the existing `VenueOnboarding`; it does not activate a venue.
+`playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
+on three dedicated local native PostgreSQL targets, including disabled mode.
+The directory/UI was merged in #285 after the read diagnostic #284.
+The readiness slice #286 adds GET
+`.../crm/readiness` with the same read/access/audit boundary. It uses a real
+scoped DB count and the existing encrypted POS projection; saved provider
+checks are not new live probes. `tenant-crm-readiness.ts` rejects stale/future
+or incomplete evidence and leaves subscription/activation unconfigured/pending.
+`TenantCrmReadiness.tsx` shows these gates in the existing wizard, default-off;
+no canonical active flag or guest runtime changes. Contract and verification
+are in `ops/SPACEVERSE-CRM-READINESS-RUNBOOK.md`.
+Signed HTTP regression is in `server/tests/tenant-crm-http.spec.ts`, using the
+same seed in PGlite or opt-in native PostgreSQL. The native fixture requires a
+local test database/role, creates dedicated databases, and pins pool clients
+through the real read-only transaction. Production-mode image/real registry
+smoke and native checks are documented in the runbook/progress.
+
+Current source-backed product status, competitor evidence, external publication
+gates and implementation sequence are in `ops/SAAS-PRODUCT-AUDIT.md`,
+`ops/SAAS-COMPETITOR-RESEARCH.md`, `ops/EVOTOR-MARKET-REQUIREMENTS.md`,
+`ops/SAAS-PRODUCT-ROADMAP.md` and `ops/SAAS-ANALYTICS-AI-ARCHITECTURE.md`.
+Marketplace terms remain unverified after official-site HTTP 403; AI is a future
+independent add-on whose architecture is specified, with no adapter implemented
+or external AI calls in this iteration. Neither research
+nor the existing onboarding artifacts mean a commercially activated tenant.
+
+`admin-platform/src/App.tsx` keys the production CRM by actor/company/venue;
+changing scope immediately discards its list, filters, selected customer and
+forms while the next request is pending. `ProductionCRM.tsx` keys its drawer by
+scope/customer and ignores obsolete detail responses. This is a UI lifecycle
+boundary, not a replacement for existing server authorization. Browser fixtures
+in `e2e/crm-scope.spec.ts` reproduce same-company venue and cross-company switches
+and delayed responses; `playwright.evotor.config.ts` runs them on desktop/mobile
+alongside existing cash dashboard checks. No production APIs are called by them.
+
+## Business venue audit isolation (2026-10-17)
+
+`admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit
+by both the resolved company ID and venue ID; company-level and other-venue
+entries are excluded. The existing `/api/admin/venues/:venueId/audit` router
+resolves current account access before reading. Query parameters cannot replace
+that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
+`server/tests/audit-venue-scope.spec.ts` covers SQL isolation;
+`server/tests/audit-http.spec.ts` exercises signed sessions, both routes,
+same-company venues, cross-company denial and access revocation through actual
+HTTP and disposable PGlite. No schema or write-path change is required.
+
+## Business onboarding drafts (2026-10-12, opt-in)
+
+`admin-platform/server/venue-onboarding.ts` and the existing Business router own
+the draft API. With the invitation flag off it remains SUPER_ADMIN-only.
+`server/onboarding-access.ts` adds scoped owner/manager/viewer access through
+existing canonical company/venue IDs and the revocable invitation access ledger;
+it does not introduce another tenant model. Mutations lock their grants until
+COMMIT and recheck exact draft scope. `src/phaseC/VenueOnboarding.tsx` extends the real
+Business App. Additive admin migrations 004, 005 and 006 are separate from
+guest/startup policy; `ADMIN_ENABLE_ONBOARDING_DRAFTS` defaults off and also
+requires the global write switch. Drafts and their standard application blueprint
+are scoped to their creator, versioned, idempotent and audited. Migration 005
+reserves a stable `sv-*` tenant key and requires `dedicated_database`; the API
+contract remains `not_provisioned`, `published=false` and `legacyDataAccess=false`.
+Migration 006 lets an explicit `PUT .../scope` atomically reserve the canonical
+company/venue IDs. A new company and every new venue are created with
+`active=false`; no access row is granted, and source revisions are frozen after
+preparation. The operation is replay-safe and audit failure rolls back the scope
+and both canonical rows. Inactive scope rows remain invisible to the normal venue
+resolver. It does not create an active company/venue, database, bot, webhook or POS link.
+Manual admin migration 011 extends the existing 007/008 invitation table with
+server-owned canonical scope, role and replay fields, and adds revocable access.
+No second invitation or tenant model is introduced.
+`server/onboarding-invitations.ts` owns issuance, exact replay, expiry, acceptance
+and revocation; `ADMIN_ENABLE_ONBOARDING_INVITATIONS` defaults off. Tokens use a
+domain-separated HMAC of the existing strong Admin CSRF secret; only their hash
+is stored. Tokens/passwords are excluded from audit and browser storage. An
+accepted invitation creates an Admin account only when its email is new; an
+existing account must log in. Accepting/revoking access and auditing are atomic.
+`OnboardingInvitations.tsx` and `InviteAcceptance.tsx` connect the owner link to
+the real resumable wizard, with server-provided per-draft write permissions.
+Organization owners can delegate their prepared inactive organization or point;
+a point grant cannot expose another point in that company. No messaging is sent.
+Runbook: `ops/SPACEVERSE-VENUE-ONBOARDING.md`. Browser checks use real signed
+Admin HTTP and SQL fixtures on desktop/mobile (`test:e2e:invitations`). Runtime
+provisioning and live terminal verification remain pending; prepared metadata
+never means an active venue. When the scoped invitation flag is on, legacy
+issuance/claim is disabled and old links require reissue from «Приглашения».
+Legacy rows and independently granted company rights are retained.
+Manual admin migration 012 stores only the operator checkpoint, terminal ID/name
+and cash-report choice for the existing draft. `server/onboarding-workflow.ts`
+derives the eight step statuses from canonical company/venue, frozen application,
+existing provider verification and provisioning ledger; request statuses and
+scope are rejected. `GET/PUT .../progress` share the same revocable read/write
+permissions, revision/replay checks and atomic audit. `OnboardingProgress.tsx`
+restores these choices after reload. `ADMIN_ENABLE_ONBOARDING_WORKFLOW` defaults
+off. A configured terminal has no confirmed binding/event yet; its status stays
+pending. Missing connection returns unavailable report data with null amounts,
+never invented zero revenue. A database binding or readable provider documents
+do not mark a venue active or an application published.
+Manual Admin migration 015 adds encrypted POS proxy settings and a leased,
+audited verification result to the same draft. `server/onboarding-pos-proxy.ts`
+resolves its HTTPS origin from protected references in
+`ADMIN_ONBOARDING_PROXY_REGISTRY_JSON`; UI input cannot choose an address,
+runtime or scope. `ADMIN_ENABLE_ONBOARDING_POS_PROXY` defaults off and requires
+the workflow switch. Network work runs outside SQL transactions; completion
+rechecks lease, source revisions, terminal and revocable access.
+`routes/spaceverse-pos.js` mounts behind the existing tenant startup guard in
+both root servers. It rechecks the exact runtime binding and live POS device
+scope in SQL and requires `X-Pivnik-Device-Key`. Manual root migration 021 stores
+only idempotent test-event receipts; no customer/bonus/receipt writes occur.
+`pos/onboarding-proxy.js` defines the v2 nonce/MAC contract shared with Admin.
+Verification requires a fresh terminal event and complete fresh provider sync.
+An empty verified 24-hour report returns 0 receipts/0 cents; unavailable data
+returns null, and a zero-value receipt is still data. Device credentials cannot
+read financial/customer rows. A successful connection probe does not bypass
+`SPACEVERSE_RUNTIME_NOT_PROVISIONED`, deploy or activate a venue.
+`server/onboarding-venues.ts` provides the authenticated read-only owner list
+(`GET /api/admin/onboarding/venues`, 25 entries/page) under the existing default-off
+workflow switch. It combines the canonical active-venue resolver with scoped
+draft access; inactive prepared points reuse `onboarding-workflow.ts` projection.
+Company/venue/status input cannot choose scope. An existing active metadata row
+without verified connectivity remains pending/unknown, never false connected or
+zero revenue. Device and operator activity are distinct. `OwnerVenues.tsx`
+refreshes results and resumes the selected real wizard, including a repeated
+open of the same draft. Its developer request copies owner text and non-secret
+connection diagnostics only; it neither sends messages nor records a delivered
+ticket. SPACEVERSE branding and general navigation omit legacy PIVNIK-only
+reward/broadcast/content controls while that flow is enabled. Mobile Integration
+Hub/OAuth/sandbox/developer integration grants remain a separate future scope.
+`spaceverse-runtime-release.js` fingerprints the two Node entrypoints, their
+literal relative import/re-export/dynamic-import closure and package/lock files.
+The explicit local builder writes a new non-secret release record; no code is
+executed and no database/service is started. `onboarding-runtime-release.ts`
+uses operator-only file/SHA/fingerprint registration and rechecks actual files.
+Production bundle verification requires this proof; description-only success
+from the earlier ledger is projected as action_required and safely reclaimed
+for verification. Shared bundle v2 includes the code proof in its digest; v1
+remains readable. Neither version authorizes launch. Coverage is Node literal
+imports, not a hermetic image or arbitrary computed imports/frontend assets.
+`scripts/prepare-spaceverse-runtime-image.mjs` creates a new allowlisted local
+image context and verifies its copied release. `ops/spaceverse-runtime.Dockerfile`
+pins the Node base digest and reinstalls locked production dependencies offline
+from a separate public npm cache; cache/logs are tmpfs, host node_modules excluded.
+`spaceverse-runtime-image.js` verifies an independently approved immutable local
+Docker image ID, platform, code labels, non-root user, exact tenant wrapper and
+limited baked environment. The wrapper rechecks bundle/modules and retains the
+startup denial without npm prestart, DB access or legacy fallback. A local image
+ID is not a registry publication or provisioned service. The existing server-only
+assembler now reads protected image ID/inspection-file references, compares image
+config/source against the current approved code proof, and emits shared bundle v3
+with image identity bound into the same checksum and exact tenant scope. Production
+verification requires that proof; v1/v2 ledger success is safely projected/retried
+in the same record. Owner workflow distinguishes missing image from verified image
+and unlaunched runtime. Approved resumable launch and terminal provisioning remain
+pending; no Docker daemon, deployment or image publication is invoked by Admin API.
+`spaceverse-tenant-service.js` is a separate default-off tenant API inside the same
+approved image. The existing two legacy entrypoints retain their startup denial.
+Its container wrapper is now included in the code fingerprint closure, including
+literal imports of this service and the existing customer/POS adapters. Startup
+requires v3, approved image identity, private per-tenant credentials, the same
+verified runtime binding, and an unexpired permission from manual root migration
+022. That permission references the existing binding and stores only a token hash;
+it is not a tenant registry or an active venue. A held session advisory lock admits
+one serving process per runtime. Scope/permission are rechecked before requests;
+revocation, suspension, expiry or a changed binding closes serving access.
+`spaceverse-runtime-readiness.js` signs/verifies a fresh nonce, exact scope, image,
+bundle and permission expiry. Its `tenant-api-only` proof says neither published
+frontend nor active venue. No schema/device provisioning occurs at boot; the API
+reuses the canonical auth/wallet/POS adapters, has no legacy fallback and leaves
+financial routes unavailable. Admin resume orchestration/terminal provisioning
+and the public standard application remain pending.
+`spaceverse-runtime-manifest.js` now emits the strict checksummed non-secret v2
+manifest only after canonical scope exists. It binds draft/application/scope
+revisions plus canonical company/venue IDs. A tenant-mode guest process must find
+the same IDs and checksum in its dedicated database (manual additive migrations
+017 and 018); only then does it receive a verified immutable tenant/location
+context. `dashboard-summary-repository.js` has the first tenant-runtime read
+adapter: the operational query captures that verified context and rejects
+request-supplied scope before SQL. `transaction-persistence.js` now has the
+matching write boundary for new operations: it accepts only transaction data,
+rechecks the exact runtime/database binding in the same parameterized INSERT,
+derives tenant/location from that binding, and uses `request_key` for exact
+replay after an uncertain response. A mismatched payload, tenant, location,
+database or forged runtime returns no write and never falls back to legacy SQL.
+Manual additive migration 019 adds explicit customer ownership without
+backfill: every owned user is tied by a composite foreign key to the exact
+runtime/company/venue binding. `customer-wallet-repository.js` is the matching
+read boundary. It accepts only a canonical user ID plus the privately verified
+runtime, rechecks the same binding inside the read query, and can reach
+`users`/`wallets` only through the ownership row. Unowned historical rows are
+invisible; a different database, tenant or venue is rejected, and request scope
+or a copied runtime never reaches SQL. `customer-provisioning.js` is the single
+write boundary for a **new** tenant customer. Inside one database transaction it
+locks and rechecks the exact binding, records only a UUID/fingerprint in the
+manual additive migration 020 ledger, and creates the existing `users`,
+`user_identities`, `wallets` and ownership rows. An exact retry (including after
+an uncertain COMMIT response) resolves to the same user; a changed payload,
+request-supplied scope, another tenant database, or any historical Telegram/VK
+identity fails closed instead of adopting that row. The ledger stores no
+provider ID or profile data. `spaceverse-customer-auth.js` verifies signed
+Telegram/VK identity, accepts existing customers only through exact ownership,
+and delegates every missing-customer write to that provisioner; there is no
+second auth-specific creation path or ledger. Sessions carry the exact
+runtime/checksum/company/venue and every read rechecks identity, ownership,
+session version and live binding. A missing wallet is an unavailable
+configuration, not a zero balance. `routes/spaceverse-customer.js` is the shared
+auth and wallet HTTP adapter mounted by both guest entrypoints behind the same
+preflight. It rejects request scope and prevents tenant APIs falling through to
+legacy staff, money or PIVNIK-specific handlers. Wallet issuers remain
+`not_configured`. Both
+`universal-server.js` and `server.js` check this before spawning/initializing any
+PIVNIK runtime data. Even an exact binding is deliberately rejected with
+`SPACEVERSE_RUNTIME_NOT_PROVISIONED`: the current artifact remains PIVNIK-specific
+and the manifest cannot claim publication. With no tenant manifest, the existing
+legacy PIVNIK startup path is unchanged and performs no binding query. Continue
+from `ops/SPACEVERSE-ONBOARDING-PROGRESS.md`; never store provider keys, database
+URLs or other secrets in draft/application JSON or the runtime manifest.
+
+The first provider slice stays in that same master and reuses
+`pos/evotor-client.js`; it is not a second integration framework. Manual admin
+migration `admin-platform/admin-migrations/009_onboarding_integrations.sql`
+stores the exact prepared draft/provider/store binding plus only an AES-256-GCM
+envelope, key ID, HMAC request fingerprint and verification state. The keyring is
+read only from protected server variables, supports active + previous keys, and a
+verification write rewraps the token under the active key. `GET/PUT
+.../integrations/evotor` and `POST .../integrations/evotor/verify` use the same draft
+read/write permissions behind writes, draft and integration feature flags.
+Invited viewers can read masked state; only scoped owners/managers can save or
+verify, and revocation is rechecked before recording a verification result.
+Responses expose a fixed mask, never ciphertext or plaintext. Verification calls
+the existing fixed-host Evotor document-page adapter and records only
+`configured`, `verified`, `action_required` or `error`; HTTP 200 without the
+expected document shape is an error. This proves read permission only: it does
+not create an Evotor account, install an app, bind POS, import receipts, provision
+runtime or publish the guest application. Telegram/VK remain external-
+authorization work. Do not confuse this admin migration 009 with root
+`migrations/009_spaceverse_transaction_scope.sql`.
+
+The first executable provisioning step is isolated in
+`admin-platform/server/onboarding-provisioning.ts`. Manual additive admin
+migration `010_onboarding_provisioning.sql` stores one
+`runtime_database_binding` ledger row per prepared draft. A transaction claims
+the row with a short lease; an unexpired claim blocks double execution, while an
+expired claim or a recorded safe failure can be retried. The worker reloads the
+manifest from the authorized frozen draft/application/scope and resolves the
+target database only by that server-derived runtime key. Request data never
+contains a database URL or credential. In the already-created dedicated
+database, the action requires manual migrations 017/018, inserts the exact
+singleton binding if absent, accepts an exact existing binding after an
+uncertain response, and refuses to overwrite any mismatch. A successful target
+commit and metadata completion are deliberately reconciled rather than treated
+as one cross-database transaction. The ledger and audit contain only safe IDs,
+checksum, attempts, status and fixed error/result codes.
+`server/onboarding-database-registry.ts` now resolves only the exact frozen
+runtime key through `ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON`, whose values are
+references to separate `SPACEVERSE_TENANT_DATABASE_URL_*` variables. It rejects
+embedded URLs, Admin/legacy databases, duplicate targets and duplicate secret
+references, and safely rotates bounded pools without exposing driver errors.
+`server/onboarding-provisioning-api.ts` mounts creator/scoped GET status and POST
+run through the existing Business router behind the separate default-off
+`ADMIN_ENABLE_ONBOARDING_PROVISIONING` gate, signed session, Origin, CSRF and
+rate limits. POST accepts only an empty object; query/body scope, URL and
+credentials are invalid. `VenueOnboarding.tsx` now reloads this ledger after a
+prepared scope, starts it with exactly `{}`, blocks double clicks and uses the
+server-authoritative `startAllowed` flag so an active lease cannot be repeated
+while an expired lease can be reclaimed. Owner-facing copy distinguishes
+waiting, verifying, action required, retryable failure and prepared binding;
+even success remains explicitly not started and unpublished. The UI accepts no
+database field or credential. This step does not create a database, activate a
+venue/runtime, run tenant migrations automatically or publish an application.
+
+The second fixed step, `tenant_schema_readiness`, stays in the same
+`onboarding-provisioning.ts` service and ledger. Manual additive admin migration
+`013_onboarding_schema_readiness.sql` only extends the ledger step constraint
+after migrations 010/012. It cannot connect to or mutate a tenant database.
+After an exact successful binding, the worker resolves the same server-owned
+target and runs one read-only transaction. It verifies the frozen binding,
+required canonical columns, critical PK/FK/check/unique boundaries from root
+migrations 009 and 017–020, and the absence of customer/wallet/identity/
+transaction/create-request rows outside the exact runtime/company/venue
+ownership boundary. Results and errors are fixed non-sensitive codes; there is
+no row count, identifier, driver text, migration execution, backfill or legacy
+adoption. The scoped GET/POST endpoints reuse the same auth, CSRF, Origin, rate
+limit and empty-command contract. `VenueOnboarding.tsx` keeps the step locked
+until binding succeeds, then restores/retries the server ledger. The shared
+`onboarding-workflow.ts` projection reports schema pending/error/ready while
+keeping runtime `not_provisioned` and publication false.
+
+The third fixed step, `runtime_bundle_verification`, also uses that ledger and
+is added by manual additive admin migration
+`014_onboarding_runtime_bundle.sql`. It is locked until schema readiness
+succeeds. The shared `spaceverse-runtime-manifest.js` now builds and strictly
+parses one deterministic, non-secret bundle contract for the existing
+`pivnik-bonus-app` artifact and its two server entrypoints (`server.js` and
+`universal-server.js`). The bundle checksum covers the canonical manifest plus
+the `tenant-runtime-v1` compatibility contract; it is not a hash or signature
+of deployed binaries. The server reconstructs the tenant environment from the
+verified bundle and persists only its safe checksum/contract/result summary.
+The Admin Docker build now copies the same shared manifest module instead of
+depending on a file absent from its image. GET/POST accept no manifest,
+artifact, path, URL or credential from the browser. Lease/retry prevents double
+assembly, a tampered or incompatible candidate fails closed, and an exact
+reopen returns the saved result. Success still records `not_provisioned`,
+`published=false` and no start permission: it does not launch a process, set
+Railway variables, resolve a database credential, build the VK static client or
+attest a deployed release SHA.
+
 ## The honest starting picture
 
 This is **not** a single ball of mud. ~20 small, single-purpose modules already
@@ -590,17 +974,112 @@ isolation.
 
 ### Evotor integration draft (2026-10-06)
 
+- Unified window (1.0.16/code20, approved 2026-10-18): the native
+  receipt-discount tile is **PIVNIK — БОНУСЫ**. `RedemptionActivity` receives
+  foreground scanner/manual codes in the same window, pins resolve/bind to the
+  source receipt UUID, and displays identity independently of quote availability.
+  Return without redemption uses `IntegrationExit`/KEY_SKIP, preserving discounts,
+  positions and payments. The failed product-barcode service/card are removed.
+  `BindingPolicy` tracks only live scan tickets, invalidates them on that receipt's
+  completion/cancellation or another receipt opening; Bridge releases in finally.
+  Existing receipt cleanup and exact-UUID persistent binding remain. No server,
+  schema, feature flag or monetary-policy change. Native/fiscal acceptance is
+  required. Details: `ops/EVOTOR-BONUS-WINDOW-20261018.md`.
+  The 1.0.16 UI fix starts with focus on the window and the soft keyboard hidden;
+  manual customer/points fields remain editable on explicit selection. It does
+  not change scanner callbacks, receipt state, credentials or monetary rules.
+- Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
+  `qr/resolve` caller can explicitly request `includeWallet: true`.
+  `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
+  live QR, using the serving runtime's existing unlimited policy injected into
+  both `createPosHttp` mounts. Legacy requests retain their exact response.
+  Missing/invalid wallets fail unavailable, not as a zero balance. Android retains the
+  optional balance with the exact receipt binding, expires/clears it with that
+  identity and does not treat it as authority to spend. The settings screen
+  checks a saved key automatically and shows an explicit successful connection;
+  the keyless button moves into diagnostics.
+- Native sale loyalty (1.0.13/code17 candidate): `NativeCustomerActivity` is
+  launched from the native barcode integration and displays the guest/balance.
+  `RedemptionService` declares the native **Списать баллы** receipt-discount tile.
+  `RedemptionActivity`, `ReceiptBasket`, `RedemptionJournal` and the pure
+  `core/RedemptionOperation` persist an idempotent request before network/SDK
+  effects, check exact UUID/basket again, and return a real discount, never a
+  fake payment/product. Unresolved redemption prevents replacing the guest;
+  the before-positions-edit hook requests cancellation first. It refuses to
+  stack over other document discounts or partially paid receipts. No arbitrary
+  overlay or permanent native sale widget is installed. Actual POS handling
+  of an empty barcode result and all physical till flows remain unverified.
+- `pos/redemption.js` adds the guarded financial lifecycle. New reservations
+  default off (`PIVNIK_POS_REDEMPTION_ENABLED`). They debit available funds under
+  the existing user/wallet and receipt locks, recording a non-purchase adjustment.
+  Receipt/client/device and idempotency identity are immutable. Explicit cancel
+  requires removal of the receipt effect; a cancel-before-reserve tombstone
+  rejects delayed requests. Holds never expire on a timer. The cloud worker
+  commits only a matching own-app `extras.pivnikLoyaltyV1` marker plus actual
+  discount/net amount, or releases a matching marker with zero document discount.
+  Unknown/mismatched effects stay in review. PAYBACK restores spent points by a
+  cumulative capped proportion, independently of the ordinary cashback reversal.
+  Cancellation/refund credits follow explicit merged_into_user_id edges to the
+  surviving wallet without recreating an old wallet; new reservations still
+  require the exact active client of the current verified receipt claim.
+- The canonical endpoint is `POST /api/device/pos/redemptions`. The installed
+  proxy masks also support the same actions over `receipts/bind` with
+  `operation: "redemption"`; ordinary `{receiptUuid,payload}` binds stay nonfinancial.
+  The gateway forwards both financial transports to the main runtime to use the
+  cloud worker's monetary policy, rather than its legacy display/owner policy.
+  No new external URL/whitelist or Selectel routing is necessary for the APK.
+- Manual additive migration023 and `scripts/evotor-redemption-setup.mjs` prepare
+  reservations, cancellation tombstones and refunds. Neither runs on startup.
+  `scripts/check-evotor-redemption-concurrency.mjs` is restricted to a fresh local
+  `evotor_redemption_test` DB; the integration workflow runs it against PostgreSQL17.
+
+- Selectel ingress draft (2026-10-16,1.0.12/code16): `BridgeSettings` uses the
+  verified separate `/evotor` ingress on the existing Selectel hostname.
+  `DeviceCredentialStore` explicitly migrates only the old production AAD into
+  separate encrypted slots, preserving the original record and Keystore alias.
+  Existing/corrupted current records never fall back to a previous identity.
+  Optional personal-APK provisioning (`core/ProvisionedKey`) only initializes an
+  empty credential store; real keys are absent from Git/public artifacts. The
+  permanent certificate is retained. Server route checks passed on the owner's
+  VM; real Evotor proxy permissions/device flows and redemption remain pending.
+
+- Proxy response budget (2026-10-16, 1.0.11/code15): `PivnikApi` uses 10-second
+  connect and 30-second read timeouts, allowing Evotor's 5+10-second upstream
+  budget. Diagnostics retain the POST TLS issuer and elapsed wait on timeout,
+  close the failed connection before health, and surface bounded health errors.
+  `SettingsActivity` classifies TLS failures by the error line, not issuer names.
+  Existing permanent signing identity and encrypted settings are preserved.
+  This is a diagnostic update, not proof of terminal connectivity or redemption.
+
+- Foreground scanner draft (2026-10-15): `evotor-bridge` opens
+  `CustomerScanActivity`, subscribes to the SDK scanner broadcast only while
+  resumed, and passes recognised customer QR through the existing `Bridge`
+  receipt-specific resolve/bind policy. `core/ForegroundScan` prevents queued
+  double scans and stale customer messages after leaving the window.
+  `core/ProxyDiagnostic` classifies proxy 2003 by its structured reason.
+  `core/ConnectionCheck` separates the explicit keyless network check from the
+  saved-device-key check, accepting only the actual POS refusal envelope.
+  The encrypted credential store is unchanged. APK publication requires the
+  approved backed-up permanent certificate; no throwaway fallback.
+  The owner authorized one reinstall from the disposable 1.0.8 signature;
+  local settings require re-entry. The backup restoration/signing test passed.
+  This
+  changes no server mount, monetary rule or DB schema; real proxy connectivity,
+  CI secret provisioning and device behaviour remain unverified. Evidence and
+  current blockers: `ops/EVOTOR-AUDIT-20261015.md`.
+
 - `pos/http.js` is the shared dispatcher for native POS device and scoped POS admin
   routes in `server.js` and `universal-server.js`; preserve both mounts on changes.
 - `pos/scope.js`, `devices.js`, `repository.js`, `analytics.js`, `service.js` and
   `sync.js` isolate explicit store access, device identity and cash projections.
 - `pos-admin.js` / `pos-admin.css` are served by both runtimes and copied by the
   existing VK Hosting builder. Existing staff transactions stay in app operations.
-- Migrations 012/013/014 are opt-in manual migrations, never part of startup policy.
-- `pos/bonus.js` is the only POS code that writes wallets/transactions: device
+- Migrations 012/013/014/023 are opt-in manual migrations, never part of startup policy.
+- `pos/bonus.js` and `pos/redemption.js` are the POS wallet/transaction writers: device
   `receipts/bind` claims plus the `server.js` worker (`startPosBonusWorker`,
   off unless `PIVNIK_POS_BONUS_ENABLED=true`) settle closed SELL/PAYBACK documents
-  once each through `pos_bonus_accruals`. Its ledger hooks sit just above
+  once each through `pos_bonus_accruals`; reservation/refund reconciliation runs
+  before cashback using the same ledger policy. Its ledger hooks sit just above
   `createPosHttp` in `server.js`, outside the slice `evotor-http-boundary` evals.
 - `pos/setup.js` + `scripts/evotor-setup.mjs`: the owner's one-off store setup
   (migrations 012–014, binding, operator access, till key). Never on startup.
@@ -608,3 +1087,43 @@ isolation.
   with explicit fixture adapters; it does not claim complete production startup.
 - See `EVOTOR-INTEGRATION.md` and `EVOTOR-VERIFICATION.md` for the separate Business
   branch, rollback, unresolved real Extras and production approval boundaries.
+
+### Wallet route extraction first stage of P3 (2026-10-10)
+
+- `routes/wallet.js` registers the three existing GET endpoints under `/api/wallet/`.
+  `server.js` mounts them at their original position, passing the existing
+  `authRequired` middleware and Apple/Google issuer URLs. Handler bodies are
+  unchanged apart from indentation. This is pass delivery, not bonus persistence.
+- The public gateway continues to enforce consent and proxy these endpoints;
+  it has no separate Wallet handler. No gateway, auth, money or patch-chain
+  implementation changed. The user explicitly selected this first P3 stage
+  while the patch-chain remains active; this does not retire any patch script
+  or establish that other domains are safe to extract yet.
+- `test/wallet-routes.test.js` exercises the actual mount, existing signed-session
+  middleware and gateway consent/proxy source on loopback with fixture DB/profile
+  adapters. Evidence and limits: `ops/WALLET-ROUTES-EXTRACTION-20261010.md`.
+
+## Evotor paid draft-beer volume (2026-10-19)
+
+`pos/beer.js` accepts an explicit `operation: "beer"` on the existing device
+receipt-bind transport. Selection is pending metadata, fenced by store, receipt,
+client, device and QR-claim timestamp. Manual additive migration **024** creates
+only selection/audit tables; it is never a startup migration. Old APKs and
+cashback continue without 024; new volume writes return 503 until prepared.
+
+Closed paid cloud positions measured in liters cap the selected volume; pieces,
+kg and zero-price gifts are excluded. `pos/bonus.js` settles the canonical
+`beer_loyalty` row and original transaction beer fields in the same transaction
+as cashback: 14 paid liters earn 1 gift liter. No second loyalty counter or staff
+purchase is created. Partial refunds reverse only the original
+purchase's attributed beer/reward (whole gift liters from its original threshold crossings), retain a remaining original transaction, and
+cap cumulative removals. A previously spent gift becomes an audited shortfall
+for owner review. Full canonical cancellation must not reverse beer twice.
+
+The native window has a horizontally scrolling row of total-volume choices,
+ordinary checkout, and separate reserve / payment controls for redemption.
+Initial keyboard focus remains on the non-editable root. Volume saves must be
+acknowledged before checkout; actual accrual still waits for the cloud document.
+Receipt close/clear/new UUID invalidates customer identity; no global volume is
+stored. Do not enable redemption, alter Evotor URL masks, or change the existing
+VK/Selectel services as part of this feature.

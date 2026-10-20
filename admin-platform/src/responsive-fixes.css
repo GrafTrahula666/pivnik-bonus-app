@@ -1,0 +1,15 @@
+/* Responsive regression fixes kept separate from the main visual stylesheet.
+   The top-bar profile control must be allowed to shrink at compact desktop widths;
+   its name/role text already uses ellipsis in styles.css. */
+.profile-menu {
+  min-width: 0;
+}
+
+.profile-button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.profile-button > div:not(.avatar) {
+  min-width: 0;
+}

@@ -248,6 +248,18 @@ test('Загрузчик снимается до профиля, начисле�
   assert.match(gateway, /url\.pathname === '\/api\/bootstrap'/);
 });
 
+test('Стартовый ответ несёт опубликованный дизайн, чтобы тема не мигала старым белым оформлением', async () => {
+  const gateway = await source('universal-server.js');
+  const start = gateway.indexOf('async function getAppPayload(');
+  const end = gateway.indexOf('async function ensureAuthRecords(', start);
+  assert.ok(start >= 0 && end > start);
+  const payload = gateway.slice(start, end);
+  assert.match(payload, /pool\.query\('SELECT published FROM app_settings WHERE id = 1'\)\.catch\(/);
+  assert.doesNotMatch(payload, /startup\s*\?\s*Promise\.resolve\(\{ rows: \[\] \}\)/);
+  assert.match(payload, /if \(!startup\) throw error;/);
+  assert.match(payload, /design: designResult\.rows\[0\]\?\.published \|\| null/);
+});
+
 test('Первый вход не открывает цепочку модалок, но блокирует действия до принятия правил', async () => {
   const [app, railway, gateway] = await Promise.all([
     source('app.js'),

@@ -1,16 +1,29 @@
 export const GOLD_BARS_FRAME = Object.freeze({ code: 'gold-bars', title: 'Золотая орбитальная рамка' });
 export const PERSONAL_FRAME_GIFT_CODE = 'personal-frame-gift-20261002';
 const MONEY_FRAME = Object.freeze({ code: 'money', title: 'Долларовая рамка' });
+// Frames PIVNIK Business can give to any guest: each has its own animation in styles.css.
+export const GRANTABLE_FRAMES = Object.freeze([
+  MONEY_FRAME,
+  GOLD_BARS_FRAME,
+  Object.freeze({ code: 'fire', title: 'Огненная рамка' }),
+  Object.freeze({ code: 'diamond', title: 'Алмазная рамка' })
+]);
+export const GRANTABLE_FRAME_CODES = new Set(GRANTABLE_FRAMES.map((frame) => frame.code));
 export const PERSONAL_FRAME_OWNERSHIP_SQL = `
   EXISTS(SELECT 1 FROM user_frames pf WHERE pf.user_id = u.id AND pf.frame_id = 'money') AS owns_money_frame,
-  EXISTS(SELECT 1 FROM user_frames pf WHERE pf.user_id = u.id AND pf.frame_id = 'gold-bars') AS owns_gold_bars_frame`;
+  EXISTS(SELECT 1 FROM user_frames pf WHERE pf.user_id = u.id AND pf.frame_id = 'gold-bars') AS owns_gold_bars_frame,
+  ARRAY(SELECT pf.frame_id FROM user_frames pf WHERE pf.user_id = u.id) AS owned_frame_ids`;
 
 // Persisted gifts remain selectable without relying on mutable usernames.
 export function giftedFrameChoices(row) {
   const code = String(row?.profile_frame || row?.profileFrame || '');
+  const owned = new Set(Array.isArray(row?.owned_frame_ids) ? row.owned_frame_ids : []);
   const choices = [];
-  if (row?.owns_money_frame || code === 'money') choices.push({ ...MONEY_FRAME });
-  if (row?.owns_gold_bars_frame || code === 'gold-bars') choices.push({ ...GOLD_BARS_FRAME });
+  if (row?.owns_money_frame || owned.has('money') || code === 'money') choices.push({ ...MONEY_FRAME });
+  if (row?.owns_gold_bars_frame || owned.has('gold-bars') || code === 'gold-bars') choices.push({ ...GOLD_BARS_FRAME });
+  if (owned.has('fire')) choices.push({ ...GRANTABLE_FRAMES[2] });
+  // The caller already lists a diamond frame bought earlier or currently selected.
+  if (owned.has('diamond') && !row?.owns_diamond_frame && code !== 'diamond') choices.push({ ...GRANTABLE_FRAMES[3] });
   return choices;
 }
 

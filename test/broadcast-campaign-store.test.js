@@ -169,3 +169,13 @@ test('complete and fail persist only aggregate delivery outcome and safe error c
   assert.equal(calls.at(-1).params[1], 'broadcast_failed');
   assert.equal(calls.at(-1).params.some((value) => String(value).includes('secret connection string')), false);
 });
+
+test('a Business segment gets its own fingerprint, so the same text can reach another segment', () => {
+  const plain = broadcastCampaignFingerprint({ channel: 'telegram', audience: 'clients', message: 'Ждём вас' });
+  const lapsing = broadcastCampaignFingerprint({ channel: 'telegram', audience: 'clients', message: 'Ждём вас', segment: 'lapsing' });
+  const gone = broadcastCampaignFingerprint({ channel: 'telegram', audience: 'clients', message: 'Ждём вас', segment: 'gone' });
+  assert.notEqual(plain.fingerprint, lapsing.fingerprint);
+  assert.notEqual(lapsing.fingerprint, gone.fingerprint);
+  assert.equal(plain.fingerprint, broadcastCampaignFingerprint({ channel: 'telegram', audience: 'clients', message: 'Ждём вас', segment: '' }).fingerprint);
+  assert.throws(() => broadcastCampaignFingerprint({ channel: 'telegram', audience: 'clients', message: 'x', segment: 'DROP TABLE' }));
+});

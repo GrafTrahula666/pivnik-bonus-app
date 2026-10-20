@@ -1,4 +1,8 @@
 import { resolveTransactionAttribution } from './transaction-attribution.js';
+import {
+  requireSpaceverseTenantRuntime,
+  SpaceverseRuntimeError
+} from './spaceverse-runtime-manifest.js';
 
 const TRANSACTION_MODES = new Set([
   'accrue',
@@ -54,6 +58,58 @@ function normalizeTransaction(transaction) {
   return Object.freeze({ ...transaction, mode });
 }
 
+function runtimeWriteFailure(code, message) {
+  return new SpaceverseRuntimeError(code, message);
+}
+
+function buildSpaceverseRuntimeInsert({ transaction, runtime }) {
+  const columns = [];
+  const values = [];
+  for (const column of WRITABLE_COLUMNS) {
+    if (!Object.prototype.hasOwnProperty.call(transaction, column)) continue;
+    columns.push(column);
+    values.push(transaction[column]);
+  }
+
+  const businessPlaceholders = values.map((_, index) => `$${index + 1}`);
+  const bindingOffset = values.length;
+  const binding = runtime.binding;
+  values.push(
+    binding.runtimeKey,
+    binding.manifestSha256,
+    binding.manifestRevision,
+    runtime.context.tenantId,
+    runtime.context.locationId
+  );
+
+  const bindingPlaceholders = Object.freeze({
+    runtimeKey: `$${bindingOffset + 1}`,
+    manifestSha256: `$${bindingOffset + 2}`,
+    manifestRevision: `$${bindingOffset + 3}`,
+    tenantId: `$${bindingOffset + 4}`,
+    locationId: `$${bindingOffset + 5}`
+  });
+  const replayChecks = [...columns, 'tenant_id', 'location_id']
+    .map((column) => `transactions.${column} IS NOT DISTINCT FROM EXCLUDED.${column}`)
+    .join('\n    AND ');
+  const sql = `INSERT INTO transactions (${[...columns, 'tenant_id', 'location_id'].join(', ')})
+SELECT ${[...businessPlaceholders, 'binding.company_id', 'binding.venue_id'].join(', ')}
+FROM spaceverse_runtime_binding AS binding
+WHERE binding.singleton=TRUE
+  AND binding.runtime_key=${bindingPlaceholders.runtimeKey}
+  AND binding.manifest_sha256=${bindingPlaceholders.manifestSha256}
+  AND binding.manifest_revision=${bindingPlaceholders.manifestRevision}
+  AND binding.company_id=${bindingPlaceholders.tenantId}
+  AND binding.venue_id=${bindingPlaceholders.locationId}
+  AND binding.isolation_policy='dedicated_database'
+  AND binding.status='prepared'
+ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key
+  WHERE ${replayChecks}
+RETURNING *`;
+
+  return Object.freeze({ sql, values: Object.freeze(values) });
+}
+
 /**
  * Persistence boundary for NEW SPACEVERSE-attributed transactions.
  *
@@ -107,6 +163,82 @@ export function createScopedTransactionPersistence({ query }) {
   };
 }
 
+/**
+ * Tenant-runtime write boundary for NEW transactions.
+ *
+ * Scope is captured from the exact runtime object branded by the dedicated-DB
+ * binding check. The INSERT rechecks that binding in the same SQL statement,
+ * so a verified context cannot be paired with another tenant database. The
+ * caller may supply only transaction data; tenant/location and authorization
+ * fields from a request are rejected before SQL. request_key makes an exact
+ * retry return the original row, while a conflicting payload or scope fails
+ * closed with no legacy INSERT fallback.
+ *
+ * This boundary remains unwired until migration 009 and the tenant runtime are
+ * deliberately provisioned in an isolated environment.
+ */
+export function createSpaceverseTransactionPersistence({ query, runtime } = {}) {
+  if (typeof query !== 'function') throw new TypeError('query must be a function');
+  const verifiedRuntime = requireSpaceverseTenantRuntime(runtime);
+
+  return async function persistSpaceverseTransaction(options = {}) {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError('SPACEVERSE transaction options must be an object');
+    }
+    const unsupported = Object.keys(options).filter((field) => field !== 'transaction');
+    if (unsupported.length) {
+      throw runtimeWriteFailure(
+        'SPACEVERSE_RUNTIME_REQUEST_SCOPE_FORBIDDEN',
+        'SPACEVERSE tenant scope cannot be supplied by a request.'
+      );
+    }
+
+    const transaction = normalizeTransaction(options.transaction);
+    const requestKey = typeof transaction.request_key === 'string'
+      ? transaction.request_key.trim()
+      : '';
+    if (!requestKey) {
+      throw new TypeError('SPACEVERSE transaction persistence requires request_key');
+    }
+    const normalized = requestKey === transaction.request_key
+      ? transaction
+      : Object.freeze({ ...transaction, request_key: requestKey });
+    const statement = buildSpaceverseRuntimeInsert({ transaction: normalized, runtime: verifiedRuntime });
+
+    let result;
+    try {
+      result = await query(statement.sql, [...statement.values]);
+    } catch {
+      throw runtimeWriteFailure(
+        'SPACEVERSE_TRANSACTION_WRITE_UNAVAILABLE',
+        'SPACEVERSE transaction write is unavailable; retry with the same request key.'
+      );
+    }
+    if (!result || !Array.isArray(result.rows)) {
+      throw runtimeWriteFailure(
+        'SPACEVERSE_TRANSACTION_WRITE_INVALID_RESULT',
+        'SPACEVERSE transaction write returned an invalid result.'
+      );
+    }
+    if (result.rows.length !== 1) {
+      throw runtimeWriteFailure(
+        'SPACEVERSE_TRANSACTION_WRITE_REJECTED',
+        'SPACEVERSE transaction write did not match the verified runtime binding or replay payload.'
+      );
+    }
+    const row = result.rows[0];
+    if (String(row.tenant_id) !== verifiedRuntime.context.tenantId
+      || String(row.location_id) !== verifiedRuntime.context.locationId
+      || String(row.request_key) !== requestKey) {
+      throw runtimeWriteFailure(
+        'SPACEVERSE_TRANSACTION_WRITE_SCOPE_MISMATCH',
+        'SPACEVERSE transaction write returned an unexpected scope.'
+      );
+    }
+    return Object.freeze({ ...row });
+  };
+}
+
 export const transactionPersistenceContract = Object.freeze({
   appliesTo: 'new-transactions-only',
   table: 'transactions',
@@ -115,5 +247,9 @@ export const transactionPersistenceContract = Object.freeze({
   requiredScopeColumns: Object.freeze(['tenant_id', 'location_id']),
   parameterizedValuesOnly: true,
   historicalBackfill: false,
-  productionWiringEnabled: false
+  productionWiringEnabled: false,
+  runtimeBindingRecheckedInWrite: true,
+  runtimeRequestScopeAccepted: false,
+  runtimeReplayKey: 'request_key',
+  runtimeFallbackToLegacy: false
 });

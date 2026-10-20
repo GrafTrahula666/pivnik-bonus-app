@@ -1,0 +1,51 @@
+import { posDashboards } from '../../pos/analytics.js'
+import { loadPosDocuments,posConnectionStatus,type PosReadDb } from '../../pos/repository.js'
+import { HttpError,type PeriodRange,type VenueScope } from './types.js'
+
+export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
+  const today=new Date(now.getTime()+3*3600000).toISOString().slice(0,10)
+  const midnightFor=(date:string)=>{
+    const midnight=Date.parse(`${date}T00:00:00+03:00`)
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(midnight)||
+      new Date(midnight+3*3600000).toISOString().slice(0,10)!==date||date>today){
+      throw new HttpError(400,'INVALID_PERIOD','Выберите существующий день не позднее сегодняшнего по Москве.')
+    }
+    return midnight
+  }
+  const date=url.searchParams.get('date'),from=url.searchParams.get('from'),to=url.searchParams.get('to')
+  if(date!==null&&(from!==null||to!==null))throw new HttpError(400,'INVALID_PERIOD','Выберите день или диапазон, без смешения параметров.')
+  if(date!==null){
+    const midnight=midnightFor(date)
+    return {from:new Date(midnight),to:new Date(midnight+86400000),days:1}
+  }
+  if(from!==null||to!==null){
+    if(!from||!to)throw new HttpError(400,'INVALID_PERIOD','Для периода нужны начальная и конечная даты.')
+    const start=midnightFor(from),until=midnightFor(to)+86400000
+    const days=(until-start)/86400000
+    if(days<1||days>366)throw new HttpError(400,'INVALID_PERIOD','Период должен содержать от 1 до 366 дней.')
+    return {from:new Date(start),to:new Date(until),days}
+  }
+  const requested=Number(url.searchParams.get('days')||30)
+  const days=[1,7,14,30,90,365].includes(requested)?requested:30
+  const midnight=Date.parse(`${today}T00:00:00+03:00`)
+  return {from:new Date(midnight-(days-1)*86400000),to:new Date(midnight+86400000),days}
+}
+
+// Caller MUST have resolved scope through resolveVenueScope(session.admin,...).
+// No legacy bar id, provider env store, request company id, or global fallback.
+export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:PeriodRange){
+  const period={from:range.from.toISOString(),until:range.to.toISOString(),timeZone:'Europe/Moscow'}
+  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null})
+  const schema=await db.query(`SELECT to_regclass('public.pos_store_bindings') IS NOT NULL
+    AND to_regclass('public.pos_documents') IS NOT NULL AND to_regclass('public.pos_customer_links') IS NOT NULL
+    AND to_regclass('public.pos_sync_state') IS NOT NULL AS ready`)
+  if(!schema.rows[0]?.ready)return empty('schema_required')
+  const binding=await db.query(`SELECT store_id FROM pos_store_bindings
+    WHERE tenant_id=$1 AND location_id=$2 AND enabled=TRUE`,[scope.companyId,scope.id])
+  if(binding.rows.length!==1)return empty('not_connected')
+  const storeId=String(binding.rows[0]!.store_id)
+  const connection=await posConnectionStatus(db,{enabled:true,readOnly:true,storeId})
+  if(!connection.lastSuccessAt)return {...empty(connection.state),connection}
+  const documents=await loadPosDocuments(db,storeId,period)
+  return {period,connection,...posDashboards(documents)}
+}

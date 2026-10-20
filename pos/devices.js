@@ -2,10 +2,13 @@ import crypto from 'node:crypto';
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
 import { posError, posIdentifier, requirePosSchema, resolveOperatorStore } from './scope.js';
 import { claimReceipt, posBonusConfig } from './bonus.js';
+import { readPosLoyaltyView } from './loyalty-view.js';
+import { selectReceiptBeer } from './beer.js';
+import { deviceRedemption } from './redemption.js';
 
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
-export function createPosDeviceService(pool, config) {
+export function createPosDeviceService(pool, config, loyaltyPolicy) {
   const bonusEnabled = () => config.bonusEnabled ?? posBonusConfig().enabled;
   const ready = async () => {
     if (!config.enabled) throw posError(503, 'pos_disabled', 'POS-подключение выключено.');
@@ -30,20 +33,33 @@ export function createPosDeviceService(pool, config) {
       if (!body || typeof body.payload !== 'string' || !body.payload || body.payload.length > 2048) {
         throw posError(400, 'invalid_qr', 'Нужен QR клиента.');
       }
+      if (body.includeWallet !== undefined && typeof body.includeWallet !== 'boolean') {
+        throw posError(400, 'invalid_input', 'Некорректный запрос баланса.');
+      }
       const record = await resolvePersonalQrRecord(pool, body.payload);
       if (!record) throw posError(404, 'qr_not_found', 'QR не найден или отозван.');
       const result = await pool.query(`SELECT id,first_name FROM users
         WHERE id=$1 AND deleted_at IS NULL AND merged_into_user_id IS NULL`, [record.id]);
       if (!result.rows[0]) throw posError(404, 'qr_not_found', 'QR не найден или отозван.');
-      // Same small client envelope the existing bridge parser expects; no wallet,
-      // QR tokens, contact details, social identity or staff/admin session returned.
-      return { client: { id: String(result.rows[0].id), firstName: result.rows[0].first_name || '' } };
+      const answer = { client: { id: String(result.rows[0].id), firstName: result.rows[0].first_name || '' } };
+      // Explicit opt-in keeps the old diagnostic/bind contract intact. A missing
+      // wallet is unavailable, never represented to the cashier as zero points.
+      if (body.includeWallet === true) answer.wallet = await readPosLoyaltyView(pool, result.rows[0].id, loyaltyPolicy);
+      return answer;
     },
     async bindFor(device, body) {
+      // Compatibility transport for already installed Evotor proxy URL masks.
+      // The explicit discriminator never turns a normal QR bind into a spend.
+      if (body?.operation === 'redemption') return this.redemptionFor(device, body);
       // A claim is a promise to accrue: refuse it while accrual is off, so the till never
       // shows a bonus that will not come and re-enabling cannot pay out a backlog.
       if (!bonusEnabled()) throw posError(503, 'pos_bonus_disabled', 'Начисление бонусов по кассе выключено.');
+      if (body?.operation === 'beer') return selectReceiptBeer(pool, device, body);
       return claimReceipt(pool, device, body);
+    },
+    async redemptionFor(device, body) {
+      const enabled = bonusEnabled() && (config.redemptionEnabled ?? process.env.PIVNIK_POS_REDEMPTION_ENABLED === 'true');
+      return deviceRedemption(pool, device, body, loyaltyPolicy, enabled);
     },
     async resolve(header, body) {
       return this.resolveFor(await this.authenticate(header), body);

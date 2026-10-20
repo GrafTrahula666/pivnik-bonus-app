@@ -1,0 +1,38 @@
+{
+  "checks": [
+    "login:super@qa.local",
+    "width:1440x900:1440/1440",
+    "login:venue@qa.local",
+    "login:super@qa.local",
+    "login:venue@qa.local",
+    "width:390x844:390/390",
+    "login:venue@qa.local",
+    "width:1920x1080:1920/1920",
+    "login:venue@qa.local",
+    "width:1366x768:1366/1366",
+    "login:venue@qa.local",
+    "width:1024x768:1024/1024",
+    "login:venue@qa.local",
+    "width:tablet:768/768"
+  ],
+  "console_errors": [],
+  "page_errors": [],
+  "failed_requests": [],
+  "screenshots": [
+    "01-super-admin-platform-dashboard.png",
+    "02-super-admin-companies.png",
+    "03-super-admin-venues.png",
+    "04-venue-dashboard.png",
+    "05-analytics.png",
+    "06-crm-customers.png",
+    "07-customer-profile.png",
+    "08-loyalty-constructor.png",
+    "09-wheel-constructor.png",
+    "10-shop.png",
+    "11-achievements.png",
+    "12-promotions.png",
+    "13-branding.png",
+    "14-demo-mode.png",
+    "15-mobile-dashboard.png"
+  ]
+}

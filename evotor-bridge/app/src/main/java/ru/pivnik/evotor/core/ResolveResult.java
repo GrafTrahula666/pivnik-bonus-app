@@ -43,11 +43,23 @@ public final class ResolveResult {
         if (status == 409) return new ResolveResult(Kind.CONFLICT, null);
         if (status != 200 || body == null) return unavailable();
         try {
-            JSONObject client = new JSONObject(body).optJSONObject("client");
+            JSONObject answer = new JSONObject(body);
+            JSONObject client = answer.optJSONObject("client");
             if (client == null) return unavailable();
             String id = client.optString("id", "");
             String name = client.optString("firstName", "");
-            return new ResolveResult(Kind.FOUND, new ResolvedClient(id, name));
+            JSONObject wallet = answer.optJSONObject("wallet");
+            Long balance = null;
+            boolean unlimited = false;
+            if (answer.has("wallet")) {
+                if (wallet == null || !wallet.has("balance") || !wallet.has("unlimited")
+                        || !(wallet.get("unlimited") instanceof Boolean)) return unavailable();
+                String rawBalance = String.valueOf(wallet.get("balance"));
+                if (!rawBalance.matches("[0-9]{1,16}")) return unavailable();
+                balance = Long.parseLong(rawBalance);
+                unlimited = wallet.getBoolean("unlimited");
+            }
+            return new ResolveResult(Kind.FOUND, new ResolvedClient(id, name, balance, unlimited));
         } catch (JSONException | IllegalArgumentException error) {
             return unavailable();
         }

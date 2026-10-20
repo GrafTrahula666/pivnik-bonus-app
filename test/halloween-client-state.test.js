@@ -12,7 +12,7 @@ function harness(api) {
     setInterval: () => 1, clearInterval: () => {}, IS_VK: false,
     openModal: () => {}, switchScreen: () => {}, toast: (message) => toasts.push(message),
     $: (id) => {
-      if (!elements.has(id)) elements.set(id, { textContent: '', hidden: true, disabled: false, value: '' });
+      if (!elements.has(id)) elements.set(id, { textContent: '', hidden: true, disabled: false, value: '', dataset: {} });
       return elements.get(id);
     }
   });
