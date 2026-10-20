@@ -988,6 +988,17 @@ isolation.
   The 1.0.16 UI fix starts with focus on the window and the soft keyboard hidden;
   manual customer/points fields remain editable on explicit selection. It does
   not change scanner callbacks, receipt state, credentials or monetary rules.
+
+- Fresh closed documents (2026-10-18): `pos/recent-sync.js` reads an overlapping
+  two-day API window before historical synchronization. It reuses the exact
+  immutable-document importer extracted as `importEvotorDocuments`, has a bounded
+  page budget/independent lock, and never changes historical cursor/completion
+  state. Failed history cannot hold fresh paid receipts behind its cursor.
+  `fetchEvotorPage` adds optional `since` only on the initial page. The existing
+  scoped receipt claims and canonical bonus worker remain the only identity and
+  monetary path. No migration, flag, tenant model or bonus formula is added.
+  See `ops/EVOTOR-RECENT-SYNC-20261018.md` for runtime maintenance evidence.
+
 - Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
   `qr/resolve` caller can explicitly request `includeWallet: true`.
   `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved
