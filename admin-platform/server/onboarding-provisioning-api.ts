@@ -7,10 +7,15 @@ import { HttpError, type AdminPrincipal } from './types.js'
 import {assembleApprovedRuntimeBundle} from './onboarding-runtime-release.js'
 import {crmCheckView,crmActivationSummary} from './tenant-crm-activation-state.js'
 import {loadOnboardingPosProxyProjection} from './onboarding-pos-proxy.js'
+import {reserveDatabaseSlot} from './onboarding-database-capacity.js'
 
 const provisioning=createOnboardingProvisioningService({
   metadata:pool,
   allowEmptyDatabaseBootstrap:config.enableOnboardingDatabaseBootstrap,
+  reserveTargetDatabase:config.enableOnboardingDatabaseCapacity?async(client,admin,source)=>{
+    if(onboardingTargetRegistry.hasExplicitTarget(source.manifest.runtimeKey))return 'reserved'
+    return reserveDatabaseSlot(client,admin,source,onboardingTargetRegistry.capacitySlots())
+  }:undefined,
   resolveTargetDatabase:runtimeKey=>onboardingTargetRegistry.resolveTargetDatabase(runtimeKey),
   assembleRuntimeBundle:assembleApprovedRuntimeBundle,
   requireCodeRelease:true,

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs/promises'
 import {createSpaceverseRuntimeManifest} from '../../../spaceverse-runtime-manifest.js'
 import {seedOnboardingFixture} from './onboarding-fixture.js'
 import {tenantCrmApplication} from './tenant-crm-fixture.js'
@@ -6,8 +7,9 @@ import {tenantCrmFixtureDatabase} from './tenant-crm-database-fixture.js'
 
 // Metadata and three EMPTY, physically distinct databases. No legacy fixtures
 // are removed to manufacture emptiness; native test databases are retained.
-export async function emptyTenantFixture(copies:1|2=1){
+export async function emptyTenantFixture(copies:1|2=1,capacity=false){
   const metadata=await seedOnboardingFixture(await tenantCrmFixtureDatabase())
+  if(capacity)await metadata.exec(await fs.readFile(new URL('../../admin-migrations/018_onboarding_database_capacity.sql',import.meta.url),'utf8'))
   const password=(await metadata.query<{password_hash:string}>('SELECT password_hash FROM admin_accounts WHERE id=11')).rows[0]!.password_hash
   await metadata.query(`INSERT INTO admin_accounts(id,email,display_name,role,password_hash)
     VALUES(21,'south@fixture.invalid','south','VENUE_ADMIN',$1)`,[password])

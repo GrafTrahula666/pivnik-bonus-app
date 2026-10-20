@@ -95,7 +95,7 @@ interface Integration {
 type IntegrationCommand={requestKey:string;revision:number;storeId:string;token:string}
 interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';expiresAt:string;createdAt:string;revokedAt:string|null;claimedAt:string|null}
 type ProvisioningStatus='not_started'|'running'|'retryable_error'|'action_required'|'succeeded'
-type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'|'TARGET_DATABASE_NOT_EMPTY'
+type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'|'TARGET_DATABASE_NOT_EMPTY'|'TARGET_DATABASE_CAPACITY_EXHAUSTED'|'TARGET_DATABASE_CAPACITY_UNAVAILABLE'
 type SchemaReadinessErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_TENANT_SCHEMA_REQUIRED'|'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED'
 type RuntimeBundleErrorCode='RUNTIME_ARTIFACT_INCOMPATIBLE'|'RUNTIME_RELEASE_NOT_REGISTERED'|'RUNTIME_RELEASE_INVALID'|'RUNTIME_RELEASE_UNAVAILABLE'|'RUNTIME_RELEASE_MISMATCH'|'RUNTIME_IMAGE_NOT_REGISTERED'|'RUNTIME_IMAGE_MISMATCH'|'RUNTIME_IMAGE_CONTRACT_INVALID'
 interface ProvisioningStep {
@@ -251,6 +251,7 @@ function inviteResponse(raw:unknown):Invite {
 const provisioningErrors:ProvisioningErrorCode[]=[
   'TARGET_DATABASE_NOT_REGISTERED','TARGET_BINDING_SCHEMA_REQUIRED','TARGET_BINDING_CONFLICT',
   'TARGET_DATABASE_UNAVAILABLE','TARGET_CONFIRMATION_UNCERTAIN','TARGET_DATABASE_NOT_EMPTY',
+  'TARGET_DATABASE_CAPACITY_EXHAUSTED','TARGET_DATABASE_CAPACITY_UNAVAILABLE',
 ]
 function provisioningResponse(raw:unknown):ProvisioningStep {
   const value=raw as Partial<ProvisioningStep>|null,scope=value?.scope,result=value?.result
@@ -289,6 +290,8 @@ const provisioningGuidance=(value:ProvisioningStep)=>{
     TARGET_DATABASE_UNAVAILABLE:'Выделенная база недоступна. Проверьте серверную регистрацию и повторите после восстановления.',
     TARGET_CONFIRMATION_UNCERTAIN:'Запись могла сохраниться. Повтор безопасно сверит ту же привязку без создания дубля.',
     TARGET_DATABASE_NOT_EMPTY:'В выбранной базе уже есть объекты. Подготовка остановлена, данные не изменены. Поддержке нужно проверить выделение новой пустой базы для этой точки.',
+    TARGET_DATABASE_CAPACITY_EXHAUSTED:'Ожидаем свободную выделенную базу. Поддержке нужно пополнить резерв ресурсов; ключи и данные заново вводить не нужно.',
+    TARGET_DATABASE_CAPACITY_UNAVAILABLE:'Зарезервированная база недоступна или её регистрация изменилась. Поддержке нужно восстановить тот же ресурс; новая база автоматически не подставляется.',
   }
   return actions[value.errorCode!]
 }

@@ -73,6 +73,7 @@ type Client=PoolClient
 export interface OnboardingProvisioningOptions {
   metadata:Connectable
   allowEmptyDatabaseBootstrap?:boolean
+  reserveTargetDatabase?:(client:PoolClient,admin:AdminPrincipal,source:RuntimeSource)=>Promise<'reserved'|'exhausted'|'unavailable'>
   // Credentials stay server-side. A request can select only its frozen runtime
   // key; it can never provide a database URL, host or credential.
   resolveTargetDatabase:(runtimeKey:string)=>Promise<Connectable|null>
@@ -181,11 +182,31 @@ interface Claim {
   token:string|null
 }
 
+async function commitBindingClaim(options:OnboardingProvisioningOptions,client:Client,admin:AdminPrincipal,
+  source:RuntimeSource,step:StepName,row:StepRow,token:string):Promise<Claim>{
+  if(step===BINDING_STEP&&options.reserveTargetDatabase){
+    const state=await options.reserveTargetDatabase(client,admin,source)
+    if(state!=='reserved'){
+      const code=state==='exhausted'?'TARGET_DATABASE_CAPACITY_EXHAUSTED':'TARGET_DATABASE_CAPACITY_UNAVAILABLE'
+      await client.query(`UPDATE admin_onboarding_provisioning_steps SET status='action_required',
+        lease_token=NULL,lease_expires_at=NULL,last_error_code=$3,result=NULL,updated_at=NOW()
+        WHERE draft_id=$1::uuid AND step=$2`,[source.draftId,step,code])
+      await recordAudit({admin,scope:source.auditScope,action:'onboarding.database_capacity_waiting',
+        entityType:'onboarding_draft',entityId:source.draftId,metadata:{code}},client)
+      row=(await selectStep(client,source.draftId,step,true))!
+      await client.query('COMMIT')
+      return {source,step,row,token:null}
+    }
+  }
+  await client.query('COMMIT')
+  return {source,step,row,token}
+}
+
 async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,draftId:string,step:StepName):Promise<Claim> {
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
-    if(step===CRM_ACTIVATION_STEP||(step===BINDING_STEP&&options.allowEmptyDatabaseBootstrap))await lockCrmActor(client,admin)
+    if(step===CRM_ACTIVATION_STEP||(step===BINDING_STEP&&(options.allowEmptyDatabaseBootstrap||options.reserveTargetDatabase)))await lockCrmActor(client,admin)
     const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
     if(step!==BINDING_STEP) {
       const dependencyStep=step===SCHEMA_READINESS_STEP?BINDING_STEP:SCHEMA_READINESS_STEP
@@ -213,8 +234,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
     }
     if(step===CRM_ACTIVATION_STEP&&row.status==='succeeded')throw unavailable()
     if(inserted.rows.length===1) {
-      await client.query('COMMIT')
-      return {source,step,row,token:initialToken}
+      return await commitBindingClaim(options,client,admin,source,step,row,initialToken)
     }
     const oldDescriptor=step===RUNTIME_BUNDLE_STEP&&row.status==='succeeded'&&Boolean(missingProof(row,options))
     if((row.status==='succeeded'&&!oldDescriptor)||(row.status==='running'&&row.lease_active)) {
@@ -228,8 +248,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
       WHERE draft_id=$1::uuid AND step=$2`,[source.draftId,step,token])
     row=await selectStep(client,source.draftId,step,true)
     if(!row) throw unavailable()
-    await client.query('COMMIT')
-    return {source,step,row,token}
+    return await commitBindingClaim(options,client,admin,source,step,row,token)
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>undefined)
     if(error instanceof HttpError) throw error

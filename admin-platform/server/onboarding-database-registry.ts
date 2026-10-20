@@ -13,10 +13,12 @@ const protectedDatabaseVariables=[
 type Connectable=Pick<PgPool,'connect'>
 type RegistryPool=Connectable&{end:()=>Promise<void>;on?:(event:string,listener:(error:Error)=>void)=>unknown}
 type RegistryEntry={credentialEnv:string}
+export interface CapacitySlot {slotKey:string;targetFingerprint:string}
 
 export interface OnboardingTargetRegistryOptions {
   env?:NodeJS.ProcessEnv
   poolFactory?:(config:PoolConfig)=>RegistryPool
+  resolveAllocation?:(runtimeKey:string)=>Promise<CapacitySlot|null>
 }
 
 const invalidRegistry=()=>new HttpError(500,'ONBOARDING_DATABASE_REGISTRY_INVALID',
@@ -42,7 +44,7 @@ function databaseIdentity(raw:string):string {
   }
 }
 
-function parseEntries(raw:string):Map<string,RegistryEntry> {
+function parseEntries(raw:string,pattern=runtimeKeyPattern):Map<string,RegistryEntry> {
   if(!raw.trim()) return new Map()
   let parsed:unknown
   try {parsed=JSON.parse(raw)} catch {throw invalidRegistry()}
@@ -51,7 +53,7 @@ function parseEntries(raw:string):Map<string,RegistryEntry> {
   if(records.length>200) throw invalidRegistry()
   const entries=new Map<string,RegistryEntry>(),references=new Set<string>()
   for(const [runtimeKey,candidate] of records) {
-    if(!runtimeKeyPattern.test(runtimeKey)||!candidate||typeof candidate!=='object'||Array.isArray(candidate)) {
+    if(!pattern.test(runtimeKey)||!candidate||typeof candidate!=='object'||Array.isArray(candidate)) {
       throw invalidRegistry()
     }
     const value=candidate as Record<string,unknown>
@@ -68,6 +70,8 @@ function parseEntries(raw:string):Map<string,RegistryEntry> {
 export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryOptions={}) {
   const env=options.env??process.env
   const entries=parseEntries(String(env.ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON??''))
+  const capacityEnabled=['true','1','yes','on'].includes(String(env.ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY??'').trim().toLowerCase())
+  const capacity=capacityEnabled?parseEntries(String(env.ADMIN_ONBOARDING_DATABASE_CAPACITY_JSON??''),/^capacity-[a-z0-9-]{1,48}$/):new Map<string,RegistryEntry>()
   const poolFactory=options.poolFactory??((poolConfig:PoolConfig)=>new Pool(poolConfig) as RegistryPool)
   const pools=new Map<string,{fingerprint:string;pool:RegistryPool}>()
   const resolving=new Map<string,Promise<Connectable|null>>()
@@ -76,8 +80,7 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
     const value=String(env[name]??'').trim()
     return value?[databaseIdentity(value)]:[]
   }))
-  const credential=(runtimeKey:string):{url:string;fingerprint:string;identity:string}|null=>{
-    const entry=entries.get(runtimeKey)
+  const credential=(entry:RegistryEntry|undefined):{url:string;fingerprint:string;identity:string}|null=>{
     if(!entry) return null
     const url=String(env[entry.credentialEnv]??'').trim()
     if(!url) return null
@@ -88,9 +91,11 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
     return {url,identity,fingerprint:crypto.createHash('sha256').update(url).digest('hex')}
   }
   const validateIsolation=()=>{
-    const identities=new Set<string>()
-    for(const runtimeKey of entries.keys()) {
-      const current=credential(runtimeKey)
+    const identities=new Set<string>(),references=new Set<string>()
+    for(const entry of [...entries.values(),...capacity.values()]) {
+      if(references.has(entry.credentialEnv))throw invalidRegistry()
+      references.add(entry.credentialEnv)
+      const current=credential(entry)
       if(!current) continue
       if(identities.has(current.identity)) throw invalidRegistry()
       identities.add(current.identity)
@@ -106,7 +111,10 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
   const resolveOnce=async(runtimeKey:string):Promise<Connectable|null>=>{
     if(!runtimeKeyPattern.test(runtimeKey)) return null
     validateIsolation()
-    const current=credential(runtimeKey)
+    const allocated=capacityEnabled?await options.resolveAllocation?.(runtimeKey):null
+    if(allocated&&(entries.has(runtimeKey)||!capacity.has(allocated.slotKey)))throw invalidRegistry()
+    const current=credential(allocated?capacity.get(allocated.slotKey):entries.get(runtimeKey))
+    if(allocated&&(!current||crypto.createHash('sha256').update(current.identity).digest('hex')!==allocated.targetFingerprint))throw invalidRegistry()
     if(!current) {await closeOne(runtimeKey);return null}
     const existing=pools.get(runtimeKey)
     if(existing?.fingerprint===current.fingerprint) return existing.pool
@@ -122,6 +130,14 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
   }
 
   return Object.freeze({
+    hasExplicitTarget(runtimeKey:string){return entries.has(runtimeKey)},
+    capacitySlots():CapacitySlot[]{
+      validateIsolation()
+      return [...capacity].flatMap(([slotKey,entry])=>{
+        const current=credential(entry)
+        return current?[{slotKey,targetFingerprint:crypto.createHash('sha256').update(current.identity).digest('hex')}]:[]
+      }).sort((a,b)=>a.slotKey.localeCompare(b.slotKey))
+    },
     validate() {
       return validateIsolation()
     },
@@ -140,6 +156,8 @@ export function createOnboardingTargetRegistry(options:OnboardingTargetRegistryO
   })
 }
 
-export const onboardingTargetRegistry=createOnboardingTargetRegistry()
+export const onboardingTargetRegistry=createOnboardingTargetRegistry({
+  resolveAllocation:async key=>(await import('./onboarding-database-capacity.js')).readAllocatedDatabaseSlot(key),
+})
 export const validateOnboardingTargetRegistry=()=>onboardingTargetRegistry.validate()
 export const closeOnboardingTargetRegistry=()=>onboardingTargetRegistry.close()

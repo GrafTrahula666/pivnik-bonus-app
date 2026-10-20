@@ -2120,3 +2120,74 @@ MODULE-MAP обновлён в том же PR. `/mnt/project-files/owner-panel` 
 в этой сессии не подключены; доступный handoff — `.result.md`
 файлы одним ZIP здесь. Требования установки/подписки/модерации не выдумываются
 до подтверждения реального контракта существующего кабинета Эвотора.
+
+
+## CRM database capacity — 2026-10-20
+
+Следующий небольшой шаг поверх проверенного Draft #296 (`4d75b85`), отдельная
+ветка `spaceverse/crm-database-capacity-20261020`. #296 не расширялся новыми
+commits; новая часть пока не объявляется вошедшей в main/production.
+
+Новый default-off `ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY` и server-only
+`ADMIN_ONBOARDING_DATABASE_CAPACITY_JSON` расширяют существующий target registry
+резервом заранее выделенных пустых физических БД. Теперь обычной команде owner
+не нужна отдельная env-запись для каждого runtime. URLs/пароли по-прежнему только
+в protected `SPACEVERSE_TENANT_DATABASE_URL_*`; в UI нет выбора slot/URL/SQL.
+
+Новая manual Admin migration018 хранит resource allocation с canonical composite
+FK и UNIQUE draft/runtime/slot/physical identity. Это не второй tenant/customer
+registry. Reservation+claim+audit одна metadata TX после current actor/grant /
+frozen source locks, под общим коротким advisory lock. Ошибка audit откатывает
+оба до обращения к target. GET/lookup ничего не резервируют. Старый explicit
+mapping сохраняется; конфликт с persisted allocation — ошибка, не retarget.
+
+Existing bootstrap/readiness исполняют target SQL. Lost reply возвращается к
+тому же ресурсу; неверные/непустые/изменённые targets не перераспределяются.
+Password rotation той же physical DB допускается, смена host/port/database
+сравнивается с stored identity hash и запрещается. Нет CREATE DATABASE/cloud
+API, новых затрат, удаления/recycle данных или фактических изменений Railway.
+Пустой резерв — action_required + фиксированный code, workflow provisioning
+pending; draft/ключи сохраняются. Active/лицензия/публикация не симулируются.
+
+Локальная первая проверка: registry14 + capacity10 — 24 native tests passed,
+4 E2E auto-allocation passed. Добавлены ещё три SQL negative cases и workflow
+pending assertion. Первый общий прогон дал 492 passed/2 failed: optional
+migration018 ошибочно загружалась всеми fixtures и мешала двум старым
+missing-schema tests из-за новых FK. Исправлено только место загрузки — теперь
+migration018 применяется только capacity fixtures. Старые проверки не ослаблены.
+Первый empty-capacity mobile case использовал ту же запись, что desktop;
+тесты разделены по разным собственным точкам, без сброса/удаления данных.
+Первый cold PGlite case требовал lazy startup; boot перенесён в beforeEach,
+таймаут/утверждения операции не увеличены и не ослаблены.
+
+Повторная полная регрессия выполняется на новом isolated native test control DB,
+прежние fixtures сохранены. Итоговые команды/логи:
+`/workspace/spaceverse-verification/capacity-final-20261020`;
+первые результаты/сбои сохранены в `capacity-20261020` и исходных local logs.
+Итоговая полная регрессия: Root650, Business494/40files, дополнительные
+PGlite27 и E2E60 — passed. Check/parity/bundle/audits/typecheck/lint/build/
+isolation — exit0; все 28 стадий зелёные. E2E60 включает capacity4,
+empty-capacity2 и прежние54 под соответствующими режимами.
+Два старых missing-migration tests тоже прошли без ослабления проверок.
+Materialize дважды снова idempotent. Прежние семь generated diffs, включая
+server.js/universal-server.js/app.js, сохранены и восстановлены побайтово после
+root checks; молча не исправлялись, в новый код не включаются.
+
+Read-only peer review нового участка не нашёл blocking P0/P1; результаты агента
+не выдаются за мои SQL/HTTP/E2E. Технический C13 можно засчитать только после
+полной зелёной регрессии: «Самостоятельное выделение и подготовка CRM-БД из
+заранее подготовленной ёмкости; без вмешательства оператора для каждой точки».
+Это не Railway autoscale, automatic CREATE DATABASE или подтверждение production.
+C15/16/17/18/20 остаются незавершёнными. Quotas/license и пополнение fleet отдельно.
+
+Новый Draft не открывается вторым без разрешения: соблюдается правило одного
+открытого PR этой итерации. Запрошено разрешение на merge #296 с существующим
+автодеплоем из-за прямого production-запрета; до ответа продолжается отдельная
+ветка и проверки. CI/production settings/БД/устройства не менялись. Runbook и
+MODULE-MAP включены в эту ветку. `/mnt/project-files/owner-panel` не смонтирован;
+этот файл — versioned журнал, дополнительный отчёт будет сохранён в workspace.
+
+Финальная оценка v1: технический C13 PASS в ограничении подготовленной ёмкости;
+готовность реализованного кода 52% (13/25), main пока48% (12/25). Это не
+подтверждение нового production deploy, живого Эвотора или лицензии. Новый
+участок default-off и пока находится в отдельной ветке поверх #296.

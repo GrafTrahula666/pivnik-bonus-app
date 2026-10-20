@@ -4,6 +4,24 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Reserved CRM database capacity (2026-10-20, default off)
+
+`ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY=false` extends the same database
+registry with a server-configured pool of precreated dedicated targets, referenced
+only through `SPACEVERSE_TENANT_DATABASE_URL_*`. New manual Admin migration 018
+stores a resource assignment with canonical composite FK/UNIQUE constraints,
+not a second tenant model or customer table. The existing binding claim reserves
+one slot + audit atomically under an advisory lock after current account/grant /
+frozen source checks. Reads never reserve. New owners no longer require an
+env mapping per runtime. Protected URL/transport/duplicate-target checks apply
+across old explicit entries and capacity. A stored physical identity hash allows
+password rotation but refuses silent retargeting; missing/stale/corrupted slots
+are not automatically recycled. Existing bootstrap/readiness do the target work.
+No cloud API or CREATE DATABASE is added. Exhaustion maps to provisioning pending,
+with retained draft and an honest retry; no successful activation is inferred.
+Requires existing CRM/provisioning/bootstrap gates; disabled mode is unchanged.
+Runbook: `ops/SPACEVERSE-DATABASE-CAPACITY-RUNBOOK.md`.
+
 ## Empty dedicated CRM database bootstrap (2026-10-20, default off)
 
 `ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=false` extends the existing explicit

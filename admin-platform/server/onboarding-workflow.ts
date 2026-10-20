@@ -124,6 +124,9 @@ function view(row:WorkflowRow){
   }else if(['retryable_error','action_required'].includes(row.provisioning_status??'')){
     provisioning='failed';provisioningCode=row.provisioning_code??'binding_failed'
     provisioningAction='Точная привязка БД не подтверждена. Исправьте указанную причину и повторите шаг.'
+    if(row.provisioning_code==='TARGET_DATABASE_CAPACITY_EXHAUSTED'){
+      provisioning='pending';provisioningAction='Ожидаем свободную выделенную базу. Поддержке нужно пополнить резерв; ключи и данные заново вводить не нужно.'
+    }
   }else if(row.provisioning_status==='succeeded'){
     if(row.schema_status==='running'){
       provisioning=row.schema_lease_active?'verifying':'degraded';provisioningCode=row.schema_lease_active?'schema_verifying':'schema_lease_expired'

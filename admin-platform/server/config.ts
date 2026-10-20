@@ -29,6 +29,7 @@ export const config = {
   enableOnboardingInvitations: bool('ADMIN_ENABLE_ONBOARDING_INVITATIONS', false),
   enableOnboardingProvisioning: bool('ADMIN_ENABLE_ONBOARDING_PROVISIONING', false),
   enableOnboardingDatabaseBootstrap: bool('ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP', false),
+  enableOnboardingDatabaseCapacity: bool('ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY', false),
   enableOnboardingSupport: bool('ADMIN_ENABLE_ONBOARDING_SUPPORT', false),
   enableOnboardingWorkflow: bool('ADMIN_ENABLE_ONBOARDING_WORKFLOW', false),
   enableOnboardingPosProxy: bool('ADMIN_ENABLE_ONBOARDING_POS_PROXY', false),
@@ -48,6 +49,8 @@ export const isProduction = config.nodeEnv === 'production'
 
 export function validateRuntimeConfig(): void {
   if (!config.databaseUrl) throw new HttpError(500,'ADMIN_DATABASE_URL_MISSING','ADMIN_DATABASE_URL is required.')
+  if(config.enableOnboardingDatabaseCapacity&&(!config.enableOnboardingDatabaseBootstrap||!config.enableOnboardingProvisioning||!config.enableCrmOnboarding))
+    throw new HttpError(500,'ONBOARDING_DATABASE_CAPACITY_CONFIG_INVALID','Выдача базы требует включённых CRM onboarding, provisioning и empty database bootstrap.')
   if(config.enableOnboardingIntegrations)onboardingSecretBox()
   if(config.enableOnboardingProvisioning||config.enableTenantCrmReads||config.enableTenantCrmActivationChecks)validateOnboardingTargetRegistry()
   if (isProduction) {

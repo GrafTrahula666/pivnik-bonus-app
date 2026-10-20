@@ -21,6 +21,47 @@ function fakeFactory(calls:PoolConfig[],closed:string[]) {
 }
 
 describe('protected onboarding database registry',()=>{
+  it('keeps capacity completely disabled by default, including lazy metadata lookup',async()=>{
+    let reads=0
+    const registry=createOnboardingTargetRegistry({env:{ADMIN_ONBOARDING_DATABASE_CAPACITY_JSON:'invalid-disabled-value'},
+      resolveAllocation:async()=>{reads++;return null}})
+    expect(registry.capacitySlots()).toEqual([])
+    expect(await registry.resolveTargetDatabase(runtimeA)).toBeNull()
+    expect(reads).toBe(0)
+  })
+  it('resolves reserved capacity without a per-runtime secret, permits password rotation and rejects retargeting',async()=>{
+    const calls:PoolConfig[]=[],closed:string[]=[],slotKey='capacity-first'
+    const env:NodeJS.ProcessEnv={ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY:'true',
+      ADMIN_ONBOARDING_DATABASE_CAPACITY_JSON:JSON.stringify({[slotKey]:{credentialEnv:referenceA}}),
+      [referenceA]:'postgresql://tenant:synthetic-one@tenant-a.internal:5432/spaceverse_a'}
+    let allocation:ReturnType<ReturnType<typeof createOnboardingTargetRegistry>['capacitySlots']>[number]|null=null
+    const registry=createOnboardingTargetRegistry({env,poolFactory:fakeFactory(calls,closed),resolveAllocation:async()=>allocation})
+    expect(await registry.resolveTargetDatabase(runtimeA)).toBeNull();expect(calls).toHaveLength(0)
+    allocation=registry.capacitySlots()[0]!
+    expect(allocation).toMatchObject({slotKey,targetFingerprint:expect.stringMatching(/^[a-f0-9]{64}$/)})
+    expect(JSON.stringify(allocation)).not.toContain('synthetic-one')
+    const first=await registry.resolveTargetDatabase(runtimeA);expect(first).toBeTruthy()
+    env[referenceA]='postgresql://tenant:synthetic-two@tenant-a.internal:5432/spaceverse_a'
+    expect(await registry.resolveTargetDatabase(runtimeA)).not.toBe(first)
+    env[referenceA]='postgresql://tenant:must-not-leak@tenant-a.internal:5432/another_database'
+    await expect(registry.resolveTargetDatabase(runtimeA)).rejects.toMatchObject({code:'ONBOARDING_DATABASE_REGISTRY_INVALID'})
+    expect(calls).toHaveLength(2);await registry.close()
+  })
+  it.each(['reference','database'])('rejects overlap between explicit targets and capacity by %s',kind=>{
+    const env:NodeJS.ProcessEnv={ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY:'true',
+      ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON:JSON.stringify({[runtimeA]:{credentialEnv:referenceA}}),
+      ADMIN_ONBOARDING_DATABASE_CAPACITY_JSON:JSON.stringify({'capacity-first':{credentialEnv:kind==='reference'?referenceA:'SPACEVERSE_TENANT_DATABASE_URL_B'}}),
+      [referenceA]:'postgresql://tenant:synthetic@tenant.internal/dedicated',
+      SPACEVERSE_TENANT_DATABASE_URL_B:'postgresql://another:synthetic@tenant.internal:5432/dedicated'}
+    expect(()=>createOnboardingTargetRegistry({env}).validate()).toThrowError(expect.objectContaining({code:'ONBOARDING_DATABASE_REGISTRY_INVALID'}))
+  })
+  it('rejects missing configured slots and explicit-map overrides of a persisted allocation',async()=>{
+    const registry=createOnboardingTargetRegistry({env:{ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY:'true',
+      ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON:JSON.stringify({[runtimeA]:{credentialEnv:referenceA}}),
+      [referenceA]:'postgres://tenant:synthetic@tenant.internal/dedicated'},
+      resolveAllocation:async()=>({slotKey:'capacity-removed',targetFingerprint:'a'.repeat(64)})})
+    await expect(registry.resolveTargetDatabase(runtimeA)).rejects.toMatchObject({code:'ONBOARDING_DATABASE_REGISTRY_INVALID'})
+  })
   it('resolves only a referenced secret env, caches it, rotates on change and closes pools',async()=>{
     const calls:PoolConfig[]=[],closed:string[]=[]
     const env:NodeJS.ProcessEnv={

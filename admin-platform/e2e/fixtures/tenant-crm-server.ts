@@ -16,12 +16,14 @@ process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS='true'
 process.env.ADMIN_ENABLE_ONBOARDING_WORKFLOW='true'
 process.env.ADMIN_ENABLE_ONBOARDING_SUPPORT=process.env.SPACEVERSE_E2E_SUPPORT==='true'?'true':'false'
 process.env.ADMIN_ENABLE_ONBOARDING_INTEGRATIONS='false'
-process.env.ADMIN_ENABLE_ONBOARDING_PROVISIONING=process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'?'true':'false'
-process.env.ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'?'true':'false'
+const capacity=process.env.SPACEVERSE_E2E_DATABASE_CAPACITY==='true'
+process.env.ADMIN_ENABLE_ONBOARDING_DATABASE_CAPACITY=capacity?'true':'false'
+process.env.ADMIN_ENABLE_ONBOARDING_PROVISIONING=process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'||capacity?'true':'false'
+process.env.ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=process.env.ADMIN_ENABLE_ONBOARDING_PROVISIONING
 process.env.ADMIN_ENABLE_ONBOARDING_POS_PROXY='false'
 process.env.ADMIN_ENABLE_TENANT_CRM_READS=process.env.SPACEVERSE_E2E_CRM_READS==='false'?'false':'true'
 process.env.ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS=process.env.SPACEVERSE_E2E_CRM_ACTIVATION==='true'?'true':'false'
-process.env.ADMIN_ENABLE_CRM_ONBOARDING=process.env.SPACEVERSE_E2E_CRM_PREPARATION==='true'||process.env.SPACEVERSE_E2E_SUPPORT==='true'||process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'?'true':'false'
+process.env.ADMIN_ENABLE_CRM_ONBOARDING=process.env.SPACEVERSE_E2E_CRM_PREPARATION==='true'||process.env.SPACEVERSE_E2E_SUPPORT==='true'||process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'||capacity?'true':'false'
 process.env.ADMIN_PUBLIC_ORIGIN='http://127.0.0.1:5101'
 process.env.ADMIN_CSRF_SECRET='synthetic-loopback-tenant-crm-csrf-secret-123456'
 process.env.ADMIN_SECURE_COOKIES='false'
@@ -34,10 +36,11 @@ const seeded=spawnSync(process.execPath,['--import','tsx','e2e/fixtures/tenant-c
   cwd:fileURLToPath(new URL('../../',import.meta.url)),env:process.env,encoding:'utf8',timeout:60_000,
 })
 if(seeded.status!==0)throw new Error('CRM browser fixture requires SPACEVERSE_TEST_NATIVE_POSTGRES_URL pointing at the dedicated local crm_fixture test cluster.')
-const fixture=JSON.parse(seeded.stdout) as {metadataUrl:string;registry:Record<string,{credentialEnv:string}>;targets:Record<string,string>}
+const fixture=JSON.parse(seeded.stdout) as {metadataUrl:string;registry:Record<string,{credentialEnv:string}>;capacity:Record<string,{credentialEnv:string}>;targets:Record<string,string>}
 process.env.ADMIN_DATABASE_URL=fixture.metadataUrl
 process.env.ADMIN_READ_DATABASE_URL=fixture.metadataUrl
 process.env.ADMIN_ONBOARDING_DATABASE_REGISTRY_JSON=JSON.stringify(fixture.registry)
+process.env.ADMIN_ONBOARDING_DATABASE_CAPACITY_JSON=JSON.stringify(fixture.capacity)
 for(const [name,url] of Object.entries(fixture.targets))process.env[name]=url
 const {pool,readPool}=await import('../../server/db.js')
 const {closeOnboardingTargetRegistry}=await import('../../server/onboarding-database-registry.js')
