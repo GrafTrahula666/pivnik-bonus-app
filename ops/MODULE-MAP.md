@@ -4,6 +4,22 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Owner network search (2026-10-19, existing default-off workflow gate)
+
+`GET /api/admin/onboarding/venues` accepts optional `q` (up to 100 characters,
+no control characters) alongside `offset`. The existing authorized canonical/
+draft union is deduplicated, then filtered by literal case-insensitive venue or
+company name before pagination. Scope parameters and repeated parameters remain
+invalid; search cannot add a company grant. Nonempty responses echo trimmed `q`;
+the old empty-query response is unchanged. `OwnerVenues.tsx` submits explicitly,
+resets pagination, retains the applied query on refresh/load-more, and rejects
+late or mismatched-query responses. Empty search results differ from no venues.
+No target/provider queries, schema/CI/production changes or new tenant model.
+Native HTTP/SQL and built desktop/mobile tests cover 301+ matches, both owned
+companies, inaccessible companies and literal wildcard text. This retains the
+existing metadata-directory scan; performance at thousands of tenants is not
+claimed. See `ops/SPACEVERSE-OWNER-VENUE-SEARCH-RUNBOOK.md`.
+
 ## Owner list: saved CRM activation state (2026-10-19, default off)
 
 `onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary
