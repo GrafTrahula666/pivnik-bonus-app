@@ -20,6 +20,7 @@ import { AppWheelManager } from './phaseC/AppWheelManager'
 import { SettingsPage } from './phaseC/SettingsPage'
 import { AccountSecurityPanel } from './phaseC/AccountSecurity'
 import { BroadcastPage } from './phaseC/BroadcastPage'
+import {OnboardingSupportQueue} from './phaseC/OnboardingSupportQueue'
 import { DeveloperPage } from './phaseC/DeveloperPage'
 import { DemoMode } from './phaseC/DemoMode'
 import { VenueOnboarding } from './phaseC/VenueOnboarding'
@@ -109,6 +110,7 @@ export default function App(){
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
         <>
+          {isSuper&&page==='platform'&&session.capabilities.onboardingSupport&&<OnboardingSupportQueue key={'support:'+session.admin.id}/>}
           {session.capabilities.onboardingInvitationOwner&&['platform','companies','venues','overview'].includes(page)&&<OnboardingInvitations session={session}/>}
           {(isSuper||session.capabilities.onboardingAccess)&&session.capabilities.onboardingWorkflow&&['platform','companies','venues','overview'].includes(page)&&<OwnerVenues key={'venues:'+session.admin.id} refreshKey={String(ownerListRevision)} onVenue={openVenue} onDraft={id=>{setOnboardingDraftId(id);setOnboardingOpenRequest(value=>value+1);requestAnimationFrame(()=>document.querySelector('[aria-label="Подключение заведений"]')?.scrollIntoView({behavior:'smooth',block:'start'}))}}/>}
           {(isSuper||session.capabilities.onboardingAccess)&&session.capabilities.onboardingDrafts&&['platform','companies','venues','overview'].includes(page)&&<VenueOnboarding key={'wizard:'+session.admin.id} session={session} initialDraftId={onboardingDraftId} openRequest={onboardingOpenRequest} onChanged={refreshOwnerList}/>}

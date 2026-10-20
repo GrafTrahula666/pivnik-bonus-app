@@ -5,6 +5,7 @@ import './venue-onboarding.css'
 import { OnboardingProgress } from './OnboardingProgress'
 import { OnboardingPosProxy } from './OnboardingPosProxy'
 import { TenantCustomerDirectory } from './TenantCustomerDirectory'
+import {OnboardingSupport} from './OnboardingSupport'
 import { TenantCrmReadiness } from './TenantCrmReadiness'
 import { TenantCrmActivationCheck } from './TenantCrmActivationCheck'
 
@@ -854,6 +855,8 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         <button className="btn secondary" type="button" disabled={busy||uncertain||appBusy||appUncertain||scopeBusy||scopeUncertain||integrationBusy||integrationUncertain||provisioningBusy||provisioningUncertain||schemaReadinessBusy||schemaReadinessUncertain||runtimeBundleBusy||runtimeBundleUncertain} onClick={()=>{invalidateAppLoads();invalidateScopeLoads();setIntegrationToken('');setEditing(false);setNotice('');setError('');setAppError('');setAppNotice('');setScopeError('');setScopeNotice('');setIntegrationError('');setIntegrationNotice('');setProvisioningError('');setProvisioningNotice('');setSchemaReadinessError('');setSchemaReadinessNotice('');setRuntimeBundleError('');setRuntimeBundleNotice('')}}>Закрыть</button>
       </div>
     </form>}
+    {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.onboardingSupport&&
+      <OnboardingSupport actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>}
     {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmReads&&
       <div className="tenant-crm-sections">
         <TenantCrmReadiness actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
