@@ -9,7 +9,7 @@ interface Venue{
  report:{state:'available'|'unavailable';netCents:string|null;receiptCount:number|null}
  crmActivation?:CrmActivationSummary
 }
-interface Page{venues:Venue[];total:number;nextOffset:number|null}
+interface Page{venues:Venue[];total:number;nextOffset:number|null;q?:string}
 function DeveloperRequest({venue}:{venue:Venue}){
  const [message,setMessage]=useState(''),[notice,setNotice]=useState('')
  const diagnostic=['SPACEVERSE · помощь с подключением','Организация: '+venue.companyName,'Заведение: '+venue.name,
@@ -32,17 +32,23 @@ function DeveloperRequest({venue}:{venue:Venue}){
 }
 export function OwnerVenues({onDraft,onVenue,refreshKey}:{onDraft:(id:string)=>void;onVenue:(id:string)=>void;refreshKey:string}){
  const [result,setResult]=useState<Page|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ const [search,setSearch]=useState(''),[query,setQuery]=useState('')
  const sequence=useRef(0)
  const load=useCallback(async(offset=0)=>{
   const run=++sequence.current;setBusy(true);setError('')
-  try{const value=await apiGet<Page>('/api/admin/onboarding/venues?offset='+offset)
+  try{const params=new URLSearchParams({offset:String(offset)});if(query)params.set('q',query)
+   const value=await apiGet<Page>('/api/admin/onboarding/venues?'+params)
    if(run!==sequence.current)return
-   if(!Array.isArray(value.venues)||value.venues.some(venue=>!Object.hasOwn(statuses,venue.status)||
+   if((value.q??'')!==query||!Array.isArray(value.venues)||value.venues.some(venue=>!Object.hasOwn(statuses,venue.status)||
      (venue.crmActivation!==undefined&&!validCrmActivationSummary(venue.crmActivation,venue))))throw new Error('Сервер не подтвердил состояния заведений.')
    setResult(before=>({...value,venues:offset&&before?[...before.venues,...value.venues].filter((venue,index,rows)=>rows.findIndex(row=>row.kind===venue.kind&&row.id===venue.id)===index):value.venues}))
   }catch(error){if(run===sequence.current){setResult(null);setError(error instanceof Error?error.message:'Не удалось загрузить состояния.')}}
   finally{if(run===sequence.current)setBusy(false)}
- },[])
+ },[query])
+ function applySearch(value:string){
+  const next=value.trim();setSearch(next);sequence.current++;setResult(null);setError('');setBusy(true)
+  if(next===query)void load();else setQuery(next)
+ }
  useEffect(()=>{
   const counter=sequence,timer=setTimeout(()=>void load(),250)
   return()=>{clearTimeout(timer);counter.current++}
@@ -51,10 +57,16 @@ export function OwnerVenues({onDraft,onVenue,refreshKey}:{onDraft:(id:string)=>v
  const date=(value:string|null)=>value?new Date(value).toLocaleString('ru-RU'):'Нет подтверждённой активности'
  return <section className="card owner-venues" aria-label="Все заведения">
   <div className="onboarding-head"><div><span className="eyebrow">МОЯ СЕТЬ</span><h2>Заведения</h2><p>Статус подключения, последняя активность и следующий шаг.</p></div><button className="btn secondary" disabled={busy} onClick={()=>void load()}>Обновить заведения</button></div>
+  <form role="search" aria-label="Поиск по сети" onSubmit={event=>{event.preventDefault();applySearch(search)}}>
+   <label className="field"><span>Поиск заведений</span><input type="search" maxLength={100} value={search} onChange={event=>setSearch(event.target.value)} placeholder="Название заведения или организации"/></label>
+   <div className="onboarding-actions"><button className="btn secondary" type="submit">Найти заведение</button>
+    {(search||query)&&<button className="btn secondary" type="button" onClick={()=>applySearch('')}>Сбросить поиск</button>}</div>
+  </form>
   {error&&<p className="onboarding-feedback error" role="alert">{error}</p>}
   {busy&&<p role="status">Получаем состояния заведений…</p>}
   {result&&<><p>Показано {result.venues.length} из {result.total}</p>
-   {!result.venues.length&&<p>Заведений пока нет. Создайте заведение в мастере или примите приглашение.</p>}
+   {query&&<p>Результаты по запросу «{query}»</p>}
+   {!result.venues.length&&<p>{query?'По вашему запросу заведений не найдено. Измените название или сбросьте поиск.':'Заведений пока нет. Создайте заведение в мастере или примите приглашение.'}</p>}
    <ul className="owner-venue-list">{result.venues.map(venue=><li key={venue.kind+':'+venue.id} data-status={venue.status}>
     <div className="owner-venue-title"><div><b>{venue.name}</b><small>{venue.companyName}</small></div><span>{statuses[venue.status]}</span></div>
     {venue.requiresAttention&&<p className="onboarding-note"><b>Требует внимания: </b>{venue.nextAction}</p>}
