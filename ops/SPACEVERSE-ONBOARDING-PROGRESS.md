@@ -1893,3 +1893,66 @@ gates install/pay/revoke и разрешённый test contour. Следующ�
 Финальный отдельный `npm run build`: exit 0, только прежнее предупреждение
 chunk >500KB. Перед push origin/main всё ещё 93dd65d; итоговый diff ограничен
 owner search, его тестами и ops-документацией. Источник проверки/код не менялся.
+
+## 2026-10-19 — CRM preparation без обязательного гостевого оформления
+
+Пользователь просит ускориться и продолжать; ориентир общей коммерческой
+готовности был ~40%, предварительная инженерная оценка, не вывод из числа тестов.
+Свежий preflight: main 93dd65d, #292 OPEN/Draft/head 23bfe33, оба CI SUCCESS,
+рабочее дерево чистое. Ранее выполненный поиск не переделывался. Старые PR
+не объединялись. Текущий запрет production/устройств сохраняется.
+
+Новая отдельная локальная ветка `spaceverse/crm-simple-preparation-20261019`
+от main 93dd65d. Второй открытый PR пока не создаётся по правилу владельца;
+merge #292 запустил бы запрещённый сейчас production deploy. Самостоятельная
+реализация/изолированные тесты следующего шага не требуют такого merge.
+
+Лично добавлен default-off CRM preparation: владелец сохраняет venue data и
+нажимает «Подготовить CRM», без guest branding. Сервер принимает только
+draftRevision и в существующей canonical scope transaction создаёт defaults
+только для отсутствующей application config, с тем же tenant key, shop=false.
+Существующий профиль не меняется. Config/scope/audit атомарны, retries и
+concurrency возвращают одну точку; статус inactive/not_provisioned сохраняется.
+Старый scope endpoint и old wizard mode не получают новых defaults.
+
+Новая настройка `ADMIN_ENABLE_CRM_ONBOARDING=false` описана во всех трёх
+env examples; реальные env/secrets/CI/production DB/устройства не менялись.
+Миграции/вторая tenant модель не нужны. Browser восстановление после uncertain
+ответа не симулирует active. Первая focused native регрессия: 73 passed;
+новые desktop/mobile preparation E2E: 4 passed. Затем усилены SQL tests для
+scope audit rollback и ограниченного manager. Финальные проверки выполняются.
+
+Риск текущего среза P1 (новая metadata write-команда), изоляция и replay требуют
+обязательной полной регрессии. Прежние P0 коммерческого выпуска сохраняются:
+bootstrap/test contour, Market App ID/контракт/install/pay/revoke, полный E2E.
+Артефакты: `/tmp/spaceverse-crm-simple-preparation-20261019`.
+
+Окончательная регрессия: materialize ×2 idempotent/SHA256; прежний diff по
+achievements.js, app.js, index.html, red-cosmos-v2.js,
+scripts/v22-data-audit-and-repair.mjs, server.js, universal-server.js сохранён
+и после root gates восстановлен побайтово, не исправлялся молча.
+`node --test`: 632 passed /0 failed/skipped. `npm run check`, VK parity/bundle,
+root audit/full+production: exit 0, 0 vulnerabilities.
+
+Business `npm test -- --maxWorkers=1` с native PG16: 436 passed /37 files,
+0 failed/skipped. Это main baseline 427 +9 новых тестов; поиск из отдельного
+необъединённого #292 не дублировался в этой ветке. Финальные typecheck/lint:
+exit 0, прежние 12 warnings. Оба Business audit: 0 vulnerabilities.
+Новые tests на PGlite: 9 passed, включая concurrency compatibility и откат
+config/scope/company/venue при ошибке второго аудита. Native suite проверяет
+реальные row locks и одновременные запросы.
+
+Built Playwright desktop/mobile: 38 passed /0 failed/skipped — новый CRM
+preparation 4, activation 10, CRM native 6, disabled 2, cash/CRM 12, onboarding 4.
+PNG восстановлены SHA256; Admin source hashes до/после проверок совпали.
+До финального build никаких правок кода после проверки не было. Общая
+коммерческая готовность оценивается предварительно ~42%, без заявления
+подтверждённой Market activation, production rollout или автоматического DB bootstrap.
+
+Следующий reviewable результат — отдельная проверенная ветка/patch. Второй
+Draft и merge не выполняются без решения владельца по правилу одного PR.
+Текущий #292 уже зелёный и сохраняется; запрет production/устройств действует.
+
+Финальный `npm run build` exit 0 (прежний >500KB warning). До push main
+остаётся 93dd65d, source SHA256 неизменны. Рабочий срез не содержит код
+немерженного поиска #292 и не расширяет его Draft PR.

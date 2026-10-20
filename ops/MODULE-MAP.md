@@ -20,6 +20,23 @@ companies, inaccessible companies and literal wildcard text. This retains the
 existing metadata-directory scan; performance at thousands of tenants is not
 claimed. See `ops/SPACEVERSE-OWNER-VENUE-SEARCH-RUNBOOK.md`.
 
+## Standalone CRM metadata preparation (2026-10-19, default off)
+
+`ADMIN_ENABLE_CRM_ONBOARDING=false` gates POST
+`/api/admin/onboarding/drafts/:id/crm/prepare` and the corresponding wizard mode.
+The command accepts only `draftRevision`; signed session, Origin/CSRF, current
+onboarding write grants and actor rate limits are mandatory. It reuses
+`prepareOnboardingScope`'s canonical transaction/source locks. A missing existing
+app-config record is created from server defaults (venue name, shop off,
+loyalty on), with the same deterministic tenant key, then the canonical inactive
+scope is prepared atomically with audits. An existing configuration is preserved.
+Retries/concurrent identical commands return the same scope; audit failure rolls
+back profile/company/venue/scope together. No second tenant, migration, target DB
+or provider provisioning, guest bundle, launch or license is introduced.
+`VenueOnboarding.tsx` hides guest branding in this mode, submits one preparation
+command and restores actual scope after an uncertain response. Off keeps the
+previous application/scope workflow. See `SPACEVERSE-CRM-PREPARATION-RUNBOOK.md`.
+
 ## Owner list: saved CRM activation state (2026-10-19, default off)
 
 `onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary
