@@ -27,15 +27,17 @@ export function hashBroadcastMessage(message) {
   return crypto.createHash('sha256').update(String(message ?? ''), 'utf8').digest('hex');
 }
 
-export function broadcastCampaignFingerprint({ channel, audience, message }) {
+// segment narrows the audience (PIVNIK Business guest segments); without it the fingerprint is unchanged.
+export function broadcastCampaignFingerprint({ channel, audience, message, segment = '' }) {
   if (!ALLOWED_CHANNELS.has(channel)) throw new TypeError('invalid broadcast channel');
   if (!ALLOWED_AUDIENCES.has(audience)) throw new TypeError('invalid broadcast audience');
+  if (segment && !/^[a-z_]{1,32}$/.test(segment)) throw new TypeError('invalid broadcast segment');
   const messageHash = hashBroadcastMessage(message);
   return {
     messageHash,
     fingerprint: crypto
       .createHash('sha256')
-      .update(`${channel}\n${audience}\n${messageHash}`, 'utf8')
+      .update(`${channel}\n${audience}\n${messageHash}${segment ? `\n${segment}` : ''}`, 'utf8')
       .digest('hex')
   };
 }
@@ -100,9 +102,9 @@ export function createBroadcastCampaignStore(pool) {
     `);
   }
 
-  async function claim({ actorUserId, channel, audience, message, totalUsers, truncated }) {
+  async function claim({ actorUserId, channel, audience, message, segment = '', totalUsers, truncated }) {
     const actorId = positiveIntegerId(actorUserId, 'actorUserId');
-    const { messageHash, fingerprint } = broadcastCampaignFingerprint({ channel, audience, message });
+    const { messageHash, fingerprint } = broadcastCampaignFingerprint({ channel, audience, message, segment });
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

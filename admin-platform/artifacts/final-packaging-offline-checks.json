@@ -1,0 +1,32 @@
+{
+  "syntax": {
+    "exit": 0,
+    "stdout": "checked=50 syntaxErrors=0",
+    "stderr": ""
+  },
+  "frontend_typecheck_offline": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "server_typecheck_offline": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "server_tests_typecheck_offline": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "security_logic": {
+    "exit": 0,
+    "stdout": "PASS scrypt authentication primitives\nPASS tenant URL/body-independent authorization query\nPASS bonus amount/user/idempotency validation\nPASS decimal-safe wheel probability = exactly 100%\nPASS loyalty threshold invariants\nPASS server-side promotion state\nPASS Demo Mode cannot perform production API writes\nPASS additive-only migration policy\noffline-phase-c-check: 8/8 passed",
+    "stderr": ""
+  },
+  "isolation": {
+    "exit": 0,
+    "stdout": "isolation-check: PASS\nadmin runtime files=38\ncustomer runtime imports=0\ndestructive legacy migrations=0\nDemo Mode production API writes=0\nAdmin service customer API namespace=0",
+    "stderr": ""
+  }
+}

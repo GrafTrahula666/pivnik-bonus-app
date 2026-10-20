@@ -29,8 +29,11 @@ final class PrefsBindingStore implements BindingStore {
         String user = prefs.getString(prefix + "user", null);
         if (receipt == null || user == null) return null;
         try {
-            return new ReceiptBinding(receipt, user, prefs.getString(prefix + "name", ""), prefs.getLong(prefix + "at", 0));
-        } catch (IllegalArgumentException corrupt) {
+            String rawBalance = prefs.getString(prefix + "balance", null);
+            Long balance = rawBalance == null ? null : Long.valueOf(rawBalance);
+            return new ReceiptBinding(receipt, user, prefs.getString(prefix + "name", ""), prefs.getLong(prefix + "at", 0),
+                    balance, prefs.getBoolean(prefix + "unlimited", false));
+        } catch (IllegalArgumentException | ClassCastException corrupt) {
             clear(prefix);
             return null;
         }
@@ -42,6 +45,8 @@ final class PrefsBindingStore implements BindingStore {
                 .putString(prefix + "user", binding.userId)
                 .putString(prefix + "name", binding.displayName)
                 .putLong(prefix + "at", binding.boundAtMillis)
+                .putString(prefix + "balance", binding.bonusBalance == null ? null : binding.bonusBalance.toString())
+                .putBoolean(prefix + "unlimited", binding.unlimitedBonus)
                 .commit();
     }
 
@@ -51,6 +56,8 @@ final class PrefsBindingStore implements BindingStore {
                 .remove(prefix + "user")
                 .remove(prefix + "name")
                 .remove(prefix + "at")
+                .remove(prefix + "balance")
+                .remove(prefix + "unlimited")
                 .commit();
     }
 }

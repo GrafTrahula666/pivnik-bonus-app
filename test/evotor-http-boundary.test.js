@@ -41,13 +41,14 @@ async function fixture(){
 }
 async function mount(kind,pool){
  const pos=createPosHttp(pool,config);
- const globals={pool,Buffer,URL,MAX_BODY_BYTES:8192,verifySession:t=>verifySession(t,secret),effectiveRoleForAuthenticatedIdentity,ownerTelegramId:'fixture-owner',ownerVkId:'fixture-owner-vk',TERMS_VERSION:terms,createPosHttp:()=>pos};
+ const globals={pool,Buffer,URL,MAX_BODY_BYTES:8192,verifySession:t=>verifySession(t,secret),effectiveRoleForAuthenticatedIdentity,ownerTelegramId:'fixture-owner',ownerVkId:'fixture-owner-vk',TERMS_VERSION:terms,createPosHttp:()=>pos,
+  hasUnlimitedBonus:()=>false,UNLIMITED_BONUS_BALANCE:9_999_999_999_999};
  let server,dropNextLink=false;
  if(kind==='express'){
    const text=await source('server.js'),app=express();app.use(express.json());
    app.use((req,res,next)=>{const json=res.json.bind(res);res.json=payload=>{if(dropNextLink&&req.originalUrl==='/api/admin/pos/link'&&payload.ok){dropNextLink=false;req.socket.destroy();return res;}return json(payload);};next();});
    const getProfile=async(id)=>{const row=(await pool.query('SELECT * FROM users WHERE id=$1',[id])).rows[0];return row&&{id:String(row.id),role:row.role,termsAccepted:Boolean(row.terms_accepted_at&&row.terms_version===terms)};};
-   vm.runInNewContext(between(text,'async function authRequired(', '\nfunction requireRole(')+between(text,'const posHttp = createPosHttp(pool);',"\napp.get('/api/admin/summary'")+"\napp.get('/api/staff/fixture',authRequired,(_req,res)=>res.json({ok:true}));",{...globals,app,getProfile});
+   vm.runInNewContext(between(text,'async function authRequired(', '\nfunction requireRole(')+between(text,'const posHttp = createPosHttp(',"\napp.get('/api/admin/summary'")+"\napp.get('/api/staff/fixture',authRequired,(_req,res)=>res.json({ok:true}));",{...globals,app,getProfile});
    app.use((error,_req,res,_next)=>res.status(error.statusCode||500).json({error:error.message}));server=http.createServer(app);
  }else{
    const text=await source('universal-server.js');
@@ -79,6 +80,8 @@ for(const kind of ['express','gateway'])test(`${kind}: real auth and POS routes 
   const issued=await request('/api/admin/pos/devices','Bearer '+token(3),{storeId:'bar',externalDeviceId:'fixture',label:'Fixture'});assert.equal(issued.status,200);
   const device='Device '+issued.body.deviceToken;
   const resolved=await request('/api/device/pos/qr/resolve',device,{payload:'PVK-AAAA-2222'});assert.equal(resolved.status,200);assert.deepEqual(resolved.body,{client:{id:'1',firstName:'Client'}});assert.equal(resolved.cache,'no-store');
+  const proxied=(key)=>fetch(app.base+'/api/device/pos/qr/resolve',{method:'POST',headers:{authorization:'Bearer evotor-cloud-token','x-pivnik-device-key':key,'content-type':'application/json'},body:JSON.stringify({payload:'PVK-AAAA-2222'})});
+  assert.equal((await proxied(issued.body.deviceToken)).status,200);assert.equal((await proxied('pvpos_forged')).status,401);
   for(const qr of ['PVK-CCCC-4444','PVK-DDDD-5555'])assert.equal((await request('/api/device/pos/qr/resolve',device,{payload:qr})).status,404);
   assert.equal((await request('/api/device/pos/qr/resolve','Bearer '+token(3),{payload:'PVK-AAAA-2222'})).status,401);
   assert.equal((await request(dashboard,device)).status,401);assert.equal((await request('/api/staff/fixture',device)).status,401);
@@ -94,6 +97,7 @@ for(const kind of ['express','gateway'])test(`${kind}: real auth and POS routes 
   assert.deepEqual((await request(dashboard,'Bearer '+token(3))).body,report.body);
   assert.equal((await request('/api/admin/pos/devices/revoke','Bearer '+token(3),{id:issued.body.id})).status,200);
   assert.equal((await request('/api/device/pos/qr/resolve',device,{payload:'PVK-AAAA-2222'})).status,401);
+  assert.equal((await proxied(issued.body.deviceToken)).status,401);
   if(kind==='gateway'){
    assert.equal((await request(dashboard,'Bearer '+token(3,{pid:'wrong-identity'}))).status,401);
    const cross=await fetch(app.base+'/api/device/pos/qr/resolve',{method:'POST',headers:{'sec-fetch-site':'cross-site','content-type':'application/json'},body:'{}'});assert.equal(cross.status,403);

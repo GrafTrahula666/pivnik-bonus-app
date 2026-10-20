@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- SellIntegrationService.PERMISSION -->
     <uses-permission android:name="ru.evotor.permission.SELL_INTEGRATION_SERVICE" />
+    <uses-permission android:name="ru.evotor.devices.SCANNER_RECEIVER" />
 
     <queries>
         <!-- ReceiptApi.AUTHORITY / AUTHORITY_V2: read the open and closed sell receipt -->
@@ -17,6 +18,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="PIVNIK для Эвотора"
         android:usesCleartextTraffic="false">
 
@@ -26,7 +29,7 @@
             android:value="${evotorAppUuid}" />
 
         <activity
-            android:name=".SettingsActivity"
+            android:name=".CustomerScanActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -37,14 +40,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.EVOTOR" />
             </intent-filter>
+            <!-- Tile colour on the terminal home screen (HEX, never white). Key name from Evotor's
+                 "Вызов приложения из интерфейса смарт-терминала"; confirm against that page on a real till. -->
+            <meta-data
+                android:name="ru.evotor.launcher.BACKGROUND_COLOR"
+                android:value="#08040E" />
         </activity>
 
-        <!-- SellIntegrationService.ACTION_BARCODE_RECEIVED -->
-        <service
-            android:name=".PivnikSellService"
-            android:exported="true">
+        <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".RedemptionActivity" android:exported="true"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
+
+        <!-- Official receipt-discount integration: native tile beside payment options. -->
+        <service android:name=".RedemptionService" android:enabled="true" android:exported="true"
+            android:icon="@mipmap/ic_launcher_round" android:label="PIVNIK — БОНУСЫ">
+            <meta-data android:name="ru.evotor.sales_screen.BACKGROUND_COLOR" android:value="#272135" />
             <intent-filter>
-                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
+                <action android:name="evo.v2.receipt.sell.receiptDiscount" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="evo.v2.receipt.sell.beforePositionsEdited" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>

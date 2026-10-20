@@ -14,8 +14,24 @@ public class ResolveResultTest {
         assertEquals(ResolveResult.Kind.FOUND, result.kind);
         assertEquals("101", result.client.userId);
         assertEquals("Кирилл", result.client.displayName);
-        assertEquals("PIVNIK ✓ Кирилл",
+        assertNull(result.client.bonusBalance);
+        assertEquals("PIVNIK ✓ Кирилл • баланс недоступен",
                 IndicatorText.forBinding(BindingPolicy.Outcome.BOUND, result.client, ""));
+    }
+
+    @Test
+    public void walletSnapshotIsSeparateFromIdentityAndNeverAuthorizesSpending() {
+        ResolveResult result = ResolveResult.fromHttp(200,
+                "{\"client\":{\"id\":\"101\",\"firstName\":\"Кирилл\"},\"wallet\":{\"balance\":123,\"unlimited\":false}}");
+        assertEquals(ResolveResult.Kind.FOUND, result.kind);
+        assertEquals(Long.valueOf(123), result.client.bonusBalance);
+        assertEquals("PIVNIK ✓ Кирилл • баллы: 123", IndicatorText.forBinding(BindingPolicy.Outcome.BOUND, result.client, ""));
+        for (String wallet : new String[] {"null", "{}", "{\"balance\":-1,\"unlimited\":false}",
+                "{\"balance\":1.5,\"unlimited\":false}", "{\"balance\":9007199254740992,\"unlimited\":false}",
+                "{\"balance\":123,\"unlimited\":\"false\"}"}) {
+            assertEquals(ResolveResult.Kind.UNAVAILABLE, ResolveResult.fromHttp(200,
+                    "{\"client\":{\"id\":\"101\"},\"wallet\":" + wallet + "}").kind);
+        }
     }
 
     @Test
