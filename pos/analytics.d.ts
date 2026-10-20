@@ -12,6 +12,9 @@ export interface PosSummary {
   repeatPurchaseRate?: number | null; purchaseFrequency?: number | null;
   days: Array<{label: string; amountCents: string}>;
   payments: Array<{label: string; amountCents: string}>;
+  // Already calculated by pos/analytics.js; optional for older report fixtures/clients.
+  hours?: Array<{label: string; amountCents: string}>;
+  products?: Array<{name: string; measure: string; quantityMillis: string; salesCents: string; returnCents: string; netCents: string}>;
 }
 export function posDashboards(documents: PosDocument[]): {
   all: PosSummary; app: PosSummary; unlinked: PosSummary; linkedRevenueSharePercent: number | null;

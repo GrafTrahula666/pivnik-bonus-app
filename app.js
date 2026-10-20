@@ -779,7 +779,8 @@ async function loadWheelHistory() {
 }
 
 function visualSectorForPrize(code) {
-  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === code);
+  const sectorCode = code === 'halloween-ticket' ? 'beer-glass' : code;
+  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === sectorCode);
   if (!candidates.length) return WHEEL_VISUAL_SECTORS[0];
   const randomIndex = globalThis.crypto?.getRandomValues
     ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % candidates.length
@@ -801,6 +802,16 @@ function waitForWheelStop(disk) {
   });
 }
 
+// The Halloween wheel art has the pumpkin tickets on the same five sectors where the glass of beer sits.
+const HALLOWEEN_WHEEL_ART = '/assets/home-v2/wheel-halloween-night-20261010.webp';
+function applyHalloweenWheelArt(on) {
+  const disk = document.getElementById('wheelDisk');
+  if (!disk) return;
+  if (!disk.dataset.defaultSrc) disk.dataset.defaultSrc = disk.getAttribute('src') || '';
+  const src = on ? HALLOWEEN_WHEEL_ART : disk.dataset.defaultSrc;
+  if (src && disk.getAttribute('src') !== src) disk.setAttribute('src', src);
+}
+
 function wheelPrizeDisplayTitle(prize) {
   const titles = {
     'bonus-5': '5 бонусов',
@@ -809,6 +820,7 @@ function wheelPrizeDisplayTitle(prize) {
     'bonus-50': '50 бонусов',
     'bonus-100': '100 бонусов',
     'beer-glass': 'Бокал пива',
+    'halloween-ticket': 'Хэллоуинский билет',
     'annual-beer': 'Годовой запас пива'
   };
   return titles[String(prize?.code || '')] || 'Приз зачислен';
@@ -895,6 +907,10 @@ async function spinWheel() {
     $('#wheelResultKicker').textContent = 'Ваш приз';
     $('#wheelResultTitle').textContent = wheelPrizeDisplayTitle(data.spin?.prize);
     loadWheelHistory().catch(() => {});
+    if (data.spin?.prize?.code === 'halloween-ticket') {
+      $('#wheelResultTitle').textContent = 'Хэллоуинский билет +1';
+      refreshHalloweenSummary();
+    }
     $('#wheelRim').classList.add('wheel-win');
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
@@ -1164,7 +1180,9 @@ function renderHalloween(summary) {
   const tickets = $('#halloweenTickets');
   const timer = $('#halloweenTimer');
   const invites = $('#halloweenInviteCount');
-  if (tickets) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  // Keep the last known count while a refresh is in flight so the counter does not flash 0.
+  if (tickets && (summary || !tickets.dataset.known)) tickets.textContent = String(Math.max(0, Number(summary?.tickets) || 0));
+  if (tickets && summary) tickets.dataset.known = '1';
   if (summary?.invite) halloweenInvite = summary.invite;
   const limit = Number(halloweenInvite?.weekLimit) || 3;
   if (invites) invites.textContent = `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}`;
@@ -1289,8 +1307,24 @@ async function applyHalloweenCode() {
 }
 
 // Full-screen promo banner: shown on every app open at most once an hour, only after the app has fully loaded, the terms are accepted and no other
-// window is open. The art is set in HALLOWEEN_BANNER.src; its drawn "Войти в сезон" button opens the cauldrons tab.
-const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-autumn-season.webp?v=2', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+// window is open. The art is set in HALLOWEEN_BANNER.src; the days and the ticket count are written over its two windows.
+const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-nights-countdown.webp?v=1', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+// The night starts at 19:00 Moscow time, as the art says; the left window counts whole days to it.
+const HALLOWEEN_EVENT_START = '2026-10-31T19:00:00+03:00';
+function daysWord(n) {
+  const last2 = n % 100;
+  const last = n % 10;
+  if (last === 1 && last2 !== 11) return 'день';
+  if (last >= 2 && last <= 4 && (last2 < 12 || last2 > 14)) return 'дня';
+  return 'дней';
+}
+function fillPromoBanner(tickets) {
+  const days = Math.max(0, Math.floor((Date.parse(HALLOWEEN_EVENT_START) - Date.now()) / 86400000));
+  const daysEl = $('#promoBannerDays');
+  const ticketsEl = $('#promoBannerTickets');
+  if (daysEl) daysEl.textContent = days > 0 ? `${days} ${daysWord(days)}` : 'сегодня';
+  if (ticketsEl) ticketsEl.textContent = tickets == null ? '–' : String(Math.max(0, Number(tickets) || 0));
+}
 let promoBannerTimer = 0;
 function promoBannerDue() {
   if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
@@ -1306,15 +1340,19 @@ function schedulePromoBanner(delayMs = 1200) {
     if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
     const image = $('#promoBannerImage');
     if (!image) return;
-    const show = () => {
+    // The ticket count is read fresh on every open, so the banner never shows last session's number.
+    const ticketsReady = api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }).then((s) => s?.tickets).catch(() => null);
+    const show = async () => {
       image.onload = null;
       image.onerror = null;
+      const tickets = await ticketsReady;
       // The image may take a moment; never open over a window the user opened meanwhile.
       if (!promoBannerDue()) return;
       if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
       safeStorage.set(`pivnik_banner_${HALLOWEEN_BANNER.key}`, String(Date.now()));
       const banner = $('#promoBanner');
       if (!banner) return;
+      fillPromoBanner(tickets);
       banner.hidden = false;
       banner.classList.add('open');
       banner.setAttribute('aria-hidden', 'false');
@@ -1376,6 +1414,7 @@ function applyDesign(design) {
   // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
   root.classList.toggle('theme-halloween', design.theme === 'halloween');
   applyHalloweenCopy(design.theme === 'halloween');
+  applyHalloweenWheelArt(design.theme === 'halloween');
   if (design.theme === 'halloween' && bootCompleted && document.readyState === 'complete') schedulePromoBanner();
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
@@ -3818,7 +3857,6 @@ $('#halloweenShareCode')?.addEventListener('click', () => { void shareHalloweenI
 $('#halloweenApplyCode')?.addEventListener('click', () => { void applyHalloweenCode(); });
 $('#halloweenCodeInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void applyHalloweenCode(); });
 $('#promoBannerClose')?.addEventListener('click', closePromoBanner);
-$('#promoBannerCta')?.addEventListener('click', () => { closePromoBanner(); void openHalloweenPage(); });
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));

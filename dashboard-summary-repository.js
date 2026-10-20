@@ -1,3 +1,5 @@
+import { requireSpaceverseTenantContext, SpaceverseRuntimeError } from './spaceverse-runtime-manifest.js';
+
 function normalizeScopeId(value, name) {
   if (value === null || value === undefined || value === '') {
     throw new TypeError(`${name} is required`);
@@ -70,6 +72,26 @@ export function createSqlDashboardSummaryRepository({ query }) {
     }
 
     return Object.freeze({ ...result.rows[0] });
+  };
+}
+
+/**
+ * Tenant-runtime adapter. The caller cannot provide or replace scope: it is
+ * captured from the manifest plus dedicated-database binding verified during
+ * preflight. This stays unwired while tenant startup is deliberately blocked.
+ */
+export function createSpaceverseDashboardSummaryRepository({ query, runtime }) {
+  const context = requireSpaceverseTenantContext(runtime);
+  const loadScoped = createSqlDashboardSummaryRepository({ query });
+
+  return async function loadSpaceverseDashboardSummary(...requestScope) {
+    if (requestScope.length !== 0) {
+      throw new SpaceverseRuntimeError(
+        'SPACEVERSE_RUNTIME_REQUEST_SCOPE_FORBIDDEN',
+        'SPACEVERSE tenant scope cannot be supplied by a request.'
+      );
+    }
+    return loadScoped({ tenantId: context.tenantId, locationId: context.locationId });
   };
 }
 

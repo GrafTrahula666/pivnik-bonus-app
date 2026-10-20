@@ -3,8 +3,8 @@ import { createPosDeviceService } from './devices.js';
 import { evotorConfig } from './evotor-client.js';
 import { posError } from './scope.js';
 
-export function createPosHttp(pool, config = evotorConfig(), clock = Date.now) {
-  const sales = createPosService(pool, config), devices = createPosDeviceService(pool, config);
+export function createPosHttp(pool, config = evotorConfig(), clock = Date.now, loyaltyPolicy) {
+  const sales = createPosService(pool, config), devices = createPosDeviceService(pool, config, loyaltyPolicy);
   // Tills are limited per device after the key is checked; failed keys per client address in a
   // separate map, so anonymous traffic can never use up a till's budget.
   const deviceWindows = new Map(), failedWindows = new Map();
@@ -32,13 +32,15 @@ export function createPosHttp(pool, config = evotorConfig(), clock = Date.now) {
     return ++entry.count > 30;
   };
   return {
-    async device({ method, pathname, authorization, body, address }) {
-      const routes = { '/api/device/pos/qr/resolve': 'resolveFor', '/api/device/pos/receipts/bind': 'bindFor' };
+    async device({ method, pathname, authorization, deviceKey, body, address }) {
+      const routes = { '/api/device/pos/qr/resolve': 'resolveFor', '/api/device/pos/receipts/bind': 'bindFor',
+        '/api/device/pos/redemptions': 'redemptionFor' };
       if (method !== 'POST' || !Object.hasOwn(routes, pathname)) throw posError(404, 'pos_route_not_found', 'POS API не найден.');
       boundedBody(body);
       let device;
       try {
-        device = await devices.authenticate(authorization);
+        // Behind the Evotor cloud proxy Authorization carries Evotor's token, so the till's own header wins.
+        device = await devices.authenticate(deviceKey ? `Device ${String(deviceKey).trim()}` : authorization);
       } catch (error) {
         if (error.statusCode === 401 && recordFailure(address)) throw tooMany();
         throw error;

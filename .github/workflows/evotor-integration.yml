@@ -1,7 +1,7 @@
 name: Evotor integration draft checks
 on:
   pull_request:
-    paths: ['evotor-bridge/**', 'pos/**', 'migrations/013_evotor_pos_scope_devices.sql', '.github/workflows/evotor-integration.yml']
+    paths: ['evotor-bridge/**', 'pos/**', 'migrations/013_evotor_pos_scope_devices.sql', 'migrations/014_evotor_bonus_accrual.sql', 'migrations/023_evotor_redemptions.sql', 'scripts/check-evotor-redemption-concurrency.mjs', 'scripts/evotor-redemption-setup.mjs', 'test/evotor-*.test.js', 'test/fixtures/evotor*', '.github/workflows/evotor-integration.yml']
   push:
     branches: ['feat/evotor-scoped-integration-20261006']
 permissions:
@@ -10,6 +10,30 @@ concurrency:
   group: evotor-integration-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  financial-concurrency:
+    name: PostgreSQL reservation and refund concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: evotor_redemption_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-fixture-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/check-evotor-redemption-concurrency.mjs
+        env:
+          PIVNIK_TEST_DATABASE_URL: postgres://postgres:disposable-fixture-only@127.0.0.1:5432/evotor_redemption_test
   bridge:
     name: JVM tests and unsigned release compile only
     runs-on: ubuntu-latest
@@ -30,10 +54,46 @@ jobs:
       - name: Test and compile without generating or replacing any APK signing key
         working-directory: evotor-bridge
         run: gradle :app:testReleaseUnitTest :app:assembleRelease --stacktrace
+      - name: Verify native guest and payment integrations in the built manifest
+        run: |
+          set -euo pipefail
+          apk=evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/evotor-manifest.txt"
+          for value in 'RedemptionActivity' 'RedemptionService' 'evo.v2.receipt.sell.receiptDiscount' 'evo.v2.receipt.sell.beforePositionsEdited'; do
+            grep -Fq "$value" "$RUNNER_TEMP/evotor-manifest.txt"
+          done
+          if grep -Fq 'ru.evotor.event.sell.BARCODE_RECEIVED' "$RUNNER_TEMP/evotor-manifest.txt"; then
+            echo '::error::Customer QR must be handled in the bonus window, not product lookup.'
+            exit 1
+          fi
+          for value in 'evotor.intent.action.receipt.sell.OPENED' 'evotor.intent.action.receipt.sell.CLEARED' 'evotor.intent.action.receipt.sell.RECEIPT_CLOSED'; do
+            grep -Fq "$value" "$RUNNER_TEMP/evotor-manifest.txt"
+          done
+      - name: Record the exact source and unsigned APK identity
+        run: |
+          python - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          root=Path('evotor-bridge/app/build/outputs/apk/release')
+          apk=root/'app-release-unsigned.apk'
+          info={'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+                'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),
+                'unsignedSha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+                'version':'1.0.17','versionCode':21,'hardwareVerified':False}
+          (root/'build-provenance.json').write_text(json.dumps(info,indent=2)+'\n')
+          print(json.dumps(info))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: evotor-jvm-reports
           path: evotor-bridge/app/build/reports/tests/
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-evotor-1.0.17-pr-unsigned-not-for-installation
+          path: |
+            evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
+            evotor-bridge/app/build/outputs/apk/release/build-provenance.json
+          if-no-files-found: error
 # No APK is published, no signing secrets, no device install or production action.

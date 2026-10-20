@@ -14,6 +14,35 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
     expect(range.from.toISOString()).toBe('2026-10-01T21:00:00.000Z')
     expect(range.to.toISOString()).toBe('2026-10-02T21:00:00.000Z')
   })
+  it('selects yesterday and arbitrary valid calendar days with exclusive Moscow midnight bounds',()=>{
+    const now=new Date('2026-10-10T21:30:00Z') // Already October 11 in Moscow.
+    for(const date of ['2026-10-10','2026-09-30','2024-02-29']){
+      const selected=evotorPeriod(new URL('https://fixture.invalid/?date='+date),now)
+      expect(selected.from.getTime()).toBe(Date.parse(date+'T00:00:00+03:00'))
+      expect(selected.to.getTime()-selected.from.getTime()).toBe(86400000)
+      expect(selected.days).toBe(1)
+    }
+    const fortnight=evotorPeriod(new URL('https://fixture.invalid/?days=14'),now)
+    expect(fortnight.from.toISOString()).toBe('2026-09-27T21:00:00.000Z')
+    expect(fortnight.to.toISOString()).toBe('2026-10-11T21:00:00.000Z')
+    expect(fortnight.days).toBe(14)
+    for(const date of ['','2026-02-29','2026-04-31','2026-10-12','not-a-date','2026-1-1','2026-10-10T00:00:00Z']){
+      expect(()=>evotorPeriod(new URL('https://fixture.invalid/?date='+date),now)).toThrowError(expect.objectContaining({statusCode:400,code:'INVALID_PERIOD'}))
+    }
+  })
+  it('accepts inclusive comparison ranges and rejects reversed, ambiguous, malformed or excessive ranges',()=>{
+    const now=new Date('2026-10-11T10:00:00Z')
+    const selected=evotorPeriod(new URL('https://fixture.invalid/?from=2026-09-01&to=2026-09-07'),now)
+    expect(selected.from.toISOString()).toBe('2026-08-31T21:00:00.000Z')
+    expect(selected.to.toISOString()).toBe('2026-09-07T21:00:00.000Z')
+    expect(selected.days).toBe(7)
+    expect(evotorPeriod(new URL('https://fixture.invalid/?from=2024-01-01&to=2024-12-31'),now).days).toBe(366)
+    for(const query of ['from=2026-09-08&to=2026-09-07','from=2026-09-01','to=2026-09-07',
+      'from=2026-02-30&to=2026-03-02','from=2024-01-01&to=2025-01-01',
+      'from=2026-10-11&to=2026-10-12','date=2026-10-01&from=2026-09-01&to=2026-09-07']){
+      expect(()=>evotorPeriod(new URL('https://fixture.invalid/?'+query),now)).toThrowError(expect.objectContaining({statusCode:400,code:'INVALID_PERIOD'}))
+    }
+  })
   it('resolves company access first and selects only an explicit company/venue store mapping',async()=>{
     const db=new PGlite()
     try{
@@ -29,7 +58,9 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       await db.exec(`INSERT INTO pos_store_bindings VALUES('a','10','101',TRUE),('b','20','202',TRUE);
         INSERT INTO pos_sync_state(store_id,last_success_at) VALUES('a',NOW()),('b',NOW());`)
       const doc=(id:string,storeId:string,amount:number,type='SELL',baseDocumentId:string|null=null)=>({source:'evotor',documentId:id,storeId,closedAt:'2026-10-02T10:00:00Z',type,amountCents:amount,receiptCount:1,linkable:true,positions:[],payments:[{type:'CASH',method:'',amountCents:amount}],baseDocumentId})
-      for(const d of [doc('linked','a',11000),doc('anonymous','a',19000),doc('return','a',1000,'PAYBACK','linked'),doc('foreign','b',99000)]){
+      for(const d of [doc('linked','a',11000),doc('anonymous','a',19000),doc('return','a',1000,'PAYBACK','linked'),doc('foreign','b',99000),
+        {...doc('before','a',88000),closedAt:'2026-10-01T20:59:59.999Z'},
+        {...doc('after','a',77000),closedAt:'2026-10-02T21:00:00.000Z'}]){
         await db.query(`INSERT INTO pos_documents(source,store_id,document_id,type,closed_at,amount_cents,snapshot)
           VALUES('evotor',$1,$2,$3,$4,$5,$6::jsonb)`,[d.storeId,d.documentId,d.type,d.closedAt,d.amountCents,JSON.stringify(d)])
       }
@@ -42,6 +73,14 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       expect(report.unlinked?.salesCents).toBe('19000')
       expect(report.all).not.toHaveProperty('activeBuyers')
       expect(report.app?.activeBuyers).toBe(1)
+      const historical=await getEvotorReport(db,scope,evotorPeriod(new URL('https://fixture.invalid/?date=2026-10-02'),new Date('2026-10-11T12:00:00Z')))
+      expect(historical.all?.netCents).toBe('29000')
+      expect(historical.all?.hours).toEqual([{label:'13',amountCents:'29000'}])
+      expect(historical.period.from).toBe('2026-10-01T21:00:00.000Z')
+      const compared=await getEvotorReport(db,scope,evotorPeriod(new URL('https://fixture.invalid/?from=2026-10-01&to=2026-10-02'),new Date('2026-10-11T12:00:00Z')))
+      expect(compared.all?.salesCents).toBe('118000')
+      expect(compared.all?.netCents).toBe('117000')
+      expect(compared.app?.salesCents).toBe('11000')
       expect((await getEvotorReport(db,{...scope,id:'202'},range)).all).toBeNull()
       expect((await getEvotorReport(db,{...scope,companyId:'20'},range)).all).toBeNull()
       await db.query("UPDATE pos_store_bindings SET enabled=FALSE WHERE store_id='a'")

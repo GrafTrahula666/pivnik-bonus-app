@@ -1,3 +1,6 @@
+import { registerWalletRoutes } from './routes/wallet.js';
+import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
 import { createPosHttp } from './pos/http.js';
 import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
 import { evotorConfig } from './pos/evotor-client.js';
@@ -39,6 +42,7 @@ import {
   validateTelegramInitData as validateCoreTelegramInitData,
   verifySession as verifyCoreSession
 } from './platform-core.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
 import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
@@ -106,7 +110,20 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
+let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
+app.use((req, res, next) => {
+  if (!spaceverseCustomerHttp) return next();
+  (async () => {
+    if (spaceversePosHttp && await spaceversePosHttp(req, res)) return true;
+    return spaceverseCustomerHttp(req, res);
+  })().then(handled => { if (!handled) next(); }).catch(next);
+});
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
+
+// Standalone minigame, served as a static page. Not linked from the app shell,
+// the wheel or bonuses — no API/auth wiring, just the page and its images.
+app.use('/run', express.static(path.join(__dirname, 'minigames', 'pivnik-run'), { maxAge: '1h' }));
 
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
@@ -2096,28 +2113,10 @@ app.post('/api/shop/inquiries', authRequired, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-app.get('/api/wallet/config', authRequired, async (_req, res) => {
-  res.json({
-    appleAvailable: Boolean(appleWalletIssuerUrl),
-    googleAvailable: Boolean(googleWalletIssuerUrl),
-    fallbackAvailable: true
-  });
-});
-
-app.get('/api/wallet/apple', authRequired, async (req, res) => {
-  if (!appleWalletIssuerUrl) return res.status(503).json({ error: 'Apple Wallet ещё не подключён владельцем.' });
-  const url = new URL(appleWalletIssuerUrl);
-  url.searchParams.set('user', req.user.id);
-  url.searchParams.set('token', req.user.qrShortCode || '');
-  res.json({ url: url.toString() });
-});
-
-app.get('/api/wallet/google', authRequired, async (req, res) => {
-  if (!googleWalletIssuerUrl) return res.status(503).json({ error: 'Google Wallet ещё не подключён владельцем.' });
-  const url = new URL(googleWalletIssuerUrl);
-  url.searchParams.set('user', req.user.id);
-  url.searchParams.set('token', req.user.qrShortCode || '');
-  res.json({ url: url.toString() });
+registerWalletRoutes(app, {
+  authRequired,
+  appleWalletIssuerUrl,
+  googleWalletIssuerUrl
 });
 
 app.get('/api/halloween/summary', authRequired, async (req, res, next) => {
@@ -2866,11 +2865,14 @@ function startPosBonusWorker() {
   setTimeout(tick, 5000).unref();
   console.log(`Evotor bonus worker: every ${bonus.syncSeconds}s for store ${config.storeId}`);
 }
-const posHttp = createPosHttp(pool);
+const posHttp = createPosHttp(pool, undefined, Date.now, {
+  isUnlimited: hasUnlimitedBonus, unlimitedBalance: UNLIMITED_BONUS_BALANCE
+});
 app.use('/api/device/pos', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,
       pathname: req.originalUrl.split('?')[0], authorization: req.headers.authorization,
+      deviceKey: req.headers['x-pivnik-device-key'],
       body: req.body, address: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress }));
   } catch (error) { next(error); }
 });
@@ -3971,6 +3973,23 @@ app.use((error, _req, res, _next) => {
     : (process.env.NODE_ENV === 'production' ? 'Внутренняя ошибка сервера.' : error.message);
   res.status(500).json({ error: message });
 });
+
+try {
+  const runtime = await guardSpaceverseRuntimeStartup({
+    environment: process.env,
+    query: (text, params) => pool.query(text, params)
+  });
+  if (runtime.mode === 'tenant') {
+    spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
+    spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
+      sessionSecret: process.env.SESSION_SECRET || '', telegramBotToken: botToken,
+      vkAppId: process.env.VK_APP_ID || '', vkAppSecret: process.env.VK_APP_SECRET || '' });
+  }
+} catch (error) {
+  console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+  await pool.end().catch(() => {});
+  process.exit(1);
+}
 
 await initDatabase();
 startRuntimeConfigRefresh(pool);

@@ -19,6 +19,12 @@ export const DEFAULT_WHEEL_NEXT_PAID_COST = 100;
 const WHEEL_JACKPOT_CODE = 'annual-beer';
 // The jackpot's single ticket is taken from this prize's share; a failed jackpot gate also lands here.
 const WHEEL_FALLBACK_CODE = 'beer-glass';
+export const HALLOWEEN_TICKET_PRIZE_CODE = 'halloween-ticket';
+// While the Halloween theme is published the whole beer-glass share (its chance and the failed-jackpot
+// fallback) pays one pumpkin ticket for the Night of Cauldrons draw instead of a glass of beer.
+export const HALLOWEEN_TICKET_PRIZE = Object.freeze({
+  code: HALLOWEEN_TICKET_PRIZE_CODE, title: 'Хэллоуинский билет', tickets: 0, bonus: 0, beerMl: 0, annualSupply: false, halloweenTicket: true
+});
 const TICKETS_PER_HUNDREDTH = WHEEL_TICKET_COUNT / 10_000;
 const MAX_PAID_COST = 10_000;
 const MAX_FREE_INTERVAL_HOURS = 168;
@@ -123,7 +129,16 @@ export function selectWheelPrize(ticket) {
   throw new Error('Wheel prize table does not cover every ticket.');
 }
 
-export function drawWheelPrize(randomInt = crypto.randomInt) {
+export function halloweenWheelPrize(prize, halloween) {
+  return halloween && prize?.code === WHEEL_FALLBACK_CODE ? { ...HALLOWEEN_TICKET_PRIZE, tickets: prize.tickets } : prize;
+}
+
+export function drawWheelPrize(randomInt = crypto.randomInt, { halloween = false } = {}) {
+  const drawn = drawBasePrize(randomInt);
+  return { ticket: drawn.ticket, prize: halloweenWheelPrize(drawn.prize, halloween) };
+}
+
+function drawBasePrize(randomInt) {
   const ticket = randomInt(0, WHEEL_TICKET_COUNT);
   const candidate = selectWheelPrize(ticket);
   if (!candidate.annualSupply) return { ticket, prize: candidate };
