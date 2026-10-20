@@ -2,11 +2,18 @@ export function evotorConfig(env = process.env) {
   return { enabled: env.PIVNIK_POS_ENABLED === 'true', token: env.EVOTOR_API_TOKEN || '', storeId: env.EVOTOR_STORE_ID || '' };
 }
 
-export async function fetchEvotorPage({ token, storeId, cursor, until, fetchImpl = fetch }) {
+export async function fetchEvotorPage({ token, storeId, cursor, until, since, fetchImpl = fetch }) {
   if (!token || !storeId) throw Object.assign(new Error('Касса не подключена.'), { code: 'not_configured' });
   const url = new URL(`https://api.evotor.ru/stores/${encodeURIComponent(storeId)}/documents`);
   if (cursor) url.searchParams.set('cursor', cursor);
-  else { url.searchParams.set('type', 'SELL,PAYBACK'); url.searchParams.set('until', String(new Date(until).getTime())); }
+  else {
+    url.searchParams.set('type', 'SELL,PAYBACK'); url.searchParams.set('until', String(new Date(until).getTime()));
+    if (since != null) {
+      const start = new Date(since).getTime();
+      if (!Number.isFinite(start)) throw Object.assign(new Error('Invalid recent scan start.'), { code: 'invalid_since' });
+      url.searchParams.set('since', String(start));
+    }
+  }
   let response;
   try {
     response = await fetchImpl(url, {
