@@ -5,6 +5,7 @@ const {tenantCrmFixture}=await import('../../server/tests/tenant-crm-fixture.js'
 const fixture=process.env.SPACEVERSE_E2E_CRM_ACTIVATION==='true'
   ?await (await import('../../server/tests/tenant-crm-activation-fixture.js')).tenantCrmActivationFixture():await tenantCrmFixture()
 try{
+  if(process.env.SPACEVERSE_E2E_OWNER_SEARCH==='true')await (await import('../../server/tests/owner-venue-search-fixture.js')).seedOwnerVenueSearch(fixture.metadata)
   await fixture.metadata.exec(`CREATE TABLE users(id BIGINT PRIMARY KEY,role TEXT,merged_into_user_id BIGINT,deleted_at TIMESTAMPTZ);
     CREATE TABLE bar_customers(bar_id BIGINT,user_id BIGINT,status TEXT)`)
   const registry:Record<string,{credentialEnv:string}>={},targets:Record<string,string>={}

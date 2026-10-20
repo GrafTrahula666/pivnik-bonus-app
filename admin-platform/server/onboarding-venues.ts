@@ -12,9 +12,11 @@ interface DraftRow extends QueryResultRow{
  id:string;venue_id:string|null;company_id:string|null;company_name:string;venue_name:string;updated_at:string
 }
 const severity:Record<string,number>={failed:5,degraded:4,suspended:3,verifying:2,pending:1,not_configured:0}
-export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string|null){
+export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string|null,rawQuery:string|null=null){
  await requireWorkflow(admin)
  if(rawOffset!==null&&!/^(0|[1-9][0-9]{0,5})$/.test(rawOffset))throw new HttpError(400,'ONBOARDING_VENUE_PAGE_INVALID','Откройте список заведений заново.')
+ if(rawQuery!==null&&(rawQuery.length>100||Array.from(rawQuery).some(character=>{const code=character.codePointAt(0)!;return code<=31||code===127})))throw new HttpError(400,'ONBOARDING_VENUE_SEARCH_INVALID','Введите название заведения или организации — до 100 символов.')
+ const query=rawQuery?.trim()??'',needle=query.normalize('NFC').toLocaleLowerCase('ru')
  const offset=Number(rawOffset??0),limit=25
  try{
   // Canonical venue resolver retains existing active-venue access. Draft access
@@ -33,6 +35,9 @@ export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string
     companyId:row.company_id,companyName:row.company_name,name:row.venue_name,updatedAt:row.updated_at})),
    ...legacy.filter(venue=>!prepared.has(venue.id)).map(venue=>({kind:'existing' as const,id:venue.id,venueId:venue.id,
     companyId:venue.companyId,companyName:venue.companyName,name:venue.name,updatedAt:null}))]
+   // Filter only authorized, deduplicated entries and before pagination. Search
+   // is a literal substring: %, _ and SQL-like text never widen visibility.
+   .filter(entry=>!needle||[entry.name,entry.companyName].some(value=>value.normalize('NFC').toLocaleLowerCase('ru').includes(needle)))
    .sort((a,b)=>a.companyName.localeCompare(b.companyName,'ru')||a.name.localeCompare(b.name,'ru')||a.kind.localeCompare(b.kind)||a.id.localeCompare(b.id))
   const page=[]
   for(const entry of entries.slice(offset,offset+limit)){
@@ -84,6 +89,6 @@ export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string
     throw error
    }
   }
-  return {venues:page,total:entries.length,offset,limit,nextOffset:offset+limit<entries.length?offset+limit:null}
+  return {venues:page,total:entries.length,offset,limit,nextOffset:offset+limit<entries.length?offset+limit:null,...(query?{q:query}:{})}
  }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(503,'ONBOARDING_VENUES_UNAVAILABLE','Не удалось подтвердить состояния заведений. Обновите список; прежний статус не считается текущим.')}
 }

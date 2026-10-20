@@ -5,6 +5,7 @@ import { createPosHttp } from './pos/http.js';
 import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
 import { evotorConfig } from './pos/evotor-client.js';
 import { syncEvotor } from './pos/sync.js';
+import { syncEvotorRecent } from './pos/recent-sync.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -1383,8 +1384,8 @@ async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
       status: response.status,
       messageId: payload?.result?.message_id ?? null
     };
-  } catch (error) {
-    console.error('Telegram sendMessage error:', error.message);
+  } catch {
+    console.error('Telegram sendMessage error:', 'telegram_network_error');
     return { ok: false, status: 0, error: 'telegram_network_error' };
   }
 }
@@ -2265,8 +2266,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
         beerMl
       });
       await client.query('COMMIT');
-      await syncUserAchievements(pool, existing.rows[0].client_id);
       await halloweenAfterPurchase(existing.rows[0].id);
+      await syncUserAchievements(pool, existing.rows[0].client_id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id)
@@ -2342,8 +2343,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       [newPaidMl, newGiftBalanceMl, targetUser.id]
     );
     await client.query('COMMIT');
-    await syncUserAchievements(pool, targetUser.id);
     await halloweenAfterPurchase(persistedTransaction?.id);
+    await syncUserAchievements(pool, targetUser.id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
 
     const tx = persistedTransaction;
     const beerText = beerMl > 0
@@ -2836,6 +2837,11 @@ const posBonusLedger = {
 };
 
 async function runPosBonusCycle(config, storeId) {
+  try {
+    await syncEvotorRecent({ pool, config });
+  } catch (error) {
+    console.warn('Evotor recent sync skipped:', error.code || error.name);
+  }
   try {
     await syncEvotor({ pool, config, maxPages: 5 });
   } catch (error) {

@@ -118,15 +118,15 @@ test('code parsing accepts inv_ prefix and the signed Telegram start_param', () 
   assert.equal(inviteCodeFromStartParam(''), null);
 });
 
-test('summary falls back without the migration: 200-style payload, zero tickets, invite object', async () => {
+test('missing schema is unavailable with no fabricated balance, invite code or link', async () => {
   const db = await baseDb();
   const u = await addUser(db);
   const s = await summary(db, u);
   assert.deepEqual(s, {
-    tickets: 0, status: 'open', closesAt: '2026-10-31T20:00:00+03:00',
+    available: false, tickets: null, status: 'unavailable', closesAt: '2026-10-31T20:00:00+03:00',
     invite: {
-      code: deriveInviteCode(SECRET, u), weekCount: 0, weekLimit: 3, bonusPerFriend: 100,
-      links: inviteLinks(deriveInviteCode(SECRET, u), LINKS), canEnterCode: false, enterUntil: null, invitedBy: false
+      code: null, weekCount: null, weekLimit: 3, bonusPerFriend: 100,
+      links: { telegram: null, vk: null }, canEnterCode: false, enterUntil: null, invitedBy: false, entryReason: 'unavailable'
     }
   });
   assert.deepEqual(await claim(db, u, 'ABCDEFGH'), { attached: false, reason: 'unavailable' });
@@ -577,4 +577,66 @@ test('partial returns keep one ticket per full 1000 rub not returned; a later ca
   assert.deepEqual(await recordPurchaseReturn(db, { transactionId: tx, returnedCents: 320_000, returnKey: 'bar:r3' }), { skipped: 'not_a_purchase' });
   assert.deepEqual(await auditBalances(db), []);
   await db.close();
+});
+
+
+test('1001 rub purchase creates exactly one numbered ticket, replay and cancellation stay consistent', async () => {
+  const db = await freshDb();
+  try {
+    const user = await addUser(db, { hoursOld: 500 });
+    for (const mode of ['accrue', 'redeem']) {
+      const tx = await purchase(db, user, 1001, { mode });
+      assert.equal((await recordPurchase(db, { transactionId: tx, now: NOW })).purchaseTickets, 1);
+      assert.equal((await recordPurchase(db, { transactionId: tx, now: NOW })).purchaseTickets, 0);
+      assert.equal((await summary(db, user)).tickets, 1);
+      assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM halloween_ticket WHERE status='active'")).rows[0].n, 1);
+      await cancel(db, tx);
+      await recordCancellation(db, { transactionId: tx, now: NOW });
+      assert.equal((await summary(db, user)).tickets, 0);
+    }
+    assert.deepEqual(await auditBalances(db), []);
+  } finally { await db.close(); }
+});
+
+test('the same invite can be pasted as Telegram/VK link; waiting and earned counters follow the actual purchase', async () => {
+  const db = await freshDb();
+  try {
+    const inviter = await addUser(db, { hoursOld: 500 });
+    const before = await summary(db, inviter);
+    const friend = await addUser(db);
+    assert.equal(normalizeInviteCode(before.invite.links.telegram), before.invite.code);
+    assert.equal(normalizeInviteCode(before.invite.links.vk), before.invite.code);
+    assert.equal(normalizeInviteCode('https://example.com/#inv_' + before.invite.code), null);
+    assert.deepEqual(await claim(db, friend, before.invite.links.telegram), { attached: true });
+    assert.equal((await summary(db, friend)).invite.entryReason, 'already_attached');
+    assert.equal((await summary(db, inviter)).invite.pendingCount, 1);
+    const tx = await purchase(db, friend, 1001);
+    await recordPurchase(db, { transactionId: tx, now: NOW });
+    const earned = await summary(db, inviter);
+    assert.deepEqual([earned.invite.pendingCount, earned.invite.qualifiedCount, earned.invite.weekCount, earned.tickets], [0, 1, 1, 1]);
+    assert.equal(await wallet(db, inviter), 100);
+    await cancel(db, tx);
+    await recordCancellation(db, { transactionId: tx, now: NOW });
+    const revoked = await summary(db, inviter);
+    assert.deepEqual([revoked.invite.revokedCount, revoked.invite.qualifiedCount, revoked.invite.weekCount, revoked.tickets], [1, 0, 0, 0]);
+  } finally { await db.close(); }
+});
+
+test('entry summary explains old accounts, prior purchases and closed registration; missing draw does not issue codes', async () => {
+  const db = await freshDb();
+  try {
+    const old = await addUser(db, { hoursOld: 25 });
+    const buyer = await addUser(db);
+    await purchase(db, buyer, 1);
+    const fresh = await addUser(db);
+    assert.equal((await summary(db, old)).invite.entryReason, 'window_expired');
+    assert.equal((await summary(db, buyer)).invite.entryReason, 'has_purchase');
+    await db.query("UPDATE halloween_draw SET status='closed'");
+    assert.equal((await summary(db, fresh)).invite.entryReason, 'draw_closed');
+    await db.query('DELETE FROM halloween_draw');
+    const unavailable = await summary(db, fresh);
+    assert.equal(unavailable.available, false);
+    assert.equal(unavailable.invite.code, null);
+    assert.equal(unavailable.tickets, null);
+  } finally { await db.close(); }
 });

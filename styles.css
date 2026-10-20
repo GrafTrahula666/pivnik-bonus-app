@@ -11138,3 +11138,9 @@ html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wh
 }
 html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta > i { display: none !important; }
 html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta > span { color: inherit; }
+
+/* Visible actions and loading/error state for the Halloween ticket counters. */
+html.theme-halloween .halloween-controls { display: grid; gap: 10px; padding: 12px 16px; }
+html.theme-halloween .halloween-controls p { margin: 0; font-size: 13px; line-height: 1.45; }
+html.theme-halloween .halloween-controls button { min-height: 44px; white-space: normal; }
+html.theme-halloween .halloween-controls button[hidden] { display: none; }

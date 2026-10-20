@@ -69,7 +69,7 @@ interface PreparedScope {
   updatedAt:string
   contract:ScopeContract
 }
-type ScopeCommand={draftRevision:number;applicationRevision:number}
+type ScopeCommand={draftRevision:number;applicationRevision?:number}
 type IntegrationStatus='configured'|'verified'|'action_required'|'error'
 interface IntegrationContract {
   provider:'evotor'
@@ -385,6 +385,7 @@ const runtimeBundleGuidance=(value:RuntimeBundleStep)=>{
 
 export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}:{session:AdminSession;initialDraftId?:string|null;openRequest?:number;onChanged?:()=>void}) {
   const allowed=(session.admin.role==='SUPER_ADMIN'||session.capabilities.onboardingAccess===true)&&session.capabilities.onboardingDrafts===true
+  const crmMode=allowed&&session.capabilities.crmOnboarding===true
   const integrationsAllowed=allowed&&session.capabilities.onboardingIntegrations===true
   const provisioningAllowed=allowed&&session.capabilities.onboardingProvisioning===true&&session.capabilities.onboardingWrite!==false
   const legacyInvitesAllowed=allowed&&session.admin.role==='SUPER_ADMIN'&&!session.capabilities.onboardingInvitations
@@ -674,16 +675,20 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
     } finally {appBusyRef.current=false;setAppBusy(false)}
   }
   async function prepareScope() {
-    if(!current||!application||scopeBusyRef.current||busyRef.current||appBusyRef.current||integrationBusyRef.current)return
-    const body=scopeCommand.current||{draftRevision:current.revision,applicationRevision:application.revision}
+    if(!canWrite||!current||(!crmMode&&!application)||scopeBusyRef.current||busyRef.current||appBusyRef.current||integrationBusyRef.current)return
+    const run=++scopeSequence.current
+    const body=scopeCommand.current||(crmMode?{draftRevision:current.revision}:{draftRevision:current.revision,applicationRevision:application!.revision})
     scopeCommand.current=body;scopeBusyRef.current=true;setScopeBusy(true);setScopeError('');setScopeNotice('')
     try {
-      const saved=scopeResponse(await apiPut(base+'/'+current.id+'/scope',body))
+      const saved=scopeResponse(await (crmMode?apiPost(base+'/'+current.id+'/crm/prepare',body):apiPut(base+'/'+current.id+'/scope',body)))
+      if(run!==scopeSequence.current)return
       if(saved.draftId!==current.id)throw new Error('Сервер вернул область другого черновика.')
       setScope(saved);setScopeUncertain(false);scopeCommand.current=null
-      setScopeNotice('Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.')
+      setScopeNotice(crmMode?'Данные CRM подготовлены. CRM ещё не запущена; подключение базы и кассы проверяется отдельно.':'Каноническая область подготовлена. Заведение остаётся выключенным, приложение не запущено.')
+      if(crmMode)void loadApplication(current)
       void loadInvites(current);void loadIntegration(current);void loadProvisioning(current)
     } catch(error) {
+      if(run!==scopeSequence.current)return
       setScopeError(message(error))
       if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408){scopeCommand.current=null;setScopeUncertain(false)}
       else setScopeUncertain(true)
@@ -856,7 +861,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
       </div>}
     {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmActivationChecks&&
       <TenantCrmActivationCheck actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>}
-    {editing&&current&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
+    {editing&&current&&!crmMode&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
       <div className="onboarding-step"><Smartphone size={18}/><b>Приложение</b><span>{application?'Конфигурация сохранена':'Не настроено'} · приложение ещё не опубликовано</span></div>
       {appError&&<div className="onboarding-feedback error" role="alert">{appError}</div>}
       {appNotice&&<p className="onboarding-feedback" role="status">{appNotice}</p>}
@@ -891,9 +896,9 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         <div><ShieldCheck size={17}/><span><b>Заведение</b><small>ID {scope.venue.id} · выключено</small></span></div>
         <div><span><b>Доступ</b><small>Сотрудники не назначены · подключения не созданы</small></span></div>
       </div>}
-      <p className="onboarding-note">Заведение сохранено для дальнейшего подключения. Его приложение ещё не запущено; связь с кассой проверяется отдельно.</p>
+      <p className="onboarding-note">{crmMode?'Для CRM-сайта не нужно настраивать оформление гостевого приложения. После подготовки подключите базу и кассу; CRM ещё не запущена.':'Заведение сохранено для дальнейшего подключения. Его приложение ещё не запущено; связь с кассой проверяется отдельно.'}</p>
       <div className="onboarding-actions">
-        {!scope&&<button className="btn" type="button" disabled={!canWrite||!application||draftDirty||appDirty||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||appDirty?'Сначала сохраните изменения':'Подготовить область'}</button>}
+        {!scope&&<button className="btn" type="button" disabled={!canWrite||(!crmMode&&!application)||draftDirty||(!crmMode&&appDirty)||scopeBusy||scopeLoading||scopeUncertain||busy||appBusy||appLoading||appUncertain} onClick={()=>void prepareScope()}><MapPinned size={16}/>{scopeBusy?'Подготавливаем…':scopeUncertain?'Повторить подготовку':draftDirty||(!crmMode&&appDirty)?'Сначала сохраните изменения':crmMode?'Подготовить CRM':'Подготовить область'}</button>}
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
       </div>
     </section>}
