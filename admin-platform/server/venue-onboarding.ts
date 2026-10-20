@@ -574,16 +574,25 @@ export async function getOnboardingScope(admin: AdminPrincipal, id: string) {
 }
 
 export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, raw: unknown) {
+  return prepareScope(admin,id,raw,false)
+}
+export async function prepareCrmOnboardingScope(admin:AdminPrincipal,id:string,raw:unknown){
+  await requireOnboardingAccess(admin,true)
+  if(!config.enableCrmOnboarding)throw new HttpError(403,'CRM_ONBOARDING_DISABLED','Подготовка CRM пока выключена.')
+  return prepareScope(admin,id,raw,true)
+}
+async function prepareScope(admin:AdminPrincipal,id:string,raw:unknown,crm:boolean){
   await requireOnboardingAccess(admin,true)
   const draftId=uuid(id)
   if(!raw||typeof raw!=='object'||Array.isArray(raw)) throw scopeInvalid()
   const body=raw as Record<string,unknown>
-  if(Object.keys(body).some(key=>!['draftRevision','applicationRevision'].includes(key))) throw scopeInvalid()
+  if(Object.keys(body).some(key=>!(crm?['draftRevision']:['draftRevision','applicationRevision']).includes(key))) throw scopeInvalid()
   const revision=(value:unknown)=>{
     if(typeof value!=='number'||!Number.isSafeInteger(value)||value<1||value>2147483647) throw scopeInvalid()
     return value
   }
-  const draftRevision=revision(body.draftRevision),applicationRevision=revision(body.applicationRevision)
+  const draftRevision=revision(body.draftRevision)
+  let applicationRevision=crm?0:revision(body.applicationRevision)
   await scopeReady(admin)
   const client=await connection()
   try {
@@ -592,8 +601,22 @@ export async function prepareOnboardingScope(admin: AdminPrincipal, id: string, 
     const draft=(await client.query<DraftRow>(`SELECT ${columns} FROM admin_onboarding_drafts
       WHERE id=$1::uuid AND ${onboardingDraftAccessSql("admin_onboarding_drafts","$2",true)} FOR UPDATE`,[draftId,admin.id])).rows[0]
     if(!draft) throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
-    const application=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs
+    let application=(await client.query<AppConfigRow>(`SELECT ${appColumns} FROM admin_onboarding_app_configs
       WHERE draft_id=$1::uuid FOR UPDATE`,[draftId])).rows[0]
+    if(crm){
+      if(draft.revision!==draftRevision)throw new HttpError(409,'ONBOARDING_SCOPE_REVISION_CONFLICT','Данные заведения изменились. Откройте последнюю сохранённую версию.')
+      if(!application){
+        const data=onboardingData(draft.data),tenantKey='sv-'+draftId.replaceAll('-','')
+        const appConfig=onboardingAppConfig({displayName:data.venueName,theme:'premium-dark',primaryColor:'#73bcd9',secondaryColor:'#172c36',shopEnabled:false,loyaltyEnabled:true})
+        const collision=await client.query('SELECT 1 FROM companies WHERE code=$1 LIMIT 1',[tenantKey])
+        if(collision.rowCount)throw new HttpError(409,'ONBOARDING_TENANT_KEY_CONFLICT','Не удалось подготовить CRM. Создайте новый черновик.')
+        application=(await client.query<AppConfigRow>(`INSERT INTO admin_onboarding_app_configs(draft_id,tenant_key,config)
+          VALUES($1::uuid,$2,$3::jsonb) RETURNING ${appColumns}`,[draftId,tenantKey,JSON.stringify(appConfig)])).rows[0]!
+        await recordAudit({admin,action:'onboarding.app_config_create',entityType:'onboarding_app_config',entityId:draftId,
+          after:{revision:application.revision},metadata:{tenantKey,purpose:'standalone_crm',changedFields:appFields}},client)
+      }
+      applicationRevision=application.revision
+    }
     if(!application) throw new HttpError(409,'ONBOARDING_APP_REQUIRED','Сначала сохраните настройки приложения.')
     const existing=await loadScope(client,draftId)
     if(existing) {

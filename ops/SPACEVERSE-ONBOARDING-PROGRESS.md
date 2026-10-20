@@ -1834,3 +1834,125 @@ outputs снова восстановлены побайтово; Admin source h
 проверка CI точного head и ранее разрешённый владельцем checked merge с
 существующим автодеплоем. Market activation и production flags остаются вне
 этого шага. Полный итог после GitHub checks — отдельным Markdown-файлом.
+
+## 2026-10-19 — поиск по всем магазинам владельца
+
+Preflight: origin/main `93dd65dafab77c62674bde2bf09bc47996249311`, #291 MERGED,
+рабочее дерево было чистым. Проверены открытые PR, origin branches, актуальная
+MODULE-MAP/invariants. #96/#101 и старые CRM ветки не содержат этого поиска;
+в старой pagination-ветке даже отсутствует нынешний React App. Старые PR не
+импортировались и не закрывались. Weekly digest в ops не найден.
+
+Новая ветка `spaceverse/owner-venue-search-20261019`. Лично добавлен поиск в
+существующий owner list: буквальное имя заведения/компании, разрешённый union
+перед пагинацией, query validation/echo, пустое состояние и reset/refresh.
+Новая tenant-модель, миграции, настройки CI/production и действия устройств
+не нужны. Обычный владелец сохраняет все магазины своих компаний.
+
+Новый мандат пользователя: «Продакшен и устройства не трогай» имеет приоритет
+над прежним разрешением merge с автодеплоем. Поэтому готовится только Draft PR;
+его merge запускает production workflow и сейчас не выполняется. Секреты и
+production DB не читаются/не меняются. Локальный synthetic PG16 SELECT 1 прошёл.
+Риск: P2 для этого поиска; P0 коммерческого выпуска — прежний неподтверждённый
+контракт/test App ID Маркета — сохраняется. Следующий независимый шаг этого PR
+ограничен поиском заведения для продолжения подключения.
+
+Focused native HTTP/SQL activation+workflow: 45 passed. Добавлены проверки
+двух компаний одного владельца, чужой компании, scoped manager, q validation,
+301 совпадения/13 страниц, буквальных %/_, SQL-подобного текста и reset.
+Полные обязательные проверки и browser E2E выполняются перед push; артефакты:
+`/tmp/spaceverse-owner-venue-search-20261019`. Сканирование metadata имён до
+фильтрации существовало и сохраняется; load-test тысяч клиентов не заявляется.
+
+Окончательные checks на базе 93dd65d:
+- `npm run materialize` дважды: SHA256 idempotent; прежние 7 generated diffs
+  (achievements.js, app.js, index.html, red-cosmos-v2.js,
+  scripts/v22-data-audit-and-repair.mjs, server.js, universal-server.js)
+  сохранены в artifact patch. После root gates исходные файлы восстановлены
+  побайтово/SHA256; исправление этих старых diff не входит в задачу.
+- `node --test`: 632 passed /0 failed/skipped; `npm run check`, отдельные
+  VK parity/bundle, root audit и production audit: exit 0, 0 vulnerabilities.
+- Business native `npm test -- --maxWorkers=1`: 430 passed /36 files,
+  0 failed/skipped. `npm run typecheck`, `npm run lint`: exit 0,
+  только прежние 12 Fast Refresh warnings. Оба Business audit: 0 vulnerabilities.
+- Focused native activation+workflow: 45 passed; тот же activation/search suite
+  без native env на PGlite: 35 passed. Первый lint обнаружил no-control-regex
+  в новой проверке q; заменена запись на проверку code point. Правило не
+  отключалось, окончательные проверки выполнены после правки.
+- Playwright: 38 passed /0 failed/skipped: новый owner search 4, activation 10,
+  native CRM 6, disabled 2, cash/CRM 12, onboarding 4. Реальный built App,
+  desktop/mobile, только isolated synthetic fixtures; PNG восстановлены SHA256.
+  Включены reset/refresh/load-more, поиск точки после первой страницы,
+  две компании владельца, поздний ответ и отказ при неверном query echo.
+
+SHA256 Admin source до/после проверок совпадают. Production/устройства не
+задействованы; CI не менялся. До публикации в Маркете остаются прежние внешние
+gates install/pay/revoke и разрешённый test contour. Следующий шаг — push и
+один Draft PR, проверка его CI; merge/production deploy не выполняются.
+
+Финальный отдельный `npm run build`: exit 0, только прежнее предупреждение
+chunk >500KB. Перед push origin/main всё ещё 93dd65d; итоговый diff ограничен
+owner search, его тестами и ops-документацией. Источник проверки/код не менялся.
+
+## 2026-10-19 — CRM preparation без обязательного гостевого оформления
+
+Пользователь просит ускориться и продолжать; ориентир общей коммерческой
+готовности был ~40%, предварительная инженерная оценка, не вывод из числа тестов.
+Свежий preflight: main 93dd65d, #292 OPEN/Draft/head 23bfe33, оба CI SUCCESS,
+рабочее дерево чистое. Ранее выполненный поиск не переделывался. Старые PR
+не объединялись. Текущий запрет production/устройств сохраняется.
+
+Новая отдельная локальная ветка `spaceverse/crm-simple-preparation-20261019`
+от main 93dd65d. Второй открытый PR пока не создаётся по правилу владельца;
+merge #292 запустил бы запрещённый сейчас production deploy. Самостоятельная
+реализация/изолированные тесты следующего шага не требуют такого merge.
+
+Лично добавлен default-off CRM preparation: владелец сохраняет venue data и
+нажимает «Подготовить CRM», без guest branding. Сервер принимает только
+draftRevision и в существующей canonical scope transaction создаёт defaults
+только для отсутствующей application config, с тем же tenant key, shop=false.
+Существующий профиль не меняется. Config/scope/audit атомарны, retries и
+concurrency возвращают одну точку; статус inactive/not_provisioned сохраняется.
+Старый scope endpoint и old wizard mode не получают новых defaults.
+
+Новая настройка `ADMIN_ENABLE_CRM_ONBOARDING=false` описана во всех трёх
+env examples; реальные env/secrets/CI/production DB/устройства не менялись.
+Миграции/вторая tenant модель не нужны. Browser восстановление после uncertain
+ответа не симулирует active. Первая focused native регрессия: 73 passed;
+новые desktop/mobile preparation E2E: 4 passed. Затем усилены SQL tests для
+scope audit rollback и ограниченного manager. Финальные проверки выполняются.
+
+Риск текущего среза P1 (новая metadata write-команда), изоляция и replay требуют
+обязательной полной регрессии. Прежние P0 коммерческого выпуска сохраняются:
+bootstrap/test contour, Market App ID/контракт/install/pay/revoke, полный E2E.
+Артефакты: `/tmp/spaceverse-crm-simple-preparation-20261019`.
+
+Окончательная регрессия: materialize ×2 idempotent/SHA256; прежний diff по
+achievements.js, app.js, index.html, red-cosmos-v2.js,
+scripts/v22-data-audit-and-repair.mjs, server.js, universal-server.js сохранён
+и после root gates восстановлен побайтово, не исправлялся молча.
+`node --test`: 632 passed /0 failed/skipped. `npm run check`, VK parity/bundle,
+root audit/full+production: exit 0, 0 vulnerabilities.
+
+Business `npm test -- --maxWorkers=1` с native PG16: 436 passed /37 files,
+0 failed/skipped. Это main baseline 427 +9 новых тестов; поиск из отдельного
+необъединённого #292 не дублировался в этой ветке. Финальные typecheck/lint:
+exit 0, прежние 12 warnings. Оба Business audit: 0 vulnerabilities.
+Новые tests на PGlite: 9 passed, включая concurrency compatibility и откат
+config/scope/company/venue при ошибке второго аудита. Native suite проверяет
+реальные row locks и одновременные запросы.
+
+Built Playwright desktop/mobile: 38 passed /0 failed/skipped — новый CRM
+preparation 4, activation 10, CRM native 6, disabled 2, cash/CRM 12, onboarding 4.
+PNG восстановлены SHA256; Admin source hashes до/после проверок совпали.
+До финального build никаких правок кода после проверки не было. Общая
+коммерческая готовность оценивается предварительно ~42%, без заявления
+подтверждённой Market activation, production rollout или автоматического DB bootstrap.
+
+Следующий reviewable результат — отдельная проверенная ветка/patch. Второй
+Draft и merge не выполняются без решения владельца по правилу одного PR.
+Текущий #292 уже зелёный и сохраняется; запрет production/устройств действует.
+
+Финальный `npm run build` exit 0 (прежний >500KB warning). До push main
+остаётся 93dd65d, source SHA256 неизменны. Рабочий срез не содержит код
+немерженного поиска #292 и не расширяет его Draft PR.

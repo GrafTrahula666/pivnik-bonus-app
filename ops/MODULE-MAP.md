@@ -4,6 +4,39 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Owner network search (2026-10-19, existing default-off workflow gate)
+
+`GET /api/admin/onboarding/venues` accepts optional `q` (up to 100 characters,
+no control characters) alongside `offset`. The existing authorized canonical/
+draft union is deduplicated, then filtered by literal case-insensitive venue or
+company name before pagination. Scope parameters and repeated parameters remain
+invalid; search cannot add a company grant. Nonempty responses echo trimmed `q`;
+the old empty-query response is unchanged. `OwnerVenues.tsx` submits explicitly,
+resets pagination, retains the applied query on refresh/load-more, and rejects
+late or mismatched-query responses. Empty search results differ from no venues.
+No target/provider queries, schema/CI/production changes or new tenant model.
+Native HTTP/SQL and built desktop/mobile tests cover 301+ matches, both owned
+companies, inaccessible companies and literal wildcard text. This retains the
+existing metadata-directory scan; performance at thousands of tenants is not
+claimed. See `ops/SPACEVERSE-OWNER-VENUE-SEARCH-RUNBOOK.md`.
+
+## Standalone CRM metadata preparation (2026-10-19, default off)
+
+`ADMIN_ENABLE_CRM_ONBOARDING=false` gates POST
+`/api/admin/onboarding/drafts/:id/crm/prepare` and the corresponding wizard mode.
+The command accepts only `draftRevision`; signed session, Origin/CSRF, current
+onboarding write grants and actor rate limits are mandatory. It reuses
+`prepareOnboardingScope`'s canonical transaction/source locks. A missing existing
+app-config record is created from server defaults (venue name, shop off,
+loyalty on), with the same deterministic tenant key, then the canonical inactive
+scope is prepared atomically with audits. An existing configuration is preserved.
+Retries/concurrent identical commands return the same scope; audit failure rolls
+back profile/company/venue/scope together. No second tenant, migration, target DB
+or provider provisioning, guest bundle, launch or license is introduced.
+`VenueOnboarding.tsx` hides guest branding in this mode, submits one preparation
+command and restores actual scope after an uncertain response. Off keeps the
+previous application/scope workflow. See `SPACEVERSE-CRM-PREPARATION-RUNBOOK.md`.
+
 ## Owner list: saved CRM activation state (2026-10-19, default off)
 
 `onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary
@@ -988,6 +1021,17 @@ isolation.
   The 1.0.16 UI fix starts with focus on the window and the soft keyboard hidden;
   manual customer/points fields remain editable on explicit selection. It does
   not change scanner callbacks, receipt state, credentials or monetary rules.
+
+- Fresh closed documents (2026-10-18): `pos/recent-sync.js` reads an overlapping
+  two-day API window before historical synchronization. It reuses the exact
+  immutable-document importer extracted as `importEvotorDocuments`, has a bounded
+  page budget/independent lock, and never changes historical cursor/completion
+  state. Failed history cannot hold fresh paid receipts behind its cursor.
+  `fetchEvotorPage` adds optional `since` only on the initial page. The existing
+  scoped receipt claims and canonical bonus worker remain the only identity and
+  monetary path. No migration, flag, tenant model or bonus formula is added.
+  See `ops/EVOTOR-RECENT-SYNC-20261018.md` for runtime maintenance evidence.
+
 - Sale loyalty preparation (2026-10-17, separate unshipped draft): an authenticated
   `qr/resolve` caller can explicitly request `includeWallet: true`.
   `pos/loyalty-view.js` returns only a read-only wallet snapshot for the resolved

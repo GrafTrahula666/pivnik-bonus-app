@@ -6,6 +6,7 @@ import { type SpaceverseRuntimeManifest } from '../../../spaceverse-runtime-mani
 import { config } from '../config.js'
 import {fixturePassword} from './onboarding-fixture.js'
 import {tenantCrmActivationFixture} from './tenant-crm-activation-fixture.js'
+import {seedOwnerVenueSearch} from './owner-venue-search-fixture.js'
 import {tenantCrmApplication} from './tenant-crm-fixture.js'
 import { type TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
 
@@ -438,5 +439,51 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
     await expect(state.metadata!.query(`UPDATE admin_onboarding_provisioning_steps SET status='succeeded',result='{}',
       last_error_code=NULL WHERE draft_id=$1 AND step='crm_activation_check'`,[manifests[0]!.source.draftId])).rejects.toThrow()
     expect(await rows()).toEqual([expect.objectContaining({status:'action_required',result:null})])
+  })
+  it('searches authorized draft names and companies without narrowing a network owner to one company',async()=>{
+    config.enableOnboardingWorkflow=true
+    const search=(who:string,q:string)=>ownerList(who,'?q='+encodeURIComponent(q))
+    const all=await search('network-owner','  cRm  ');expect(all.status).toBe(200)
+    const body=await all.json();expect(body.q).toBe('cRm');expect(body.total).toBe(3)
+    expect(body.venues.map((row:{id:string})=>row.id).sort()).toEqual(manifests.map(row=>row.source.draftId).sort())
+    const south=await (await search('network-owner','юГ')).json()
+    expect(south.total).toBeGreaterThan(0);expect(south.venues.every((row:{companyId:string})=>row.companyId==='20')).toBe(true)
+    const forbidden=await search('owner','Юг');expect(forbidden.status).toBe(200)
+    expect(await forbidden.json()).toMatchObject({total:0,venues:[],nextOffset:null})
+    const manager=await (await search('trusted','CRM')).json()
+    expect(manager.venues.map((row:{id:string})=>row.id)).toEqual([manifests[0]!.source.draftId])
+    expect(state.resolutions).toBe(0)
+  })
+  it('rejects malformed or scope-bearing search requests and keeps the workflow default off',async()=>{
+    config.enableOnboardingWorkflow=true
+    for(const suffix of ['?q=a&q=b','?q=x&companyId=20','?q=x&venueId=1','?q='+('a'.repeat(101)),'?q=%00','?q=%0A','?q=x&offset=-1'])
+      expect((await ownerList('network-owner',suffix)).status).toBe(400)
+    expect((await fetch(origin+'/api/admin/onboarding/venues?q=CRM')).status).toBe(401)
+    config.enableOnboardingWorkflow=false
+    expect((await ownerList('network-owner','?q=CRM')).status).toBe(403)
+    expect(state.resolutions).toBe(0)
+  })
+  it('searches before paging through 301 matches, treats wildcard text literally and preserves the full list',async()=>{
+    config.enableOnboardingWorkflow=true;await seedOwnerVenueSearch(state.metadata!)
+    const names:string[]=[],ids:string[]=[];let offset:number|null=0
+    while(offset!==null){
+      const response=await ownerList('owner','?q='+encodeURIComponent('каталог')+'&offset='+offset)
+      expect(response.status).toBe(200);const page=await response.json()
+      expect(page.total).toBe(301);expect(page.venues.length).toBeLessThanOrEqual(25)
+      for(const row of page.venues){expect(row.companyId).toBe('10');names.push(row.name);ids.push(row.id)}
+      offset=page.nextOffset
+    }
+    expect(new Set(ids).size).toBe(301);expect(names).toHaveLength(301);expect(names.at(-1)).toBe('Каталог 301')
+    const target=await (await ownerList('owner','?q='+encodeURIComponent('Каталог 301'))).json()
+    expect(target).toMatchObject({total:1,nextOffset:null,venues:[{name:'Каталог 301'}]})
+    const network=await (await ownerList('network-owner','?q='+encodeURIComponent('Каталог'))).json();expect(network.total).toBe(302)
+    for(const text of ['%','_']){
+      const literal=await (await ownerList('owner','?q='+encodeURIComponent(text))).json()
+      expect(literal).toMatchObject({total:1,venues:[{name:'Точка 100%_плюс'}]})
+    }
+    const injection=await (await ownerList('owner','?q='+encodeURIComponent("' OR TRUE --"))).json();expect(injection.total).toBe(0)
+    const reset=await (await ownerList('owner','?q=%20%20')).json()
+    expect(reset.total).toBeGreaterThan(301);expect(reset.q).toBeUndefined()
+    expect(state.resolutions).toBe(0)
   })
 })
