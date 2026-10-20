@@ -2266,8 +2266,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
         beerMl
       });
       await client.query('COMMIT');
-      await syncUserAchievements(pool, existing.rows[0].client_id);
       await halloweenAfterPurchase(existing.rows[0].id);
+      await syncUserAchievements(pool, existing.rows[0].client_id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id)
@@ -2343,8 +2343,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       [newPaidMl, newGiftBalanceMl, targetUser.id]
     );
     await client.query('COMMIT');
-    await syncUserAchievements(pool, targetUser.id);
     await halloweenAfterPurchase(persistedTransaction?.id);
+    await syncUserAchievements(pool, targetUser.id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
 
     const tx = persistedTransaction;
     const beerText = beerMl > 0
