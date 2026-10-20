@@ -2,7 +2,8 @@
 // to the loopback test server; they are not printed in Playwright output.
 if(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)throw new Error('Dedicated local PostgreSQL is required.')
 const {tenantCrmFixture}=await import('../../server/tests/tenant-crm-fixture.js')
-const fixture=process.env.SPACEVERSE_E2E_CRM_ACTIVATION==='true'
+const fixture=process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'
+  ?await (await import('../../server/tests/empty-tenant-fixture.js')).emptyTenantFixture(2):process.env.SPACEVERSE_E2E_CRM_ACTIVATION==='true'
   ?await (await import('../../server/tests/tenant-crm-activation-fixture.js')).tenantCrmActivationFixture():await tenantCrmFixture()
 try{
   if(process.env.SPACEVERSE_E2E_OWNER_SEARCH==='true')await (await import('../../server/tests/owner-venue-search-fixture.js')).seedOwnerVenueSearch(fixture.metadata)
