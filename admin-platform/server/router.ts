@@ -58,6 +58,7 @@ import { getBroadcastPreview,listBroadcasts,sendBroadcast } from './pivnik-broad
 import { getDeveloperOverview,rememberServerError } from './developer.js'
 import { canManageOnboardingInvitations,canUseOnboarding } from './onboarding-access.js'
 import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workflow.js'
+import {onboardingSupport,onboardingSupportQueue} from './onboarding-support.js'
 import { listOnboardingVenues } from './onboarding-venues.js'
 import { readTenantCrmCustomer, listTenantCrmCustomers, checkTenantCrmReadiness } from './tenant-crm-read.js'
 import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
@@ -95,6 +96,7 @@ export const sessionCapabilities=()=>({
   onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
   onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
   onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
+  onboardingSupport:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingSupport,
   onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
   onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
   tenantCrmReads:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmReads,
@@ -213,6 +215,21 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     requireCsrf(req,session.rawToken)
     enforceRateLimit(`crm-preparation:${session.admin.id}`,20,60_000)
     json(res,200,await prepareCrmOnboardingScope(session.admin,crmPreparation[1]!,await readJsonBody(req,256)));return true
+  }
+  if(url.pathname==='/api/admin/onboarding/support'){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступно чтение очереди.')
+    if([...url.searchParams.keys()].some(key=>key!=='offset')||url.searchParams.getAll('offset').length>1||
+      !/^(0|[1-9]\d{0,5})$/.test(url.searchParams.get('offset')??'0'))throw new HttpError(400,'ONBOARDING_SUPPORT_INVALID','Проверьте страницу очереди.')
+    enforceRateLimit(`onboarding-support-queue:${session.admin.id}`,30,60_000)
+    json(res,200,await onboardingSupportQueue(session.admin,Number(url.searchParams.get('offset')??0)));return true
+  }
+  const support=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/support$/.exec(url.pathname)
+  if(support){
+    if(!isMethod(req,'GET')&&!isMethod(req,'POST'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Доступны создание и чтение обращений.')
+    if(url.search)throw new HttpError(400,'ONBOARDING_SUPPORT_INVALID','Область обращения определяется сервером.')
+    if(isMethod(req,'POST'))requireCsrf(req,session.rawToken)
+    enforceRateLimit(`onboarding-support:${session.admin.id}`,30,60_000)
+    json(res,200,await onboardingSupport(session.admin,support[1]!,isMethod(req,'POST')?await readJsonBody(req,1024):undefined));return true
   }
   if(url.pathname==='/api/admin/onboarding/venues'){
     if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')

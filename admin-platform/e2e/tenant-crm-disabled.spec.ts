@@ -9,6 +9,8 @@ test('disabled customer diagnostic exposes neither a UI control nor a working AP
   await page.getByLabel('Пароль',{exact:true}).fill(fixturePassword)
   await page.getByRole('button',{name:'Войти',exact:true}).click()
   await page.getByRole('button',{name:'Открыть черновик CRM 1',exact:true}).click()
+  await expect(page.getByRole('region',{name:'Помощь с подключением',exact:true})).toHaveCount(0)
+  expect((await page.request.get('/api/admin/onboarding/support')).status()).toBe(403)
   await expect(page.getByLabel('Название заведения',{exact:true})).toHaveValue('CRM 1')
   await expect(page.getByRole('region',{name:'Проверка клиентской базы',exact:true})).toHaveCount(0)
   await expect(page.getByRole('region',{name:'Готовность CRM к запуску',exact:true})).toHaveCount(0)

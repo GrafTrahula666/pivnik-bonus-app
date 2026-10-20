@@ -37,6 +37,28 @@ or provider provisioning, guest bundle, launch or license is introduced.
 command and restores actual scope after an uncertain response. Off keeps the
 previous application/scope workflow. See `SPACEVERSE-CRM-PREPARATION-RUNBOOK.md`.
 
+## Internal onboarding support queue (2026-10-19, default off)
+
+`server/onboarding-support.ts` adds GET/POST `.../drafts/:id/support` under
+`ADMIN_ENABLE_ONBOARDING_SUPPORT=false`, reusing the existing draft/canonical
+scope and revocable owner/manager grants. Manual Admin migration 017 stores
+only a server UUID, creator, draft, enumerated topic, recorded status and time.
+The draft lock plus unique `(draft_id,topic)` makes concurrent retries return
+the same request. Grant/account locks and atomic scoped audit protect writes;
+missing schema/audit failures never become successful or empty results.
+No free text, credentials, invitation URLs, customer data or provider prose is
+stored. GET `/api/admin/onboarding/support` is a bounded, audited internal queue
+for current active SUPER_ADMIN only, not a developer integration invitation.
+`OnboardingSupport.tsx` in the existing wizard restores requests after reload
+or lost responses, rejects contradictory scope/delivery and isolates late
+responses. `OnboardingSupportQueue.tsx` appears on the platform operator page.
+Recorded means saved, never read/assigned/resolved or externally delivered.
+No external messaging, customer/runtime/financial writes, activation, migration
+autostart or production switch change. Existing copy-to-developer flow remains.
+Runbook: `SPACEVERSE-ONBOARDING-SUPPORT-RUNBOOK.md`; signed HTTP/native SQL:
+`server/tests/onboarding-support.spec.ts`; built desktop/mobile E2E:
+`SPACEVERSE_E2E_SUPPORT=true` with `playwright.tenant-crm.config.ts`.
+
 ## Owner list: saved CRM activation state (2026-10-19, default off)
 
 `onboarding-venues.ts` optionally includes a sanitized `crmActivation` summary

@@ -1956,3 +1956,106 @@ Draft и merge не выполняются без решения владель�
 Финальный `npm run build` exit 0 (прежний >500KB warning). До push main
 остаётся 93dd65d, source SHA256 неизменны. Рабочий срез не содержит код
 немерженного поиска #292 и не расширяет его Draft PR.
+
+
+## 2026-10-19 — независимая очередь обращений о подключении CRM
+
+Мандат владельца: продолжить от текущего GitHub, не дублировать и не объединять
+#293, новый независимый Draft PR, production не трогать. Среда уже опубликована;
+настройки/повторная публикация среды не выполняются. Перед работой проверены
+актуальные main/ветки и все открытые PR через GitHub API. Main —
+93dd65dafab77c62674bde2bf09bc47996249311; #292 и #293 остаются открытыми Draft.
+Отдельная ветка `spaceverse/crm-onboarding-support-20261019` основана на main,
+без импорта поиска #292 или CRM preparation #293.
+
+Лично реализовано: GET/POST `.../drafts/:id/support`, ручная Admin migration 017,
+default-off `ADMIN_ENABLE_ONBOARDING_SUPPORT=false`, блок помощи в существующем
+мастере и внутренняя очередь оператора SUPER_ADMIN на странице платформы.
+Существующие canonical scope/grants/auth повторно используются. Владелец видит
+все свои компании/точки; store invitation не ограничивает независимые owner
+grants. Manager ограничен своим черновиком, viewer/revoked/foreign запрещены.
+
+Сервер принимает только одну из четырёх фиксированных причин, без произвольного
+текста/ключей/URL/клиентских данных. Идентификатор серверный; повтор и конкурентные
+команды для draft/topic возвращают то же обращение. Account/grant/draft locks и
+tenant-scoped audit атомарны; audit failure откатывает создание. Queue reads
+ограничены страницей 25 и аудируются; неуспешный audit не выдаёт ответ.
+Состояние `recorded` означает «сохранено», не «прочитано/решено/отправлено».
+После потерянного ответа и reload UI восстанавливает серверный номер; поздняя
+или противоречивая delivery/scope не считается подтверждением.
+
+Runbook: `SPACEVERSE-ONBOARDING-SUPPORT-RUNBOOK.md`; MODULE-MAP обновлена вместе
+с кодом. Это ограниченная вертикаль обращения, без уведомлений, переписки, SLA,
+назначения/решения или внешнего developer access. Прежнее копирование текста
+не меняется. Новых моделей tenant, финансовых/customer/runtime writes, миграций
+на startup, изменений production env/secrets/CI/устройств нет.
+
+Предварительно проверены 11 новых signed HTTP/SQL cases на PGlite и native PG16,
+4 новых built E2E desktop/mobile. После этого добавлены проверки нескольких
+компаний владельца и повреждённого scope; окончательные результаты полной
+регрессии записываются ниже перед push.
+
+
+### Продолжение 2026-10-20 — новая база, без merge с моей стороны
+
+После восстановления сессии /tmp оказался пустым; исходный код/ветка сохранены.
+Конфигурация/публикация облачной среды не менялась. Зависимости восстановлены
+строго по lockfile вне checkout; Chromium — только тестовый /tmp cache.
+GitHub показал main ab88f085bde82b245f778fa0fa1b77e80fbaa3f4 и уже MERGED
+#292/#293; #293 merged_at=2026-10-20T03:58:35Z. Эти merge выполнены вне данной
+итерации, я их не выполнял и не присваиваю. Ветка обращений перебазирована
+на этот main. Все изменения поиска/CRM preparation сохранены; новый diff
+по отношению к main содержит только support scope. Отдельный Draft создаётся
+после регрессии; merge/deploy здесь не выполняются.
+
+Новые синтетические базы размещены в /tmp из-за ограниченного root disk.
+PostgreSQL16.15 извлечён из уже имеющегося официального образа с проверенным
+digest 0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4,
+нужные runtime libs передаются только дочернему PG процессу. SELECT version()
+подтвердил loopback-only fixture. Прежние Docker/local test data сохранены;
+производственные БД/адреса/credentials и устройства не использовались.
+Частичный Business-прогон на root-volume прерван до заполнения диска и не
+считается успешным; полный прогон затем выполнен на новом /tmp cluster.
+
+Дополнительно защищена смена роли между loadSession и account lock: аккаунт
+в транзакции обязан оставаться активным с той же ролью. Детерминированный
+signed HTTP/SQL тест воспроизводит demotion в этом промежутке и получает 403
+без обращения. Проверка support UI выполняется совместно с CRM-only wizard,
+а не только с прежним guest-application режимом.
+
+Логи/команды/SHA256 этой итерации сохраняются вне /tmp, чтобы пережить
+восстановление сессии: /workspace/spaceverse-verification/support-20261020.
+Полные root checks на новой базе: node --test 650 passed, 0 failed/skipped;
+check/VK parity/VK build и root audit/full+production exit 0, 0 vulnerabilities.
+Materialize дважды SHA256-idempotent; прежние 7 generated diffs сохранены,
+server.js/universal-server.js/app.js и остальные outputs восстановлены
+побайтово после root gates. Иных root-runtime изменений в PR нет.
+
+После финального усиления роли native Business: 453 passed /38 files,
+0 failed/skipped; новый support suite на PGlite: 14 passed. Предыдущий полный
+452-pass прогон до усиления роли не выдаётся за финальную проверку.
+Первая команда owner-search E2E ошибочно не включила обязательный
+SPACEVERSE_E2E_CRM_ACTIVATION (требование существующего search runbook); четыре
+сценария не смогли войти синтетическим network-owner. Исправляется только
+команда прогона, тесты/код поиска не меняются. Финальные E2E ниже.
+
+
+Финальные E2E на built desktop/mobile: **50 passed, 0 failed/skipped**.
+Support 4 (с включённым CRM-only mode), preparation 4, owner search 4,
+activation 10, tenant CRM 6, disabled 2, invitations/proxy 4, cash/CRM 12,
+onboarding 4. Исправленная search-команда точно соответствует существующему
+runbook; первый ошибочный запуск и его логи не скрыты и не включены в успех.
+Исходные tracked PNG после проверок восстановлены и сверены SHA256.
+
+Финальные typecheck/lint/build/isolation-check: exit 0. Lint — только прежние
+12 Fast Refresh warnings; build — прежний chunk >500KB warning. Root и Business
+полный/production npm audit — 0 vulnerabilities. SHA256 всех 19 изменённых
+source/test/env/migration файлов совпали до/после финальных проверок.
+`final-proof.json`, команды и логи — в persistent verification folder выше.
+
+Общая коммерческая готовность по-прежнему оценивается предварительно ~42%:
+эта support-вертикаль готова к review, не является выпуском в Маркете.
+Внешние install/license/pay/revoke, разрешённый live test contour и полный
+самостоятельный запуск нового клиента остаются непроверенными/незавершёнными.
+Новые production функции выключены. Следующий минимальный шаг — отдельный
+Draft PR этой ветки и его CI. Никакого merge/deploy/устройств.
