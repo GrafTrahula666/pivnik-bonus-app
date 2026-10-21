@@ -61,3 +61,12 @@ manually adjust real wallets to make a test pass.
 
 Automated release and actual terminal acceptance are tracked separately. No
 physical transaction has been performed by the agent during implementation.
+
+## Candidate validation (2026-10-21)
+
+- PR #297, redemption candidate `16be997ba9410b9bc11e278caf35dfaa5710b36c`.
+- Full prepared Node suite: 655 passed, no failures/skips; materialize twice is byte-idempotent, syntax/runtime audits and VK startup parity passed. Root full/production dependency audits report zero vulnerabilities.
+- PostgreSQL 17: all 8 real concurrency scenarios passed locally and in Actions.
+- Android integration workflow 39528364972: release JVM tests and unsigned APK build passed. Exact final artifact identity is recorded at signing time; this does not establish hardware acceptance.
+- The unrelated full release gate found the existing Business Vite 7.3.6 advisory. Vite is patched to 7.3.7, with no other dependency changes, so release checks can pass.
+- Manual migration 025 is deployed through the existing sync maintenance job while spending remains off; observe its readiness log, then remove the bounded DDL block. No balances are modified by this migration.
