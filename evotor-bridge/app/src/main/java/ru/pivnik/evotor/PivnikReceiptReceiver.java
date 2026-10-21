@@ -19,7 +19,8 @@ public final class PivnikReceiptReceiver extends SellReceiptBroadcastReceiver {
     @Override
     protected void handleReceiptCreatedEvent(Context context, ReceiptCreatedEvent event) {
         try {
-            Bridge.get(context).policy.onReceiptOpened(event.getReceiptUuid());
+            Bridge bridge=Bridge.get(context);
+            bridge.policy.onReceiptOpened(event.getReceiptUuid()); bridge.recoverRedemptions();
         } catch (RuntimeException error) {
             Log.w(Bridge.TAG, "receipt-opened handling failed");
         }
@@ -28,7 +29,9 @@ public final class PivnikReceiptReceiver extends SellReceiptBroadcastReceiver {
     @Override
     protected void handleReceiptDeletedEvent(Context context, ReceiptDeletedEvent event) {
         try {
-            Bridge.get(context).policy.onReceiptFinished(event.getReceiptUuid());
+            Bridge bridge=Bridge.get(context);
+            new RedemptionJournal(context).deleted(event.getReceiptUuid());
+            bridge.policy.onReceiptFinished(event.getReceiptUuid()); bridge.recoverRedemptions();
         } catch (RuntimeException error) {
             Log.w(Bridge.TAG, "receipt-deleted handling failed");
         }
@@ -38,11 +41,12 @@ public final class PivnikReceiptReceiver extends SellReceiptBroadcastReceiver {
     protected void handleReceiptCompletedEvent(Context context, ReceiptCompletedEvent event) {
         try {
             Bridge bridge = Bridge.get(context);
+            new RedemptionJournal(context).completed(event.getReceiptUuid());
             ReceiptBinding binding = bridge.policy.storedBinding();
             if (binding != null && binding.receiptUuid.equals(event.getReceiptUuid())) {
                 bridge.settings.recordStatus("closed " + event.getReceiptUuid() + " client " + binding.userId);
             }
-            bridge.policy.onReceiptFinished(event.getReceiptUuid());
+            bridge.policy.onReceiptFinished(event.getReceiptUuid()); bridge.recoverRedemptions();
         } catch (RuntimeException error) {
             Log.w(Bridge.TAG, "receipt-closed handling failed");
         }

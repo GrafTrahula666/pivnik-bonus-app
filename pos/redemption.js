@@ -81,6 +81,9 @@ export async function deviceRedemption(pool, device, body, policy, enabled) {
   if (!await redemptionSchemaReady(pool)) throw unavailable();
   // Recovery remains available after switching new reservations off.
   if (['quote','reserve'].includes(body.action) && !enabled) throw unavailable();
+  if (['quote','reserve'].includes(body.action) && body.checkoutProtocol !== 2) {
+    throw posError(426, 'pos_checkout_update_required', 'Для списания обновите PIVNIK на кассе до версии 1.0.18 или новее.');
+  }
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
@@ -173,14 +176,24 @@ export async function guardRedemptionClaim(db, device, receiptUuid, clientId) {
 
 async function settleSale(db, row, doc, policy) {
   const evidence = doc.snapshot?.pivnikRedemption;
-  if (evidence?.operationId === row.id && evidence.points === Number(row.points) && evidence.documentDiscountCents === 0) {
+  const net = Number(doc.amount_cents), points = Number(row.points);
+  const effect = doc.redemption_effect;
+  const matching = evidence?.operationId === row.id && evidence.points === points;
+  const markerless = !evidence && effect?.version === 1 && effect.marker === 'absent';
+  const knownZero = matching && evidence.documentDiscountCents === 0
+    || markerless && effect.documentDiscountCents === 0 && effect.distributedDiscountCents === 0;
+  const paid = doc.snapshot?.payments;
+  const fullPayment = safe(net) && net > 0 && Array.isArray(paid) && paid.length > 0 && paid.every(p =>
+    ['CASH', 'ELECTRON', 'CARD'].includes(p.type) && safe(p.amountCents) && p.amountCents > 0)
+    && paid.reduce((sum, p) => sum + BigInt(p.amountCents), 0n) === BigInt(net);
+  if (knownZero && safe(net) && net > 0 && net === Number(row.total_cents) && fullPayment
+      && (!effect || effect.marker !== 'invalid' && effect.documentDiscountCents === 0 && effect.distributedDiscountCents === 0)) {
     await release(db, row, policy, 'Возврат резерва: закрытый чек без скидки');
     return 'released';
   }
-  const net = Number(doc.amount_cents), points = Number(row.points);
   if (!evidence || evidence.operationId !== row.id || evidence.points !== points
       || !safe(net) || net + points * 100 !== Number(row.total_cents)
-      || !safe(evidence.documentDiscountCents) || evidence.documentDiscountCents < points * 100
+      || !safe(evidence.documentDiscountCents) || evidence.documentDiscountCents !== points * 100
       || BigInt(points) * 10000n > BigInt(net + points * 100) * 30n) {
     await db.query("UPDATE pos_redemptions SET state='review',review_reason='closed_effect_mismatch',updated_at=NOW() WHERE id=$1", [row.id]);
     return 'review';
@@ -217,7 +230,13 @@ export async function processPosRedemptions(pool, { storeId, policy, limit = 50 
   if (!await redemptionSchemaReady(pool)) return [];
   const candidates = (await pool.query(`SELECT r.id,d.document_id,d.type,r.receipt_uuid FROM pos_redemptions r
     JOIN pos_documents d ON d.source=r.source AND d.store_id=r.store_id
-      AND ((d.type='SELL' AND d.document_id=r.receipt_uuid AND r.state='reserved')
+      AND ((d.type='SELL' AND d.document_id=r.receipt_uuid AND (r.state='reserved'
+        OR (r.state='review' AND r.review_reason='closed_effect_mismatch'
+          AND to_jsonb(d)->'redemption_effect'->>'marker'='absent'
+          AND to_jsonb(d)->'redemption_effect'->>'paidInFull'='true'
+          AND to_jsonb(d)->'redemption_effect'->>'documentDiscountCents'='0'
+          AND to_jsonb(d)->'redemption_effect'->>'distributedDiscountCents'='0'
+          AND d.amount_cents=r.total_cents)))
         OR (d.type='PAYBACK' AND d.snapshot->>'baseDocumentId'=r.receipt_uuid AND r.state='committed'))
     WHERE r.store_id=$1 AND NOT EXISTS (SELECT 1 FROM pos_redemption_refunds f
       WHERE f.source=d.source AND f.store_id=d.store_id AND f.document_id=d.document_id)
@@ -231,7 +250,7 @@ export async function processPosRedemptions(pool, { storeId, policy, limit = 50 
       const row = (await db.query('SELECT * FROM pos_redemptions WHERE id=$1 FOR UPDATE', [candidate.id])).rows[0];
       const doc = (await db.query(`SELECT * FROM pos_documents WHERE source='evotor' AND store_id=$1 AND document_id=$2`, [storeId, candidate.document_id])).rows[0];
       let state;
-      if (doc.type === 'SELL' && row.state === 'reserved') state = await settleSale(db, row, doc, policy);
+      if (doc.type === 'SELL' && (row.state === 'reserved' || row.state === 'review' && row.review_reason === 'closed_effect_mismatch')) state = await settleSale(db, row, doc, policy);
       else if (doc.type === 'PAYBACK' && row.state === 'committed' && !(await db.query(`SELECT 1 FROM pos_redemption_refunds
         WHERE source='evotor' AND store_id=$1 AND document_id=$2`, [storeId, doc.document_id])).rows.length) state = await refund(db, row, doc, policy);
       await db.query('COMMIT');

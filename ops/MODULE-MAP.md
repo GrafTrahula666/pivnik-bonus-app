@@ -1193,3 +1193,35 @@ acknowledged before checkout; actual accrual still waits for the cloud document.
 Receipt close/clear/new UUID invalidates customer identity; no global volume is
 stored. Do not enable redemption, alter Evotor URL masks, or change the existing
 VK/Selectel services as part of this feature.
+
+## Evotor redemption rollout and recovery (2026-10-21)
+
+Current owner request explicitly authorizes enabling POS redemption after readiness
+checks; the prior beer-volume-only restriction does not cover this release.
+Reservations remain default-off in code. Production rollout uses only
+`PIVNIK_POS_REDEMPTION_ENABLED=true`; rollback sets that flag false and keeps POS,
+cloud ingestion, bonus worker, device credentials and recovery active.
+
+APK1.0.18/code22 preserves the existing signature, native ruble discount, QR/beer
+window and hidden initial keyboard. A deletion broadcast is only a hint: a
+persisted exact-UUID deleted fence plus successful empty receipt AND fiscal
+provider queries is required before cancellation. Completed/deleted lifecycle and
+terminal operation tombstones survive process death and journal cleanup. Recovery
+runs separately from checkout, uses exact operation status, rotates bounded
+batches and compare-clears only the acknowledged operation. No absence of a
+current receipt, timeout, new UUID or unauthenticated broadcast alone credits
+points. Late callbacks cannot resurrect or apply a terminal operation.
+
+`pos/redemption.js` commits only the exact requested discount/net effect. Zero
+receipt discount cannot refund contradictory discounted net. Manual additive
+migration025 adds nullable `pos_documents.redemption_effect` enrichment; normalized
+historical snapshots remain byte-compatible. The importer allows unknown→known,
+retains known across unknown replay, and rejects conflicting known evidence in
+the same immutable fiscal-document transaction. Only explicit discount evidence,
+valid marker absence, no distributed discount, and real full-price supported
+payments can release a crash-before-SDK hold. Narrow provable review rows may be
+rechecked; ambiguous/wrong markers or unknown effects remain in review.
+
+Validation and physical cash/card/remove/delete/restart/return acceptance are
+recorded in `ops/EVOTOR-REDEMPTION-ROLLOUT-20261021.md`. No fake product/payment,
+manual wallet adjustment, external proxy mask, Selectel/VK change or timer expiry.

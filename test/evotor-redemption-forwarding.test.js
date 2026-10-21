@@ -49,7 +49,7 @@ test('real gateway proxy sends both redemption transports/key to the canonical f
     };
     const path='/api/device/pos/receipts/bind',receiptUuid='receipt-forward';
     assert.equal((await request(path,{receiptUuid,payload:'PVK-AAAA-2222'})).status,200);
-    const quote={operation:'redemption',action:'quote',receiptUuid,clientId:'1',totalCents:100000,basketHash:'a'.repeat(64)};
+    const quote={operation:'redemption',checkoutProtocol:2,action:'quote',receiptUuid,clientId:'1',totalCents:100000,basketHash:'a'.repeat(64)};
     const quoted=await request(path,quote);
     assert.equal(quoted.status,200);assert.equal(quoted.canonical,'yes');
     assert.equal(quoted.data.unlimited,false);assert.equal(quoted.data.balance,1000);assert.equal(quoted.data.maxPoints,300);

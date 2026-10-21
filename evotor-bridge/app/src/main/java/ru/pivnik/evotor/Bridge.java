@@ -7,6 +7,7 @@ import android.util.Log;
 import android.widget.Toast;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import ru.evotor.framework.receipt.Receipt;
 import ru.evotor.framework.receipt.ReceiptApi;
 import ru.pivnik.evotor.core.BindingPolicy;
@@ -31,6 +32,8 @@ final class Bridge {
     final BridgeSettings settings;
     final BindingPolicy policy;
     final ExecutorService worker = Executors.newSingleThreadExecutor();
+    final ExecutorService recoveryWorker = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean recovering=new AtomicBoolean();
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private Bridge(Context context) {
@@ -38,6 +41,7 @@ final class Bridge {
         PivnikTls.install(app);
         settings = new BridgeSettings(app);
         policy = new BindingPolicy(new PrefsBindingStore(app));
+        recoverRedemptions();
     }
 
     static synchronized Bridge get(Context context) {
@@ -121,6 +125,22 @@ final class Bridge {
         return IndicatorText.forBinding(outcome, result.client, previous == null ? "" : previous.displayName);
     }
 
+    /** Separate executor: an offline old receipt must not block scanning or a new sale. */
+    void recoverRedemptions() {
+        if (!settings.isConfigured()) return;
+        try { if (new RedemptionJournal(app).operations().isEmpty()) return; }
+        catch (RuntimeException unreadable) { Log.w(TAG,"saved redemption needs verification"); return; }
+        if (!recovering.compareAndSet(false,true)) return;
+        recoveryWorker.execute(() -> {
+            try {
+                RedemptionJournal journal=new RedemptionJournal(app);
+                RedemptionRecovery.run(journal,body -> PivnikApi.redemption(settings,body),receipt -> DeletedReceiptProof.confirmed(app,receipt));
+                int pending=journal.operations().size();
+                settings.recordStatus(pending==0 ? "Сохранённые списания проверены." : "Есть незавершённые списания: "+pending+". Проверка повторится при открытии бонусов.");
+            } finally { recovering.set(false); }
+        });
+    }
+
     /** Check actual receipt AFTER returning zero discount; never release on a timeout alone. */
     void retryRemovedRedemption(final String receiptUuid) {
         main.postDelayed(() -> worker.execute(() -> {
@@ -133,7 +153,7 @@ final class Bridge {
                 org.json.JSONObject reply=PivnikApi.redemption(settings,new org.json.JSONObject().put("action","cancel")
                     .put("receiptUuid",receiptUuid).put("operationId",op.operationId).put("effectRemoved",true));
                 org.json.JSONObject row=reply.optJSONObject("redemption");
-                if (row!=null && op.matchesServer(row) && "released".equals(row.getString("state"))) journal.clear(receiptUuid);
+                if (row!=null && op.matchesServer(row) && "released".equals(row.getString("state"))) journal.clear(receiptUuid,op.operationId);
             } catch (Exception ignored) { /* durable journal retries when the tile is opened again */ }
         }),1000);
     }
