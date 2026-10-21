@@ -89,7 +89,7 @@ public final class RedemptionActivity extends IntegrationActivity {
         amount=new EditText(this); amount.setInputType(InputType.TYPE_CLASS_NUMBER); amount.setHint("Сколько баллов списать"); root.addView(amount);
         apply=new Button(this); apply.setText("Списать баллы"); apply.setOnClickListener(v -> reserve()); root.addView(apply);
         remove=new Button(this); remove.setText("Отменить списание"); remove.setOnClickListener(v -> cancel()); root.addView(remove);
-        refresh=new Button(this); refresh.setText("Обновить"); refresh.setOnClickListener(v -> load()); root.addView(refresh);
+        refresh=new Button(this); refresh.setText("Обновить"); refresh.setOnClickListener(v -> { bridge.recoverRedemptions(); load(); }); root.addView(refresh);
         pay=new Button(this); pay.setText("Оплата"); pay.setOnClickListener(v -> payReserved()); root.addView(pay);
         TextView paymentNote=new TextView(this); paymentNote.setText("«Оплата» — для выбранного списания. Без списания используйте «Перейти к оплате» выше. Клиент и объём выбираются заново в каждом чеке."); root.addView(paymentNote);
         ScrollView scroll=new ScrollView(this); scroll.addView(root); setContentView(scroll);
@@ -216,7 +216,7 @@ public final class RedemptionActivity extends IntegrationActivity {
     }
 
     @Override protected void onResume() {
-        super.onResume(); foreground=true;
+        super.onResume(); foreground=true; bridge.recoverRedemptions();
         try {
             registerReceiver(scanner,new IntentFilter(ScannerBroadcastReceiver.ACTION_BARCODE_RECEIVED),
                     ScannerBroadcastReceiver.SENDER_PERMISSION,null);
@@ -245,15 +245,18 @@ public final class RedemptionActivity extends IntegrationActivity {
                 runOnUiThread(() -> scanStatus.setText("Объём пока не подтверждён. При переходе к оплате повторим сохранение."));
             }
             if (operation!=null) {
-                JSONObject row=PivnikApi.redemption(bridge.settings,request("status")).optJSONObject("redemption");
+                JSONObject row=PivnikApi.redemption(bridge.settings,request("status").put("operationId",operation.operationId)).optJSONObject("redemption");
                 if (row!=null && !operation.matchesServer(row)) throw new IllegalStateException("На сервере другая операция. Не применяйте скидку повторно.");
                 if (row!=null && "released".equals(row.getString("state")) && basket.documentDiscountCents==0) {
-                    journal.clear(receiptUuid); operation=null;
+                    if (!journal.clear(receiptUuid,operation.operationId)) throw new IllegalStateException("Операция изменилась. Нажмите «Обновить»."); operation=null;
                 } else if (row!=null && "committed".equals(row.getString("state"))) {
                     throw new IllegalStateException("Списание уже подтверждено закрытым чеком. Вернитесь к продаже.");
                 } else if (row!=null && "review".equals(row.getString("state"))) {
                     throw new IllegalStateException("Закрытый чек требует сверки. Не применяйте списание повторно; обратитесь к разработчику.");
                 } else {
+                    if (row!=null && "reserved".equals(row.getString("state")) && "requested".equals(operation.phase)) {
+                        operation=operation.phase("reserved"); journal.save(operation);
+                    }
                     showOperation(); return;
                 }
             }
@@ -348,7 +351,7 @@ public final class RedemptionActivity extends IntegrationActivity {
                 JSONObject row=answer.optJSONObject("redemption");
                 boolean cancelledBeforeReserve=row==null && saved.operationId.equals(answer.optString("cancelledOperationId",""));
                 if (!cancelledBeforeReserve && (row==null || !saved.matchesServer(row) || !"released".equals(row.getString("state")))) throw new IllegalStateException("Нет подтверждения отмены.");
-                journal.clear(receiptUuid); operation=null; basket=null; maxPoints=0;
+                if (!journal.clear(receiptUuid,saved.operationId)) throw new IllegalStateException("Операция изменилась. Нажмите «Обновить»."); operation=null; basket=null; maxPoints=0;
                 show("Списание отменено. Баллы возвращены. Можно вернуться к оплате или нажать «Обновить».");
             } else {
                 if (now.foreignLoyalty || (now.documentDiscountCents!=0
@@ -367,6 +370,8 @@ public final class RedemptionActivity extends IntegrationActivity {
             if (isFinishing() || isDestroyed()) return;
             try {
                 ReceiptBasket live=current();
+                RedemptionOperation pending=journal.get(expected.receiptUuid);
+                if (journal.isFinished(expected.receiptUuid) || pending==null || !expected.operationId.equals(pending.operationId)) throw new IllegalStateException("Чек завершён или удалён. Скидка повторно не применяется.");
                 if (live.hasPayment || live.foreignLoyalty || !live.uuid.equals(expected.receiptUuid)
                         || (discount.signum()>0 && (!live.matches(expected) || live.documentDiscountCents!=0))
                         || (discount.signum()==0 && live.documentDiscountCents!=0

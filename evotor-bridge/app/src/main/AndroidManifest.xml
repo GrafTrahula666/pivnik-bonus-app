@@ -14,6 +14,7 @@
         <!-- ReceiptApi.AUTHORITY / AUTHORITY_V2: read the open and closed sell receipt -->
         <provider android:authorities="ru.evotor.evotorpos.receipt" />
         <provider android:authorities="ru.evotor.evotorpos.v2.receipt" />
+        <provider android:authorities="ru.evotor.framework.document.fiscal" />
     </queries>
 
     <application

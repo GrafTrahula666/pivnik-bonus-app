@@ -21,7 +21,7 @@ const receipt = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 async function fixture() {
   const db = new PGlite();
   await db.exec(await readFile(new URL('./fixtures/evotor-redemption.sql', import.meta.url), 'utf8'));
-  for (const name of ['012_evotor_sales.sql','013_evotor_pos_scope_devices.sql','014_evotor_bonus_accrual.sql','023_evotor_redemptions.sql']) {
+  for (const name of ['012_evotor_sales.sql','013_evotor_pos_scope_devices.sql','014_evotor_bonus_accrual.sql','023_evotor_redemptions.sql','025_evotor_redemption_effect.sql']) {
     await db.exec(await readFile(new URL('../migrations/' + name, import.meta.url), 'utf8'));
   }
   await db.exec("INSERT INTO pos_store_bindings VALUES('bar','tenant','location',TRUE),('other','other','other',TRUE)");
@@ -39,7 +39,7 @@ async function fixture() {
     body:{...body,operation:'redemption'} });
   const bind = (r = receipt, qr = 'PVK-AAAA-2222') => devices.bind(auth, { receiptUuid: r, payload: qr });
   const balance = async () => Number((await db.query('SELECT balance FROM wallets WHERE user_id=1')).rows[0].balance);
-  const reserveBody = (extra = {}) => ({ action: 'reserve', receiptUuid: receipt, clientId: '1', totalCents: 100000,
+  const reserveBody = (extra = {}) => ({ action: 'reserve', checkoutProtocol:2, receiptUuid: receipt, clientId: '1', totalCents: 100000,
     basketHash: 'a'.repeat(64), points: 300, operationId: randomUUID(), ...extra });
   const importDoc = doc => importEvotorPage(db, doc.store_id, { items: [doc], paging: {} }, { until: new Date().toISOString() });
   const process = () => processPosRedemptions(pool, { storeId: 'bar', policy });
@@ -196,9 +196,9 @@ test('mismatched, unknown and missing receipt effect hold for review, never refu
       const doc = closed(body, 990); mutate(doc);
       await f.importDoc(doc);
       const result = await f.process();
-      assert.equal(result[0].state, i === 2 ? 'released' : 'review');
+      assert.equal(result[0].state, 'review');
     }
-    assert.equal(await f.balance(), 960);
+    assert.equal(await f.balance(), 950);
     assert.deepEqual(await f.process(), []);
   } finally { await f.close(); }
 });
@@ -254,4 +254,94 @@ test('release and cloud refund follow an explicit account merge to the surviving
       assert.equal(Number((await f.db.query('SELECT client_id FROM transactions ORDER BY id DESC LIMIT 1')).rows[0].client_id),2);
     }finally{await f.close();}
   });
+});
+
+
+test('zero-discount recovery requires full actual payment; contradictory or larger effects stay in review',async()=>{
+  const f=await fixture();
+  try {
+    const cases=[
+      {id:'removed-full',net:1000,discount:0,expected:'released'},
+      {id:'zero-but-discounted-net',net:990,discount:0,expected:'review'},
+      {id:'oversized-discount',net:990,discount:20,expected:'review'},
+      {id:'no-actual-payment',net:1000,discount:0,expected:'review',payments:[]},
+    ];
+    for (const item of cases) {
+      await f.bind(item.id);const body=f.reserveBody({receiptUuid:item.id,points:10});await f.request(body);
+      const doc=closed(body,item.net);doc.body.doc_discounts=item.discount===0?[]:[{doc_discount:{discount_sum:item.discount}}];
+      if(item.payments)doc.body.payments=item.payments;
+      await f.importDoc(doc);assert.equal((await f.process())[0].state,item.expected);
+    }
+    assert.equal(await f.balance(),970);assert.deepEqual(await f.process(),[]);
+  } finally {await f.close();}
+});
+
+test('crash before SDK marker then full-price cloud payment restores reserved points exactly once',async()=>{
+  const f=await fixture();
+  try {
+    for (const type of ['CASH','ELECTRON','CARD']) {
+      const id='crashed-'+type;await f.bind(id);const body=f.reserveBody({receiptUuid:id,points:100});await f.request(body);
+      assert.equal(await f.balance(),900);
+      const doc=closed(body,1000);delete doc.extras;doc.body.doc_discounts=[];doc.body.payments[0].payment.type=type;doc.body.positions[0].doc_distributed_discount={discount_type:'SUM',discount_sum:0};
+      await f.importDoc(doc);const result=await f.process();assert.equal(result[0].state,'released');
+      assert.equal(await f.balance(),1000);assert.deepEqual(await f.process(),[]);
+    }
+  } finally {await f.close();}
+});
+
+test('unknown evidence can enrich a byte-identical snapshot and recover only its matching full-price review',async()=>{
+  const f=await fixture();
+  try {
+    await f.bind();const body=f.reserveBody({points:100});await f.request(body);
+    const doc=closed(body,1000);delete doc.extras;delete doc.body.doc_discounts;
+    await f.importDoc(doc);const before=JSON.stringify((await f.db.query('SELECT snapshot FROM pos_documents')).rows[0].snapshot);
+    assert.equal((await f.process())[0].state,'review');assert.equal(await f.balance(),900);
+    doc.body.doc_discounts=[];await f.importDoc(doc);await f.importDoc(doc);
+    assert.equal(JSON.stringify((await f.db.query('SELECT snapshot FROM pos_documents')).rows[0].snapshot),before);
+    assert.equal((await f.process())[0].state,'released');assert.equal(await f.balance(),1000);
+    assert.deepEqual(await f.process(),[]);
+    const contradictory=structuredClone(doc);contradictory.body.doc_discounts=[{doc_discount:{discount_sum:1}}];
+    await assert.rejects(f.importDoc(contradictory),e=>e.code==='document_conflict');
+    assert.equal((await f.db.query("SELECT redemption_effect->>'documentDiscountCents' AS d FROM pos_documents")).rows[0].d,'0');
+    delete doc.body.doc_discounts;await f.importDoc(doc);
+    assert.equal((await f.db.query("SELECT redemption_effect->>'documentDiscountCents' AS d FROM pos_documents")).rows[0].d,'0');
+  } finally {await f.close();}
+});
+
+test('malformed/wrong markers, distributed discounts, unsupported payments and unknown discounts never refund a possible discount',async()=>{
+  const f=await fixture();
+  try {
+    const mutations=[
+      d=>{d.extras={pivnikLoyaltyV1:{version:99}};},
+      d=>{d.body.positions[0].doc_distributed_discount={discount_type:'SUM',discount_sum:10};},
+      d=>{d.body.positions[0].splitted_positions=[{doc_distributed_discount:10}];},
+      d=>{d.body.payments[0].payment.type='CREDIT';},
+      d=>{d.body.payments[0].payment.sum=999;},
+      d=>{delete d.body.doc_discounts;},
+      d=>{d.body.doc_discounts=null;},
+      d=>{d.body.doc_discounts=[{doc_discount:{discount_sum:'bad'}}];},
+    ];
+    for (let i=0;i<mutations.length;i++) {
+      const id='unsafe-full-'+i;await f.bind(id);const body=f.reserveBody({receiptUuid:id,points:10});await f.request(body);
+      const doc=closed(body,1000);delete doc.extras;doc.body.doc_discounts=[];mutations[i](doc);
+      await f.importDoc(doc);assert.equal((await f.process())[0].state,'review');
+      assert.deepEqual(await f.process(),[], 'unsafe review must not starve subsequent receipts');
+    }
+    assert.equal(await f.balance(),920);
+  } finally {await f.close();}
+});
+
+
+test('old checkout clients cannot start monetary reservations; recovery remains compatible',async()=>{
+  const f=await fixture();try {
+    await f.bind();
+    for(const checkoutProtocol of [undefined,1,'2',3]) {
+      await assert.rejects(f.request(f.reserveBody({checkoutProtocol})),denied(426));
+      await assert.rejects(f.request({...f.reserveBody({checkoutProtocol}),action:'quote'}),denied(426));
+    }
+    assert.equal(await f.balance(),1000);
+    const op=f.reserveBody();await f.request(op);
+    const result=await f.request({action:'cancel',receiptUuid:receipt,operationId:op.operationId,effectRemoved:true});
+    assert.equal(result.redemption.state,'released');assert.equal(await f.balance(),1000);
+  } finally {await f.close();}
 });

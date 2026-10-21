@@ -1,21 +1,26 @@
-import { normalizeEvotorDocument } from './evotor-document.js';
+import { normalizeEvotorDocument, evotorRedemptionEffect } from './evotor-document.js';
 import { resolvePersonalQrRecord } from '../qr-resolver.js';
 
 export async function importEvotorDocuments(db, storeId, items) {
   // Caller owns the transaction. The same immutable-document guard serves all ingestion.
   let imported = 0;
+  const effectReady = (await db.query(`SELECT EXISTS(SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='pos_documents' AND column_name='redemption_effect') AS ready`)).rows[0]?.ready;
   for (const raw of items) {
     const doc = normalizeEvotorDocument(raw, storeId);
     if (!doc) continue;
-    const saved = await db.query(`INSERT INTO pos_documents(source,store_id,document_id,type,closed_at,amount_cents,snapshot)
-      VALUES ('evotor',$1,$2,$3,$4,$5,$6::jsonb)
+    const effect = effectReady ? evotorRedemptionEffect(raw, doc) : null;
+    const saved = await db.query(`INSERT INTO pos_documents(source,store_id,document_id,type,closed_at,amount_cents,snapshot${effectReady ? ',redemption_effect' : ''})
+      VALUES ('evotor',$1,$2,$3,$4,$5,$6::jsonb${effectReady ? ',$7::jsonb' : ''})
       ON CONFLICT(source,store_id,document_id) DO UPDATE SET
       type=EXCLUDED.type,closed_at=EXCLUDED.closed_at,amount_cents=EXCLUDED.amount_cents,
-      snapshot=EXCLUDED.snapshot,imported_at=NOW()
+      snapshot=EXCLUDED.snapshot,imported_at=NOW()${effectReady ? ',redemption_effect=COALESCE(pos_documents.redemption_effect,EXCLUDED.redemption_effect)' : ''}
       WHERE pos_documents.type=EXCLUDED.type AND pos_documents.closed_at=EXCLUDED.closed_at
         AND pos_documents.amount_cents=EXCLUDED.amount_cents
-        AND pos_documents.snapshot=EXCLUDED.snapshot RETURNING document_id`,
-    [storeId, doc.documentId, doc.type, doc.closedAt, doc.amountCents, JSON.stringify(doc)]);
+        AND pos_documents.snapshot=EXCLUDED.snapshot
+        ${effectReady ? 'AND (pos_documents.redemption_effect IS NULL OR EXCLUDED.redemption_effect IS NULL OR pos_documents.redemption_effect=EXCLUDED.redemption_effect)' : ''}
+      RETURNING document_id`,
+    [storeId, doc.documentId, doc.type, doc.closedAt, doc.amountCents, JSON.stringify(doc), ...(effectReady ? [effect === null ? null : JSON.stringify(effect)] : [])]);
     // A closed document cannot silently change fiscal count, return ancestry,
     // client eligibility or payment/product projections on a repeated delivery.
     if (!saved.rows.length) throw Object.assign(new Error('Конфликт финансовых данных закрытого документа.'), { code: 'document_conflict', statusCode: 409 });
