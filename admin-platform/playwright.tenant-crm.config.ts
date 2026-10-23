@@ -1,7 +1,8 @@
 import {defineConfig} from '@playwright/test'
 
 export default defineConfig({
-  testDir:'./e2e',testMatch:process.env.SPACEVERSE_E2E_SUPPORT==='true'?'onboarding-support.spec.ts':
+  testDir:'./e2e',testMatch:process.env.SPACEVERSE_E2E_DATABASE_BOOTSTRAP==='true'?'tenant-database-bootstrap.spec.ts':
+    process.env.SPACEVERSE_E2E_SUPPORT==='true'?'onboarding-support.spec.ts':
     process.env.SPACEVERSE_E2E_OWNER_SEARCH==='true'?'owner-venue-search.spec.ts':
     process.env.SPACEVERSE_E2E_CRM_PREPARATION==='true'?'crm-preparation.spec.ts':
     process.env.SPACEVERSE_E2E_CRM_ACTIVATION==='true'?'tenant-crm-activation.spec.ts':

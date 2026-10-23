@@ -96,6 +96,7 @@ export const sessionCapabilities=()=>({
   onboardingIntegrations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingIntegrations,
   onboardingInvitations:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingInvitations,
   onboardingProvisioning:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning,
+  onboardingDatabaseBootstrap:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingProvisioning&&config.enableOnboardingDatabaseBootstrap,
   onboardingSupport:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingSupport,
   onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
   onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
