@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-23",
+  "branch": "spaceverse/evotor-market-20261023",
+  "base": "0dd84af1431db65ded266715c6cf4369c7a318cf",
+  "ready_for_evotor_submission": false,
+  "production_mutations": false,
+  "provider_live_test": false,
+  "railway_deployment_verified": false,
+  "checks": {
+    "materialize": { "runs": 2, "sha256_equal": true, "tracked_files": 935 },
+    "node_test": { "passed": 655, "failed": 0, "skipped": 0 },
+    "admin_native_vitest": {
+      "version": "4.1.12", "passed": 472, "failed": 0, "skipped": 0,
+      "files": 40, "log": "release-native-retry.log"
+    },
+    "e2e": { "cash_crm": 12, "pagination": 12, "invitations_proxy": 4, "total": 28, "synthetic": true },
+    "built_runtime_smoke": { "assertions": 13, "postgres": "17", "external_requests": false },
+    "typecheck": 0,
+    "build": 0,
+    "lint": { "exit": 0, "existing_warnings": 12 },
+    "isolation_check": 0,
+    "root_check": 0,
+    "vk_parity": 0,
+    "vk_bundle": { "exit": 0, "api_base": "https://vk-gateway.invalid", "live_gateway_test": false },
+    "audit_vulnerabilities": { "root_full": 0, "root_production": 0, "admin_full": 0, "admin_production": 0 }
+  },
+  "retained_failed_attempts": [
+    "release-native-vitest.log: 470 passed, 2 existing provisioning tests exceeded 5000ms under concurrent load; full idle retry 472 passed",
+    "final-vk-build.log: missing required API base; retry with existing CI fixture passed"
+  ],
+  "release_blockers": [
+    "Real Evotor test installation and app/user event authentication confirmation",
+    "Verified provider-to-canonical company/venue/store ownership binding",
+    "Reconciled license authorizer and active independent tenant CRM path",
+    "Railway reconnect and exact deployed source/config verification",
+    "Publisher/legal/support/tariff approval and final review assets"
+  ],
+  "scope": [
+    "Default-off durable encrypted Evotor callback inbox",
+    "Login aggregate limits",
+    "CRM pagination and numeric stable ordering",
+    "Vitest advisory patch",
+    "Publication/configuration draft documentation"
+  ]
+}
