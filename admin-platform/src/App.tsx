@@ -92,7 +92,7 @@ export default function App(){
     else if(!selected&&!platformPage)setPage(isSuper?'platform':'overview')
   }
 
-  if(authState==='loading')return <main className="boot-screen"><div className="brand-mark">S</div><Database/><b>Подключение к панели управления…</b><span>Клиентские приложения продолжают работать независимо.</span></main>
+  if(authState==='loading')return <main className="boot-screen"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><Database/><b>Подключение к панели управления…</b><span>Клиентские приложения продолжают работать независимо.</span></main>
   if(authState==='error')return <main className="login-shell"><section className="login-card card service-error-card">
     <div className="login-icon error"><AlertTriangle/></div><span className="eyebrow">СЕРВИС ВРЕМЕННО НЕДОСТУПЕН</span><h1>Панель управления недоступна</h1><p>{authError}</p>
     <button className="btn secondary" onClick={()=>setRetry(v=>v+1)}><RefreshCw/>Повторить</button><div className="login-safety"><ShieldCheck/><span>Приложения для гостей продолжают работать.</span></div>

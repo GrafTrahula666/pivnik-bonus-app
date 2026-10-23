@@ -23,7 +23,7 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=fal
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
     <aside className={cn('sidebar',open&&'open')}>
-      <div className="brand"><div className="brand-mark">S</div><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
+      <div className="brand"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className={cn('demo-badge',mode==='production'&&'live-badge')}>
         {mode==='demo'?<Sparkles size={13}/>:<Database size={13}/>}
         {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':spaceverse?'ПАНЕЛЬ УПРАВЛЕНИЯ':'СИСТЕМА ПОДКЛЮЧЕНА'}
