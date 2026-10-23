@@ -154,7 +154,7 @@ const base = '/api/admin/onboarding/drafts'
 const empty = ():OnboardingData=>({companyId:null,companyName:'',venueName:'',address:'',timeZone:'Europe/Moscow',venueType:'bar',ownerEmail:''})
 const defaultContract:ApplicationContract={template:'standard',qrEnabled:true,isolationPolicy:'dedicated_database',legacyDataAccess:false,runtimeStatus:'not_provisioned',published:false}
 const defaultIntegrationContract:IntegrationContract={provider:'evotor',credentialStorage:'server_encrypted',credentialExposure:'masked_only',verificationMethod:'documents_read',externalAccountCreated:false,posBindingCreated:false,runtimeStatus:'not_provisioned'}
-const emptyApplication=(displayName=''):ApplicationConfig=>({displayName,theme:'premium-dark',primaryColor:'#73bcd9',secondaryColor:'#172c36',shopEnabled:true,loyaltyEnabled:true})
+const emptyApplication=(displayName=''):ApplicationConfig=>({displayName,theme:'premium-dark',primaryColor:'#73d993',secondaryColor:'#173622',shopEnabled:true,loyaltyEnabled:true})
 const message = (error:unknown)=>error instanceof Error?error.message:'Не удалось загрузить черновики.'
 
 // A damaged successful response is uncertain, never a reason to create a new request key.

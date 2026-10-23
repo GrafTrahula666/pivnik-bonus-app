@@ -103,7 +103,7 @@ export function Kpi({
             <Area
               type="monotone"
               dataKey="value"
-              stroke={down ? '#ff7a90' : '#73bcd9'}
+              stroke={down ? '#ff7a90' : '#73d993'}
               fill="none"
               strokeWidth={1.5}
             />
@@ -151,8 +151,8 @@ export function Donut({ value }: { value: number }) {
           endAngle={-270}
           stroke="none"
         >
-          <Cell fill="#73bcd9" />
-          <Cell fill="#192f3a" />
+          <Cell fill="#73d993" />
+          <Cell fill="#193a25" />
         </Pie>
       </PieChart>
     </ResponsiveContainer>
