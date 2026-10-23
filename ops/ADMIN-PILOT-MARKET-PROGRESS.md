@@ -2,6 +2,8 @@
 
 Дата: 23 октября 2026. Ветка `spaceverse/evotor-market-20261023`.
 База `origin/main`: `0dd84af1431db65ded266715c6cf4369c7a318cf`.
+Код и тесты: commit `708b5724f3f035f09e080311dfa8bc9e01309a92`.
+Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 **Статус продукта: не готов к коммерческому выпуску; публикация не выполнялась.**
 Процент готовности не используется: ниже проверяемые функции и ограничения.
 
@@ -25,6 +27,8 @@
   и не доказательство tenant onboarding или версии. Сайт не изменялся.
 - Полномочия: локальная разработка/тесты/коммиты/draft PR. Нет merge/deploy,
   production migrations/data writes, кассовых операций, публикации, киоска.
+- Read-only main branch protection API вернул403 (`Resource not accessible by
+  integration`); обязательные review/status gates не подтверждены и не менялись.
 
 ## Сделано в этой сессии
 
