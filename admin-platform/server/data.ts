@@ -415,11 +415,11 @@ export async function getClients(scope: VenueScope, url: URL) {
   const offset = boundedInt(url.searchParams.get('offset'), 0, 0, 1_000_000)
   const sortKey = String(url.searchParams.get('sort') || 'lastActivity')
   const orderBy = {
-    lastActivity: 'last_activity_at DESC NULLS LAST',
-    spend: 'lifetime_spend_cents DESC',
-    balance: 'balance DESC',
+    lastActivity: 'tx.last_activity_at DESC NULLS LAST',
+    spend: 'COALESCE(tx.lifetime_spend_cents,0) DESC',
+    balance: 'COALESCE(w.balance,0) DESC',
     created: 'u.created_at DESC',
-  }[sortKey] || 'last_activity_at DESC NULLS LAST'
+  }[sortKey] || 'tx.last_activity_at DESC NULLS LAST'
 
   const segment = String(url.searchParams.get('segment') || '')
   const params: Array<string | number> = [barId, `%${query}%`, limit, offset]
@@ -519,7 +519,7 @@ export async function getClients(scope: VenueScope, url: URL) {
          OR u.id::text ILIKE $2
        )
        ${statusClause}
-     ORDER BY ${orderBy}
+     ORDER BY ${orderBy}, u.id ASC
      LIMIT $3 OFFSET $4`,
     params,
   )

@@ -4,6 +4,47 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Admin Pilot Marketplace inbox (2026-10-23, default off)
+
+`admin-platform/server/evotor-market.ts` handles only POST `/api/v1/user/token`,
+`/api/v1/installation/event` and `/api/v1/subscription/event` before the browser
+Admin router. `ADMIN_ENABLE_EVOTOR_MARKET_WEBHOOKS=false` hides these routes.
+Enabling requires a UUID4 product, exact strong app-level Authorization and
+the existing onboarding secret keyring. Manual Admin migration 018 contains
+provider identities, encrypted tokens, durable deduplicated events and a
+contiguous subscription projection; none is a new tenant or company grant.
+Unknown properties/products/versions, conflicting retries and cross-user
+subscriptions fail closed. Event and projection commit together before 200;
+SQL/commit failures return 503 without provider/SQL/credential text. Uninstall
+cannot be undone by an older install. Sequence gaps are explicit; large
+contiguous backlogs drain in batches. Terms/add-on changes require review.
+Termination requested remains resumable, distinct from terminal termination.
+No token consumer, tenant binding, license authorizer, commercial activation,
+provider call or billing is introduced. App-vs-user notification auth differs
+between official documents and remains a mandatory real-provider test gate.
+See `EVOTOR-MARKET-RUNBOOK.md` and `ADMIN-PILOT-MARKET-PROGRESS.md`.
+`server/tests/evotor-market.spec.ts` exercises real HTTP and disposable SQL;
+`SPACEVERSE_TEST_NATIVE_POSTGRES_URL` selects independent native connections.
+This Admin-only mount has no duplicate route in root `server.js` or
+`universal-server.js`; neither root server is changed by this feature.
+
+`auth.ts:login` retains the six-attempt IP/account limit and adds independent
+30-per-IP and 15-per-normalized-account limits per 15 minutes, before password
+SQL/scrypt. `login-rate-limit.spec.ts` covers rotating identities/IPs and expiry.
+Limits are process-local, not a distributed ingress protection guarantee.
+
+`ProductionCRM.tsx` now requests bounded 100-row pages with offset and accessible
+Previous/Next controls. Search/sort/segment changes reset the page; exact-path
+results hide stale rows and reject late responses. Existing keyed scope/drawer
+isolation remains. `data.ts:getClients` orders by typed numeric balance/spend
+and timestamp sources (not response text aliases), then `u.id ASC` for stable
+ties. Native PostgreSQL integration covers 205 equal-sort customers, a foreign
+bar and 9/20/100 numeric ordering; existing legacy tenant guard is retained.
+`crm-pagination.config.ts` and its named fixtures run desktop/mobile browser
+regressions. Ordinary offset pagination does not promise a frozen snapshot
+while another operator changes the database. Vitest is pinned to 4.1.12 to fix
+the two currently reported moderate dev-only @vitest/mocker advisories.
+
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
 `GET /api/admin/onboarding/venues` accepts optional `q` (up to 100 characters,

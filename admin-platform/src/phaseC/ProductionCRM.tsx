@@ -37,24 +37,45 @@ interface DetailResponse extends Client {
   achievements:Array<Record<string,unknown>>;wheelHistory:Array<Record<string,unknown>>;shopPurchases:Array<Record<string,unknown>>
 }
 interface AchievementConfigResponse {items:Array<{code:string;title:string}>}
+const CLIENT_PAGE_SIZE=100
+const MAX_CLIENT_OFFSET=1_000_000
+
+// Bind visible rows to the exact request; filters/pages must not display an older result.
+function useClientPage(path:string){
+  const [result,setResult]=useState<{path:string;data:ListResponse}|null>(null)
+  const [failure,setFailure]=useState<{path:string;message:string}|null>(null)
+  const [pending,setPending]=useState(true),[revision,setRevision]=useState(0)
+  useEffect(()=>{
+    let cancelled=false
+    setPending(true);setFailure(null)
+    apiGet<ListResponse>(path).then(data=>{if(!cancelled)setResult({path,data})})
+      .catch(error=>{if(!cancelled)setFailure({path,message:error instanceof Error?error.message:'Ошибка загрузки'})})
+      .finally(()=>{if(!cancelled)setPending(false)})
+    return()=>{cancelled=true}
+  },[path,revision])
+  const data=result?.path===path?result.data:null
+  const error=failure?.path===path?failure.message:''
+  return {data,error,loading:pending||(!data&&!error),reload:()=>setRevision(v=>v+1)}
+}
 
 export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;session:AdminSession;onBroadcast?:(segment:string)=>void}){
   const [query,setQuery]=useState(''),[sort,setSort]=useState('lastActivity'),[selected,setSelected]=useState<string|null>(null),[segment,setSegment]=useState<Segment|''>('')
-  const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&limit=100${segment?`&segment=${segment}`:''}`
-  const {data,error,loading,reload}=useResource<ListResponse>(path,[query,sort,segment])
+  const [offset,setOffset]=useState(0)
+  const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&limit=${CLIENT_PAGE_SIZE}&offset=${offset}${segment?`&segment=${segment}`:''}`
+  const {data,error,loading,reload}=useClientPage(path)
   const segments=useResource<{segments:Record<Segment,number>}>(`/api/admin/venues/${venue.id}/clients/segments`)
   return <div className="page">
     <PageHead eyebrow="БАЗА КЛИЕНТОВ" title="Клиенты" sub={data?`${rub.format(data.total)} клиентов в выбранном заведении`:'Загрузка клиентской базы'}
       actions={<><LivePill/>{venue.accessKind!=='trusted'&&<WriteGatePill enabled={session.capabilities.productionBonusWrites} label="БОНУСЫ"/>}</>}/>
     <div className="toolbar card">
-      <label className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Имя, @ник или ID клиента…"/></label>
-      <div className="toolbar-filters"><select value={sort} onChange={e=>setSort(e.target.value)}>
+      <label className="search"><Search size={16}/><input value={query} onChange={e=>{setQuery(e.target.value);setOffset(0)}} placeholder="Имя, @ник или ID клиента…"/></label>
+      <div className="toolbar-filters"><select aria-label="Сортировка клиентов" value={sort} onChange={e=>{setSort(e.target.value);setOffset(0)}}>
         <option value="lastActivity">Последняя активность</option><option value="spend">Сумма покупок</option><option value="balance">Баланс</option><option value="created">Регистрация</option>
       </select><div className="live-source-pill"><span/><Database/>АКТУАЛЬНЫЕ ДАННЫЕ</div></div>
     </div>
     {segments.data&&<div className="segment-row">
-      <button className={segment===''?'segment-chip active':'segment-chip'} onClick={()=>setSegment('')}><b>Все</b><span>{rub.format(Object.values(segments.data.segments).reduce((a,b)=>a+b,0))}</span></button>
-      {SEGMENTS.map(([key,label,hint])=><button key={key} title={hint} className={segment===key?`segment-chip seg-${key} active`:`segment-chip seg-${key}`} onClick={()=>setSegment(segment===key?'':key)}><b>{label}</b><span>{rub.format(segments.data!.segments[key]||0)}</span></button>)}
+      <button className={segment===''?'segment-chip active':'segment-chip'} onClick={()=>{setSegment('');setOffset(0)}}><b>Все</b><span>{rub.format(Object.values(segments.data.segments).reduce((a,b)=>a+b,0))}</span></button>
+      {SEGMENTS.map(([key,label,hint])=><button key={key} title={hint} className={segment===key?`segment-chip seg-${key} active`:`segment-chip seg-${key}`} onClick={()=>{setSegment(segment===key?'':key);setOffset(0)}}><b>{label}</b><span>{rub.format(segments.data!.segments[key]||0)}</span></button>)}
     </div>}
     {segment&&<div className="segment-note"><SourceNote>{SEGMENTS.find(([k])=>k===segment)?.[2]}.</SourceNote>{onBroadcast&&segment!=='active'&&<button className="btn secondary" onClick={()=>onBroadcast(segment)}><Megaphone/>Написать этим гостям</button>}</div>}
     {error&&<ErrorCard error={error} onRetry={reload}/>}
@@ -69,6 +90,11 @@ export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;sessio
       </tr>)}</tbody>
     </table></div></div>}
     {data&&data.rows.length===0&&<EmptyState title="Клиенты не найдены" sub="Измените поисковый запрос или сегмент."/>}
+    <nav aria-label="Страницы клиентов" className="toolbar" style={{flexWrap:'wrap'}}>
+      <button className="btn secondary" disabled={loading||offset===0} onClick={()=>setOffset(v=>Math.max(0,v-CLIENT_PAGE_SIZE))}>Назад</button>
+      <span role="status" aria-live="polite">{loading?'Загрузка страницы…':error?'Страница не загружена':data?`${data.rows.length?offset+1:0}–${data.rows.length?offset+data.rows.length:0} из ${rub.format(data.total)}`:''}</span>
+      <button className="btn secondary" disabled={loading||!!error||!data||offset>=MAX_CLIENT_OFFSET||offset+CLIENT_PAGE_SIZE>=data.total} onClick={()=>setOffset(v=>Math.min(MAX_CLIENT_OFFSET,v+CLIENT_PAGE_SIZE))}>Далее</button>
+    </nav>
     {selected&&<CustomerDrawer key={`${venue.companyId}:${venue.id}:${selected}`} venue={venue} session={session} userId={selected} onClose={()=>setSelected(null)} onChanged={reload}/>}
   </div>
 }
