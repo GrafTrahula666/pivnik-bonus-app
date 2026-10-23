@@ -35,15 +35,15 @@ export function PlatformPage({ onOpenVenue }: { onOpenVenue: (id: string) => voi
               <AreaChart data={platformSeries}>
                 <defs>
                   <linearGradient id="platformFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stopColor="#73d993" stopOpacity=".22" />
-                    <stop offset="1" stopColor="#73d993" stopOpacity="0" />
+                    <stop offset="0" stopColor="#46d8e2" stopOpacity=".22" />
+                    <stop offset="1" stopColor="#46d8e2" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="#173622" strokeDasharray="4 4" />
-                <XAxis dataKey="day" tick={{ fill: '#6e917b', fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: '#6e917b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <CartesianGrid vertical={false} stroke="#173336" strokeDasharray="4 4" />
+                <XAxis dataKey="day" tick={{ fill: '#6e8d91', fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#6e8d91', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip />
-                <Area type="monotone" dataKey="customers" stroke="#73d993" fill="url(#platformFill)" strokeWidth={2} />
+                <Area type="monotone" dataKey="customers" stroke="#46d8e2" fill="url(#platformFill)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

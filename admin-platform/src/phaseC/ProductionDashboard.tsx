@@ -77,10 +77,10 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
         </div>
         <div className="chart">
           {metric==='visits'?<div className="chart-empty"><CircleHelp/><b>Пока недостаточно данных</b><span>Показатель появится после накопления истории посещений.</span></div>:
-          chart.length?<ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}>
-            <defs><linearGradient id="liveFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#73d993" stopOpacity=".25"/><stop offset="1" stopColor="#73d993" stopOpacity="0"/></linearGradient></defs>
-            <CartesianGrid vertical={false} stroke="#173622" strokeDasharray="4 4"/><XAxis dataKey="day" tick={{fill:'#6e917b',fontSize:11}} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
-            <YAxis tick={{fill:'#6e917b',fontSize:11}} axisLine={false} tickLine={false}/><Tooltip/><Area type="monotone" dataKey={metric} stroke="#73d993" fill="url(#liveFill)" strokeWidth={2}/>
+          chart.length?<ResponsiveContainer width="100%" height="100%"><AreaChart key={metric} data={chart}>
+            <defs><linearGradient id="liveFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#46d8e2" stopOpacity=".25"/><stop offset="1" stopColor="#46d8e2" stopOpacity="0"/></linearGradient></defs>
+            <CartesianGrid vertical={false} stroke="#173336" strokeDasharray="4 4"/><XAxis dataKey="day" tick={{fill:'#6e8d91',fontSize:11}} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
+            <YAxis tick={{fill:'#6e8d91',fontSize:11}} axisLine={false} tickLine={false}/><Tooltip/><Area type="monotone" dataKey={metric} stroke="#46d8e2" fill="url(#liveFill)" strokeWidth={2} isAnimationActive animationDuration={800} animationEasing="ease-out"/>
           </AreaChart></ResponsiveContainer>:<div className="chart-empty"><Database/><b>За период нет операций</b></div>}
         </div>
         {compare&&<div className="chart-legend"><span className="legend-now"/>Текущий период <span className="comparison-note">KPI сравниваются с предыдущим периодом</span></div>}
