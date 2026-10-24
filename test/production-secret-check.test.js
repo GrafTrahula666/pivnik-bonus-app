@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 test('Release secret check accepts valid config and fails mismatches without any Railway mutation', async () => {
@@ -27,7 +27,7 @@ test('Release secret check accepts valid config and fails mismatches without any
   `);
   try {
     const run = (mode) => execFileSync(process.execPath,
-      ['--import', fixture, path.join(root, 'scripts/railway-ensure-production-secrets.mjs'), '--check'], {
+      ['--import', pathToFileURL(fixture).href, path.join(root, 'scripts/railway-ensure-production-secrets.mjs'), '--check'], {
         encoding: 'utf8', stdio: 'pipe', timeout: 5000,
         env: { PATH: process.env.PATH, RAILWAY_API_TOKEN: 'fixture-token', FIXTURE: mode }
       });
