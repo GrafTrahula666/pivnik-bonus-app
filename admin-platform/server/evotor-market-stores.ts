@@ -115,3 +115,34 @@ export async function verifyEvotorMarketStores({ token, expectedUserId, fetchImp
     if (reader) void reader.cancel().catch(() => undefined)
   }
 }
+
+
+/**
+ * Server-only token revision boundary for a future authorized owner flow.
+ * The revision reader MUST use current primary-DB credential state, not browser
+ * data or a cached projection. This guards stale read-only store evidence, but
+ * is NOT owner proof, a tenant/store binding, or a license. A binding transaction
+ * must independently recheck revision and current canonical grants.
+ */
+export async function verifyEvotorMarketStoresAtRevision({
+  token, expectedUserId, expectedTokenRevision, readCurrentTokenRevision, fetchImpl,
+}: {
+  token: string
+  expectedUserId: string
+  expectedTokenRevision: number
+  readCurrentTokenRevision: () => Promise<number | null>
+  fetchImpl?: typeof fetch
+}): Promise<readonly EvotorMarketStore[]> {
+  if (!Number.isSafeInteger(expectedTokenRevision) || expectedTokenRevision < 1
+    || typeof readCurrentTokenRevision !== 'function') throw failure('INVALID_CONFIGURATION')
+  const revisionMatches = async () => {
+    try { return await readCurrentTokenRevision() === expectedTokenRevision }
+    catch { return false }
+  }
+  // Do not contact the provider when the token is already revoked or rotated.
+  if (!await revisionMatches()) throw failure('TOKEN_REVISION_STALE')
+  const stores = await verifyEvotorMarketStores({ token, expectedUserId, fetchImpl })
+  // A complete provider response is not valid evidence after a mid-flight revoke.
+  if (!await revisionMatches()) throw failure('TOKEN_REVISION_STALE')
+  return stores
+}
