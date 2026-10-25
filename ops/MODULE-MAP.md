@@ -15,6 +15,12 @@ Non-200, foreign owner, malformed data, duplicate IDs/cursors, redirects or caps
 fail closed without partial results. One 15s deadline covers headers and streamed
 bodies across all pages; bounds are 50 pages/5000 stores, 1MiB per page/5MiB total.
 Timeout/late-response cleanup and secret-free errors have focused tests.
+`verifyEvotorMarketStoresAtRevision` is an additional unmounted server-only
+wrapper: it requires a trusted primary-DB revision reader, denies missing/stale
+revision before provider GET and rechecks after complete pagination. Revocation,
+rotation or DB read errors fail closed without returning store evidence. Its
+revision checks are not owner proof and cannot replace atomic binding-time
+revision/grant verification. Negative tests cover mid-flight revoke.
 It has no route, feature switch, environment mutation, DB writes or live caller.
 It does not prove canonical company ownership, installation, selected-store
 binding, terminal allocation or license. Empty stores proves no ownership.
