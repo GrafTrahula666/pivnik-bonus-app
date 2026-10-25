@@ -226,7 +226,7 @@ async function periodMetrics(scope: VenueScope, range: PeriodRange) {
   }
 }
 
-export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
+export async function getVenueDashboard(scope: VenueScope, range: PeriodRange, options: {hourly?: boolean} = {}) {
   const current = await periodMetrics(scope, range)
   const duration = range.to.getTime() - range.from.getTime()
   const previousRange: PeriodRange = {
@@ -257,7 +257,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
          AND u.role = 'client'
      )
      SELECT
-       (COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::date::text AS day,
+       ${options.hourly ? "(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::date::text" : "DATE_TRUNC('day', COALESCE(t.completed_at, t.created_at))::date::text"} AS day,
        COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
        COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
        COUNT(*)::bigint AS operations,
@@ -285,7 +285,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
 
 
   // A separate 24-hour aggregate of completed app operations, not POS receipts.
-  const hourlyResult = await readPool.query<{
+  const hourlyResult = options.hourly ? await readPool.query<{
     hour: number
     revenue_cents: string
     checks: string
@@ -329,7 +329,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
      GROUP BY 1
      ORDER BY 1`,
     [barId, range.from.toISOString(), range.to.toISOString()],
-  )
+  ) : null
 
   const platformResult = await readPool.query<{
     platform_state: string
@@ -426,7 +426,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
       bonusEarned: numeric(row.bonus_earned),
       bonusRedeemed: numeric(row.bonus_redeemed),
     })),
-    hourly: hourlyResult.rows.map(row => ({
+    hourly: hourlyResult?.rows.map(row => ({
       hour: row.hour,
       revenue: centsToRubles(row.revenue_cents),
       checks: numeric(row.checks),
