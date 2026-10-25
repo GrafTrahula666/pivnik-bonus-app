@@ -9,10 +9,44 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-25 22:13 UTC (AUTO-RESUME turn 10).
-Канонический координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
-Единая кооперативная точка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto10-20261025T225524Z-gpt6-a1`, acquired_at_UTC=`2026-10-25T22:55:24Z`, status=`active`. Release в текущем checkpoint commit; не считать глобальной блокировкой без дисциплины других writers. `automations.peek` недоступен.
+Обновлено: 2026-10-25 23:18 UTC. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
+**LOCK CURRENT:** owner_run_id=`auto10-20261025T225524Z-gpt6-a1`, acquired_at_UTC=`2026-10-25T22:55:24Z`, status=`released`.
+Освобождение в текущем checkpoint commit (его SHA читать из GitHub, не записывать самоссылочно).
+Кооперативный CAS не является глобальной блокировкой writers вне протокола.
+`automations.peek` недоступен; независимая CRM automation остаётся disabled.
+
+### Последняя итерация — 2026-10-25 23:18 UTC, AUTO-RESUME
+
+**Сделано (без production):**
+- Draft #299 синхронизирован с актуальным `main@517ea17c4620b843c08b4d01f781c666b41f3548` без потери 967 неизменённых main blobs. Разведены конфликтующие Admin migration IDs: в main 018 beer intake/019 stock operations, Marketplace inbox теперь `020_evotor_market_inbox.sql` и `021_evotor_market_reconciliation.sql`. Ссылки в SQL/tests/docs/env исправлены; native CI paths обновлены. Implementation HEAD #299: `10ba06f0ed976c46794efd6697ce7177d5f54319`. PR теперь mergeable=true, draft=true.
+- Зависимый Draft #302 синхронизирован с #299; nonce migration перенумерована с 020 на `022_evotor_owner_proof_nonces.sql`, тесты и workflow paths исправлены. Сохранены P0.2 store adapter, proof verifier, native nonce consumer, а также изменения main. Implementation HEAD #302: `5c7a32e7d2c1586a75964f9453fd9a98c9f71b39`, mergeable=true, draft=true.
+- Независимый CRM Draft #296 синхронизирован с main; сохранены текущие owner dashboard/stock safety и CRM bootstrap. Единственный пересекавшийся тип AdminSession вручную объединил `beerIntake` + `onboardingDatabaseBootstrap`. Добавлен `.github/workflows/spaceverse-crm-native-postgres.yml` с disposable PostgreSQL16, отдельной CI-ролью и 27 native тестами. Implementation HEAD #296: `9c8b0d15d0c4b41640d3d50b2f550ca429cb5c0b`, mergeable=true, draft=true.
+- Все изменения в разрешённых Draft; `main`, Railway, production БД, касса, VK/TG, kiosk, секреты, миграции в production, платные ресурсы не изменялись. Ни один PR не merged/deployed.
+
+**Проверено (именно GitHub Actions, не локально):**
+- #299 `10ba06f0`: native callback PostgreSQL **4 pass / 0 fail / 0 skip** (run 40243762246), release gate **656 root pass / 0 fail / 0 skip; Business 481 pass / 0 fail / 25 skip** (run 40243762249), browser **success** (run 40243762241); npm audits **0 vulnerabilities**.
+- #302 `5c7a32e7`: native nonce **4 pass**, signed owner proof **26 pass**, native callback **4 pass**, все 0 fail/skip (run 40243822383). Release gate **656 root pass / 0 fail / 0 skip; Business 566 pass / 0 fail / 29 skip** (run 40243822257); browser **success** (run 40243822251); npm audits **0 vulnerabilities**.
+- #296 `9c8b0d15`: **27/27 native PostgreSQL CRM bootstrap pass** (run 40243855133), release gate **656 root pass / 0 fail / 0 skip; Business 485 pass / 0 fail / 20 skip** (run 40243855075); npm audits **0 vulnerabilities**. Browser run 40243855187 ещё выполнялся на момент записи, НЕ заявлять PASS до проверки.
+- CI release gate включает materialize×2, runtime/VK parity, root tests, Business tests, audits. Локальные команды `npm run materialize`, `node --test`, `npm run check`, `npm audit` и native DB локально НЕ выполнялись: нет клона, github.com DNS недоступен. `pivnik-preflight` не обнаружен среди установленных skills.
+
+**Release gate матрица:**
+
+| Функция | Реализовано | Проверено | main | production | Блокер / следующее действие |
+| --- | --- | --- | --- | --- | --- |
+| P0.1 callback inbox | #299 Draft, миграции 020/021 | native 4 PASS + CI green | нет | нет | Реальный provider auth/install/reconciliation, license gate |
+| P0.2 store ownership | #302 Draft, unmounted adapter + nonce 022 | native 4+26+4 PASS + CI green | нет | нет | Trusted issuer, canonical grants/token revision в binding transaction |
+| P0.3 CRM bootstrap | #296 Draft | native 27 PASS, release PASS, browser pending | нет | нет | Live independent DB/tenant E2E и #96 tenant isolation |
+| P0.4 server license | Нет подтверждённого готового authorizer | нет | нет | нет | Подтверждённый provider grant и коммерческий контракт |
+| P0.5 fiscal sync | Частичная существующая интеграция | новый tenant E2E нет | не подтверждено | не подтверждено | Тестовый Evotor store/terminal, возврат и документы |
+| Market onboarding A–H | Частичный Draft | end-to-end не пройден | нет | нет | Owner account, provider/legal/release gates |
+
+**Риски:** P0 — нет trusted owner issuer, server license, реального Эвотор E2E и canonical binding; P1 — #96 tenant isolation остаётся конфликтным, #296 browser run pending; P2 — общая кооперативная CAS-блокировка не защищает от writers вне протокола. Пропущенные 25/29/20 native/integration тесты в общих Business suites не считаются успешными; отдельно выполненные native suites указаны выше.
+
+**Следующее точное действие:** сначала проверить финальный browser CI #296 (run 40243855187) и свежие HEAD; затем P0.2 подготовить минимальный fail-closed binding-time validator current canonical grants + token revision без выдачи лицензии, только после изучения действующего ownership/authorization контракта. #96 и внешние provider/legal gates остаются отдельными задачами. Никаких merge/deploy до release acceptance.
+
+**Checkpoint commit:** текущий коммит этой записи; точный SHA получить из GitHub после CAS. Последний implementation SHA: #299 `10ba06f0ed976c46794efd6697ce7177d5f54319`, #302 `5c7a32e7d2c1586a75964f9453fd9a98c9f71b39`, #296 `9c8b0d15d0c4b41640d3d50b2f550ca429cb5c0b`.
+**LOCK:** `auto10-20261025T225524Z-gpt6-a1` освобождён после остановки собственных writers. Следующий запуск читает этот checkpoint и проверяет run ownership перед новым CAS.
 
 ### Последняя итерация — 2026-10-25 22:13 UTC, AUTO-RESUME turn 10
 
