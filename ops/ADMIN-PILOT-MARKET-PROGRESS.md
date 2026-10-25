@@ -65,7 +65,7 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 ### LOCK — общий протокол единственного исполнителя
 
 ```json
-{"owner_run_id":null,"acquired_at":null,"status":"released"}
+{"owner_run_id":"auto7-20261025T1704Z-iyemnwfs","acquired_at":"2026-10-25T17:04:34.968Z","status":"active"}
 ```
 
 Перед записью проверь run_details обеих инженерных automations через peek.
