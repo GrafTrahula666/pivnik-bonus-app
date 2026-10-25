@@ -196,11 +196,13 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
             'Сначала подтвердите схему и ownership-границы выделенной базы приложения.')
       }
     }
+    // A metadata lock wait must not consume the binding lease before it is issued.
+    const leaseClock=step===BINDING_STEP?'clock_timestamp()':'NOW()'
     const initialToken=crypto.randomUUID()
     const inserted=await client.query<{lease_token:string}>(`INSERT INTO admin_onboarding_provisioning_steps(
       draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,
       status,attempt_count,lease_token,lease_expires_at)
-      VALUES($1::uuid,$2,$3,$4,$5,$6::bigint,$7::bigint,'running',1,$8::uuid,NOW()+INTERVAL '${LEASE_SECONDS} seconds')
+      VALUES($1::uuid,$2,$3,$4,$5,$6::bigint,$7::bigint,'running',1,$8::uuid,${leaseClock}+INTERVAL '${LEASE_SECONDS} seconds')
       ON CONFLICT (draft_id,step) DO NOTHING RETURNING lease_token::text`,[
       source.draftId,step,source.manifest.runtimeKey,source.manifest.manifestSha256,
       source.manifest.source.applicationRevision,source.manifest.scope.companyId,source.manifest.scope.venueId,
@@ -224,7 +226,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
     const token=crypto.randomUUID()
     await client.query(`UPDATE admin_onboarding_provisioning_steps SET
       status='running',attempt_count=attempt_count+1,lease_token=$3::uuid,
-      lease_expires_at=NOW()+INTERVAL '${LEASE_SECONDS} seconds',last_error_code=NULL,result=NULL,updated_at=NOW()
+      lease_expires_at=${leaseClock}+INTERVAL '${LEASE_SECONDS} seconds',last_error_code=NULL,result=NULL,updated_at=NOW()
       WHERE draft_id=$1::uuid AND step=$2`,[source.draftId,step,token])
     row=await selectStep(client,source.draftId,step,true)
     if(!row) throw unavailable()
