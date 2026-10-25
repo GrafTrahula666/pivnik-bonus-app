@@ -6,7 +6,7 @@ export type EvotorStockProduct={
 }
 const productIdPattern=/^[A-Za-z0-9_-]{1,200}$/
 const storeIdPattern=/^[A-Za-z0-9_-]{1,200}$/
-const required=(condition:unknown,code:string,message:string)=>{
+function required(condition:unknown,code:string,message:string): asserts condition {
   if(!condition)throw new HttpError(502,code,message)
 }
 const requestHeaders=(token:string)=>({
