@@ -57,7 +57,11 @@ Shared Admin-данные, production `users/wallets/purchases`, реальны�
 Действующий lease блокирует повтор; истёкший lease допускает reconciliation.
 Роль/active account и canonical write grant повторно проверяются до claim и
 подтверждения результата. Lease измеряется `clock_timestamp()`, в том числе
-после ожидания metadata locks. Старый worker не подтверждает истёкшую попытку.
+после ожидания metadata locks. Для первого claim и retry шага привязки
+`lease_expires_at` теперь отсчитывается от фактического момента выдачи,
+а не от начала транзакции (`NOW()`). Регрессионный тест моделирует ожидание
+блокировки metadata перед обоими claim; результаты CI нового HEAD проверяются
+отдельно. Старый worker не подтверждает истёкшую попытку.
 
 Target commit и metadata commit не являются общей транзакцией. Если target уже
 сохранился, а ответ/audit/metadata confirmation потеряны, UI не обещает успех;
