@@ -103,7 +103,7 @@ export function Kpi({
             <Area
               type="monotone"
               dataKey="value"
-              stroke={down ? '#ff7a90' : '#46d8e2'}
+              stroke={down ? '#ff7a90' : 'var(--accent)'}
               fill="none"
               strokeWidth={1.5}
               isAnimationActive
@@ -157,7 +157,7 @@ export function Donut({ value }: { value: number }) {
           animationDuration={900}
           animationEasing="ease-out"
         >
-          <Cell fill="#46d8e2" />
+          <Cell fill="var(--accent)" />
           <Cell fill="#19363a" />
         </Pie>
       </PieChart>

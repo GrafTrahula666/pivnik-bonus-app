@@ -1,18 +1,21 @@
+import { SPACEVERSE_BRAND } from './branding'
 import { useState,type FormEvent } from 'react'
 import { LockKeyhole,ShieldCheck,Sparkles } from 'lucide-react'
 import { login,type AdminSession } from './api'
+import BlackHole from './BlackHole'
 
 export function Login({onAuthenticated,onDemo,onInvite}:{onAuthenticated:(session:AdminSession)=>void;onDemo?:()=>void;onInvite?:()=>void}){
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   async function submit(event:FormEvent){event.preventDefault();setBusy(true);setError('')
     try{onAuthenticated(await login(email,password))}catch(e){setError(e instanceof Error?e.message:'Не удалось войти.')}finally{setBusy(false)}
   }
-  return <main className="login-shell">
+  return <main className="login-shell spaceverse-login">
+    <BlackHole/>
+    <div className="login-brand"><img src={SPACEVERSE_BRAND.logo} alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПРОСТРАНСТВО ВАШЕГО БИЗНЕСА</span></div></div>
     <section className="login-card card">
-      <div className="login-brand"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className="login-icon"><LockKeyhole /></div><span className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</span>
-      <h1>Вход в панель управления</h1>
-      <p>Безопасный доступ к показателям, клиентам и настройкам ваших заведений.</p>
+      <h1>С возвращением.</h1>
+      <p>Ваш бизнес. Под вашим контролем.</p>
       <form onSubmit={submit}>
         <label className="field"><span>Email</span><input aria-label="Email" type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)}/></label>
         <label className="field"><span>Пароль</span><input aria-label="Пароль" type="password" autoComplete="current-password" required minLength={12} value={password} onChange={e=>setPassword(e.target.value)}/></label>
