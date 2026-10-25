@@ -37,6 +37,7 @@ export async function bootstrapEmptyTenant(client:PoolClient,sql:readonly string
       AND nspname !~ '^pg_(toast|temp)')
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_extension WHERE extname<>'plpgsql')
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_event_trigger)
+    OR EXISTS(SELECT 1 FROM pg_catalog.pg_publication)
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_foreign_server)
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_class WHERE relnamespace=pg_catalog.pg_my_temp_schema())
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_largeobject_metadata)
