@@ -9,44 +9,57 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-25T11:56:50.846Z. Канонический координатор: automation
-`6add7969f55c8191a8e5eb93dbe96ff1`; общий журнал и LOCK — только эта
-ветка `spaceverse/evotor-market-20261023` (#299), в том числе для работ в #296/#302.
+Обновлено: 2026-10-25 (AUTO-RESUME turn 5).
+Канонический координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Общая ветка координации и единственный кооперативный LOCK: `spaceverse/evotor-market-20261023` (#299).
 
-- Последняя выполненная задача: диагностика остановки AUTO-RESUME и инициализация
-  общего checkpoint. Запуск `c56df172-75a4-832e-9de8-959920dd1ceb` завершился
-  без кода и сам приостановил расписание из-за недоступного тогда peek.
-  Сейчас peek доступен; оба прежних инженерных запуска подтверждены completed.
-- Текущая незавершённая задача: P0.1 native PostgreSQL concurrency evidence;
-  затем P0.2 canonical owner proof/current grants/token revision поверх #302.
-- Последний implementation commit #299:
-  `7d2a310e8817a4f929f777a4f947f781e706523e`.
-  Последний #302: `babc890c8aa302ad7ad514e8ccb8bb0185e808ac`.
-  Последний #296: `a1bc89c17a12213a8b18e58621548d7b58f0ac74`.
-  Это существовавший код других итераций, не результат восстановления расписания.
-- Checkpoint commit: текущий коммит этой записи; его SHA читать из GitHub.
-- Проверки лично в этой итерации: свежие GitHub PR/head/progress и статусы CI.
-  Для каждого указанного implementation SHA два workflow completed/success:
-  #299 runs 40160686929/40160686942; #302 40171432193/40171432344;
-  #296 40173545303/40173545218. Локальные тесты не запускались;
-  runtime/production/native PostgreSQL/provider E2E не проверены.
-- Подтверждённые блокеры: в этой среде нет локального checkout; live provider
-  account/install/ownership и коммерческие условия не подтверждены.
-  Недоступность live provider не блокирует независимые native/test-code задачи.
-- Точное следующее техническое действие: получить собственный LOCK по протоколу
-  ниже; прочитать существующие native SQL callback tests и их CI setup, проверить
-  незакрытые cross-user/owner-conflict concurrency cases и подготовить минимальное
-  дополнение существующего тестового контура. Не повторять общий аудит и не
-  включать owner/store/license доступ без доказательства полномочий.
-- Осталось: native concurrency gates, canonical binding, license authorizer,
-  independent CRM activation и внешний test E2E. Не считать CI коммерческим релизом.
-- Полномочия этой передачи: разработка/тесты/коммиты/Draft; без production writes,
-  merge/deploy, реальных денег, новых платных ресурсов и публикации.
+- Последняя завершённая инженерная задача: P0.1, добавлен **native PostgreSQL**
+  integration test для callback inbox: миграции 018→019 и повторное применение,
+  параллельные точные retry на независимых PG соединениях, настоящий `FOR UPDATE`
+  lock/wait и cross-user owner-conflict с сохранением исходного владельца,
+  `review_required` и sticky reconciliation hold. Тест использует только
+  временную schema внутри БД с обязательным префиксом `codex_admin_test`;
+  production, Railway, настоящие магазины и лицензии не затрагивались.
+- Implementation commits #299:
+  `152fce57ae56e1547f3fa200cfca924d52ab4463` (native тест),
+  `611c9f10c1890aae5a84ee7a65e72ec098af3fa5` (CI PostgreSQL 16).
+  #302 остаётся `babc890c8aa302ad7ad514e8ccb8bb0185e808ac`;
+  #296 остаётся `a1bc89c17a12213a8b18e58621548d7b58f0ac74`.
+  Эти последние два SHA — чужие предыдущие результаты, не изменения этого запуска.
+- Checkpoint commit: **текущий коммит этой записи**, точный SHA читать из GitHub
+  после CAS; не создавать самоссылочный SHA.
+- Проверено лично: свежие PR/heads, MODULE-MAP Do not break, текущий код
+  `evotor-market.ts`, существующие PGlite tests, миграции 018/019;
+  GitHub Actions run `40195800084` на implementation SHA
+  `611c9f10` — **completed/success**, включая шаг
+  `Native PostgreSQL callback and migration regression` и disposable PG16.
+  Browser E2E run `40195800041` — **completed/success**.
+  Release Gate run `40195800052` — **in_progress** при фиксации.
+  Никакие локальные команды, `materialize ×2`, native PostgreSQL на машине
+  агента, реальные Эвотор E2E или production проверки лично не запускались.
+- Риски/ограничения: это доказательство **только тестового контура**,
+  не подтверждение официального owner proof, лицензии или SaaS-релиза.
+  `pivnik-preflight` отсутствовал в доступном каталоге skills этого запуска;
+  обязательные ограничения прочитаны из `ops/MODULE-MAP.md`.
+  GitHub CI нужно перепроверить после завершения Release Gate.
+- Текущая незавершённая задача: P0.2, server-side owner proof/current
+  provider grants/token revision для read-only stores adapter из #302.
+  Без подтверждённого install/auth контракта только fail-closed spec/tests,
+  никаких фиктивных привязок, реальных provider запросов или выдачи лицензий.
+- Следующее минимальное действие: перепроверить итог Release Gate на
+  `611c9f10`; изучить `evotor-market-stores.ts` и официальный install/auth
+  контракт, добавить узкий отрицательный test для отсутствующего owner proof
+  в существующий #302 без подключения к рабочему API.
+- Внешние блокеры: подтверждённые test account/install/auth и коммерческие
+  условия Эвотора отсутствуют. Локальный GitHub clone недоступен из-за DNS.
+  Не merge, не deploy, не создавать платные ресурсы.
+- Полномочия: только безопасные Draft-код/тесты/CI; production writes,
+  реальные БД/касса, платежи, merge, deploy и публикация запрещены.
 
 ### LOCK — общий протокол единственного исполнителя
 
 ```json
-{"owner_run_id":"spaceverse-auto-turn5-20261025T125714Z","acquired_at":"2026-10-25T12:57:14Z","status":"active"}
+{"owner_run_id":null,"acquired_at":null,"status":"released"}
 ```
 
 Перед записью проверь run_details обеих инженерных automations через peek.
