@@ -3,6 +3,7 @@ import {recordAudit} from './audit.js'
 import {config} from './config.js'
 import {HttpError,type AdminPrincipal,type VenueScope} from './types.js'
 import {getEvotorStockList,getEvotorStockProduct,patchEvotorStockQuantity} from './evotor-stock-client.js'
+import {requireSafeStockIncrement,stockWriteBlock} from './evotor-stock-safety.js'
 
 const operationPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const productPattern=/^[A-Za-z0-9_-]{1,200}$/
@@ -38,11 +39,12 @@ async function binding(scope:VenueScope){
 export async function listEvotorStock(scope:VenueScope){
   if(!config.enableBeerIntake||!config.enableWrites)throw new HttpError(403,'EVOTOR_STOCK_DISABLED','Модуль отключён.')
   const {storeId,token}=await binding(scope)
-  return {source:'evotor_cloud',writeEnabled:config.enableEvotorStockWrites,products:await getEvotorStockList(storeId,token)}
+  return {source:'evotor_cloud',writeEnabled:false,writeBlock:stockWriteBlock,products:await getEvotorStockList(storeId,token)}
 }
 export async function incrementEvotorStock(admin:AdminPrincipal,scope:VenueScope,input:unknown){
   if(!config.enableBeerIntake||!config.enableWrites||!config.enableEvotorStockWrites)
     throw new HttpError(403,'EVOTOR_STOCK_WRITE_DISABLED','Запись остатков Эвотора пока выключена.')
+  requireSafeStockIncrement()
   const body=parseEvotorStockCommand(input)
   if(!await tableExists('admin_evotor_stock_operations'))
     throw new HttpError(503,'EVOTOR_STOCK_SCHEMA_REQUIRED','Миграция журнала операций не применена.')

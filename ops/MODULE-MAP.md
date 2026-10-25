@@ -175,6 +175,35 @@ alongside existing cash dashboard checks. No production APIs are called by them.
 
 ## Owner panel appearance and cash interval (2026-10-25)
 
+### Evotor stock intake safety (2026-10-25)
+
+PR #309 introduced the intake screen; #310 changed it to the existing cloud
+products, selected by product ID and measured in liters. `server/evotor-stock.ts`
+uses the metadata DB for its operation journal and the existing production reader
+for the exact company/venue `pos_store_bindings` lookup. It does not own a second
+inventory balance. `server/evotor-stock-client.ts` pins the official Cloud V2 host.
+
+The absolute PATCH path is quarantined by `evotor-stock-safety.ts` before any
+operation reservation, database write or provider write, including when all three
+feature flags are on. A local advisory lock and a successful read-back cannot
+prevent lost terminal sales. Listing preserves actual products but returns
+`writeEnabled:false` and an explicit block reason rendered by `BeerIntake.tsx`.
+Removing this gate requires a verified provider-side atomic delta/CAS or safe
+receipt-independent stock document contract and concurrent-sale acceptance.
+No environment variable alone supplies that proof.
+
+Live read-only preflight: metadata venue 1/company 1 maps to enabled store
+`20241111-E9DB-403D-8079-3522141697B9`. The existing token reads stores/documents
+(HTTP 200), while products return HTTP 403. `admin-pilot` now uses server-only
+Railway references to the existing token/store; both intake flags remain false.
+Migration 019 is absent and is intentionally not applied while writes cannot be
+enabled. No stock, guest, wallet, receipt or payment data was changed.
+
+Evidence, provider constraints and the remaining release gates are recorded in
+`ops/SPACEVERSE-EVOTOR-STOCK-PREFLIGHT-20261025.md`. Adapter race tests, service
+boundary tests, actual HTTP director restrictions and UI gate tests cover this
+boundary. The requested end-to-end intake is **not operational**.
+
 `admin-platform/src/spaceverse.css` is the final presentation layer imported by
 `src/main.tsx`; it preserves the existing page components, handlers and RBAC.
 `src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing

@@ -11,6 +11,18 @@ const makeProduct=(fields:Record<string,unknown>={})=>({
 const response=(obj:unknown,status=200)=>new Response(JSON.stringify(obj),{status,headers:{'content-type':'application/vnd.evotor.v2+json'}})
 
 describe('real Evotor V2 product quantity adapter',()=>{
+ it('demonstrates why an absolute PATCH cannot preserve a terminal sale between read and write',async()=>{
+   let liveQuantity=25
+   const fetcher=vi.fn(async(_url:unknown,options:RequestInit)=>{
+     if(options.method==='PATCH')liveQuantity=(JSON.parse(String(options.body)) as {quantity:number}).quantity
+     return response(makeProduct({quantity:liveQuantity}))
+   }) as unknown as typeof fetch
+   const before=await getEvotorStockProduct(store,id,'fake',fetcher)
+   liveQuantity-=1 // The bartender sells one liter outside the CRM's lock.
+   await patchEvotorStockQuantity(store,id,'fake',before.quantity!+50,fetcher)
+   expect(liveQuantity).toBe(75)
+   expect(liveQuantity).not.toBe(74) // Read-back at 75 would still wrongly look successful.
+ })
  it('reads liter products and skips pieces, unknown balances',async()=>{
    const fetcher=vi.fn().mockResolvedValue(response({items:[
      makeProduct(),makeProduct({id:'another',measure_name:'шт',quantity:5}),

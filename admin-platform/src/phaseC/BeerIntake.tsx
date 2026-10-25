@@ -6,7 +6,7 @@ import {BEER_CATALOG,beerSearchKey,parsePositiveLiters} from './beer-catalog'
 import './beer-intake.css'
 
 type Product={id:string;name:string;quantity:number;measure_name:string;updated_at:string;store_id:string;type:string}
-type CatalogResponse={source:'evotor_cloud';writeEnabled:boolean;products:Product[]}
+type CatalogResponse={source:'evotor_cloud';writeEnabled:boolean;writeBlock?:{code:string;message:string};products:Product[]}
 type AddResponse={ok:true;alreadyApplied:boolean;recordedLiters:number;source:'evotor_cloud'}
 const litersText=(value:number)=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:3}).format(value)
 const aliasesFor=(name:string)=>BEER_CATALOG.find(item=>beerSearchKey(item.name)===beerSearchKey(name))?.aliases??[]
@@ -83,7 +83,7 @@ export function BeerIntake({venue}:{venue:ApiVenue}){
       {loading&&<p role="status">Проверяю остатки в Эвоторе…</p>}
       {error&&<p role="alert">{error}</p>}
       {notice&&<p role="status">{notice}</p>}
-      {catalog&&!catalog.writeEnabled&&<p role="status">Просмотр доступен, но запись в Эвотор пока не включена.</p>}
+      {catalog&&!catalog.writeEnabled&&<p role="status">{catalog.writeBlock?.message||'Просмотр доступен, но запись в Эвотор пока не включена.'}</p>}
       <div className="beer-intake-products">
         {!loading&&catalog&&products.length===0&&<p>Сортов в литрах по запросу не найдено. Проверьте название и единицу измерения товара в Эвоторе.</p>}
         {products.map(item=>{
