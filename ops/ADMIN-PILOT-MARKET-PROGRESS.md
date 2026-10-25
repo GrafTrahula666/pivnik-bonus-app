@@ -7,6 +7,17 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 **Статус продукта: не готов к коммерческому выпуску; публикация не выполнялась.**
 Процент готовности не используется: ниже проверяемые функции и ограничения.
 
+## Агент №1, 25 октября: uncached store verification (Draft #302)
+
+Добавлен `cache: 'no-store'` для каждого запроса GET `/stores` в read-only
+adapter; регрессионная проверка фиксирует этот режим на всех страницах.
+Это только требование к HTTP fetch, **не доказательство свежести/владения**:
+до binding по-прежнему необходимы canonical owner proof, повторная проверка
+provider user/token revision, актуальные ACL и разрешённый тестовый API flow.
+На момент изменения GitHub не показал CI для нового head; локальный shell
+недоступен, тесты этой итерации не запускались. PR #302 отстаёт от #299,
+синхронизация нужна отдельно до интеграции. Без merge/deploy/live calls.
+
 ## Следующий независимый этап25 октября — P0.2 store evidence
 
 Ветка `spaceverse/evotor-store-ownership-20261025`, [Draft #302](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/302) поверх #299.
