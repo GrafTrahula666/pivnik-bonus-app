@@ -199,10 +199,10 @@ in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
 ## Application operations overview: calendar filters (2026-10-25)
 
 The production owner overview source "Операции приложения" is separate from
-POS cash "Все продажи кассы" and "Клиенты приложения". The existing signed,
-venue-authorized GET /api/admin/venues/:id/dashboard route now uses
-server/data.ts:parseOperationsPeriod instead of changing the shared
-parsePeriod used by unrelated analytics. Accepted filters: preset 1/7/14/30/90/365
+POS cash "Все продажи кассы" and "Клиенты приложения". Its new signed,
+venue-authorized GET /api/admin/venues/:id/dashboard/operations route uses
+server/data.ts:parseOperationsPeriod; existing /dashboard still uses parsePeriod
+for unrelated analytics, with unchanged daily time semantics and no extra hourly query. Accepted filters: preset 1/7/14/30/90/365
 Moscow calendar days, one date, or inclusive from/to (1..366 days).
 Future/invalid/mixed/duplicated date parameters fail closed with HTTP 400;
 the old POS read endpoint and monetary logic are unchanged.
