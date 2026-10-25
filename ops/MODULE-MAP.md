@@ -196,6 +196,37 @@ Browser coverage: `e2e/owner-design.spec.ts`, custom interval coverage in
 Release evidence and the separately discovered dependency blocker are recorded
 in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
 
+## Application operations overview: calendar filters (2026-10-25)
+
+The production owner overview source "Операции приложения" is separate from
+POS cash "Все продажи кассы" and "Клиенты приложения". The existing signed,
+venue-authorized GET /api/admin/venues/:id/dashboard route now uses
+server/data.ts:parseOperationsPeriod instead of changing the shared
+parsePeriod used by unrelated analytics. Accepted filters: preset 1/7/14/30/90/365
+Moscow calendar days, one date, or inclusive from/to (1..366 days).
+Future/invalid/mixed/duplicated date parameters fail closed with HTTP 400;
+the old POS read endpoint and monetary logic are unchanged.
+
+The dashboard's existing readPool legacy-bar membership boundary and only
+completed transaction timestamps power a second, bounded-by-range SQL aggregate
+for 24 Moscow-hour buckets. Day grouping now uses the Moscow timezone as well.
+The new operations field counts completed transaction ledger entries rather
+than falsely relabeling purchase checks. Empty time buckets render as zero
+only when that completed ledger is the source; visits and app opens remain
+unavailable without events. Both aggregates retain the exclusion of manual
+personal gift credits from bonus-earned totals. The existing stock indicators
+(total customers, bonus balance) are snapshots, not historical counts.
+The previous equal-length period is still the comparison baseline.
+
+src/phaseC/ProductionDashboard.tsx shows the same period selection as POS
+and switches between actual hourly and daily series, without inserting a
+second global date control. No modifications to billing, kiosk, guest apps,
+migrations, roles, write methods, patch-chain, or server.js/universal-server.js.
+Server date tests: server/tests/operations-period.spec.ts.
+Client controls: src/tests/app-operations-periods.spec.ts.
+Read adapter for other tenants remains fail-closed pending trustworthy
+venue-attributed data.
+
 ## Business venue audit isolation (2026-10-17)
 
 `admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit
