@@ -19,3 +19,26 @@
 .beer-intake-notice{margin:0;font-size:13px}
 .beer-intake-warning{max-width:1100px}
 .beer-intake-warning svg{flex-shrink:0}
+
+.beer-intake-search{display:flex;align-items:center;gap:10px;background:var(--surface,#101c2c);padding:0 14px;border:1px solid var(--border,rgba(180,200,230,.3));border-radius:12px}
+.beer-intake-search input{border:0;background:transparent;min-height:48px;width:100%;color:inherit;font:inherit;outline:none}
+.beer-intake-source{font-size:13px;opacity:.75;margin:0}
+.beer-intake-products{display:grid;gap:6px;max-height:450px;overflow:auto;overscroll-behavior:contain}
+.beer-intake-item{border-radius:12px;border:1px solid var(--border,rgba(180,200,230,.2));overflow:hidden}
+.beer-intake-choice{background:transparent;color:inherit;width:100%;border:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;cursor:pointer}
+.beer-intake-choice:hover,.beer-intake-choice.selected{background:rgba(92,163,210,.1)}
+.beer-intake-choice small{color:var(--text-muted,#b7c2d2);text-align:right}
+.beer-intake-name{font-weight:650}
+.beer-intake-name strong{margin-left:10px;color:var(--accent,#66d5ea)}
+.beer-intake-inline{display:flex;flex-wrap:wrap;align-items:center;gap:12px;background:rgba(40,65,90,.2);padding:12px 14px}
+.beer-intake-inline>small{width:100%;opacity:.8}
+.beer-intake-inline>small[role=alert]{color:#fc8ba0}
+.beer-intake-inline label{font-weight:600}
+.beer-intake-current{flex-basis:100%;font-size:13px}
+.beer-intake-volume{display:flex;align-items:center;gap:8px}
+.beer-intake-volume input{width:110px;padding:10px 12px;border-radius:10px;color:inherit;background:var(--surface,#101c2c);border:1px solid var(--border,#43536a);font:inherit}
+.beer-intake-volume input[aria-invalid=true]{border-color:#dc6475}
+.beer-intake-summary{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border,rgba(180,200,230,.2));padding-top:16px}
+.beer-intake-summary>div:first-child{display:grid;gap:4px}
+.beer-intake-summary span{opacity:.8}
+@media(max-width:640px){.beer-intake-choice{flex-wrap:wrap}.beer-intake-choice small{text-align:left}.beer-intake-products{max-height:55vh}}
