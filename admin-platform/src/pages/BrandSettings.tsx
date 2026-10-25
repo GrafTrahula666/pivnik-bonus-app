@@ -17,7 +17,7 @@ export function BrandPage({
   const [name, setName] = useState(venueName)
   const [address, setAddress] = useState('Невский проспект, 88')
   const [phone, setPhone] = useState('+7 999 142-88-02')
-  const [accent, setAccent] = useState('#73bcd9')
+  const [accent, setAccent] = useState('#46d8e2')
 
   return (
     <div className="page">

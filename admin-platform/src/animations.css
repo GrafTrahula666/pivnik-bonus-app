@@ -1,0 +1,22 @@
+.nav-item{transition:background-color .16s ease,color .16s ease}
+.nav-item svg{transition:color .16s ease,transform .16s ease}
+.btn,.btn.secondary,.icon-btn,.ghost-icon,.quick-row,.periods button,.segmented button,.table-foot button,.toggle,.compare>span,.card-title button{transition:background-color .16s ease,color .16s ease,border-color .16s ease,transform .1s ease}
+.card{transition:border-color .2s ease,box-shadow .2s ease}
+.tenant-select,.search,.field input,.field select{transition:border-color .16s ease,box-shadow .16s ease}
+.tenant-select:focus,.search:focus-within,.field input:focus,.field select:focus{border-color:var(--accent)}
+tbody tr{transition:background-color .15s ease}
+@media(prefers-reduced-motion:no-preference){
+.nav-item:hover{transform:translateX(2px)}
+.nav-item.active svg{transform:scale(1.08)}
+.btn:active,.icon-btn:active,.quick-row:active,.table-foot button:active{transform:scale(.97)}
+.card:hover,.kpi.card:hover,.mini-insight:hover,.chart-card:hover,.quick-card:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.28)}
+.card{transform:translateY(0);transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease}
+.page,.login-card{animation:pvFadeIn .36s cubic-bezier(.16,1,.3,1)}
+.kpi-grid>*,.analytics-grid>*{animation:pvFadeIn .4s cubic-bezier(.16,1,.3,1) backwards}
+.kpi-grid>*:nth-child(1){animation-delay:.02s}.kpi-grid>*:nth-child(2){animation-delay:.04s}.kpi-grid>*:nth-child(3){animation-delay:.06s}.kpi-grid>*:nth-child(4){animation-delay:.08s}.kpi-grid>*:nth-child(5){animation-delay:.1s}.kpi-grid>*:nth-child(6){animation-delay:.12s}.kpi-grid>*:nth-child(7){animation-delay:.14s}.kpi-grid>*:nth-child(8){animation-delay:.16s}.kpi-grid>*:nth-child(9){animation-delay:.18s}.kpi-grid>*:nth-child(10){animation-delay:.2s}.kpi-grid>*:nth-child(11){animation-delay:.22s}.kpi-grid>*:nth-child(12){animation-delay:.24s}
+.analytics-grid>*:nth-child(1){animation-delay:.05s}.analytics-grid>*:nth-child(2){animation-delay:.1s}.analytics-grid>*:nth-child(3){animation-delay:.15s}.analytics-grid>*:nth-child(4){animation-delay:.2s}
+.drawer{animation:pvSlideIn .22s cubic-bezier(.16,1,.3,1)}
+.modal,.drawer-scrim,.modal-scrim{animation:pvFadeIn .18s ease}
+}
+@keyframes pvFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pvSlideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}

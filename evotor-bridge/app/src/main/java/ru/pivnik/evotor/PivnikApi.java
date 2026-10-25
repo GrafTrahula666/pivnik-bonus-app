@@ -210,6 +210,7 @@ final class PivnikApi {
             // No wildcard, another server, or portal reconfiguration is needed.
             URL url=new URL(settings.apiBaseUrl()+"/api/device/pos/receipts/bind");
             body.put("operation",operation);
+            if ("redemption".equals(operation)) body.put("checkoutProtocol",2);
             if (!"https".equalsIgnoreCase(url.getProtocol()) || !settings.isConfigured()) throw new IOException("Касса не подключена.");
             connection=(HttpURLConnection)url.openConnection();
             PivnikTls.apply(connection);
@@ -225,6 +226,7 @@ final class PivnikApi {
             int status=connection.getResponseCode();
             String raw=read(status==200 ? connection.getInputStream() : connection.getErrorStream());
             if (status!=200) {
+                if (status==426) throw new IOException("Для списания обновите PIVNIK на кассе до версии 1.0.18 или новее.");
                 // Do not display arbitrary proxy/server response text or credentials.
                 if (status==409 && "beer".equals(operation)) throw new IOException("Объём не сохранён: чек или клиент изменился. Откройте бонусы снова.");
                 if (status==409) throw new IOException("Списание не подтверждено: проверьте баланс, лимит и сохранённую операцию. Нажмите «Обновить».");

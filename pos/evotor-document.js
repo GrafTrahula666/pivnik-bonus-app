@@ -37,6 +37,34 @@ function redemptionEvidence(document) {
   return { operationId: marker.operationId, points: marker.points, documentDiscountCents: discount };
 }
 
+/** Separate enrichment; never changes the historical immutable snapshot shape.
+ * Missing/malformed discounts are unknown, never implicitly zero.
+ */
+export function evotorRedemptionEffect(document, normalized = normalizeEvotorDocument(document, document.store_id)) {
+  const discounts = document.body?.doc_discounts;
+  if (!Array.isArray(discounts) || discounts.length > 1000 || !Array.isArray(document.body?.positions)) return null;
+  try {
+    const documentDiscountCents = discounts.reduce((n, d) => n + scaledInteger(unpack(d, 'doc_discount').discount_sum), 0);
+    const distributed = value => value === undefined ? 0 : scaledInteger(
+      value !== null && typeof value === 'object' && !Array.isArray(value) ? value.discount_sum : value);
+    // Main positions use the REST discount object; split subpositions may use a scalar.
+    const distributedDiscountCents = document.body.positions.reduce((n, p) => {
+      const splits = p.splitted_positions;
+      if (splits !== undefined && !Array.isArray(splits)) throw new Error('Unknown split discounts');
+      return n + distributed(p.doc_distributed_discount)
+        + (splits || []).reduce((sum, child) => sum + distributed(child.doc_distributed_discount), 0);
+    }, 0);
+    if (!Number.isSafeInteger(documentDiscountCents) || !Number.isSafeInteger(distributedDiscountCents)) return null;
+    const present = document.extras != null && Object.prototype.hasOwnProperty.call(document.extras, 'pivnikLoyaltyV1');
+    const paid = normalized.payments;
+    const paidInFull = normalized.amountCents > 0 && paid.length > 0 && paid.every(p =>
+      ['CASH', 'ELECTRON', 'CARD'].includes(p.type) && p.amountCents > 0)
+      && paid.reduce((sum, p) => sum + BigInt(p.amountCents), 0n) === BigInt(normalized.amountCents);
+    return { version: 1, documentDiscountCents, distributedDiscountCents, paidInFull,
+      marker: !present ? 'absent' : redemptionEvidence(document) ? 'valid' : 'invalid' };
+  } catch { return null; }
+}
+
 export function normalizeEvotorDocument(document, storeId) {
   if (!['SELL', 'PAYBACK'].includes(document?.type)) return null;
   if (document.store_id !== storeId) throw new Error('Документ другого магазина.');

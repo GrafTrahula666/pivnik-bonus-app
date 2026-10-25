@@ -73,7 +73,7 @@ public final class BonusWindowTest {
         if (controller!=null) controller.pause().stop().destroy();
         Field field=Bridge.class.getDeclaredField("instance"); field.setAccessible(true);
         Bridge bridge=(Bridge)field.get(null);
-        if (bridge!=null) bridge.worker.shutdownNow();
+        if (bridge!=null) { bridge.worker.shutdownNow(); bridge.recoveryWorker.shutdownNow(); }
         field.set(null,null);
     }
 

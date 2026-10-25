@@ -32,6 +32,44 @@ export function parsePeriod(url: URL): PeriodRange {
   return { from, to, days }
 }
 
+
+/** App-operation calendar days in Moscow, independent of the legacy analytics parser.
+ * The date and to inputs represent inclusive calendar dates.
+ */
+export function parseOperationsPeriod(url: URL, now = new Date()): PeriodRange {
+  const invalid = (): never => { throw new HttpError(400, 'INVALID_PERIOD', 'Некорректный период операций приложения.') }
+  const keys = ['days','date','from','to'] as const
+  if (keys.some(key => url.searchParams.getAll(key).length > 1)) return invalid()
+  const today = new Date(now.getTime() + 3 * 3_600_000).toISOString().slice(0,10)
+  const midnight = (day: string) => Date.parse(day + 'T00:00:00+03:00')
+  const validDay = (day: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(midnight(day)) &&
+    new Date(midnight(day) + 3 * 3_600_000).toISOString().slice(0,10) === day
+
+  const fromParam = url.searchParams.get('from'), toParam = url.searchParams.get('to')
+  const dateParam = url.searchParams.get('date'), daysParam = url.searchParams.get('days')
+  const modes = Number(fromParam !== null || toParam !== null) + Number(dateParam !== null) + Number(daysParam !== null)
+  if (modes > 1) return invalid()
+  let fromDay: string, toDay: string
+  if (fromParam !== null || toParam !== null) {
+    if (!fromParam || !toParam || !validDay(fromParam) || !validDay(toParam)) return invalid()
+    fromDay = fromParam; toDay = toParam
+  } else if (dateParam !== null) {
+    if (!validDay(dateParam)) return invalid()
+    fromDay = dateParam; toDay = dateParam
+  } else {
+    const raw = daysParam === null ? '30' : daysParam
+    if (!/^(1|7|14|30|90|365)$/.test(raw)) return invalid()
+    const count = Number(raw)
+    fromDay = new Date(midnight(today) - (count - 1) * 86_400_000 + 3 * 3_600_000).toISOString().slice(0,10)
+    toDay = today
+  }
+  if (fromDay > toDay || toDay > today) return invalid()
+  const days = Math.round((midnight(toDay) - midnight(fromDay)) / 86_400_000) + 1
+  if (days > 366) throw new HttpError(400, 'PERIOD_TOO_LARGE', 'Максимальный период — 366 дней.')
+  return { from: new Date(midnight(fromDay)), to: new Date(midnight(toDay) + 86_400_000), days }
+}
+
 function centsToRubles(cents: unknown): number {
   return Number(cents || 0) / 100
 }
@@ -188,7 +226,7 @@ async function periodMetrics(scope: VenueScope, range: PeriodRange) {
   }
 }
 
-export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
+export async function getVenueDashboard(scope: VenueScope, range: PeriodRange, options: {hourly?: boolean} = {}) {
   const current = await periodMetrics(scope, range)
   const duration = range.to.getTime() - range.from.getTime()
   const previousRange: PeriodRange = {
@@ -203,6 +241,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
     day: string
     revenue_cents: string
     checks: string
+    operations: string
     customers: string
     bonus_earned: string
     bonus_redeemed: string
@@ -218,9 +257,10 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
          AND u.role = 'client'
      )
      SELECT
-       DATE_TRUNC('day', COALESCE(t.completed_at, t.created_at))::date::text AS day,
+       ${options.hourly ? "(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::date::text" : "DATE_TRUNC('day', COALESCE(t.completed_at, t.created_at))::date::text"} AS day,
        COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
        COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
+       COUNT(*)::bigint AS operations,
        COUNT(DISTINCT t.client_id)::bigint AS customers,
        COALESCE(SUM(t.bonus_earned) FILTER (
          WHERE NOT (
@@ -242,6 +282,54 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
      ORDER BY 1`,
     [barId, range.from.toISOString(), range.to.toISOString()],
   )
+
+
+  // A separate 24-hour aggregate of completed app operations, not POS receipts.
+  const hourlyResult = options.hourly ? await readPool.query<{
+    hour: number
+    revenue_cents: string
+    checks: string
+    operations: string
+    customers: string
+    bonus_earned: string
+    bonus_redeemed: string
+  }>(
+    `WITH members AS (
+       SELECT bc.user_id
+       FROM bar_customers bc
+       JOIN users u ON u.id = bc.user_id
+       WHERE bc.bar_id = $1::bigint
+         AND bc.status = 'active'
+         AND u.merged_into_user_id IS NULL
+         AND u.deleted_at IS NULL
+         AND u.role = 'client'
+     )
+     SELECT
+       EXTRACT(HOUR FROM COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::integer AS hour,
+       COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
+       COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
+       COUNT(*)::bigint AS operations,
+       COUNT(DISTINCT t.client_id)::bigint AS customers,
+       COALESCE(SUM(t.bonus_earned) FILTER (
+         WHERE NOT (
+           t.mode = 'adjustment'
+           AND (
+             t.staff_id IS NOT NULL
+             OR COALESCE(t.reward_code, '') LIKE 'admin:bonus:%'
+             OR COALESCE(t.reason, '') ILIKE 'Персональный подарок%'
+           )
+         )
+       ),0)::bigint AS bonus_earned,
+       COALESCE(SUM(t.bonus_spent),0)::bigint AS bonus_redeemed
+     FROM transactions t
+     JOIN members m ON m.user_id = t.client_id
+     WHERE t.status = 'completed'
+       AND COALESCE(t.completed_at, t.created_at) >= $2::timestamptz
+       AND COALESCE(t.completed_at, t.created_at) < $3::timestamptz
+     GROUP BY 1
+     ORDER BY 1`,
+    [barId, range.from.toISOString(), range.to.toISOString()],
+  ) : null
 
   const platformResult = await readPool.query<{
     platform_state: string
@@ -333,6 +421,16 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
       day: row.day,
       revenue: centsToRubles(row.revenue_cents),
       checks: numeric(row.checks),
+      operations: numeric(row.operations),
+      customers: numeric(row.customers),
+      bonusEarned: numeric(row.bonus_earned),
+      bonusRedeemed: numeric(row.bonus_redeemed),
+    })),
+    hourly: hourlyResult?.rows.map(row => ({
+      hour: row.hour,
+      revenue: centsToRubles(row.revenue_cents),
+      checks: numeric(row.checks),
+      operations: numeric(row.operations),
       customers: numeric(row.customers),
       bonusEarned: numeric(row.bonus_earned),
       bonusRedeemed: numeric(row.bonus_redeemed),

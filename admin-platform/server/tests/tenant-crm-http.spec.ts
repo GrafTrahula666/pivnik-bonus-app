@@ -77,7 +77,9 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
       expect(response.status).toBe(200);csrfTokens.set(who,(await response.json()).csrfToken)
       sessions.set(who, response.headers.get('set-cookie')!.split(';')[0]!)
     }
-  }, 30_000)
+  // The isolated PGlite/HTTP fixture startup can exceed 30s under Railway image-builder CPU quotas.
+  // Preserve the full assertions rather than skipping this entire tenant-isolation suite.
+  }, 90_000)
 
   afterEach(async () => {
     config.enableOnboardingWorkflow=false;config.enableOnboardingPosProxy=false;vi.unstubAllEnvs()

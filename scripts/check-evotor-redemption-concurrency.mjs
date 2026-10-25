@@ -26,7 +26,7 @@ try {
   const auth='Device '+issued.deviceToken,http=createPosHttp(pool,config,Date.now,policy);
   const request=body=>http.device({method:'POST',pathname:'/api/device/pos/redemptions',authorization:auth,body});
   const bind=receiptUuid=>devices.bind(auth,{receiptUuid,payload:'PVK-AAAA-2222'});
-  const body=(receiptUuid,points=300,totalCents=100000)=>({action:'reserve',receiptUuid,operationId:randomUUID(),clientId:'1',basketHash:'a'.repeat(64),points,totalCents});
+  const body=(receiptUuid,points=300,totalCents=100000)=>({action:'reserve',checkoutProtocol:2,receiptUuid,operationId:randomUUID(),clientId:'1',basketHash:'a'.repeat(64),points,totalCents});
   const balance=async()=>Number((await pool.query('SELECT balance FROM wallets WHERE user_id=1')).rows[0].balance);
   const cancel=op=>request({action:'cancel',receiptUuid:op.receiptUuid,operationId:op.operationId,effectRemoved:true});
   await bind('same-receipt');const op=body('same-receipt');
@@ -107,5 +107,25 @@ try {
   assert.deepEqual((await pool.query('SELECT paid_ml_total,gift_ml_balance FROM beer_loyalty WHERE user_id=1')).rows[0],{paid_ml_total:'13000',gift_ml_balance:0});
   assert.equal(Number((await pool.query('SELECT SUM(paid_ml_delta) AS n FROM pos_beer_settlements')).rows[0].n),0);
   checks.push('concurrent full fiscal refunds: canonical cancel and beer audit reverse exactly once');
+  await pool.query(await readFile(new URL('migrations/025_evotor_redemption_effect.sql',root),'utf8'));
+  const beforeRecovery=await balance();
+  const recoveryId='crash-before-sdk';await bind(recoveryId);const recoveryOp=body(recoveryId,10,100000);await request(recoveryOp);
+  const fullPrice=sale({id:recoveryId,close_date:new Date(Date.now()+60000).toISOString(),body:{result_sum:1000,
+    positions:[{product_name:'Beer',quantity:1,result_sum:1000,doc_distributed_discount:{discount_type:'SUM',discount_sum:0}}],
+    payments:[{payment:{type:'CASH',sum:1000}}],pos_print_results:[{pos_print_result:{receipt_number:99}}]}});
+  await importEvotorPage(pool,'bar',{items:[fullPrice],paging:{}},{until:new Date().toISOString()});
+  await processPosRedemptions(pool,{storeId:'bar',policy});
+  assert.equal((await request({action:'status',receiptUuid:recoveryId,operationId:recoveryOp.operationId})).redemption.state,'review');
+  fullPrice.body.doc_discounts=[];
+  await Promise.all([importEvotorPage(pool,'bar',{items:[fullPrice],paging:{}},{until:new Date().toISOString()}),
+    importEvotorPage(pool,'bar',{items:[fullPrice],paging:{}},{until:new Date().toISOString()})]);
+  await Promise.all(Array.from({length:3},()=>processPosRedemptions(pool,{storeId:'bar',policy})));
+  assert.equal(await balance(),beforeRecovery);
+  assert.equal((await request({action:'status',receiptUuid:recoveryId,operationId:recoveryOp.operationId})).redemption.state,'released');
+  assert.equal(Number((await pool.query("SELECT COUNT(*) AS n FROM transactions WHERE request_key LIKE $1",['evotor-redemption:'+recoveryOp.operationId+':%'])).rows[0].n),2);
+  checks.push('concurrent zero-effect enrichment and recovery: one full-price hold refund, including a prior review');
+  const contradictory=structuredClone(fullPrice);contradictory.body.doc_discounts=[{doc_discount:{discount_sum:1}}];
+  await assert.rejects(importEvotorPage(pool,'bar',{items:[contradictory],paging:{}},{until:new Date().toISOString()}),e=>e.code==='document_conflict');
+  checks.push('known cloud effect cannot change on an otherwise identical fiscal document');
   console.log(JSON.stringify({postgres:'17',checks,passed:checks.length},null,2));
 } finally {await pool.end();}

@@ -18,6 +18,7 @@ import { AppAchievementsManager } from './phaseC/AppRewardsManagers'
 import { AppLoyaltyManager } from './phaseC/AppLoyaltyManager'
 import { AppWheelManager } from './phaseC/AppWheelManager'
 import { SettingsPage } from './phaseC/SettingsPage'
+import { BeerIntake } from './phaseC/BeerIntake'
 import { AccountSecurityPanel } from './phaseC/AccountSecurity'
 import { BroadcastPage } from './phaseC/BroadcastPage'
 import {OnboardingSupportQueue} from './phaseC/OnboardingSupportQueue'
@@ -44,7 +45,6 @@ export default function App(){
   const [venueError,setVenueError]=useState('')
   const [venueId,setVenueId]=useState('')
   const [page,setPage]=useState<Page>('overview')
-  const [cashView,setCashView]=useState(true)
   const [period,setPeriod]=useState<Period>('30 дней')
   const [compare,setCompare]=useState(true)
   const [mobileNav,setMobileNav]=useState(false)
@@ -92,7 +92,7 @@ export default function App(){
     else if(!selected&&!platformPage)setPage(isSuper?'platform':'overview')
   }
 
-  if(authState==='loading')return <main className="boot-screen"><div className="brand-mark">S</div><Database/><b>Подключение к панели управления…</b><span>Клиентские приложения продолжают работать независимо.</span></main>
+  if(authState==='loading')return <main className="boot-screen"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><Database/><b>Подключение к панели управления…</b><span>Клиентские приложения продолжают работать независимо.</span></main>
   if(authState==='error')return <main className="login-shell"><section className="login-card card service-error-card">
     <div className="login-icon error"><AlertTriangle/></div><span className="eyebrow">СЕРВИС ВРЕМЕННО НЕДОСТУПЕН</span><h1>Панель управления недоступна</h1><p>{authError}</p>
     <button className="btn secondary" onClick={()=>setRetry(v=>v+1)}><RefreshCw/>Повторить</button><div className="login-safety"><ShieldCheck/><span>Приложения для гостей продолжают работать.</span></div>
@@ -101,11 +101,11 @@ export default function App(){
   if(authState==='guest'||!session)return <Login onDemo={demoAvailable?startDemo:undefined} onInvite={invitationAvailable?()=>setInviteToken(''):undefined} onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
 
   return <div className="app-shell">
-    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} open={mobileNav} onClose={()=>setMobileNav(false)}
+    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} intakeEnabled={session.capabilities.beerIntake===true} open={mobileNav} onClose={()=>setMobileNav(false)}
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
-        period={period} compare={compare} restricted={isTrusted} roleLabel={setupOnly?'Доступ к панели':undefined} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'&&cashView}/>
+        period={period} compare={compare} restricted={isTrusted} roleLabel={setupOnly?'Доступ к панели':undefined} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'}/>
       <TenantDangerContext role={session.admin.role} mode={mode} venue={mode==='production'?selected:null} onBack={()=>setPage('platform')}/>
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
@@ -118,7 +118,7 @@ export default function App(){
           {!selected&&!allVenues&&!platformPage&&!venueError&&!setupOnly&&<div className="empty card"><Database/><h3>Нет доступных заведений</h3><p>Для этой учётной записи пока не назначены заведения.</p></div>}
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}
 
-          {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} onCashView={setCashView} spaceverse={spaceversePanel}/>}
+          {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} spaceverse={spaceversePanel}/>}
           {selected&&page==='clients'&&<ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
@@ -127,6 +127,7 @@ export default function App(){
           {selected&&!isTrusted&&!spaceversePanel&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
           {selected&&!isTrusted&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
+          {selected&&session.capabilities.beerIntake&&!isTrusted&&page==='intake'&&<BeerIntake key={'intake:'+session.admin.id+':'+selected.id} venue={selected}/>}
           {selected&&!spaceversePanel&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&(isTrusted?<AccountSecurityPanel session={session}/>:<SettingsPage venue={selected} session={session}/>)}

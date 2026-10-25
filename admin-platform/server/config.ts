@@ -35,6 +35,8 @@ export const config = {
   enableTenantCrmReads: bool('ADMIN_ENABLE_TENANT_CRM_READS', false),
   enableTenantCrmActivationChecks: bool('ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS', false),
   enableCrmOnboarding: bool('ADMIN_ENABLE_CRM_ONBOARDING', false),
+  enableBeerIntake: bool('ADMIN_ENABLE_BEER_INTAKE', false),
+  enableEvotorStockWrites: bool('ADMIN_ENABLE_EVOTOR_STOCK_WRITES', false),
   enableProductionBonusWrites: bool('ADMIN_ENABLE_PRODUCTION_BONUS_WRITES', false),
   enableProductionAchievementWrites: bool('ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES', false),
   enableProductionEntitlementWrites: bool('ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES', false),
