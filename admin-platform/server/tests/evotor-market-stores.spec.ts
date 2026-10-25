@@ -104,6 +104,20 @@ describe('Evotor Market complete store ownership read', () => {
     await rejects(vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 403 })), 'FORBIDDEN')
     expect(cancelled).toBe(true)
   })
+  it('requires the complete declared Content-Length before accepting store evidence', async () => {
+    const body = JSON.stringify({ items: [store()], paging: {} })
+    const bytes = Buffer.byteLength(body)
+    const response = (length: number) => new Response(body, {
+      headers: { 'content-type': 'application/json', 'content-length': String(length) },
+    })
+    expect(await run(vi.fn<typeof fetch>().mockResolvedValue(response(bytes)))).toEqual([
+      { storeId: store().id, userId: expectedUserId },
+    ])
+    // Both a truncated body and surplus bytes make completeness unprovable,
+    // even if the received bytes happen to form syntactically valid JSON.
+    await rejects(vi.fn<typeof fetch>().mockResolvedValue(response(bytes + 1)))
+    await rejects(vi.fn<typeof fetch>().mockResolvedValue(response(bytes - 1)))
+  })
   it('rejects oversized Content-Length and invalid UTF-8', async () => {
     await rejects(vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json', 'content-length': '1048577' } })))
     await rejects(vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([0xff]), { headers: { 'content-type': 'application/json' } })))
