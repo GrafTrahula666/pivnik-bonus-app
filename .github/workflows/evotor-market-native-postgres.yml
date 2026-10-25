@@ -5,8 +5,8 @@ on:
     paths:
       - 'admin-platform/server/evotor-market.ts'
       - 'admin-platform/server/tests/evotor-market-postgres.spec.ts'
-      - 'admin-platform/admin-migrations/018_evotor_market_inbox.sql'
-      - 'admin-platform/admin-migrations/019_evotor_market_reconciliation.sql'
+      - 'admin-platform/admin-migrations/020_evotor_market_inbox.sql'
+      - 'admin-platform/admin-migrations/021_evotor_market_reconciliation.sql'
       - '.github/workflows/evotor-market-native-postgres.yml'
   workflow_dispatch:
 
