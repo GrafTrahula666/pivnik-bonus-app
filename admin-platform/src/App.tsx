@@ -18,6 +18,7 @@ import { AppAchievementsManager } from './phaseC/AppRewardsManagers'
 import { AppLoyaltyManager } from './phaseC/AppLoyaltyManager'
 import { AppWheelManager } from './phaseC/AppWheelManager'
 import { SettingsPage } from './phaseC/SettingsPage'
+import { BeerIntake } from './phaseC/BeerIntake'
 import { AccountSecurityPanel } from './phaseC/AccountSecurity'
 import { BroadcastPage } from './phaseC/BroadcastPage'
 import {OnboardingSupportQueue} from './phaseC/OnboardingSupportQueue'
@@ -126,6 +127,7 @@ export default function App(){
           {selected&&!isTrusted&&!spaceversePanel&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
           {selected&&!isTrusted&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
+          {selected&&spaceversePanel&&!isTrusted&&page==='intake'&&<BeerIntake key={'intake:'+session.admin.id+':'+selected.id} venue={selected}/>}
           {selected&&!spaceversePanel&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&(isTrusted?<AccountSecurityPanel session={session}/>:<SettingsPage venue={selected} session={session}/>)}
