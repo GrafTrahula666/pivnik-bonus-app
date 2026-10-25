@@ -82,7 +82,9 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
       expect(response.status).toBe(200);csrfTokens.set(who,(await response.json()).csrfToken)
       sessions.set(who, response.headers.get('set-cookie')!.split(';')[0]!)
     }
-  }, 30_000)
+  // Synthetic tenant SQL and six test-only sessions may initialize slowly under
+  // Railway's restricted builder CPU. Assertions and fixture behavior stay unchanged.
+  }, 90_000)
 
   afterEach(async()=>{
     config.enableWrites=config.enableOnboardingDrafts=config.enableTenantCrmActivationChecks=true
