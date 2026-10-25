@@ -44,7 +44,6 @@ export default function App(){
   const [venueError,setVenueError]=useState('')
   const [venueId,setVenueId]=useState('')
   const [page,setPage]=useState<Page>('overview')
-  const [cashView,setCashView]=useState(true)
   const [period,setPeriod]=useState<Period>('30 дней')
   const [compare,setCompare]=useState(true)
   const [mobileNav,setMobileNav]=useState(false)
@@ -118,7 +117,7 @@ export default function App(){
           {!selected&&!allVenues&&!platformPage&&!venueError&&!setupOnly&&<div className="empty card"><Database/><h3>Нет доступных заведений</h3><p>Для этой учётной записи пока не назначены заведения.</p></div>}
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}
 
-          {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} onCashView={setCashView} spaceverse={spaceversePanel}/>}
+          {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} spaceverse={spaceversePanel}/>}
           {selected&&page==='clients'&&<ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
