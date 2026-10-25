@@ -31,6 +31,8 @@ export async function bootstrapEmptyTenant(client:PoolClient,sql:readonly string
       WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_(toast|temp)')
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace
       WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_(toast|temp)')
+    OR EXISTS(SELECT 1 FROM pg_catalog.pg_collation c JOIN pg_catalog.pg_namespace n ON n.oid=c.collnamespace
+      WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_(toast|temp)')
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','public')
       AND nspname !~ '^pg_(toast|temp)')
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_extension WHERE extname<>'plpgsql')

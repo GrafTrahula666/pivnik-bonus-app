@@ -30,7 +30,7 @@
 В **одной target-транзакции** берётся фиксированный advisory lock, выставляются
 ограничения SQL/lock wait и безопасный search path с системными функциями первыми.
 Если public binding отсутствует, проверяются существующие relations, routines,
-типы, дополнительные схемы, extensions, event triggers, foreign servers,
+типы, пользовательские collations, дополнительные схемы, extensions, event triggers, foreign servers,
 large objects и temporary objects текущей session. Даже пустая чужая таблица
 означает `TARGET_DATABASE_NOT_EMPTY`; объекты не принимаются и не удаляются.
 

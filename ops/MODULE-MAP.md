@@ -11,7 +11,7 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 It does not create a target resource or accept URLs/SQL/scope from a request.
 Only an existing server registry entry may resolve a target. With the flag on,
 a missing public binding permits a conservative empty-database preflight;
-existing relations, routines, types, extra schemas, extensions, event triggers,
+existing relations, routines, types, user-defined collations, extra schemas, extensions, event triggers,
 foreign servers, large objects and current-session temporary objects refuse
 bootstrap. `onboarding-tenant-bootstrap.ts` loads new manual numbered
 `tenant-migrations/001_customer_core.sql` and the unchanged canonical root
