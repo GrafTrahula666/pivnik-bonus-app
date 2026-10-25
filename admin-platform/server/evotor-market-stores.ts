@@ -134,7 +134,7 @@ export async function verifyEvotorMarketStoresAtRevision({
   readCurrentTokenRevision: () => Promise<string | null>
   fetchImpl?: typeof fetch
 }): Promise<readonly EvotorMarketStore[]> {
-  if (typeof expectedTokenRevision !== 'string' || !/^[1-9]\\d{0,18}$/.test(expectedTokenRevision)
+  if (typeof expectedTokenRevision !== 'string' || !/^[1-9]\d{0,18}$/.test(expectedTokenRevision)
     || BigInt(expectedTokenRevision) > 9223372036854775807n
     || typeof readCurrentTokenRevision !== 'function') throw failure('INVALID_CONFIGURATION')
   const revisionMatches = async () => {
