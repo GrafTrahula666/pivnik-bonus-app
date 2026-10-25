@@ -132,6 +132,31 @@ describe('explicit empty tenant bootstrap: existing scope and binding ledger',()
     await fixture.metadata.exec("UPDATE admin_onboarding_provisioning_steps SET lease_expires_at=clock_timestamp()-INTERVAL '1 second'")
     expect(await service().runRuntimeDatabaseBinding(owner,draft())).toMatchObject({status:'succeeded',attemptCount:2,result:{binding:'verified_existing'}})
   })
+  it('starts initial and retry binding leases after metadata lock waits',async()=>{
+    const leaseSeconds:number[]=[]
+    const delayAccountLock=()=>new Promise<void>(resolve=>setTimeout(resolve,250))
+    const provisioner=createOnboardingProvisioningService({
+      metadata:connectable(fixture.metadata),allowEmptyDatabaseBootstrap:true,
+      resolveTargetDatabase:async key=>{
+        const clockBase=leaseSeconds.length===0?'created_at':'updated_at'
+        const row=await fixture.metadata.query(`SELECT EXTRACT(EPOCH FROM (lease_expires_at-${clockBase})) AS seconds
+          FROM admin_onboarding_provisioning_steps WHERE draft_id=$1 AND step='runtime_database_binding'`,[draft()])
+        leaseSeconds.push(Number(row.rows[0]?.seconds))
+        const target=state.targets.get(key)
+        return target?connectable(target,true):null
+      },
+    })
+    state.targets.clear()
+    state.afterAccount=delayAccountLock
+    expect(await provisioner.runRuntimeDatabaseBinding(owner,draft()))
+      .toMatchObject({status:'action_required',errorCode:'TARGET_DATABASE_NOT_REGISTERED'})
+    state.targets=new Map(fixture.registry)
+    state.afterAccount=delayAccountLock
+    expect(await provisioner.runRuntimeDatabaseBinding(owner,draft())).toMatchObject({status:'succeeded',attemptCount:2})
+    expect(leaseSeconds).toHaveLength(2)
+    // NOW() is fixed at BEGIN; the lease must start after the simulated lock wait.
+    for(const seconds of leaseSeconds)expect(seconds).toBeGreaterThan(30.1)
+  })
   it('does not confirm an expired claim after the target committed',async()=>{
     const result=await service(true,async()=>{
       await fixture.metadata.exec("UPDATE admin_onboarding_provisioning_steps SET lease_expires_at=clock_timestamp()-INTERVAL '1 second'")
