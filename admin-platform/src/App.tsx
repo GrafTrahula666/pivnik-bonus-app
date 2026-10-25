@@ -101,7 +101,7 @@ export default function App(){
   if(authState==='guest'||!session)return <Login onDemo={demoAvailable?startDemo:undefined} onInvite={invitationAvailable?()=>setInviteToken(''):undefined} onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
 
   return <div className="app-shell">
-    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} open={mobileNav} onClose={()=>setMobileNav(false)}
+    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} intakeEnabled={session.capabilities.beerIntake===true} open={mobileNav} onClose={()=>setMobileNav(false)}
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
@@ -127,7 +127,7 @@ export default function App(){
           {selected&&!isTrusted&&!spaceversePanel&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
           {selected&&!isTrusted&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
-          {selected&&spaceversePanel&&!isTrusted&&page==='intake'&&<BeerIntake key={'intake:'+session.admin.id+':'+selected.id} venue={selected}/>}
+          {selected&&session.capabilities.beerIntake&&!isTrusted&&page==='intake'&&<BeerIntake key={'intake:'+session.admin.id+':'+selected.id} venue={selected}/>}
           {selected&&!spaceversePanel&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&(isTrusted?<AccountSecurityPanel session={session}/>:<SettingsPage venue={selected} session={session}/>)}
