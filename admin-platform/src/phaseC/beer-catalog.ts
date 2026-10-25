@@ -29,13 +29,6 @@ export const BEER_CATALOG:readonly BeerCatalogItem[] = [
   {id:"beer-26",name:"Клубника гозе",aliases:["Клубника Гозе"],countedAt:"2026-10-25",balance:"нет"},
   {id:"beer-27",name:"Медовуха",aliases:[],countedAt:"2026-10-25",balance:"⅓ кеги"},
   {id:"beer-28",name:"Эльдорадо",aliases:["Эль эльдорадо"],countedAt:"2026-10-25",balance:"остаток не указан"},
-  {id:"beer-29",name:"Квантум черри",aliases:["Квантум"],countedAt:null,balance:null},
-  {id:"beer-30",name:"Черника стаут",aliases:["Черничный стаут"],countedAt:null,balance:null},
-  {id:"beer-31",name:"Вишня Крэк",aliases:[],countedAt:null,balance:null},
-  {id:"beer-32",name:"ИПА",aliases:["IPA","Ипа"],countedAt:null,balance:null},
-  {id:"beer-33",name:"Зеро",aliases:["Zero"],countedAt:null,balance:null},
-  {id:"beer-34",name:"Томатное гозе",aliases:[],countedAt:null,balance:null},
-  {id:"beer-35",name:"Трипель",aliases:[],countedAt:null,balance:null},
 ];
 export const beerSearchKey = (name:string) => name.toLocaleLowerCase("ru-RU").normalize("NFKC").replace(/ё/gu,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim()
 export function filterBeerCatalog(query:string){
