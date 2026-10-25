@@ -22,8 +22,8 @@ COPY admin-platform/ ./
 ARG VITEST_MAX_WORKERS=1
 RUN npm run typecheck \
   && npm run lint \
-  && npm test \
-  && npm run test:security \
+  && npm test -- --maxWorkers="${VITEST_MAX_WORKERS}" \
+  && npm run test:security -- --maxWorkers="${VITEST_MAX_WORKERS}" \
   && npm run build
 
 ENV NODE_ENV=production
