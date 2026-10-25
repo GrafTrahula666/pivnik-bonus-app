@@ -163,7 +163,7 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
         <SourceNote>Изменения настроек безопасно отделены от работы приложений для гостей.</SourceNote>
       </section>
     </div>
-    <section className="card cash-comparison">
+    <section className="card cash-comparison app-operation-comparison">
       <div className="cash-comparison-heading"><h3>Сравнение с предыдущим периодом</h3>
         <label><input aria-label="Сравнить операции с предыдущим периодом" type="checkbox" checked={showComparison} onChange={event=>setShowComparison(event.target.checked)}/>Сравнить</label>
       </div>
@@ -178,12 +178,12 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
             <div><span>{label}</span><b>{current===null?'Нет данных':rub.format(Math.round(current))} / {previous===null?'Нет данных':rub.format(Math.round(previous))}</b></div>
             <div className="cash-comparison-track">
               {high>0&&current!==null&&<div className="cash-comparison-bar" style={{width:(current/high*100)+'%'}}/>}
-              {high>0&&previous!==null&&<div className="cash-comparison-bar previous" style={{width:(previous/high*100)+'%',top:'13px'}}/>}
+              {high>0&&previous!==null&&<div className="cash-comparison-bar previous" style={{width:(previous/high*100)+'%'}}/>}
             </div>
           </div>
         })}
       </div>}
-      <p className="cash-comparison-note">Слева текущий период, справа предыдущий такой же длительности. Сравниваются только записи приложения, не фискальная выручка Эвотора.</p>
+      <p className="cash-comparison-note">Верхняя полоса — выбранный период, нижняя — предыдущий такой же длительности. Сравниваются только записи приложения, не фискальная выручка Эвотора.</p>
     </section>
     <div className="analytics-grid">
       <div className="card mini-insight"><div><span>Клиенты VK</span><b>{rub.format(data.platformSplit.vk)}</b><small>подключённые профили</small></div><div className="mini-viz"><BarChart3/></div></div>
