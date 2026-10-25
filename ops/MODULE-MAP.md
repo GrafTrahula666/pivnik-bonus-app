@@ -28,6 +28,20 @@ See `EVOTOR-MARKET-RUNBOOK.md` and `ADMIN-PILOT-MARKET-PROGRESS.md`.
 This Admin-only mount has no duplicate route in root `server.js` or
 `universal-server.js`; neither root server is changed by this feature.
 
+25 October hardening requires manual Admin migration **019 after 018**. Conflicting
+same-key deliveries preserve only the changed SHA256 plus the original event key
+and set sticky `reconciliation_required` on the **original** provider user and
+subscription before returning 409. Failed writes/COMMIT return 503 without a
+partial hold; exact retries, token rotation and later events cannot clear it.
+An installation conflict remains ambiguous across reinstall. There is no reset
+API/reconciler yet. A future license consumer must check BOTH user and subscription
+holds, installation, complete sequence and fresh verified canonical ownership;
+another subscription's `active` projection alone never authorizes access.
+A termination request after terminal termination now enters `review_required`,
+so a subsequent renewal cannot reopen it. HTTP/disposable SQL regression covers
+identity substitution, concurrent retries and failure recovery. No customer or
+financial tables, root route copies or startup migrations are changed.
+
 `auth.ts:login` retains the six-attempt IP/account limit and adds independent
 30-per-IP and 15-per-normalized-account limits per 15 minutes, before password
 SQL/scrypt. `login-rate-limit.spec.ts` covers rotating identities/IPs and expiry.

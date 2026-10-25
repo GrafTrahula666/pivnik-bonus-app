@@ -103,9 +103,12 @@ export function Kpi({
             <Area
               type="monotone"
               dataKey="value"
-              stroke={down ? '#ff7a90' : '#73bcd9'}
+              stroke={down ? '#ff7a90' : '#46d8e2'}
               fill="none"
               strokeWidth={1.5}
+              isAnimationActive
+              animationDuration={900}
+              animationEasing="ease-out"
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -150,9 +153,12 @@ export function Donut({ value }: { value: number }) {
           startAngle={90}
           endAngle={-270}
           stroke="none"
+          isAnimationActive
+          animationDuration={900}
+          animationEasing="ease-out"
         >
-          <Cell fill="#73bcd9" />
-          <Cell fill="#192f3a" />
+          <Cell fill="#46d8e2" />
+          <Cell fill="#19363a" />
         </Pie>
       </PieChart>
     </ResponsiveContainer>

@@ -31,7 +31,8 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
   let failWrites = false, failCommit = false
   beforeAll(async () => {
     db = await tenantCrmFixtureDatabase()
-    await db.exec(await fs.readFile(new URL('../../admin-migrations/018_evotor_market_inbox.sql', import.meta.url), 'utf8'))
+    for (const file of ['018_evotor_market_inbox.sql', '019_evotor_market_reconciliation.sql'])
+      await db.exec(await fs.readFile(new URL('../../admin-migrations/' + file, import.meta.url), 'utf8'))
     // PGlite has one SQL connection; serialize transactions like a size-one pool.
     // Native tests use independent real connections and row locks instead.
     let queue = Promise.resolve()
@@ -115,11 +116,11 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     const state = async () => (await db.query('SELECT installation_state FROM admin_evotor_market_users WHERE user_id=$1', ['01-fixture'])).rows[0]!.installation_state
     expect(await state()).toBe('uninstalled')
     expect((await request(installations, { ...second, type: 'ApplicationInstalled' })).status).toBe(409)
-    expect(await state()).toBe('uninstalled')
+    expect(await state()).toBe('ambiguous')
     expect((await request(installations, install('ApplicationInstalled', second.timestamp))).status).toBe(200)
     expect(await state()).toBe('ambiguous')
     expect((await request(installations, install('ApplicationInstalled', 1792774800020))).status).toBe(200)
-    expect(await state()).toBe('installed')
+    expect(await state()).toBe('ambiguous')
   })
   it('out-of-order payments wait for a contiguous sequence; duplicate delivery/order of JSON keys is harmless', async () => {
     const id = crypto.randomUUID(), paid = sub(id, 2, 'SubscriptionActivated')
@@ -130,7 +131,6 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     expect((await readSub(id)).state).toBe('active'); expect(Number((await readSub(id)).last_sequence)).toBe(2)
     expect((await readSub(id)).has_sequence_gap).toBe(false)
     expect((await request(events, Object.fromEntries(Object.entries(paid).reverse()))).status).toBe(200)
-    expect((await request(events, { ...paid, nextBillingDate: '2027-01-01T00:00:00Z' })).status).toBe(409)
     expect(Number((await readSub(id)).last_sequence)).toBe(2)
     expect((await request(events, sub(id, 3, 'SubscriptionTerminationRequested'))).status).toBe(200)
     expect((await readSub(id)).state).toBe('termination_requested')
@@ -181,6 +181,64 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     }
     expect((await readSub(reused)).state).toBe('review_required')
   })
+  it('termination cannot be bypassed by a later termination request and renewal', async () => {
+    const id = crypto.randomUUID()
+    for (const [index, type] of ['SubscriptionCreated', 'SubscriptionActivated', 'SubscriptionTerminated',
+      'SubscriptionTerminationRequested', 'SubscriptionRenewed'].entries()) {
+      expect((await request(events, sub(id, index + 1, type))).status).toBe(200)
+    }
+    expect((await readSub(id)).state).toBe('review_required')
+    expect(Number((await readSub(id)).last_sequence)).toBe(5)
+  })
+  it('conflicting replay holds the original identity durably without storing changed private payload', async () => {
+    const id = crypto.randomUUID(), owner = 'conflict-original'
+    const first = sub(id, 1, 'SubscriptionCreated', { userId: owner })
+    const paid = sub(id, 2, 'SubscriptionActivated', { userId: owner })
+    for (const event of [first, paid]) expect((await request(events, event)).status).toBe(200)
+    const changed = { ...paid, userId: 'conflict-foreign', planId: 'private-provider-prose-not-to-store' }
+    for (let n = 0; n < 2; n++) expect((await request(events, changed)).status).toBe(409)
+    const original = (await db.query('SELECT payload FROM admin_evotor_market_events WHERE event_key=$1', [`subscription:${id}:2`])).rows[0]!.payload
+    expect(original).toEqual({ ...paid, timestamp: '2026-10-23T17:00:00.000Z', nextBillingDate: '2026-11-23T17:00:00.000Z' })
+    const conflicts = await db.query('SELECT * FROM admin_evotor_market_conflicts WHERE event_key=$1', [`subscription:${id}:2`])
+    expect(conflicts.rows).toHaveLength(1)
+    expect(JSON.stringify(conflicts.rows)).not.toContain(changed.planId)
+    const user = async () => (await db.query('SELECT reconciliation_required,installation_state FROM admin_evotor_market_users WHERE user_id=$1', [owner])).rows[0]!
+    expect((await user()).reconciliation_required).toBe(true)
+    // Provider facts cannot authorize clearing a reconciliation hold.
+    for (const event of [paid, sub(id, 3, 'SubscriptionRenewed', { userId: owner }),
+      sub(id, 4, 'SubscriptionTerminated', { userId: owner })]) expect((await request(events, event)).status).toBe(200)
+    for (const event of [install('ApplicationUninstalled', 1, { data: { productId, userId: owner } }),
+      install('ApplicationInstalled', 2, { data: { productId, userId: owner } })]) expect((await request(installations, event)).status).toBe(200)
+    expect((await request(tokens, { userId: owner, token: cloudToken })).status).toBe(200)
+    expect((await readSub(id)).reconciliation_required).toBe(true)
+    expect((await readSub(id)).state).toBe('review_required')
+    expect(Number((await readSub(id)).last_sequence)).toBe(4)
+    expect(await user()).toEqual({ reconciliation_required: true, installation_state: 'ambiguous' })
+  })
+  it('concurrent exact/conflicting deliveries cannot restore a held projection', async () => {
+    const id = crypto.randomUUID(), event = sub(id, 1, 'SubscriptionCreated')
+    expect((await request(events, event)).status).toBe(200)
+    const replies = await Promise.all([request(events, event), request(events, { ...event, planId: 'changed' })])
+    expect(replies.map(reply => reply.status).sort()).toEqual([200, 409])
+    expect((await readSub(id)).reconciliation_required).toBe(true)
+    expect((await readSub(id)).state).toBe('review_required')
+  })
+  it('failed conflict writes/commit return 503; retry commits the hold before 409', async () => {
+    const id = crypto.randomUUID(), event = sub(id, 1, 'SubscriptionCreated')
+    expect((await request(events, event)).status).toBe(200)
+    const changed = { ...event, planId: 'changed' }
+    for (const mode of ['write', 'commit']) {
+      failWrites = mode === 'write'; failCommit = mode === 'commit'
+      const response = await request(events, changed)
+      failWrites = failCommit = false
+      expect(response.status).toBe(503)
+      expect(await response.text()).toBe('{"code":"EVOTOR_MARKET_UNAVAILABLE"}')
+      expect((await readSub(id)).reconciliation_required).toBe(false)
+      expect((await db.query('SELECT * FROM admin_evotor_market_conflicts WHERE event_key=$1', [`subscription:${id}:1`])).rows).toHaveLength(0)
+    }
+    expect((await request(events, changed)).status).toBe(409)
+    expect((await readSub(id)).reconciliation_required).toBe(true)
+  })
   it('invalid schemas, oversized bodies, unsupported versions/event casing and arbitrary properties cannot persist', async () => {
     const id = crypto.randomUUID(), created = sub(id, 1, 'SubscriptionCreated'), before = queries
     for (const body of [{ ...created, sequenceNumber: 1.5 }, { ...created, planId: undefined }, { ...created, type: 'subscriptionCreated' },
@@ -205,9 +263,10 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     }
   })
   it('manual migration is repeatable and creates only provider metadata, never canonical access or financial tables', async () => {
-    await db.exec(await fs.readFile(new URL('../../admin-migrations/018_evotor_market_inbox.sql', import.meta.url), 'utf8'))
+    for (const file of ['018_evotor_market_inbox.sql', '019_evotor_market_reconciliation.sql'])
+      await db.exec(await fs.readFile(new URL('../../admin-migrations/' + file, import.meta.url), 'utf8'))
     expect((await db.query(`SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`)).rows.map(row => row.tablename)).toEqual([
-      'admin_evotor_market_events', 'admin_evotor_market_subscriptions', 'admin_evotor_market_users',
+      'admin_evotor_market_conflicts', 'admin_evotor_market_events', 'admin_evotor_market_subscriptions', 'admin_evotor_market_users',
     ])
   })
 })

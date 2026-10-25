@@ -119,10 +119,10 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
   async function projectSubscription(client: PoolClient, event: Subscription) {
     await client.query(`INSERT INTO admin_evotor_market_subscriptions(subscription_id,product_id,user_id)
       VALUES($1::uuid,$2::uuid,$3) ON CONFLICT DO NOTHING`, [event.subscriptionId, event.productId, event.userId])
-    const current = (await client.query(`SELECT product_id::text,user_id,last_sequence::text,state,paid_until,plan_id
+    const current = (await client.query(`SELECT product_id::text,user_id,last_sequence::text,state,paid_until,plan_id,reconciliation_required
       FROM admin_evotor_market_subscriptions WHERE subscription_id=$1::uuid FOR UPDATE`, [event.subscriptionId])).rows[0]!
     if (current.product_id !== event.productId || current.user_id !== event.userId) throw conflict()
-    let sequence = Number(current.last_sequence), state = String(current.state)
+    let sequence = Number(current.last_sequence), state = current.reconciliation_required ? 'review_required' : String(current.state)
     let paidUntil: string | Date | null = current.paid_until, planId: string | null = current.plan_id
     // The user lock serializes deliveries; only the contiguous prefix is projected.
     let gap = false
@@ -149,7 +149,7 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
           state = 'review_required'
         }
         if (next.type === 'AddonsUpdated') state = 'review_required'
-        if (next.type === 'SubscriptionTerminationRequested') state = 'termination_requested'
+        if (next.type === 'SubscriptionTerminationRequested') state = state === 'terminated' ? 'review_required' : 'termination_requested'
         if (next.type === 'SubscriptionTerminated') state = 'terminated'
         if (next.planId) planId = next.planId
       }
@@ -185,7 +185,7 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
       await client.query("SET LOCAL statement_timeout='5s'")
       await client.query(`INSERT INTO admin_evotor_market_users(product_id,user_id)
         VALUES($1::uuid,$2) ON CONFLICT DO NOTHING`, [productId, userId])
-      const user = (await client.query(`SELECT token_fingerprint,installation_state,installation_timestamp::text
+      const user = (await client.query(`SELECT token_fingerprint,installation_state,installation_timestamp::text,reconciliation_required
         FROM admin_evotor_market_users WHERE product_id=$1::uuid AND user_id=$2 FOR UPDATE`, [productId, userId])).rows[0]!
       if (token !== undefined) {
         const aad = `evotor-market-token-v1:${productId}:${userId}`
@@ -204,13 +204,32 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
         [eventKey, productId, userId, kind, digest, serialized])
         if (!inserted.rows.length) {
           const existing = (await client.query('SELECT payload_sha256 FROM admin_evotor_market_events WHERE event_key=$1', [eventKey])).rows[0]
-          if (existing?.payload_sha256 !== digest) throw conflict()
+          if (existing?.payload_sha256 !== digest) {
+            // A conflicting delivery is evidence, not a failed transaction to forget.
+            // Commit the sticky hold before returning 409. No incoming payload/token
+            // is retained, and retries cannot erase the original event or the hold.
+            if (!existing) throw unavailable()
+            await client.query(`INSERT INTO admin_evotor_market_conflicts(event_key,observed_sha256)
+              VALUES($1,$2) ON CONFLICT DO NOTHING`, [eventKey, digest])
+            // Use the ORIGINAL identity: a changed userId must never place the
+            // hold solely on an attacker-selected/different provider account.
+            await client.query(`UPDATE admin_evotor_market_users u SET reconciliation_required=TRUE,
+              installation_state=CASE WHEN e.kind='installation' THEN 'ambiguous' ELSE u.installation_state END,
+              updated_at=NOW() FROM admin_evotor_market_events e WHERE e.event_key=$1
+              AND u.product_id=e.product_id AND u.user_id=e.user_id`, [eventKey])
+            await client.query(`UPDATE admin_evotor_market_subscriptions s SET reconciliation_required=TRUE,
+              state='review_required',updated_at=NOW() FROM admin_evotor_market_events e
+              WHERE e.event_key=$1 AND e.kind='subscription'
+              AND s.subscription_id=(e.payload->>'subscriptionId')::uuid`, [eventKey])
+            await client.query('COMMIT')
+            return true
+          }
         }
         if (kind === 'installation' && inserted.rows.length) {
           const event = payload as Installation, previous = user.installation_timestamp === null ? null : Number(user.installation_timestamp)
           const incoming = event.type === 'ApplicationInstalled' ? 'installed' : 'uninstalled'
           if (previous === null || event.timestamp >= previous) {
-            const state = previous === event.timestamp && user.installation_state !== incoming ? 'ambiguous' : incoming
+            const state = user.reconciliation_required || (previous === event.timestamp && user.installation_state !== incoming) ? 'ambiguous' : incoming
             await client.query(`UPDATE admin_evotor_market_users SET installation_state=$3,installation_timestamp=$4,
               updated_at=NOW() WHERE product_id=$1::uuid AND user_id=$2`, [productId, userId, state, event.timestamp])
           }
@@ -218,6 +237,7 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
         if (kind === 'subscription') await projectSubscription(client, payload as Subscription)
       }
       await client.query('COMMIT')
+      return false
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined)
       if (error instanceof HttpError) throw error
@@ -237,7 +257,7 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
       const supplied = String(req.headers.authorization || '')
       if (!safeEqual(supplied, settings.authorization)) throw new HttpError(401, 'EVOTOR_MARKET_AUTH_REQUIRED', 'Unauthorized callback.')
       if (url.search || !/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type'] || ''))) throw invalid()
-      await accept(kind, await readJsonBody(req, 32 * 1024))
+      if (await accept(kind, await readJsonBody(req, 32 * 1024))) throw conflict()
       res.statusCode = 200; securityHeaders(res); res.end()
     } catch (error) {
       const known = error instanceof HttpError ? error : unavailable()

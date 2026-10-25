@@ -9,7 +9,7 @@ export function Login({onAuthenticated,onDemo,onInvite}:{onAuthenticated:(sessio
   }
   return <main className="login-shell">
     <section className="login-card card">
-      <div className="login-brand"><div className="brand-mark">S</div><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
+      <div className="login-brand"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className="login-icon"><LockKeyhole /></div><span className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</span>
       <h1>Вход в панель управления</h1>
       <p>Безопасный доступ к показателям, клиентам и настройкам ваших заведений.</p>

@@ -1,7 +1,8 @@
 # Admin Pilot — облачное приложение Эвотор.Маркета
 
-Обновлено 23 октября 2026. Реализация: `admin-platform/server/evotor-market.ts`,
-ручная Admin migration `018_evotor_market_inbox.sql`.
+Обновлено 25 октября 2026. Реализация: `admin-platform/server/evotor-market.ts`,
+ручные Admin migrations `018_evotor_market_inbox.sql`, затем
+`019_evotor_market_reconciliation.sql`.
 
 ## Выбранная архитектура и фактическая граница
 
@@ -94,7 +95,7 @@ Receiver отвечает 200 только после сохранения тр�
 
 Никакие реальные значения не записываются в Git, карточку, URL, тесты или чат.
 Примеры согласованы в `.env.example`, `env.example`, `.env.admin.example`.
-Миграции не запускаются на startup. Migration 018 additive/manual; отдельно
+Миграции не запускаются на startup. Migrations 018/019 additive/manual; отдельно
 review schema/grants/backup до разрешённого применения. Root migration007 не
 меняется. Таблицы не дают доступ к `users`, `wallets`, `transactions`.
 
@@ -111,7 +112,14 @@ reject. Для включённого receiver: 401 bad auth, 400 bad schema/pro
 
 - Ключ event: `installation:<id>` или `subscription:<subscriptionId>:<sequence>`.
   Нормализованный JSON canonicalized и SHA256 защищает exact retry; изменение
-  payload под тем же ключом возвращает 409, оригинал сохраняется.
+  payload под тем же ключом возвращает 409 **после COMMIT**: оригинал сохраняется,
+  `admin_evotor_market_conflicts` хранит только event key и изменённый SHA256.
+  У исходного provider user и subscription устанавливается sticky
+  `reconciliation_required`. Подмена userId не переносит hold на чужую личность.
+  Повтор/последующее событие/новый token/reinstall не снимают hold. API сброса нет;
+  нужен отдельный проверенный reconciler. Ошибка сохранения hold даёт503.
+  До 019 исторические отклонённые конфликты не сохранялись: новая миграция не
+  восстанавливает отсутствующие свидетельства задним числом.
 - Row lock пользователя сериализует события/rotation; subscription lock и
   проверка product/user не позволяют переиспользовать чужую подписку.
 - Проекция применяет только contiguous prefix от sequence1. Gap сохраняется
@@ -119,6 +127,8 @@ reject. Для включённого receiver: 401 bad auth, 400 bad schema/pro
 - Uninstall не стирает записи/клиентов. Более старый install игнорируется;
   противоречие установки в одно время даёт `ambiguous`. Installation timestamps
   разных событий без гарантированного порядка остаются provider-test gate.
+- `TerminationRequested` после `Terminated` даёт `review_required`, а не resumable
+  состояние: следующий Renewed/Activated не восстанавливает эту подписку.
 - `TerminationRequested` отличается от `Terminated` и допускает renewal.
   Реальный paid-through доступ требует отдельной согласованной политики.
   Смена plan/addons требует review; неизвестная AI опция не получает доступ.
@@ -130,7 +140,7 @@ reject. Для включённого receiver: 401 bad auth, 400 bad schema/pro
   различима по этому контракту. До использования нужны live API verification
   и reconciliation; сейчас token consumer отсутствует. AAD включает product/user.
 - Будущий expiry/license authorizer обязан учитывать installation/revocation,
-  sequence gaps/conflicts, provider freshness, exact tenant/store allocation,
+  sequence gaps/conflicts и ОБА reconciliation_required (user/subscription), provider freshness, exact tenant/store allocation,
   paid period, признанный plan/addon и account/grant revocation. Никакого
   автоматического согласия на AI или paid provider calls из inbox нет.
 
@@ -166,3 +176,20 @@ documents → activation/renewal → expiry/uninstall/revoke. Проверить
 Production flag/config/deploy разрешаются владельцем отдельно, после готовой
 проверки. Merge main также отдельно: существующие workflows могут запускать
 production deploy. Нынешний Draft PR не является разрешением на запуск.
+
+## Повторная проверка официальных источников — 25 октября
+
+Официальные endpoint schemas и общий документ авторизации повторно прочитаны
+через web retrieval. App/user auth discrepancy сохраняется; app-only gate не
+ослабляется. Известен возможный account-link flow через дополнительные поля
+[user/verify](https://developer.evotor.ru/docs/rest_api_webhooks_post_user_verify.html),
+но callback ещё не реализован: нужны подтверждённые настройки тестового приложения,
+одноразовый owner proof и повторная проверка текущих canonical grants. Ни userId,
+ни полученный cloud token отдельно не назначают компанию SPACEVERSE.
+
+Будущий license reconciler может изучить официальный
+[event stream](https://developer.evotor.ru/docs/rest_events_streaming_api_guide.html)
+и [GET events](https://developer.evotor.ru/docs/rest_api_get_events.html).
+История начинается с настройки событий версии приложения; этот поток нельзя
+выдавать за безусловный current-state oracle или подтверждение полноты старой
+подписки. Тарифные права и provider test остаются отдельными gates.

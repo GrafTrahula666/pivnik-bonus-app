@@ -7,6 +7,79 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 **Статус продукта: не готов к коммерческому выпуску; публикация не выполнялась.**
 Процент готовности не используется: ниже проверяемые функции и ограничения.
 
+## Продолжение 25 октября 2026 — P0.1, только Draft #299
+
+**Авторитетен этот новый раздел; результаты 23 октября ниже — история, не новый прогон.**
+Мандат: разработка/коммиты/Draft PR; без merge main/deploy/production migrations,
+финансовых операций и публикации. Прочитаны вложенные правила/starter pack/CRM
+knowledge base, PIVNIK preflight/core, MODULE-MAP Do not break и целевые runbooks.
+GitHub и свежий clone подтвердили первоначальный main `019237ad2cf3d439201d612ebda1282755ad2dfa`,
+#299 `efae6eef9406ff68bfa478c5f0adfd7b45c89ff5` и #296
+`4d75b856dbd607036f2c1e46204ecff02249148e`: оба открыты/Draft. Просмотрены origin
+heads, история и 50 открытых PR. #300 — отдельный дизайн/периоды; не импортирован.
+Перед публикацией main изменился: отдельно авторизованный владельцем чужой
+security PR #301 уже merged (`6ec4350b1ad6d8f115421bed9282c8c63cf4ec15`).
+Его body-parser1.20.9 импортирован синхронизацией main и лично перепроверен,
+не присваивается этой сессии. Финальная база — этот SHA; чужой дизайн сохранён. #296 не импортирован:
+его database bootstrap — отдельный этап; готовая схема ещё не активная CRM.
+
+Действующее списание бонусов в баре подтверждено владельцем; в main есть merged
+#297 (`16be997`, `6b7772a`) с redemption/recovery. Код и тесты существуют; это
+не новый реальный денежный тест и не подтверждение production configuration.
+Старое «списание pending» не используется как статус работающей кассы.
+
+Лично реализовано координатором:
+- Сохранение конфликта callback до409 с атомарными sticky holds на исходном
+  provider user/subscription; только digest изменённого payload, без его текста.
+- Запрет перехода terminated → termination_requested → active.
+- Manual additive Admin019; миграции/root POS/bonus/VK/TG/kiosk не менялись.
+- Тесты replay/подмены userId/конкуренции/отзыва-переустановки/ошибок COMMIT и
+  документация. Подписка остаётся metadata projection, не лицензией.
+
+Независимый subagent проверил diff read-only: blocking P0/P1 не нашёл;
+его focused15/15 PGlite не подменяет проверки координатора. Другой subagent
+проверил официальные контракты: app/user discrepancy остаётся. Следующий
+независимый P0.2 store adapter ведётся отдельным scope/PR, не включён сюда.
+
+Проверки координатора на итоговом P0.1:
+- materialize×2: SHA256 совпали для954 tracked files на новой базе; 7 исторических generated
+  файлов восстановлены побайтово и в commit не входят. Patch-chain не менялась.
+- `node --test`: первый прогон654 pass/1 file failure (POS proxy), отдельный
+  повтор этого файла5/5; полный повтор `--test-concurrency=4`:655/655;
+  после нового main/security lockfile финальный повтор: **656/656, 0 skip**.
+  Первый провал не засчитан успешным. `npm run check`, VK parity/bundle PASS.
+- Business typecheck/build/lint/isolation PASS. Lint13 прежних Fast Refresh
+  warnings после синхронизации main; существующий chunk warning сохранён.
+- Business Vitest: **455 pass, 21 skip, 0 fail** (40 files). Пропуски — native
+  PostgreSQL integration без разрешённого тестового URL, не успех этих тестов.
+  Общий финальный candidate с независимыми44 store-adapter tests: **499 pass,
+  21 skip, 0 fail** (41 files); эти дополнительные44 теста относятся к следующему
+  отдельному PR, а не к функциональности inbox #299.
+- Focused inbox HTTP/SQL PGlite: **15/15 PASS**. Native PostgreSQL не проверен:
+  Docker/psql отсутствуют; подготовленный временный пакет PG не запущен, среда
+  запрещает отдельный OS user (`runuser: Operation not permitted`). Production
+  URL/БД не использовались. Cross-user native lock/deadlock test остаётся gate.
+- Playwright desktop/mobile: cash/scope12 + CRM pagination12 = **24/24 PASS**.
+  Это synthetic browser regression, не provider installation E2E.
+- Root audit первоначально выявил1 high body-parser GHSA-27r3-jxmh-p828.
+  После независимого merged #301, exact npm ci и повтора root full/prod audit:
+  **0 vulnerabilities**. Business full/prod audit: **0 vulnerabilities**.
+  Зависимость исправлена другим агентом в #301, не этим inbox изменением.
+
+| Gate | Статус 25 октября | Следующее доказательство |
+|---|---|---|
+| Callback inbox | P0.1 hardening проверен локально, Draft | native SQL + реальный auth/повторы провайдера |
+| Canonical business/store binding | Не реализован | owner proof + подтверждённый account flow, текущие grants, проверенные stores/terminal |
+| Лицензия/runtime enforcement | Не реализован | согласованный тариф/период/allocations + полная reconciliation |
+| Независимая CRM activation | Не закрыт; #296 отдельный Draft | ресурс тестовой БД + owner binding + license path; не снимать legacy guard |
+| Релиз | BLOCKED | native/provider E2E, legal/moderation и отдельное разрешение выпуска; audit high закрыт чужим #301 |
+
+Требуется от владельца/Эвотора: разрешённый тестовый app/account/store/terminal,
+подтверждённый callback auth/account flow и коммерческие правила. Секреты —
+через защищённые настройки. Повторные реальные денежные тесты не проводятся.
+Следующий минимальный шаг: отдельный bounded read-only store verifier, затем
+подтверждённый owner proof; не принимать userId за право на canonical компанию.
+
 ## Preflight и полномочия
 
 - До изменений working tree чистый, локальная ветка `work`; `git fetch` подтвердил
