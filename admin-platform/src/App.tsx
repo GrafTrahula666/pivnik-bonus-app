@@ -105,7 +105,7 @@ export default function App(){
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
-        period={period} compare={compare} restricted={isTrusted} roleLabel={setupOnly?'Доступ к панели':undefined} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'&&cashView}/>
+        period={period} compare={compare} restricted={isTrusted} roleLabel={setupOnly?'Доступ к панели':undefined} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'}/>
       <TenantDangerContext role={session.admin.role} mode={mode} venue={mode==='production'?selected:null} onBack={()=>setPage('platform')}/>
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
