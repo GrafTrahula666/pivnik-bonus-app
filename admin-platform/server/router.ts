@@ -14,6 +14,7 @@ import {
   getVenueDashboard,
   getWheelAnalytics,
   parsePeriod,
+  parseOperationsPeriod,
 } from './data.js'
 import { recordAudit } from './audit.js'
 import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js'
@@ -51,6 +52,7 @@ import {
 } from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
 import { evotorPeriod,getEvotorReport } from './evotor-read.js'
+import {listEvotorStock,incrementEvotorStock} from './evotor-stock.js'
 import {
   PROMOTION_BODY_LIMIT,createAppPromotion,deleteAppPromotion,getAppDesign,listAppPromotions,publishAppDesign,updateAppPromotion,
 } from './pivnik-app-content.js'
@@ -102,6 +104,7 @@ export const sessionCapabilities=()=>({
   tenantCrmReads:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmReads,
   tenantCrmActivationChecks:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmActivationChecks,
   crmOnboarding:config.enableWrites&&config.enableOnboardingDrafts&&config.enableCrmOnboarding,
+  beerIntake:config.enableWrites&&config.enableBeerIntake,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -460,6 +463,15 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     }
     await requireVenueAccess(session.admin,scope,String(req.method||'GET').toUpperCase(),resource,child,grandchild)
 
+    if(resource==='beer-intake'&&!child){
+      if(!config.enableWrites||!config.enableBeerIntake)throw new HttpError(403,'BEER_INTAKE_DISABLED','Учёт поступлений пока выключен.')
+      if(isMethod(req,'GET')){json(res,200,await listEvotorStock(scope));return true}
+      if(isMethod(req,'POST')){
+        enforceRateLimit('beer-intake:'+session.admin.id,30,60_000)
+        json(res,200,await incrementEvotorStock(session.admin,scope,await readJsonBody(req,2048)));return true
+      }
+      throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+    }
     if(resource==='clients'&&child&&grandchild==='bonus-adjustments'&&isMethod(req,'POST')){
       const body=await readJsonBody(req)
       json(res,200,await adjustPivnikBonusPilot(session.admin,scope,child,body));return true
@@ -552,7 +564,8 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       }catch(error){await db.query('ROLLBACK');throw error}
       finally{db.release()}
     }
-    if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
+    if(resource==='dashboard'&&child==='operations'){json(res,200,await getVenueDashboard(scope,parseOperationsPeriod(url),{hourly:true}));return true}
+    if(resource==='dashboard'&&!child){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
     if(resource==='clients'&&child==='segments'){json(res,200,await getClientSegments(scope));return true}
     if(resource==='clients'&&child){json(res,200,await getClientDetail(scope,child));return true}
     if(resource==='clients'){json(res,200,await getClients(scope,url));return true}

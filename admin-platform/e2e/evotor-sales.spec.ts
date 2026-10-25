@@ -125,3 +125,35 @@ test('compact cash KPIs and period comparison: revenue, average, operations, cus
  await expect(comparison.locator('.cash-comparison-chart')).toHaveCount(0)
  await expect(page.locator('.kpi')).toHaveCount(3)
 })
+
+
+test('custom inclusive cash interval, daily grouping and validation preserve the report',async({page})=>{
+ const queries:string[]=[]
+ const daily=[{label:'2026-10-01',amountCents:'30000000'},{label:'2026-10-02',amountCents:'-1000000'}]
+ await page.route('**/api/admin/venues/*/pos?*',async route=>{
+  const url=new URL(route.request().url());queries.push(url.search)
+  return route.fulfill({json:{...report,period:{from:'2026-09-30T21:00:00Z',until:'2026-10-02T21:00:00Z',timeZone:'Europe/Moscow'},all:{...all,days:daily}}})
+ })
+ await page.goto('/e2e/fixtures/evotor.html')
+ await page.getByLabel('Начало периода кассы').fill('2026-10-01')
+ await page.getByLabel('Конец периода кассы').fill('2026-10-02')
+ await page.getByRole('button',{name:'Показать период',exact:true}).click()
+ await expect(page.getByText('01.10.2026 — 02.10.2026 · сумма за одинаковые часы всех дней периода')).toBeVisible()
+ expect(queries.at(-1)).toBe('?from=2026-10-01&to=2026-10-02')
+ const total=await page.locator('.kpi-value').first().textContent()
+ await page.getByRole('button',{name:'По дням',exact:true}).click()
+ await expect(page.locator('[data-cash-day]')).toHaveCount(2)
+ await page.locator('[data-cash-day="2026-10-02"]').click()
+ await expect(page.locator('.cash-chart-detail')).toContainText('−₽ 10')
+ await expect(page.getByRole('list',{name:'Выручка по часам',exact:true})).toHaveCount(0)
+ await expect(page.locator('.kpi-value').first()).toHaveText(total!)
+ await page.getByRole('button',{name:'По часам',exact:true}).click()
+ await expect(page.locator('[data-cash-hour]')).toHaveCount(24)
+ const before=queries.length
+ await page.getByLabel('Начало периода кассы').fill('2026-10-03')
+ await page.getByRole('button',{name:'Показать период',exact:true}).click()
+ await expect(page.getByRole('alert')).toContainText('Начало периода')
+ expect(queries).toHaveLength(before)
+ await expect(page.locator('.kpi-value').first()).toHaveText(total!)
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+})

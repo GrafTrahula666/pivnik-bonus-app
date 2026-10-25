@@ -1,4 +1,4 @@
--- Manual Admin metadata migration, applied after 018. No startup execution.
+-- Manual Admin metadata migration, applied after 020. No startup execution.
 -- Conflicting authenticated callbacks must survive the 409 response. These
 -- sticky holds have no automatic reset; a future reconciler needs separate review.
 BEGIN;

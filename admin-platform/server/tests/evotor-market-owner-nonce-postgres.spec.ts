@@ -24,7 +24,7 @@ native('Evotor owner proof nonce: native PostgreSQL atomic replay denial', () =>
     schema = 'evotor_owner_nonce_' + crypto.randomBytes(8).toString('hex')
     await setup.query('CREATE SCHEMA ' + schema)
     db = new pg.Pool({ connectionString, ssl: false, max: 12, options: '-c search_path=' + schema })
-    const sql = await fs.readFile(new URL('../../admin-migrations/020_evotor_owner_proof_nonces.sql', import.meta.url), 'utf8')
+    const sql = await fs.readFile(new URL('../../admin-migrations/022_evotor_owner_proof_nonces.sql', import.meta.url), 'utf8')
     await db.query(sql)
     await db.query(sql)
   }, 30_000)

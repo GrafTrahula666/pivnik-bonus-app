@@ -4,6 +4,7 @@ import './styles.css'
 import './responsive-fixes.css'
 import './ui-polish.css'
 import './animations.css'
+import './spaceverse.css'
 import App from './App'
 import { InviteClaim } from './InviteClaim'
 

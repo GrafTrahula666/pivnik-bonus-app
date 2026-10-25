@@ -72,3 +72,9 @@
 .cash-comparison-bar.previous{background:#bc9bdd}.cash-comparison-bar.negative{background:var(--danger)}
 .cash-comparison-delta{font-size:12px;margin:14px 0 0}.cash-comparison-note{font-size:11px;color:var(--muted);line-height:1.5;margin:10px 0 0}
 @media(max-width:780px){.cash-comparison-chart{grid-template-columns:minmax(0,1fr);gap:14px}.cash-calculation-details dl{grid-template-columns:repeat(2,minmax(0,1fr))}.cash-comparison-controls>label{width:100%}.cash-comparison-dates label{flex:1}.cash-comparison-dates{width:100%}.cash-comparison-dates input{width:100%;box-sizing:border-box}.cash-comparison-metrics{width:100%}.cash-comparison-metrics button{flex:1}.cash-comparison{padding:14px}}
+
+/* Application-operation comparison keeps both historical series visible. */
+.app-operation-comparison .cash-comparison-track{height:26px;background:transparent}
+.app-operation-comparison .cash-comparison-bar{top:1px}
+.app-operation-comparison .cash-comparison-bar.previous{top:14px}
+.app-operation-comparison .cash-comparison-row{min-width:0}
