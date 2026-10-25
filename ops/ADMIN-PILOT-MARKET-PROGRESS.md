@@ -7,6 +7,46 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 **Статус продукта: не готов к коммерческому выпуску; публикация не выполнялась.**
 Процент готовности не используется: ниже проверяемые функции и ограничения.
 
+## Следующий независимый этап25 октября — P0.2 store evidence
+
+Ветка `spaceverse/evotor-store-ownership-20261025`, Draft поверх #299.
+База — [inbox hardening fa5cec9](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/fa5cec97dbcab208816cd7df50d84ca291a4c03a),
+[Draft #299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
+Реализация: новые `evotor-market-stores.ts` +44 проверок; MODULE-MAP/runbook
+в том же scope. Не смешивается с #296, #300, POS или денежной интеграцией.
+
+Делегированный инженер создал adapter и43 теста, подтвердил официальный Bearer/
+v2 headers. Координатор лично прочитал код/источники, потребовал exact200 вместо
+любого2xx, добавил206 regression и выполнил итоговую верификацию. Независимое
+read-only review не нашло blocking/must-fix. Результат возвращается только после
+полной пагинации и проверки каждого owner; redirect/foreign/duplicates/timeout/
+byte/page caps не дают частичного успеха. Error text/token не раскрываются.
+
+Проверки координатора итогового candidate:
+- Focused HTTP inbox15 + stores44 = **59/59 PASS**, synthetic/PGlite/fake transport.
+- Business full: **499 pass/21 skip/0 fail**,41 files;21 native PostgreSQL skip
+  остаются непроверенными. Typecheck/build/lint/isolation PASS,13 прежних lint
+  warnings и прежний chunk warning. Собственных DB writes этот adapter не имеет.
+- Root на базе main6ec4350: **656/656 PASS**, check PASS, materialize×2 SHA256,
+ 7 generated diffs восстановлены. Root/Admin full+prod audits:0 vulnerabilities.
+- Desktop/mobile regression ранее в этой же сессии: **24/24 PASS**; frontend
+  этим adapter не меняется. Native PostgreSQL и real-provider E2E заблокированы
+  окружением/тестовыми доступами; имитация не считается живой установкой.
+
+**Доступно только как Draft-модуль:** adapter не mounted, не вызывает провайдера
+в production, не записывает binding/лицензию/tenant activation. Нет нового env,
+миграции, платного API или зависимости. Одноразовый canonical owner proof,
+consumer с повторной проверкой token revision/grants, terminal allocation и
+runtime license gates всё ещё не реализованы. P0.2 в целом НЕ закрыт.
+
+Для продолжения account flow нужны подтверждённые настройки test app/user/verify
+и разрешённый test user/store/terminal. Нельзя принимать произвольный userId
+или полный список stores за право на компанию SPACEVERSE. Лицензии дополнительно
+ждут утверждённых product/plan/addon/trial/expiry правил и reconciliation источника.
+Не снимаются existing legacy guard и `market_contract_not_configured`.
+#296 уже содержит проверяемую подготовку пустой target-схемы; без разрешённого
+ресурса DB/owner/license его нельзя выдавать за активный клиентский SaaS путь.
+
 ## Продолжение 25 октября 2026 — P0.1, только Draft #299
 
 **Авторитетен этот новый раздел; результаты 23 октября ниже — история, не новый прогон.**

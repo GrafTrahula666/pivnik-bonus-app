@@ -4,6 +4,24 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Evotor Market store evidence adapter (2026-10-25, not mounted)
+
+`admin-platform/server/evotor-market-stores.ts:verifyEvotorMarketStores` is an
+unmounted read-only building block. It uses server-supplied cloud credentials
+and expected provider user, fixed `https://api.evotor.ru/stores`, both v2 headers,
+Bearer auth and opaque encoded cursors. Every store must match the exact user;
+only a complete chain ending in empty paging returns immutable ID/user records.
+Non-200, foreign owner, malformed data, duplicate IDs/cursors, redirects or caps
+fail closed without partial results. One 15s deadline covers headers and streamed
+bodies across all pages; bounds are 50 pages/5000 stores, 1MiB per page/5MiB total.
+Timeout/late-response cleanup and secret-free errors have focused tests.
+It has no route, feature switch, environment mutation, DB writes or live caller.
+It does not prove canonical company ownership, installation, selected-store
+binding, terminal allocation or license. Empty stores proves no ownership.
+Integration must recheck current canonical grants and unchanged token revision,
+provider identity, installation/hold state and exact store before persisting any
+binding. No legacy POS source is changed. See `EVOTOR-MARKET-RUNBOOK.md`.
+
 ## Admin Pilot Marketplace inbox (2026-10-23, default off)
 
 `admin-platform/server/evotor-market.ts` handles only POST `/api/v1/user/token`,
