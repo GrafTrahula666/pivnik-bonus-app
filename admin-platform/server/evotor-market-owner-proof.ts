@@ -75,6 +75,7 @@ export async function verifyEvotorOwnerProofOnce({
   const parts = proof.split('.')
   if (parts.length !== 2) return denied()
   const [encoded, mac] = parts
+  if (!encoded || !mac) return denied()
   const providedMac = parseCanonicalBase64url(mac)
   if (providedMac.length !== 32) return denied()
   const calculatedMac = createHmac('sha256', signingKey).update(purpose + '\n' + encoded).digest()
