@@ -87,6 +87,7 @@ describe('explicit empty tenant bootstrap: existing scope and binding ledger',()
     "CREATE TYPE existing_type AS ENUM ('existing')",
     'CREATE SEQUENCE existing_sequence',
     'CREATE COLLATION public.existing_collation FROM pg_catalog."C"',
+    'CREATE PUBLICATION existing_publication',
     'CREATE TEMP TABLE temporary_customers(id BIGINT)',
     'SELECT lo_create(12345)',
     "CREATE FUNCTION public.to_regclass(text) RETURNS regclass LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'UNTRUSTED_FUNCTION_EXECUTED'; END $$",
