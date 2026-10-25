@@ -1,0 +1,25 @@
+.beer-intake-card{display:grid;gap:16px;max-width:1000px}
+.beer-intake-heading{display:flex;gap:14px;align-items:flex-start}
+.beer-intake-heading svg{flex-shrink:0;color:var(--accent,#76d5ef)}
+.beer-intake-heading h3{margin:0 0 5px}
+.beer-intake-heading p{margin:0;opacity:.8}
+.beer-intake-label{font-weight:600}
+.beer-intake-search{display:flex;align-items:center;gap:10px;padding:0 14px;background:rgba(12,23,39,.5);border:1px solid rgba(180,205,235,.25);border-radius:12px}
+.beer-intake-search input{width:100%;min-height:48px;color:inherit;background:transparent;border:0;outline:0;font:inherit}
+.beer-intake-search:focus-within{outline:2px solid var(--accent,#69bdda);outline-offset:2px}
+.beer-intake-products{display:grid;gap:6px;max-height:460px;overflow:auto;overscroll-behavior:contain}
+.beer-intake-item{border:1px solid rgba(180,205,235,.2);border-radius:12px;overflow:hidden}
+.beer-intake-choice{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:12px 14px;width:100%;color:inherit;background:transparent;border:0;text-align:left;cursor:pointer}
+.beer-intake-choice:hover,.beer-intake-choice.selected{background:rgba(92,163,210,.12)}
+.beer-intake-choice:focus-visible{outline:2px solid var(--accent,#69bdda);outline-offset:-2px}
+.beer-intake-choice small{color:inherit;opacity:.7;text-align:right}
+.beer-intake-name{font-weight:650}
+.beer-intake-inline{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;background:rgba(92,163,210,.08)}
+.beer-intake-current{flex-basis:100%;font-size:13px}
+.beer-intake-inline label{font-weight:600}
+.beer-intake-volume{display:flex;align-items:center;gap:8px}
+.beer-intake-volume input{width:100px;padding:10px;border-radius:10px;color:inherit;background:rgba(12,23,39,.5);border:1px solid rgba(180,205,235,.35);font:inherit}
+.beer-intake-inline small{flex-basis:100%;font-size:13px}
+.beer-intake-inline small[role=alert]{color:#f68b9b}
+.beer-intake-source{margin:0;font-size:13px;opacity:.75}
+@media(max-width:640px){.beer-intake-choice{flex-wrap:wrap}.beer-intake-choice small{text-align:left}.beer-intake-products{max-height:55vh}}
