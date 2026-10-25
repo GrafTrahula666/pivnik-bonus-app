@@ -241,6 +241,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
     day: string
     revenue_cents: string
     checks: string
+    operations: string
     customers: string
     bonus_earned: string
     bonus_redeemed: string
@@ -259,6 +260,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
        (COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::date::text AS day,
        COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
        COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
+       COUNT(*)::bigint AS operations,
        COUNT(DISTINCT t.client_id)::bigint AS customers,
        COALESCE(SUM(t.bonus_earned) FILTER (
          WHERE NOT (
@@ -287,6 +289,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
     hour: number
     revenue_cents: string
     checks: string
+    operations: string
     customers: string
     bonus_earned: string
     bonus_redeemed: string
@@ -305,6 +308,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
        EXTRACT(HOUR FROM COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::integer AS hour,
        COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
        COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
+       COUNT(*)::bigint AS operations,
        COUNT(DISTINCT t.client_id)::bigint AS customers,
        COALESCE(SUM(t.bonus_earned) FILTER (
          WHERE NOT (
@@ -417,6 +421,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
       day: row.day,
       revenue: centsToRubles(row.revenue_cents),
       checks: numeric(row.checks),
+      operations: numeric(row.operations),
       customers: numeric(row.customers),
       bonusEarned: numeric(row.bonus_earned),
       bonusRedeemed: numeric(row.bonus_redeemed),
@@ -425,6 +430,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange) {
       hour: row.hour,
       revenue: centsToRubles(row.revenue_cents),
       checks: numeric(row.checks),
+      operations: numeric(row.operations),
       customers: numeric(row.customers),
       bonusEarned: numeric(row.bonus_earned),
       bonusRedeemed: numeric(row.bonus_redeemed),
