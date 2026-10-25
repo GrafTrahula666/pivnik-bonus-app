@@ -69,8 +69,8 @@ nativeSuite('Evotor Market native PostgreSQL: actual row locks and durable callb
     }
   }, 30_000)
 
-  const send = async (body: unknown) => {
-    const response = await fetch(origin + endpoint, {
+  const send = async (body: unknown, path = endpoint) => {
+    const response = await fetch(origin + path, {
       method: 'POST',
       headers: { authorization, 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -101,6 +101,45 @@ nativeSuite('Evotor Market native PostgreSQL: actual row locks and durable callb
     const sub = await db.query<{ last_sequence: string; state: string }>(
       'SELECT last_sequence::text,state FROM admin_evotor_market_subscriptions WHERE subscription_id=$1', [id])
     expect(sub.rows[0]).toMatchObject({ last_sequence: '1', state: 'pending' })
+  })
+
+
+  it('rolls back failed token rotation on native PostgreSQL and permits safe concurrent retry', async () => {
+    const userId = 'native-token-' + crypto.randomUUID()
+    const firstToken = 'fixture-only-initial-cloud-token-' + crypto.randomUUID()
+    const rotatedToken = 'fixture-only-rotated-cloud-token-' + crypto.randomUUID()
+    const tokenPath = '/api/v1/user/token'
+    const readToken = async () => (await db.query<{
+      token_revision: string; token_fingerprint: string; secret_ciphertext: Buffer
+    }>(`SELECT token_revision::text,token_fingerprint,secret_ciphertext
+        FROM admin_evotor_market_users WHERE product_id=$1 AND user_id=$2`, [productId, userId])).rows[0]!
+
+    expect((await send({ userId, token: firstToken }, tokenPath)).status).toBe(200)
+    const initial = await readToken()
+    expect(initial.token_revision).toBe('1')
+    expect(initial.secret_ciphertext.toString('utf8')).not.toContain(firstToken)
+
+    // A real PostgreSQL CHECK violation aborts the UPDATE after BEGIN and
+    // row locking. The inbox must roll back the whole request and return 503.
+    await db.query(`ALTER TABLE admin_evotor_market_users
+      ADD CONSTRAINT native_token_rotation_guard CHECK (token_revision <= 1)`)
+    try {
+      const rejected = await send({ userId, token: rotatedToken }, tokenPath)
+      expect(rejected.status).toBe(503)
+      expect(rejected.body).not.toContain(rotatedToken)
+      expect(rejected.body).not.toContain(firstToken)
+      expect(await readToken()).toEqual(initial)
+    } finally {
+      await db.query('ALTER TABLE admin_evotor_market_users DROP CONSTRAINT native_token_rotation_guard')
+    }
+
+    const retries = await Promise.all(Array.from({ length: 3 },
+      () => send({ userId, token: rotatedToken }, tokenPath)))
+    expect(retries.map(response => response.status)).toEqual([200, 200, 200])
+    const updated = await readToken()
+    expect(updated.token_revision).toBe('2')
+    expect(updated.token_fingerprint).not.toBe(initial.token_fingerprint)
+    expect(updated.secret_ciphertext.toString('utf8')).not.toContain(rotatedToken)
   })
 
   it('keeps the original owner and sticky hold across cross-user concurrent callbacks and a real row lock', async () => {
