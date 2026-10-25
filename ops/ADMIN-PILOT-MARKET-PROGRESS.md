@@ -9,11 +9,30 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-25 21:13 UTC (AUTO-RESUME turn 9; turn 7 ниже как история).
+Обновлено: 2026-10-25 22:13 UTC (AUTO-RESUME turn 10).
 Канонический координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Единая кооперативная точка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto10-20261025T220246Z-krm10`, acquired_at_UTC=`2026-10-25T22:02:46Z`, status=`active`. GitHub blob-SHA CAS; automations.peek недоступен.
+**LOCK CURRENT:** owner_run_id=`auto10-20261025T220246Z-krm10`, acquired_at_UTC=`2026-10-25T22:02:46Z`, status=`released`. Release в текущем checkpoint commit; не считать глобальной блокировкой без дисциплины других writers. `automations.peek` недоступен.
 
+### Последняя итерация — 2026-10-25 22:13 UTC, AUTO-RESUME turn 10
+
+**Последняя выполненная задача:** P0.1 native PostgreSQL callback inbox regression для зависимого PR #302. В существующий `.github/workflows/evotor-owner-nonce-postgres.yml` добавлен обязательный шаг `npm test --prefix admin-platform -- server/tests/evotor-market-postgres.spec.ts` на disposable PostgreSQL. Implementation commit `16de01cf40330c717eecf836136a1bc07a526072`, ветка `spaceverse/evotor-store-ownership-20261025`, Draft PR #302. Код production и кассы не менялся.
+
+**Проверено (GitHub Actions на точном implementation SHA):**
+- `Evotor owner nonce native PostgreSQL` run 40238783685: SUCCESS. Native PostgreSQL 4/4 nonce, 26/26 signed owner proof и 4/4 callback inbox tests (включая conflict/concurrent retry), 0 fail, 0 skip в этих трёх suites.
+- `Pivnik release gate` run 40238783795: SUCCESS. Business Vitest 541 passed / 0 failed / 29 skipped (не считать skips выполненными). `npm audit` и production audit: 0 vulnerabilities по логам; остальное в workflow.
+- `Business cash dashboard browser check` run 40238783833: SUCCESS.
+- Это **CI**, а не лично запущенные локальные/native тесты. Локальный clone, реальные credentials, production, касса и внешний Эвотор в этом запуске НЕ проверялись.
+
+**Актуальные PR:** #299 Draft, head до checkpoint `d71f651e139407b0cc118ac4242c51243d19f1d4`, mergeable=false; #296 Draft head `a1bc89c17a12213a8b18e58621548d7b58f0ac74`, mergeable=false; #302 Draft head `16de01cf40330c717eecf836136a1bc07a526072`, mergeable=true относительно зависимой базы; #96 Draft, mergeable=false. Ничего не merged/deployed. Новые commits в #299 после этого checkpoint могут изменить head.
+
+**Текущая незавершённая задача / P0:** завершить P0.1 и P0.2 интеграцию с main: #299 имеет конфликт с main; native callback тест подтверждён на #302, но не является подтверждением mergeability или production. P0.2 owner identity issuer, проверка grant/token revision и реальный signed HTTP ещё не закрыты end-to-end.
+
+**Риски и блокеры:** P0 — Draft #299/#296/#96 конфликтуют с main, нет end-to-end реального owner proof / licence authorizer; P1 — не подтверждены native CRM, production и кассовые сценарии. GitHub Actions CI доступен; локальная копия проекта в runtime отсутствует. `pivnik-preflight` как установленный skill не обнаружен. Не обходить review/release gates. Отдельного разрешения на опасные production операции нет.
+
+**Точное следующее техническое действие:** на свежем main и #299 локализовать конфликтующие файлы/миграции, безопасно подготовить синхронизацию #299 без потери main; повторить native PostgreSQL и release gates после синхронизации. Затем P0.2 issuer proof и revocation/token revision. Checkpoint commit: **текущий коммит**, SHA не указывается самоссылочно.
+
+### История предыдущих запусков
 
 ### Последняя итерация — 2026-10-25 21:13 UTC, AUTO-RESUME turn 9
 
