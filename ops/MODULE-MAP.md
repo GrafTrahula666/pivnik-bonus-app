@@ -34,7 +34,11 @@ and set sticky `reconciliation_required` on the **original** provider user and
 subscription before returning 409. Failed writes/COMMIT return 503 without a
 partial hold; exact retries, token rotation and later events cannot clear it.
 An installation conflict remains ambiguous across reinstall. There is no reset
-API/reconciler yet. A future license consumer must check BOTH user and subscription
+API/reconciler yet. A later sequence with a different provider userId for the
+same subscription also persists a sticky hold on the ORIGINAL subscription before
+409 (503/rollback if COMMIT fails). Its conflicting event is durable evidence,
+but the original user row is not additionally locked, avoiding a cross-user
+lock-order deadlock. A future license consumer must check BOTH user and subscription
 holds, installation, complete sequence and fresh verified canonical ownership;
 another subscription's `active` projection alone never authorizes access.
 A termination request after terminal termination now enters `review_required`,
