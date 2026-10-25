@@ -7,6 +7,28 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 **Статус продукта: не готов к коммерческому выпуску; публикация не выполнялась.**
 Процент готовности не используется: ниже проверяемые функции и ограничения.
 
+## Почасовой P0.1 security slice — конфликт владельца subscription (25 октября 2026)
+
+В существующем [Draft #299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299)
+исправлен отдельный fail-open риск: ранее новый `sequenceNumber` с тем же
+`subscriptionId`, но другим provider `userId`, отклонялся 409 с ROLLBACK.
+При этом прежняя subscription могла остаться в `active`, без sticky hold.
+Теперь такой конфликт сохраняет пришедшее событие как доказательство и
+атомарно переводит ИСХОДНУЮ subscription в `review_required` с
+`reconciliation_required=true` **до** 409. Ошибка COMMIT даёт 503 и откат;
+повтор и последующее корректное событие не снимают hold. Отдельная original
+user row намеренно не блокируется в этом пути во избежание межпользовательского
+deadlock; будущий license gate обязан проверять subscription-level hold.
+Это не лицензия, не tenant binding и не включение платного доступа.
+
+Код: [5c928e4](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/5c928e467224a2fc151cf59b57fb7ef028d8945f).
+Регрессия: [5f48317](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/5f483174b85f48ab4f7aa8d11fcb1d9096dd9480)
+проверяет original owner, atomic COMMIT failure, retry и невозможность
+очистить hold. Runbook и MODULE-MAP обновлены. **CI для нового head
+ожидается; локальные materialize×2, root tests, Admin native SQL и E2E в
+текущем окружении не запускались**. Результаты прежних SHA ниже не являются
+результатами этого изменения. Без merge/deploy/production migration.
+
 ## Агент №1, 25 октября: uncached store verification (Draft #302)
 
 Добавлен `cache: 'no-store'` для каждого запроса GET `/stores` в read-only

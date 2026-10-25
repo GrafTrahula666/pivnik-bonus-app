@@ -162,7 +162,14 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     expect((await db.query('SELECT COUNT(*)::int AS n FROM admin_evotor_market_events WHERE event_key=$1', [`subscription:${id}:1`])).rows[0]!.n).toBe(1)
     expect((await request(events, sub(id, 2, 'SubscriptionActivated', { userId: 'another-user' }))).status).toBe(409)
     expect((await readSub(id)).user_id).toBe('01-fixture')
-    expect((await db.query('SELECT COUNT(*)::int AS n FROM admin_evotor_market_users WHERE user_id=$1', ['another-user'])).rows[0]!.n).toBe(0)
+    // A foreign provider event is retained as evidence after the durable 409 hold.
+    // Its inbox identity must not acquire credentials, installation proof or the original subscription.
+    const foreign = (await db.query(`SELECT secret_key_id,token_revision,installation_state,reconciliation_required
+      FROM admin_evotor_market_users WHERE user_id=$1`, ['another-user'])).rows[0]!
+    expect(foreign).toMatchObject({ secret_key_id: null, installation_state: 'unknown', reconciliation_required: false })
+    expect(Number(foreign.token_revision)).toBe(0)
+    expect((await readSub(id)).reconciliation_required).toBe(true)
+    expect((await readSub(id)).state).toBe('review_required')
   })
   it('plan/add-on changes never silently expand access; trial/create and malformed first sequence never become paid', async () => {
     for (const [type, extra] of [['SubscriptionTermsChanged', { planId: 'pro' }], ['AddonsUpdated', { addons: [{ id: 'ai', quantity: 1 }] }]] as const) {
@@ -215,6 +222,39 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     expect(Number((await readSub(id)).last_sequence)).toBe(4)
     expect(await user()).toEqual({ reconciliation_required: true, installation_state: 'ambiguous' })
   })
+  it('holds the ORIGINAL subscription when a new sequence changes provider userId', async () => {
+    const subscriptionId = crypto.randomUUID(), originalUser = 'owner-sticky-original', foreignUser = 'owner-sticky-foreign'
+    expect((await request(events, sub(subscriptionId, 1, 'SubscriptionCreated', { userId: originalUser }))).status).toBe(200)
+    expect((await request(events, sub(subscriptionId, 2, 'SubscriptionActivated', { userId: originalUser }))).status).toBe(200)
+    expect((await readSub(subscriptionId)).state).toBe('active')
+
+    const foreign = sub(subscriptionId, 3, 'SubscriptionRenewed', { userId: foreignUser })
+    // COMMIT failure must not acknowledge a hold that was rolled back.
+    failCommit = true
+    try { expect((await request(events, foreign)).status).toBe(503) }
+    finally { failCommit = false }
+    expect((await readSub(subscriptionId)).state).toBe('active')
+    expect((await db.query('SELECT COUNT(*)::int AS n FROM admin_evotor_market_events WHERE event_key=$1',
+      [`subscription:${subscriptionId}:3`])).rows[0]!.n).toBe(0)
+
+    expect((await request(events, foreign)).status).toBe(409)
+    let held = await readSub(subscriptionId)
+    expect(held.user_id).toBe(originalUser)
+    expect(held.state).toBe('review_required')
+    expect(held.reconciliation_required).toBe(true)
+    expect(Number(held.last_sequence)).toBe(2)
+    // The valid event remains durable evidence, but cannot grant the foreign user access.
+    expect((await db.query('SELECT user_id FROM admin_evotor_market_events WHERE event_key=$1',
+      [`subscription:${subscriptionId}:3`])).rows[0]!.user_id).toBe(foreignUser)
+    expect((await request(events, foreign)).status).toBe(409)
+    expect((await request(events, sub(subscriptionId, 3, 'SubscriptionRenewed', { userId: originalUser }))).status).toBe(409)
+    expect((await request(events, sub(subscriptionId, 4, 'SubscriptionRenewed', { userId: originalUser }))).status).toBe(200)
+    held = await readSub(subscriptionId)
+    expect(held.user_id).toBe(originalUser)
+    expect(held.reconciliation_required).toBe(true)
+    expect(held.state).toBe('review_required')
+  })
+
   it('concurrent exact/conflicting deliveries cannot restore a held projection', async () => {
     const id = crypto.randomUUID(), event = sub(id, 1, 'SubscriptionCreated')
     expect((await request(events, event)).status).toBe(200)

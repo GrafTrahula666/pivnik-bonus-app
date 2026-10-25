@@ -122,6 +122,15 @@ reject. Для включённого receiver: 401 bad auth, 400 bad schema/pro
   восстанавливает отсутствующие свидетельства задним числом.
 - Row lock пользователя сериализует события/rotation; subscription lock и
   проверка product/user не позволяют переиспользовать чужую подписку.
+  **Отдельный конфликт:** если пришёл новый sequence для уже существующей
+  subscription, но с другим provider userId/productId, событие сохраняется как
+  свидетельство, исходная subscription атомарно получает sticky
+  `reconciliation_required=true` и `review_required`, ответ 409 только после
+  COMMIT. Ошибка COMMIT даёт 503 и откат; повтор не очищает hold. Исходный
+  provider user в этом пути не блокируется дополнительно: чужая user row уже
+  удерживается транзакцией, а захват второй user row после subscription lock
+  создаёт риск deadlock. Поэтому будущий license gate ОБЯЗАН проверять hold
+  конкретной subscription, а не только user-level hold. Ручная сверка обязательна.
 - Проекция применяет только contiguous prefix от sequence1. Gap сохраняется
   явно; заполнение gap обрабатывает и backlog >1000 за несколько batches.
 - Uninstall не стирает записи/клиентов. Более старый install игнорируется;
