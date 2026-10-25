@@ -21,7 +21,7 @@ COPY admin-platform/ ./
 # Keep build-time tests within small builder CPU quotas; not a runtime setting.
 ARG VITEST_MAX_WORKERS=1
 # Builder CPU contention can exceed Vitest's 5s per-test default without a failing assertion.
-ARG VITEST_TEST_TIMEOUT_MS=15000
+ARG VITEST_TEST_TIMEOUT_MS=30000
 RUN npm run typecheck \
   && npm run lint \
   && npm test -- --maxWorkers="${VITEST_MAX_WORKERS}" --testTimeout="${VITEST_TEST_TIMEOUT_MS}" \
