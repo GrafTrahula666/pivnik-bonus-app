@@ -230,6 +230,17 @@ items/id/user_id и paging/next_cursor; [overview](https://developer.evotor.ru/d
    permissions/allocations проверяются отдельно. Пустая коллекция не подтверждает
    ownership и не активирует CRM. Лицензия отдельная.
 
+Дополнительно `verifyEvotorMarketStoresAtRevision` требует серверный
+`expectedTokenRevision` (положительный safe integer) и async reader текущей
+revision из primary Admin DB. До GET и после полного списка сравнивает revision:
+отсутствие, отзыв, ротация или ошибка чтения возвращают только
+`EVOTOR_MARKET_STORES_TOKEN_REVISION_STALE`, без результатов/секретов.
+Проверены тестами preflight rejection, mid-flight revocation, ошибки DB и
+валидный двойной read. Это **не** доказательство владельца и не готовый
+consumer; после GET binding transaction всё равно обязан повторно проверить
+revision, install/holds и canonical grants под актуальными блокировками.
+Реальный провайдер не вызывался.
+
 Пока этот consumer не реализован, функция — подготовленный adapter, **не безопасная
 каноническая привязка бизнеса целиком**. Настройки кабинета/реальные запросы/DB
 binding/активация и финансовые операции в этой итерации не выполнялись.
