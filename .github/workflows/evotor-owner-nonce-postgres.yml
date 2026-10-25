@@ -48,3 +48,7 @@ jobs:
         run: npm test --prefix admin-platform -- server/tests/evotor-market-owner-nonce-postgres.spec.ts
       - name: Signed owner proof negative regression
         run: npm test --prefix admin-platform -- server/tests/evotor-market-owner-proof.spec.ts
+      - name: Native callback inbox regression inherited from #299
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-postgres.spec.ts
