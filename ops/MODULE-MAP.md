@@ -33,10 +33,15 @@ server-side one-time signed-claim verifier. It requires an exact SPACEVERSE
 session/provider/product/company/store/token-revision scope, a short-lived
 HMAC claim, and an atomic durable nonce-consumption callback. Missing, expired,
 replayed, foreign, malformed or wrong-key claims fail closed. Its signing key
-must never be browser-controlled; the trusted issuer and native PostgreSQL
-nonce table are **not implemented**. A valid internal signature is NOT Evotor
-ownership evidence. No HTTP route, tenant activation, provider call, license,
-DB migration or production integration is added. Tests are synthetic only.
+must never be browser-controlled; the trusted issuer is **not implemented**.
+The separate unmounted `evotor-market-owner-nonce.ts` provides a fail-closed
+native PostgreSQL insert-if-absent nonce consumer, with manual additive Admin
+migration 020. It hashes nonces before storage and rejects replay/expired claims;
+a new disposable PostgreSQL regression and dedicated CI workflow are prepared,
+but results must be verified before integration. Migration 020 is **not applied**
+to production and the consumer is **not mounted**. A valid internal signature
+is NOT Evotor ownership evidence. No HTTP route, tenant activation, provider
+call, license or production integration is added.
 
 
 ## Admin Pilot Marketplace inbox (2026-10-23, default off)
