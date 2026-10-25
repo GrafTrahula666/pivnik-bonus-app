@@ -232,6 +232,89 @@ in `e2e/crm-scope.spec.ts` reproduce same-company venue and cross-company switch
 and delayed responses; `playwright.evotor.config.ts` runs them on desktop/mobile
 alongside existing cash dashboard checks. No production APIs are called by them.
 
+## Owner panel appearance and cash interval (2026-10-25)
+
+### Evotor stock intake safety (2026-10-25)
+
+PR #309 introduced the intake screen; #310 changed it to the existing cloud
+products, selected by product ID and measured in liters. `server/evotor-stock.ts`
+uses the metadata DB for its operation journal and the existing production reader
+for the exact company/venue `pos_store_bindings` lookup. It does not own a second
+inventory balance. `server/evotor-stock-client.ts` pins the official Cloud V2 host.
+
+The absolute PATCH path is quarantined by `evotor-stock-safety.ts` before any
+operation reservation, database write or provider write, including when all three
+feature flags are on. A local advisory lock and a successful read-back cannot
+prevent lost terminal sales. Listing preserves actual products but returns
+`writeEnabled:false` and an explicit block reason rendered by `BeerIntake.tsx`.
+Removing this gate requires a verified provider-side atomic delta/CAS or safe
+receipt-independent stock document contract and concurrent-sale acceptance.
+No environment variable alone supplies that proof.
+
+Live read-only preflight: metadata venue 1/company 1 maps to enabled store
+`20241111-E9DB-403D-8079-3522141697B9`. The existing token reads stores/documents
+(HTTP 200), while products return HTTP 403. `admin-pilot` now uses server-only
+Railway references to the existing token/store; both intake flags remain false.
+Migration 019 is absent and is intentionally not applied while writes cannot be
+enabled. No stock, guest, wallet, receipt or payment data was changed.
+
+Evidence, provider constraints and the remaining release gates are recorded in
+`ops/SPACEVERSE-EVOTOR-STOCK-PREFLIGHT-20261025.md`. Adapter race tests, service
+boundary tests, actual HTTP director restrictions and UI gate tests cover this
+boundary. The requested end-to-end intake is **not operational**.
+
+`admin-platform/src/spaceverse.css` is the final presentation layer imported by
+`src/main.tsx`; it preserves the existing page components, handlers and RBAC.
+`src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing
+auth/demo/invitation flow; `BlackHole.tsx` animates only the background, with a
+static image fallback, reduced-motion support and a pause control. The cube
+logo is stationary in the upper-right corner.
+
+`phaseC/SalesDashboard.tsx` adds inclusive `from`/`to` controls to the existing
+POS read endpoint. `cash-period.ts` follows its existing 1–366-day/Moscow
+contract. `CashDashboard.tsx` switches the existing `summary.hours` and
+`summary.days` projections without changing totals, products, comparison,
+permissions, monetary logic or API contracts. Arbitrary-day and preset controls
+remain. `pages/Dashboard.tsx` initially shows four demo KPIs and keeps all twelve
+available behind an accessible expand control; production cash KPIs are unchanged.
+
+Browser coverage: `e2e/owner-design.spec.ts`, custom interval coverage in
+`e2e/evotor-sales.spec.ts`, existing scope and comparison checks, all run by
+`playwright.evotor.config.ts` on desktop/mobile with synthetic fixture data.
+Release evidence and the separately discovered dependency blocker are recorded
+in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
+
+## Application operations overview: calendar filters (2026-10-25)
+
+The production owner overview source "Операции приложения" is separate from
+POS cash "Все продажи кассы" and "Клиенты приложения". Its new signed,
+venue-authorized GET /api/admin/venues/:id/dashboard/operations route uses
+server/data.ts:parseOperationsPeriod; existing /dashboard still uses parsePeriod
+for unrelated analytics, with unchanged daily time semantics and no extra hourly query. Accepted filters: preset 1/7/14/30/90/365
+Moscow calendar days, one date, or inclusive from/to (1..366 days).
+Future/invalid/mixed/duplicated date parameters fail closed with HTTP 400;
+the old POS read endpoint and monetary logic are unchanged.
+
+The dashboard's existing readPool legacy-bar membership boundary and only
+completed transaction timestamps power a second, bounded-by-range SQL aggregate
+for 24 Moscow-hour buckets. Day grouping now uses the Moscow timezone as well.
+The new operations field counts completed transaction ledger entries rather
+than falsely relabeling purchase checks. Empty time buckets render as zero
+only when that completed ledger is the source; visits and app opens remain
+unavailable without events. Both aggregates retain the exclusion of manual
+personal gift credits from bonus-earned totals. The existing stock indicators
+(total customers, bonus balance) are snapshots, not historical counts.
+The previous equal-length period is still the comparison baseline.
+
+src/phaseC/ProductionDashboard.tsx shows the same period selection as POS
+and switches between actual hourly and daily series, without inserting a
+second global date control. No modifications to billing, kiosk, guest apps,
+migrations, roles, write methods, patch-chain, or server.js/universal-server.js.
+Server date tests: server/tests/operations-period.spec.ts.
+Client controls: src/tests/app-operations-periods.spec.ts.
+Read adapter for other tenants remains fail-closed pending trustworthy
+venue-attributed data.
+
 ## Business venue audit isolation (2026-10-17)
 
 `admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit

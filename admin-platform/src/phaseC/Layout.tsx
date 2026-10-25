@@ -1,7 +1,8 @@
+import { SPACEVERSE_BRAND } from '../branding'
 import {
   Activity,BarChart3,Bell,Building2,CalendarDays,ChevronDown,ClipboardList,Crown,
   Database,Gift,LayoutDashboard,LogOut,Megaphone,Menu,Palette,Settings,ShieldCheck,
-  ShoppingBag,Sparkles,Store,TerminalSquare,TicketPercent,Trophy,Users,WalletCards,
+  ShoppingBag,Sparkles,Store,TerminalSquare,TicketPercent,Trophy,Users,WalletCards,PackagePlus,
 } from 'lucide-react'
 import type { Page } from '../appTypes'
 import type { AdminRole,ApiVenue } from '../api'
@@ -11,25 +12,25 @@ const nav=[
   ['overview','Обзор',LayoutDashboard],['clients','Клиенты',Users],['operations','Операции',WalletCards],
   ['analytics','Аналитика',BarChart3],['loyalty','Лояльность',Crown],['wheel','Колесо',Gift],
   ['achievements','Достижения',Trophy],['shop','Магазин',ShoppingBag],['promotions','Акции',TicketPercent],
-  ['broadcast','Рассылки',Megaphone],['brand','Оформление',Palette],['settings','Настройки',Settings],['audit','Журнал',ClipboardList],
+  ['broadcast','Рассылки',Megaphone],['brand','Оформление',Palette],['intake','Приход пива',PackagePlus],['settings','Настройки',Settings],['audit','Журнал',ClipboardList],
 ] as const
 const superNav=[['platform','Платформа',Activity],['companies','Компании',Building2],['venues','Заведения',Store],['developer','Разработчик',TerminalSquare]] as const
 export const periods=['Сегодня','7 дней','30 дней','3 месяца','Год'] as const
 export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
 
-const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand'])
-export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false,setupOnly=false,spaceverse=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean;setupOnly?:boolean;spaceverse?:boolean}){
+const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand','intake'])
+export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false,setupOnly=false,spaceverse=false,intakeEnabled=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean;setupOnly?:boolean;spaceverse?:boolean;intakeEnabled?:boolean}){
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
     <aside className={cn('sidebar',open&&'open')}>
-      <div className="brand"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
+      <div className="brand"><img src={SPACEVERSE_BRAND.logo} alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className={cn('demo-badge',mode==='production'&&'live-badge')}>
         {mode==='demo'?<Sparkles size={13}/>:<Database size={13}/>}
         {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':spaceverse?'ПАНЕЛЬ УПРАВЛЕНИЯ':'СИСТЕМА ПОДКЛЮЧЕНА'}
       </div>
       <nav className="nav">
-        {nav.filter(([id])=>!(spaceverse&&['wheel','achievements','broadcast'].includes(id))&&(setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id))).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
+        {nav.filter(([id])=>!(spaceverse&&['wheel','achievements','broadcast','brand'].includes(id))&&(id!=='intake'||(spaceverse&&mode==='production'&&intakeEnabled))&&(setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id))).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
           <Icon size={17}/><span>{setupOnly?'Подключение':restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
         </button>)}
         {role==='SUPER_ADMIN'&&<>
@@ -54,7 +55,7 @@ export function PhaseCTopbar({
   onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean;restricted?:boolean;roleLabel?:string
 }){
   return <header className="topbar">
-    <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
+    <button className="icon-btn mobile-menu" aria-label="Открыть меню" onClick={onMenu}><Menu size={20}/></button>
     <div className="tenant-select-wrap">
       <select className="tenant-select" value={venueId} onChange={e=>onVenue(e.target.value)} disabled={mode==='demo'}>
         {mode==='demo'?<option value="demo-pivnik">ДЕМО · Заведение</option>:<>
@@ -78,6 +79,7 @@ export function PhaseCTopbar({
       <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{roleLabel||(role==='SUPER_ADMIN'?'Главный администратор':restricted?'Директор':'Владелец')}</span></div><ChevronDown size={14}/></button>
       <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>{demoOnly?'Выйти из демо':'Выйти'}</button></div>
     </div>
+    <img className="brand-cubes" src={SPACEVERSE_BRAND.logo} alt="Логотип SPACEVERSE"/>
   </header>
 }
 

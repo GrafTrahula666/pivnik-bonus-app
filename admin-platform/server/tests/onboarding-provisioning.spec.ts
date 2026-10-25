@@ -102,11 +102,11 @@ describe('onboarding runtime binding provisioning ledger',()=>{
   describe('image release policy',()=>{
     let imageFixture:{meta:PGlite;tenant:PGlite;draft:Awaited<ReturnType<typeof preparedDraft>>}
     beforeEach(async()=>{
-      // Boot fresh isolated SQL fixtures in setup, before the operation's test
-      // watchdog. Keep every assertion and the default 5s test timeout intact.
+      // This isolated PGlite fixture may need more than the default 10s hook
+      // on Railway's CPU-limited image builder. Test assertions are unchanged.
       const meta=await metadata(),tenant=await readyTarget()
       imageFixture={meta,tenant,draft:await preparedDraft(meta,'Image approval')}
-    })
+    },45_000)
     it('image policy upgrades v2 success in the same ledger and only v3 can confirm image identity without implying launch',async()=>{
       const {meta,tenant,draft}=imageFixture
       const codeRelease={sourceSha:'a'.repeat(40),fingerprint:'b'.repeat(64),coverage:'node_literal_import_closure' as const,moduleCount:45}

@@ -1,0 +1,32 @@
+name: SPACEVERSE Evotor stock integration checks
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/server/evotor-stock*'
+      - 'admin-platform/server/tests/evotor-stock*'
+      - 'admin-platform/admin-migrations/019_evotor_stock_operations.sql'
+      - 'admin-platform/src/phaseC/BeerIntake.tsx'
+      - 'admin-platform/src/phaseC/beer-catalog.ts'
+      - '.github/workflows/evotor-stock-check.yml'
+permissions:
+  contents: read
+jobs:
+  stock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: admin-platform
+      - name: Typecheck frontend and API, then build
+        run: npm run build
+        working-directory: admin-platform
+      - name: Server and catalog regression
+        run: npx vitest run server/tests/evotor-stock-client.spec.ts src/tests/beer-catalog.spec.ts
+        working-directory: admin-platform
+      - name: Lint source
+        run: npm run lint
+        working-directory: admin-platform
