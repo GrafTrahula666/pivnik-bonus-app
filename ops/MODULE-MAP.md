@@ -173,6 +173,29 @@ in `e2e/crm-scope.spec.ts` reproduce same-company venue and cross-company switch
 and delayed responses; `playwright.evotor.config.ts` runs them on desktop/mobile
 alongside existing cash dashboard checks. No production APIs are called by them.
 
+## Owner panel appearance and cash interval (2026-10-25)
+
+`admin-platform/src/spaceverse.css` is the final presentation layer imported by
+`src/main.tsx`; it preserves the existing page components, handlers and RBAC.
+`src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing
+auth/demo/invitation flow; `BlackHole.tsx` animates only the background, with a
+static image fallback, reduced-motion support and a pause control. The cube
+logo is stationary in the upper-right corner.
+
+`phaseC/SalesDashboard.tsx` adds inclusive `from`/`to` controls to the existing
+POS read endpoint. `cash-period.ts` follows its existing 1–366-day/Moscow
+contract. `CashDashboard.tsx` switches the existing `summary.hours` and
+`summary.days` projections without changing totals, products, comparison,
+permissions, monetary logic or API contracts. Arbitrary-day and preset controls
+remain. `pages/Dashboard.tsx` initially shows four demo KPIs and keeps all twelve
+available behind an accessible expand control; production cash KPIs are unchanged.
+
+Browser coverage: `e2e/owner-design.spec.ts`, custom interval coverage in
+`e2e/evotor-sales.spec.ts`, existing scope and comparison checks, all run by
+`playwright.evotor.config.ts` on desktop/mobile with synthetic fixture data.
+Release evidence and the separately discovered dependency blocker are recorded
+in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
+
 ## Business venue audit isolation (2026-10-17)
 
 `admin-platform/server/admin-metadata-read.ts:getAdminAudit` filters venue audit

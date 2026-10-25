@@ -4,6 +4,7 @@ import { PageHead } from '../ui'
 import { CashDashboard,type CashReport } from './CashDashboard'
 import { CashComparison } from './CashComparison'
 import { isCashReport } from './cash-report'
+import { validateCashRange } from './cash-period'
 import { ErrorCard,LoadingCard } from './common'
 
 const moscowDay=(now=new Date())=>new Date(now.getTime()+3*3600000).toISOString().slice(0,10)
@@ -11,10 +12,11 @@ const presets=[[1,'Сегодня'],[7,'7 дней'],[14,'14 дней'],[30,'30 
 
 export function SalesDashboard({venue,days,mode}:{venue:ApiVenue;days:number;mode:'all'|'app'}){
   const [selection,setSelection]=useState('days:'+days)
+  const [from,setFrom]=useState(''),[to,setTo]=useState(''),[validation,setValidation]=useState('')
   const today=moscowDay()
   const yesterday=moscowDay(new Date(Date.parse(today+'T00:00:00+03:00')-86400000))
   const date=selection==='yesterday'?yesterday:selection.startsWith('date:')?selection.slice(5):''
-  const query=date?'date='+encodeURIComponent(date):'days='+selection.slice(5)
+  const query=selection.startsWith('range:')?`from=${selection.split(':')[1]}&to=${selection.split(':')[2]}`:date?'date='+encodeURIComponent(date):'days='+selection.slice(5)
   const path=`/api/admin/venues/${venue.id}/pos?${query}`
   const chooseDate=(value:string)=>{
     if(/^\d{4}-\d{2}-\d{2}$/.test(value)&&value<=today&&
@@ -28,6 +30,17 @@ export function SalesDashboard({venue,days,mode}:{venue:ApiVenue;days:number;mod
         {presets.slice(1).map(([n,label])=><button type="button" key={n} className={selection==='days:'+n?'active':''} aria-pressed={selection==='days:'+n} onClick={()=>setSelection('days:'+n)}>{label}</button>)}
       </div>
       <label className="cash-date-label">Любой день<input aria-label="Дата кассового отчёта" type="date" max={today} value={date} onChange={e=>chooseDate(e.target.value)}/></label>
+      <form aria-label="Произвольный период кассы" onSubmit={event=>{
+        event.preventDefault()
+        const fields=new FormData(event.currentTarget),start=String(fields.get('from')||''),end=String(fields.get('to')||'')
+        const error=validateCashRange(start,end,today);setValidation(error)
+        if(!error)setSelection('range:'+start+':'+end)
+      }}>
+        <label>С даты<input name="from" aria-label="Начало периода кассы" type="date" max={today} required value={from} onChange={e=>setFrom(e.target.value)}/></label>
+        <label>По дату включительно<input name="to" aria-label="Конец периода кассы" type="date" max={today} required value={to} onChange={e=>setTo(e.target.value)}/></label>
+        <button className="btn secondary" type="submit">Показать период</button>
+        {validation&&<p className="cash-period-error" role="alert">{validation}</p>}
+      </form>
       <small>Календарные дни · время Москвы</small>
     </div>
     <CashReportContent key={path} venue={venue} mode={mode} path={path}/>

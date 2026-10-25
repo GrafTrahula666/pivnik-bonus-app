@@ -1,3 +1,4 @@
+import { SPACEVERSE_BRAND } from '../branding'
 import {
   Activity,BarChart3,Bell,Building2,CalendarDays,ChevronDown,ClipboardList,Crown,
   Database,Gift,LayoutDashboard,LogOut,Megaphone,Menu,Palette,Settings,ShieldCheck,
@@ -23,7 +24,7 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=fal
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
     <aside className={cn('sidebar',open&&'open')}>
-      <div className="brand"><img src="/spaceverse-mark.png" alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
+      <div className="brand"><img src={SPACEVERSE_BRAND.logo} alt="SPACEVERSE" className="brand-mark" /><div><b>SPACEVERSE</b><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></div></div>
       <div className={cn('demo-badge',mode==='production'&&'live-badge')}>
         {mode==='demo'?<Sparkles size={13}/>:<Database size={13}/>}
         {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':spaceverse?'ПАНЕЛЬ УПРАВЛЕНИЯ':'СИСТЕМА ПОДКЛЮЧЕНА'}
@@ -54,7 +55,7 @@ export function PhaseCTopbar({
   onMenu:()=>void;onVenue:(id:string)=>void;onPeriod:(p:Period)=>void;onCompare:(v:boolean)=>void;onMode:(m:AppMode)=>void;onLogout:()=>void;demoOnly?:boolean;hidePeriodControls?:boolean;restricted?:boolean;roleLabel?:string
 }){
   return <header className="topbar">
-    <button className="icon-btn mobile-menu" onClick={onMenu}><Menu size={20}/></button>
+    <button className="icon-btn mobile-menu" aria-label="Открыть меню" onClick={onMenu}><Menu size={20}/></button>
     <div className="tenant-select-wrap">
       <select className="tenant-select" value={venueId} onChange={e=>onVenue(e.target.value)} disabled={mode==='demo'}>
         {mode==='demo'?<option value="demo-pivnik">ДЕМО · Заведение</option>:<>
@@ -78,6 +79,7 @@ export function PhaseCTopbar({
       <button className="profile-button"><div className="avatar small">{adminName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div><div><b>{adminName}</b><span>{roleLabel||(role==='SUPER_ADMIN'?'Главный администратор':restricted?'Директор':'Владелец')}</span></div><ChevronDown size={14}/></button>
       <div className="profile-popover"><button onClick={onLogout}><LogOut size={15}/>{demoOnly?'Выйти из демо':'Выйти'}</button></div>
     </div>
+    <img className="brand-cubes" src={SPACEVERSE_BRAND.logo} alt="Логотип SPACEVERSE"/>
   </header>
 }
 
