@@ -1,0 +1,52 @@
+name: SPACEVERSE CRM native PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/server/onboarding-tenant-bootstrap.ts'
+      - 'admin-platform/server/onboarding-provisioning.ts'
+      - 'admin-platform/server/tests/onboarding-tenant-bootstrap.spec.ts'
+      - 'admin-platform/server/tests/empty-tenant-fixture.ts'
+      - 'admin-platform/server/tests/tenant-crm-database-fixture.ts'
+      - 'admin-platform/tenant-migrations/001_customer_core.sql'
+      - '.github/workflows/spaceverse-crm-native-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-crm-bootstrap:
+    name: Empty dedicated CRM / PostgreSQL 16 (disposable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: codex_admin_test_crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install exact Business dependencies
+        run: npm ci --prefix admin-platform
+      - name: Create disposable least-scope fixture role
+        run: |
+          node -e "const pg=require('./admin-platform/node_modules/pg');const p=new pg.Pool({connectionString:'postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_crm'});p.query(\"CREATE ROLE crm_fixture LOGIN PASSWORD 'crm_fixture_ci_only' CREATEDB\").then(()=>p.end()).catch(e=>{console.error(e.message);process.exitCode=1;p.end()})"
+      - name: Native empty-database bootstrap, cross-tenant and rollback regression
+        env:
+          SPACEVERSE_TEST_NATIVE_POSTGRES_URL: postgres://crm_fixture:crm_fixture_ci_only@127.0.0.1:5432/codex_admin_test_crm
+        run: npm test --prefix admin-platform -- server/tests/onboarding-tenant-bootstrap.spec.ts
