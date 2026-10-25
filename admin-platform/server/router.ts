@@ -14,6 +14,7 @@ import {
   getVenueDashboard,
   getWheelAnalytics,
   parsePeriod,
+  parseOperationsPeriod,
 } from './data.js'
 import { recordAudit } from './audit.js'
 import { getAdminAudit, getAdminPlatformSummary } from './admin-metadata-read.js'
@@ -552,7 +553,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       }catch(error){await db.query('ROLLBACK');throw error}
       finally{db.release()}
     }
-    if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
+    if(resource==='dashboard'){json(res,200,await getVenueDashboard(scope,parseOperationsPeriod(url)));return true}
     if(resource==='clients'&&child==='segments'){json(res,200,await getClientSegments(scope));return true}
     if(resource==='clients'&&child){json(res,200,await getClientDetail(scope,child));return true}
     if(resource==='clients'){json(res,200,await getClients(scope,url));return true}
