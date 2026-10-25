@@ -31,8 +31,11 @@
 ограничения SQL/lock wait и безопасный search path с системными функциями первыми.
 Если public binding отсутствует, проверяются существующие relations, routines,
 типы, пользовательские collations, дополнительные схемы, extensions, event triggers,
-logical publications, foreign servers, large objects и temporary objects текущей session. Даже пустая чужая таблица
-означает `TARGET_DATABASE_NOT_EMPTY`; объекты не принимаются и не удаляются.
+logical publications, default ACL grants, foreign servers, large objects и temporary objects текущей session.
+Даже без таблиц изменённые `ALTER DEFAULT PRIVILEGES` опасны: они могут
+выдать права на будущие таблицы клиентов посторонним ролям. Такой target,
+как и пустая чужая таблица, возвращает `TARGET_DATABASE_NOT_EMPTY`;
+объекты и grants не принимаются и не удаляются.
 
 Только после empty-preflight выполняются новая нумерованная
 `admin-platform/tenant-migrations/001_customer_core.sql` и существующие canonical
