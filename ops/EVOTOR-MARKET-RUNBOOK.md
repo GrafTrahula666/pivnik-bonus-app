@@ -231,8 +231,9 @@ items/id/user_id и paging/next_cursor; [overview](https://developer.evotor.ru/d
    ownership и не активирует CRM. Лицензия отдельная.
 
 Дополнительно `verifyEvotorMarketStoresAtRevision` требует серверный
-`expectedTokenRevision` (положительный safe integer) и async reader текущей
-revision из primary Admin DB. До GET и после полного списка сравнивает revision:
+`expectedTokenRevision` (каноническая десятичная строка положительного
+PostgreSQL BIGINT без JS Number coercion) и async reader текущей revision
+из primary Admin DB. До GET и после полного списка сравнивает revision:
 отсутствие, отзыв, ротация или ошибка чтения возвращают только
 `EVOTOR_MARKET_STORES_TOKEN_REVISION_STALE`, без результатов/секретов.
 Проверены тестами preflight rejection, mid-flight revocation, ошибки DB и
