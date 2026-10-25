@@ -1,80 +1,83 @@
 import {useEffect,useMemo,useRef,useState} from 'react'
-import {ClipboardCopy,Download,PackagePlus,Search,ShieldAlert} from 'lucide-react'
-import type {ApiVenue} from '../api'
+import {PackagePlus,Search} from 'lucide-react'
+import {apiGet,apiPost,type ApiVenue} from '../api'
 import {PageHead} from '../ui'
-import {BEER_CATALOG,filterBeerCatalog,parsePositiveLiters} from './beer-catalog'
+import {filterBeerCatalog,parsePositiveLiters} from './beer-catalog'
 import './beer-intake.css'
 
+type StockResponse={source:'admin_arrivals_only';balances:Record<string,number>}
+type AddResponse={ok:true;recordedLiters:number;alreadyApplied:boolean}
 const formatLiters=(value:number)=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:3}).format(value)
-type IntakeRow={name:string;liters:number}
 
-/** Quick intake draft using manual, dated stock. Never claims to update Evotor. */
 export function BeerIntake({venue}:{venue:ApiVenue}){
   const [query,setQuery]=useState('')
-  const [selectedId,setSelectedId]=useState<string|null>(null)
-  const [litersById,setLitersById]=useState<Record<string,string>>({})
+  const [selected,setSelected]=useState<string|null>(null)
+  const [liters,setLiters]=useState('')
+  const [balances,setBalances]=useState<Record<string,number>>({})
+  const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
+  const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
+  const pendingOperation=useRef<string|null>(null)
   const volumeInput=useRef<HTMLInputElement>(null)
   const matches=useMemo(()=>filterBeerCatalog(query),[query])
-  const rows=useMemo<IntakeRow[]>(()=>BEER_CATALOG.flatMap(item=>{
-    const liters=parsePositiveLiters(litersById[item.id]||'')
-    return liters===null?[]:[{name:item.name,liters}]
-  }),[litersById])
-  const invalid=Object.values(litersById).filter(v=>v.trim()!==''&&parsePositiveLiters(v)===null).length
-  const canExport=rows.length>0&&invalid===0
-  const total=rows.reduce((sum,row)=>sum+row.liters,0)
-  useEffect(()=>{if(selectedId)volumeInput.current?.focus()},[selectedId])
-  function changeVolume(id:string,value:string){setLitersById(prev=>({...prev,[id]:value}));setNotice('')}
-  function select(id:string){setSelectedId(id);setNotice('')}
-  const summary=rows.map(row=>row.name+': +'+formatLiters(row.liters)+' л').join('\n')
-  async function copySummary(){
-    if(!canExport)return
-    try{await navigator.clipboard.writeText(summary);setNotice('Сводка скопирована. Остатки Эвотора не изменены.')}
-    catch{setNotice('Скопировать не удалось. Используйте CSV.')}
-  }
-  function exportCsv(){
-    if(!canExport)return
-    const csv='\uFEFFНазвание;Приход (л)\r\n'+rows.map(row=>[row.name,row.liters].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n')
-    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
-    const link=document.createElement('a');link.href=url;link.download='PIVNIK-prihod-chernovik.csv';link.click()
-    URL.revokeObjectURL(url)
-    setNotice('Черновик выгружен. Это не документ Эвотора.')
+  const parsed=parsePositiveLiters(liters)
+  const base='/api/admin/venues/'+venue.id+'/beer-intake'
+  useEffect(()=>{
+    let cancelled=false
+    apiGet<StockResponse>(base).then(data=>{if(!cancelled){setBalances(data.balances);setError('')}})
+      .catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Не удалось открыть учёт поступлений.')})
+      .finally(()=>{if(!cancelled)setLoading(false)})
+    return()=>{cancelled=true}
+  },[base])
+  useEffect(()=>{if(selected)volumeInput.current?.focus()},[selected])
+  function select(id:string){setSelected(id);setLiters('');setError('');setNotice('');pendingOperation.current=null}
+  function edit(value:string){setLiters(value);setNotice('');pendingOperation.current=null}
+  async function add(){
+    if(!selected||parsed===null||saving||loading)return
+    const operationId=pendingOperation.current??crypto.randomUUID()
+    pendingOperation.current=operationId
+    setSaving(true);setNotice('');setError('')
+    try{
+      const result=await apiPost<AddResponse>(base,{productId:selected,liters:parsed,operationId})
+      if(!result.ok)throw new Error('Поступление не подтверждено сервером.')
+      setBalances(previous=>({...previous,[selected]:result.recordedLiters}))
+      setNotice(result.alreadyApplied?'Это поступление уже было учтено. Повторно литры не добавлены.':'Добавлено '+formatLiters(parsed)+' л.')
+      setLiters('')
+      pendingOperation.current=null
+    }catch(e){setError(e instanceof Error?e.message:'Не удалось добавить литры. Попробуйте ещё раз.')}
+    finally{setSaving(false)}
   }
   return <div className="page beer-intake">
-    <PageHead eyebrow="ПИВНИК · ПРИХОД" title="Добавить привоз" sub={venue.companyName+' → '+venue.name}/>
+    <PageHead eyebrow="ПИВНИК · ИНВЕНТАРИЗАЦИЯ" title="Добавить литры" sub={venue.companyName+' → '+venue.name}/>
     <section className="card beer-intake-card">
-      <div className="beer-intake-heading"><PackagePlus size={22}/><div><h3>Найди сорт и впиши литры</h3><p>Одно нажатие на сорт, затем сразу количество. Никаких отдельных карточек товаров.</p></div></div>
-      <label className="beer-intake-label" htmlFor="beer-search">Поиск по названию</label>
-      <div className="beer-intake-search"><Search size={18}/><input id="beer-search" type="search" autoComplete="off" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Хадыженское, Пилснер, Барное…"/></div>
-      <p className="beer-intake-source">Сорта из инвентаризаций ПИВНИКА. Остатки указаны на 25.10.2026, не из Эвотора в реальном времени. Для части сортов остаток неизвестен.</p>
+      <div className="beer-intake-heading"><PackagePlus size={22}/><div><h3>Выберите сорт и добавьте литры</h3><p>Поиск → сорт → количество → добавить.</p></div></div>
+      <label className="beer-intake-label" htmlFor="beer-search">Название пива</label>
+      <div className="beer-intake-search"><Search size={18}/><input id="beer-search" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Например, Хадыженское"/></div>
+      {loading&&<p role="status">Загружаем остатки…</p>}
+      {!loading&&error&&!selected&&<p role="alert">{error}</p>}
       <div className="beer-intake-products">
-        {matches.length===0&&<p>Совпадений нет.</p>}
+        {!matches.length&&<p>Совпадений нет.</p>}
         {matches.map(item=>{
-          const selected=selectedId===item.id
-          const value=litersById[item.id]||''
-          const parsed=parsePositiveLiters(value)
-          const invalidVolume=value.trim()!==''&&parsed===null
+          const open=item.id===selected
           return <div className="beer-intake-item" key={item.id}>
-            <button type="button" className={'beer-intake-choice'+(selected?' selected':'')} aria-expanded={selected} onClick={()=>select(item.id)}>
-              <span className="beer-intake-name">{item.name}{parsed!==null&&<strong>+{formatLiters(parsed)} л</strong>}</span>
-              <small>{item.balance===null?'Остаток неизвестен':item.balance}</small>
+            <button type="button" className={'beer-intake-choice'+(open?' selected':'')} onClick={()=>select(item.id)} aria-expanded={open} disabled={loading}>
+              <span className="beer-intake-name">{item.name}</span>
+              <small>{item.balance??'Остаток не указан'}</small>
             </button>
-            {selected&&<div className="beer-intake-inline">
-              <span className="beer-intake-current">Последняя инвентаризация: <b>{item.balance??'нет данных'}</b>{item.countedAt?' · '+item.countedAt:''}</span>
-              <label htmlFor={'intake-'+item.id}>Привоз, литры</label>
-              <div className="beer-intake-volume"><input ref={volumeInput} id={'intake-'+item.id} inputMode="decimal" type="text" placeholder="Например, 50" value={value} aria-invalid={invalidVolume} onChange={event=>changeVolume(item.id,event.target.value)}/><span>л</span></div>
-              {invalidVolume&&<small role="alert">Введите положительное количество в литрах, максимум 10 000.</small>}
-              <small>Ввод сразу попадёт в список ниже. Никаких изменений в кассе.</small>
+            {open&&<div className="beer-intake-inline">
+              <span className="beer-intake-current">Последняя инвентаризация: <b>{item.balance??'нет данных'}</b> · 25.10.2026</span>
+              <span className="beer-intake-current">Добавлено через CRM: <b>{formatLiters(balances[item.id]??0)} л</b> (с запуска функции, не фактический остаток)</span>
+              <label htmlFor="beer-volume">Добавить литров</label>
+              <div className="beer-intake-volume"><input ref={volumeInput} id="beer-volume" inputMode="decimal" type="text" placeholder="50" value={liters} onChange={event=>edit(event.target.value)} disabled={saving}/><span>л</span></div>
+              <button type="button" className="btn" disabled={parsed===null||loading||saving} onClick={()=>void add()}>{saving?'Добавляем…':'Добавить'}</button>
+              {error&&<small role="alert">{error}</small>}
+              {notice&&<small role="status">{notice}</small>}
             </div>}
           </div>
         })}
       </div>
-      <div className="beer-intake-summary"><div><strong>Привоз: {rows.length} сортов</strong><span>Всего +{formatLiters(total)} л</span></div><div className="beer-intake-actions">
-        <button type="button" className="btn secondary" disabled={!canExport} onClick={()=>void copySummary()}><ClipboardCopy size={16}/>Копировать</button>
-        <button type="button" className="btn secondary" disabled={!canExport} onClick={exportCsv}><Download size={16}/>CSV</button>
-      </div></div>
-      {notice&&<p role="status">{notice}</p>}
+      <p className="beer-intake-source">Данные исходной инвентаризации приблизительные. Новые поступления сохраняются отдельно в CRM. Остатки Эвотора не меняются.</p>
     </section>
-    <div className="safety-note beer-intake-warning"><ShieldAlert size={18}/><span><b>Черновик, не товароучёт.</b> В этой версии ввод подготавливает список поступления, но не меняет реальные остатки Эвотора. Для проведения нужны проверенное сопоставление карточек, права и защита от повторной записи.</span></div>
   </div>
 }
