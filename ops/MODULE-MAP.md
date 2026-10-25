@@ -28,6 +28,17 @@ Integration must recheck current canonical grants and unchanged token revision,
 provider identity, installation/hold state and exact store before persisting any
 binding. No legacy POS source is changed. See `EVOTOR-MARKET-RUNBOOK.md`.
 
+`admin-platform/server/evotor-market-owner-proof.ts` is a separate **unmounted**
+server-side one-time signed-claim verifier. It requires an exact SPACEVERSE
+session/provider/product/company/store/token-revision scope, a short-lived
+HMAC claim, and an atomic durable nonce-consumption callback. Missing, expired,
+replayed, foreign, malformed or wrong-key claims fail closed. Its signing key
+must never be browser-controlled; the trusted issuer and native PostgreSQL
+nonce table are **not implemented**. A valid internal signature is NOT Evotor
+ownership evidence. No HTTP route, tenant activation, provider call, license,
+DB migration or production integration is added. Tests are synthetic only.
+
+
 ## Admin Pilot Marketplace inbox (2026-10-23, default off)
 
 `admin-platform/server/evotor-market.ts` handles only POST `/api/v1/user/token`,
