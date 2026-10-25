@@ -29,6 +29,23 @@ deadlock; будущий license gate обязан проверять subscripti
 текущем окружении не запускались**. Результаты прежних SHA ниже не являются
 результатами этого изменения. Без merge/deploy/production migration.
 
+## Агент №1: синхронизация #302 с #299 (25 октября 2026)
+
+Merge commit [dc94c24](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/dc94c24530493ee2d2390649ee562f0d38b2cba2)
+обновил Draft #302 до callback hardening head #299 `7d2a310e`, не
+объединяя ни один PR с `main`. В GitHub compare для #302 относительно
+#299 теперь `ahead=9, behind=0`, PR `mergeable=true`, `draft=true`.
+Два файла store adapter/tests сохранены побайтово (их blob SHA не менялись);
+три документа сведены с сохранением P0.1 sticky-hold и P0.2 ограничений.
+Перед записью обе версии документов проверены на отсутствие потери разделов.
+Это синхронизация ветки, не включение provider API/tenant/license.
+
+GitHub CI для merge commit запущен (release gate и browser E2E), но на момент
+записи выполняется. Локальные команды, native PostgreSQL и реальные provider
+E2E в этой итерации не запускались: локальный shell недоступен.
+Следующий шаг — проверить CI, затем только авторизованный test flow и
+подтверждённый owner proof; `market_contract_not_configured` не снимается.
+
 ## Агент №1, 25 октября: uncached store verification (Draft #302)
 
 Добавлен `cache: 'no-store'` для каждого запроса GET `/stores` в read-only
