@@ -52,7 +52,7 @@ import {
 } from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
 import { evotorPeriod,getEvotorReport } from './evotor-read.js'
-import {addBeerIntake,getBeerIntake} from './beer-intake.js'
+import {listEvotorStock,incrementEvotorStock} from './evotor-stock.js'
 import {
   PROMOTION_BODY_LIMIT,createAppPromotion,deleteAppPromotion,getAppDesign,listAppPromotions,publishAppDesign,updateAppPromotion,
 } from './pivnik-app-content.js'
@@ -465,10 +465,10 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
 
     if(resource==='beer-intake'&&!child){
       if(!config.enableWrites||!config.enableBeerIntake)throw new HttpError(403,'BEER_INTAKE_DISABLED','Учёт поступлений пока выключен.')
-      if(isMethod(req,'GET')){json(res,200,await getBeerIntake(scope));return true}
+      if(isMethod(req,'GET')){json(res,200,await listEvotorStock(scope));return true}
       if(isMethod(req,'POST')){
         enforceRateLimit('beer-intake:'+session.admin.id,30,60_000)
-        json(res,200,await addBeerIntake(session.admin,scope,await readJsonBody(req,2048)));return true
+        json(res,200,await incrementEvotorStock(session.admin,scope,await readJsonBody(req,2048)));return true
       }
       throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
     }
