@@ -162,7 +162,14 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     expect((await db.query('SELECT COUNT(*)::int AS n FROM admin_evotor_market_events WHERE event_key=$1', [`subscription:${id}:1`])).rows[0]!.n).toBe(1)
     expect((await request(events, sub(id, 2, 'SubscriptionActivated', { userId: 'another-user' }))).status).toBe(409)
     expect((await readSub(id)).user_id).toBe('01-fixture')
-    expect((await db.query('SELECT COUNT(*)::int AS n FROM admin_evotor_market_users WHERE user_id=$1', ['another-user'])).rows[0]!.n).toBe(0)
+    // A foreign provider event is retained as evidence after the durable 409 hold.
+    // Its inbox identity must not acquire credentials, installation proof or the original subscription.
+    const foreign = (await db.query(`SELECT secret_key_id,token_revision,installation_state,reconciliation_required
+      FROM admin_evotor_market_users WHERE user_id=$1`, ['another-user'])).rows[0]!
+    expect(foreign).toMatchObject({ secret_key_id: null, installation_state: 'unknown', reconciliation_required: false })
+    expect(Number(foreign.token_revision)).toBe(0)
+    expect((await readSub(id)).reconciliation_required).toBe(true)
+    expect((await readSub(id)).state).toBe('review_required')
   })
   it('plan/add-on changes never silently expand access; trial/create and malformed first sequence never become paid', async () => {
     for (const [type, extra] of [['SubscriptionTermsChanged', { planId: 'pro' }], ['AddonsUpdated', { addons: [{ id: 'ai', quantity: 1 }] }]] as const) {
