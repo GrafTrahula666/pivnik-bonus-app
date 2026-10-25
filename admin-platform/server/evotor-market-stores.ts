@@ -72,6 +72,8 @@ export async function verifyEvotorMarketStores({ token, expectedUserId, fetchImp
           void reader.cancel().catch(() => undefined)
           reader.releaseLock(); reader = undefined
         }
+        // A valid JSON prefix is not proof that the declared HTTP body was complete.
+        if (length !== null && bytes !== Number(length)) throw invalid()
         let raw: unknown
         try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))) }
         catch { throw invalid() }
