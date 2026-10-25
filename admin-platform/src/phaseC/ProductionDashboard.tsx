@@ -1,11 +1,11 @@
-import { useEffect,useMemo,useState } from 'react'
+import { useMemo,useState } from 'react'
 import { BarChart3,CircleHelp,Database,ShieldCheck,TrendingDown,TrendingUp } from 'lucide-react'
 import { Area,AreaChart,CartesianGrid,ResponsiveContainer,Tooltip,XAxis,YAxis } from 'recharts'
 import type { Page } from '../appTypes'
 import type { ApiVenue } from '../api'
 import type { Period } from './Layout'
 import { PageHead,cn,pct,rub } from '../ui'
-import { ErrorCard,LivePill,LoadingCard,SourceNote,useResource } from './common'
+import { ErrorCard,LoadingCard,SourceNote,useResource } from './common'
 import { SalesDashboard } from './SalesDashboard'
 import { validateCashRange } from './cash-period'
 import './cash-panel.css'
@@ -197,10 +197,8 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
   </div>
 }
 
-export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void;onCashView?:(cash:boolean)=>void;spaceverse?:boolean}){
+export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:boolean;onNavigate:(p:Page)=>void;spaceverse?:boolean}){
   const [source,setSource]=useState<'all'|'app'|'operations'>('all')
-  const onCashView=props.onCashView
-  useEffect(()=>{onCashView?.(source!=='operations')},[source,onCashView])
   return <div className="page">
     <div className="segmented dashboard-sources" role="group" aria-label="Продажи">
       <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи кассы</button>
