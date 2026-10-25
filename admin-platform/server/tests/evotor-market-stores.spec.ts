@@ -23,6 +23,7 @@ describe('Evotor Market complete store ownership read', () => {
     expect(Object.isFrozen(result)).toBe(true)
     expect(result.every(Object.isFrozen)).toBe(true)
     expect(transport).toHaveBeenCalledTimes(2)
+    expect(transport.mock.calls.every(([, options]) => options?.cache === 'no-store')).toBe(true)
     const [first, options] = transport.mock.calls[0]!, [second] = transport.mock.calls[1]!
     expect(String(first)).toBe('https://api.evotor.ru/stores')
     const next = new URL(String(second))
