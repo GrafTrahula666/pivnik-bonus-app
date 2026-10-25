@@ -9,7 +9,9 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## Следующий независимый этап25 октября — P0.2 store evidence
 
-Ветка `spaceverse/evotor-store-ownership-20261025`, Draft поверх #299.
+Ветка `spaceverse/evotor-store-ownership-20261025`, [Draft #302](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/302) поверх #299.
+Код этого этапа: [10218e2](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/10218e2d2cd68ae78c4a41b83a188971fb345f74).
+GitHub browser CI #299 на fa5cec9: success (run40149963628); release gate на момент записи ещё выполнялся. CI #302 проверяется отдельно.
 База — [inbox hardening fa5cec9](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/fa5cec97dbcab208816cd7df50d84ca291a4c03a),
 [Draft #299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 Реализация: новые `evotor-market-stores.ts` +44 проверок; MODULE-MAP/runbook
