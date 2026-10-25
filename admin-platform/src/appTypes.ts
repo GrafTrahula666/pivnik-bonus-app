@@ -10,6 +10,7 @@ export type Page =
   | 'promotions'
   | 'broadcast'
   | 'brand'
+  | 'intake'
   | 'settings'
   | 'audit'
   | 'platform'
