@@ -57,7 +57,7 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
   const query=selection.startsWith('range:')?
     'from='+encodeURIComponent(selection.split(':')[1]||'')+'&to='+encodeURIComponent(selection.split(':')[2]||''):
     date?'date='+encodeURIComponent(date):'days='+encodeURIComponent(selection.slice(5))
-  const path='/api/admin/venues/'+venue.id+'/dashboard?'+query
+  const path='/api/admin/venues/'+venue.id+'/dashboard/operations?'+query
   const {data,error,loading,reload}=useResource<Dashboard>(path)
   const presets=[[1,'Сегодня'],[7,'7 дней'],[14,'14 дней'],[30,'30 дней'],[90,'3 месяца'],[365,'Год']] as const
   const updatePeriod=(value:string)=>{setSelection(value);setValidation('');setGrouping(value==='yesterday'||value.startsWith('date:')?'hours':'days')}
