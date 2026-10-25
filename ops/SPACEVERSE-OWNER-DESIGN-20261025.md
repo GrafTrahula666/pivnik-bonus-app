@@ -43,14 +43,16 @@ No backend route, migration, patch script, root runtime or lockfile changes.
 - Cloud browser: rendered the real frontend with a local synthetic session fixture,
   inspected login, logo, background and demo navigation. This is not production login.
 
-## Separate release blocker — do not mix into appearance changes
+## Historical release blocker and isolated correction
 
-Current `npm audit --omit=dev --audit-level=high` in the root reports one high
+The initial `npm audit --omit=dev --audit-level=high` in the root reported one high
 advisory for existing `body-parser@1.20.8`: GHSA-27r3-jxmh-p828, denial of service
 via trailing bytes after a compressed body; audit reports fixed in 1.20.9.
 The root full audit reports the same high advisory. It is present in the unchanged
 main lockfile and was not introduced by this branch. Do not bypass the release gate.
-Resolve in a separate dependency-only change with its own review/regression run.
+Corrected separately in PR #301 (body-parser 1.20.9 and HTTP regression); its
+verified commit is included as a dependency of this branch. Merge #301 first.
+Root full and production audits on the combined candidate are clean.
 
 Admin production audit: 0 vulnerabilities. Admin full audit: 2 existing moderate
 Vitest development advisories; the unrelated open PR #299 already proposes Vitest
@@ -60,5 +62,5 @@ Vitest development advisories; the unrelated open PR #299 already proposes Vites
 
 No production data, account, environment, infrastructure, deployment, real till,
 fiscal receipt, kiosk, billing or external message changed. Native PostgreSQL tests,
-real tenant login and live financial flows were not executed. Merge remains blocked
-until the production dependency audit is clear and exact-head CI succeeds.
+real tenant login and live financial flows were not executed. Exact-head CI and any required GitHub approval remain mandatory before merge.
+PR #301 must land first; no protection is bypassed.

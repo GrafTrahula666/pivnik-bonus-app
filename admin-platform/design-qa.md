@@ -23,7 +23,7 @@ frontend, not the standalone prototype, was exercised with explicit synthetic da
 P0/P1/P2 visual issues: none outstanding in the verified fixture flows.
 P3: existing large bundle warning; deep page fields retain some legacy compact
 secondary text. These are follow-up polish, not grounds for a rewrite.
-Separate P1 release gate: pre-existing root body-parser high audit advisory;
+The former P1 root body-parser audit advisory is corrected separately in PR #301;
 see `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. Visual QA does not waive release gates.
 
 final result: passed
