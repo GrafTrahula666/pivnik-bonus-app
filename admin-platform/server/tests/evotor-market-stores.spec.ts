@@ -28,7 +28,7 @@ describe('Evotor Market complete store ownership read', () => {
     const next = new URL(String(second))
     expect(next.origin).toBe('https://api.evotor.ru'); expect(next.pathname).toBe('/stores')
     expect([...next.searchParams.keys()]).toEqual(['cursor']); expect(next.searchParams.get('cursor')).toBe(cursor)
-    expect(options).toMatchObject({ method: 'GET', redirect: 'error', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.evotor.v2+json', 'Content-Type': 'application/vnd.evotor.v2+json' } })
+    expect(options).toMatchObject({ method: 'GET', redirect: 'error', cache: 'no-store', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.evotor.v2+json', 'Content-Type': 'application/vnd.evotor.v2+json' } })
   })
   it('accepts an explicitly complete empty collection', async () => {
     expect(await run(vi.fn<typeof fetch>().mockResolvedValue(json([])))).toEqual([])
