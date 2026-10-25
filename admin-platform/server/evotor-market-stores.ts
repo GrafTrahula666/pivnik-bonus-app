@@ -42,7 +42,7 @@ export async function verifyEvotorMarketStores({ token, expectedUserId, fetchImp
       if (cursor !== undefined) url.searchParams.set('cursor', cursor)
       let response: Response
       try {
-        response = await fetchImpl(url, { method: 'GET', redirect: 'error', signal: controller.signal,
+        response = await fetchImpl(url, { method: 'GET', redirect: 'error', cache: 'no-store', signal: controller.signal,
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.evotor.v2+json', 'Content-Type': 'application/vnd.evotor.v2+json' } })
       } catch { throw failure('UNAVAILABLE') }
       try {
