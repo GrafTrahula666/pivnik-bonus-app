@@ -116,12 +116,22 @@ export function evotorMarketSettings(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: NodeJS.ProcessEnv = process.env) {
-  async function projectSubscription(client: PoolClient, event: Subscription) {
+  async function projectSubscription(client: PoolClient, event: Subscription): Promise<boolean> {
     await client.query(`INSERT INTO admin_evotor_market_subscriptions(subscription_id,product_id,user_id)
       VALUES($1::uuid,$2::uuid,$3) ON CONFLICT DO NOTHING`, [event.subscriptionId, event.productId, event.userId])
     const current = (await client.query(`SELECT product_id::text,user_id,last_sequence::text,state,paid_until,plan_id,reconciliation_required
       FROM admin_evotor_market_subscriptions WHERE subscription_id=$1::uuid FOR UPDATE`, [event.subscriptionId])).rows[0]!
-    if (current.product_id !== event.productId || current.user_id !== event.userId) throw conflict()
+    if (current.product_id !== event.productId || current.user_id !== event.userId) {
+      // A different provider identity on the SAME subscription with a new
+      // sequence must not roll back the only evidence of an ownership conflict.
+      // Keep the original owner immutable and hold this subscription until
+      // explicit reconciliation. Do not lock the original user here: the
+      // current request already holds another user lock and that can deadlock.
+      await client.query(`UPDATE admin_evotor_market_subscriptions
+        SET reconciliation_required=TRUE,state='review_required',updated_at=NOW()
+        WHERE subscription_id=$1::uuid`, [event.subscriptionId])
+      return true
+    }
     let sequence = Number(current.last_sequence), state = current.reconciliation_required ? 'review_required' : String(current.state)
     let paidUntil: string | Date | null = current.paid_until, planId: string | null = current.plan_id
     // The user lock serializes deliveries; only the contiguous prefix is projected.
@@ -160,6 +170,7 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
     await client.query(`UPDATE admin_evotor_market_subscriptions SET last_sequence=$2,state=$3,paid_until=$4,
       plan_id=$5,has_sequence_gap=$6,updated_at=NOW() WHERE subscription_id=$1::uuid`,
     [event.subscriptionId, sequence, state, paidUntil, planId, gap])
+    return false
   }
 
   async function accept(kind: Kind, raw: unknown) {
@@ -234,7 +245,11 @@ export function createEvotorMarketInbox(database: Pick<Pool, 'connect'>, env: No
               updated_at=NOW() WHERE product_id=$1::uuid AND user_id=$2`, [productId, userId, state, event.timestamp])
           }
         }
-        if (kind === 'subscription') await projectSubscription(client, payload as Subscription)
+        if (kind === 'subscription' && await projectSubscription(client, payload as Subscription)) {
+          // 409 only AFTER durable COMMIT; a retry cannot clear this hold.
+          await client.query('COMMIT')
+          return true
+        }
       }
       await client.query('COMMIT')
       return false
