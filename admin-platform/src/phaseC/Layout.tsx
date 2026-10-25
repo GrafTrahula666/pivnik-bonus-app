@@ -19,7 +19,7 @@ export const periods=['Сегодня','7 дней','30 дней','3 месяц�
 export type Period=(typeof periods)[number]
 export type AppMode='production'|'demo'
 
-const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand'])
+const trustedHiddenPages=new Set<Page>(['loyalty','wheel','achievements','shop','brand','intake'])
 export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=false,setupOnly=false,spaceverse=false,intakeEnabled=false}:{page:Page;role:AdminRole;mode:AppMode;open:boolean;onClose:()=>void;onPage:(page:Page)=>void;restricted?:boolean;setupOnly?:boolean;spaceverse?:boolean;intakeEnabled?:boolean}){
   return <>
     {open&&<button className="scrim" onClick={onClose} aria-label="Закрыть меню"/>}
