@@ -166,18 +166,18 @@ describe('Evotor Market complete store ownership read', () => {
 
 
 describe('Evotor Market token revision boundary (not owner proof)', () => {
-  const guarded = (readCurrentTokenRevision: () => Promise<number | null>, fetchImpl: typeof fetch, expectedTokenRevision = 7) =>
+  const guarded = (readCurrentTokenRevision: () => Promise<number | null>, fetchImpl: typeof fetch, expectedTokenRevision = '7') =>
     verifyEvotorMarketStoresAtRevision({ token, expectedUserId, expectedTokenRevision, readCurrentTokenRevision, fetchImpl })
 
   it('returns complete read-only evidence only after two fresh primary revision checks', async () => {
-    const read = vi.fn().mockResolvedValue(7)
+    const read = vi.fn().mockResolvedValue('7')
     const transport = vi.fn<typeof fetch>().mockResolvedValue(json([store()]))
     expect(await guarded(read, transport)).toEqual([{ storeId: store().id, userId: expectedUserId }])
     expect(read).toHaveBeenCalledTimes(2)
     expect(transport).toHaveBeenCalledTimes(1)
   })
 
-  it.each([null, 6, 8])('rejects missing/rotated revision %s before contacting Evotor', async current => {
+  it.each([null, '6', '8'])('rejects missing/rotated revision %s before contacting Evotor', async current => {
     const transport = vi.fn<typeof fetch>()
     await expect(guarded(vi.fn().mockResolvedValue(current), transport)).rejects.toMatchObject({
       statusCode: 503, code: 'EVOTOR_MARKET_STORES_TOKEN_REVISION_STALE',
@@ -185,8 +185,16 @@ describe('Evotor Market token revision boundary (not owner proof)', () => {
     expect(transport).not.toHaveBeenCalled()
   })
 
+  it('compares native BIGINT revisions beyond JS safe integers without rounding', async () => {
+    const revision = '9007199254740993'
+    const read = vi.fn().mockResolvedValue(revision)
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(json([store()]))
+    expect(await guarded(read, transport, revision)).toHaveLength(1)
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
   it('rejects a token revoked while provider pagination was in flight without leaking partial stores', async () => {
-    const read = vi.fn().mockResolvedValueOnce(7).mockResolvedValueOnce(null)
+    const read = vi.fn().mockResolvedValueOnce('7').mockResolvedValueOnce(null)
     const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json([store()], { next_cursor: 'page2' }))
       .mockResolvedValueOnce(json([store('second-store')]))
     await expect(guarded(read, transport)).rejects.toMatchObject({
@@ -201,7 +209,7 @@ describe('Evotor Market token revision boundary (not owner proof)', () => {
     const secret = 'synthetic-secret-not-a-real-key'
     for (const read of [
       vi.fn().mockRejectedValue(new Error(secret)),
-      vi.fn().mockResolvedValueOnce(7).mockRejectedValueOnce(new Error(secret)),
+      vi.fn().mockResolvedValueOnce('7').mockRejectedValueOnce(new Error(secret)),
     ]) {
       const error = await guarded(read, transport).catch(value => value)
       expect(error).toMatchObject({ statusCode: 503, code: 'EVOTOR_MARKET_STORES_TOKEN_REVISION_STALE' })
@@ -211,8 +219,8 @@ describe('Evotor Market token revision boundary (not owner proof)', () => {
     expect(transport).toHaveBeenCalledTimes(1)
   })
 
-  it.each([0, -1, 1.5, NaN, Infinity])('rejects invalid expected revision %s before network', async revision => {
-    const read = vi.fn().mockResolvedValue(7), transport = vi.fn<typeof fetch>()
+  it.each(['0', '-1', '1.5', 'NaN', 'Infinity', '01', '9223372036854775808'])('rejects invalid expected revision %s before network', async revision => {
+    const read = vi.fn().mockResolvedValue('7'), transport = vi.fn<typeof fetch>()
     await expect(guarded(read, transport, revision)).rejects.toMatchObject({
       statusCode: 503, code: 'EVOTOR_MARKET_STORES_INVALID_CONFIGURATION',
     })
