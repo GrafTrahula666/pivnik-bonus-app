@@ -6,8 +6,8 @@ import fs from 'node:fs/promises'
 const state=vi.hoisted(()=>({db:null as PGlite|null}))
 vi.mock('../db.js',()=>({
   pool:{
-    query:(sql:string,params?:unknown[])=>state.db!.query(sql,params),
-    connect:async()=>({query:(sql:string,params?:unknown[])=>state.db!.query(sql,params),release:()=>{}}),
+    query:async(sql:string,params?:unknown[])=>{const r=await state.db!.query(sql,params);return {...r,rowCount:r.affectedRows??r.rows.length}},
+    connect:async()=>({query:async(sql:string,params?:unknown[])=>{const r=await state.db!.query(sql,params);return {...r,rowCount:r.affectedRows??r.rows.length}},release:()=>{}}),
   },
   tableExists:async(name:string)=>{
     const result=await state.db!.query<{exists:boolean}>("SELECT to_regclass($1) IS NOT NULL AS exists",['public.'+name])
