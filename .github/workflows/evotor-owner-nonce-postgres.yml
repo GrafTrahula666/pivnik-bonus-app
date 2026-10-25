@@ -7,7 +7,7 @@ on:
       - 'admin-platform/server/evotor-market-owner-nonce.ts'
       - 'admin-platform/server/tests/evotor-market-owner-proof.spec.ts'
       - 'admin-platform/server/tests/evotor-market-owner-nonce-postgres.spec.ts'
-      - 'admin-platform/admin-migrations/020_evotor_owner_proof_nonces.sql'
+      - 'admin-platform/admin-migrations/022_evotor_owner_proof_nonces.sql'
       - '.github/workflows/evotor-owner-nonce-postgres.yml'
   workflow_dispatch:
 
