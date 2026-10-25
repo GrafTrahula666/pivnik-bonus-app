@@ -9,57 +9,63 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-25 (AUTO-RESUME turn 5).
+Обновлено: 2026-10-25 (AUTO-RESUME turn 6).
 Канонический координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
-Общая ветка координации и единственный кооперативный LOCK: `spaceverse/evotor-market-20261023` (#299).
+Единая кооперативная точка LOCK: `spaceverse/evotor-market-20261023` (#299).
 
-- Последняя завершённая инженерная задача: P0.1, добавлен **native PostgreSQL**
-  integration test для callback inbox: миграции 018→019 и повторное применение,
-  параллельные точные retry на независимых PG соединениях, настоящий `FOR UPDATE`
-  lock/wait и cross-user owner-conflict с сохранением исходного владельца,
-  `review_required` и sticky reconciliation hold. Тест использует только
-  временную schema внутри БД с обязательным префиксом `codex_admin_test`;
-  production, Railway, настоящие магазины и лицензии не затрагивались.
-- Implementation commits #299:
-  `152fce57ae56e1547f3fa200cfca924d52ab4463` (native тест),
-  `611c9f10c1890aae5a84ee7a65e72ec098af3fa5` (CI PostgreSQL 16).
-  #302 остаётся `babc890c8aa302ad7ad514e8ccb8bb0185e808ac`;
-  #296 остаётся `a1bc89c17a12213a8b18e58621548d7b58f0ac74`.
-  Эти последние два SHA — чужие предыдущие результаты, не изменения этого запуска.
-- Checkpoint commit: **текущий коммит этой записи**, точный SHA читать из GitHub
-  после CAS; не создавать самоссылочный SHA.
-- Проверено лично: свежие PR/heads, MODULE-MAP Do not break, текущий код
-  `evotor-market.ts`, существующие PGlite tests, миграции 018/019;
-  GitHub Actions run `40195800084` на implementation SHA
-  `611c9f10` — **completed/success**, включая шаг
-  `Native PostgreSQL callback and migration regression` и disposable PG16.
-  Browser E2E run `40195800041` — **completed/success**.
-  Release Gate run `40195800052` — **in_progress** при фиксации.
-  Никакие локальные команды, `materialize ×2`, native PostgreSQL на машине
-  агента, реальные Эвотор E2E или production проверки лично не запускались.
-- Риски/ограничения: это доказательство **только тестового контура**,
-  не подтверждение официального owner proof, лицензии или SaaS-релиза.
-  `pivnik-preflight` отсутствовал в доступном каталоге skills этого запуска;
-  обязательные ограничения прочитаны из `ops/MODULE-MAP.md`.
-  GitHub CI нужно перепроверить после завершения Release Gate.
-- Текущая незавершённая задача: P0.2, server-side owner proof/current
-  provider grants/token revision для read-only stores adapter из #302.
-  Без подтверждённого install/auth контракта только fail-closed spec/tests,
-  никаких фиктивных привязок, реальных provider запросов или выдачи лицензий.
-- Следующее минимальное действие: перепроверить итог Release Gate на
-  `611c9f10`; изучить `evotor-market-stores.ts` и официальный install/auth
-  контракт, добавить узкий отрицательный test для отсутствующего owner proof
-  в существующий #302 без подключения к рабочему API.
-- Внешние блокеры: подтверждённые test account/install/auth и коммерческие
-  условия Эвотора отсутствуют. Локальный GitHub clone недоступен из-за DNS.
-  Не merge, не deploy, не создавать платные ресурсы.
-- Полномочия: только безопасные Draft-код/тесты/CI; production writes,
-  реальные БД/касса, платежи, merge, deploy и публикация запрещены.
+- Последний завершённый инженерный slice: **P0.2, default-off server-only
+  token revision guard** для существующего read-only Evotor stores adapter в
+  Draft #302. Добавлена `verifyEvotorMarketStoresAtRevision`: до provider GET
+  и после полного чтения всех страниц проверяет неизменность текущей ревизии
+  токена из primary Admin DB. Неизвестная/отозванная/сменившаяся ревизия или
+  ошибка DB дают `EVOTOR_MARKET_STORES_TOKEN_REVISION_STALE` без результатов.
+  PostgreSQL `token_revision BIGINT` сравнивается как каноническая десятичная
+  строка без округления JS Number. Нет route, real provider calls, DB writes,
+  owner proof, tenant binding, лицензии или production активации.
+- Реализация в #302: `7d1266b4` (guard), `356c9568` (negative tests),
+  `7eb8da47` (BIGINT fix), `009d8bbf` (BIGINT tests),
+  `8c742146` (MODULE-MAP), итоговый implementation/documentation HEAD
+  **`9ede48d406388f923802551f180a6e1b7f0d480a`**.
+  #299 P0.1 native PostgreSQL implementation `611c9f10` сохранён;
+  #296 остаётся отдельным Draft `a1bc89c`. Не присваивать их этому run.
+- Checkpoint commit: **текущий коммит этой записи**, точный SHA читать из
+  GitHub после CAS (не использовать самоссылочный SHA).
+- Проверено через GitHub Actions на итоговом #302 SHA: release gate
+  `40201058169` completed/success, root Node **656 pass/0 fail/0 skip**,
+  Admin Vitest **515 pass/0 fail/24 skip**, включая
+  `evotor-market-stores.spec.ts` **59 tests pass**; materialize×2 с
+  проверкой SHA256 diff idempotency, `npm run check`, npm audits exit0.
+  Browser desktop/mobile workflow `40201058172` completed/success.
+  Ранее #299 native PostgreSQL 16 CI `40195800084` completed/success,
+  но это другой кодовый slice.
+- Не проверено: локальный full checkout (GitHub DNS недоступен), собственный
+  native PostgreSQL для нового revision guard, Admin typecheck/build отдельно,
+  реальный provider install/auth, signed owner proof, signed HTTP binding,
+  token rotation на реальном аккаунте, production и касса.
+  В release gate 24 native/integration теста пропущены без test DB: это
+  **не** native PASS. `pivnik-preflight` отсутствует в каталоге skills
+  этого запуска; прочитаны MODULE-MAP и обязательные ops runbooks.
+- Текущий незакрытый P0.2: подтверждённый одноразовый provider account owner
+  proof, актуальные canonical grants и atomic store binding. `/user/verify`
+  описан в официальной документации, но без разрешённого test install/auth
+  нельзя считать его внедрённым или работающим. Revision guard сам по себе
+  **не** доказывает ownership.
+- Внешние blockers: тестовое приложение/аккаунт/магазин Эвотора и подтверждение
+  схемы auth/owner proof, безопасная disposable Admin DB для native tests.
+  Production, merge, deploy, миграции живых БД, публикация и платные ресурсы
+  остаются запрещены.
+- Следующее минимальное действие: на свежих #299/#302 подготовить fail-closed
+  server-side одноразовый owner proof contract + отрицательные тесты для
+  missing/replayed/foreign proof, не связывая tenant и не открывая лицензию
+  до реального подтверждения провайдера.
+- Этот запуск владел кооперативным LOCK под `auto6-20261025T1404Z-qfz6kp77ib` и освободил его
+  при сохранении данного checkpoint. Кооперативный LOCK не защищает от
+  внешних writers, игнорирующих протокол.
 
 ### LOCK — общий протокол единственного исполнителя
 
 ```json
-{"owner_run_id":"auto6-20261025T1404Z-qfz6kp77ib","acquired_at":"2026-10-25T14:05:58.498Z","status":"active"}
+{"owner_run_id":null,"acquired_at":null,"status":"released"}
 ```
 
 Перед записью проверь run_details обеих инженерных automations через peek.
