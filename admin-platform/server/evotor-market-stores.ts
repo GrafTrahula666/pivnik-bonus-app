@@ -129,11 +129,13 @@ export async function verifyEvotorMarketStoresAtRevision({
 }: {
   token: string
   expectedUserId: string
-  expectedTokenRevision: number
-  readCurrentTokenRevision: () => Promise<number | null>
+  // PostgreSQL BIGINT comes back as decimal text; never coerce it to JS Number.
+  expectedTokenRevision: string
+  readCurrentTokenRevision: () => Promise<string | null>
   fetchImpl?: typeof fetch
 }): Promise<readonly EvotorMarketStore[]> {
-  if (!Number.isSafeInteger(expectedTokenRevision) || expectedTokenRevision < 1
+  if (typeof expectedTokenRevision !== 'string' || !/^[1-9]\\d{0,18}$/.test(expectedTokenRevision)
+    || BigInt(expectedTokenRevision) > 9223372036854775807n
     || typeof readCurrentTokenRevision !== 'function') throw failure('INVALID_CONFIGURATION')
   const revisionMatches = async () => {
     try { return await readCurrentTokenRevision() === expectedTokenRevision }
