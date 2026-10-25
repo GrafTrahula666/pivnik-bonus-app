@@ -2,7 +2,7 @@ import { SPACEVERSE_BRAND } from '../branding'
 import {
   Activity,BarChart3,Bell,Building2,CalendarDays,ChevronDown,ClipboardList,Crown,
   Database,Gift,LayoutDashboard,LogOut,Megaphone,Menu,Palette,Settings,ShieldCheck,
-  ShoppingBag,Sparkles,Store,TerminalSquare,TicketPercent,Trophy,Users,WalletCards,
+  ShoppingBag,Sparkles,Store,TerminalSquare,TicketPercent,Trophy,Users,WalletCards,PackagePlus,
 } from 'lucide-react'
 import type { Page } from '../appTypes'
 import type { AdminRole,ApiVenue } from '../api'
@@ -12,7 +12,7 @@ const nav=[
   ['overview','Обзор',LayoutDashboard],['clients','Клиенты',Users],['operations','Операции',WalletCards],
   ['analytics','Аналитика',BarChart3],['loyalty','Лояльность',Crown],['wheel','Колесо',Gift],
   ['achievements','Достижения',Trophy],['shop','Магазин',ShoppingBag],['promotions','Акции',TicketPercent],
-  ['broadcast','Рассылки',Megaphone],['brand','Оформление',Palette],['settings','Настройки',Settings],['audit','Журнал',ClipboardList],
+  ['broadcast','Рассылки',Megaphone],['brand','Оформление',Palette],['intake','Приход пива',PackagePlus],['settings','Настройки',Settings],['audit','Журнал',ClipboardList],
 ] as const
 const superNav=[['platform','Платформа',Activity],['companies','Компании',Building2],['venues','Заведения',Store],['developer','Разработчик',TerminalSquare]] as const
 export const periods=['Сегодня','7 дней','30 дней','3 месяца','Год'] as const
@@ -30,7 +30,7 @@ export function PhaseCSidebar({page,role,mode,open,onClose,onPage,restricted=fal
         {mode==='demo'?'ДЕМО-РЕЖИМ':setupOnly?'ЗАВЕДЕНИЕ НЕ ЗАПУЩЕНО':spaceverse?'ПАНЕЛЬ УПРАВЛЕНИЯ':'СИСТЕМА ПОДКЛЮЧЕНА'}
       </div>
       <nav className="nav">
-        {nav.filter(([id])=>!(spaceverse&&['wheel','achievements','broadcast'].includes(id))&&(setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id))).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
+        {nav.filter(([id])=>!(spaceverse&&['wheel','achievements','broadcast','brand'].includes(id))&&(id!=='intake'||(spaceverse&&mode==='production'))&&(setupOnly?id==='overview':mode==='demo'||!restricted||!trustedHiddenPages.has(id))).map(([id,label,Icon])=><button key={id} className={cn('nav-item',page===id&&'active')} onClick={()=>onPage(id)}>
           <Icon size={17}/><span>{setupOnly?'Подключение':restricted&&mode==='production'&&id==='settings'?'Мой пароль':label}</span>
         </button>)}
         {role==='SUPER_ADMIN'&&<>
