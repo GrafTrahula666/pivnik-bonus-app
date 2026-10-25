@@ -1,8 +1,8 @@
 # Admin Pilot — облачное приложение Эвотор.Маркета
 
 Обновлено 25 октября 2026. Реализация: `admin-platform/server/evotor-market.ts`,
-ручные Admin migrations `018_evotor_market_inbox.sql`, затем
-`019_evotor_market_reconciliation.sql`.
+ручные Admin migrations `020_evotor_market_inbox.sql`, затем
+`021_evotor_market_reconciliation.sql`.
 
 ## Выбранная архитектура и фактическая граница
 
@@ -95,7 +95,7 @@ Receiver отвечает 200 только после сохранения тр�
 
 Никакие реальные значения не записываются в Git, карточку, URL, тесты или чат.
 Примеры согласованы в `.env.example`, `env.example`, `.env.admin.example`.
-Миграции не запускаются на startup. Migrations 018/019 additive/manual; отдельно
+Миграции не запускаются на startup. Migrations 020/021 additive/manual; отдельно
 review schema/grants/backup до разрешённого применения. Root migration007 не
 меняется. Таблицы не дают доступ к `users`, `wallets`, `transactions`.
 
@@ -118,7 +118,7 @@ reject. Для включённого receiver: 401 bad auth, 400 bad schema/pro
   `reconciliation_required`. Подмена userId не переносит hold на чужую личность.
   Повтор/последующее событие/новый token/reinstall не снимают hold. API сброса нет;
   нужен отдельный проверенный reconciler. Ошибка сохранения hold даёт503.
-  До 019 исторические отклонённые конфликты не сохранялись: новая миграция не
+  До 021 исторические отклонённые конфликты не сохранялись: новая миграция не
   восстанавливает отсутствующие свидетельства задним числом.
 - Row lock пользователя сериализует события/rotation; subscription lock и
   проверка product/user не позволяют переиспользовать чужую подписку.

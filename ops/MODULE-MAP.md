@@ -10,7 +10,7 @@ refactor doesn't quietly drop an edge case that only exists as inline logic.
 `/api/v1/installation/event` and `/api/v1/subscription/event` before the browser
 Admin router. `ADMIN_ENABLE_EVOTOR_MARKET_WEBHOOKS=false` hides these routes.
 Enabling requires a UUID4 product, exact strong app-level Authorization and
-the existing onboarding secret keyring. Manual Admin migration 018 contains
+the existing onboarding secret keyring. Manual Admin migration 020 contains
 provider identities, encrypted tokens, durable deduplicated events and a
 contiguous subscription projection; none is a new tenant or company grant.
 Unknown properties/products/versions, conflicting retries and cross-user
@@ -28,7 +28,7 @@ See `EVOTOR-MARKET-RUNBOOK.md` and `ADMIN-PILOT-MARKET-PROGRESS.md`.
 This Admin-only mount has no duplicate route in root `server.js` or
 `universal-server.js`; neither root server is changed by this feature.
 
-25 October hardening requires manual Admin migration **019 after 018**. Conflicting
+25 October hardening requires manual Admin migration **021 after 020**. Conflicting
 same-key deliveries preserve only the changed SHA256 plus the original event key
 and set sticky `reconciliation_required` on the **original** provider user and
 subscription before returning 409. Failed writes/COMMIT return 503 without a

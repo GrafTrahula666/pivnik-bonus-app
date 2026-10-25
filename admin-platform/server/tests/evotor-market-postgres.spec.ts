@@ -45,7 +45,7 @@ nativeSuite('Evotor Market native PostgreSQL: actual row locks and durable callb
     schema = 'evotor_market_native_' + crypto.randomBytes(8).toString('hex')
     await setup.query('CREATE SCHEMA ' + schema)
     db = new pg.Pool({ connectionString, ssl: false, max: 8, options: '-c search_path=' + schema })
-    for (const file of ['018_evotor_market_inbox.sql', '019_evotor_market_reconciliation.sql']) {
+    for (const file of ['020_evotor_market_inbox.sql', '021_evotor_market_reconciliation.sql']) {
       const sql = await fs.readFile(new URL('../../admin-migrations/' + file, import.meta.url), 'utf8')
       await db.query(sql)
     }
@@ -79,7 +79,7 @@ nativeSuite('Evotor Market native PostgreSQL: actual row locks and durable callb
   }
 
   it('applies 018 then 019 twice in an isolated native schema without canonical tenant tables', async () => {
-    for (const file of ['018_evotor_market_inbox.sql', '019_evotor_market_reconciliation.sql'])
+    for (const file of ['020_evotor_market_inbox.sql', '021_evotor_market_reconciliation.sql'])
       await db.query(await fs.readFile(new URL('../../admin-migrations/' + file, import.meta.url), 'utf8'))
     const tables = await db.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname=current_schema() ORDER BY tablename")

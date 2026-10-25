@@ -31,7 +31,7 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
   let failWrites = false, failCommit = false
   beforeAll(async () => {
     db = await tenantCrmFixtureDatabase()
-    for (const file of ['018_evotor_market_inbox.sql', '019_evotor_market_reconciliation.sql'])
+    for (const file of ['020_evotor_market_inbox.sql', '021_evotor_market_reconciliation.sql'])
       await db.exec(await fs.readFile(new URL('../../admin-migrations/' + file, import.meta.url), 'utf8'))
     // PGlite has one SQL connection; serialize transactions like a size-one pool.
     // Native tests use independent real connections and row locks instead.
@@ -303,7 +303,7 @@ describe('Evotor Market: real HTTP + durable isolated SQL, no activation or exte
     }
   })
   it('manual migration is repeatable and creates only provider metadata, never canonical access or financial tables', async () => {
-    for (const file of ['018_evotor_market_inbox.sql', '019_evotor_market_reconciliation.sql'])
+    for (const file of ['020_evotor_market_inbox.sql', '021_evotor_market_reconciliation.sql'])
       await db.exec(await fs.readFile(new URL('../../admin-migrations/' + file, import.meta.url), 'utf8'))
     expect((await db.query(`SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`)).rows.map(row => row.tablename)).toEqual([
       'admin_evotor_market_conflicts', 'admin_evotor_market_events', 'admin_evotor_market_subscriptions', 'admin_evotor_market_users',
