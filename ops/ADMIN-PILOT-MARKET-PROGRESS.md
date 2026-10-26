@@ -9,10 +9,26 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-26T08:17:55Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Обновлено: 2026-10-26T09:15:00Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto11-20261026T0902Z-gpt6-b38f`, acquired_at_UTC=`2026-10-26T09:02:09Z`, released_at_UTC=`none`, status=`active`.
+**LOCK CURRENT:** owner_run_id=`auto11-20261026T0902Z-gpt6-b38f`, acquired_at_UTC=`2026-10-26T09:02:09Z`, released_at_UTC=`2026-10-26T09:15:00Z`, status=`released`.
 Это кооперативный CAS; глобальный single-flight вне протокола не доказан. `automations.peek` недоступен; отдельная CRM automation и независимый read-only аудит не изменены.
+
+### Итерация 26.10.2026 09:02–09:15 UTC — P0.4 Draft ancestry + rollback native regression
+
+**Сделано:** #312 теперь содержит upstream HEAD #302 как реального второго родителя merge commit `d42a6c15c396b2b433ae43ed26a1c74925a95b82`. Merge создан с ТОЧНО тем же Git tree `362c04ce2fb205b15f727f21969d05aceea97c1b`, что у прежнего #312 HEAD: никаких файлов не потеряно и код не изменён при синхронизации. GitHub compare #302→#312 после изменений: `ahead=14, behind=0`. Force push, merge PR, main и production не затронуты.
+
+**Implementation commit:** `bd9d7527f494c50aca99075551069e45b202f100` в `spaceverse/evotor-license-preflight-20261026` (#312 Draft). Добавлен native PostgreSQL regression: ошибка `onAuthorized` после записи в той же транзакции обязана дать `EVOTOR_LICENSE_UNAVAILABLE`, откатить изменение `token_revision` и сохранить возможность последующей авторизованной операции. Только тест, никаких runtime/DDL/production изменений. #302 остаётся `ece38c0e45269693c347e7c0eaf1572c176dc2eb` Draft; #296 — `b15c7355` Draft; #299 — координационная ветка. **Checkpoint commit = текущий коммит** (не самоссылочный SHA).
+
+**CI на точном #312 HEAD `bd9d7527`:**
+- Evotor owner nonce native PostgreSQL `40297624782`: **SUCCESS**, native suites **95 pass / 0 fail / 0 skip**, включая license guard **8/8**. Business typecheck/build/lint успешны.
+- Browser `40297625349`: **SUCCESS**, **16 desktop + 4 mobile = 20 pass / 0 fail**, synthetic.
+- Release gate `40297625718`: **SUCCESS**; root `node --test` **656 pass / 0 fail / 0 skip**; Business Vitest **600 pass / 0 fail / 77 skip** (native отдельно 95/95); `npm run materialize` ×2, check, VK parity и production audit успешны; root/prod audit **0 vulnerabilities**; Business audit high threshold **0 high/critical**. CI не означает готовность live provider.
+- Локальные команды не выполнялись: GitHub clone в runtime недоступен (DNS), установленный `pivnik-preflight` не обнаружен в skills; GitHub Actions использован как фактическое подтверждение. Production-only steps CI намеренно skipped.
+
+**Не проверено / P0 блокеры:** официальный OAuth state echo, реальный provider owner identity и install, license unit/contract, реальные фискальные данные, production и действующая касса. P0.2 и P0.4 пока unmounted/default deny, нельзя объявлять `ready` или оплаченный доступ. В #312 тестовый `ready` разрешён только в disposable DB; production migration 024 его не допускает. Никаких merge/deploy.
+
+**Следующее техническое действие:** на свежих HEAD #302/#312 проверить P0.2 signed HTTP + owner proof/revocation тестовое покрытие и закрыть ближайший независимый негативный сценарий без включения live API; реальный OAuth E2E только после официального тестового аккаунта и подтверждённого контракта. Перед записью снова CAS LOCK и проверка активных PR.
 
 ### Итерация 26.10.2026 — P0.3 post-commit venue activation guard, #312 browser closure
 
