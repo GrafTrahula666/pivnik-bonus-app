@@ -1,5 +1,9 @@
 # Module map and "do not break" list
 
+## Evotor OAuth authorization_code transport (2026-10-26, UNMOUNTED)
+
+`admin-platform/server/evotor-market-oauth-exchange.ts` adds a fail-closed, bounded server-side OAuth code exchange using the official `https://oauth.evotor.ru/oauth/token` endpoint, Basic client credentials, exact registered HTTPS redirect URI and mandatory `store:read` scope. Redirects, non-200, malformed/oversized/stalled responses and provider errors fail without disclosing tokens. It intentionally returns only access token, expiry and scope, never refresh token, user identity, owner proof, binding, tenant or license. A real issuer still needs session-bound durable one-time OAuth state, independent store/user ownership verification, canonical grants, current token revision and transactional binding checks. No HTTP route, production config, migration or provider call is mounted. Synthetic negative tests: `server/tests/evotor-market-oauth-exchange.spec.ts`.
+
 Written 2026-09-28 after a live audit of the running code (not from memory/docs).
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
