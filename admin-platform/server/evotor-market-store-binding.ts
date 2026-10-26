@@ -21,7 +21,7 @@ export class EvotorStoreBindingError extends Error {
 type BindingResult = Readonly<{ state: 'pending'; created: boolean }>
 type ConflictResult = Readonly<{ conflict: true }>
 const id = (v: unknown): v is string => typeof v === 'string'
-  && /^[1-9]\\d{0,18}$/.test(v) && BigInt(v) <= 9223372036854775807n
+  && /^[1-9]\d{0,18}$/.test(v) && BigInt(v) <= 9223372036854775807n
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const store = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const session = /^[0-9a-f]{64}$/
