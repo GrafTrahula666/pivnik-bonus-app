@@ -53,6 +53,7 @@ import {
 import { HttpError } from './types.js'
 import { evotorPeriod,getEvotorReport } from './evotor-read.js'
 import {listEvotorStock,incrementEvotorStock} from './evotor-stock.js'
+import {getBeerInventory,writeBeerInventory} from './beer-inventory.js'
 import {
   PROMOTION_BODY_LIMIT,createAppPromotion,deleteAppPromotion,getAppDesign,listAppPromotions,publishAppDesign,updateAppPromotion,
 } from './pivnik-app-content.js'
@@ -105,6 +106,7 @@ export const sessionCapabilities=()=>({
   tenantCrmActivationChecks:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmActivationChecks,
   crmOnboarding:config.enableWrites&&config.enableOnboardingDrafts&&config.enableCrmOnboarding,
   beerIntake:config.enableWrites&&config.enableBeerIntake,
+  beerInventory:config.enableBeerInventory,
 })
 async function capabilitiesFor(admin:import('./types.js').AdminPrincipal){
   const capabilities=sessionCapabilities()
@@ -463,6 +465,18 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     }
     await requireVenueAccess(session.admin,scope,String(req.method||'GET').toUpperCase(),resource,child,grandchild)
 
+    if(resource==='beer-inventory'&&!child&&!grandchild){
+      if(isMethod(req,'GET')){
+        const offset=url.searchParams.get('historyOffset')||'0'
+        if(!/^(0|[1-9]\d{0,4})$/.test(offset))throw new HttpError(400,'BEER_HISTORY_OFFSET','Некорректная страница истории.')
+        json(res,200,await getBeerInventory(session.admin,scope,evotorPeriod(url),undefined,Number(offset)));return true
+      }
+      if(isMethod(req,'POST')){
+        enforceRateLimit('beer-inventory:'+session.admin.id,30,60_000)
+        json(res,200,await writeBeerInventory(session.admin,scope,await readJsonBody(req,4096)));return true
+      }
+      throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+    }
     if(resource==='beer-intake'&&!child){
       if(!config.enableWrites||!config.enableBeerIntake)throw new HttpError(403,'BEER_INTAKE_DISABLED','Учёт поступлений пока выключен.')
       if(isMethod(req,'GET')){json(res,200,await listEvotorStock(scope));return true}

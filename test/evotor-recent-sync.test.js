@@ -64,3 +64,38 @@ test('API sends since only on initial page and keeps historical request format',
   assert.equal(urls[1].search,'?cursor=recent-2');
   await fetchEvotorPage({...config,until:now(),fetchImpl});assert.equal(urls[2].searchParams.has('since'),false);
 });
+
+test('optional recent observation records completed ranges, truncated pages and errors without changing history or money',async()=>{
+  const {db,pool}=await fixture();
+  try {
+    await db.exec(await readFile(new URL('../migrations/026_evotor_recent_sync_status.sql',import.meta.url),'utf8'));
+    const history=JSON.stringify((await db.query('SELECT * FROM pos_sync_state')).rows);
+    const money=JSON.stringify((await db.query('SELECT * FROM wallets')).rows);
+    await syncEvotorRecent({pool,config,now,fetchPage:async()=>({items:[sale({id:'observed'})],paging:{}})});
+    let row=(await db.query('SELECT * FROM pos_recent_sync_status')).rows[0];
+    assert.equal(row.state,'complete');assert.equal(row.pages,1);assert.equal(row.cursor_pending,false);
+    assert.equal(row.success_since.toISOString(),'2026-10-16T11:30:00.000Z');assert.equal(row.success_until.toISOString(),'2026-10-18T11:30:00.000Z');
+    const successful=row.last_success_at.toISOString();
+    await syncEvotorRecent({pool,config,now,maxPages:1,fetchPage:async()=>({items:[],paging:{next_cursor:'more'}})});
+    row=(await db.query('SELECT * FROM pos_recent_sync_status')).rows[0];
+    assert.equal(row.state,'incomplete');assert.equal(row.cursor_pending,true);assert.equal(row.last_success_at.toISOString(),successful);
+    await assert.rejects(syncEvotorRecent({pool,config,now,fetchPage:async()=>{throw Object.assign(new Error('private provider prose'),{code:'network'});}}));
+    row=(await db.query('SELECT * FROM pos_recent_sync_status')).rows[0];
+    assert.equal(row.state,'error');assert.equal(row.last_error_code,'scan_failed');assert.equal(row.last_success_at.toISOString(),successful);
+    assert.equal(JSON.stringify((await db.query('SELECT * FROM pos_sync_state')).rows),history);
+    assert.equal(JSON.stringify((await db.query('SELECT * FROM wallets')).rows),money);
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM transactions')).rows[0].n,0);
+  }finally{await db.close();}
+});
+
+test('observation failure never prevents a valid recent receipt import',async()=>{
+  const {db,pool}=await fixture();
+  try {
+    // A presence probe succeeds, but an intentionally missing table rejects only
+    // the optional observation. The same connection then imports normally.
+    const baseConnect=pool.connect.bind(pool);
+    pool.connect=async()=>{const c=await baseConnect();const query=c.query.bind(c);c.query=(q,a)=>q.includes("to_regclass('public.pos_recent_sync_status')")?Promise.resolve({rows:[{ready:true}]}):query(q,a);return c;};
+    assert.deepEqual(await syncEvotorRecent({pool,config,now,fetchPage:async()=>({items:[sale({id:'telemetry-fails'})],paging:{}})}),{imported:1,complete:true});
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM pos_documents')).rows[0].n,1);
+  }finally{await db.close();}
+});
