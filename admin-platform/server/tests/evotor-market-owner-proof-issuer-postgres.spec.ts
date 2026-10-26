@@ -183,6 +183,34 @@ native('Evotor trusted OAuth owner proof issuer: native PostgreSQL and negative 
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(7)
   })
 
+  it('rechecks owner grant after the network response and denies a mid-flight downgrade', async () => {
+    const s = await state()
+    const fetchImpl: typeof fetch = vi.fn<typeof fetch>().mockImplementation(async input => {
+      if (String(input).includes('oauth/token')) return oauthResponse()
+      await db.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=$1", [ownerId])
+      return storesResponse()
+    })
+    try {
+      await expect(issue(s,{fetchImpl})).rejects.toMatchObject({code:'EVOTOR_OWNER_ISSUE_DENIED'})
+    } finally {
+      await db.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=$1", [ownerId])
+    }
+  })
+
+  it('rechecks the session after the provider response and denies mid-flight revocation', async () => {
+    const s = await state()
+    const fetchImpl: typeof fetch = vi.fn<typeof fetch>().mockImplementation(async input => {
+      if (String(input).includes('oauth/token')) return oauthResponse()
+      await db.query("UPDATE admin_sessions SET expires_at=clock_timestamp()-INTERVAL '1 minute' WHERE token_hash=$1", [sessionTokenHash])
+      return storesResponse()
+    })
+    try {
+      await expect(issue(s,{fetchImpl})).rejects.toMatchObject({code:'EVOTOR_OWNER_ISSUE_DENIED'})
+    } finally {
+      await db.query("UPDATE admin_sessions SET expires_at=clock_timestamp()+INTERVAL '1 hour' WHERE token_hash=$1", [sessionTokenHash])
+    }
+  })
+
   it('denies invalid signing key before consuming a state and keeps tenant scope canonical', async () => {
     const s = await state()
     await expect(issue(s,{signingKey:Buffer.alloc(12)}))
