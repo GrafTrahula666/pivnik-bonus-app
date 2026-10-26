@@ -1,5 +1,26 @@
 # Module map and "do not break" list
 
+## Evotor durable OAuth state (2026-10-26, UNMOUNTED)
+
+`admin-platform/server/evotor-market-oauth-state.ts` and manual additive Admin migration
+`023_evotor_oauth_states.sql` add a cryptographically random 32-byte OAuth
+state stored only by SHA-256, tied to the current Admin session token hash,
+canonical owner/company/venue, fixed productId and server-configured HTTPS
+redirect. Issuance checks active account/session, company/venue and owner-only
+grant with SQL row locks. Consumption serializes competing callbacks with
+`FOR UPDATE`, rechecks the same session and current grants under `FOR SHARE`,
+then marks the state consumed in one transaction. Invalid foreign session,
+redirect or product cannot burn another session's state. Expiry is 5 minutes,
+checked with `clock_timestamp()` after any lock wait. No provider token/code
+is stored in the state table. Native PostgreSQL tests:
+`admin-platform/server/tests/evotor-market-oauth-state-postgres.spec.ts`,
+CI: `evotor-owner-nonce-postgres.yml`.
+
+This is a CSRF/session-binding prerequisite, **NOT Evotor identity proof**.
+It has no HTTP route, OAuth issuer, signed store proof, license, binding write,
+production migration or provider call. Never enable it until the independent
+provider owner verification and full P0.2 authorization chain are implemented.
+
 ## Evotor OAuth authorization_code transport (2026-10-26, UNMOUNTED)
 
 `admin-platform/server/evotor-market-oauth-exchange.ts` adds a fail-closed, bounded server-side OAuth code exchange using the official `https://oauth.evotor.ru/oauth/token` endpoint, Basic client credentials, exact registered HTTPS redirect URI and mandatory `store:read` scope. Redirects, non-200, malformed/oversized/stalled responses and provider errors fail without disclosing tokens. It intentionally returns only access token, expiry and scope, never refresh token, user identity, owner proof, binding, tenant or license. A real issuer still needs session-bound durable one-time OAuth state, independent store/user ownership verification, canonical grants, current token revision and transactional binding checks. No HTTP route, production config, migration or provider call is mounted. Synthetic negative tests: `server/tests/evotor-market-oauth-exchange.spec.ts`.
