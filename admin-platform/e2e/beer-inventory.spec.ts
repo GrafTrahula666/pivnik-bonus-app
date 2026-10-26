@@ -1,0 +1,43 @@
+import {expect,test} from '@playwright/test'
+const product={productId:'product-verified-id',name:'Жигулёвское',measure:'л',supported:true,baseline:null,balanceMillis:null,deliveredMillis:'0',soldMillis:'0',writtenOffMillis:'0',returnedMillis:'0',soldTodayMillis:'8500',soldPeriodMillis:'8500',warnings:[],status:'uninitialized',history:[],historyTruncated:false,refunds:[]}
+test('CRM beer: initial/delivery/spill, lost reply recovery, incomplete data and foreign scope',async({page},info)=>{
+ await page.clock.install({time:new Date('2026-10-26T12:00:00Z')})
+ let current={...product} as Record<string,unknown>,lost=true,denied=false;const bodies:Record<string,unknown>[]=[]
+ const report=()=>({source:'crm_calculated',storeId:'store-a',asOf:'2026-10-26T12:00:00Z',writeEnabled:true,products:[current],quality:{lastSuccessfulHistorySyncAt:'2026-10-26T11:55:00Z',coveredUntil:'2026-10-26T11:54:00Z',historyComplete:true,historyCursorPending:false,errorCode:null,unknownPositions:0,stale:false,recentSync:{state:'not_recorded'}}})
+ await page.route('**/api/admin/venues/*/beer-inventory**',async route=>{
+  if(denied)return route.fulfill({status:403,json:{code:'SCOPE_DENIED',error:'Fixture foreign scope denied'}})
+  if(route.request().method()==='GET')return route.fulfill({json:report()})
+  const b=route.request().postDataJSON() as Record<string,unknown>;bodies.push(b)
+  if(b.kind==='initial')current={...current,baseline:{operationId:b.operationId,effectiveAt:'2026-10-26T12:00:00Z'},balanceMillis:b.quantityMillis,status:'pending'}
+  if(b.kind==='delivery'&&lost){lost=false;current={...current,balanceMillis:'80000',deliveredMillis:'50000'};return route.abort('connectionreset')}
+  return route.fulfill({json:{ok:true,source:'crm_calculated',operationId:b.operationId,alreadyApplied:b.kind==='delivery'}})
+ })
+ await page.goto('/e2e/fixtures/beer-inventory.html')
+ await expect(page.getByRole('heading',{name:'Остатки пива',exact:true})).toBeVisible()
+ await expect(page.getByText('Нет начального остатка',{exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'Начать учёт',exact:true}).click()
+ await page.getByLabel('Фактически, л',{exact:true}).fill('30')
+ await page.getByRole('button',{name:'Сохранить',exact:true}).click()
+ expect(bodies[0]?.quantityMillis).toBe('30000');expect(bodies[0]).not.toHaveProperty('storeId')
+ await expect(page.getByText('Ожидается синхронизация',{exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'Привоз',exact:true}).click()
+ await page.getByLabel('Количество, л',{exact:true}).fill('50')
+ await page.getByLabel('Накладная (необязательно)').fill('TEST-1')
+ await page.getByRole('button',{name:'Добавить привоз',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Проверить сохранение'})).toBeVisible()
+ await page.reload()
+ await page.getByRole('button',{name:'Проверить сохранение'}).click()
+ await expect(page.getByText('Операция уже сохранена. Повторного движения нет.')).toBeVisible()
+ expect(bodies[1]).toEqual(bodies[2])
+ await page.getByRole('button',{name:'Списание',exact:true}).click()
+ await page.getByLabel('Количество, л',{exact:true}).fill('1,5')
+ await page.getByLabel('Комментарий',{exact:true}).fill('Пролив')
+ await expect(page.getByRole('button',{name:'Сохранить',exact:true})).toBeDisabled()
+ await page.getByLabel('Этот расход ещё не отражён в кассовых чеках').check()
+ await expect(page.getByRole('button',{name:'Сохранить',exact:true})).toBeEnabled()
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+ await page.screenshot({path:info.outputPath('beer-inventory.png'),fullPage:true})
+ denied=true;await page.getByRole('button',{name:'Сменить заведение'}).click()
+ await expect(page.getByRole('alert')).toHaveText('Fixture foreign scope denied')
+ await expect(page.getByText('Жигулёвское',{exact:true})).toHaveCount(0)
+})

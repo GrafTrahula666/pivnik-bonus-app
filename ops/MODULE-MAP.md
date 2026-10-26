@@ -175,6 +175,49 @@ alongside existing cash dashboard checks. No production APIs are called by them.
 
 ## Owner panel appearance and cash interval (2026-10-25)
 
+### CRM calculated beer inventory (2026-10-26, separate default-off flag)
+
+The owner's corrected task is **independent CRM calculation**, with no provider
+quantity writes. `ADMIN_ENABLE_BEER_INVENTORY` gates the separate owner-only
+`GET/POST /api/admin/venues/:id/beer-inventory` route. Global Admin writes also
+gate POST. Session, Origin/CSRF, rate limit and canonical owner grants remain;
+trusted directors have no new access. `BeerInventory.tsx` replaces only the
+"Оформление" menu entry with "Остатки пива" when enabled in working mode.
+The older intake route, APK, bonus logic and `evotor-stock-safety.ts` are unchanged.
+
+Manual Admin metadata migration **026** is an append-only movement journal,
+not a replacement fiscal store or cached stock balance. Products are identified
+by exact bound store/product ID from existing normalized `pos_documents`, never
+the handwritten catalog. Only verified liter quantities are eligible. Initial
+and count movements start a new baseline; later close times are deducted, old
+or equal close times are included in the physical baseline. Late imports are
+reprojected by close time; receipt PK deduplication and no mutable sale counter
+prevent repeated consumption. PAYBACK alone restores nothing; an explicit linked
+physical return can restore at most its quantity once. Manual writeoff requires
+an explicit acknowledgement that the expense is absent from cash receipts.
+
+`beer-inventory.ts` rechecks active canonical company/venue/account/owner grants,
+uses per-product transaction locks, payload-hashed operation IDs and same-commit
+audit. Receipt queries run in a separate read-only repeatable-read transaction;
+there is **no atomic transaction between the two databases**. Projection limits
+fail closed rather than silently truncate. Full history is paged in 100s.
+`beer-inventory-model.ts` uses integer thousandths/BigInt, retains negative
+balances and exposes incomplete/awaiting-sync/uninitialized states. Existing
+history scan watermark/errors/cursor are reported independently. Optional manual
+POS migration026 adds `pos_recent_sync_status`; the existing recent-first importer
+records complete two-day ranges, page truncation and errors there after receipt
+commit. Its absence/failure never changes ingestion or bonus processing. Before
+that migration/first observed run, recent completeness is explicitly unknown.
+"Current" means covered through the displayed cutoff, never mere API reachability.
+The working worker interval is 120s (observed logs); freshness budget is three
+cycles of the matching `PIVNIK_POS_SYNC_SECONDS` setting, not a completeness proof.
+
+Runbook and release/rollback boundaries:
+`ops/CRM-BEER-INVENTORY-20261026.md`. Native PostgreSQL tests use two disposable
+databases and real concurrent writers; model tests compare existing cash
+analytics with its monetary-return convention separated. Desktop/mobile browser
+fixtures exercise actual UI and lost-reply recovery without production APIs.
+
 ### Evotor stock intake safety (2026-10-25)
 
 PR #309 introduced the intake screen; #310 changed it to the existing cloud
