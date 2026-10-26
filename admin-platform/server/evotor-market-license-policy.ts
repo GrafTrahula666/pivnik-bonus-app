@@ -56,7 +56,7 @@ interface SignedEntitlement {
 
 const purpose = 'spaceverse.evotor.license.v1'
 const digits = (value: unknown): value is string =>
-  typeof value === 'string' && /^[1-9]\\d{0,18}$/.test(value)
+  typeof value === 'string' && /^[1-9]\d{0,18}$/.test(value)
   && BigInt(value) <= 9223372036854775807n
 const same = (a: unknown, b: unknown) =>
   typeof a === 'string' && a.length > 0 && a === b
@@ -65,7 +65,7 @@ const same = (a: unknown, b: unknown) =>
 function decodeSignedEntitlement(raw: string, signingKey: Buffer): SignedEntitlement | null {
   if (!Buffer.isBuffer(signingKey) || signingKey.length < 32
     || typeof raw !== 'string' || raw.length > 4096) return null
-  const match = /^([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)$/.exec(raw)
+  const match = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(raw)
   if (!match) return null
   const [encoded, mac] = [match[1]!, match[2]!]
   try {
@@ -73,7 +73,7 @@ function decodeSignedEntitlement(raw: string, signingKey: Buffer): SignedEntitle
     if (payload.toString('base64url') !== encoded || payload.length > 2048) return null
     const signature = Buffer.from(mac, 'base64url')
     if (signature.toString('base64url') !== mac || signature.length !== 32) return null
-    const expected = createHmac('sha256', signingKey).update(purpose + '\\n' + encoded).digest()
+    const expected = createHmac('sha256', signingKey).update(purpose + '\n' + encoded).digest()
     if (!timingSafeEqual(expected, signature)) return null
     const claim: unknown = JSON.parse(payload.toString('utf8'))
     if (!claim || typeof claim !== 'object' || Array.isArray(claim)) return null
