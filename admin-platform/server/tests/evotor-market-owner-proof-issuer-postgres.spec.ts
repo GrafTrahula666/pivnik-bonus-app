@@ -176,6 +176,36 @@ native('Evotor trusted OAuth owner proof issuer: native PostgreSQL and negative 
     await db.query('UPDATE admin_evotor_market_users SET token_revision=1 WHERE product_id=$1', [productId])
   })
 
+  it('never reuses a consumed OAuth state after provider code exchange fails', async () => {
+    const s = await state()
+    const failing: typeof fetch = vi.fn<typeof fetch>().mockImplementation(async input => {
+      if (String(input).includes('oauth/token')) return Response.json({ error: 'invalid_grant' }, { status: 400 })
+      throw Error('provider stores must not be contacted after failed code exchange')
+    })
+    await expect(issue(s, { fetchImpl: failing }))
+      .rejects.toMatchObject({ code: 'EVOTOR_OWNER_ISSUE_UNAVAILABLE' })
+    expect(vi.mocked(failing)).toHaveBeenCalledTimes(1)
+    const retry = fetchProvider()
+    await expect(issue(s, { fetchImpl: retry }))
+      .rejects.toMatchObject({ code: 'EVOTOR_OWNER_ISSUE_DENIED' })
+    expect(vi.mocked(retry)).not.toHaveBeenCalled()
+  })
+
+  it('denies a venue moved to another company during the provider store request', async () => {
+    const s = await state()
+    const fetchImpl: typeof fetch = vi.fn<typeof fetch>().mockImplementation(async input => {
+      if (String(input).includes('oauth/token')) return oauthResponse()
+      await db.query('UPDATE venues SET company_id=$1 WHERE id=$2', [foreignCompanyId, venueId])
+      return storesResponse()
+    })
+    try {
+      await expect(issue(s, { fetchImpl }))
+        .rejects.toMatchObject({ code: 'EVOTOR_OWNER_ISSUE_DENIED' })
+    } finally {
+      await db.query('UPDATE venues SET company_id=$1 WHERE id=$2', [companyId, venueId])
+    }
+  })
+
   it('permits only one of concurrent callbacks for a single state', async () => {
     const s = await state()
     const results = await Promise.allSettled(Array.from({length:8}, () => issue(s)))
