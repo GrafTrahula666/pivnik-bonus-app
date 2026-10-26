@@ -19,7 +19,9 @@ const purpose = 'spaceverse.evotor.store-owner-binding.v1'
 const maxBigint = 9223372036854775807n
 const productPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const storePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
-const providerPattern = /^[^\s\x00-\x20\x7f]{1,128}$/
+const validProviderId = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= 128
+  && !Array.from(value).some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)
 
 export class EvotorOwnerProofIssueError extends Error {
   readonly code: 'EVOTOR_OWNER_ISSUE_DENIED' | 'EVOTOR_OWNER_ISSUE_UNAVAILABLE'
@@ -65,7 +67,7 @@ export async function issueEvotorOwnerProofFromOAuth({
 }): Promise<Readonly<{ proof: string }>> {
   if (!database || typeof database.query !== 'function' || typeof database.connect !== 'function'
     || typeof productId !== 'string' || !productPattern.test(productId)
-    || typeof expectedProviderUserId !== 'string' || !providerPattern.test(expectedProviderUserId)
+    || !validProviderId(expectedProviderUserId)
     || typeof selectedStoreId !== 'string' || !storePattern.test(selectedStoreId)
     || !Buffer.isBuffer(signingKey) || signingKey.length < 32) throw denied()
 
