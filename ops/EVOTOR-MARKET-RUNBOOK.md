@@ -21,14 +21,25 @@ owner-only grant при выдаче и при consume; `FOR UPDATE` сериа�
 `evotor-owner-nonce-postgres.yml`. В таблице **нет** OAuth code/token/secret.
 Не выполнять migration в production без отдельного разрешения.
 
-Это только защита от CSRF/replay: она НЕ удостоверяет владельца Эвотора,
-не выдаёт proof, store binding, лицензию или доступ к CRM. Нет HTTP-маршрута,
-provider live E2E и production-активации. Следующий P0.2: trusted issuer,
-официальный provider owner proof, grants/token revision, signed HTTP binding.
+OAuth `state` сам по себе защищает только от CSRF/replay и НЕ удостоверяет
+владельца Эвотора. Дополнительно создан **UNMOUNTED**
+`evotor-market-owner-proof-issuer.ts`: одноразовый state → server-side code
+exchange → полный GET stores по OAuth-токену с точным provider user из
+callback installation → проверка token revision до/после GET → финальные
+`FOR SHARE` блокировки активной сессии, owner grant, company/venue и
+installation/reconciliation/token revision → HMAC proof на 5 минут или меньше.
+Браузерный store ID лишь выбор, не доказательство; OAuth token и clientSecret
+не попадают в proof/БД. Native PostgreSQL 16 regression содержит 9 тестов
+(replay, foreign session/store/provider, revoked owner, hold/uninstall,
+mid-flight token rotation, concurrency, cross-tenant). Вызов не смонтирован
+в HTTP. Нет store binding, лицензии, production-активации и live provider E2E.
+До монтажа проверить возврат OAuth `state` реальным провайдером и официальный
+owner flow; затем добавить signed HTTP binding с независимой проверкой
+текущих grants и revocation. Миграции 022/023 в production не применялись.
 
 ## OAuth authorization_code: безопасная заготовка (26 октября, default-off)
 
-Официальная [OAuth инструкция](https://developer.evotor.ru/docs/rest_oauth20_authorization_guide.html) подтверждает server-side `authorization_code` → `POST https://oauth.evotor.ru/oauth/token` с Basic clientId/clientSecret и тем же registered redirect URI. Scope `store:read` нужен для независимой проверки магазинов. Новый `evotor-market-oauth-exchange.ts` реализует только ограниченный обмен кода; возвращённый access token **не является доказательством identity**, не даёт роль, лицензию или право на компанию. Модуль не подключён к HTTP и не вызывается production. Перед реальным issuer обязательны одноразовый OAuth state в durable storage, привязка state к действующей SPACEVERSE-сессии, независимая проверка GET stores/owner и текущих canonical grants/token revision. Не принимать произвольный code/redirect/clientId/secret из браузера как авторитет. Refresh token не возвращается из модуля и не сохраняется.
+Официальная [OAuth инструкция](https://developer.evotor.ru/docs/rest_oauth20_authorization_guide.html) подтверждает server-side `authorization_code` → `POST https://oauth.evotor.ru/oauth/token` с Basic clientId/clientSecret и тем же registered redirect URI. Scope `store:read` нужен для независимой проверки магазинов. Новый `evotor-market-oauth-exchange.ts` реализует только ограниченный обмен кода; возвращённый access token **не является доказательством identity**, не даёт роль, лицензию или право на компанию. Модуль не подключён к HTTP и не вызывается production. Перед реальным HTTP-подключением обязательны одноразовый OAuth state в durable storage, привязка state к действующей SPACEVERSE-сессии, независимая проверка GET stores/owner и текущих canonical grants/token revision. Не принимать произвольный code/redirect/clientId/secret из браузера как авторитет. Refresh token не возвращается из модуля и не сохраняется.
 
 Обновлено 25 октября 2026. Реализация: `admin-platform/server/evotor-market.ts`,
 ручные Admin migrations `020_evotor_market_inbox.sql`, затем
