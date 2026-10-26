@@ -175,6 +175,29 @@ describe('explicit empty tenant bootstrap: existing scope and binding ledger',()
       UPDATE admin_onboarding_provisioning_steps SET lease_expires_at=clock_timestamp()-INTERVAL '1 second'`)
     expect(await service().runRuntimeDatabaseBinding(owner,draft())).toMatchObject({status:'succeeded',attemptCount:2,result:{binding:'verified_existing'}})
   })
+  it('revoked company ownership after target commit cannot confirm a cross-company CRM binding',async()=>{
+    // Owner 11 has separate grants for companies 10 and 20. Revoke only 20
+    // after its target transaction commits, before metadata confirmation.
+    await expect(service(true,async()=>{
+      await fixture.metadata.query('DELETE FROM admin_company_access WHERE admin_id=$1 AND company_id=$2',[11,20])
+    }).runRuntimeDatabaseBinding(owner,draft(2))).rejects.toMatchObject({statusCode:404})
+    expect((await fixture.metadata.query(`SELECT status,result FROM admin_onboarding_provisioning_steps
+      WHERE draft_id=$1 AND step='runtime_database_binding'`,[draft(2)])).rows)
+      .toEqual([{status:'running',result:null}])
+    expect(await relations(0)).toEqual([])
+    expect(await relations(1)).toEqual([])
+    // A restored, independently verified grant can reconcile the committed
+    // target without executing a second bootstrap or granting access to A.
+    await fixture.metadata.query(`INSERT INTO admin_company_access(admin_id,company_id,access_kind)
+      VALUES(11,20,'owner')`)
+    await fixture.metadata.query(`UPDATE admin_onboarding_provisioning_steps
+      SET lease_expires_at=clock_timestamp()-INTERVAL '1 second'
+      WHERE draft_id=$1 AND step='runtime_database_binding'`,[draft(2)])
+    expect(await service().runRuntimeDatabaseBinding(owner,draft(2)))
+      .toMatchObject({status:'succeeded',attemptCount:2,result:{binding:'verified_existing'}})
+    expect((await fixture.targets[2]!.query('SELECT company_id,venue_id FROM spaceverse_runtime_binding')).rows)
+      .toEqual([{company_id:fixture.manifests[2]!.scope.companyId,venue_id:fixture.manifests[2]!.scope.venueId}])
+  })
   it('requires a server-registered target and never substitutes the metadata database',async()=>{
     state.targets.clear()
     expect(await service().runRuntimeDatabaseBinding(owner,draft())).toMatchObject({status:'action_required',errorCode:'TARGET_DATABASE_NOT_REGISTERED'})
