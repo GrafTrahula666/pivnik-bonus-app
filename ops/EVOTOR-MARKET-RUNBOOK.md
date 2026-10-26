@@ -247,3 +247,23 @@ revision, install/holds и canonical grants под актуальными бло
 binding/активация и финансовые операции в этой итерации не выполнялись.
 
 P0.2 nonce consumer: manual Admin migration `022_evotor_owner_proof_nonces.sql` follows Marketplace inbox `020`/`021`; no automatic migration or provider binding.
+
+
+### P0.2 binding-time guard (Draft, not mounted)
+
+`server/evotor-market-binding-guard.ts` composes a complete read-only provider GET,
+revision checks before/after GET, a short-lived HMAC one-time proof with **signed
+canonical venueId**, and native PostgreSQL transaction checks with `FOR SHARE`.
+The exact active SPACEVERSE session hash, active account, active canonical company
+and venue, owner-only `admin_company_access` grant, installed/unheld provider
+identity, nonempty encrypted credential and unchanged token revision must all
+match before an `onVerified(client)` callback can write in that SAME transaction.
+The issuer is not implemented. The proof must be issued server-side after
+independent Evotor authentication; neither a browser-supplied ID nor an
+internal signature alone proves ownership. Binding callers must use idempotent
+writes and a new proof after uncertain COMMIT, and enforce revocation for every
+subsequent licensed API read. No new table, route, feature flag, issuer, license,
+actual binding or production migration is added by this guard. Canonical inactive
+onboarding scopes need a separate explicit reviewed policy before activation;
+the current guard intentionally denies them. Native PostgreSQL regression and
+CI are required; do not claim release readiness from a green unit suite.
