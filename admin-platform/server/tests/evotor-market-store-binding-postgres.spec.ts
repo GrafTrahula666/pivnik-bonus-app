@@ -4,7 +4,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import pg from 'pg'
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
-import { bindEvotorStoreWithOwnerProof, readEvotorStoreBindingStatus } from '../evotor-market-store-binding.js'
+import { bindEvotorStoreWithOwnerProof, readEvotorStoreBindingStatus, revokeEvotorStoreBinding } from '../evotor-market-store-binding.js'
 import { createEvotorOwnerNonceConsumer } from '../evotor-market-owner-nonce.js'
 
 const connectionString = String(process.env.ADMIN_INTEGRATION_TEST_DATABASE_URL || '')
@@ -225,6 +225,30 @@ native('Evotor durable binding persistence / native PostgreSQL', () => {
       }
       expect(await status(storeB)).toBe('revoked')
     }
+  })
+
+  it('audits an owner-scoped local disconnect exactly once and cannot revive it', async () => {
+    const storeId = 'fixture-store-local-disconnect'
+    expect(await bind(storeId)).toEqual({state:'pending',created:true})
+    expect(await status(storeId)).toBe('pending')
+    const disconnect = (foreign = false) => revokeEvotorStoreBinding({
+      database:db, productId, storeId,
+      companyId:foreign ? companyB : companyA,
+      venueId:foreign ? venueB : venueA,
+      actorId:foreign ? ownerB : ownerA,
+      sessionTokenHash:foreign ? sessionB : sessionA,
+    })
+    expect(await disconnect(true)).toBeNull()
+    expect(await status(storeId,true)).toBeNull()
+    expect(await disconnect()).toEqual({state:'revoked',changed:true})
+    expect(await status(storeId)).toBe('revoked')
+    expect(await disconnect()).toEqual({state:'revoked',changed:false})
+    await expect(bind(storeId)).rejects.toMatchObject({code:'EVOTOR_STORE_BINDING_CONFLICT'})
+    const audit = await db.query<{n:string}>(
+      "SELECT count(*)::text AS n FROM admin_audit_log WHERE action='evotor_store_disconnect' AND entity_id=$1 AND company_id=$2",
+      [storeId,companyA],
+    )
+    expect(audit.rows[0]!.n).toBe('1')
   })
 
 })
