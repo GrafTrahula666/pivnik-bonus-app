@@ -108,6 +108,11 @@ installation, subscription, store-binding and explicit approved license policy.
 It rejects missing contract/plan approval, unknown unit, pending/held binding,
 sequence gaps, user/subscription reconciliation, expired periods, stale token
 revision, scope substitution, unapproved trial/grace and terminal widening.
+`admin-platform/server/evotor-market-license-guard.ts` additionally locks canonical
+owner/session/company/venue, provider installation, exact subscription and
+store binding in a single native PostgreSQL transaction before any authorized
+callback. Its native test uses a disposable test-only CHECK relaxation to
+simulate a future `ready` binding; this is NOT a production migration.
 The existing store-binding migration 024 has no `ready` state, and there is NO
 trusted license issuer, runtime SQL reader, billing or HTTP consumer. Thus no
 production row can be licensed through this module. Synthetic unit tests do
