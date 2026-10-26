@@ -14,7 +14,7 @@ const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const noncePattern = /^[A-Za-z0-9_-]{22,128}$/
 const revisionPattern = /^[1-9]\d{0,18}$/
 const expectedFields = ['purpose', 'nonce', 'spaceverseUserId', 'sessionId', 'providerUserId',
-  'productId', 'companyId', 'storeId', 'tokenRevision', 'issuedAt', 'expiresAt'] as const
+  'productId', 'companyId', 'venueId', 'storeId', 'tokenRevision', 'issuedAt', 'expiresAt'] as const
 
 type OwnerProofField = (typeof expectedFields)[number]
 export interface EvotorOwnerProofScope {
@@ -23,6 +23,7 @@ export interface EvotorOwnerProofScope {
   readonly providerUserId: string
   readonly productId: string
   readonly companyId: string
+  readonly venueId: string
   readonly storeId: string
   readonly tokenRevision: string
 }
@@ -94,7 +95,7 @@ export async function verifyEvotorOwnerProofOnce({
   const issuedAt = claim.issuedAt as number, expiresAt = claim.expiresAt as number
   if (issuedAt > now || expiresAt <= now || expiresAt <= issuedAt
     || expiresAt - issuedAt > maxTtlMs) return denied()
-  for (const field of ['spaceverseUserId', 'sessionId', 'providerUserId', 'productId', 'companyId', 'storeId'] as const) {
+  for (const field of ['spaceverseUserId', 'sessionId', 'providerUserId', 'productId', 'companyId', 'venueId', 'storeId'] as const) {
     if (!validId(expected[field]) || !validId(claim[field]) || claim[field] !== expected[field]) return denied()
   }
   if (!validRevision(expected.tokenRevision) || claim.tokenRevision !== expected.tokenRevision) return denied()
