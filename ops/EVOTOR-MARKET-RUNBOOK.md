@@ -1,5 +1,9 @@
 # Admin Pilot — облачное приложение Эвотор.Маркета
 
+## OAuth authorization_code: безопасная заготовка (26 октября, default-off)
+
+Официальная [OAuth инструкция](https://developer.evotor.ru/docs/rest_oauth20_authorization_guide.html) подтверждает server-side `authorization_code` → `POST https://oauth.evotor.ru/oauth/token` с Basic clientId/clientSecret и тем же registered redirect URI. Scope `store:read` нужен для независимой проверки магазинов. Новый `evotor-market-oauth-exchange.ts` реализует только ограниченный обмен кода; возвращённый access token **не является доказательством identity**, не даёт роль, лицензию или право на компанию. Модуль не подключён к HTTP и не вызывается production. Перед реальным issuer обязательны одноразовый OAuth state в durable storage, привязка state к действующей SPACEVERSE-сессии, независимая проверка GET stores/owner и текущих canonical grants/token revision. Не принимать произвольный code/redirect/clientId/secret из браузера как авторитет. Refresh token не возвращается из модуля и не сохраняется.
+
 Обновлено 25 октября 2026. Реализация: `admin-platform/server/evotor-market.ts`,
 ручные Admin migrations `020_evotor_market_inbox.sql`, затем
 `021_evotor_market_reconciliation.sql`.
