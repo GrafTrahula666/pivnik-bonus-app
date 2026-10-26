@@ -60,7 +60,16 @@ server-side one-time signed-claim verifier. It requires an exact SPACEVERSE
 session/provider/product/company/venue/store/token-revision scope, a short-lived
 HMAC claim, and an atomic durable nonce-consumption callback. Missing, expired,
 replayed, foreign, malformed or wrong-key claims fail closed. Its signing key
-must never be browser-controlled; the trusted issuer is **not implemented**.
+must never be browser-controlled. The new **unmounted**
+`evotor-market-owner-proof-issuer.ts` consumes the single-use session-bound OAuth
+state, exchanges the authorization code only with server credentials, checks
+complete provider stores against an installed callback identity and current
+token revision, then rechecks canonical owner grants and provider state under
+PostgreSQL row locks before signing a 5-minute-or-less claim. The expected
+provider user is only a lookup hint, never sufficient ownership evidence.
+Native PostgreSQL negative tests and CI cover the issuer. It is NOT a mounted
+HTTP route, an authorized provider launch, a license or a tenant activation.
+Official OAuth `state` echo and live owner/store E2E remain unverified.
 The separate unmounted `evotor-market-owner-nonce.ts` provides a fail-closed
 native PostgreSQL insert-if-absent nonce consumer, with manual additive Admin
 migration 022. It hashes nonces before storage and rejects replay/expired claims;
