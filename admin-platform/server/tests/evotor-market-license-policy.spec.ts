@@ -3,10 +3,11 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { evaluateEvotorLicensePolicy } from '../evotor-market-license-policy.js'
+import type { EvotorLicenseScope } from '../evotor-market-license-policy.js'
 
 const now = Date.UTC(2026, 9, 26, 5, 0, 0)
 const key = Buffer.alloc(32, 81)
-const scope = {
+const scope: EvotorLicenseScope = {
   productId: 'c0d01535-5193-4cc2-9bfb-be20e0679498',
   providerUserId: 'verified-provider-1',
   subscriptionId: 'f1d01535-5193-4cc2-9bfb-be20e0679498',
@@ -33,14 +34,15 @@ const baseline = () => ({
     },
   },
   policy: {
-    approved: true, unit: 'venue' as const, planIds: ['approved-plan'],
+    approved: true, unit: 'venue' as 'company' | 'venue' | 'terminal', planIds: ['approved-plan'],
     allowTrial: false, allowGrace: false, maxProofAgeMs: 120_000,
   },
   proof: {
     purpose: 'spaceverse.evotor.license.v1',
     issuer: 'trusted-provider-license-verifier',
     ...scope, tokenRevision: '2', planId: 'approved-plan',
-    unit: 'venue', status: 'active', verifiedAtMs: now - 10_000,
+    unit: 'venue', status: 'active', terminalId: undefined as string | undefined,
+    verifiedAtMs: now - 10_000,
     expiresAtMs: now + 60_000,
   },
 })
