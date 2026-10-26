@@ -18,7 +18,7 @@ const providerUserId = 'fixture-provider-binding'
 const sessionA = crypto.createHash('sha256').update('store-binding-A').digest('hex')
 const sessionB = crypto.createHash('sha256').update('store-binding-B').digest('hex')
 const key = Buffer.alloc(32, 72)
-const storeA = 'fixture-store-a', storeB = 'fixture-store-b'
+const storeA = 'fixture-store-a', storeB = 'fixture-store-b', storeC = 'fixture-store-c'
 
 native('Evotor durable binding persistence / native PostgreSQL', () => {
   let setup: pg.Pool, db: pg.Pool, schema = ''
@@ -129,6 +129,22 @@ native('Evotor durable binding persistence / native PostgreSQL', () => {
     expect(record.rows[0]!.company_id).toBe(companyA)
     expect(record.rows[0]!.state).toBe('hold')
     expect(record.rows[0]!.conflict_at).toBeTruthy()
+  })
+  it('serializes simultaneous claims by different valid owners into one sticky hold', async () => {
+    const results = await Promise.allSettled([bind(storeC), bind(storeC, true)])
+    expect(results.filter(x => x.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.filter(x => x.status === 'rejected') as PromiseRejectedResult[]
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]!.reason).toMatchObject({code:'EVOTOR_STORE_BINDING_CONFLICT'})
+    const rows = await db.query<{company_id:string;state:string}>(
+      'SELECT company_id::text,state FROM admin_evotor_store_bindings WHERE store_id=$1',[storeC],
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0]!.state).toBe('hold')
+    expect([companyA,companyB]).toContain(rows.rows[0]!.company_id)
+    const visible = [await status(storeC), await status(storeC,true)]
+    expect(visible.filter(x => x === 'hold')).toHaveLength(1)
+    expect(visible.filter(x => x === null)).toHaveLength(1)
   })
   it('never grants another tenant access by changing IDs or a session', async () => {
     expect(await status(storeB,true)).toBeNull()
