@@ -147,6 +147,29 @@ native('Evotor license gate / native PostgreSQL scope and row-lock regression', 
     await expect(gate({policy:{...policy,approved:false}}))
       .rejects.toMatchObject({code:'EVOTOR_LICENSE_DENIED'})
   })
+  it('rolls back all callback writes if an authorized operation throws', async () => {
+    const before = (await db.query<{token_revision:string}>(
+      'SELECT token_revision::text FROM admin_evotor_market_users WHERE product_id=$1',
+      [productId],
+    )).rows[0]!.token_revision
+    let entered = false
+    await expect(gate({}, async client => {
+      entered = true
+      await client.query(
+        'UPDATE admin_evotor_market_users SET token_revision=token_revision+1 WHERE product_id=$1',
+        [productId],
+      )
+      throw new Error('synthetic downstream failure')
+    })).rejects.toMatchObject({code:'EVOTOR_LICENSE_UNAVAILABLE',statusCode:503})
+    expect(entered).toBe(true)
+    const after = (await db.query<{token_revision:string}>(
+      'SELECT token_revision::text FROM admin_evotor_market_users WHERE product_id=$1',
+      [productId],
+    )).rows[0]!.token_revision
+    expect(after).toBe(before)
+    expect(await gate()).toBe('allowed')
+  })
+
   it('holds native row locks across the authorized callback and observes revocation afterwards', async () => {
     let started!: () => void, release!: () => void
     const entered = new Promise<void>(resolve => { started=resolve })
