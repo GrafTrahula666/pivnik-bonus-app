@@ -28,7 +28,7 @@ export class EvotorOAuthStateError extends Error {
 const denied = () => new EvotorOAuthStateError('EVOTOR_OAUTH_STATE_DENIED')
 const unavailable = () => new EvotorOAuthStateError('EVOTOR_OAUTH_STATE_UNAVAILABLE')
 const positiveId = (value: unknown): value is string =>
-  typeof value === 'string' && /^[1-9]\\d{0,18}$/.test(value) && BigInt(value) <= maxBigint
+  typeof value === 'string' && /^[1-9]\d{0,18}$/.test(value) && BigInt(value) <= maxBigint
 
 function validRedirect(value: unknown): value is string {
   if (typeof value !== 'string' || value.length < 12 || value.length > 2048) return false
