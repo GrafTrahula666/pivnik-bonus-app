@@ -9,9 +9,30 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
+Обновлено: 2026-10-26T01:15:25.538Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
+**LOCK CURRENT:** owner_run_id=`auto11-20261026T0105Z-gpt6-cd82`, acquired_at_UTC=`2026-10-26T01:06:37.909Z`, released_at_UTC=`2026-10-26T01:15:25.538Z`, status=`released`.
+Кооперативный CAS не гарантирует single-flight для writers вне протокола; `automations.peek` недоступен, отдельная CRM automation по предыдущему checkpoint disabled.
+
+### Последняя итерация — 2026-10-26T01:15:25.538Z, OAuth authorization_code transport (unmounted)
+
+**Сделано:** проверены свежие main `517ea17c4620b843c08b4d01f781c666b41f3548`, Draft #299/#296/#302/#96, MODULE-MAP и актуальные CI. На #302 добавлены `admin-platform/server/evotor-market-oauth-exchange.ts` и `server/tests/evotor-market-oauth-exchange.spec.ts`, обновлены MODULE-MAP и runbook. Это безопасный server-side OAuth authorization_code exchange с фиксированным `https://oauth.evotor.ru/oauth/token`, exact HTTPS redirect, Basic client credentials, строгим `store:read`, deadline 10s, bounded body 16KiB, fail-closed response. Не возвращает refresh token, не доверяет JWT payload и не создаёт identity/tenant/лицензию. Модуль НЕ смонтирован и НЕ используется production. Реальный provider не вызывался.
+
+**GitHub:** implementation HEAD `d744b8c91ca83e5da78b3b5470f908d769ad640e`, ветка `spaceverse/evotor-store-ownership-20261025`, Draft PR #302, не merged/deployed. #299 head до checkpoint `963664c518f3d030859f46364bb65cf6baf67294` (LOCK acquisition); checkpoint commit = **текущий коммит**, SHA читать после записи из GitHub, без самоссылочного SHA. #296 остаётся Draft; #96 не интегрирован. Main/production не менялись.
+
+**Проверено (GitHub Actions, не локально, на точном implementation HEAD):** Pivnik release gate run `40252935206` **success**: root `node --test` **656 pass / 0 fail / 0 skip**, Business Vitest **588 pass / 0 fail / 39 skip**, из них новые OAuth negative tests **21 pass**; `npm audit` high root/Admin **0 vulnerabilities**. CI materialize/check passed. Native PostgreSQL16 run `40252935293` **success**: nonce 4, proof 27, binding guard 10, callback inbox 4, итого **45 pass / 0 fail / 0 skip** в 4 целевых тестовых файлах; новые OAuth transport тесты не используют БД. Browser run `40252935235` **success**: **20 pass / 0 fail** (16+4 synthetic E2E). Прежние 39 skipped в общем Business Vitest не объявлять успешными. Локального клона нет; `git ls-remote` из container завершился `Could not resolve host: github.com`. `pivnik-preflight` отсутствует в доступных skills.
+
+**Release gates:** P0.1 callback inbox Draft, native PostgreSQL пройден, live provider не проверен. P0.2 store adapter/proof/guard Draft + OAuth exchange transport; **нет durable OAuth state, trusted issuer, signed HTTP binding endpoint, canonical binding write и runtime revocation**. P0.3 independent CRM #296 Draft, production E2E не доказан. P0.4 license authorizer и P0.5 новый fiscal sync не готовы. A–H не закрыты, публикации нет.
+
+**Риски:** P0 — нет независимого подтверждения provider owner на реальном аккаунте, issuer, license authorizer; P1 — нет production/terminal/provider E2E и безопасного pending onboarding; P2 — нет локального клона, кооперативный LOCK не глобальный. Никаких production migrations, платных ресурсов, кассы, VK/TG, kiosk или реальных данных не меняли.
+
+**Точное следующее действие:** в #302 реализовать durable session-bound OAuth `state` с одноразовым CAS/nonce, затем trusted issuer на основании server-side OAuth code exchange + complete GET stores + canonical company/venue/current grant/token revision; подписанный HTTP route монтировать только после native PostgreSQL и негативных HTTP тестов. Проверить, что другой агент не сделал этот slice; соблюдать общий LOCK. Не merge/deploy до release gates.
+
+### Архив предыдущего checkpoint — 2026-10-26 00:18 UTC
+
 Обновлено: 2026-10-26 00:18 UTC. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto11-20261026T0105Z-gpt6-cd82`, acquired_at_UTC=`2026-10-26T01:06:37.909Z`, released_at_UTC=`none`, status=`active`.
+**LOCK ARCHIVED:** owner_run_id=`auto11-20261026T0105Z-gpt6-cd82`, acquired_at_UTC=`2026-10-26T01:06:37.909Z`, released_at_UTC=`none`, status=`active`.
 Освобождение в текущем checkpoint commit (его SHA читать из GitHub, не записывать самоссылочно).
 Кооперативный CAS не является глобальной блокировкой writers вне протокола.
 `automations.peek` недоступен; независимая CRM automation остаётся disabled.
