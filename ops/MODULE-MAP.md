@@ -1,5 +1,25 @@
 # Module map and "do not break" list
 
+## Evotor durable store binding (2026-10-26, UNMOUNTED)
+
+Manual additive Admin migration `024_evotor_store_bindings.sql` (after 020/021,
+not startup-applied) creates one unique (product_id,store_id) binding. The
+server-only `evotor-market-store-binding.ts` calls the existing
+`withEvotorOwnerBindingGuard` to consume an HMAC one-time proof, verify the
+complete provider GET /stores and current token revision, then persist the
+binding inside canonical owner/session/company/venue/provider `FOR SHARE`
+locks. Identical fresh verified retries are idempotent; a verified competing
+owner/company/venue claim makes a **sticky hold** committed before returning
+409. Neither retries nor token rotation clear hold/revoked; a newly verified
+proof can refresh a pending revision. Diagnostic reads recheck current owner
+session and provider install/reconciliation/revision, return no foreign scope,
+and NEVER authorize CRM, fiscal data or license. New records stay `pending`;
+there is no `ready` transition or HTTP route. Native PG negative/concurrency
+regression: `server/tests/evotor-market-store-binding-postgres.spec.ts`,
+`evotor-owner-nonce-postgres.yml`. No production migration, merge or deploy.
+OAuth `state` echo and live provider owner proof are still external P0 gates.
+
+
 ## Evotor durable OAuth state (2026-10-26, UNMOUNTED)
 
 `admin-platform/server/evotor-market-oauth-state.ts` and manual additive Admin migration
