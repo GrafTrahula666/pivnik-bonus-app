@@ -9,14 +9,39 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-25 23:18 UTC. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Обновлено: 2026-10-26 00:18 UTC. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto11-20261026T000132Z-gpt6`, acquired_at_UTC=`2026-10-26T00:03:22.200Z`, status=`active`.
+**LOCK CURRENT:** owner_run_id=`auto11-20261026T000132Z-gpt6`, acquired_at_UTC=`2026-10-26T00:03:22.200Z`, released_at_UTC=`2026-10-26T00:16:40.261Z`, status=`released`.
 Освобождение в текущем checkpoint commit (его SHA читать из GitHub, не записывать самоссылочно).
 Кооперативный CAS не является глобальной блокировкой writers вне протокола.
 `automations.peek` недоступен; независимая CRM automation остаётся disabled.
 
-### Последняя итерация — 2026-10-25 23:18 UTC, AUTO-RESUME
+### Последняя итерация — 2026-10-26 00:18 UTC, AUTO-RESUME run 11
+
+**Последняя выполненная задача:** P0.2 — безопасная привязка магазина, без публикации маршрута. В Draft #302 добавлен `admin-platform/server/evotor-market-binding-guard.ts`: HMAC one-time proof теперь подписывает **canonical venueId**, неверная подпись отклоняется ДО provider GET; полная GET-проверка магазинов и token revision, а затем native SQL `FOR SHARE` на active account/session, canonical company/venue, owner-only grant и installed/unheld provider identity. `onVerified(client)` выполняется внутри той же транзакции, rollback при ошибке. Проверка чужой РЕАЛЬНО существующей компании и точки, ротации токена и конкурентного revoke покрыта native тестами. Сохранён принцип fail-closed; лицензия, tenant и production автоматически не активируются. Исправлена устаревшая ссылка на nonce migration 020 → 022; обновлены module-map, runbook и PR body.
+
+**GitHub:** implementation HEAD `ddc6831661f0967fcd2615bf22e60bf0dc618590`, ветка `spaceverse/evotor-store-ownership-20261025`, Draft PR #302, **не merged/deployed**. Координационная ветка `spaceverse/evotor-market-20261023`, Draft #299, LOCK освобождён этим checkpoint commit; checkpoint commit = **текущий коммит**, его SHA читать из GitHub после записи (самоссылочный SHA не записывать). #296 `9c8b0d15d0c4b41640d3d50b2f550ca429cb5c0b` Draft, browser CI 40243855187 завершён **success**. #96 не интегрирован. Main/production не изменены этой итерацией.
+
+**Проверено на GitHub Actions (не локально):** workflow `Evotor owner nonce native PostgreSQL` run **40248351505** на точном HEAD #302: native PostgreSQL binding guard **10 pass / 0 fail / 0 skip**; native nonce **4/0/0**; signed proof **27/0/0**; native callback inbox **4/0/0**. Итого **45 pass / 0 fail / 0 skip** в этих 4 целевых запусках. Проверен реальный PostgreSQL16 в disposable CI, не PGlite. На момент записи `Business cash dashboard browser check` run **40248351482** и `Pivnik release gate` run **40248351688** на этом HEAD ещё **in_progress**: НЕ считать PASS до завершения. `npm run materialize`×2, `node --test`, `npm run check`, `npm audit` локально не выполнялись: нет клона. `pivnik-preflight` отсутствует в доступном списке skills, `automations.peek` недоступен; блокировка CAS кооперативная, не глобальная.
+
+**Текущая задача / что осталось:** P0.2 trusted issuer и подписанный HTTP binding endpoint пока **НЕ реализованы**; нет независимого подтверждения provider owner на реальном аккаунте, канонического binding write, runtime revocation, токенов настоящего магазина. Текущий guard требует active company/venue; безопасный путь для **pending onboarding** ещё должен быть согласован с canonical ledger, без обхода grant. Нельзя объявлять подключение нового клиента завершённым. P0.1 native callback CI пройден, но live provider не проверен. P0.3 native bootstrap CI пройден, но независимый production CRM E2E не проверен. P0.4 license authorizer, P0.5 fiscal sync и E01–E13 release gates остаются незавершёнными.
+
+**Release gate матрица (после итерации):**
+
+| Функция | Реализовано | Проверено | В main | В production | Блокер / следующее действие |
+| --- | --- | --- | --- | --- | --- |
+| P0.1 callback inbox | #299 Draft, миграции 020/021 | native PG 4 pass; прежний CI green | нет | нет | Live install/auth/reconciliation и подписка |
+| P0.2 ownership | #302 Draft, proof+nonce 022, unmounted binding-time guard | native PG guard 10 pass + proof 27 + nonce 4; финальные browser/release CI pending | нет | нет | Trusted issuer, signed HTTP, pending scope, runtime revoke |
+| P0.3 independent CRM | #296 Draft | native PG 27 pass, browser success | нет | нет | Live tenant E2E, #96 isolation |
+| P0.4 license | Не доказан | нет | нет | нет | Официальный license contract + authorizer |
+| P0.5 fiscal sync | Частично legacy | нет нового tenant E2E | не подтверждено | не подтверждено | Тестовый магазин/касса и документы |
+| A–H Market launch | Не завершено | нет live E2E | нет | нет | Provider, legal, production release gates |
+
+**Риски/блокеры:** P0 — отсутствие trusted provider identity/issuer, runtime grants и license authorizer; P1 — inactive onboarding не проходит текущий guard и пока нет signed HTTP E2E; P2 — нет локальной среды и CAS lock не покрывает несогласованных writers. Платных ресурсов и опасных production операций не было.
+
+**Точное следующее действие:** проверить финальные результаты runs 40248351482 и 40248351688 на HEAD `ddc68316` и отсутствие параллельных изменений; затем в #302 реализовать **минимальный trusted owner proof issuer** на основании официального контракта Evotor auth/OAuth с серверным связыванием canonical session/venue и signed HTTP негативными тестами. Не монтировать production route и не merge до проверенного issuer, native PG и browser gates.
+
+### Предыдущая итерация — 2026-10-25 23:18 UTC, AUTO-RESUME
 
 **Сделано (без production):**
 - Draft #299 синхронизирован с актуальным `main@517ea17c4620b843c08b4d01f781c666b41f3548` без потери 967 неизменённых main blobs. Разведены конфликтующие Admin migration IDs: в main 018 beer intake/019 stock operations, Marketplace inbox теперь `020_evotor_market_inbox.sql` и `021_evotor_market_reconciliation.sql`. Ссылки в SQL/tests/docs/env исправлены; native CI paths обновлены. Implementation HEAD #299: `10ba06f0ed976c46794efd6697ce7177d5f54319`. PR теперь mergeable=true, draft=true.
