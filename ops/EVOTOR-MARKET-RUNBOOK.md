@@ -249,6 +249,19 @@ documents → activation/renewal → expiry/uninstall/revoke. Проверить
 401/402/403/429, pagination, неполную историю и различие unknown/zero.
 Приём локального JSON не засчитывается как этот E2E.
 
+## P0.4: серверная политика лицензий (UNMOUNTED, 26.10.2026)
+
+Отдельный Draft добавляет `evotor-market-license-policy.ts`: только проверка
+HMAC-подписанного доказательства от **будущего доверенного server-side issuer**,
+актуальной установки, целой последовательности подписки, отсутствия обоих
+reconciliation hold, срока, plan ID, token revision, canonical company/venue/store,
+готовой binding и утверждённой единицы лицензирования. По умолчанию отказ.
+Сейчас нет issuer, SQL consumer, подтверждённой единицы лицензии или
+`ready` binding в миграции 024; даже зелёный synthetic test не открывает
+платный доступ. Нельзя выдавать подпись на основании callback `active` или
+данных браузера. Реальная выдача требует официального договора/контракта,
+native PostgreSQL guard, негативных tenant-тестов и отдельного release gate.
+
 ## Выключение и выпуск
 
 Для локального/стендового rollback выключить flag и перезапустить разрешённый
