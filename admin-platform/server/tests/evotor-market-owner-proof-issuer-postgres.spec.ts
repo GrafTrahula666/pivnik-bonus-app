@@ -165,6 +165,38 @@ native('Evotor trusted OAuth owner proof issuer: native PostgreSQL and negative 
     }
   })
 
+  it('rejects mid-flight uninstall and reconciliation hold before signing an owner proof', async () => {
+    for (const change of [
+      {
+        apply: "UPDATE admin_evotor_market_users SET installation_state='uninstalled' WHERE product_id=$1",
+        restore: "UPDATE admin_evotor_market_users SET installation_state='installed' WHERE product_id=$1",
+      },
+      {
+        apply: 'UPDATE admin_evotor_market_users SET reconciliation_required=TRUE WHERE product_id=$1',
+        restore: 'UPDATE admin_evotor_market_users SET reconciliation_required=FALSE WHERE product_id=$1',
+      },
+    ]) {
+      const s = await state()
+      const fetchImpl: typeof fetch = vi.fn<typeof fetch>().mockImplementation(async input => {
+        if (String(input).includes('oauth/token')) return oauthResponse()
+        await db.query(change.apply, [productId])
+        return storesResponse()
+      })
+      try {
+        await expect(issue(s, {fetchImpl}))
+          .rejects.toMatchObject({code:'EVOTOR_OWNER_ISSUE_UNAVAILABLE'})
+        expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(2)
+      } finally {
+        await db.query(change.restore, [productId])
+      }
+      // A failed verification must not leave a reusable authorization state.
+      const replay = fetchProvider()
+      await expect(issue(s, {fetchImpl:replay}))
+        .rejects.toMatchObject({code:'EVOTOR_OWNER_ISSUE_DENIED'})
+      expect(vi.mocked(replay)).not.toHaveBeenCalled()
+    }
+  })
+
   it('denies a token revision rotated during the provider GET and never signs stale evidence', async () => {
     const s = await state()
     const fetchImpl: typeof fetch = vi.fn<typeof fetch>().mockImplementation(async input => {
