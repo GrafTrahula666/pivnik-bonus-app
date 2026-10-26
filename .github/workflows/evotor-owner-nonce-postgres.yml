@@ -10,6 +10,9 @@ on:
       - 'admin-platform/server/tests/evotor-market-binding-guard-postgres.spec.ts'
       - 'admin-platform/server/tests/evotor-market-owner-nonce-postgres.spec.ts'
       - 'admin-platform/admin-migrations/022_evotor_owner_proof_nonces.sql'
+      - 'admin-platform/admin-migrations/023_evotor_oauth_states.sql'
+      - 'admin-platform/server/evotor-market-oauth-state.ts'
+      - 'admin-platform/server/tests/evotor-market-oauth-state-postgres.spec.ts'
       - '.github/workflows/evotor-owner-nonce-postgres.yml'
   workflow_dispatch:
 
@@ -54,6 +57,10 @@ jobs:
         env:
           ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
         run: npm test --prefix admin-platform -- server/tests/evotor-market-binding-guard-postgres.spec.ts
+      - name: Durable OAuth state / native PostgreSQL concurrency and tenant denial
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-oauth-state-postgres.spec.ts
       - name: Native callback inbox regression inherited from #299
         env:
           ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
