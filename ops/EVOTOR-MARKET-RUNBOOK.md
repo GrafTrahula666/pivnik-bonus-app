@@ -29,9 +29,10 @@ callback installation → проверка token revision до/после GET �
 `FOR SHARE` блокировки активной сессии, owner grant, company/venue и
 installation/reconciliation/token revision → HMAC proof на 5 минут или меньше.
 Браузерный store ID лишь выбор, не доказательство; OAuth token и clientSecret
-не попадают в proof/БД. Native PostgreSQL 16 regression содержит 9 тестов
+не попадают в proof/БД. Native PostgreSQL 16 regression содержит 11 тестов
 (replay, foreign session/store/provider, revoked owner, hold/uninstall,
-mid-flight token rotation, concurrency, cross-tenant). Вызов не смонтирован
+mid-flight token rotation, owner downgrade, session revoke, concurrency,
+cross-tenant). Вызов не смонтирован
 в HTTP. Нет store binding, лицензии, production-активации и live provider E2E.
 До монтажа проверить возврат OAuth `state` реальным провайдером и официальный
 owner flow; затем добавить signed HTTP binding с независимой проверкой
