@@ -11,7 +11,7 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 Обновлено: 2026-10-26T05:14:20.807Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto11-20261026T0501Z-gpt6-lic-d6e3`, acquired_at_UTC=`2026-10-26T05:02:11.268Z`, released_at_UTC=`2026-10-26T05:14:20.807Z`, status=`released`.
+**LOCK CURRENT:** owner_run_id=`auto11-20261026T0556Z-gpt6-d4c2`, acquired_at_UTC=`2026-10-26T05:56:08Z`, released_at_UTC=`none`, status=`active`.
 Кооперативный CAS не гарантирует глобальную блокировку writers вне протокола. `automations.peek` недоступен; CRM automation приостановлена, read-only аудит не изменён.
 
 ### Последняя итерация — 2026-10-26, P0.4 signed license policy + native guard (UNMOUNTED)
