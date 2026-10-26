@@ -100,6 +100,21 @@ is NOT Evotor ownership evidence. No HTTP route, tenant activation, provider
 call, license or production integration is added.
 
 
+## SPACEVERSE Evotor signed license policy (2026-10-26, UNMOUNTED)
+
+`admin-platform/server/evotor-market-license-policy.ts` evaluates ONLY a
+server-signed, independently provider-verified license claim plus current
+installation, subscription, store-binding and explicit approved license policy.
+It rejects missing contract/plan approval, unknown unit, pending/held binding,
+sequence gaps, user/subscription reconciliation, expired periods, stale token
+revision, scope substitution, unapproved trial/grace and terminal widening.
+The existing store-binding migration 024 has no `ready` state, and there is NO
+trusted license issuer, runtime SQL reader, billing or HTTP consumer. Thus no
+production row can be licensed through this module. Synthetic unit tests do
+NOT establish Evotor commercial authorization. Do not use browser fields or
+callback `active` as an entitlement. No changes to existing routes, bonuses,
+Telegram/VK, kiosk, production migrations or tenant activation.
+
 ## Admin Pilot Marketplace inbox (2026-10-23, default off)
 
 `admin-platform/server/evotor-market.ts` handles only POST `/api/v1/user/token`,
