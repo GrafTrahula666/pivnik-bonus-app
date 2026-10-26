@@ -145,7 +145,8 @@ native('Evotor OAuth state: native PostgreSQL one-time session-bound ownership',
 
   it('denies expired state and malformed context without consuming another state', async () => {
     const { state } = await issue()
-    await db.query(`UPDATE admin_evotor_oauth_states SET expires_at=clock_timestamp()-INTERVAL '1 minute'
+    await db.query(`UPDATE admin_evotor_oauth_states SET issued_at=clock_timestamp()-INTERVAL '10 minutes',
+        expires_at=clock_timestamp()-INTERVAL '1 minute'
       WHERE state_hash=$1`, [hash(state)])
     await expect(consume(state)).rejects.toMatchObject({code:'EVOTOR_OAUTH_STATE_DENIED'})
     const fresh = (await issue()).state
