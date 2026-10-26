@@ -48,7 +48,7 @@ describe('Evotor OAuth authorization_code exchange (unmounted)', () => {
   })
   it.each([
     { code: '' }, { code: 'invalid code' }, { clientId: '' },
-    { clientSecret: '' }, { redirectUri: 'http://spaceverse.example/callback' },
+    { clientSecret: '' }, { clientId: 'client:spoof' }, { redirectUri: 'http://spaceverse.example/callback' },
     { redirectUri: 'https://attacker@spaceverse.example/callback' },
     { redirectUri: 'https://spaceverse.example/callback#fragment' },
   ])('rejects invalid server configuration without any request: %j', async override => {
