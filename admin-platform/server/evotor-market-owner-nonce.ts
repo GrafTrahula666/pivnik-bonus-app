@@ -16,7 +16,7 @@ export class EvotorOwnerNonceError extends Error {
 }
 
 /**
- * Requires manual migration 020 on the primary Admin DB. A single INSERT is
+ * Requires manual migration 022 on the primary Admin DB. A single INSERT is
  * an autocommitted, atomic claim: only one concurrent caller can get true.
  * Use only as an unmounted prerequisite; final binding must recheck all grants
  * and token revision in its own atomic transaction.
