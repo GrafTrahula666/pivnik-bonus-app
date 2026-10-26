@@ -9,6 +9,41 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
+Обновлено: 2026-10-26T03:20:27Z. Единый координатор: automation \`6add7969f55c8191a8e5eb93dbe96ff1\`.
+Каноническая ветка LOCK: \`spaceverse/evotor-market-20261023\` (#299).
+**LOCK CURRENT:** owner_run_id=\`auto11-20261026T0300Z-gpt6-8c71\`, acquired_at_UTC=\`2026-10-26T03:00:57Z\`, released_at_UTC=\`2026-10-26T03:20:27Z\`, status=\`released\`.
+Кооперативный CAS защищает только writers, соблюдающих протокол; глобальный single-flight не доказан. \`automations.peek\` недоступен; CRM automation остаётся disabled, независимый read-only аудит не изменён.
+
+### Последняя итерация — 2026-10-26T03:20:27Z, trusted OAuth owner-proof issuer (UNMOUNTED)
+
+**Последняя выполненная задача:** P0.2, реализован \`admin-platform/server/evotor-market-owner-proof-issuer.ts\`. Серверный issuer потребляет одноразовый durable OAuth state, обменивает authorization code на сервере, проверяет полный GET /stores с OAuth token и установленную callback identity, сверяет token revision до/после GET, затем в native PostgreSQL транзакции под \`FOR SHARE\` повторно проверяет SPACEVERSE owner/session/company/venue, installation/reconciliation и revision. Только после этого подписывает HMAC owner proof (TTL <=5 мин). OAuth code/token/client secret не записываются в БД или proof. Выбранный store ID не считается полномочием. НЕТ HTTP route, tenant activation, лицензии или production миграции. Дополнены native SQL тесты, workflow, MODULE-MAP, runbook и тело существующего Draft #302.
+
+**GitHub:** main \`517ea17c4620b843c08b4d01f781c666b41f3548\` (без изменений); implementation HEAD \`93b1111b30814472740c8a5b4f6e213efa36f19e\`, ветка \`spaceverse/evotor-store-ownership-20261025\`, Draft PR #302, НЕ merged/deployed. #296 head \`9c8b0d15d0c4b41640d3d50b2f550ca429cb5c0b\` Draft; #96 head \`febefa93f6a53c3b47db3a1fe2ec3ed727baaac8\` Draft, mergeable=false. #299 содержит координационный checkpoint; checkpoint commit = **текущий коммит**, его SHA читать после записи (самоссылочный SHA не выдумывать).
+
+**Проверено на точном HEAD #302 через GitHub Actions, не локально:**
+- Native PostgreSQL 16 disposable \`40263236086\` **SUCCESS**: owner nonce 4, signed proof 27, binding guard 10, OAuth state 8, **новый issuer 11**, callback inbox 4 = **64 pass / 0 fail / 0 skip**. Business server/web build и lint PASS.
+- Pivnik release gate \`40263236073\` **SUCCESS**: \`node --test\` **656 pass / 0 fail**; Business Vitest **588 pass / 0 fail / 58 skip** (целевые native PG выполнены отдельно); \`materialize\`×2 идемпотентность, \`npm run check\`, VK parity и audits PASS; Admin/root audit **0 vulnerabilities**.
+- Browser \`40263236029\` **SUCCESS**: desktop 16 + mobile 4 = **20 pass / 0 fail** на synthetic fixtures. Не live Evotor.
+- Локального клона нет: \`git ls-remote\` в container → \`Could not resolve host: github.com\`. \`pivnik-preflight\` отсутствует в доступных skills. Локальные shell/native тесты не запускались.
+
+**Матрица release gates (Draft ≠ main/prod):**
+
+| Функция | Реализовано | Проверено | В main | В production | Блокер | Следующее действие |
+|---|---|---|---|---|---|---|
+| P0.1 callback inbox | Draft #299 | Native PG/CI; нет live provider | Нет | Нет | Live install/reconciliation | Test account |
+| P0.2 store owner/OAuth issuer | Частично Draft #302 | Native PG 64/64; browser synthetic | Нет | Нет | Official state echo, live owner proof, signed HTTP binding | Unmounted idempotent binding persistence |
+| P0.3 independent CRM bootstrap | Частично Draft #296 | Ранее CI; нет production E2E | Нет | Нет | Runtime provisioning/live grants | Tenant E2E |
+| P0.4 license authorizer | Нет | Нет | Нет | Нет | Official license unit/tariff | Default-deny gate |
+| P0.5 fiscal sync нового клиента | Нет | Нет | Нет | Нет | Test store/documents | Closed SELL/PAYBACK E2E |
+
+**Риски:** P0 — официальная OAuth-инструкция показывает callback \`code\`, но не подтверждает echo \`state\`; без разрешённого live owner flow не монтировать issuer и не активировать tenant/license. P0 — нет финального idempotent store binding, license authorizer и revocation enforcement. P1 — нет provider/terminal/production E2E и сценариев A–H. P2 — нет локального клона; кооперативный LOCK не глобальный. Ни merge/deploy, ни платных ресурсов, ни реальных кассовых/CRM/киоск/VK/TG изменений.
+
+**Точная следующая безопасная задача:** проверить свежие heads и чужие PR, затем в существующем Draft #302 подготовить UNMOUNTED idempotent store-binding persistence с уникальным ограничением на (provider product, store), явным conflict/hold и revocation read guard; native PostgreSQL negative/concurrency tests. Не монтировать HTTP и не применять миграции production до подтверждённого official \`state\` roundtrip и owner E2E. При отсутствии полномочий/ресурсов переключиться на независимый default-deny license authorizer. Почасовую очередь сохранить.
+
+### Архив предыдущего checkpoint — 2026-10-26T02:26:17Z
+
+AUTO-RESUME CHECKPOINT
+
 Обновлено: 2026-10-26T02:26:17Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
 **LOCK CURRENT:** owner_run_id=`auto11-20261026T0300Z-gpt6-8c71`, acquired_at_UTC=`2026-10-26T03:00:57Z`, released_at_UTC=`none`, status=`active`.
