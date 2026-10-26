@@ -256,7 +256,11 @@ HMAC-подписанного доказательства от **будущег
 актуальной установки, целой последовательности подписки, отсутствия обоих
 reconciliation hold, срока, plan ID, token revision, canonical company/venue/store,
 готовой binding и утверждённой единицы лицензирования. По умолчанию отказ.
-Сейчас нет issuer, SQL consumer, подтверждённой единицы лицензии или
+Есть UNMOUNTED transactional SQL guard, который повторно проверяет и блокирует
+current owner/session/company/venue, subscription, installation и binding
+перед выполнением server-only callback. В native PostgreSQL regression
+`ready` разрешён только временным изменением CHECK в disposable test schema.
+Сейчас нет issuer, HTTP consumer, подтверждённой единицы лицензии или
 `ready` binding в миграции 024; даже зелёный synthetic test не открывает
 платный доступ. Нельзя выдавать подпись на основании callback `active` или
 данных браузера. Реальная выдача требует официального договора/контракта,
