@@ -57,6 +57,10 @@ export async function withEvotorOwnerBindingGuard<T>({
     || typeof onVerified !== 'function' || !database
     || typeof database.connect !== 'function' || typeof database.query !== 'function') throw denied()
 
+  // Authenticate and consume the one-time proof BEFORE any provider network call.
+  // Failed/unavailable provider checks require a new proof, never a replay.
+  await verifyEvotorOwnerProofOnce({ proof, signingKey, expected, consumeNonce })
+
   // Only current primary-DB installation/credential state is eligible.
   const readRevision = async (): Promise<string | null> => {
     const result = await database.query<{ token_revision: string }>(
@@ -78,9 +82,6 @@ export async function withEvotorOwnerBindingGuard<T>({
   if (!stores.some(store => store.storeId === expected.storeId
     && store.userId === expected.providerUserId)) throw denied()
 
-  // Durable nonce consumption precedes binding. A failed binding needs a NEW
-  // signed proof, never replay the same one after an uncertain COMMIT response.
-  await verifyEvotorOwnerProofOnce({ proof, signingKey, expected, consumeNonce })
   let client: PoolClient
   try { client = await database.connect() }
   catch { throw unavailable() }
