@@ -1,0 +1,385 @@
+# POS signed-session boundary evidence, 2026-10-05
+
+Branch directly from freshly fetched origin/main 18a0fa4e5d911952a7993c432a6e7fc50de9e8c5.
+Remotes/history/worktrees/origin branches and open PRs reviewed. MODULE-MAP read;
+no applicable AGENTS found. Previously read starter/knowledge context retained.
+Foreign dirty work preserved. #202 release gate, hosting parity and public observation
+all passed. #201/#202 remain separate drafts; their implementation is not included.
+
+| Function | Existing implementation | Verification | Specific gap | Next step |
+|---|---|---|---|---|
+| Cash/Evotor | Disabled #174 | #201 SQL/HTTP evidence | Real fiscal samples/store onboarding absent | Controlled onboarding review |
+| Dashboards | #174/#176 | Fixture sales/replay | Approved venue binding absent | Existing binding review |
+| CRM/Customer 360 | Main + #96/#115 | #196/#197 scope evidence | Visibility is not wallet ownership | Trusted ownership contract |
+| Bonus corrections | Main + #193/#199 | SQL/recovery/replay evidence | Complete signed entry absent | Isolated entry composition |
+| Telegram | Main campaign store | Existing suite | Live provider retry unverified | Local retry provider |
+| Achievements/frames | Main + Business grants | Existing suite | Scoped grant workflow unverified | Audited grant scenario |
+| Rights/audit | Main gateway + disabled #174 routes | 179 Node + 24 original-renderer browser checks | Tenant/store isolation unproven | Review approved store/tenant binding |
+
+## Selected stage and updated composition
+
+The original 54-check admission stage remains; it now executes the actual pinned
+POS service instead of a service spy. Added 22 checks through the same signed HTTP
+boundary, 11 per platform. No implementation bug confirmed; only diagnostic/report
+changes. The owner workflow gains verification evidence, not new production behavior.
+#203 release gate 1724 passed before this extension. Current main remains 18a0fa4.
+
+`node scripts/verify-pos-session-boundary.mjs` reads exact #174 route blocks and ten
+modules/DDL/fixtures from local git object 776c70d691540b01bbc56a1496203e6cc918eea6
+into an OS temporary directory. No fetch/fallback or startup import. Current gateway
+canonicalizeSessionToken/requireGatewayUser are extracted verbatim, asserted equal
+to the pinned draft, and run with real main HMAC/session/effective-role helpers and
+actual identity queries. Emits SHA256 for gateway boundary, routes and every module.
+
+Original admission checks cover authorized dashboard/sync/link, repeated admission,
+missing/forged/wrong-secret/expired/invalid/staff sessions, cross-provider identity,
+revoked version, deleted/merged actor, outdated consent, viewer/client refusal,
+permission before malformed-body parsing, malformed/oversized body and DB outage.
+Denied admission invokes no service/provider and preserves POS documents, links,
+sync state, wallets, transactions and identity snapshots. Deliberate fixture auth
+changes apply only to actor 1. Signed platform cannot be overridden by an HTTP header.
+
+Actual createPosService invokes existing sync/normalizer/import transaction SQL,
+QR resolver/link repository, dashboard SQL and analytics. Local provider sends one
+10-ruble receipt. Cash remains 1000 cents; loyalty becomes 1000 only after explicit
+QR link to customer 2. Exact replay retains the entire original confirmation.
+Conflicting customer, invalid input and unknown QR leave state unchanged.
+A temporary CHECK constraint in disposable pos_customer_links forces an actual SQL
+error: the service rolls back; removing the constraint allows the original command.
+
+COMMIT followed by a deliberately truncated complete HTTP 200 body leaves one link
+with actor 1 and time. JSON decoding fails. Revoked session on manual retry returns
+401 and preserves the committed row; restored version retries the original body,
+returns customer 2 and preserves all financial/audit state. This is direct HTTP
+verification, not application API/browser recovery. Provider HTTP 401 is mapped by
+existing Evotor client to 502; old cash/loyalty and link audit remain unchanged while
+sync error state changes to error. All three fixture wallets and empty application
+journal remain unchanged. Both platforms use the same fixture actor 1; this does
+not establish real identity/account separation.
+
+## Validation and boundaries
+
+179/179 Node checks (203/203 with optional browser mode) on canonical and materialized gateway sources; equal boundary/module
+hashes. Full materialized node --test: 436/436. Two materializations identical across
+395 tracked files; npm run check and diff-check pass. npm audit retains three existing
+moderate qs/body-parser/express findings (exit 1). Generated runtime files restored.
+No server route implementation change: server.js/universal-server.js final diff empty.
+No UI change, therefore desktop/mobile testing not applicable to this extension.
+Earlier auth-stage public probe had Telegram timeouts then passed 16/16.
+Current limiter-stage probe initially had eight VK timeouts; one repeat passed 16/16.
+Cause not established.
+Authenticated production operations and business data were not queried.
+
+Provider authentication now runs original local authenticateVk/authenticateTelegram,
+validate wrappers, resolveProviderUser, canonicalUserId, ensureAuthRecords and
+createSession, with real platform-core HMAC validators and account SQL. The actual /api/auth route block is now extracted verbatim and executed, including
+its 401 catch limiter. Trace/readiness/profile/body/server scaffolding remains
+fixture composition, not a full production boot. Original 76 checks retained; 31 new auth/issuance checks.
+
+Signed fixture launches create independent TG/VK owner actors, canonical repeated
+login does not duplicate actors, issued sessions require consent then admit POS,
+version revocation rejects the old token and re-auth issues current version.
+Signed non-owners remain clients and receive POS refusal after fixture consent.
+Missing/forged/expired/demo-disabled inputs reject before DB; VK unsigned profile
+ID mismatch rejects. DB outage and actual wallet CHECK constraint failure leave
+actor/identity/wallet/loyalty/journal/POS snapshots unchanged after rollback.
+Existing wallet balances stay unchanged; newly provisioned wallets are zero and
+application journal remains empty. Fixture consent is a direct disposable SQL
+change; real consent endpoint not tested.
+
+Materialized authentication invokes the existing optional tester-gift claim, unlike
+canonical auth. The original function SQL from migration 008 and original table
+DDL from 007 execute against an empty recipient table, without seeding actual
+handles/gifts. Initial materialized harness failed on the missing function; adding
+this required isolated schema resolved it. This was a fixture gap, not a confirmed
+production regression. Auth source hashes intentionally differ canonical/materialized
+and are emitted separately. Gift-recipient/award path remains untested.
+
+Fixture base DDL/secrets, rowCount mapping, HTTP/body/error adapters and local
+provider remain. The original startup profile assembly now executes; deferred setup,
+trace helpers are adapters; the actual request limiter now executes. Thus complete startup, proxy/multi-process throttling, QR
+setup and live identity provisioning are not verified. Advisory locks stubbed;
+no independent PostgreSQL contention, tenant/business/store ownership proof or
+real fiscal samples. Existing link audit has actor/time/object/client but no reason.
+
+No production data, config, schema, dependencies, sends, merge/deploy or patch
+retirement. #201/#202 and foreign dirty work remain separate. Recovery at the profile
+adapter boundary is now checked; non-startup detailed profile remains outside this stage. Production enablement still requires approved store/
+business ownership and real fiscal samples; do not invent that mapping.
+
+Prior #203 release gate 1738 passed. MODULE-MAP and open PRs rechecked; current
+main unchanged, no applicable AGENTS, previous starter/knowledge context retained.
+
+## Actual auth route and rate limiter, current extension
+
+Removed the rate-limit adapter. Exact current requestAddress/enforceRateLimit and
+/api/auth route block run in the VM/loopback composition. 14 new named checks:
+for each platform, 60 invalid attempts return 401 without any DB query/write;
+61st returns 429. Other platform remains independent. Invalid attempts do not
+consume signed identity quota: 60 valid signed requests pass, 61st returns 429
+before any query/write. Both buckets expire at exactly ten minutes using a fixture
+clock, without sleeping. Snapshots include actor/identity, wallets/loyalty, journal,
+POS documents/links/status. This verifies denial under repeated entry attempts;
+production behavior is unchanged, no new protection was enabled.
+
+Real auth route maps generic DB/SQL failures to 500 and its generic Russian login
+message; previous simplified HTTP adapter returned 503. Updated fixture assertions
+to the actual route contract, no production regression found. Output includes
+hashes for limiter and auth route. In-memory buckets are process-local and reset
+on restart; persistence/multi-process limiting is not established.
+
+Current requestAddress trusts the first X-Forwarded-For entry. This existing issue
+already has separate unmerged hardening in #198, reviewed and not imported here.
+No trusted proxy/spoofed-address verdict from the loopback test. Existing live
+identity/store ownership, tenant, full profile/deferred setup and PostgreSQL
+concurrency limits remain. No UI change, browser testing not applicable.
+
+## Post-commit profile failure and safe re-authentication
+
+12 additional named checks, six per platform. A deliberate missing-relation SQL
+query in the diagnostic profile adapter fails after actual resolveProviderUser
+has committed actor/identity/zero-wallet/loyalty rows. Actual /api/auth returns
+500 with its generic login error and no token. Repeated failure uses the same
+actor; forged retry returns 401 before SQL and changes nothing. Once the adapter
+recovers, the same signed launch produces a session for that original actor,
+without another user, wallet or loyalty row. Consent is still required; after
+fixture consent the recovered owner accesses POS without financial changes.
+
+Whole financial snapshots verify that provisioning adds only the new zero wallet;
+all prior wallets, POS documents/links/status and journal remain unchanged. Actual
+account SQL/session/auth route execute; getAppPayload used a minimal adapter at this earlier stage; superseded below.
+This proves recovery from an injected error at its boundary, not full real profile
+assembly, client loading/error UX, deferred QR setup or concurrent auth. No production
+regression confirmed; no owner-facing feature was activated.
+
+Current public read-only probe initially returned 8/16 responses, with eight VK
+timeouts; one bounded retry returned 16/16. Cause of the initial timeouts is unknown.
+Reachability does not verify authenticated production workflows.
+
+Next bounded stage: replace the minimal profile adapter with the original startup
+profile assembly against complete disposable schema and verify its failure/recovery.
+Do not expand this evidence into a production readiness or tenant-isolation claim.
+
+
+## Original startup profile assembly, current stage
+
+The minimal getAppPayload adapter was replaced by source excerpts of the current
+getAppPayload and getProfile, their original status/role/frame helpers and constants,
+and the imported personal-profile-frames module. No rewritten profile assembly.
+Disposable schema now includes paid/gift beer columns and user_frames, covering
+the original startup SELECT, including the persisted frame-ownership EXISTS clauses.
+This is sufficient schema for the executed startup query, not the full production schema.
+
+137 checks pass on canonical and materialized sources. Four new named checks
+(two per platform) assert the startup owner/client projections: identity/platform,
+consent, startup/design, empty achievements/linked platform, status and beer fields.
+The existing owner display policy returns an unlimited displayed balance; snapshots
+prove actual newly provisioned wallets remain zero and no journal is written.
+
+The twelve post-COMMIT failure/recovery cases now fail the real profile SELECT by
+substituting its relation in the diagnostic pool adapter. The original profile
+functions execute unchanged, reject SQL failure, and recover on repeated signed
+auth for the same actor/wallet/identity/loyalty records. No production regression
+confirmed. The injected fault is diagnostic SQL substitution, not a live DB outage.
+
+Profile hashes intentionally differ because materialization changes original frame
+helpers and adds raise-shields handling. Both exact variants pass; boundary/module
+hashes remain equal. Node tests 436/436; materialize twice gives identical hashes
+for 395 tracked files; npm check passes. Audit retains three existing moderate
+findings. No production/UI/routes/dependencies/schema or patch-retirement change.
+
+Not verified: non-startup spend/achievements/design/identity assembly, full process
+boot/deferred setup, live auth, browser error UX, tenant/store ownership, real fiscal
+samples or PostgreSQL advisory-lock contention. Next bounded step: detailed profile
+reads on isolated schema, preserving the startup-versus-detail distinction.
+
+Current public read-only observation: 8/16 responses on both initial probe and one
+bounded retry; all eight VK requests timed out, while Telegram returned responses.
+Cause is not established. Previous successful 16/16 observation is historical and
+does not override this current result. No live authenticated workflow conclusion.
+
+
+## Detailed profile reads after signed entry, current extension
+
+16 additional named HTTP cases, eight per platform. Original getRollingSpend,
+getIdentitySummary, imported getUserEarnedAchievementState, getAppPayload/getProfile,
+platformFromRequest and serveStartupProfile now execute for /api/me and /api/bootstrap.
+No copied/reimplemented detail read model. Fixture DDL adds required detail columns,
+beta/reward grants and published settings. Full boot schema is still not claimed.
+
+Disposable journal samples have 10000 cents completed accrual and 2500 redemption;
+cancelled, manual adjustment and 13-month-old samples are excluded. Original detailed
+profile returns 125 rubles rolling spend, zero wallet, persisted identity, earned
+first-purchase and unannounced grant plus published fixture design. Repeated read
+returns the same projection. Startup remains lightweight: spend zero, achievements
+empty, design null. This proves those fields are deferred, not missing sales data.
+
+Missing/forged tokens return 401; a platform header conflicting with the signed
+session returns 403. Injected design-table SQL failure rejects detail load; the
+same session recovers after removing the diagnostic fault. Original handler throws;
+503 is the diagnostic outer error adapter's status, not a verified production HTTP
+error contract. Initial 500 expectation failed and was corrected to this adapter.
+
+Every read compares complete users/identities/wallets/beer/POS/journal plus
+reward/frame/beta/settings snapshots. Seed journal/grants are deleted only in the
+isolated fixture after these comparisons; final original wallets and empty journal
+checks remain. No production data, sends, dependencies, migrations, runtime/UI/routes,
+merge/deploy or patch retirement changed. No confirmed implementation regression.
+
+153/153 cases pass on canonical and materialized sources; profile route hashes match.
+Original profile/achievement module hashes may differ after materialization and are
+reported separately. Detailed profile projection is verified, not a full startup,
+tenant isolation, true multi-platform identity binding or browser UX proof.
+Acknowledgement, full reward catalogue, concurrent PostgreSQL and real fiscal samples
+remain unverified. Next bounded step: signed-session profile recovery in the actual
+client transport without activating disabled POS routes.
+
+Current checks: 436/436 node tests; npm check and diff-check pass; two materializations
+have equal SHA256 across 395 tracked files. Audit retains three existing moderate
+findings. Public observation: initial 8/16 with all VK requests timed out; one retry
+8/16 with all Telegram requests timed out instead. Each platform responded in one
+probe, but neither probe passed overall. Cause unknown; do not infer service outage
+or production readiness. Generated runtime outputs restored before committing.
+Fresh origin/main remains 18a0fa4; prior CI 1732 success. New #204 theme draft and
+other origin branches were reviewed without importing them. Foreign dirty work
+preserved; no applicable AGENTS; MODULE-MAP reread, starter/KB context retained.
+
+
+## Original client API/fetch profile recovery, current extension
+
+12 additional cases, six per platform. Extract the exact timeoutError,
+fetchWithTimeout and api functions from current app.js into a VM with fixture state,
+version/platform constants and real timers/AbortController. Fetch adapts relative
+paths to the loopback origin and checks the signed session/version headers. Original
+API retry policy and 450 ms delay execute; no rewritten retry/transport logic.
+This is Node fetch composition, not browser-network or screen-state evidence.
+
+Default successful signed GET makes one request. One injected design SQL failure
+recovers automatically with two requests and the same detail projection. Two
+failures reject with 503 after exactly two requests; an explicit manual repeat
+returns the same profile. Forged-session 401 and conflicting-platform 403 each
+make one request without retry. Complete profile/financial/grant/settings snapshots
+remain identical after every transport scenario. Profile projection uses the same
+actual SQL and signed account/session from the preceding stage.
+
+165 cases pass on canonical and materialized sources. Transport source hash is
+emitted alongside route/profile/module hashes. Main's damaged-successful-JSON
+behavior is already addressed separately in unmerged #202; that fix is not imported
+and unreadable-success handling is not claimed here. No production bug confirmed
+in this extension. No runtime/UI/routes/config/schema/dependencies, sends, merge,
+deploy or patch retirement changed.
+
+Still unverified: browser fetch/navigation, timeout/AbortController failure scenarios,
+full client loader state/error visibility, reloading/tab closing, live identity,
+tenant ownership, full startup and independent PostgreSQL. Next bounded step:
+original profile-loader success/error state around this signed local transport.
+
+Current validation: 436/436 node tests; check/diff-check pass; materialize twice
+identical across 395 tracked files; API/fetch hashes equal across both variants.
+Audit retains three existing moderate findings. Initial public read-only probe 8/16
+with VK timeouts; one bounded retry 0/16 with all requests timed out. Cause unknown;
+no production outage diagnosis or authenticated workflow claim. Runtime files restored.
+Fresh main remains 18a0fa4, prior CI 1736 passed; open PRs/worktrees/remotes/history
+reviewed without importing foreign work. MODULE-MAP reread; no applicable AGENTS.
+
+
+## Original profile-loader state and recovery, current extension
+
+14 additional cases, seven per platform. Exact refreshMe, applyProfilePayload,
+renderCoreProfile and hydrateAfterBoot are extracted from current app.js and run
+around the signed original API/profile SQL in the existing VM. Render/chrome/design,
+secondary reads and wheel functions are diagnostic adapters with call counters.
+This verifies loader orchestration and state assignment, not pixels or DOM behavior.
+
+Confirmed hydration applies profile/statuses and invokes render adapters once.
+One SQL failure produces one request (hydrateAfterBoot sets retries=0), retains the
+same token/profile/statuses and logs its original warning. Explicit repeat restores
+rendering. refreshMe rejects after its two default failed attempts without applying
+or starting secondary jobs; a successful repeat applies once and calls secondary/
+wheel adapters. Failed signed token in background hydration retains prior state,
+makes one request and only warns. Optional design adapter failure is caught by
+original applyProfilePayload, so confirmed profile still reaches render adapters.
+All profile/financial/grant/settings snapshots remain unchanged.
+
+Specific observed gap: hydrateAfterBoot catches auth/database errors with console.warn
+and keeps prior profile; no user-visible error call occurs inside that function.
+This does not establish full application's visible state, callers or browser UX.
+No production defect fix or new owner-facing feature is claimed. The owner recovery
+scenario now has verified client state evidence; runtime remains unchanged.
+
+179 cases pass on canonical/materialized variants; original loader hash emitted.
+Remaining limits: actual render/secondary behavior, DOM/loading/error visibility,
+full boot, timeout/abort/reload/navigation, live identity, tenant binding and PostgreSQL
+contention. Next bounded stage: inspect the same failure/retained-profile behavior in
+an isolated browser before choosing a narrowly scoped visible-error change.
+
+Current validation: 179/179 diagnostic cases on canonical and materialized sources,
+436/436 node tests, npm check and diff-check pass. Two full materializations are
+byte-identical across 395 tracked files. Loader and transport hashes match between
+variants. Successful hydration starts from a distinct stale fixture to prove server
+profile/status replacement, rather than merely rendering already matching state.
+The first materialized diagnostic attempt included neighboring VK browser event
+wiring and failed because the VM has no window. Extraction now ends at each original
+function's unindented closing brace; event wiring is excluded and remains untested.
+No production code was changed to make this fixture pass. Generated runtime files
+were restored after validation; no patch script retired.
+
+Audit: three existing moderate dependency findings (qs, body-parser, express), no new
+dependencies. Public read-only probe and one bounded retry both returned 0/16 due to
+timeouts; cause unknown, production status is unverified. Fresh main remains 18a0fa4;
+previous published head 04e432f has successful release gate 1738. PR #203 is extended
+without importing other open PRs or touching foreign worktrees. UI desktop/mobile,
+full startup and live provider/database behavior remain unverified.
+
+## Original browser profile rendering and error visibility, current extension
+
+Selected continuation: close the renderer-adapter gap in the existing signed-session
+diagnostic before choosing a user-facing error fix. Adds optional `--browser` mode,
+using the same disposable SQL fixture and issued sessions. No runtime/UI changes.
+Reuses the project's existing optional PLAYWRIGHT_MODULE_PATH and
+CHROMIUM_EXECUTABLE_PATH settings; no dependency or production environment added.
+
+24 additional browser checks, six for each Telegram/VK and 390/1440 px combination.
+The original api/fetch, refreshMe/hydrateAfterBoot/applyProfilePayload/renderCoreProfile,
+renderProfile/renderStatuses/currentLevelIndex/toast and utility declarations execute
+in Chromium. Current index.html/CSS are served only over loopback; scripts are removed
+from the shell to prevent full boot, external bridge loading, jobs and live network.
+External browser requests are blocked. Bridge/design/avatar/achievement/beer/shift/
+secondary render jobs are explicitly adapted. Actual original name/balance/spend DOM,
+status rendering and role-entry class changes execute; unexpected renderer errors or
+page script errors fail the diagnostic. This is not full-app end-to-end evidence.
+
+Successful hydration replaces startup spend 0 with confirmed detailed spend 125 ₽
+and assigns the exact server profile. SQL failure makes one GET, retains the entire
+profile/status/token and checked DOM, logs the original warning and shows no toast.
+A manual repeat repairs a deliberately stale name node. Forged-token denial makes
+one GET and retains the same checked DOM with no toast. Explicit refresh exhausts
+two failing GET attempts, rejects with 503 and retains DOM; the next manual refresh
+recovers. Every browser action preserves complete fixture identity/financial/grant/
+frame/settings snapshots. No profile writes or real provider requests are introduced.
+
+Confirmed narrow UX gap: hydrateAfterBoot's 401/SQL failure leaves prior displayed
+data and does not invoke the original toast in this isolated browser composition.
+No full-screen warning/loading/caller claim: boot scheduling, consent UI, red-cosmos
+scripts, navigation, live VK/TG hosts and secondary jobs are excluded. A future fix
+must preserve the profile while making its freshness/error state clear, after checking
+the existing full-boot/caller contract. No new owner-facing capability delivered here.
+
+Validation: 203/203 with browser mode on canonical/materialized sources (179 baseline
+plus 24 browser cases), 436/436 node tests, check/diff-check pass. Two materializations
+are byte-identical across 395 tracked files. Loader/transport hashes equal; original
+renderer hash is emitted separately, so materialized renderer differences remain
+traceable. Existing isolated Chromium initially failed GL startup, then closing its
+only page ended the single-process instance; documented runner flags and a separate
+process per viewport resolve fixture startup/lifecycle without runtime changes.
+
+Audit retains three existing moderate findings. Current public read-only probe: 0/16
+timeouts, cause unknown. Production status, tenant ownership, full boot and independent
+PostgreSQL remain unverified. Fresh main 18a0fa4 and prior head a717fa8 release gate
+1742 passed. Open PRs/remotes/history/worktree status rechecked; foreign dirty files
+preserved, foreign branch claude/project-thread-nthfpr advanced to 343349d but was not
+imported. MODULE-MAP reread; no AGENTS present; starter/KB context retained.
+
+Next bounded stage: inspect actual boot/foreground callers and existing error controls
+before a narrowly scoped, validated hydration-error UI change. No merge/deploy or
+patch retirement performed; materialized runtime files restored after validation.
