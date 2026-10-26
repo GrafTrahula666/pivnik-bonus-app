@@ -36,7 +36,7 @@ export async function exchangeEvotorAuthorizationCode({
   // No redirects or arbitrary callback destinations.
   let redirect: URL
   try { redirect = new URL(redirectUri) } catch { throw unavailable() }
-  if (!printable(code, 2_048) || !printable(clientId, 256)
+  if (!printable(code, 2_048) || !/^[A-Za-z0-9._-]{1,256}$/.test(clientId)
     || !printable(clientSecret, 2_048)
     || redirect.protocol !== 'https:' || !redirect.hostname || redirect.username
     || redirect.password || redirect.hash || redirect.href !== redirectUri
