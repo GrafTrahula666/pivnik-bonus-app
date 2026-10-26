@@ -8,7 +8,7 @@ const now = Date.UTC(2026, 9, 25, 17, 0)
 const key = Buffer.alloc(32, 17)
 const scope = Object.freeze({
   spaceverseUserId: 'owner-1', sessionId: 'session-1', providerUserId: '01-000000000000001',
-  productId: 'c0d01535-5193-4cc2-9bfb-be20e0679498', companyId: 'company-1',
+  productId: 'c0d01535-5193-4cc2-9bfb-be20e0679498', companyId: 'company-1', venueId: 'venue-1',
   storeId: '20170228-F4F1-401B-80FA-9ECCA8451FFB', tokenRevision: '9223372036854775807',
 })
 const claim = (overrides: Record<string, unknown> = {}) => ({
@@ -51,7 +51,7 @@ describe('Evotor owner binding one-time claim prerequisite (unmounted)', () => {
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1)
     expect(results.filter(r => r.status === 'rejected')).toHaveLength(1)
   })
-  it.each(['spaceverseUserId', 'sessionId', 'providerUserId', 'productId', 'companyId', 'storeId', 'tokenRevision'] as const)(
+  it.each(['spaceverseUserId', 'sessionId', 'providerUserId', 'productId', 'companyId', 'venueId', 'storeId', 'tokenRevision'] as const)(
     'rejects foreign %s without consuming a nonce', async field => {
       const { consumeNonce } = fresh()
       await expect(verify(sign(claim()), consumeNonce, { ...scope, [field]: 'foreign-2' }))
