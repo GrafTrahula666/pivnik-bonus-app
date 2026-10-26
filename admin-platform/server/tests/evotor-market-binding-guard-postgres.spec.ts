@@ -108,6 +108,18 @@ native('Evotor binding guard: native canonical locks, provider revision and owne
     await expect(guard({ companyId: foreignCompanyId, venueId: foreignVenueId })).rejects.toMatchObject({code:'EVOTOR_BINDING_DENIED'})
     expect(await count()).toBe(before)
   })
+  it('rejects invalid one-time proof before any provider GET', async () => {
+    let calls = 0
+    const countedFetch: typeof fetch = async () => { calls++; return fetchStores('https://api.evotor.ru/stores') }
+    await expect(withEvotorOwnerBindingGuard({
+      database: db, proof: 'invalid-proof', signingKey: key, expected: scope(),
+      sessionTokenHash, providerToken: token,
+      consumeNonce: createEvotorOwnerNonceConsumer(db, 'fixture-key'),
+      fetchImpl: countedFetch,
+      onVerified: async () => { throw Error('should never write') },
+    })).rejects.toMatchObject({code:'EVOTOR_OWNER_PROOF_INVALID'})
+    expect(calls).toBe(0)
+  })
   it('denies a store missing from complete provider evidence', async () => {
     const before = await count()
     await expect(guard({ storeId: 'unowned-store' })).rejects.toMatchObject({code:'EVOTOR_BINDING_DENIED'})
