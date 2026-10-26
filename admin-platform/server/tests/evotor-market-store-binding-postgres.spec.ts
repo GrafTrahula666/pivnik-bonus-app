@@ -18,7 +18,7 @@ const providerUserId = 'fixture-provider-binding'
 const sessionA = crypto.createHash('sha256').update('store-binding-A').digest('hex')
 const sessionB = crypto.createHash('sha256').update('store-binding-B').digest('hex')
 const key = Buffer.alloc(32, 72)
-const storeA = 'fixture-store-a', storeB = 'fixture-store-b', storeC = 'fixture-store-c'
+const storeA = 'fixture-store-a', storeB = 'fixture-store-b'
 
 native('Evotor durable binding persistence / native PostgreSQL', () => {
   let setup: pg.Pool, db: pg.Pool, schema = ''
