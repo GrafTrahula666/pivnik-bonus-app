@@ -198,22 +198,22 @@ describe('explicit empty tenant bootstrap: existing scope and binding ledger',()
     expect((await fixture.targets[2]!.query('SELECT company_id,venue_id FROM spaceverse_runtime_binding')).rows)
       .toEqual([{company_id:fixture.manifests[2]!.scope.companyId,venue_id:fixture.manifests[2]!.scope.venueId}])
   })
-  it('rejects a venue moved to another company after target commit and reconciles only after scope restoration',async()=>{
+  it('rejects premature venue activation after target commit and reconciles only after scope restoration',async()=>{
     const venueId=fixture.manifests[0]!.scope.venueId
-    const originalCompanyId=fixture.manifests[0]!.scope.companyId
-    // Target DB has already committed its original canonical binding. A concurrent
-    // metadata reassignment must not publish that binding as successful.
+    const companyId=fixture.manifests[0]!.scope.companyId
+    // A venue activated outside the CRM/license workflow must not cause a
+    // committed but still unconfirmed dedicated DB binding to report success.
     await expect(service(true,async()=>{
-      await fixture.metadata.query('UPDATE venues SET company_id=$1 WHERE id=$2',[20,venueId])
+      await fixture.metadata.query('UPDATE venues SET active=TRUE WHERE id=$1',[venueId])
     }).runRuntimeDatabaseBinding(owner,draft())).rejects.toMatchObject({statusCode:409})
     expect((await fixture.metadata.query(`SELECT status,result FROM admin_onboarding_provisioning_steps
       WHERE draft_id=$1 AND step='runtime_database_binding'`,[draft()])).rows)
       .toEqual([{status:'running',result:null}])
     expect((await fixture.targets[0]!.query('SELECT company_id,venue_id FROM spaceverse_runtime_binding')).rows)
-      .toEqual([{company_id:originalCompanyId,venue_id:venueId}])
+      .toEqual([{company_id:companyId,venue_id:venueId}])
     expect(await relations(1)).toEqual([])
     expect(await relations(2)).toEqual([])
-    await fixture.metadata.query('UPDATE venues SET company_id=$1 WHERE id=$2',[originalCompanyId,venueId])
+    await fixture.metadata.query('UPDATE venues SET active=FALSE WHERE id=$1',[venueId])
     await fixture.metadata.query(`UPDATE admin_onboarding_provisioning_steps
       SET lease_expires_at=clock_timestamp()-INTERVAL '1 second'
       WHERE draft_id=$1 AND step='runtime_database_binding'`,[draft()])
