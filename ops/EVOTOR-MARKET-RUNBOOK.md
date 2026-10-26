@@ -1,5 +1,34 @@
 # Admin Pilot — облачное приложение Эвотор.Маркета
 
+## P0.2 — durable store binding (26 октября, UNMOUNTED)
+
+Подготовлены ручная additive migration `024_evotor_store_bindings.sql`
+(после 020/021; не применять автоматически), модуль
+`admin-platform/server/evotor-market-store-binding.ts` и native PostgreSQL
+тесты. Это **не** подключённый API и не активная лицензия.
+
+Вход только через `bindEvotorStoreWithOwnerProof`: одноразовая подпись,
+повторная проверка полного GET stores, текущей установки и token revision,
+owner-only grant, действующей SPACEVERSE-сессии, company/venue. Запись
+выполняется в той же транзакции с `FOR SHARE` locks. Уникальность
+(product_id,store_id) не даёт закрепить один магазин за двумя компаниями.
+Повторный свежий proof того же владельца идемпотентен; подтверждённая
+конкурирующая претензия устанавливает sticky `hold` и возвращает 409
+**после COMMIT**. Никаких данных чужой компании ответ не раскрывает.
+`hold` и `revoked` не снимаются повтором. Новый proof после ротации
+может обновить только `pending` token revision.
+
+`readEvotorStoreBindingStatus` служит **только** для диагностики владельца:
+отзывает видимость при потере session/owner grant, показывает
+`disconnected` после token revision mismatch, uninstall или reconciliation.
+Ни `pending`, ни диагностический ответ не дают права на CRM/кассу.
+`ready` не выставляется; license authorizer и live provider E2E отсутствуют.
+Проверки выполняются в disposable native PostgreSQL через workflow
+`evotor-owner-nonce-postgres.yml`. Для полноценного HTTP-монтажа сначала
+проверить официальный возврат OAuth `state` и владельца на разрешённом
+тестовом аккаунте. Production, Эвотор, реальные БД и киоск не трогать.
+
+
 ## Durable OAuth state: одноразовый session-bound callback (26 октября, UNMOUNTED)
 
 Добавлена **ручная** additive Admin migration `023_evotor_oauth_states.sql`
@@ -33,7 +62,7 @@ installation/reconciliation/token revision → HMAC proof на 5 минут ил
 (replay, foreign session/store/provider, revoked owner, hold/uninstall,
 mid-flight token rotation, owner downgrade, session revoke, concurrency,
 cross-tenant). Вызов не смонтирован
-в HTTP. Нет store binding, лицензии, production-активации и live provider E2E.
+в HTTP. Нет смонтированного store binding, лицензии, production-активации и live provider E2E.
 До монтажа проверить возврат OAuth `state` реальным провайдером и официальный
 owner flow; затем добавить signed HTTP binding с независимой проверкой
 текущих grants и revocation. Миграции 022/023 в production не применялись.
