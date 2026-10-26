@@ -24,7 +24,7 @@ const fetchStores: typeof fetch = async () => Response.json({
 })
 
 native('Evotor binding guard: native canonical locks, provider revision and owner denial', () => {
-  let setup: pg.Pool, db: pg.Pool, schema = '', ownerId = '', companyId = '', venueId = ''
+  let setup: pg.Pool, db: pg.Pool, schema = '', ownerId = '', companyId = '', venueId = '', foreignCompanyId = '', foreignVenueId = ''
   beforeAll(async () => {
     setup = new pg.Pool({ connectionString, ssl: false, max: 2 })
     await setup.query('SELECT 1')
@@ -43,6 +43,8 @@ native('Evotor binding guard: native canonical locks, provider revision and owne
     ownerId = owner.rows[0]!.id
     companyId = (await db.query<{id:string}>("SELECT id::text FROM companies WHERE code='pivnik'")).rows[0]!.id
     venueId = (await db.query<{id:string}>('SELECT id::text FROM venues WHERE company_id=$1', [companyId])).rows[0]!.id
+    foreignCompanyId = (await db.query<{id:string}>("INSERT INTO companies(code,name) VALUES('foreign-fixture','Foreign') RETURNING id::text")).rows[0]!.id
+    foreignVenueId = (await db.query<{id:string}>("INSERT INTO venues(company_id,code,name) VALUES($1,'foreign-1','Foreign venue') RETURNING id::text", [foreignCompanyId])).rows[0]!.id
     await db.query('INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES($1,$2,\'owner\')',
       [ownerId, companyId])
     await db.query(`INSERT INTO admin_sessions(token_hash,admin_id,expires_at)
@@ -102,8 +104,8 @@ native('Evotor binding guard: native canonical locks, provider revision and owne
   })
   it('denies a foreign canonical venue and foreign company, even for a valid signature', async () => {
     const before = await count()
-    await expect(guard({ venueId: '999999' })).rejects.toMatchObject({code:'EVOTOR_BINDING_DENIED'})
-    await expect(guard({ companyId: '999999' })).rejects.toMatchObject({code:'EVOTOR_BINDING_DENIED'})
+    await expect(guard({ venueId: foreignVenueId })).rejects.toMatchObject({code:'EVOTOR_BINDING_DENIED'})
+    await expect(guard({ companyId: foreignCompanyId, venueId: foreignVenueId })).rejects.toMatchObject({code:'EVOTOR_BINDING_DENIED'})
     expect(await count()).toBe(before)
   })
   it('denies a store missing from complete provider evidence', async () => {
