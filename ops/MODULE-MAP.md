@@ -13,7 +13,13 @@ owner/company/venue claim makes a **sticky hold** committed before returning
 409. Neither retries nor token rotation clear hold/revoked; a newly verified
 proof can refresh a pending revision. Diagnostic reads recheck current owner
 session and provider install/reconciliation/revision, return no foreign scope,
-and NEVER authorize CRM, fiscal data or license. New records stay `pending`;
+and NEVER authorize CRM, fiscal data or license. Explicit server-only
+`revokeEvotorStoreBinding` requires a fresh active canonical owner/session,
+company and venue, locks them in the same order as binding, and sets the
+scoped store to sticky `revoked` with exactly one `admin_audit_log` row
+inside the transaction. Foreign/missing scope returns null; repeat disconnect
+is idempotent and does not duplicate audit. It does NOT revoke a provider token
+or expose an HTTP route. New records stay `pending`;
 there is no `ready` transition or HTTP route. Native PG negative/concurrency
 regression: `server/tests/evotor-market-store-binding-postgres.spec.ts`,
 `evotor-owner-nonce-postgres.yml`. No production migration, merge or deploy.
