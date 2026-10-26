@@ -9,10 +9,27 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-26T09:15:00Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Обновлено: 2026-10-26T10:14:29.394Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`spaceverse-auto-20261026T1004Z-r11-5ac2`, acquired_at_UTC=`2026-10-26T10:04:00Z`, status=`active`.
+**LOCK CURRENT:** owner_run_id=`spaceverse-auto-20261026T1004Z-r11-5ac2`, acquired_at_UTC=`2026-10-26T10:04:00Z`, released_at_UTC=`2026-10-26T10:14:29.394Z`, status=`released`.
 Это кооперативный CAS; глобальный single-flight вне протокола не доказан. `automations.peek` недоступен; отдельная CRM automation и независимый read-only аудит не изменены.
+
+### Итерация 26.10.2026 10:04 UTC — P0.2 mid-flight revocation + синхронизация зависимого Draft
+
+**Сделано:** в #302 добавлен native PostgreSQL negative regression: во время OAuth GET /stores провайдерская установка меняется на `uninstalled` либо получает `reconciliation_required=TRUE`. В обоих случаях подписанный owner proof не выдаётся, повтор использованного OAuth state отклоняется до обращения к провайдеру. Изменён только `admin-platform/server/tests/evotor-market-owner-proof-issuer-postgres.spec.ts`, без runtime/API/DDL. Implementation commit #302: `75a2fc4ab9eb7c005bdbd7942787d53baa0f69a5`.
+
+**Зависимый PR:** #312 fast-forward обновлён merge commit `092d6cc412962e43ba3085e8a57c255654a6cb43` (первый parent прежний #312 `bd9d7527`, второй новый #302 `75a2fc4`). Git tree #312 меняет относительно прежнего HEAD только тот же native test (+32 строки), все runtime и лицензирование сохранены. Compare #302→#312: ahead=15, behind=0. Ни force push, ни merge PR, ни main/production writes не выполнялись.
+
+**Проверено GitHub Actions на точных SHA:**
+- #302 `75a2fc4`: native PostgreSQL workflow `40304712958` SUCCESS, **76 pass / 0 fail / 0 skip**; browser `40304713027` SUCCESS, **16 desktop + 4 mobile = 20/20**; release gate `40304712946` SUCCESS, root **656/656**, Business **588 pass / 70 skip**, audits **0 vulnerabilities**.
+- #312 `092d6cc`: native PostgreSQL `40305337672` SUCCESS, **96 pass / 0 fail / 0 skip**; browser `40305337674` SUCCESS, **20/20**; release gate `40305337773` SUCCESS, root **656/656**, Business **600 pass / 78 skip**, audits **0 vulnerabilities**. Native suites выполнялись отдельно; Business skips не считать успешными.
+- CI выполнил сборку/lint, materialize×2, check, VK parity; production-only jobs были skipped по условиям workflow. Локальный clone и `pivnik-preflight` недоступны в этом runtime; локальные тесты не выполнялись.
+
+**Текущая матрица:** main `517ea17c4620b843c08b4d01f781c666b41f3548`; #299 Draft (общий checkpoint), #296 Draft `b15c7355`, #302 Draft `75a2fc4`, #312 Draft `092d6cc`, #96 Draft `febefa93`. P0.1 inbox — проверен synthetic/native, не live. P0.2 owner proof/store binding — UNMOUNTED, native PASS, нет provider E2E/signed HTTP. P0.3 CRM — Draft, не active tenant. P0.4 license — UNMOUNTED/default deny. P0.5 real fiscal sync — нет нового test-store E2E. В main/production эти Draft-функции отсутствуют.
+
+**Не проверено / P0 блокеры:** реальный OAuth state echo и provider identity, разрешённые app/account/store/terminal, официальный license unit/contract, production и касса. Нет доказательств полного подключения клиента, публикации, live revocation. Не применять production migrations, не включать routes, не выдавать лицензию по mock.
+
+**Следующее точное действие:** в #302 проверить native `readEvotorStoreBindingStatus` после отзыва canonical owner grant и отключения venue; добавить минимальный негативный тест, если покрытия ещё нет. Затем оценить signed HTTP mount только после официального test OAuth/account contract. Не начинать конкурентную запись без нового CAS LOCK. Последний implementation commit `75a2fc4`, последний dependency merge `092d6cc`; **checkpoint commit = текущий коммит** (самоссылочный SHA не указывать).
 
 ### Итерация 26.10.2026 09:02–09:15 UTC — P0.4 Draft ancestry + rollback native regression
 
