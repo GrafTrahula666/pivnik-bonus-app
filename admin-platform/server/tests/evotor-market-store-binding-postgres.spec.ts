@@ -212,4 +212,19 @@ native('Evotor durable binding persistence / native PostgreSQL', () => {
     expect(await status(storeB)).toBe('revoked')
   })
 
+  it('hides a persisted binding when its company or venue is disabled', async () => {
+    for (const [table, entityId] of [['companies', companyA], ['venues', venueA]] as const) {
+      await db.query('UPDATE ' + table + ' SET active=FALSE WHERE id=$1', [entityId])
+      try {
+        expect(await status(storeB)).toBeNull()
+        await expect(bind('fixture-store-inactive-' + table)).rejects.toMatchObject({
+          code: 'EVOTOR_BINDING_DENIED', statusCode: 403,
+        })
+      } finally {
+        await db.query('UPDATE ' + table + ' SET active=TRUE WHERE id=$1', [entityId])
+      }
+      expect(await status(storeB)).toBe('revoked')
+    }
+  })
+
 })
