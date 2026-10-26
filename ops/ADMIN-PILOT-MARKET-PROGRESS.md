@@ -9,24 +9,36 @@ Draft PR: [#299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
 
 ## AUTO-RESUME CHECKPOINT
 
-Обновлено: 2026-10-26T01:15:25.538Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
+Обновлено: 2026-10-26T02:26:17Z. Единый координатор: automation `6add7969f55c8191a8e5eb93dbe96ff1`.
 Каноническая ветка LOCK: `spaceverse/evotor-market-20261023` (#299).
-**LOCK CURRENT:** owner_run_id=`auto11-20261026T0203Z-gpt6-9f21`, acquired_at_UTC=`2026-10-26T02:03:45Z`, released_at_UTC=`none`, status=`active`.
-Кооперативный CAS не гарантирует single-flight для writers вне протокола; `automations.peek` недоступен, отдельная CRM automation по предыдущему checkpoint disabled.
+**LOCK CURRENT:** owner_run_id=`auto11-20261026T0203Z-gpt6-9f21`, acquired_at_UTC=`2026-10-26T02:03:45Z`, released_at_UTC=`2026-10-26T02:26:17Z`, status=`released`.
+Кооперативный CAS защищает только writers, соблюдающих протокол; глобальный single-flight не доказан. `automations.peek` недоступен, проверено через automations.list: эта очередь enabled, отдельная CRM automation disabled; независимый read-only аудит не изменён.
 
-### Последняя итерация — 2026-10-26T01:15:25.538Z, OAuth authorization_code transport (unmounted)
+### Последняя итерация — 2026-10-26T02:26:17Z, durable OAuth state (UNMOUNTED)
 
-**Сделано:** проверены свежие main `517ea17c4620b843c08b4d01f781c666b41f3548`, Draft #299/#296/#302/#96, MODULE-MAP и актуальные CI. На #302 добавлены `admin-platform/server/evotor-market-oauth-exchange.ts` и `server/tests/evotor-market-oauth-exchange.spec.ts`, обновлены MODULE-MAP и runbook. Это безопасный server-side OAuth authorization_code exchange с фиксированным `https://oauth.evotor.ru/oauth/token`, exact HTTPS redirect, Basic client credentials, строгим `store:read`, deadline 10s, bounded body 16KiB, fail-closed response. Не возвращает refresh token, не доверяет JWT payload и не создаёт identity/tenant/лицензию. Модуль НЕ смонтирован и НЕ используется production. Реальный provider не вызывался.
+**Сделано:** продолжен P0.2 в существующем Draft #302. Добавлены ручная additive migration `admin-platform/admin-migrations/023_evotor_oauth_states.sql`, `admin-platform/server/evotor-market-oauth-state.ts` и native PostgreSQL regression `server/tests/evotor-market-oauth-state-postgres.spec.ts`. OAuth `state` — случайные 32 байта, в БД только SHA256, 5-минутный TTL; привязан к текущей SPACEVERSE-сессии, canonical owner/company/venue, server productId и HTTPS redirect. Issuance требует active account/session, owner-only grant, active company/venue; consume сериализуется `FOR UPDATE`, повторно проверяет все grants/session под `FOR SHARE`, атомарно помечает одноразовый state. Foreign session/product/redirect не сжигают чужой state. В таблице нет OAuth code/token/secret. Обновлены CI native workflow, MODULE-MAP, runbook, PR body. НЕТ HTTP route/issuer/tenant activation/license/provider calls; production миграция не применялась.
 
-**GitHub:** implementation HEAD `d744b8c91ca83e5da78b3b5470f908d769ad640e`, ветка `spaceverse/evotor-store-ownership-20261025`, Draft PR #302, не merged/deployed. #299 head до checkpoint `963664c518f3d030859f46364bb65cf6baf67294` (LOCK acquisition); checkpoint commit = **текущий коммит**, SHA читать после записи из GitHub, без самоссылочного SHA. #296 остаётся Draft; #96 не интегрирован. Main/production не менялись.
+**GitHub:** main `517ea17c4620b843c08b4d01f781c666b41f3548`; implementation HEAD `3444f170ed574a570d8d3af2aed09ff47704ec37`, ветка `spaceverse/evotor-store-ownership-20261025`, Draft PR #302, не merged/deployed. #299 head до release LOCK `c76ba55f5b02976407b48dfc35f25c7f61759688`; checkpoint commit = **текущий коммит**, SHA читать после записи (самоссылочный SHA не выдумывать). #296 head `9c8b0d15d0c4b41640d3d50b2f550ca429cb5c0b` Draft; #96 head `febefa93f6a53c3b47db3a1fe2ec3ed727baaac8` Draft, mergeable=false. Главная ветка/production не менялись.
 
-**Проверено (GitHub Actions, не локально, на точном implementation HEAD):** Pivnik release gate run `40252935206` **success**: root `node --test` **656 pass / 0 fail / 0 skip**, Business Vitest **588 pass / 0 fail / 39 skip**, из них новые OAuth negative tests **21 pass**; `npm audit` high root/Admin **0 vulnerabilities**. CI materialize/check passed. Native PostgreSQL16 run `40252935293` **success**: nonce 4, proof 27, binding guard 10, callback inbox 4, итого **45 pass / 0 fail / 0 skip** в 4 целевых тестовых файлах; новые OAuth transport тесты не используют БД. Browser run `40252935235` **success**: **20 pass / 0 fail** (16+4 synthetic E2E). Прежние 39 skipped в общем Business Vitest не объявлять успешными. Локального клона нет; `git ls-remote` из container завершился `Could not resolve host: github.com`. `pivnik-preflight` отсутствует в доступных skills.
+**Проверено на точном HEAD #302 через GitHub Actions, не локально:**
+- Native PostgreSQL16 disposable, workflow `40258515557` **SUCCESS**: owner nonce 4, signed proof 27, binding guard 10, новый OAuth state 8, callback inbox 4 = **53 pass / 0 fail / 0 skip**. Реальный PostgreSQL, не PGlite; Business server/web build и lint **SUCCESS**.
+- Pivnik release gate `40258515573` **SUCCESS**: root `node --test` **656 pass / 0 fail / 0 skip**; Business Vitest **588 pass / 0 fail / 47 skip** (native пропуски в общем Vitest не считать успехом; соответствующие целевые PG тесты выполнены отдельно); materialize×2 idempotence/check/VK gates PASS; root/Admin audit **0 vulnerabilities**.
+- Browser workflow `40258515586` **SUCCESS**: desktop/mobile synthetic E2E **16+4=20 pass / 0 fail**. Это НЕ live Evotor.
+- Локального клона нет, `git ls-remote` из container: `Could not resolve host: github.com`; `pivnik-preflight` отсутствует в доступных skills. Никакие локальные npm/PG tests лично в shell не выполнялись.
 
-**Release gates:** P0.1 callback inbox Draft, native PostgreSQL пройден, live provider не проверен. P0.2 store adapter/proof/guard Draft + OAuth exchange transport; **нет durable OAuth state, trusted issuer, signed HTTP binding endpoint, canonical binding write и runtime revocation**. P0.3 independent CRM #296 Draft, production E2E не доказан. P0.4 license authorizer и P0.5 новый fiscal sync не готовы. A–H не закрыты, публикации нет.
+**Матрица release gates (Draft ≠ main/prod):**
 
-**Риски:** P0 — нет независимого подтверждения provider owner на реальном аккаунте, issuer, license authorizer; P1 — нет production/terminal/provider E2E и безопасного pending onboarding; P2 — нет локального клона, кооперативный LOCK не глобальный. Никаких production migrations, платных ресурсов, кассы, VK/TG, kiosk или реальных данных не меняли.
+| Функция | Реализовано | Проверено | В main | В production | Блокер | Следующее действие |
+|---|---|---|---|---|---|---|
+| P0.1 callback inbox | Draft #299 | Native PG/CI; нет live provider | Нет | Нет | Provider live contract | Тестовый install/reconciliation |
+| P0.2 store owner/OAuth state | Частично Draft #302 | Native PG 53/53; synthetic browser | Нет | Нет | Trusted issuer, state echo, signed HTTP binding | Issuer + owner proof |
+| P0.3 independent CRM bootstrap | Частично Draft #296 | Ранее CI; нет production E2E | Нет | Нет | Runtime provisioning/live grants | Изолированный tenant E2E |
+| P0.4 license authorizer | Нет | Нет | Нет | Нет | Official unit/tariff/reconciliation | Default-deny server gate |
+| P0.5 fiscal sync нового клиента | Нет | Нет | Нет | Нет | Test store/documents | Closed SELL/PAYBACK E2E |
 
-**Точное следующее действие:** в #302 реализовать durable session-bound OAuth `state` с одноразовым CAS/nonce, затем trusted issuer на основании server-side OAuth code exchange + complete GET stores + canonical company/venue/current grant/token revision; подписанный HTTP route монтировать только после native PostgreSQL и негативных HTTP тестов. Проверить, что другой агент не сделал этот slice; соблюдать общий LOCK. Не merge/deploy до release gates.
+**Риски:** P0 — нет подтверждённой live provider identity, issuer, лицензии, финальной привязки. Официальная OAuth-инструкция показывает redirect с `code`, но не доказывает возврат `state`; до теста в разрешённом аккаунте нельзя монтировать этот flow. P1 — нет live provider/terminal/production E2E, A–H не закрыты. P2 — нет локального клона; кооперативный LOCK не глобальный. Нет merge/deploy, production writes, платных API, изменений кассы, бонусов, VK/TG/kiosk.
+
+**Точная следующая безопасная задача:** в #302 подготовить UNMOUNTED trusted owner-proof issuer, который принимает только успешно consumed session-bound OAuth scope и server-side exchanged OAuth token, сверяет полный GET stores с текущей подтверждённой provider identity из callback inbox, installation/reconciliation/token revision и canonical owner grants, затем подписывает ограниченный одноразовый proof; покрыть negative/native SQL tests. Не создавать HTTP binding route/лицензию до проверки official `state` roundtrip и live owner flow. Перед записью снова проверить LOCK/heads/чужую работу. Временный внешний блокер не останавливает почасовую очередь.
 
 ### Архив предыдущего checkpoint — 2026-10-26 00:18 UTC
 
