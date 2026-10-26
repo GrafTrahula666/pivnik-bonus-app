@@ -54,7 +54,7 @@ native('Evotor owner proof nonce: native PostgreSQL atomic replay denial', () =>
     const signingKey = Buffer.alloc(32, 17)
     const scope = {
       spaceverseUserId: 'owner-1', sessionId: 'session-1', providerUserId: 'provider-1',
-      productId: 'c0d01535-5193-4cc2-9bfb-be20e0679498', companyId: 'company-1',
+      productId: 'c0d01535-5193-4cc2-9bfb-be20e0679498', companyId: 'company-1', venueId: 'venue-1',
       storeId: 'store-1', tokenRevision: '1',
     }
     const now = Date.now()
