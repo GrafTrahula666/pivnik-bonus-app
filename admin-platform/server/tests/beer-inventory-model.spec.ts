@@ -71,4 +71,9 @@ describe('CRM beer calculation from existing immutable receipts',()=>{
   expect(project([doc(1)],[move()],{sync:{...sync,recent:{...sync.recent,state:'incomplete',cursorPending:true}}}).products[0]?.status).toBe('pending')
   expect(project([doc(1)],[move()],{sync:{...sync,recent:{...sync.recent,state:'error',errorCode:'scan_failed'}}}).products[0]?.status).toBe('incomplete')
  })
+ it('unknown historical positions before the physical baseline do not contaminate its later stock',()=>{
+  const bad=doc(-1,1000,{positions:[{productId:null,measure:'л',quantityMillis:1000}]})
+  expect(project([bad,doc(1)]).products[0]?.status).toBe('current')
+  expect(project([{...bad,closedAt:later(2)},doc(1)]).products[0]?.status).toBe('incomplete')
+ })
 })

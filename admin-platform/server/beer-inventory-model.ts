@@ -13,6 +13,7 @@ export function projectBeerInventory({storeId,documents,movements,sync,asOf,peri
  const todayFrom=Date.parse(moscowDay+'T00:00:00+03:00')
  const products=new Map<string,BeerProduct>(),sales=new Map<string,{documentId:string;closedAt:string;quantity:bigint}[]>(),seen=new Set<string>()
  let unknownPositions=0
+ const unknownAt:number[]=[]
  const ensure=(id:string,name=id,measure='л')=>{
   if(!products.has(id))products.set(id,{productId:id,name,measure,supported:true,baseline:null,balanceMillis:null,deliveredMillis:'0',soldMillis:'0',writtenOffMillis:'0',returnedMillis:'0',soldTodayMillis:'0',soldPeriodMillis:'0',warnings:[],status:'uninitialized',history:[],historyTruncated:false,refunds:[]})
   return products.get(id)!
@@ -23,11 +24,11 @@ export function projectBeerInventory({storeId,documents,movements,sync,asOf,peri
   const key=d.storeId+'\0'+d.documentId
   if(seen.has(key))continue // DB PK is authoritative; projection also remains replay-safe.
   seen.add(key)
-  if(!Number.isFinite(Date.parse(d.closedAt))||!Array.isArray(d.positions)){unknownPositions++;continue}
+  if(!Number.isFinite(Date.parse(d.closedAt))||!Array.isArray(d.positions)){unknownPositions++;unknownAt.push(Date.parse(d.closedAt));continue}
   const grouped=new Map<string,bigint>()
   for(const raw of d.positions){
    const x=raw as Record<string,unknown>|null
-   if(!x||typeof x.productId!=='string'||!idPattern.test(x.productId)){unknownPositions++;continue}
+   if(!x||typeof x.productId!=='string'||!idPattern.test(x.productId)){unknownPositions++;unknownAt.push(Date.parse(d.closedAt));continue}
    const p=ensure(x.productId,typeof x.name==='string'?x.name.slice(0,500):x.productId,typeof x.measure==='string'?x.measure:'')
    if(typeof x.name==='string')p.name=x.name.slice(0,500)
    if(typeof x.measure!=='string'||x.measure.trim().toLowerCase()!=='л'){
@@ -68,7 +69,7 @@ export function projectBeerInventory({storeId,documents,movements,sync,asOf,peri
    Object.assign(p,{balanceMillis:String(balance),deliveredMillis:String(delivered),soldMillis:String(sold),writtenOffMillis:String(written),returnedMillis:String(returned)})
    if(balance<0n)warn(p,'Отрицательный расчётный остаток: проверьте привозы, списания и сверку.')
   }
-  if(unknownPositions)warn(p,'Есть позиции без надёжного ID или количества; расчёт может быть неполным.')
+  if(base&&unknownAt.some(at=>!Number.isFinite(at)||at>Date.parse(base.effectiveAt)))warn(p,'После начальной точки есть позиции без надёжного ID; расчёт может быть неполным.')
   const recentCovers=base&&recent?.from&&recent.until&&Date.parse(recent.from)<=Date.parse(base.effectiveAt)&&Date.parse(recent.until)>=end&&recentFresh&&recent.state==='complete'
   p.status=!base?'uninitialized':p.warnings.length||sync.errorCode||recent?.errorCode?'incomplete':(coveredUntil&&Date.parse(coveredUntil)>=end&&fresh)||recentCovers?'current':'pending'
   const history=[...sorted.filter(m=>m.productId===p.productId).map(m=>({source:'crm',...m})),...(sales.get(p.productId)||[]).map(s=>({source:'evotor',kind:'sale',documentId:s.documentId,effectiveAt:s.closedAt,quantityMillis:String(s.quantity),included:Boolean(base)&&Date.parse(s.closedAt)>Date.parse(base!.effectiveAt)}))]
