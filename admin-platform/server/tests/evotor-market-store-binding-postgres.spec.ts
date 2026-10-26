@@ -76,7 +76,7 @@ native('Evotor durable binding persistence / native PostgreSQL', () => {
     }
     const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
     const mac = crypto.createHmac('sha256',key)
-      .update('spaceverse.evotor.store-owner-binding.v1\\n'+encoded).digest('base64url')
+      .update('spaceverse.evotor.store-owner-binding.v1\n'+encoded).digest('base64url')
     return encoded + '.' + mac
   }
   const bind = (storeId: string, foreign = false, revision = '1') => {
