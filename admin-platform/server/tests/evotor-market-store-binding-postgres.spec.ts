@@ -186,4 +186,30 @@ native('Evotor durable binding persistence / native PostgreSQL', () => {
     await expect(bind(storeB)).rejects.toMatchObject({code:'EVOTOR_STORE_BINDING_CONFLICT'})
     expect(await status(storeB)).toBe('revoked')
   })
+  it('immediately denies a revoked company owner grant on existing and new store bindings', async () => {
+    const unboundStore = 'fixture-store-revoked-owner'
+    const removed = await db.query(
+      'DELETE FROM admin_company_access WHERE admin_id=$1 AND company_id=$2 AND access_kind=$3 RETURNING admin_id',
+      [ownerA, companyA, 'owner'],
+    )
+    expect(removed.rowCount).toBe(1)
+    try {
+      expect(await status(storeB)).toBeNull()
+      await expect(bind(unboundStore)).rejects.toMatchObject({
+        code: 'EVOTOR_BINDING_DENIED', statusCode: 403,
+      })
+      const count = await db.query<{n:string}>(
+        'SELECT count(*)::text AS n FROM admin_evotor_store_bindings WHERE store_id=$1',
+        [unboundStore],
+      )
+      expect(count.rows[0]!.n).toBe('0')
+    } finally {
+      await db.query(
+        "INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES($1,$2,'owner')",
+        [ownerA, companyA],
+      )
+    }
+    expect(await status(storeB)).toBe('revoked')
+  })
+
 })
