@@ -28,9 +28,11 @@ Integration must recheck current canonical grants and unchanged token revision,
 provider identity, installation/hold state and exact store before persisting any
 binding. No legacy POS source is changed. See `EVOTOR-MARKET-RUNBOOK.md`.
 
+`admin-platform/server/evotor-market-binding-guard.ts` is an additional **unmounted** transaction prerequisite (Draft #302). It checks the exact selected provider store via the complete server-side GET, verifies a short-lived one-time claim including **canonical venueId**, then under native PostgreSQL FOR SHARE locks rechecks active session/account, canonical company/venue, exact owner grant (not trusted director), installed/unheld provider identity and token revision. It runs a future idempotent binding write only through the same transaction client. Missing, foreign, revoked or rotated state denies. No route, issuer, license, runtime revocation enforcement, binding table or production call exists. Native tests/CI must be verified independently.
+
 `admin-platform/server/evotor-market-owner-proof.ts` is a separate **unmounted**
 server-side one-time signed-claim verifier. It requires an exact SPACEVERSE
-session/provider/product/company/store/token-revision scope, a short-lived
+session/provider/product/company/venue/store/token-revision scope, a short-lived
 HMAC claim, and an atomic durable nonce-consumption callback. Missing, expired,
 replayed, foreign, malformed or wrong-key claims fail closed. Its signing key
 must never be browser-controlled; the trusted issuer is **not implemented**.
