@@ -218,6 +218,16 @@ databases and real concurrent writers; model tests compare existing cash
 analytics with its monetary-return convention separated. Desktop/mobile browser
 fixtures exercise actual UI and lost-reply recovery without production APIs.
 
+The default **«На учёте»** subtab (2026-10-27) shows only products with an
+initial/count baseline, including zero, negative and unsupported balances.
+Each row displays the saved quantity/date, deliveries/physical returns, deducted
+sales, manual writeoffs and remaining liters from the same server projection.
+Balances ≤10 liters are highlighted and sorted first by default. **«Все товары»**
+retains discovery, initialization and historical period controls. After an initial
+save the UI opens the tracked list. Refresh stays at 120 seconds; sync quality
+and warnings remain visible, with detailed watermarks in a disclosure. This is a
+UI-only view: no second counter, migration, provider write or importer change.
+
 ### Evotor stock intake safety (2026-10-25)
 
 PR #309 introduced the intake screen; #310 changed it to the existing cloud
