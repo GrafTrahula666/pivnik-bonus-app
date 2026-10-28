@@ -259,6 +259,9 @@ boundary. The requested end-to-end intake is **not operational**.
 
 `admin-platform/src/spaceverse.css` is the final presentation layer imported by
 `src/main.tsx`; it preserves the existing page components, handlers and RBAC.
+CRM customer drawers use a body-level portal so the `.main` isolation context
+cannot hide their scrim behind the sidebar. The drawer/modal surfaces stack
+above their own scrims; customer actions, tenant scope and data routes are unchanged.
 `src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing
 auth/demo/invitation flow; `BlackHole.tsx` animates only the background, with a
 static image fallback, reduced-motion support and a pause control. The cube
