@@ -91,3 +91,34 @@ test('a delayed customer response cannot reopen data from the previous scope', a
   await expect(page.getByText('Клиент точки 101', { exact: true })).toHaveCount(0)
   await expect(page.locator('.drawer')).toHaveCount(0)
 })
+
+for (const viewport of [{ label: 'desktop', width: 1440, height: 900 }, { label: 'mobile', width: 390, height: 844 }]) {
+  test(`customer drawer remains above its backdrop on ${viewport.label}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await app(page)
+    await page.getByText('Клиент точки 101', { exact: true }).click()
+    await expect(page.locator('.drawer h2')).toHaveText('Клиент точки 101')
+
+    const layers = await page.evaluate(() => {
+      const layer = document.querySelector('.drawer-layer')
+      const drawer = layer?.querySelector('.drawer')
+      if (!layer || !drawer) return { portalled: false, drawerOnTop: false, sidebarCovered: false, fits: false }
+      const rect = drawer.getBoundingClientRect()
+      const foreground = document.elementFromPoint(rect.left + Math.min(36, rect.width / 2), rect.top + 100)
+      const background = document.elementFromPoint(8, window.innerHeight / 2)
+      return {
+        portalled: layer.parentElement === document.body,
+        drawerOnTop: drawer === foreground || drawer.contains(foreground),
+        sidebarCovered: background?.classList.contains('drawer-scrim') ?? false,
+        fits: rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight,
+      }
+    })
+    expect(layers.portalled).toBe(true)
+    expect(layers.drawerOnTop).toBe(true)
+    expect(layers.fits).toBe(true)
+    if (viewport.width > 860) expect(layers.sidebarCovered).toBe(true)
+
+    await page.locator('.drawer-head .icon-btn').click()
+    await expect(page.locator('.drawer-layer')).toHaveCount(0)
+  })
+}
