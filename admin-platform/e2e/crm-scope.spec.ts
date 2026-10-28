@@ -129,25 +129,25 @@ for (const viewport of [{ label: 'desktop', width: 1440, height: 900 }, { label:
 
 test('CRM column heading requests a server-wide sort and reverses its direction', async ({ page }) => {
   await app(page)
-  const operations = page.getByRole('columnheader', { name: /Операции/ })
-  const spend = page.getByRole('columnheader', { name: /Сумма покупок/ })
+  const operations = page.locator('th').filter({ has: page.getByRole('button', { name: /^Сортировать по: Операции/ }) })
+  const spend = page.locator('th').filter({ has: page.getByRole('button', { name: /^Сортировать по: Сумма покупок/ }) })
 
   const request = (column: string, direction: string) => page.waitForRequest(r => {
     const u = new URL(r.url())
     return u.pathname.endsWith('/venues/101/clients') && u.searchParams.get('sort') === column && u.searchParams.get('direction') === direction
   })
   const first = request('operations','desc')
-  await operations.getByRole('button').click()
+  await operations.locator('button').click()
   await first
   await expect(operations).toHaveAttribute('aria-sort','descending')
 
   const reverse = request('operations','asc')
-  await operations.getByRole('button').click()
+  await operations.locator('button').click()
   await reverse
   await expect(operations).toHaveAttribute('aria-sort','ascending')
 
   const money = request('spend','desc')
-  await spend.getByRole('button').click()
+  await spend.locator('button').click()
   await money
   await expect(spend).toHaveAttribute('aria-sort','descending')
   await expect(operations).toHaveAttribute('aria-sort','none')
