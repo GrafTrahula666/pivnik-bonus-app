@@ -27,7 +27,7 @@ export function SortTh({ label, column, sort, direction, onSort, initialDirectio
 }) {
   const active = column === sort
   const next: SortDirection = active ? (direction === 'asc' ? 'desc' : 'asc') : initialDirection
-  return <th aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+  return <th scope="col" aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
     <button type="button" className="table-sort-button" onClick={() => onSort(column, next)}
       aria-label={`Сортировать по: ${typeof label === 'string' ? label : column}. ${next === 'desc' ? 'По убыванию' : 'По возрастанию'}`}>
       <span>{label}</span><span className={active ? 'table-sort-icon active' : 'table-sort-icon'} aria-hidden="true">
