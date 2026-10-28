@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { CheckCircle2,RefreshCw,XCircle } from 'lucide-react'
 import { CardTitle,PageHead } from '../ui'
 import { ErrorCard,LoadingCard,SourceNote,dt,num,useResource } from './common'
+import { SortTh,sortTableRows,type SortDirection } from './TableSort'
 
 // Owner-only technical view of PIVNIK Business and the guest app. Read-only.
 
@@ -23,20 +25,27 @@ function Light({ok,label,detail}:{ok:boolean;label:string;detail:string}){
   return <div className="setting-row"><div><b>{label}</b><span>{detail}</span></div>{ok?<CheckCircle2 className="dev-ok"/>:<XCircle className="dev-bad"/>}</div>
 }
 function DbCard({title,probe}:{title:string;probe:Probe<DbInfo>}){
+  const [sort,setSort]=useState('table'),[direction,setDirection]=useState<SortDirection>('asc')
+  const changeSort=(key:string,dir:SortDirection)=>{setSort(key);setDirection(dir)}
   if(!probe.ok)return <section className="card editor-card"><CardTitle title={title}/><div className="login-error">{probe.error}</div></section>
   const d=probe.value
+  const rows=sortTableRows(d.tables,t=>sort==='rows'?t.rows:sort==='size'?t.bytes:t.table,direction)
   return <section className="card editor-card"><CardTitle title={title}/>
     <div className="setting-row"><div><b>{d.name}</b><span>PostgreSQL {d.version} · подключений {d.connections} · ответ {probe.ms} мс</span></div><strong>{mb(d.bytes)}</strong></div>
-    <div className="table-scroll"><table><thead><tr><th>Таблица</th><th>Строк (примерно)</th><th>Размер</th></tr></thead>
-      <tbody>{d.tables.map(t=><tr key={t.table}><td>{t.table}</td><td>{num(t.rows)}</td><td>{mb(t.bytes)}</td></tr>)}</tbody></table></div>
+    <div className="table-scroll"><table><thead><tr><SortTh label="Таблица" column="table" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Строк (примерно)" column="rows" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Размер" column="size" sort={sort} direction={direction} onSort={changeSort}/></tr></thead>
+      <tbody>{rows.map(t=><tr key={t.table}><td>{t.table}</td><td>{num(t.rows)}</td><td>{mb(t.bytes)}</td></tr>)}</tbody></table></div>
   </section>
 }
 
 export function DeveloperPage(){
+  const [errorSort,setErrorSort]=useState('date'),[errorDirection,setErrorDirection]=useState<SortDirection>('desc')
+  const [actionSort,setActionSort]=useState('date'),[actionDirection,setActionDirection]=useState<SortDirection>('desc')
   const {data,error,loading,reload}=useResource<Overview>('/api/admin/developer')
   if(loading&&!data)return <LoadingCard text="Собираем состояние сервисов…"/>
   if(error&&!data)return <ErrorCard error={error} onRetry={reload}/>
   if(!data)return null
+  const errors=sortTableRows(data.recentErrors,e=>errorSort==='request'?e.method+' '+e.path:errorSort==='error'?e.code+' '+e.message:e.at,errorDirection)
+  const actions=sortTableRows(data.recentActions,a=>actionSort==='admin'?a.admin:actionSort==='action'?a.action:a.at,actionDirection)
   const s=data.service,db=data.databases
   const used=(db.metadata.ok?db.metadata.value.bytes:0)+(db.production.ok?db.production.value.bytes:0)
   return <div className="page">
@@ -67,13 +76,13 @@ export function DeveloperPage(){
     <div className="settings-grid dev-grid">
       <section className="card editor-card"><CardTitle title="Последние ошибки сервера"/>
         {!data.recentErrors.length?<p className="muted-copy">С момента запуска ошибок не было.</p>:
-        <div className="table-scroll"><table><thead><tr><th>Когда</th><th>Запрос</th><th>Ошибка</th></tr></thead><tbody>
-          {data.recentErrors.map((e,i)=><tr key={i}><td>{dt(e.at)}</td><td>{e.method} {e.path}</td><td><b>{e.code}</b> {e.message}</td></tr>)}
+        <div className="table-scroll"><table><thead><tr><SortTh label="Когда" column="date" sort={errorSort} direction={errorDirection} onSort={(key,dir)=>{setErrorSort(key);setErrorDirection(dir)}}/><SortTh label="Запрос" column="request" sort={errorSort} direction={errorDirection} onSort={(key,dir)=>{setErrorSort(key);setErrorDirection(dir)}} initialDirection="asc"/><SortTh label="Ошибка" column="error" sort={errorSort} direction={errorDirection} onSort={(key,dir)=>{setErrorSort(key);setErrorDirection(dir)}} initialDirection="asc"/></tr></thead><tbody>
+          {errors.map((e,i)=><tr key={i}><td>{dt(e.at)}</td><td>{e.method} {e.path}</td><td><b>{e.code}</b> {e.message}</td></tr>)}
         </tbody></table></div>}
       </section>
       <section className="card editor-card"><CardTitle title="Последние действия в панели"/>
-        <div className="table-scroll"><table><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th></tr></thead><tbody>
-          {data.recentActions.map((a,i)=><tr key={i}><td>{dt(a.at)}</td><td>{a.admin||'—'}</td><td>{a.action}</td></tr>)}
+        <div className="table-scroll"><table><thead><tr><SortTh label="Когда" column="date" sort={actionSort} direction={actionDirection} onSort={(key,dir)=>{setActionSort(key);setActionDirection(dir)}}/><SortTh label="Кто" column="admin" sort={actionSort} direction={actionDirection} onSort={(key,dir)=>{setActionSort(key);setActionDirection(dir)}} initialDirection="asc"/><SortTh label="Действие" column="action" sort={actionSort} direction={actionDirection} onSort={(key,dir)=>{setActionSort(key);setActionDirection(dir)}} initialDirection="asc"/></tr></thead><tbody>
+          {actions.map((a,i)=><tr key={i}><td>{dt(a.at)}</td><td>{a.admin||'—'}</td><td>{a.action}</td></tr>)}
         </tbody></table></div>
       </section>
     </div>
