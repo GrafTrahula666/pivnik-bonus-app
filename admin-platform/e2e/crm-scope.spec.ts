@@ -98,6 +98,10 @@ for (const viewport of [{ label: 'desktop', width: 1440, height: 900 }, { label:
     await app(page)
     await page.getByText('Клиент точки 101', { exact: true }).click()
     await expect(page.locator('.drawer h2')).toHaveText('Клиент точки 101')
+    // The slide-in briefly translates the drawer past the viewport edge.
+    await page.locator('.drawer').evaluate(async element => {
+      await Promise.all(element.getAnimations().map(animation => animation.finished))
+    })
 
     const layers = await page.evaluate(() => {
       const layer = document.querySelector('.drawer-layer')
