@@ -1,4 +1,5 @@
 import { useEffect,useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Coins,Database,Gift,Megaphone,MoreHorizontal,Search,ShieldCheck,
   SlidersHorizontal,Trophy,X,
@@ -87,7 +88,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
   const refresh=()=>{setReload(v=>v+1);onChanged()}
   // In the PIVNIK app achievements and frames are given through the app (GuestRewardsPanel).
   const linked=isPivnikAppVenue(venue)
-  return <div className="drawer-layer">
+  return createPortal(<div className="drawer-layer">
     <button className="drawer-scrim" onClick={onClose} aria-label="Закрыть карточку"/>
     <aside className="drawer">
       <div className="drawer-head"><div><span className="eyebrow">КАРТОЧКА КЛИЕНТА</span><h2>{client?.name||'Загрузка…'}</h2><span className="drawer-sub">{venue.companyName} → {venue.name} · клиент #{userId}</span></div><button className="icon-btn" onClick={onClose}><X/></button></div>
@@ -123,7 +124,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
     {achievementOpen&&client&&<AchievementGrantModal venue={venue} client={client} onCancel={()=>setAchievementOpen(false)} onSaved={()=>{setAchievementOpen(false);refresh()}}/>}
     {cashbackOpen&&client&&<CashbackModal venue={venue} client={client} onCancel={()=>setCashbackOpen(false)} onSaved={()=>{setCashbackOpen(false);refresh()}}/>}
     {entitlementOpen&&client&&<EntitlementModal venue={venue} session={session} client={client} onCancel={()=>setEntitlementOpen(false)} onSaved={()=>{setEntitlementOpen(false);refresh()}}/>}
-  </div>
+  </div>, document.body)
 }
 
 function BonusModal({venue,client,mode,onCancel,onSaved}:{venue:ApiVenue;client:DetailResponse;mode:'credit'|'debit';onCancel:()=>void;onSaved:()=>void}){
