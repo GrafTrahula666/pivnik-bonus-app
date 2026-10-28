@@ -877,6 +877,18 @@ export async function getClientDetail(scope: VenueScope, rawUserId: string) {
 export async function getOperations(scope: VenueScope, url: URL) {
   const barId = await requireLegacyBar(scope)
   const limit = boundedInt(url.searchParams.get('limit'), 100, 1, 200)
+  const direction = url.searchParams.get('direction') === 'asc' ? 'ASC' : 'DESC'
+  const sort = String(url.searchParams.get('sort') || 'date')
+  const orderBy = ({
+    date: 'COALESCE(t.completed_at,t.created_at)',
+    customer: "LOWER(CONCAT_WS(' ',u.first_name,u.last_name))",
+    mode: 't.mode',
+    status: 't.status',
+    check: 'COALESCE(t.check_amount_cents,0)',
+    paid: 'COALESCE(t.cash_paid_cents,0)',
+    bonus: 'COALESCE(t.bonus_earned,0) - COALESCE(t.bonus_spent,0)',
+    comment: "COALESCE(t.reason,t.reward_code,'')",
+  } as Record<string,string>)[sort] || 'COALESCE(t.completed_at,t.created_at)'
   const result = await readPool.query(
     `SELECT
        t.id::text,t.mode,t.status,t.check_amount_cents,t.discount_cents,
@@ -888,7 +900,7 @@ export async function getOperations(scope: VenueScope, url: URL) {
      JOIN bar_customers bc ON bc.user_id=t.client_id AND bc.bar_id=$1::bigint
      JOIN users u ON u.id=t.client_id
      WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
-     ORDER BY COALESCE(t.completed_at,t.created_at) DESC
+     ORDER BY ${orderBy} ${direction} NULLS LAST, t.id DESC
      LIMIT $2`,
     [barId, limit],
   )
