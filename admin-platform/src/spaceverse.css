@@ -33,3 +33,11 @@ html,body,#root{background:var(--bg)}
 /* Keep operational text readable at normal zoom. */
 .nav-item{font-size:13px}.kpi-top>span{font-size:12px}.page-head p,.demo-mode-surface .page-head p{font-size:12px}.field>span,.source-note,.setting-row span{font-size:12px}.field input,.field select,.field textarea{font-size:14px}.toolbar select,.toolbar-filters select{font-size:12px}th{font-size:11px}td{font-size:12px}.login-demo{display:flex;width:100%;justify-content:center}.spaceverse-login .login-card:before{content:"";position:absolute;inset:15% -30px 0;background:#02060e77;filter:blur(35px);z-index:-1;pointer-events:none}
 @media(max-width:600px){.field input,.field select,.field textarea,.spaceverse-login .field input{font-size:16px}.kpi-top>span{font-size:11px}.background-motion-toggle{position:relative;left:22px;bottom:12px}}
+
+/* Table sorting: explicit touch targets, visible direction and keyboard focus. */
+.table-sort-button{display:inline-flex;align-items:center;justify-content:flex-start;gap:7px;width:100%;min-height:35px;padding:5px 0;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;text-align:left;cursor:pointer;white-space:normal}
+.table-sort-button:hover{color:#b3ceff}
+.table-sort-button:focus-visible{outline:2px solid #729cff;outline-offset:2px;border-radius:3px}
+.table-sort-icon{color:#657c9e;min-width:12px;font-size:13px;line-height:1;text-align:center}
+.table-sort-icon.active{color:#76a7ff;font-weight:700}
+@media(hover:none){.table-sort-button{min-height:44px}}
