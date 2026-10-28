@@ -274,8 +274,7 @@ SQL expressions instead of text result aliases; stable `u.id` breaks ties.
 The original CRM filters and write permissions are unchanged. Cash product
 columns and both beer-stock views sort complete returned product collections
 by underlying exact integer amounts, not localized display strings. No fiscal
-or inventory mutation, schema or patch-chain code changes. Other bounded
-operation/audit lists must not claim whole-history ordering from just the page.
+or inventory mutation, schema or patch-chain code changes. Operation and audit lists now accept whitelisted `sort`/`direction` through their existing authorized routes, order within the tenant-scope SQL query before their 150/180 row caps, and retain stable ID tie-breakers. Company summary and developer DB tables sort complete returned collections locally. Broadcast history and the developer's recent-event tables sort only the bounded entries returned by those APIs; they are not a whole-history index.
 
 `src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing
 auth/demo/invitation flow; `BlackHole.tsx` animates only the background, with a
