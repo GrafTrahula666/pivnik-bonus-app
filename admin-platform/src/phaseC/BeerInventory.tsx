@@ -4,6 +4,7 @@ import {PageHead} from '../ui'
 import {beerSearchKey} from './beer-catalog'
 import type {BeerProduct} from '../../server/beer-inventory-model'
 import './beer-inventory.css'
+import { SortTh, sortTableRows, type SortDirection, type SortValue } from './TableSort'
 
 type Report={source:'crm_calculated';asOf:string;storeId:string;writeEnabled:boolean;products:BeerProduct[];quality:{lastSuccessfulHistorySyncAt:string|null;coveredUntil:string|null;historyComplete:boolean;historyCursorPending:boolean;errorCode:string|null;unknownPositions:number;stale:boolean;recentSync:{state:string;lastSuccessAt?:string|null;from?:string|null;until?:string|null;pages?:number;cursorPending?:boolean;errorCode?:string|null}}}
 type Command={operationId:string;productId:string;kind:string;quantityMillis:string;baselineId:string|null;note:string;invoice:string;reason:string;returnDocumentId:string|null;notInReceipts:boolean}
@@ -22,7 +23,7 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
  const [view,setView]=useState<'tracked'|'all'>('tracked')
  const scope=actorId+':'+venue.companyId+':'+venue.id,storage='beer-inventory-pending:'+scope
  const [report,setReport]=useState<Report|null>(null),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false)
- const [error,setError]=useState(''),[notice,setNotice]=useState(''),[query,setQuery]=useState(''),[sort,setSort]=useState('balance'),[low,setLow]=useState(false)
+ const [error,setError]=useState(''),[notice,setNotice]=useState(''),[query,setQuery]=useState(''),[sort,setSort]=useState('balance'),[direction,setDirection]=useState<SortDirection>('asc'),[low,setLow]=useState(false)
  const [period,setPeriod]=useState('1'),[from,setFrom]=useState(''),[to,setTo]=useState('')
  const [historyOffset,setHistoryOffset]=useState(0)
  const [selected,setSelected]=useState<string|null>(null),[kind,setKind]=useState('delivery'),[amount,setAmount]=useState(''),[note,setNote]=useState(''),[invoice,setInvoice]=useState(''),[reason,setReason]=useState('spill'),[refund,setRefund]=useState(''),[notInReceipts,setNotInReceipts]=useState(false)
@@ -49,8 +50,22 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
  const tracked=(report?.products||[]).filter(p=>p.baseline!==null)
  const lowStock=tracked.filter(p=>p.balanceMillis!==null&&BigInt(p.balanceMillis)<=10000n)
  const needsReview=tracked.filter(p=>!p.supported||p.status==='incomplete')
- const products=(view==='tracked'?tracked:report?.products||[]).filter(p=>beerSearchKey(p.name).includes(beerSearchKey(query))&&(!low||p.balanceMillis!==null&&BigInt(p.balanceMillis)<=10000n)).sort((a,b)=>sort==='balance'?Number(a.balanceMillis??Number.MAX_SAFE_INTEGER)-Number(b.balanceMillis??Number.MAX_SAFE_INTEGER):sort==='sold'?Number(view==='tracked'?b.soldMillis:b.soldPeriodMillis)-Number(view==='tracked'?a.soldMillis:a.soldPeriodMillis):a.name.localeCompare(b.name,'ru'))
- function changeView(next:'tracked'|'all'){setView(next);setSelected(null);setHistoryOffset(0);if(next==='tracked')setPeriod('1')}
+ const value=(p:BeerProduct):SortValue=>{
+  switch(sort){
+   case 'name':return p.name
+   case 'balance':return p.balanceMillis===null?null:BigInt(p.balanceMillis)
+   case 'initial':return p.baseline?BigInt(p.baseline.quantityMillis):null
+   case 'delivered':return BigInt(p.deliveredMillis)+BigInt(p.returnedMillis)
+   case 'writeoff':return BigInt(p.writtenOffMillis)
+   case 'today':return BigInt(p.soldTodayMillis)
+   case 'sold':return BigInt(view==='tracked'?p.soldMillis:p.soldPeriodMillis)
+   case 'status':return statusText[p.status]
+   default:return p.name
+  }
+ }
+ const products=sortTableRows((view==='tracked'?tracked:report?.products||[]).filter(p=>beerSearchKey(p.name).includes(beerSearchKey(query))&&(!low||p.balanceMillis!==null&&BigInt(p.balanceMillis)<=10000n)),value,direction)
+ const changeSort=(column:string,next:SortDirection)=>{setSort(column);setDirection(next)}
+ function changeView(next:'tracked'|'all'){setView(next);setSelected(null);setHistoryOffset(0);setSort('balance');setDirection('asc');if(next==='tracked')setPeriod('1')}
  function addProduct(){changeView('all');setQuery('');setLow(false)}
  function open(p:BeerProduct,nextKind:string){setSelected(p.productId);setHistoryOffset(0);setKind(nextKind);setAmount('');setNote('');setInvoice('');setRefund('');setNotInReceipts(false);setError('');setNotice('')}
  function actions(p:BeerProduct){return <div className="beer-inventory-actions">
@@ -103,7 +118,7 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
   </>}
   <section className="card beer-inventory-controls">
    <label>Поиск товара<input type="search" value={query} onChange={e=>setQuery(e.target.value)}/></label>
-   <label>Сортировка<select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">По названию</option><option value="balance">По остатку</option><option value="sold">{view==='tracked'?'По вычтенным продажам':'По продажам за период'}</option></select></label>
+   <label>Сортировка<select value={sort} onChange={e=>changeSort(e.target.value,e.target.value==='name'||e.target.value==='balance'?'asc':'desc')}><option value="name">По названию</option><option value="balance">По остатку</option><option value="sold">{view==='tracked'?'По вычтенным продажам':'По продажам за период'}</option><option value="status">По статусу</option>{view==='tracked'?<><option value="initial">По начальной фиксации</option><option value="delivered">По привозам и возвратам</option><option value="writeoff">По списаниям</option></>:<option value="today">По продажам сегодня</option>}</select></label>
    <label className="beer-inventory-low-filter"><input type="checkbox" checked={low} onChange={e=>setLow(e.target.checked)}/>Остаток ≤ 10 л</label>
    {view==='all'&&<label>Период продаж<select value={period} onChange={e=>{setSelected(null);setHistoryOffset(0);setPeriod(e.target.value)}}><option value="1">Сегодня</option><option value="yesterday">Вчера</option><option value="7">7 дней</option><option value="30">30 дней</option><option value="custom">Дата / диапазон</option></select></label>}
    {period==='custom'&&<><label>С даты<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>По дату<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label></>}
@@ -123,7 +138,7 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
     {report.quality.unknownPositions>0&&<p role="alert">Позиций без надёжного ID: {report.quality.unknownPositions}.</p>}
    </details>
    {view==='tracked'?<>
-    <div className="card beer-inventory-table beer-inventory-tracked"><table aria-label="Пиво на учёте"><thead><tr><th>Товар</th><th>Зафиксировано</th><th>Привозы / возвраты</th><th>Вычтено продажами</th><th>Списано вручную</th><th>Осталось</th><th>Учёт продаж</th><th>Действия</th></tr></thead><tbody>
+    <div className="card beer-inventory-table beer-inventory-tracked"><table aria-label="Пиво на учёте"><thead><tr><SortTh label="Товар" column="name" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Зафиксировано" column="initial" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Привозы / возвраты" column="delivered" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Вычтено продажами" column="sold" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Списано вручную" column="writeoff" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Осталось" column="balance" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Учёт продаж" column="status" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><th>Действия</th></tr></thead><tbody>
      {products.map(p=><tr key={p.productId}>
       <td data-label="Товар"><b>{p.name}</b><small>{p.productId}</small></td>
       <td data-label="Зафиксировано">{liters(p.baseline!.quantityMillis)}<small>{p.baseline!.kind==='count'?'Инвентаризация':'Начальный остаток'} · {date(p.baseline!.effectiveAt)}</small></td>
@@ -136,7 +151,7 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
      </tr>)}
     </tbody></table>{products.length===0&&<div className="beer-inventory-empty"><p>{tracked.length===0?'Пока нет пива на учёте. Выберите товар и внесите фактический остаток — он появится здесь.':'Нет сортов с такими условиями поиска.'}</p>{tracked.length===0&&<button className="btn" onClick={addProduct}>Выбрать товар</button>}</div>}</div>
     {products.length>0&&<p>Осталось = зафиксировано + привозы + физические возвраты − продажи после фиксации − ручные списания. Полная история — в строке товара.</p>}
-   </>:<div className="card beer-inventory-table"><table><thead><tr><th>Товар</th><th>Расчётный остаток</th><th>Продано сегодня</th><th>Продано за период</th><th>Статус</th><th>Действия</th></tr></thead><tbody>
+   </>:<div className="card beer-inventory-table"><table><thead><tr><SortTh label="Товар" column="name" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Расчётный остаток" column="balance" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Продано сегодня" column="today" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Продано за период" column="sold" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Статус" column="status" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><th>Действия</th></tr></thead><tbody>
     {products.map(p=><tr key={p.productId}><td><b>{p.name}</b><small>{p.productId}</small></td><td>{liters(p.balanceMillis)}</td><td>{liters(p.soldTodayMillis)}</td><td>{liters(p.soldPeriodMillis)}</td><td>{statusText[p.status]}{p.warnings.map(w=><small key={w}>{w}</small>)}</td><td>{actions(p)}</td></tr>)}
    </tbody></table>{products.length===0&&<p>Товары не найдены в загруженных чеках. Без подтверждённых ID и литров учёт не начинается.</p>}</div>}
    {product&&<section className="card beer-inventory-detail" aria-label="Карточка товара"><h3>{product.name} · {kindText[kind]||'История'}</h3>
