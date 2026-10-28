@@ -450,7 +450,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     requireSuperAdmin(session.admin);json(res,200,await getDeveloperOverview());return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/audit'){
-    requireSuperAdmin(session.admin);json(res,200,await getAdminAudit(null,Number(url.searchParams.get('limit')||100)));return true
+    requireSuperAdmin(session.admin);json(res,200,await getAdminAudit(null,Number(url.searchParams.get('limit')||100),String(url.searchParams.get('sort')||'date'),String(url.searchParams.get('direction')||'desc')));return true
   }
 
   const parts=routeParts(url.pathname)
@@ -590,7 +590,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(resource==='promotions'){json(res,200,await getPromotions(scope));return true}
     if(resource==='design'){json(res,200,await getLegacyDesign(scope));return true}
     if(resource==='capabilities'){json(res,200,await getCapabilities(scope));return true}
-    if(resource==='audit'){json(res,200,await getAdminAudit(scope,Number(url.searchParams.get('limit')||100)));return true}
+    if(resource==='audit'){json(res,200,await getAdminAudit(scope,Number(url.searchParams.get('limit')||100),String(url.searchParams.get('sort')||'date'),String(url.searchParams.get('direction')||'desc')));return true}
     throw new HttpError(404,'ADMIN_ROUTE_NOT_FOUND','Admin API route not found.')
   }
 

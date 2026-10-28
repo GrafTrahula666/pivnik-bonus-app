@@ -31,6 +31,16 @@ async function app(page: Page, options: { slowList?: string; listGate?: ReturnTy
         productionAchievementWrites: false, productionEntitlementWrites: false, demo: false },
     } })
     if (url.pathname === '/api/admin/venues') return route.fulfill({ json: { venues } })
+    if (url.pathname === '/api/admin/venues/101/operations') return route.fulfill({ json: { rows: [{
+      id:'op1',occurred_at:'2026-10-01T12:00:00Z',first_name:'Клиент',last_name:'Один',
+      user_id:'101',mode:'accrue',status:'completed',checkAmount:100,cashPaid:100,
+      bonusEarned:5,bonusSpent:0,is_suspicious:false,reason:null,reward_code:null,
+    }] } })
+    if (url.pathname === '/api/admin/venues/101/audit') return route.fulfill({ json: { rows: [{
+      id:'audit1',created_at:'2026-10-01T12:00:00Z',admin_name:'Администратор',admin_role:'VENUE_ADMIN',
+      company_name:'Компания A',venue_name:'Точка A1',action:'customer.read',entity_type:'user',
+      entity_id:'101',reason:'Проверка',before_value:null,after_value:null,
+    }] } })
     const clients = /^\/api\/admin\/venues\/(101|102|201)\/clients(?:\/(segments|\d+))?$/.exec(url.pathname)
     if (clients) {
       const [, venueId, child] = clients
@@ -151,4 +161,29 @@ test('CRM column heading requests a server-wide sort and reverses its direction'
   await money
   await expect(spend).toHaveAttribute('aria-sort','descending')
   await expect(operations).toHaveAttribute('aria-sort','none')
+})
+
+test('operation and audit headers request sorting from the server before limiting rows', async ({ page }) => {
+  await app(page)
+  const request = (endpoint: string, column: string) => page.waitForRequest(r => {
+    const url = new URL(r.url())
+    return url.pathname.endsWith(endpoint) && url.searchParams.get('sort') === column && url.searchParams.get('direction') === 'desc'
+  })
+  if (await page.locator('.mobile-menu').isVisible()) await page.locator('.mobile-menu').click()
+  await page.getByRole('button',{name:'Операции',exact:true}).click()
+  const operations = page.getByRole('button',{name:/Сортировать по: Чек/})
+  await expect(operations).toBeVisible()
+  const first = request('/venues/101/operations','check')
+  await operations.click()
+  await first
+  if (await page.locator('.mobile-menu').isVisible()) await page.locator('.mobile-menu').click()
+  await page.getByRole('button',{name:'Журнал',exact:true}).click()
+  const audit = page.getByRole('button',{name:/Сортировать по: Администратор/})
+  await expect(audit).toBeVisible()
+  const second = page.waitForRequest(r => {
+    const u=new URL(r.url())
+    return u.pathname.endsWith('/venues/101/audit') && u.searchParams.get('sort')==='admin' && u.searchParams.get('direction')==='asc'
+  })
+  await audit.click()
+  await second
 })

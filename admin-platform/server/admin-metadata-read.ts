@@ -10,8 +10,19 @@ function boundedLimit(value:unknown,fallback=100,minimum=1,maximum=200):number{
 const unavailable=(reason:string)=>({value:null,available:false,reason})
 const noActivity='В production БД нет отдельного события открытия приложения/визита; метрика не вычисляется по косвенным признакам.'
 
-export async function getAdminAudit(scope:VenueScope|null,limit=100){
+export async function getAdminAudit(scope:VenueScope|null,limit=100,sort='date',direction='desc'){
   const safeLimit=boundedLimit(limit)
+  const order = direction === 'asc' ? 'ASC' : 'DESC'
+  const orderBy = ({
+    date: 'al.created_at',
+    admin: "LOWER(COALESCE(aa.display_name,aa.email,'system'))",
+    role: 'al.admin_role',
+    company: 'c.name',
+    venue: 'v.name',
+    action: 'al.action',
+    object: 'al.entity_type',
+    reason: 'al.reason',
+  } as Record<string,string>)[sort] || 'al.created_at'
   const params:Array<string|number>=[safeLimit]
   let tenantClause=''
   if(scope){
@@ -29,7 +40,7 @@ export async function getAdminAudit(scope:VenueScope|null,limit=100){
      LEFT JOIN companies c ON c.id=al.company_id
      LEFT JOIN venues v ON v.id=al.venue_id
      ${tenantClause}
-     ORDER BY al.created_at DESC
+     ORDER BY ${orderBy} ${order} NULLS LAST, al.id DESC
      LIMIT $1`,
     params,
   )

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo,useState } from 'react'
 import {
   ArrowUpRight,BarChart3,Coins,Database,ShieldCheck,Store,
 } from 'lucide-react'
@@ -7,11 +7,14 @@ import type { Period } from './Layout'
 import { CardTitle,PageHead,Status,rub } from '../ui'
 import { ErrorCard,LivePill,LoadingCard,SourceNote,dt,useResource } from './common'
 import { auditValueSummary,businessLabel } from './labels'
+import { SortTh,sortTableRows,type SortDirection } from './TableSort'
 
 const days=(p:Period)=>p==='Сегодня'?1:p==='7 дней'?7:p==='30 дней'?30:p==='3 месяца'?90:365
 
 export function ProductionOperations({venue}:{venue:ApiVenue}){
-  const {data,error,loading,reload}=useResource<{rows:Array<any>}>(`/api/admin/venues/${venue.id}/operations?limit=150`)
+  const [sort,setSort]=useState('date'),[direction,setDirection]=useState<SortDirection>('desc')
+  const changeSort=(key:string,dir:SortDirection)=>{setSort(key);setDirection(dir)}
+  const {data,error,loading,reload}=useResource<{rows:Array<any>}>(`/api/admin/venues/${venue.id}/operations?limit=150&sort=${sort}&direction=${direction}`)
   return <div className="page">
     <PageHead eyebrow="ИСТОРИЯ ОПЕРАЦИЙ" title="Операции" sub={`${venue.companyName} → ${venue.name}`} actions={<LivePill/>}/>
     {error&&<ErrorCard error={error} onRetry={reload}/>}
@@ -24,7 +27,7 @@ export function ProductionOperations({venue}:{venue:ApiVenue}){
         <div className={data.rows.some(r=>r.is_suspicious)?'warning':''}><ShieldCheck/><span>Требуют внимания</span><b>{data.rows.filter(r=>r.is_suspicious).length}</b></div>
       </div>
       <div className="table-card card"><div className="table-scroll"><table>
-        <thead><tr><th>Дата</th><th>Клиент</th><th>Тип</th><th>Статус</th><th>Чек</th><th>Оплачено</th><th>Бонусы</th><th>Комментарий</th></tr></thead>
+        <thead><tr><SortTh label="Дата" column="date" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Клиент" column="customer" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Тип" column="mode" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Статус" column="status" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Чек" column="check" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Оплачено" column="paid" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Бонусы" column="bonus" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Комментарий" column="comment" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/></tr></thead>
         <tbody>{data.rows.map(r=><tr key={r.id}><td>{dt(r.occurred_at)}</td><td><b>{[r.first_name,r.last_name].filter(Boolean).join(' ')}</b><br/><small>клиент #{r.user_id}</small></td>
           <td>{businessLabel(r.mode)}</td><td><Status value={businessLabel(r.status)}/></td><td>₽ {rub.format(Math.round(r.checkAmount||0))}</td><td>₽ {rub.format(Math.round(r.cashPaid||0))}</td>
           <td><div className="bonus-flow"><span className="bonus-plus">+{r.bonusEarned||0} Б</span><span className="bonus-minus">−{r.bonusSpent||0} Б</span></div></td><td>{r.reason||r.reward_code||'—'}</td></tr>)}</tbody>
@@ -64,8 +67,11 @@ interface PlatformData {
   metrics:Record<string,{value:null;reason:string}>
 }
 export function ProductionPlatform({mode,venues,onOpenVenue}:{mode:'platform'|'companies'|'venues';venues:ApiVenue[];onOpenVenue:(id:string)=>void}){
+  const [sort,setSort]=useState('company'),[direction,setDirection]=useState<SortDirection>('asc')
+  const changeSort=(key:string,dir:SortDirection)=>{setSort(key);setDirection(dir)}
   const {data,error,loading,reload}=useResource<PlatformData>('/api/admin/platform')
   const grouped=useMemo(()=>{const map=new Map<string,{name:string;venues:any[];customers:number}>();for(const row of data?.companies||[]){const e=map.get(row.company_id)||{name:row.company_name,venues:[],customers:0};if(row.venue_id)e.venues.push(row);e.customers+=Number(row.customers||0);map.set(row.company_id,e)}return [...map.entries()]},[data])
+  const companies=sortTableRows(grouped,([,v])=>sort==='venues'?v.venues.length:sort==='customers'?v.customers:v.name,direction)
   const title=mode==='platform'?'Платформа':mode==='companies'?'Компании':'Заведения'
   return <div className="page">
     <PageHead eyebrow="УПРАВЛЕНИЕ СЕТЬЮ" title={title} sub="Компании, заведения и ключевые показатели на одном экране" actions={<LivePill/>}/>
@@ -82,8 +88,8 @@ export function ProductionPlatform({mode,venues,onOpenVenue}:{mode:'platform'|'c
         {venues.map(v=><button className="platform-venue-row" key={v.id} onClick={()=>onOpenVenue(v.id)}><div><Store/><span><b>{v.name}</b><small>{v.companyName} · ID {v.id}</small></span></div><ArrowUpRight/></button>)}
       </section>
     </>}
-    {data&&mode==='companies'&&<div className="table-card card"><div className="table-scroll"><table><thead><tr><th>Компания</th><th>Заведений</th><th>Клиентов</th><th>Источник</th></tr></thead><tbody>
-      {grouped.map(([id,v])=><tr key={id}><td><b>{v.name}</b></td><td>{v.venues.length}</td><td>{rub.format(v.customers)}</td><td>Подключено</td></tr>)}
+    {data&&mode==='companies'&&<div className="table-card card"><div className="table-scroll"><table><thead><tr><SortTh label="Компания" column="company" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Заведений" column="venues" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Клиентов" column="customers" sort={sort} direction={direction} onSort={changeSort}/><th>Источник</th></tr></thead><tbody>
+      {companies.map(([id,v])=><tr key={id}><td><b>{v.name}</b></td><td>{v.venues.length}</td><td>{rub.format(v.customers)}</td><td>Подключено</td></tr>)}
     </tbody></table></div></div>}
     {data&&mode==='venues'&&<div className="venue-grid">{venues.map(v=>{const row=data.companies.find(x=>x.venue_id===v.id);return <article className="card venue-card" key={v.id}>
       <div className="venue-thumb"><Store/></div><div><Status value="Активно"/><h3>{v.name}</h3><p>{v.address||'Адрес не задан'}</p><div className="venue-stats"><span><b>{rub.format(Number(row?.customers||0))}</b> клиентов</span><span><b>ID {v.id}</b> заведение</span></div>
@@ -92,14 +98,16 @@ export function ProductionPlatform({mode,venues,onOpenVenue}:{mode:'platform'|'c
 }
 
 export function ProductionAudit({venue,superAdmin}:{venue:ApiVenue;superAdmin:boolean}){
-  const path=superAdmin?'/api/admin/audit?limit=180':`/api/admin/venues/${venue.id}/audit?limit=180`
+  const [sort,setSort]=useState('date'),[direction,setDirection]=useState<SortDirection>('desc')
+  const changeSort=(key:string,dir:SortDirection)=>{setSort(key);setDirection(dir)}
+  const path=(superAdmin?'/api/admin/audit?limit=180':`/api/admin/venues/${venue.id}/audit?limit=180`)+`&sort=${sort}&direction=${direction}`
   const {data,error,loading,reload}=useResource<{rows:Array<any>}>(path)
   return <div className="page">
     <PageHead eyebrow="ЖУРНАЛ ДЕЙСТВИЙ" title="Журнал" sub="Кто, что и когда изменил" actions={<LivePill/>}/>
     {error&&<ErrorCard error={error} onRetry={reload}/>}
     {loading&&!data&&<LoadingCard/>}
     {data&&<div className="table-card card"><div className="table-scroll"><table>
-      <thead><tr><th>Дата</th><th>Администратор</th><th>Роль</th><th>Компания</th><th>Заведение</th><th>Действие</th><th>Объект</th><th>Причина</th><th>Было → Стало</th></tr></thead>
+      <thead><tr><SortTh label="Дата" column="date" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Администратор" column="admin" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Роль" column="role" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Компания" column="company" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Заведение" column="venue" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Действие" column="action" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Объект" column="object" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Причина" column="reason" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><th>Было → Стало</th></tr></thead>
       <tbody>{data.rows.map(r=><tr key={r.id}><td>{dt(r.created_at)}</td><td><b>{r.admin_name||r.admin_email||'system'}</b></td><td>{r.admin_role||'—'}</td><td>{r.company_name||'—'}</td><td>{r.venue_name||'—'}</td>
         <td>{businessLabel(r.action)}</td><td>{businessLabel(r.entity_type)}{r.entity_id?` #${r.entity_id}`:''}</td><td>{r.reason||'—'}</td><td className="audit-json">{auditValueSummary(r.before_value)} → {auditValueSummary(r.after_value)}</td></tr>)}</tbody>
     </table></div></div>}

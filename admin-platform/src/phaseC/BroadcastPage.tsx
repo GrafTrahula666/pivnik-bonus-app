@@ -5,6 +5,7 @@ import { apiGet,apiPost } from '../api'
 import { CardTitle,ConfirmModal,PageHead,cn } from '../ui'
 import { ErrorCard,LoadingCard,SourceNote,WriteGatePill,dt,num,useResource } from './common'
 import { LinkedToAppNote,isPivnikAppVenue } from './AppContentManagers'
+import { SortTh,sortTableRows,type SortDirection } from './TableSort'
 
 // Sends a message to guests through the PIVNIK app's Telegram and VK bots.
 
@@ -37,6 +38,8 @@ export function BroadcastPage({venue,session,segment}:{venue:ApiVenue;session:Ad
 function PivnikBroadcast({venue,session,initialAudience}:{venue:ApiVenue;session:AdminSession;initialAudience:Audience}){
   const base=`/api/admin/venues/${venue.id}/broadcast`
   const history=useResource<History>(base)
+  const [historySort,setHistorySort]=useState('date'),[historyDirection,setHistoryDirection]=useState<SortDirection>('desc')
+  const changeHistorySort=(key:string,dir:SortDirection)=>{setHistorySort(key);setHistoryDirection(dir)}
   const [audience,setAudience]=useState<Audience>(initialAudience),[channel,setChannel]=useState<Channel>('all'),[message,setMessage]=useState('')
   const [preview,setPreview]=useState<Preview|null>(null),[previewError,setPreviewError]=useState('')
   const [confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[result,setResult]=useState<SendResult|null>(null)
@@ -54,6 +57,7 @@ function PivnikBroadcast({venue,session,initialAudience}:{venue:ApiVenue;session
   const canWrite=session.capabilities.writes&&Boolean(configured)
   const recipients=preview?(channel==='telegram'?preview.telegramRecipients:channel==='vk'?preview.vkRecipients:preview.telegramRecipients+preview.vkRecipients):0
   const channelMissing=preview&&((channel==='telegram'&&!preview.telegramConfigured)||(channel==='vk'&&!preview.vkConfigured))
+  const items=sortTableRows(history.data?.items||[],x=>historySort==='text'?x.message:historySort==='audience'?audienceLabel(x.segment?`seg:${x.segment}`:x.audience):historySort==='channel'?channelLabel(x.channel):historySort==='tg'?x.telegramDelivered:historySort==='vk'?x.vkDelivered:historySort==='status'?statusLabel(x.status):x.createdAt,historyDirection)
 
   async function send(){
     setConfirm(false);setBusy(true);setError('');setResult(null)
@@ -92,8 +96,8 @@ function PivnikBroadcast({venue,session,initialAudience}:{venue:ApiVenue;session
     </div>
     <section className="card broadcast-history"><div className="card-title"><h3>История рассылок</h3><button className="btn secondary" onClick={history.reload}><RefreshCw/>Обновить</button></div>
       {!history.data?.items.length?<p className="muted-copy">Рассылок пока не было.</p>:
-      <div className="table-scroll"><table><thead><tr><th>Когда</th><th>Текст</th><th>Кому</th><th>Куда</th><th>Telegram</th><th>VK</th><th>Статус</th></tr></thead><tbody>
-        {history.data.items.map(x=><tr key={x.id}>
+      <div className="table-scroll"><table><thead><tr><SortTh label="Когда" column="date" sort={historySort} direction={historyDirection} onSort={changeHistorySort}/><SortTh label="Текст" column="text" sort={historySort} direction={historyDirection} onSort={changeHistorySort} initialDirection="asc"/><SortTh label="Кому" column="audience" sort={historySort} direction={historyDirection} onSort={changeHistorySort} initialDirection="asc"/><SortTh label="Куда" column="channel" sort={historySort} direction={historyDirection} onSort={changeHistorySort} initialDirection="asc"/><SortTh label="Telegram" column="tg" sort={historySort} direction={historyDirection} onSort={changeHistorySort}/><SortTh label="VK" column="vk" sort={historySort} direction={historyDirection} onSort={changeHistorySort}/><SortTh label="Статус" column="status" sort={historySort} direction={historyDirection} onSort={changeHistorySort} initialDirection="asc"/></tr></thead><tbody>
+        {items.map(x=><tr key={x.id}>
           <td>{dt(x.createdAt)}{x.sentBy&&<small className="broadcast-by">{x.sentBy}</small>}</td>
           <td className="broadcast-text">{x.message||<span className="muted-copy">из админки приложения</span>}</td>
           <td>{audienceLabel(x.segment?`seg:${x.segment}`:x.audience)}</td>
