@@ -262,6 +262,21 @@ boundary. The requested end-to-end intake is **not operational**.
 CRM customer drawers use a body-level portal so the `.main` isolation context
 cannot hide their scrim behind the sidebar. The drawer/modal surfaces stack
 above their own scrims; customer actions, tenant scope and data routes are unchanged.
+
+## SPACEVERSE sortable operational tables (2026-10-28)
+
+`src/phaseC/TableSort.tsx` supplies accessible column-header controls and
+missing-value-safe numeric/text comparators for complete client-side lists.
+The CRM directory requests whitelisted `sort` and `direction` from
+`server/data.ts:getClients` so the full permitted tenant-scoped result is
+ordered before the 100-row cap. Monetary/wallet/order-count fields use numeric
+SQL expressions instead of text result aliases; stable `u.id` breaks ties.
+The original CRM filters and write permissions are unchanged. Cash product
+columns and both beer-stock views sort complete returned product collections
+by underlying exact integer amounts, not localized display strings. No fiscal
+or inventory mutation, schema or patch-chain code changes. Other bounded
+operation/audit lists must not claim whole-history ordering from just the page.
+
 `src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing
 auth/demo/invitation flow; `BlackHole.tsx` animates only the background, with a
 static image fallback, reduced-motion support and a pause control. The cube

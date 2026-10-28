@@ -512,12 +512,21 @@ export async function getClients(scope: VenueScope, url: URL) {
   const limit = boundedInt(url.searchParams.get('limit'), 50, 1, 100)
   const offset = boundedInt(url.searchParams.get('offset'), 0, 0, 1_000_000)
   const sortKey = String(url.searchParams.get('sort') || 'lastActivity')
-  const orderBy = {
-    lastActivity: 'last_activity_at DESC NULLS LAST',
-    spend: 'lifetime_spend_cents DESC',
-    balance: 'balance DESC',
-    created: 'u.created_at DESC',
-  }[sortKey] || 'last_activity_at DESC NULLS LAST'
+  const direction = url.searchParams.get('direction') === 'asc' ? 'ASC' : 'DESC'
+  // Whitelist SQL expressions; ORDER BY must use numeric source columns, not
+  // the text-serialized SELECT aliases (e.g. 1000 must rank above 900).
+  const orderBy = ({
+    lastActivity: 'tx.last_activity_at',
+    spend: 'COALESCE(tx.lifetime_spend_cents,0)',
+    balance: 'COALESCE(w.balance,0)',
+    created: 'u.created_at',
+    name: "LOWER(CONCAT_WS(' ',u.first_name,u.last_name))",
+    operations: 'COALESCE(tx.operation_count,0)',
+    averageCheck: 'tx.avg_check_cents',
+    status: 'bc.status',
+    segment: `${SEGMENT_SQL}`,
+    channel: "CASE WHEN COALESCE(i.has_vk,FALSE) AND COALESCE(i.has_tg,FALSE) THEN 'VK + TG' WHEN COALESCE(i.has_vk,FALSE) THEN 'VK' WHEN COALESCE(i.has_tg,FALSE) THEN 'TG' ELSE '' END",
+  } as Record<string,string>)[sortKey] || 'tx.last_activity_at'
 
   const segment = String(url.searchParams.get('segment') || '')
   const params: Array<string | number> = [barId, `%${query}%`, limit, offset]
@@ -617,7 +626,7 @@ export async function getClients(scope: VenueScope, url: URL) {
          OR u.id::text ILIKE $2
        )
        ${statusClause}
-     ORDER BY ${orderBy}
+     ORDER BY ${orderBy} ${direction} NULLS LAST, u.id ASC
      LIMIT $3 OFFSET $4`,
     params,
   )
