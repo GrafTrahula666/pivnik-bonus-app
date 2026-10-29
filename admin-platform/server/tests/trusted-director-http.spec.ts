@@ -74,6 +74,7 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
 
   it.each([
     ['GET','beer-intake'],['POST','beer-intake'],
+    ['GET','beer-inventory'],['POST','beer-inventory'],
     ['GET','app/design'],['GET','app/loyalty'],['GET','app/wheel'],['GET','app/rewards'],
     ['GET','features/manage'],['GET','branding/manage'],['GET','loyalty/manage'],['GET','wheel/manage'],
     ['GET','achievements/manage'],['GET','shop/manage'],['GET','design'],
