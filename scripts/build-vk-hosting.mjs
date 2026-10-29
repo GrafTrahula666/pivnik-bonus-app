@@ -57,13 +57,19 @@ async function copyIfExists(relativePath) {
   }
 }
 
-const VK_BOOT_IMAGE = 'assets/boot/vk-boot-sky-city-20261001.webp';
+const VK_BOOT_IMAGE = 'assets/boot/pivnik-halloween-20261006.webp';
 
 function renderVkIndex(source) {
   let html = source
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
     .replace(/<script defer src="\/vendor\/vk-bridge\.js[^>]*><\/script>\s*/gi, '')
     .replace(/<script defer src="\/vk-platform\.js[^>]*><\/script>\s*/gi, '');
+
+  // Match renderAppIndex(): loader overrides follow the main stylesheet.
+  const mainStylePattern = /<link rel="stylesheet" href="\/?styles\.css[^"]*"\s*\/>/i;
+  if (!mainStylePattern.test(html)) throw new Error('index.html main stylesheet not found.');
+  html = html.replace(mainStylePattern,
+    '$&\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />');
 
   if (!html.includes('account-link.js')) {
     html = html.replace(
@@ -77,7 +83,7 @@ function renderVkIndex(source) {
     '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.2-main-parity"></script>\n  <script defer src="/account-link.js$1"></script>'
   );
 
-  // VK has its own loading artwork, bundled locally so the boot screen never waits on an external CDN.
+  // Bundle the shared Telegram/VK Halloween artwork locally, without an external CDN.
   const bootImagePattern = /(<img class="boot-image" src=")[^"]*(")/i;
   if (!bootImagePattern.test(html)) throw new Error('index.html boot image not found.');
   html = html.replace(bootImagePattern, `$1${VK_BOOT_IMAGE}$2`);
@@ -220,7 +226,8 @@ const requiredFiles = [
   'vk-platform.js',
   'account-link.js',
   'vendor/vk-bridge.js',
-  'styles.css'
+  'styles.css',
+  'loader-fix.css'
 ];
 for (const relativePath of requiredFiles) {
   await fs.access(path.join(outDir, relativePath));

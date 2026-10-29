@@ -1,3 +1,11 @@
+import { registerWalletRoutes } from './routes/wallet.js';
+import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
+import { createPosHttp } from './pos/http.js';
+import { posBonusConfig, processPosBonuses } from './pos/bonus.js';
+import { evotorConfig } from './pos/evotor-client.js';
+import { syncEvotor } from './pos/sync.js';
+import { syncEvotorRecent } from './pos/recent-sync.js';
 import compression from 'compression';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -5,10 +13,25 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import pg from 'pg';
-import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
+import { GOLD_BARS_FRAME, GRANTABLE_FRAMES, GRANTABLE_FRAME_CODES, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
+import {
+  BUSINESS_RUNTIME_CONFIG_SQL,
+  onRuntimeConfig,
+  readRuntimeConfigMeta,
+  saveRuntimeConfig,
+  startRuntimeConfigRefresh
+} from './business-runtime-config.js';
+import { configureLoyalty, normalizeLoyaltySettings, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
+import { configureWheel, normalizeWheelSettings, wheelPrizeChances, wheelSettingsSnapshot } from './wheel.js';
 import QRCode from 'qrcode';
 import {
+  ACHIEVEMENT_CATALOG,
+  achievementSettingsSnapshot,
   acknowledgeAchievement,
+  activeAchievementCatalog,
+  configureAchievements,
+  grantAchievementManually,
+  normalizeAchievementSettings,
   getUserAchievementState,
   getUserEarnedAchievementState,
   syncUserAchievements
@@ -20,12 +43,23 @@ import {
   validateTelegramInitData as validateCoreTelegramInitData,
   verifySession as verifyCoreSession
 } from './platform-core.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
 import { createAdminAdjustmentPersistence } from './admin-adjustment-persistence.js';
 import { createShopPurchasePersistence } from './shop-purchase-persistence.js';
 import { createStaffTransactionPersistence } from './staff-transaction-persistence.js';
 import { createBeerGiftTransactionPersistence } from './beer-gift-transaction-persistence.js';
 import { createBroadcastCampaignStore } from './broadcast-campaign-store.js';
+import {
+  claimInvite as claimHalloweenInvite,
+  getInviteSummary as getHalloweenInviteSummary,
+  identityTombstoneSecretFromEnv,
+  inviteCodeFromStartParam,
+  recordCancellation as recordHalloweenCancellation,
+  recordPurchase as recordHalloweenPurchase,
+  recordPurchaseReturn as recordHalloweenPurchaseReturn,
+  runHalloweenHook
+} from './halloween-invite.js';
 import {
   adminUserCrmStatus,
   adminUserDisplayName,
@@ -77,17 +111,21 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
+let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
+app.use((req, res, next) => {
+  if (!spaceverseCustomerHttp) return next();
+  (async () => {
+    if (spaceversePosHttp && await spaceversePosHttp(req, res)) return true;
+    return spaceverseCustomerHttp(req, res);
+  })().then(handled => { if (!handled) next(); }).catch(next);
+});
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
-const STATUS_LEVELS = [
-  { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
-  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 0, nextCents: 3_000_000 },
-  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 0, nextCents: 7_000_000 },
-  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 0, nextCents: 10_000_000 },
-  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 0, nextCents: 15_000_000 },
-  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 0, nextCents: 50_000_000 },
-  { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
-];
+// Standalone minigame, served as a static page. Not linked from the app shell,
+// the wheel or bonuses — no API/auth wiring, just the page and its images.
+app.use('/run', express.static(path.join(__dirname, 'minigames', 'pivnik-run'), { maxAge: '1h' }));
+
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
@@ -430,11 +468,11 @@ async function ensurePersonalQr(db, userId, force = false) {
 }
 
 function getStatus(spendCents) {
-  return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
+  return statusForSpend(spendCents);
 }
 
 function getEffectiveStatus(row, spendCents) {
-  return hasUnlimitedBonus(row) ? STATUS_LEVELS[STATUS_LEVELS.length - 1] : getStatus(spendCents);
+  return hasUnlimitedBonus(row) ? topStatus() : getStatus(spendCents);
 }
 
 function centsFromInput(value) {
@@ -834,6 +872,12 @@ async function initDatabase() {
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_cancel_quota_resets ON cancel_quota_resets(shift_id, user_id, reset_at DESC)');
+
+    await client.query(BUSINESS_RUNTIME_CONFIG_SQL);
+    // PIVNIK Business can change paid wheel prices, so the price column is no longer limited to 0/50/100.
+    // The wheel table comes from migration 006, which the gateway applies; on a fresh database it may not exist yet.
+    await client.query('ALTER TABLE IF EXISTS wheel_spins DROP CONSTRAINT IF EXISTS wheel_spins_listed_bonus_cost_check');
+    await client.query('ALTER TABLE IF EXISTS wheel_spins ADD CONSTRAINT wheel_spins_listed_bonus_cost_check CHECK (listed_bonus_cost >= 0)');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_settings (
@@ -1340,8 +1384,8 @@ async function sendTelegramMessage(telegramId, text, retryAttempt = 0) {
       status: response.status,
       messageId: payload?.result?.message_id ?? null
     };
-  } catch (error) {
-    console.error('Telegram sendMessage error:', error.message);
+  } catch {
+    console.error('Telegram sendMessage error:', 'telegram_network_error');
     return { ok: false, status: 0, error: 'telegram_network_error' };
   }
 }
@@ -1400,7 +1444,8 @@ function normalizeBroadcastAudience(value) {
   return BROADCAST_AUDIENCES.has(audience) ? audience : '';
 }
 
-async function getBroadcastRecipients(audience) {
+// userIds (optional) narrows the audience to a Business guest segment; the consent rule below still applies.
+async function getBroadcastRecipients(audience, userIds = null) {
   const result = await pool.query(
     `SELECT u.id, u.role,
             COALESCE(
@@ -1417,11 +1462,14 @@ async function getBroadcastRecipients(audience) {
      FROM users u
      WHERE u.merged_into_user_id IS NULL
        AND u.deleted_at IS NULL
-       AND u.marketing_opt_in = TRUE
+       -- Everyone who accepted the rules, except guests who turned promo messages off (owner's choice, 2026-10-07)
+       AND u.terms_accepted_at IS NOT NULL
+       AND (u.marketing_opt_in = TRUE OR u.marketing_opt_out_at IS NULL)
        AND ($1::text = 'all' OR u.role = 'client')
+       AND ($3::bigint[] IS NULL OR u.id = ANY($3::bigint[]))
      ORDER BY u.created_at ASC
      LIMIT $2`,
-    [audience, BROADCAST_MAX_RECIPIENTS + 1]
+    [audience, BROADCAST_MAX_RECIPIENTS + 1, userIds]
   );
   const truncated = result.rows.length > BROADCAST_MAX_RECIPIENTS;
   const rows = truncated ? result.rows.slice(0, BROADCAST_MAX_RECIPIENTS) : result.rows;
@@ -1597,6 +1645,30 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, re
   return updated.rows[0];
 }
 
+// Halloween "Night of Cauldrons" hooks (halloween-invite.js). Each runs on its own connection after the main
+// operation has committed and never throws, so a missing manual migration 011 or a ticket error can never
+// break login, a staff purchase or a cancel.
+// Same secret as the gateway's deleted_identity_tombstones hash: a re-created account cannot be invited again.
+const halloweenTombstoneSecret = identityTombstoneSecretFromEnv();
+
+async function claimHalloweenInviteFromStartParam(initData, userId) {
+  const code = initData ? inviteCodeFromStartParam(initData) : null;
+  if (!code) return;
+  await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
+    inviteeId: userId, code, channel: 'telegram_start_param', tombstoneSecret: halloweenTombstoneSecret
+  }));
+}
+
+async function halloweenAfterPurchase(transactionId) {
+  if (!transactionId) return;
+  await runHalloweenHook(pool, 'purchase', (db) => recordHalloweenPurchase(db, { transactionId }));
+}
+
+async function halloweenAfterCancel(transactionId) {
+  if (!transactionId) return;
+  await runHalloweenHook(pool, 'cancel', (db) => recordHalloweenCancellation(db, { transactionId }));
+}
+
 app.get('/api/health', async (_req, res) => {
   try {
     const result = await pool.query(`
@@ -1679,6 +1751,7 @@ app.post('/api/auth', async (req, res, next) => {
       await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
+      await claimHalloweenInviteFromStartParam(initData, userId);
 
       const profile = await getProfile(userId);
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
@@ -1693,7 +1766,7 @@ app.post('/api/auth', async (req, res, next) => {
         sv: Number(sessionResult.rows[0]?.session_version || 1),
         exp: Date.now() + 7 * 24 * 60 * 60 * 1000
       });
-      res.json({ token, profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
+      res.json({ token, profile, statuses: statusLevels().map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -1711,7 +1784,7 @@ app.get('/api/me', authRequired, async (req, res, next) => {
       getProfile(req.user.id),
       pool.query('SELECT published FROM app_settings WHERE id = 1')
     ]);
-    res.json({ profile, statuses: STATUS_LEVELS.map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
+    res.json({ profile, statuses: statusLevels().map((item) => ({ ...item, min: rubles(item.minCents), next: item.nextCents ? rubles(item.nextCents) : null })), design: designResult.rows[0].published });
   } catch (error) {
     next(error);
   }
@@ -2041,28 +2114,26 @@ app.post('/api/shop/inquiries', authRequired, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-app.get('/api/wallet/config', authRequired, async (_req, res) => {
-  res.json({
-    appleAvailable: Boolean(appleWalletIssuerUrl),
-    googleAvailable: Boolean(googleWalletIssuerUrl),
-    fallbackAvailable: true
-  });
+registerWalletRoutes(app, {
+  authRequired,
+  appleWalletIssuerUrl,
+  googleWalletIssuerUrl
 });
 
-app.get('/api/wallet/apple', authRequired, async (req, res) => {
-  if (!appleWalletIssuerUrl) return res.status(503).json({ error: 'Apple Wallet ещё не подключён владельцем.' });
-  const url = new URL(appleWalletIssuerUrl);
-  url.searchParams.set('user', req.user.id);
-  url.searchParams.set('token', req.user.qrShortCode || '');
-  res.json({ url: url.toString() });
+app.get('/api/halloween/summary', authRequired, async (req, res, next) => {
+  try {
+    res.json(await getHalloweenInviteSummary(pool, { userId: req.user.id, secret: sessionSecret }));
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get('/api/wallet/google', authRequired, async (req, res) => {
-  if (!googleWalletIssuerUrl) return res.status(503).json({ error: 'Google Wallet ещё не подключён владельцем.' });
-  const url = new URL(googleWalletIssuerUrl);
-  url.searchParams.set('user', req.user.id);
-  url.searchParams.set('token', req.user.qrShortCode || '');
-  res.json({ url: url.toString() });
+app.post('/api/halloween/invite/claim', authRequired, async (req, res) => {
+  // A bad, foreign or stale code is never an error for the client: it just does not attach.
+  const result = await runHalloweenHook(pool, 'invite claim', (db) => claimHalloweenInvite(db, {
+    inviteeId: req.user.id, code: req.body?.code, channel: 'claim', tombstoneSecret: halloweenTombstoneSecret
+  }));
+  res.json({ ok: true, ...(result || { attached: false, reason: 'unavailable' }) });
 });
 
 app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
@@ -2195,7 +2266,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
         beerMl
       });
       await client.query('COMMIT');
-      await syncUserAchievements(pool, existing.rows[0].client_id);
+      await halloweenAfterPurchase(existing.rows[0].id);
+      await syncUserAchievements(pool, existing.rows[0].client_id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
         client: await getProfile(existing.rows[0].client_id)
@@ -2271,7 +2343,8 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       [newPaidMl, newGiftBalanceMl, targetUser.id]
     );
     await client.query('COMMIT');
-    await syncUserAchievements(pool, targetUser.id);
+    await halloweenAfterPurchase(persistedTransaction?.id);
+    await syncUserAchievements(pool, targetUser.id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
 
     const tx = persistedTransaction;
     const beerText = beerMl > 0
@@ -2556,6 +2629,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
     ) {
       return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
     }
+    await halloweenAfterCancel(replay.rows[0].id); // repairs a cancel hook that failed the first time
     return res.json({
       ok: true,
       transaction: transactionResponse(replay.rows[0]),
@@ -2590,6 +2664,7 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       ownerUnlimitedCancel ? {} : { staffId: actingStaff.id, notBefore: quota.countFrom }
     );
     await client.query('COMMIT');
+    await halloweenAfterCancel(tx?.id);
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
 Причина: ${reason}
@@ -2719,6 +2794,106 @@ app.put('/api/admin/shift', authRequired, requireRole('admin'), async (req, res,
   }
 });
 
+// Evotor accruals reuse the bar's own status, unlimited-balance and cancel rules.
+const posBonusLedger = {
+  unlimitedBalance: UNLIMITED_BONUS_BALANCE,
+  suspiciousThresholdCents: SUSPICIOUS_THRESHOLD_CENTS,
+  isUnlimited: hasUnlimitedBonus,
+  async status(db, user) {
+    return getEffectiveStatus(user, await getRollingSpend(db, user.id));
+  },
+  async cancel(db, transactionId, reason, requestKey) {
+    const tx = (await db.query('SELECT client_id FROM transactions WHERE id = $1', [transactionId])).rows[0];
+    if (tx) await db.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [tx.client_id]);
+    return cancelCompletedTransaction(db, transactionId, null, reason, requestKey);
+  },
+  async afterReturn(result) {
+    await runHalloweenHook(pool, 'return', (db) => recordHalloweenPurchaseReturn(db, {
+      transactionId: result.baseTransactionId, returnedCents: result.returnedCents, returnKey: result.returnKey
+    }));
+  },
+  async afterCommit(result) {
+    // A failed achievement sync must not drop the Halloween hook or the guest's message.
+    await syncUserAchievements(pool, result.user.id).catch((error) => console.warn('POS achievements sync failed:', error.message));
+    if (result.kind === 'accrue') {
+      await halloweenAfterPurchase(result.transaction.id);
+      await sendTelegramMessage(result.user.telegram_id, `Покупка в баре «Пивник»
+
+Чек: ${rubles(result.amountCents).toFixed(2)} ₽
+Начислено: ${result.bonus} бонусов
+Баланс: ${result.balanceAfter} бонусов
+
+Если вы не совершали эту покупку, обратитесь к администратору.`);
+      return;
+    }
+    if (result.cancelledTransactionId) await halloweenAfterCancel(result.cancelledTransactionId);
+    if (result.removed > 0) {
+      await sendTelegramMessage(result.user.telegram_id, `Возврат в баре «Пивник»
+
+Списано начисленных за покупку бонусов: ${result.removed}
+Баланс: ${result.balanceAfter} бонусов`);
+    }
+  }
+};
+
+async function runPosBonusCycle(config, storeId) {
+  try {
+    await syncEvotorRecent({ pool, config });
+  } catch (error) {
+    console.warn('Evotor recent sync skipped:', error.code || error.name);
+  }
+  try {
+    await syncEvotor({ pool, config, maxPages: 5 });
+  } catch (error) {
+    console.warn('Evotor sync skipped:', error.code || error.message);
+  }
+  try {
+    const results = await processPosBonuses(pool, { storeId, ledger: posBonusLedger });
+    for (const item of results) {
+      if (item.status !== 'applied') console.warn('Evotor bonus', item.status, item.documentId, item.reason || item.error || '');
+    }
+  } catch (error) {
+    console.warn('Evotor bonus processing skipped:', error.code || error.message);
+  }
+}
+
+function startPosBonusWorker() {
+  const config = evotorConfig();
+  const bonus = posBonusConfig();
+  if (!config.enabled || !bonus.enabled || !config.token || !config.storeId) return;
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try { await runPosBonusCycle(config, config.storeId); } finally { running = false; }
+  };
+  setInterval(tick, bonus.syncSeconds * 1000).unref();
+  setTimeout(tick, 5000).unref();
+  console.log(`Evotor bonus worker: every ${bonus.syncSeconds}s for store ${config.storeId}`);
+}
+const posHttp = createPosHttp(pool, undefined, Date.now, {
+  isUnlimited: hasUnlimitedBonus, unlimitedBalance: UNLIMITED_BONUS_BALANCE
+});
+app.use('/api/device/pos', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await posHttp.device({ method: req.method,
+      pathname: req.originalUrl.split('?')[0], authorization: req.headers.authorization,
+      deviceKey: req.headers['x-pivnik-device-key'],
+      body: req.body, address: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress }));
+  } catch (error) { next(error); }
+});
+app.use('/api/admin/pos', authRequired, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await posHttp.admin({ method: req.method,
+      pathname: req.originalUrl.split('?')[0], user: req.user, params: req.query, body: req.body }));
+  } catch (error) { next(error); }
+});
+// POS errors keep their HTTP meaning in standalone Express as in the gateway.
+app.use(['/api/device/pos', '/api/admin/pos'], (error, _req, res, next) => {
+  if (!error.statusCode) return next(error);
+  res.status(error.statusCode).set('Cache-Control', 'no-store').json({ error: error.message });
+});
+
 app.get('/api/admin/summary', authRequired, requireRole('viewer', 'admin'), async (req, res, next) => {
   try {
     const summaryResult = await pool.query(`
@@ -2813,59 +2988,64 @@ app.post('/api/me/marketing-consent', authRequired, async (req, res, next) => {
   }
 });
 
-app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), async (req, res, next) => {
-  try {
-    const audience = normalizeBroadcastAudience(req.query?.audience);
-    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
-    const recipients = await getBroadcastRecipients(audience);
-    const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
-    const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
-    res.json({
-      audience,
-      totalUsers: recipients.rows.length,
-      truncated: recipients.truncated,
-      telegramRecipients: telegramIds.length,
-      vkRecipients: vkIds.length,
-      telegramConfigured: Boolean(botToken),
-      vkConfigured: Boolean(vkCommunityId && vkCommunityToken),
-      maxRecipients: BROADCAST_MAX_RECIPIENTS
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+async function buildBroadcastPreview(audience, userIds = null) {
+  const recipients = await getBroadcastRecipients(audience, userIds);
+  const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
+  const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
+  // Everyone in the audience who accepted the rules, opted out or not, so the panel can say "N of M".
+  const active = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM users u
+     WHERE u.merged_into_user_id IS NULL AND u.deleted_at IS NULL AND u.terms_accepted_at IS NOT NULL
+       AND ($1::text = 'all' OR u.role = 'client')
+       AND ($2::bigint[] IS NULL OR u.id = ANY($2::bigint[]))`,
+    [audience, userIds]
+  );
+  return {
+    audience,
+    totalUsers: recipients.rows.length,
+    activeUsers: Number(active.rows[0]?.n || 0),
+    truncated: recipients.truncated,
+    telegramRecipients: telegramIds.length,
+    vkRecipients: vkIds.length,
+    telegramConfigured: Boolean(botToken),
+    vkConfigured: Boolean(vkCommunityId && vkCommunityToken),
+    maxRecipients: BROADCAST_MAX_RECIPIENTS
+  };
+}
 
-app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req, res, next) => {
+// Shared by the in-app admin and PIVNIK Business. Returns { status, body } for the HTTP response.
+async function runBroadcast({ actorUserId, channel: rawChannel, audience: rawAudience, message: rawMessage, source, userIds = null, segment = '' }) {
   let campaignId = null;
   try {
-    const channel = normalizeBroadcastChannel(req.body?.channel);
-    const audience = normalizeBroadcastAudience(req.body?.audience);
-    const message = String(req.body?.message || '').trim();
-    if (!channel) return res.status(400).json({ error: 'Выберите канал рассылки.' });
-    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
-    if (!message) return res.status(400).json({ error: 'Введите текст рассылки.' });
+    const channel = normalizeBroadcastChannel(rawChannel);
+    const audience = normalizeBroadcastAudience(rawAudience);
+    const message = String(rawMessage || '').trim();
+    if (!channel) return { status: 400, body: { error: 'Выберите канал рассылки.' } };
+    if (!audience) return { status: 400, body: { error: 'Недопустимая аудитория рассылки.' } };
+    if (!message) return { status: 400, body: { error: 'Введите текст рассылки.' } };
     if (message.length > BROADCAST_MAX_TEXT) {
-      return res.status(400).json({ error: `Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.` });
+      return { status: 400, body: { error: `Сообщение длиннее ${BROADCAST_MAX_TEXT} символов.` } };
     }
 
-    const recipients = await getBroadcastRecipients(audience);
+    const recipients = await getBroadcastRecipients(audience, userIds);
     const telegramIds = uniqueRecipientIds(recipients.rows, 'telegram_id');
     const vkIds = uniqueRecipientIds(recipients.rows, 'vk_id');
     const wantsTelegram = channel === 'telegram' || channel === 'all';
     const wantsVk = channel === 'vk' || channel === 'all';
 
     if (channel === 'telegram' && !botToken) {
-      return res.status(503).json({ error: 'TELEGRAM_BOT_TOKEN не настроен.' });
+      return { status: 503, body: { error: 'TELEGRAM_BOT_TOKEN не настроен.' } };
     }
     if (channel === 'vk' && (!vkCommunityId || !vkCommunityToken)) {
-      return res.status(503).json({ error: 'Для VK нужны VK_COMMUNITY_ID и VK_COMMUNITY_TOKEN.' });
+      return { status: 503, body: { error: 'Для VK нужны VK_COMMUNITY_ID и VK_COMMUNITY_TOKEN.' } };
     }
 
     const claim = await broadcastCampaignStore.claim({
-      actorUserId: req.user.id,
+      actorUserId,
       channel,
       audience,
       message,
+      segment,
       totalUsers: recipients.rows.length,
       truncated: recipients.truncated
     });
@@ -2873,24 +3053,30 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
 
     if (!claim.created) {
       if (claim.campaign.status === 'completed') {
-        return res.json({
-          ok: true,
-          deduplicated: true,
-          campaignId: claim.campaign.id,
-          channel,
-          audience,
-          totalUsers: claim.campaign.totalUsers,
-          truncated: claim.campaign.truncated,
-          telegram: claim.campaign.telegram,
-          vk: claim.campaign.vk
-        });
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            deduplicated: true,
+            campaignId: claim.campaign.id,
+            channel,
+            audience,
+            totalUsers: claim.campaign.totalUsers,
+            truncated: claim.campaign.truncated,
+            telegram: claim.campaign.telegram,
+            vk: claim.campaign.vk
+          }
+        };
       }
-      return res.status(409).json({
-        error: claim.campaign.status === 'processing'
-          ? 'Такая рассылка уже выполняется. Повторная отправка заблокирована.'
-          : 'Такая рассылка недавно завершилась с ошибкой. Повтор автоматически заблокирован, чтобы не отправить сообщение дважды.',
-        campaignId: claim.campaign.id
-      });
+      return {
+        status: 409,
+        body: {
+          error: claim.campaign.status === 'processing'
+            ? 'Такая рассылка уже выполняется. Повторная отправка заблокирована.'
+            : 'Такая рассылка недавно завершилась с ошибкой. Повтор автоматически заблокирован, чтобы не отправить сообщение дважды.',
+          campaignId: claim.campaign.id
+        }
+      };
     }
 
     const telegram = wantsTelegram && botToken
@@ -2913,32 +3099,414 @@ app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req,
 
     console.info('Admin broadcast completed', {
       campaignId,
-      actor: String(req.user.id),
+      actor: String(actorUserId),
+      source,
       channel,
       audience,
+      segment: segment || undefined,
       telegram: { attempted: telegram.attempted, delivered: telegram.delivered, failed: telegram.failed },
       vk: { attempted: vk.attempted, delivered: vk.delivered, failed: vk.failed },
       truncated: recipients.truncated
     });
 
-    res.json({
-      ok: true,
-      deduplicated: false,
-      campaignId,
-      channel,
-      audience,
-      totalUsers: recipients.rows.length,
-      truncated: recipients.truncated,
-      telegram,
-      vk
-    });
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        deduplicated: false,
+        campaignId,
+        channel,
+        audience,
+        totalUsers: recipients.rows.length,
+        truncated: recipients.truncated,
+        telegram,
+        vk
+      }
+    };
   } catch (error) {
     if (campaignId) {
       await broadcastCampaignStore.fail(campaignId, error).catch((auditError) => {
         console.error('Broadcast campaign audit failure:', auditError.message);
       });
     }
+    throw error;
+  }
+}
+
+app.get('/api/admin/broadcast/preview', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const audience = normalizeBroadcastAudience(req.query?.audience);
+    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
+    res.json(await buildBroadcastPreview(audience));
+  } catch (error) {
     next(error);
+  }
+});
+
+app.post('/api/admin/broadcast', authRequired, requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await runBroadcast({ ...req.body, actorUserId: req.user.id, source: 'app-admin' });
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PIVNIK Business (admin-pilot) sends broadcasts through the guest app, which holds the bot tokens.
+// Off unless BUSINESS_INTERNAL_TOKEN is set on both services; the campaign is recorded under the owner's app account.
+function requireBusinessService(req, res, next) {
+  const expected = String(process.env.BUSINESS_INTERNAL_TOKEN || '');
+  const given = String(req.get('x-business-token') || '');
+  if (expected.length < 32) return res.status(404).json({ error: 'Not found' });
+  const a = crypto.createHash('sha256').update(given).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  if (!crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Нет доступа.' });
+  next();
+}
+
+async function businessBroadcastActorId() {
+  const configured = String(process.env.BUSINESS_BROADCAST_ACTOR_USER_ID || '').trim();
+  if (/^\d+$/.test(configured)) return configured;
+  const owner = await pool.query(
+    `SELECT id FROM users WHERE role = 'admin' AND merged_into_user_id IS NULL AND deleted_at IS NULL ORDER BY id LIMIT 1`
+  );
+  if (!owner.rowCount) throw Object.assign(new Error('Нет администратора приложения для записи рассылки.'), { statusCode: 503 });
+  return String(owner.rows[0].id);
+}
+
+app.get('/api/internal/business/broadcast/preview', requireBusinessService, async (req, res, next) => {
+  try {
+    const audience = normalizeBroadcastAudience(req.query?.audience);
+    if (!audience) return res.status(400).json({ error: 'Недопустимая аудитория рассылки.' });
+    res.json(await buildBroadcastPreview(audience));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// A Business guest segment arrives as its name and the guests' app user ids.
+function businessSegment(body) {
+  const segment = String(body?.segment || '');
+  if (!segment) return { segment: '', userIds: null };
+  const ids = Array.isArray(body?.userIds) ? body.userIds.map(String) : null;
+  if (!/^[a-z_]{1,32}$/.test(segment) || !ids || ids.length > 5000 || !ids.every((id) => /^\d{1,18}$/.test(id))) {
+    throw Object.assign(new Error('Некорректный сегмент рассылки.'), { statusCode: 400 });
+  }
+  return { segment, userIds: ids };
+}
+
+app.post('/api/internal/business/broadcast/preview', requireBusinessService, async (req, res, next) => {
+  try {
+    const { userIds } = businessSegment(req.body);
+    res.json(await buildBroadcastPreview('clients', userIds || []));
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
+app.post('/api/internal/business/broadcast', requireBusinessService, async (req, res, next) => {
+  try {
+    const { segment, userIds } = businessSegment(req.body);
+    const result = await runBroadcast({
+      channel: req.body?.channel,
+      audience: segment ? 'clients' : req.body?.audience,
+      message: req.body?.message,
+      actorUserId: await businessBroadcastActorId(),
+      source: 'business',
+      segment,
+      userIds
+    });
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    next(error);
+  }
+});
+
+// PIVNIK Business: the achievement catalog, frames, and giving them to a guest by hand.
+const ACHIEVEMENT_SETTINGS_KEY = 'achievements';
+onRuntimeConfig(ACHIEVEMENT_SETTINGS_KEY, configureAchievements);
+
+function businessError(res, error, next) {
+  if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+  return next(error);
+}
+
+async function businessGuest(rawId, db = pool) {
+  const id = String(rawId || '');
+  if (!/^\d{1,18}$/.test(id)) throw Object.assign(new Error('Некорректный гость.'), { statusCode: 400 });
+  const result = await db.query(
+    `SELECT id, profile_frame FROM users WHERE id = $1::bigint AND merged_into_user_id IS NULL AND deleted_at IS NULL`,
+    [id]
+  );
+  if (!result.rowCount) throw Object.assign(new Error('Гость не найден.'), { statusCode: 404 });
+  return result.rows[0];
+}
+
+async function businessRewardsOverview() {
+  const [achievementCounts, frameCounts, meta] = await Promise.all([
+    pool.query(
+      `SELECT achievement_code, COUNT(DISTINCT user_id)::int AS guests FROM reward_grants
+       WHERE source = 'achievement' AND achievement_code IS NOT NULL GROUP BY achievement_code`
+    ),
+    pool.query('SELECT frame_id, COUNT(*)::int AS guests FROM user_frames GROUP BY frame_id'),
+    readRuntimeConfigMeta(pool, ACHIEVEMENT_SETTINGS_KEY)
+  ]);
+  const achievementGuests = new Map(achievementCounts.rows.map((row) => [row.achievement_code, row.guests]));
+  const frameGuests = new Map(frameCounts.rows.map((row) => [row.frame_id, row.guests]));
+  const defaults = new Map(ACHIEVEMENT_CATALOG.map((item) => [item.code, item]));
+  return {
+    achievements: activeAchievementCatalog().map((item) => ({
+      code: item.code,
+      title: item.title,
+      description: item.description,
+      rarity: item.rarity,
+      metric: item.metric,
+      target: item.target,
+      unit: item.unit,
+      recurring: item.recurring || null,
+      rewardBonus: Number(item.rewardBonus || 0),
+      rewardBeerMl: Number(item.rewardBeerMl || 0),
+      defaultRewardBonus: defaults.has(item.code) ? Number(defaults.get(item.code).rewardBonus || 0) : null,
+      enabled: item.enabled !== false,
+      manual: Boolean(item.manual),
+      guests: achievementGuests.get(item.code) || 0
+    })),
+    frames: GRANTABLE_FRAMES.map((frame) => ({ ...frame, guests: frameGuests.get(frame.code) || 0 })),
+    updatedAt: meta?.updatedAt || null,
+    updatedBy: meta?.updatedBy || null
+  };
+}
+
+app.get('/api/internal/business/rewards', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessRewardsOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.put('/api/internal/business/rewards/achievements', requireBusinessService, async (req, res, next) => {
+  try {
+    const settings = normalizeAchievementSettings(req.body?.settings);
+    // An achievement that guests already have can be switched off, not deleted.
+    const kept = new Set(settings.custom.map((item) => item.code));
+    const removed = achievementSettingsSnapshot().custom.map((item) => item.code).filter((code) => !kept.has(code));
+    if (removed.length) {
+      const owned = await pool.query(
+        `SELECT 1 FROM reward_grants WHERE source = 'achievement' AND achievement_code = ANY($1::text[]) LIMIT 1`,
+        [removed]
+      );
+      if (owned.rowCount) throw Object.assign(new Error('Это достижение уже есть у гостей, его нельзя удалить.'), { statusCode: 409 });
+    }
+    await saveRuntimeConfig(pool, ACHIEVEMENT_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
+    res.json(await businessRewardsOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+// Status levels and the welcome bonus (loyalty-config.js).
+const LOYALTY_SETTINGS_KEY = 'loyalty';
+onRuntimeConfig(LOYALTY_SETTINGS_KEY, configureLoyalty);
+
+async function businessLoyaltyOverview() {
+  const levels = statusLevels();
+  // Guests per level by the same 12-month spend the app uses for a guest's status.
+  const spend = await pool.query(
+    `SELECT COALESCE(s.spend, 0)::bigint AS spend, COUNT(*)::int AS guests
+     FROM users u
+     LEFT JOIN (
+       SELECT client_id, SUM(cash_paid_cents) AS spend FROM transactions
+       WHERE status = 'completed' AND mode IN ('accrue','redeem') AND created_at >= NOW() - INTERVAL '12 months'
+       GROUP BY client_id
+     ) s ON s.client_id = u.id
+     WHERE u.role = 'client' AND u.merged_into_user_id IS NULL AND u.deleted_at IS NULL
+     GROUP BY 1`
+  );
+  const guests = levels.map(() => 0);
+  for (const row of spend.rows) {
+    const value = Number(row.spend);
+    let index = 0;
+    levels.forEach((level, i) => { if (value >= level.minCents) index = i; });
+    guests[index] += row.guests;
+  }
+  const meta = await readRuntimeConfigMeta(pool, LOYALTY_SETTINGS_KEY);
+  return {
+    levels: levels.map((level, index) => ({
+      name: level.name,
+      minCents: level.minCents,
+      bonusPercent: level.bonusPercent,
+      discountPercent: level.discountPercent,
+      guests: guests[index]
+    })),
+    welcomeBonus: welcomeBonusAmount(),
+    updatedAt: meta?.updatedAt || null,
+    updatedBy: meta?.updatedBy || null
+  };
+}
+
+app.get('/api/internal/business/loyalty', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessLoyaltyOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.put('/api/internal/business/loyalty', requireBusinessService, async (req, res, next) => {
+  try {
+    const settings = normalizeLoyaltySettings(req.body?.settings);
+    await saveRuntimeConfig(pool, LOYALTY_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
+    res.json(await businessLoyaltyOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+// Wheel chances, paid spin prices and the free spin interval (wheel.js).
+const WHEEL_SETTINGS_KEY = 'wheel';
+onRuntimeConfig(WHEEL_SETTINGS_KEY, configureWheel);
+
+async function businessWheelOverview() {
+  let stats = { spins: 0, paidSpins: 0, bonusSpent: 0, bonusAwarded: 0, beerAwardedMl: 0, guests: 0 };
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS spins, COUNT(*) FILTER (WHERE kind <> 'free')::int AS paid_spins,
+              COALESCE(SUM(charged_bonus_cost), 0)::bigint AS bonus_spent, COALESCE(SUM(bonus_awarded), 0)::bigint AS bonus_awarded,
+              COALESCE(SUM(beer_awarded_ml), 0)::bigint AS beer_awarded_ml, COUNT(DISTINCT user_id)::int AS guests
+       FROM wheel_spins WHERE created_at >= NOW() - INTERVAL '30 days'`
+    );
+    const row = result.rows[0] || {};
+    stats = {
+      spins: Number(row.spins || 0),
+      paidSpins: Number(row.paid_spins || 0),
+      bonusSpent: Number(row.bonus_spent || 0),
+      bonusAwarded: Number(row.bonus_awarded || 0),
+      beerAwardedMl: Number(row.beer_awarded_ml || 0),
+      guests: Number(row.guests || 0)
+    };
+  } catch (error) {
+    if (error?.code !== '42P01') throw error;
+  }
+  const meta = await readRuntimeConfigMeta(pool, WHEEL_SETTINGS_KEY);
+  return {
+    settings: wheelSettingsSnapshot(),
+    prizes: wheelPrizeChances(),
+    last30Days: stats,
+    updatedAt: meta?.updatedAt || null,
+    updatedBy: meta?.updatedBy || null
+  };
+}
+
+app.get('/api/internal/business/wheel', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessWheelOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.put('/api/internal/business/wheel', requireBusinessService, async (req, res, next) => {
+  try {
+    const settings = normalizeWheelSettings(req.body?.settings);
+    await saveRuntimeConfig(pool, WHEEL_SETTINGS_KEY, settings, String(req.body?.updatedBy || '').slice(0, 120));
+    res.json(await businessWheelOverview());
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+async function businessGuestRewards(userId) {
+  const guest = await businessGuest(userId);
+  const [achievements, frames] = await Promise.all([
+    pool.query(
+      `SELECT achievement_code, MAX(created_at) AS granted_at, COUNT(*)::int AS times FROM reward_grants
+       WHERE user_id = $1::bigint AND source = 'achievement' AND achievement_code IS NOT NULL
+       GROUP BY achievement_code ORDER BY MAX(created_at) DESC`,
+      [guest.id]
+    ),
+    pool.query('SELECT frame_id, acquired_source, acquired_at FROM user_frames WHERE user_id = $1::bigint ORDER BY acquired_at', [guest.id])
+  ]);
+  const titles = new Map(activeAchievementCatalog().map((item) => [item.code, item.title]));
+  const frameTitles = new Map(GRANTABLE_FRAMES.map((frame) => [frame.code, frame.title]));
+  return {
+    selectedFrame: guest.profile_frame || 'none',
+    achievements: achievements.rows.map((row) => ({
+      code: row.achievement_code,
+      title: titles.get(row.achievement_code) || row.achievement_code,
+      grantedAt: row.granted_at,
+      times: row.times
+    })),
+    frames: frames.rows.map((row) => ({
+      code: row.frame_id,
+      title: frameTitles.get(row.frame_id) || row.frame_id,
+      source: row.acquired_source,
+      acquiredAt: row.acquired_at,
+      removable: row.acquired_source === 'business'
+    }))
+  };
+}
+
+app.get('/api/internal/business/users/:id/rewards', requireBusinessService, async (req, res, next) => {
+  try {
+    res.json(await businessGuestRewards(req.params.id));
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.post('/api/internal/business/users/:id/achievements', requireBusinessService, async (req, res, next) => {
+  try {
+    const guest = await businessGuest(req.params.id);
+    const granted = await grantAchievementManually(pool, guest.id, req.body?.code);
+    res.json({ granted, rewards: await businessGuestRewards(guest.id) });
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+app.post('/api/internal/business/users/:id/frames', requireBusinessService, async (req, res, next) => {
+  try {
+    const code = String(req.body?.code || '');
+    if (!GRANTABLE_FRAME_CODES.has(code)) throw Object.assign(new Error('Такой рамки нет.'), { statusCode: 400 });
+    const guest = await businessGuest(req.params.id);
+    const inserted = await pool.query(
+      `INSERT INTO user_frames (user_id, frame_id, acquired_source) VALUES ($1::bigint, $2, 'business')
+       ON CONFLICT (user_id, frame_id) DO NOTHING RETURNING id`,
+      [guest.id, code]
+    );
+    if (!inserted.rowCount) throw Object.assign(new Error('У гостя уже есть эта рамка.'), { statusCode: 409 });
+    res.json(await businessGuestRewards(guest.id));
+  } catch (error) {
+    businessError(res, error, next);
+  }
+});
+
+// Only frames given from Business can be taken back; a guest wearing it goes back to no frame.
+app.delete('/api/internal/business/users/:id/frames/:code', requireBusinessService, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const guest = await businessGuest(req.params.id, client);
+    const code = String(req.params.code || '');
+    const removed = await client.query(
+      `DELETE FROM user_frames WHERE user_id = $1::bigint AND frame_id = $2 AND acquired_source = 'business' RETURNING id`,
+      [guest.id, code]
+    );
+    if (!removed.rowCount) throw Object.assign(new Error('Эту рамку выдали не из панели, её нельзя забрать.'), { statusCode: 409 });
+    await client.query(
+      `UPDATE users SET profile_frame = 'none', updated_at = NOW() WHERE id = $1::bigint AND profile_frame = $2`,
+      [guest.id, code]
+    );
+    await client.query('COMMIT');
+    res.json(await businessGuestRewards(guest.id));
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    businessError(res, error, next);
+  } finally {
+    client.release();
   }
 });
 
@@ -3204,6 +3772,7 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
       requestKey
     );
     await client.query('COMMIT');
+    await halloweenAfterCancel(tx?.id);
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
 Причина: ${reason}
@@ -3395,6 +3964,8 @@ app.post('/api/admin/design/reset', authRequired, requireRole('admin'), async (r
   }
 });
 
+app.get('/pos-admin.js', (_req, res) => res.set('Cache-Control', 'no-store').type('js').sendFile(path.join(__dirname, 'pos-admin.js')));
+app.get('/pos-admin.css', (_req, res) => res.set('Cache-Control', 'no-store').type('css').sendFile(path.join(__dirname, 'pos-admin.css')));
 app.get('/styles.css', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'styles.css')));
 app.get('/app.js', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'app.js')));
 app.get('/', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(path.join(__dirname, 'index.html')));
@@ -3409,9 +3980,28 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: message });
 });
 
+try {
+  const runtime = await guardSpaceverseRuntimeStartup({
+    environment: process.env,
+    query: (text, params) => pool.query(text, params)
+  });
+  if (runtime.mode === 'tenant') {
+    spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
+    spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
+      sessionSecret: process.env.SESSION_SECRET || '', telegramBotToken: botToken,
+      vkAppId: process.env.VK_APP_ID || '', vkAppSecret: process.env.VK_APP_SECRET || '' });
+  }
+} catch (error) {
+  console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+  await pool.end().catch(() => {});
+  process.exit(1);
+}
+
 await initDatabase();
+startRuntimeConfigRefresh(pool);
 const server = app.listen(port, isChildServer ? '127.0.0.1' : '0.0.0.0', () => {
   console.log(`Pivnik app is running on port ${port}`);
+  startPosBonusWorker();
 });
 
 async function shutdown(signal) {

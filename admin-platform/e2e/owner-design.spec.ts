@@ -1,0 +1,32 @@
+import {expect,test} from '@playwright/test'
+
+test('owner design retains login, demo navigation and stationary brand on desktop and mobile',async({page},info)=>{
+ const failures:string[]=[];page.on('pageerror',error=>failures.push(error.message))
+ await page.route('**/api/admin/auth/session',route=>route.fulfill({json:{authenticated:false,demo:true,invitations:true}}))
+ await page.goto('/')
+ await expect(page.getByRole('heading',{name:'С возвращением.'})).toBeVisible()
+ await expect(page.getByLabel('Email',{exact:true})).toBeVisible()
+ await expect(page.getByLabel('Пароль',{exact:true})).toBeVisible()
+ const logo=page.locator('.login-brand img')
+ await expect(logo).toHaveJSProperty('complete',true)
+ await expect(logo).toHaveCSS('animation-name','none')
+ expect(await logo.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+ await page.screenshot({path:info.outputPath('login.png'),fullPage:true})
+ await page.getByRole('button',{name:'Посмотреть демо-версию',exact:true}).click()
+ await expect(page.locator('.kpi')).toHaveCount(4)
+ await page.getByRole('button',{name:'Все 12 показателей',exact:true}).click()
+ await expect(page.locator('.kpi')).toHaveCount(12)
+ await page.getByRole('button',{name:'Свернуть показатели',exact:true}).click()
+ await expect(page.locator('.kpi')).toHaveCount(4)
+ await page.screenshot({path:info.outputPath('overview.png'),fullPage:true})
+ await expect(page.locator('.sidebar').getByRole('button',{name:'Оформление',exact:true})).toHaveCount(0)
+ for(const section of ['Клиенты','Операции','Аналитика','Лояльность','Колесо','Достижения','Магазин','Акции','Рассылки','Настройки','Журнал','Платформа','Компании','Заведения','Разработчик']){
+  const menu=page.getByRole('button',{name:'Открыть меню',exact:true})
+  if(await menu.isVisible())await menu.click()
+  await page.locator('.sidebar').getByRole('button',{name:section,exact:true}).click()
+  await expect(page.locator('.content')).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),section).toBe(true)
+ }
+ expect(failures).toEqual([])
+})

@@ -63,17 +63,31 @@ test('VK broadcast secrets are environment-only', () => {
   assert.doesNotMatch(server, /VK_COMMUNITY_TOKEN\s*=\s*['"][^'"]+['"]/);
 });
 
-test('promotional broadcasts require explicit server-side consent', () => {
+test('promotional broadcasts go to every guest who accepted the rules, except those who turned them off on the server', () => {
   const server = read('server.js');
   const html = read('index.html');
   const app = read('app.js');
   assert.match(server, /marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE/);
   assert.match(server, /app\.post\('\/api\/me\/marketing-consent'/);
-  assert.match(server, /AND u\.marketing_opt_in = TRUE/);
+  assert.match(server, /AND u\.terms_accepted_at IS NOT NULL\s+AND \(u\.marketing_opt_in = TRUE OR u\.marketing_opt_out_at IS NULL\)/);
   assert.match(server, /MARKETING_CONSENT_VERSION/);
   assert.match(app, /promotions: false/);
   assert.match(app, /\/api\/me\/marketing-consent/);
-  assert.match(app, /config\?\.marketingOptIn === true/);
-  assert.match(html, /согласие на рекламную рассылку/);
+  assert.match(app, /config\?\.marketingOptIn === true \|\| !config\?\.marketingOptOutAt/);
+  assert.match(html, /отказ сохраняется на сервере/);
   assert.doesNotMatch(html, /id="notifyPromotions"[^>]*checked/);
+});
+
+test('PIVNIK Business sends broadcasts through the same audited path, behind a service token', () => {
+  const server = read('server.js');
+  assert.match(server, /async function runBroadcast\(/);
+  assert.match(server, /app\.post\('\/api\/admin\/broadcast',[\s\S]*?runBroadcast\(\{ \.\.\.req\.body, actorUserId: req\.user\.id/);
+  assert.match(server, /app\.get\('\/api\/internal\/business\/broadcast\/preview', requireBusinessService,/);
+  assert.match(server, /app\.post\('\/api\/internal\/business\/broadcast', requireBusinessService,/);
+  // Off unless a long token is configured, and compared in constant time.
+  assert.match(server, /if \(expected\.length < 32\) return res\.status\(404\)/);
+  assert.match(server, /crypto\.timingSafeEqual\(a, b\)/);
+  // A segment only narrows the audience: the consent rule in getBroadcastRecipients still applies.
+  assert.match(server, /AND \(\$3::bigint\[\] IS NULL OR u\.id = ANY\(\$3::bigint\[\]\)\)/);
+  assert.match(server, /audience: segment \? 'clients' : req\.body\?\.audience/);
 });

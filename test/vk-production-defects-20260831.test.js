@@ -14,14 +14,6 @@ test('VK avatar hydration retries on slow devices without erasing stored photo o
   assert.match(gateway, /avatar_source = \$1::text,[\s\S]*?avatar_key = \$2::text/);
 });
 
-test('VK bottom navigation contains the QR button inside one safe-area aware panel without the legacy notch', async () => {
-  const css = await read('red-cosmos-v2.css');
-  assert.match(css, /PIVNIK_VK_BOTTOM_NAV_SAFE_AREA_20260831/);
-  assert.match(css, /\.platform-vk \.bottom-nav::before\s*\{[\s\S]*?content:none!important;[\s\S]*?display:none!important;/);
-  assert.match(css, /\.platform-vk \.bottom-nav \.qr-nav-button > span\s*\{[\s\S]*?margin-top:0!important;/);
-  assert.match(css, /padding:7px 7px max\(7px, env\(safe-area-inset-bottom\)\)!important/);
-});
-
 test('VK service screens are visible only for authorized roles and direct UI navigation is guarded', async () => {
   const [app, gateway] = await Promise.all([read('app.js'), read('universal-server.js')]);
   assert.match(app, /const roleCanStaff = \(role\) => \['staff', 'admin'\]\.includes\(role\)/);
@@ -35,11 +27,10 @@ test('VK service screens are visible only for authorized roles and direct UI nav
 });
 
 test('VK client no longer creates the redundant personal QR plaque while QR logic remains intact', async () => {
-  const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('red-cosmos-v2.css')]);
+  const [app, html] = await Promise.all([read('app.js'), read('index.html')]);
   assert.doesNotMatch(app, /Один личный код/);
   assert.doesNotMatch(app, /hero\.after\(tip\)/);
   assert.match(html, /id="qrImage"/);
   assert.match(html, /id="qrToken"/);
   assert.match(app, /\$\('#qrToken'\)\.textContent = data\.shortCode/);
-  assert.match(css, /\.platform-vk #qrToken/);
 });

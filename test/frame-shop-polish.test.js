@@ -2,10 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 
-const [server, gateway, css, shopFragment] = await Promise.all([
+const [server, gateway, shopFragment] = await Promise.all([
   fs.readFile(new URL('../server.js', import.meta.url), 'utf8'),
   fs.readFile(new URL('../universal-server.js', import.meta.url), 'utf8'),
-  fs.readFile(new URL('../red-cosmos-v2.css', import.meta.url), 'utf8'),
   fs.readFile(new URL('../scripts/fragments/red-cosmos-shop-client.fragment.txt', import.meta.url), 'utf8')
 ]);
 
@@ -23,17 +22,6 @@ test('owner can select every current frame while money remains the safe default'
   }
   assert.doesNotMatch(server, /const storedFrame = isOwnerRow\(accessRow\) \|\|/);
   assert.doesNotMatch(gateway, /if \(isOwnerRow\(row\)\) storedFrame = 'money'/);
-});
-
-test('all live frame previews rotate only on the shop shelf', () => {
-  assert.match(css, /\.shop-frame-live-preview\[data-frame-preview\]::before/);
-  assert.match(css, /@keyframes shopFrameShelfSpin/);
-  assert.match(css, /animation:shopFrameShelfSpin 4\.6s linear infinite/);
-  assert.match(css, /data-frame-preview=\"beer-mugs\"/);
-  assert.match(css, /data-frame-preview=\"beer-bottles\"/);
-  assert.match(css, /data-frame-preview=\"lights\"/);
-  assert.match(css, /data-frame-preview=\"premium-smiling-fuck\"/);
-  assert.doesNotMatch(css, /\.profile-avatar[^\n]*shopFrameShelfSpin/);
 });
 
 test('buying a frame still refreshes the profile without changing purchase accounting', () => {

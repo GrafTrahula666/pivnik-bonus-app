@@ -619,6 +619,14 @@ function wheelDurationLabel(ms) {
   return [hours, minutes, rest].map((value) => String(value).padStart(2, '0')).join(':');
 }
 
+function wheelHoursLabel(hours) {
+  const value = Number(hours) > 0 ? Number(hours) : 24;
+  const lastTwo = value % 100;
+  const last = value % 10;
+  const word = lastTwo >= 11 && lastTwo <= 14 ? 'часов' : last === 1 ? 'час' : last >= 2 && last <= 4 ? 'часа' : 'часов';
+  return `${value} ${word}`;
+}
+
 function effectiveWheelStatus() {
   const current = state.wheel.status;
   if (!current) return null;
@@ -675,7 +683,7 @@ function renderWheelStatus() {
     ? 'Бесплатное вращение доступно'
     : `Дополнительное вращение — ${paidCost} бонусов`;
   nextFreeHint.textContent = free
-    ? 'Следующее бесплатное вращение — через 24 часа после этого.'
+    ? `Следующее бесплатное вращение — через ${wheelHoursLabel(current.freeIntervalHours)} после этого.`
     : `Следующее бесплатное вращение — через ${wheelDurationLabel(remaining)}.`;
   balanceHint.textContent = current.unlimitedBonus
     ? 'Баланс: ∞ бонусов'
@@ -698,6 +706,38 @@ function startWheelCountdown() {
       loadWheelStatus().finally(() => { state.wheel.refreshPending = false; });
     }
   }, 1000);
+}
+
+// The rules show the chances and prices PIVNIK Business set; without a status the printed defaults stay.
+function renderWheelRules() {
+  const current = state.wheel.status;
+  if (!current) return;
+  const freeText = $('#wheelRulesFreeText');
+  const paidText = $('#wheelRulesPaidText');
+  const odds = $('#wheelOddsList');
+  if (freeText && current.freeIntervalHours) {
+    freeText.textContent = `Первое вращение бесплатно. Следующее бесплатное вращение становится доступно ровно через ${wheelHoursLabel(current.freeIntervalHours)} с момента предыдущего бесплатного вращения.`;
+  }
+  const first = Number(current.firstPaidCost);
+  const later = Number(current.laterPaidCost);
+  if (paidText && first > 0 && later > 0) {
+    paidText.textContent = first === later
+      ? `После бесплатного вращения каждое дополнительное вращение до следующего бесплатного стоит ${fmt(first)} бонусов.`
+      : `После бесплатного вращения первое дополнительное вращение стоит ${fmt(first)} бонусов. Все последующие дополнительные вращения до следующего бесплатного вращения стоят по ${fmt(later)} бонусов. Цена выше ${fmt(later)} бонусов не повышается.`;
+  }
+  const prizes = Array.isArray(current.prizes) ? current.prizes : [];
+  if (odds && prizes.length) {
+    odds.replaceChildren(...prizes.filter((prize) => prize.annualSupply || Number(prize.chancePercent) > 0).map((prize) => {
+      const item = document.createElement('li');
+      const title = document.createElement('b');
+      title.textContent = prize.title;
+      const chance = document.createElement('span');
+      const percent = `${Number(prize.chancePercent).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}%`;
+      chance.textContent = prize.annualSupply ? `${percent} · 1 из 1 000 000` : percent;
+      item.append(title, chance);
+      return item;
+    }));
+  }
 }
 
 async function loadWheelStatus() {
@@ -739,7 +779,8 @@ async function loadWheelHistory() {
 }
 
 function visualSectorForPrize(code) {
-  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === code);
+  const sectorCode = code === 'halloween-ticket' ? 'beer-glass' : code;
+  const candidates = WHEEL_VISUAL_SECTORS.filter((sector) => sector.code === sectorCode);
   if (!candidates.length) return WHEEL_VISUAL_SECTORS[0];
   const randomIndex = globalThis.crypto?.getRandomValues
     ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % candidates.length
@@ -761,6 +802,16 @@ function waitForWheelStop(disk) {
   });
 }
 
+// The Halloween wheel art has the pumpkin tickets on the same five sectors where the glass of beer sits.
+const HALLOWEEN_WHEEL_ART = '/assets/home-v2/wheel-halloween-night-20261010.webp';
+function applyHalloweenWheelArt(on) {
+  const disk = document.getElementById('wheelDisk');
+  if (!disk) return;
+  if (!disk.dataset.defaultSrc) disk.dataset.defaultSrc = disk.getAttribute('src') || '';
+  const src = on ? HALLOWEEN_WHEEL_ART : disk.dataset.defaultSrc;
+  if (src && disk.getAttribute('src') !== src) disk.setAttribute('src', src);
+}
+
 function wheelPrizeDisplayTitle(prize) {
   const titles = {
     'bonus-5': '5 бонусов',
@@ -769,6 +820,7 @@ function wheelPrizeDisplayTitle(prize) {
     'bonus-50': '50 бонусов',
     'bonus-100': '100 бонусов',
     'beer-glass': 'Бокал пива',
+    'halloween-ticket': 'Хэллоуинский билет',
     'annual-beer': 'Годовой запас пива'
   };
   return titles[String(prize?.code || '')] || 'Приз зачислен';
@@ -855,6 +907,10 @@ async function spinWheel() {
     $('#wheelResultKicker').textContent = 'Ваш приз';
     $('#wheelResultTitle').textContent = wheelPrizeDisplayTitle(data.spin?.prize);
     loadWheelHistory().catch(() => {});
+    if (data.spin?.prize?.code === 'halloween-ticket') {
+      $('#wheelResultTitle').textContent = 'Хэллоуинский билет +1';
+      refreshHalloweenSummary();
+    }
     $('#wheelRim').classList.add('wheel-win');
     window.setTimeout(() => $('#wheelRim')?.classList.remove('wheel-win'), 900);
     haptic('heavy');
@@ -1086,6 +1142,306 @@ function currentLevelIndex() {
   return Math.max(0, state.statuses.findIndex((level) => level.name === state.profile?.status?.name));
 }
 
+// Halloween copy for the home SPACEVERSE card; the original text is kept so the flag can be turned off again.
+const HALLOWEEN_BUSINESS_COPY = {
+  title: 'Хэллоуин в SpaceVerse',
+  sub: 'Ночь Котлов 31 октября. Копите тыквенные билеты',
+  cta: 'К котлам',
+};
+function applyHalloweenCopy(on) {
+  const title = document.querySelector('.spaceverse-business-copy > strong');
+  const sub = document.querySelector('.spaceverse-business-copy > em');
+  const cta = document.querySelector('.spaceverse-business-cta');
+  if (!title || !sub) return;
+  if (title.dataset.originalText === undefined) {
+    title.dataset.originalText = title.textContent;
+    sub.dataset.originalText = sub.textContent;
+    if (cta) cta.dataset.originalHtml = cta.innerHTML;
+  }
+  title.textContent = on ? HALLOWEEN_BUSINESS_COPY.title : title.dataset.originalText;
+  sub.textContent = on ? HALLOWEEN_BUSINESS_COPY.sub : sub.dataset.originalText;
+  if (cta) cta.innerHTML = on ? `${HALLOWEEN_BUSINESS_COPY.cta} <i aria-hidden="true">›</i>` : cta.dataset.originalHtml;
+}
+
+// Halloween tab: live ticket count and timer over the drawn "Night of Cauldrons" header.
+const HALLOWEEN_DRAW_AT = '2026-10-31T20:00:00+03:00';
+let halloweenTimerId = 0;
+function halloweenTimerText(closesAt) {
+  const left = new Date(closesAt).getTime() - Date.now();
+  if (!Number.isFinite(left)) return '—';
+  if (left <= 0) return 'Розыгрыш идёт';
+  const days = Math.floor(left / 86400000);
+  const hours = Math.floor((left % 86400000) / 3600000);
+  const minutes = Math.floor((left % 3600000) / 60000);
+  return days > 0 ? `${days}д ${hours}ч` : `${hours}ч ${minutes}м`;
+}
+let halloweenInvite = null;
+let halloweenSummary = null;
+let halloweenLoadState = 'loading';
+let halloweenSummaryRequest = null;
+let halloweenClaimPending = false;
+function renderHalloween(summary) {
+  if (summary) {
+    halloweenSummary = summary;
+    halloweenInvite = summary.invite || null;
+    halloweenLoadState = summary.available === false ? 'unavailable' :
+      Number.isSafeInteger(summary.tickets) && summary.tickets >= 0 ? 'ready' : 'error';
+  }
+  const ready = halloweenLoadState === 'ready';
+  const tickets = $('#halloweenTickets');
+  const timer = $('#halloweenTimer');
+  const invites = $('#halloweenInviteCount');
+  // Keep the last real count while a refresh is in flight so the counter does not flash; never invent a zero.
+  if (tickets && ready) { tickets.textContent = String(halloweenSummary.tickets); tickets.dataset.known = '1'; }
+  else if (tickets && (halloweenLoadState !== 'loading' || !tickets.dataset.known)) { tickets.textContent = '—'; delete tickets.dataset.known; }
+  const limit = Number(halloweenInvite?.weekLimit) || 3;
+  if (invites) invites.textContent = ready ? `${Math.min(limit, Math.max(0, Number(halloweenInvite?.weekCount) || 0))}/${limit}` : '—';
+  const status = $('#halloweenStatus');
+  if (status) status.textContent = ready ? 'Билеты за покупки: 1 за каждую полную 1 000 ₽ в чеке.' :
+    halloweenLoadState === 'loading' ? 'Проверяем билеты…' :
+    halloweenLoadState === 'unavailable' ? 'Начисление билетов временно недоступно. Обратитесь к сотруднику бара.' :
+    'Не удалось проверить билеты. Повторите загрузку.';
+  const retry = $('#halloweenRetry');
+  if (retry) { retry.hidden = ready; retry.disabled = halloweenLoadState === 'loading'; }
+  const closesAt = halloweenSummary?.closesAt || HALLOWEEN_DRAW_AT;
+  const tick = () => { if (timer) timer.textContent = halloweenTimerText(closesAt); };
+  tick();
+  renderHalloweenInviteSheet();
+  clearInterval(halloweenTimerId);
+  halloweenTimerId = setInterval(() => {
+    if ($('.screen.active')?.dataset.screen !== 'halloween') { clearInterval(halloweenTimerId); return; }
+    tick();
+    if (document.visibilityState === 'visible') void refreshHalloweenSummary();
+  }, 30000);
+}
+async function openHalloweenPage() {
+  switchScreen('halloween');
+  await refreshHalloweenSummary();
+}
+
+// "Пригласи друга": the card opens a sheet with the user's own code (to give to a friend) and, during the user's own first
+// 24 hours, a field to enter a friend's code. Every rule (new accounts only, first purchase, 3 a week) is checked on the server.
+const HALLOWEEN_INVITE_TEXT = 'Заходи в Пивник и введи мой код в первые сутки после регистрации';
+const HALLOWEEN_CLAIM_MESSAGES = {
+  invalid_code: 'Такого кода нет, проверь буквы',
+  unknown_code: 'Такого кода нет, проверь буквы',
+  self_invite: 'Свой код ввести нельзя',
+  already_attached: 'Код друга уже применён',
+  mutual_invite: 'Этот друг уже пришёл по твоему коду, взаимно нельзя',
+  window_expired: 'Код можно ввести только в первые сутки после регистрации',
+  not_new_account: 'Код можно ввести только в первые сутки после регистрации',
+  has_purchase: 'Код вводится до первой покупки',
+  returning_user: 'Код можно ввести только при первой регистрации',
+  draw_closed: 'Приём приглашений уже завершён',
+  user_not_found: 'Не удалось проверить аккаунт. Повторите загрузку.',
+  unavailable: 'Приглашения временно недоступны. Обратитесь к сотруднику бара.'
+};
+async function refreshHalloweenSummary() {
+  if (halloweenSummaryRequest) return halloweenSummaryRequest;
+  halloweenSummaryRequest = (async () => {
+    halloweenLoadState = 'loading';
+    renderHalloween(null);
+    try {
+      renderHalloween(await api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }));
+      return halloweenLoadState === 'ready';
+    } catch (_) {
+      halloweenLoadState = 'error';
+      renderHalloween(null);
+      return false;
+    }
+  })();
+  try { return await halloweenSummaryRequest; }
+  finally { halloweenSummaryRequest = null; }
+}
+function renderHalloweenInviteSheet() {
+  const invite = halloweenInvite || {};
+  const ready = halloweenLoadState === 'ready';
+  const limit = Number(invite.weekLimit) || 3;
+  const count = Math.min(limit, Math.max(0, Number(invite.weekCount) || 0));
+  const code = $('#halloweenMyCode');
+  if (code) code.textContent = ready ? invite.code || '—' : '—';
+  for (const id of ['#halloweenCopyCode', '#halloweenShareCode']) {
+    const button = $(id);
+    if (button) button.disabled = !ready || !invite.code;
+  }
+  const bonus = $('#halloweenInviteBonus');
+  if (bonus && Number(invite.bonusPerFriend) > 0) bonus.textContent = String(invite.bonusPerFriend);
+  const progress = $('#halloweenInviteProgress');
+  if (progress) progress.textContent = ready ?
+    `Наград на этой неделе: ${count} из ${limit}. Ждём первую покупку: ${Number(invite.pendingCount) || 0}. Всего получили награду: ${Number(invite.qualifiedCount) || 0}.` :
+    halloweenLoadState === 'loading' ? 'Проверяем приглашения…' : 'Не удалось получить данные приглашений';
+  const enter = $('#halloweenEnterBlock');
+  if (enter) enter.hidden = false;
+  const canEnter = ready && invite.canEnterCode;
+  for (const id of ['#halloweenCodeInput', '#halloweenApplyCode']) {
+    const control = $(id);
+    if (control) control.disabled = !canEnter || halloweenClaimPending;
+  }
+  const title = $('#halloweenEnterTitle');
+  if (title) {
+    title.textContent = !ready ? (halloweenLoadState === 'loading' ? 'Проверяем возможность ввода кода…' : HALLOWEEN_CLAIM_MESSAGES.unavailable) :
+      !canEnter ? (HALLOWEEN_CLAIM_MESSAGES[invite.entryReason] || 'Ввод кода недоступен') : 'Вставь код или ссылку приглашения друга';
+    if (canEnter && invite.enterUntil) {
+      const until = new Date(invite.enterUntil);
+      if (Number.isFinite(until.getTime())) title.textContent += ` до ${until.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+    }
+  }
+  const note = $('#halloweenInvitedNote');
+  if (note) note.hidden = !ready || !invite.invitedBy;
+}
+
+async function openHalloweenInvite() {
+  renderHalloweenInviteSheet();
+  openModal('halloweenInviteModal');
+  await refreshHalloweenSummary();
+  renderHalloweenInviteSheet();
+}
+async function copyHalloweenCode() {
+  const code = halloweenInvite?.code;
+  if (halloweenLoadState !== 'ready' || !code) { toast('Сначала загрузите данные приглашений'); return; }
+  if (IS_VK && window.vkBridge?.send) {
+    try { await window.vkBridge.send('VKWebAppCopyText', { text: code }); toast('Код скопирован'); return; } catch (_) {}
+  }
+  try { await navigator.clipboard.writeText(code); toast('Код скопирован'); } catch (_) { toast(`Твой код: ${code}`); }
+}
+async function shareHalloweenInvite() {
+  if (halloweenLoadState !== 'ready' || !halloweenInvite?.code) await refreshHalloweenSummary();
+  const code = halloweenInvite?.code;
+  if (halloweenLoadState !== 'ready' || !code) { toast('Сначала загрузите данные приглашений'); return; }
+  const text = `${HALLOWEEN_INVITE_TEXT}: ${code}`;
+  const link = IS_VK ? halloweenInvite?.links?.vk : halloweenInvite?.links?.telegram;
+  if (link && IS_VK && window.vkBridge?.send) {
+    try { await window.vkBridge.send('VKWebAppShare', { link }); return; } catch (error) {
+      if (Number(error?.error_data?.error_code) === 4) return; // the user closed the share sheet
+    }
+  }
+  if (link && !IS_VK && tg?.openTelegramLink) {
+    try {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
+      return;
+    } catch (_) {}
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Ночь Котлов', text, ...(link ? { url: link } : {}) }); return; } catch (_) {}
+  }
+  try { await navigator.clipboard.writeText(link ? `${text}\n${link}` : text); toast('Приглашение скопировано, отправь его другу'); } catch (_) { toast(`Твой код: ${code}`); }
+}
+async function applyHalloweenCode() {
+  const input = $('#halloweenCodeInput');
+  const hint = $('#halloweenEnterHint');
+  if (halloweenClaimPending || halloweenLoadState !== 'ready' || !halloweenInvite?.canEnterCode) return;
+  const code = String(input?.value || '').trim();
+  if (!code) { if (hint) hint.textContent = 'Введи код друга'; return; }
+  halloweenClaimPending = true;
+  renderHalloweenInviteSheet();
+  try {
+    const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    if (result?.attached) {
+      if (hint) hint.textContent = '';
+      toast('Код принят! После твоей первой покупки пригласивший получит билет и 100 бонусов');
+      if (input) input.value = '';
+    } else if (hint) {
+      hint.textContent = HALLOWEEN_CLAIM_MESSAGES[result?.reason] || 'Не получилось, попробуй чуть позже';
+    }
+  } catch (_) {
+    if (hint) hint.textContent = 'Не получилось, попробуй чуть позже';
+  } finally {
+    halloweenClaimPending = false;
+  }
+  await refreshHalloweenSummary();
+  renderHalloweenInviteSheet();
+}
+
+// Full-screen promo banner: shown on every app open at most once an hour, only after the app has fully loaded, the terms are accepted and no other
+// window is open. The art is set in HALLOWEEN_BANNER.src; the days and the ticket count are written over its two windows.
+const HALLOWEEN_BANNER = { src: '/assets/halloween/banner-nights-countdown.webp?v=1', key: 'halloween-2026', everyMs: 60 * 60 * 1000 };
+// The night starts at 19:00 Moscow time, as the art says; the left window counts whole days to it.
+const HALLOWEEN_EVENT_START = '2026-10-31T19:00:00+03:00';
+function daysWord(n) {
+  const last2 = n % 100;
+  const last = n % 10;
+  if (last === 1 && last2 !== 11) return 'день';
+  if (last >= 2 && last <= 4 && (last2 < 12 || last2 > 14)) return 'дня';
+  return 'дней';
+}
+function fillPromoBanner(tickets) {
+  const days = Math.max(0, Math.floor((Date.parse(HALLOWEEN_EVENT_START) - Date.now()) / 86400000));
+  const daysEl = $('#promoBannerDays');
+  const ticketsEl = $('#promoBannerTickets');
+  if (daysEl) daysEl.textContent = days > 0 ? `${days} ${daysWord(days)}` : 'сегодня';
+  if (ticketsEl) ticketsEl.textContent = tickets == null ? '–' : String(Math.max(0, Number(tickets) || 0));
+}
+let promoBannerTimer = 0;
+function promoBannerDue() {
+  if (!HALLOWEEN_BANNER.src || !document.documentElement.classList.contains('theme-halloween')) return false;
+  if (!state.profile?.termsAccepted) return false;
+  if ($('#appShell')?.classList.contains('service-mode')) return false;
+  const last = Number(safeStorage.get(`pivnik_banner_${HALLOWEEN_BANNER.key}`)) || 0;
+  return Date.now() - last >= HALLOWEEN_BANNER.everyMs;
+}
+function schedulePromoBanner(delayMs = 1200) {
+  clearTimeout(promoBannerTimer);
+  promoBannerTimer = setTimeout(() => {
+    if (!promoBannerDue()) return;
+    if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
+    const image = $('#promoBannerImage');
+    if (!image) return;
+    // The ticket count is read fresh on every open, so the banner never shows last session's number.
+    const ticketsReady = api('/api/halloween/summary', { retries: 0, timeoutMs: 7000 }).then((s) => s?.tickets).catch(() => null);
+    const show = async () => {
+      image.onload = null;
+      image.onerror = null;
+      const tickets = await ticketsReady;
+      // The image may take a moment; never open over a window the user opened meanwhile.
+      if (!promoBannerDue()) return;
+      if (document.querySelector('.modal.open') || $('#appShell')?.classList.contains('hidden')) { schedulePromoBanner(4000); return; }
+      safeStorage.set(`pivnik_banner_${HALLOWEEN_BANNER.key}`, String(Date.now()));
+      const banner = $('#promoBanner');
+      if (!banner) return;
+      fillPromoBanner(tickets);
+      banner.hidden = false;
+      banner.classList.add('open');
+      banner.setAttribute('aria-hidden', 'false');
+    };
+    if (image.getAttribute('src') === HALLOWEEN_BANNER.src && image.complete && image.naturalWidth) { show(); return; }
+    image.onload = show;
+    image.onerror = () => { image.onload = null; image.onerror = null; };
+    image.src = HALLOWEEN_BANNER.src;
+  }, delayMs);
+}
+function closePromoBanner() {
+  const banner = $('#promoBanner');
+  if (!banner) return;
+  banner.classList.remove('open');
+  banner.setAttribute('aria-hidden', 'true');
+  banner.hidden = true;
+}
+window.addEventListener('pivnik:boot-complete', () => {
+  if (document.readyState === 'complete') schedulePromoBanner();
+  else window.addEventListener('load', () => schedulePromoBanner(), { once: true });
+  // A mini app reopened from the background counts as a new visit too.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schedulePromoBanner(); });
+});
+
+// A friend who opened an invite link is attached to the inviter once, right after login. The server ignores old accounts and self-invites.
+function pendingHalloweenInviteCode() {
+  const sources = [!IS_VK ? tg?.initDataUnsafe?.start_param : '', location.hash, location.search];
+  for (const source of sources) {
+    const match = String(source || '').match(/inv_([A-Za-z0-9]{4,32})/);
+    if (match) return match[1];
+  }
+  return '';
+}
+async function claimHalloweenInvite() {
+  const code = pendingHalloweenInviteCode();
+  if (!code || safeStorage.get('pivnik_invite_claimed') === code) return;
+  try {
+    const result = await api('/api/halloween/invite/claim', { method: 'POST', body: JSON.stringify({ code }), retries: 0, timeoutMs: 7000 });
+    // "unavailable" means the raffle tables are not ready yet, so the next visit tries again.
+    if (result?.attached || (result?.reason && !['unavailable', 'user_not_found'].includes(result.reason))) safeStorage.set('pivnik_invite_claimed', code);
+  } catch (_) {}
+}
+
 function applyDesign(design) {
   if (!design) return;
   state.design = deepClone(design);
@@ -1101,6 +1457,11 @@ function applyDesign(design) {
   root.style.setProperty('--gold', '#b77917');
   root.style.setProperty('--gold2', '#e4b357');
   root.style.setProperty('--radius', String(Number(design.radius || 20)) + 'px');
+  // Seasonal skin flag: design.theme === 'halloween' (set via the admin design draft/publish).
+  root.classList.toggle('theme-halloween', design.theme === 'halloween');
+  applyHalloweenCopy(design.theme === 'halloween');
+  applyHalloweenWheelArt(design.theme === 'halloween');
+  if (design.theme === 'halloween' && bootCompleted && document.readyState === 'complete') schedulePromoBanner();
 
   $('#brandTitle').textContent = design.texts?.brand || 'Пивник';
   $('#balanceLabel').textContent = design.texts?.balanceLabel || 'Ваш баланс';
@@ -1119,10 +1480,12 @@ function applyDesign(design) {
 // Telegram chrome follows the white-gold client once a profile is on screen,
 // whether or not the server published a design record.
 function applyTelegramChrome() {
+  // Halloween night skin: Telegram's own background and bottom bar go dark too, so no cream strip shows on overscroll.
+  const night = document.documentElement.classList.contains('theme-halloween');
   try {
-    tg?.setHeaderColor(TELEGRAM_HEADER_COLOR);
-    tg?.setBackgroundColor('#efe7dc');
-    tg?.setBottomBarColor('#f8f3eb');
+    tg?.setHeaderColor(night ? TELEGRAM_HEADER_COLOR : '#fbf6ef');
+    tg?.setBackgroundColor(night ? '#0b0716' : '#efe7dc');
+    tg?.setBottomBarColor(night ? '#0b0a24' : '#f8f3eb');
   } catch (_) {}
 }
 
@@ -1801,7 +2164,36 @@ function achievementRarityLabel(rarity) {
   return { common: 'Обычное', rare: 'Редкое', epic: 'Эпическое', legendary: 'Легендарное' }[rarity] || 'Достижение';
 }
 
+const ACHIEVEMENT_SVG_ICONS = {
+  receipt: '<path d="M14 6h20v31l-3.4-2.6L27.2 37l-3.2-2.6L20.8 37l-3.4-2.6L14 37z"/><path d="m19 19 4 4 7-8"/>',
+  banknote: '<rect x="6" y="13" width="36" height="22" rx="3.5"/><circle cx="24" cy="24" r="5.5"/><path d="M11 18.5v.1M37 29.5v.1"/>',
+  triple: '<path d="M24 7c-6 0-10 4.6-10 10.5V25l-3.5 5.5h27L34 25v-7.5C34 11.6 30 7 24 7z"/><path d="M20 35a4 4 0 0 0 8 0"/>',
+  pint: '<path d="M13 16h19v21a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3z"/><path d="M32 21h3.5a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H32"/><path d="M12 16c-1.5-4 2.5-7 6-5 1.8-3.5 7-3.5 8.5 0 3.5-1.5 6.5 1.5 5.5 5"/><path d="M19 23v10M26 23v10"/>',
+  spark: '<path d="M24 6c1.2 9.5 4.5 12.8 14 18-9.5 5.2-12.8 8.5-14 18-1.2-9.5-4.5-12.8-14-18C19.5 18.8 22.8 15.5 24 6z"/>',
+  'receipt-stack': '<path d="M17 9h17v27"/><path d="M12 13h20v27l-3.3-2.5L25.5 40l-3.2-2.5L19.2 40l-3.3-2.5L12 40z"/><path d="M17 21h10M17 27h10"/>',
+  crown: '<path d="m8 34 2.5-17 8 7L24 11l5.5 13 8-7L40 34z"/><path d="M9 39h30"/>',
+  'monthly-crown': '<path d="m9 35 2.2-14 7 5.8L24 16l5.8 10.8 7-5.8L39 35z"/><path d="M10 40h28"/><path d="m24 5 1.6 3.4 3.7.5-2.7 2.6.7 3.7L24 13.4l-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z"/>',
+  calendar: '<rect x="8" y="11" width="32" height="29" rx="4"/><path d="M8 20h32M16 7v8M32 7v8"/><path d="M16 27h.1M24 27h.1M32 27h.1M16 33h.1M24 33h.1"/>',
+  bonus: '<circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="11.5" stroke-width="1.2" opacity=".55"/><path d="M19.5 17.5h9M19.5 17.5v13h5.5a3.7 3.7 0 0 0 0-7.4h-5.5"/>',
+  seal: '<path d="m24 6 4.2 3.8 5.6-.8 1.6 5.4 5 2.6-2 5.3 2 5.3-5 2.6-1.6 5.4-5.6-.8L24 42l-4.2-3.8-5.6.8-1.6-5.4-5-2.6 2-5.3-2-5.3 5-2.6 1.6-5.4 5.6.8z"/><circle cx="24" cy="24" r="6"/>',
+  beta: '<path d="M24 5c6.5 4.5 9.5 12 8 21l-4 4.5h-8L16 26c-1.5-9 1.5-16.5 8-21z"/><circle cx="24" cy="17" r="3"/><path d="m16 26-5.5 6.5 7-1.5M32 26l5.5 6.5-7-1.5M21 35.5 24 42l3-6.5"/>',
+  shield: '<path d="M24 6 38 11v11c0 9-6 16-14 20-8-4-14-11-14-20V11z"/><path d="M24 6v36M10.5 24H37.5" opacity=".55"/>'
+};
+const ACHIEVEMENT_SVG_BY_CODE = { 'beta-tester': 'beta', 'raise-shields': 'shield' };
+const ACHIEVEMENT_SHARED_ICONS = new Set(['banknote', 'pint', 'receipt-stack', 'calendar']);
+
+function achievementSvgIcon(item = {}) {
+  const key = ACHIEVEMENT_SVG_ICONS[item.icon] ? item.icon : ACHIEVEMENT_SVG_BY_CODE[item.code];
+  const body = ACHIEVEMENT_SVG_ICONS[key];
+  if (!body) return '';
+  const tier = ACHIEVEMENT_SHARED_ICONS.has(key) ? { common: 1, rare: 2, epic: 3 }[item.rarity] || 0 : 0;
+  const pips = Array.from({ length: tier }, (_, index) => `<circle cx="${24 + (index - (tier - 1) / 2) * 6}" cy="44.5" r="1.5" fill="currentColor" stroke="none"/>`).join('');
+  return `<svg class="ach-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}${pips}</svg>`;
+}
+
 function achievementIconHtml(item = {}) {
+  const svgIcon = achievementSvgIcon(item);
+  if (svgIcon) return svgIcon;
   if (item.icon === 'all-seeing-eye' || item.code === 'creator') {
     return `<svg class="all-seeing-eye" viewBox="0 0 100 90" aria-hidden="true">
       <path class="eye-triangle" d="M50 5 95 82H5Z" />
@@ -1854,6 +2246,40 @@ function achievementRewardLabel(item = {}) {
   return 'Особая награда';
 }
 
+const ACHIEVEMENTS_REFRESH_MS = 20_000;
+
+function achievementRemainingLabel(item = {}) {
+  if (item.earned || item.recurring || !item.progress) return '';
+  const remaining = Math.max(0, Number(item.progress.target || 0) - Number(item.progress.current || 0));
+  if (!remaining) return '';
+  if (item.unit === 'rub') return `ещё ${fmt(Math.ceil(remaining / 100))} ₽`;
+  if (item.unit === 'liter') return `ещё ${(remaining / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} л`;
+  if (item.unit === 'bonus') return `ещё ${fmt(remaining)} бонусов`;
+  return `ещё ${fmt(remaining)}`;
+}
+
+function nextAchievementGoal() {
+  return state.achievements
+    .filter((item) => !item.earned && !item.recurring && item.rarity !== 'legendary' && Number(item.progress?.percent || 0) > 0)
+    .sort((a, b) => Number(b.progress.percent) - Number(a.progress.percent))[0] || null;
+}
+
+function achievementNextGoalHtml() {
+  const goal = nextAchievementGoal();
+  if (!goal) return '';
+  const percent = Math.max(0, Math.min(100, Number(goal.progress.percent || 0)));
+  return `<div class="achievement-next" data-achievement-next="${escapeHtml(goal.code)}">
+      <span class="achievement-next-icon">${achievementIconHtml(goal)}</span>
+      <div>
+        <small>Ближайшая цель</small>
+        <b>${escapeHtml(goal.title)}</b>
+        <div class="achievement-progress"><i style="width:${percent}%"></i></div>
+        <small>${escapeHtml(goal.progress.label || '')} · ${escapeHtml(achievementRemainingLabel(goal))}</small>
+      </div>
+      <strong>${fmt(percent)}%</strong>
+    </div>`;
+}
+
 function renderAchievementCatalog() {
   const catalog = $('#achievementCatalog');
   if (!catalog) return;
@@ -1872,19 +2298,20 @@ function renderAchievementCatalog() {
     return;
   }
   const earnedCount = items.filter((item) => item.earned).length;
-  catalog.innerHTML = `<div class="achievement-summary">
+  catalog.innerHTML = `${rarity === 'legendary' ? '' : achievementNextGoalHtml()}<div class="achievement-summary">
       <span>${escapeHtml(achievementRarityLabel(rarity))}</span>
       <b>Получено ${earnedCount} · Всего ${items.length}</b>
     </div>
     <div class="achievement-grid">${items.map((item) => {
       const progress = item.progress || { percent: item.earned ? 100 : 0, label: item.earned ? 'Получено' : 'Уникальное условие' };
+      const remaining = achievementRemainingLabel(item);
       return `<article class="achievement-tile ${item.earned ? 'earned' : 'locked'} rarity-${escapeHtml(item.rarity)}" data-achievement-code="${escapeHtml(item.code)}">
         <span class="achievement-tile-icon">${achievementIconHtml(item)}</span>
         <span class="achievement-state">${item.earned ? 'Получено' : `${fmt(progress.percent)}%`}</span>
         <b>${escapeHtml(item.title)}</b>
         <p>${escapeHtml(item.description || '')}</p>
         <div class="achievement-progress"><i style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></i></div>
-        <small>${escapeHtml(progress.label || '')}</small>
+        <small>${escapeHtml(progress.label || '')}${remaining ? ` · ${escapeHtml(remaining)}` : ''}</small>
         <strong>${escapeHtml(achievementRewardLabel(item))}</strong>
       </article>`;
     }).join('')}</div>`;
@@ -1897,6 +2324,9 @@ function openAchievements(code = '') {
   }
   renderAchievementCatalog();
   openModal('achievementsModal');
+  if (state.achievementsLoaded && Date.now() - Number(state.achievementsLoadedAt || 0) > ACHIEVEMENTS_REFRESH_MS) {
+    void loadAchievements().catch((error) => console.warn('Achievement progress refresh skipped:', error));
+  }
 }
 
 function renderAchievements() {
@@ -1912,6 +2342,7 @@ async function loadAchievements() {
   const data = await api('/api/achievements');
   state.achievements = data.achievements || [];
   state.achievementsLoaded = true;
+  state.achievementsLoadedAt = Date.now();
   if (state.profile) {
     state.profile.achievements = data.profileAchievements || state.profile.achievements || [];
     state.profile.unannouncedAchievements = data.unannouncedAchievements || [];
@@ -2033,7 +2464,7 @@ function renderTransaction(transaction) {
     redeem: ['Списание', '−'],
     adjustment: ['Корректировка', '±'],
     beer_gift: ['Подарочный литр', '🍺'],
-    welcome: ['Приветственный бонус', '100'],
+    welcome: ['Приветственный бонус', '+'],
     shop: ['Покупка в магазине', '□'],
     achievement: ['Достижение', '◆']
   };
@@ -2169,13 +2600,14 @@ async function hydrateAfterBoot() {
 function schedulePostBootHydration() {
   window.setTimeout(() => {
     void hydrateAfterBoot();
+    void claimHalloweenInvite();
   }, 0);
 }
 
 function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
   const consentSafeTarget = event.target?.closest?.(
-    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, .spaceverse-business-screen'
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, #halloweenToBusiness, .spaceverse-business-screen'
   );
   if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(
@@ -2251,6 +2683,8 @@ async function acceptTerms() {
     renderProfile();
     toast('Правила приняты');
     void loadSecondaryData();
+    void claimHalloweenInvite();
+    schedulePromoBanner();
   } finally {
     if (button) button.disabled = false;
   }
@@ -2330,7 +2764,8 @@ async function renderNotificationPreferences() {
   if ($('#notifyPromotions')) $('#notifyPromotions').checked = false;
 
   const config = await api('/api/me/messaging-config', { retries: 0, timeoutMs: 6000 });
-  if ($('#notifyPromotions')) $('#notifyPromotions').checked = config?.marketingOptIn === true;
+  // Promo messages go to every guest who has not turned them off (owner's choice, 2026-10-07).
+  if ($('#notifyPromotions')) $('#notifyPromotions').checked = config?.marketingOptIn === true || !config?.marketingOptOutAt;
 }
 
 async function saveNotificationPreferences() {
@@ -2675,6 +3110,7 @@ function fillDesignForm(design) {
   $$('[data-design-color]').forEach((input) => input.value = design.colors?.[input.dataset.designColor] || '#000000');
   $$('[data-design-text]').forEach((input) => input.value = design.texts?.[input.dataset.designText] || '');
   $$('[data-design-section]').forEach((input) => input.checked = Boolean(design.sections?.[input.dataset.designSection]));
+  $$('[data-design-theme]').forEach((input) => input.checked = design.theme === input.dataset.designTheme);
   $('[data-design-radius]').value = String(design.radius || 20);
   $('#radiusValue').textContent = String(design.radius || 20);
 }
@@ -2687,6 +3123,12 @@ function readDesignForm() {
   $$('[data-design-color]').forEach((input) => design.colors[input.dataset.designColor] = input.value);
   $$('[data-design-text]').forEach((input) => design.texts[input.dataset.designText] = input.value.trim());
   $$('[data-design-section]').forEach((input) => design.sections[input.dataset.designSection] = input.checked);
+  const themeInputs = $$('[data-design-theme]');
+  if (themeInputs.length) {
+    const seasonalTheme = themeInputs.find((input) => input.checked);
+    if (seasonalTheme) design.theme = seasonalTheme.dataset.designTheme;
+    else delete design.theme;
+  }
   design.radius = Number($('[data-design-radius]').value || 20);
   return design;
 }
@@ -2823,7 +3265,10 @@ async function loadBroadcastPreview() {
     ? `VK: ${fmt(preview.vkRecipients)}`
     : 'VK: токен сообщества не настроен';
   const truncated = preview.truncated ? ` · показан лимит ${fmt(preview.maxRecipients)}` : '';
-  if (info) info.textContent = `${telegramState} · ${vkState} · аккаунтов в выборке: ${fmt(preview.totalUsers)}${truncated}`;
+  const consent = Number.isFinite(Number(preview.activeUsers))
+    ? `Получат: ${fmt(preview.totalUsers)} из ${fmt(preview.activeUsers)} принявших правила (кроме отказавшихся от акций) · `
+    : '';
+  if (info) info.textContent = `${consent}${telegramState} · ${vkState}${truncated}`;
 
   const count = selectedBroadcastRecipientCount(preview, channel);
   const channelConfigured = channel === 'telegram'
@@ -3444,14 +3889,35 @@ $('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => to
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
+// Registered before the original handler: with the Halloween theme on, the card opens the Halloween tab instead.
+$('#openSpaceverseBusiness')?.addEventListener('click', (event) => {
+  if (!document.documentElement.classList.contains('theme-halloween')) return;
+  event.stopImmediatePropagation();
+  openHalloweenPage();
+});
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#halloweenToBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#halloweenInvite')?.addEventListener('click', () => { void openHalloweenInvite(); });
+$('#halloweenReferralOpen')?.addEventListener('click', () => { void openHalloweenInvite(); });
+$('#halloweenRetry')?.addEventListener('click', () => { void refreshHalloweenSummary(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && $('.screen.active')?.dataset.screen === 'halloween') void refreshHalloweenSummary();
+});
+$('#halloweenCopyCode')?.addEventListener('click', () => { void copyHalloweenCode(); });
+$('#halloweenShareCode')?.addEventListener('click', () => { void shareHalloweenInvite(); });
+$('#halloweenApplyCode')?.addEventListener('click', () => { void applyHalloweenCode(); });
+$('#halloweenCodeInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void applyHalloweenCode(); });
+$('#promoBannerClose')?.addEventListener('click', closePromoBanner);
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#leagueBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#actionsBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
-$('#openWheelRulesButton')?.addEventListener('click', () => openModal('wheelRulesModal'));
+$('#openWheelRulesButton')?.addEventListener('click', () => {
+  renderWheelRules();
+  openModal('wheelRulesModal');
+});
 $('#openLeaderboardButton').addEventListener('click', () => switchScreen('league'));
 $('#openStatuses').addEventListener('click', () => { renderStatuses(); openModal('statusesModal'); });
 $('#openHelpButton').addEventListener('click', () => openModal('helpModal'));

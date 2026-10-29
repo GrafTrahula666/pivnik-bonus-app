@@ -1,0 +1,136 @@
+name: Evotor bridge APK
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix/evotor-foreground-scanner-20261015']
+    paths: ['evotor-bridge/**', '.github/workflows/evotor-bridge-apk.yml']
+permissions:
+  contents: read
+concurrency:
+  group: evotor-bridge-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: JVM tests and unsigned release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Test and build without generating a signing key
+        working-directory: evotor-bridge
+        run: gradle :app:testReleaseUnitTest :app:assembleRelease --stacktrace
+      - name: Verify foreground scanner manifest
+        run: |
+          set -euo pipefail
+          apk=evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/manifest.txt"
+          for value in 'ru.evotor.devices.SCANNER_RECEIVER' 'CustomerScanActivity' 'android.intent.category.EVOTOR' 'evo.v2.receipt.sell.receiptDiscount'; do
+            grep -Fq "$value" "$RUNNER_TEMP/manifest.txt"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-evotor-1.0.16-unsigned-not-for-installation
+          path: evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evotor-bridge-test-reports
+          path: evotor-bridge/app/build/reports/tests/
+          if-no-files-found: ignore
+
+  publish:
+    name: Verify permanent signing identity and publish APK
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      # Permanent certificate created after owner-authorized one-time reinstall; never regenerate in CI.
+      EXPECTED_CERT_SHA256: 36D73F80FB10E8EE2D2E7D1765AECFF5809405D202D700C609366C084F7F2663
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Require the backed-up permanent signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.EVOTOR_KEYSTORE_B64 }}
+          EVOTOR_KEYSTORE_PASSWORD: ${{ secrets.EVOTOR_KEYSTORE_PASSWORD }}
+          EVOTOR_KEY_ALIAS: ${{ secrets.EVOTOR_KEY_ALIAS }}
+          EVOTOR_KEY_PASSWORD: ${{ secrets.EVOTOR_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$EVOTOR_KEYSTORE_PASSWORD" ] || [ -z "$EVOTOR_KEY_ALIAS" ] || [ -z "$EVOTOR_KEY_PASSWORD" ]; then
+            echo '::error title=Permanent signing key unavailable::The permanent EVOTOR signing secrets are incomplete. No key is generated in CI; the unsigned artifact is not for installation.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/evotor-permanent.jks"
+          keytool -exportcert -keystore "$RUNNER_TEMP/evotor-permanent.jks" -alias "$EVOTOR_KEY_ALIAS" -storepass:env EVOTOR_KEYSTORE_PASSWORD -file "$RUNNER_TEMP/existing-cert.der"
+          actual=$(openssl x509 -inform DER -in "$RUNNER_TEMP/existing-cert.der" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')
+          if [ "${actual^^}" != "$EXPECTED_CERT_SHA256" ]; then
+            echo '::error title=Signing identity mismatch::The configured key does not match the approved permanent certificate. No key was generated and no APK will be published.'
+            exit 1
+          fi
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'build-tools;35.0.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pivnik-evotor-1.0.16-unsigned-not-for-installation
+          path: unsigned
+      - name: Sign and verify the APK with the permanent key
+        env:
+          EVOTOR_KEYSTORE_PASSWORD: ${{ secrets.EVOTOR_KEYSTORE_PASSWORD }}
+          EVOTOR_KEY_ALIAS: ${{ secrets.EVOTOR_KEY_ALIAS }}
+          EVOTOR_KEY_PASSWORD: ${{ secrets.EVOTOR_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$signer" sign --ks "$RUNNER_TEMP/evotor-permanent.jks" --ks-key-alias "$EVOTOR_KEY_ALIAS" --ks-pass env:EVOTOR_KEYSTORE_PASSWORD --key-pass env:EVOTOR_KEY_PASSWORD --out release/pivnik-evotor-1.0.16.apk unsigned/app-release-unsigned.apk
+          "$signer" verify --verbose --print-certs release/pivnik-evotor-1.0.16.apk > release/signature.txt
+          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/signature.txt | tr '[:lower:]' '[:upper:]')
+          test "$actual" = "$EXPECTED_CERT_SHA256"
+          (cd release && sha256sum pivnik-evotor-1.0.16.apk) > release/SHA256SUMS
+          printf 'version=1.0.16\nversionCode=20\nsource_commit=%s\ncertificate_sha256=%s\nrequires_reinstall_from_1_0_8=true\nrequires_reinstall_from_1_0_10=false\nhardware_verified=false\n' "$GITHUB_SHA" "$EXPECTED_CERT_SHA256" > release/build-info.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pivnik-evotor-1.0.16-permanent-signed
+          path: release/
+          if-no-files-found: error
+      - name: Publish versioned APK without replacing older builds
+        run: |
+          set -euo pipefail
+          cp -R release "$RUNNER_TEMP/evotor-publish"
+          git config user.name 'github-actions'
+          git config user.email 'actions@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin evotor-apk-1.0.16 > /dev/null; then
+            git fetch origin evotor-apk-1.0.16
+            git switch -c evotor-apk-publish FETCH_HEAD
+          else
+            git switch --orphan evotor-apk-publish
+          fi
+          cp "$RUNNER_TEMP/evotor-publish/"* .
+          git add pivnik-evotor-1.0.16.apk signature.txt SHA256SUMS build-info.txt
+          if ! git diff --cached --quiet; then git commit -m "Evotor 1.0.16 permanent signed APK from ${GITHUB_SHA}"; fi
+          git push origin HEAD:refs/heads/evotor-apk-1.0.16
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/evotor-permanent.jks" "$RUNNER_TEMP/existing-cert.der"

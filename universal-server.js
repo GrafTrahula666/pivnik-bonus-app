@@ -1,3 +1,4 @@
+import { createPosHttp } from './pos/http.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -7,13 +8,19 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
+import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
+import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
+import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
 import {
   createVkStartupTrace, sanitizeStartupBatch, safeStartupCode, validBootId,
   withVkStartupTrace, traceVkStage
 } from './vk-startup-diagnostics.js';
 import {
+  configureAchievements,
   getUserEarnedAchievementState
 } from './achievements.js';
+import { onRuntimeConfig, startRuntimeConfigRefresh } from './business-runtime-config.js';
+import { configureLoyalty, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
 import {
   chooseCanonicalUser,
   effectiveRoleForAuthenticatedIdentity,
@@ -29,11 +36,19 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
+import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
+import { grantTickets as grantHalloweenTickets } from './halloween-raffle.js';
+import { issueRunTicket, readRunTicket, plausibleScore, normalizeRunChar, submitRunScore, runBoard } from './run-leaderboard.js';
 import {
+  HALLOWEEN_TICKET_PRIZE,
+  HALLOWEEN_TICKET_PRIZE_CODE,
   WHEEL_PRIZES,
+  configureWheel,
   drawWheelPrize,
   freeSpinState,
-  paidSpinCost
+  paidSpinCost,
+  wheelFreeIntervalHours,
+  wheelPrizeChances
 } from './wheel.js';
 import {
   adminUserCrmStatus,
@@ -106,15 +121,6 @@ const MIGRATION_CHECKSUM_UPGRADES = Object.freeze({
   })
 });
 
-const STATUS_LEVELS = [
-  { minCents: 0, name: 'Путник', bonusPercent: 5, discountPercent: 0, nextCents: 1_000_000 },
-  { minCents: 1_000_000, name: 'Странник', bonusPercent: 6, discountPercent: 0, nextCents: 3_000_000 },
-  { minCents: 3_000_000, name: 'Гость таверны', bonusPercent: 7, discountPercent: 0, nextCents: 7_000_000 },
-  { minCents: 7_000_000, name: 'Завсегдатай', bonusPercent: 8, discountPercent: 0, nextCents: 10_000_000 },
-  { minCents: 10_000_000, name: 'Местный пьяница', bonusPercent: 9, discountPercent: 0, nextCents: 15_000_000 },
-  { minCents: 15_000_000, name: 'Легендарный пьяница', bonusPercent: 10, discountPercent: 0, nextCents: 50_000_000 },
-  { minCents: 50_000_000, name: 'Король Пивника', bonusPercent: 20, discountPercent: 10, nextCents: null }
-];
 
 if (!databaseUrl) {
   console.error('DATABASE_URL is required.');
@@ -455,11 +461,11 @@ function achievementsFromRow(row) {
 }
 
 function getStatus(spendCents) {
-  return [...STATUS_LEVELS].reverse().find((item) => spendCents >= item.minCents) || STATUS_LEVELS[0];
+  return statusForSpend(spendCents);
 }
 
 function getEffectiveStatus(row, spendCents) {
-  return hasUnlimitedBonus(row) ? STATUS_LEVELS[STATUS_LEVELS.length - 1] : getStatus(spendCents);
+  return hasUnlimitedBonus(row) ? topStatus() : getStatus(spendCents);
 }
 
 function validateVkLaunchParams(rawLaunchParams) {
@@ -1456,16 +1462,20 @@ async function getAppPayload(userId, platform = 'unknown', options = {}) {
   const startup = options?.startup === true;
   const [profile, designResult] = await Promise.all([
     getProfile(userId, platform, pool, { startup }),
-    startup
-      ? Promise.resolve({ rows: [] })
-      : pool.query('SELECT published FROM app_settings WHERE id = 1')
+    // The startup payload needs the published design too: it carries the seasonal theme flag, and without it
+    // the app shell opens in the base white-gold skin until the later /api/me arrives. One primary-key row,
+    // read in parallel; if it fails, startup still succeeds and the design simply arrives with /api/me.
+    pool.query('SELECT published FROM app_settings WHERE id = 1').catch((error) => {
+      if (!startup) throw error;
+      return { rows: [] };
+    })
   ]);
   if (!profile) {
     throw Object.assign(new Error('Не удалось открыть профиль.'), { statusCode: 404 });
   }
   return {
     profile,
-    statuses: STATUS_LEVELS.map((item) => ({
+    statuses: statusLevels().map((item) => ({
       ...item,
       min: rubles(item.minCents),
       next: item.nextCents ? rubles(item.nextCents) : null
@@ -1669,6 +1679,7 @@ async function resolveProviderUser(provider, externalUser) {
     Number(sessionResult.rows[0]?.session_version || 1),
     { pid: String(externalUser.id) }
   );
+  await claimPendingSpecialAchievement(userId, provider, externalUser);
   setImmediate(() => {
     void ensureSupplementalRecords(userId).catch((error) => {
       console.warn('Deferred user setup skipped:', error?.code || error?.message || 'unknown');
@@ -1686,6 +1697,23 @@ async function resolveProviderUser(provider, externalUser) {
     );
   }
   return { token, ...authPayload };
+}
+
+async function claimPendingSpecialAchievement(userId, provider, externalUser) {
+  const result = await pool.query(
+    'SELECT * FROM pivnik_claim_pending_special_achievement($1::bigint,$2::text,$3::text,$4::text)',
+    [userId, provider, String(externalUser?.id || ''), externalUser?.username || null]
+  );
+  const claim = result.rows[0] || null;
+  if (claim?.claimed) {
+    console.log(JSON.stringify({
+      specialAchievementClaimed: true,
+      handle: claim.recipient_handle,
+      awardedBonus: Number(claim.awarded_bonus || 0),
+      userId: String(userId)
+    }));
+  }
+  return claim;
 }
 
 async function authenticateVk(body) {
@@ -1733,10 +1761,25 @@ async function authenticateTelegram(body) {
     throw Object.assign(new Error('Откройте приложение через Telegram.'), { statusCode: 401 });
   }
   enforceRateLimit(`auth-identity:telegram:${user.id}`, 60, 10 * 60 * 1000);
-  return resolveProviderUser('telegram', user);
+  const data = await resolveProviderUser('telegram', user);
+  // Halloween invite from the signed start_param (inv_<code>); best-effort, never breaks login.
+  try {
+    const inviteCode = initData ? inviteCodeFromStartParam(initData) : null;
+    const inviteeId = inviteCode ? verifySession(data?.token)?.uid : null;
+    if (inviteeId) {
+      await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
+        inviteeId, code: inviteCode, channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret
+      }));
+    }
+  } catch (error) {
+    console.warn('Halloween invite start_param skipped:', error?.code || error?.message || 'unknown');
+  }
+  return data;
 }
 
 async function grantReward(db, userId, code, amount, source, reason, mode = 'adjustment') {
+  // A zero welcome bonus (switched off in Business) is not recorded as a grant.
+  if (!(Number(amount) > 0)) return { granted: false, amount: 0 };
   const grant = await db.query(
     `INSERT INTO reward_grants (code, user_id, amount, source)
      VALUES ($1, $2::bigint, $3::bigint, $4)
@@ -1768,7 +1811,18 @@ async function grantReward(db, userId, code, amount, source, reason, mode = 'adj
 }
 
 function wheelPrizeByCode(code) {
+  if (code === HALLOWEEN_TICKET_PRIZE_CODE) return HALLOWEEN_TICKET_PRIZE;
   return WHEEL_PRIZES.find((item) => item.code === code) || null;
+}
+
+// The Halloween ticket replaces the beer glass only while the theme is published and the raffle tables exist.
+async function halloweenWheelActive(client) {
+  const result = await client.query(
+    `SELECT (SELECT published->>'theme' FROM app_settings WHERE id = 1) AS theme,
+            to_regclass('halloween_ticket_ledger') IS NOT NULL AS has_tables`
+  );
+  const row = result.rows[0] || {};
+  return row.theme === 'halloween' && row.has_tables === true;
 }
 
 function wheelPrizeResponse(row) {
@@ -1856,7 +1910,11 @@ async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
     nextPaidCost,
     canAffordPaid: unlimitedBonus || balance >= nextPaidCost,
     balance,
-    unlimitedBonus
+    unlimitedBonus,
+    firstPaidCost: paidSpinCost(0),
+    laterPaidCost: paidSpinCost(1),
+    freeIntervalHours: wheelFreeIntervalHours(),
+    prizes: wheelPrizeChances()
   };
 }
 
@@ -1898,7 +1956,8 @@ async function spinTelegramWheel(userId, rawRequestKey) {
       const nowResult = await client.query('SELECT NOW() AS now');
       const status = await getTelegramWheelStatus(userId, client, nowResult.rows[0].now);
       const listedCost = status.freeAvailable ? 0 : status.nextPaidCost;
-      const kind = listedCost === 0 ? 'free' : listedCost === 50 ? 'paid_50' : 'paid_100';
+      // paid_50 / paid_100 name the first and the later paid spins; PIVNIK Business can change their prices.
+      const kind = status.freeAvailable ? 'free' : status.paidSpinsSinceLastFree === 0 ? 'paid_50' : 'paid_100';
       const account = accountResult.rows[0];
       const unlimitedBonus = hasUnlimitedBonus(account);
       const currentBalance = Number(account.balance || 0);
@@ -1909,7 +1968,7 @@ async function spinTelegramWheel(userId, rawRequestKey) {
       }
 
       const chargedCost = unlimitedBonus ? 0 : listedCost;
-      const { ticket, prize } = drawWheelPrize();
+      const { ticket, prize } = drawWheelPrize(undefined, { halloween: await halloweenWheelActive(client) });
       let balanceAfter = currentBalance;
       if (unlimitedBonus && prize.bonus > 0) {
         const walletResult = await client.query(
@@ -1986,6 +2045,12 @@ async function spinTelegramWheel(userId, rawRequestKey) {
         ]
       );
 
+      if (prize.halloweenTicket) {
+        await grantHalloweenTickets(client, {
+          userId, delta: 1, reason: 'wheel', sourceKey: `wheel:${spinRow.id}`, note: 'Билет с колеса Пивника'
+        });
+      }
+
       if (prize.annualSupply) {
         await client.query(
           `INSERT INTO wheel_annual_prizes (spin_id, user_id)
@@ -2053,6 +2118,8 @@ async function acceptConsent(userId, platform) {
        WHERE id = $2::bigint`,
       [TERMS_VERSION, canonical]
     );
+    // The amount comes from PIVNIK Business; the grant code stays 'welcome-100', so it is given once.
+    const WELCOME_BONUS = welcomeBonusAmount();
     const reward = rewardEligible
       ? await grantReward(
           client,
@@ -3085,6 +3152,26 @@ function platformFromRequest(req, fallback = 'unknown') {
   return signedPlatform;
 }
 
+let spaceverseCustomerHttp = null;
+let spaceversePosHttp = null;
+if (!isTestImport) {
+  try {
+    const runtime = await guardSpaceverseRuntimeStartup({
+      environment: process.env,
+      query: (text, params) => pool.query(text, params)
+    });
+    if (runtime.mode === 'tenant') {
+      spaceversePosHttp = createSpaceversePosHttp({ runtime, pool });
+      spaceverseCustomerHttp = createSpaceverseCustomerHttp({ runtime, pool,
+        sessionSecret: configuredSessionSecret, telegramBotToken, vkAppId, vkAppSecret });
+    }
+  } catch (error) {
+    console.error('SPACEVERSE runtime preflight failed:', error?.code || 'SPACEVERSE_RUNTIME_PREFLIGHT_FAILED');
+    await pool.end().catch(() => {});
+    process.exit(1);
+  }
+}
+
 function isConsentExempt(pathname) {
   return pathname === '/api/health'
     || pathname === '/api/platform-health'
@@ -3130,10 +3217,39 @@ async function serveStartupProfile(req, res, startup) {
   }
 }
 
+const posHttp = createPosHttp(pool, undefined, Date.now, {
+  isUnlimited: hasUnlimitedBonus, unlimitedBalance: UNLIMITED_BONUS_BALANCE
+});
 export const server = http.createServer(async (req, res) => {
+  if (spaceversePosHttp && await spaceversePosHttp(req, res)) return;
+  if (spaceverseCustomerHttp && await spaceverseCustomerHttp(req, res)) return;
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) enforceMutationOrigin(req);
+    // New wallet mutations use the same financial authority as the cloud bonus
+    // worker. The gateway's legacy display/owner policy is not a second ledger.
+    if (url.pathname === '/api/device/pos/redemptions') {
+      const body = req.method === 'POST' ? await readRequestBody(req, 8192) : null;
+      return await proxyRequest(req, res, body);
+    }
+    if (url.pathname === '/api/device/pos' || url.pathname.startsWith('/api/device/pos/')) {
+      const rawBody = req.method === 'POST' ? await readRequestBody(req, 8192) : null;
+      const body = rawBody === null ? undefined : parseJsonBody(rawBody);
+      // Keep the working terminal/proxy URL; monetary operations still reach the
+      // canonical financial runtime rather than the gateway's display policy.
+      if (url.pathname === '/api/device/pos/receipts/bind' && body?.operation === 'redemption') {
+        return await proxyRequest(req, res, rawBody);
+      }
+      return sendJson(res, 200, await posHttp.device({ method: req.method, pathname: url.pathname,
+        authorization: req.headers.authorization, deviceKey: req.headers['x-pivnik-device-key'],
+        body, address: requestAddress(req) }));
+    }
+    if (url.pathname === '/api/admin/pos' || url.pathname.startsWith('/api/admin/pos/')) {
+      const user = await requireGatewayUser(req);
+      const body = req.method === 'POST' ? parseJsonBody(await readRequestBody(req, 8192)) : undefined;
+      return sendJson(res, 200, await posHttp.admin({ method: req.method, pathname: url.pathname,
+        user, params: Object.fromEntries(url.searchParams), body }));
+    }
 
     // Available even during DB startup; no session, identity or database access.
     if (req.method === 'POST' && url.pathname === '/api/diagnostics/vk-startup') {
@@ -3190,6 +3306,12 @@ export const server = http.createServer(async (req, res) => {
       );
     }
 
+    if (req.method === 'GET' && url.pathname === '/pos-admin.js') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.js'), 'text/javascript; charset=utf-8', 'no-store');
+    }
+    if (req.method === 'GET' && url.pathname === '/pos-admin.css') {
+      return serveFile(res, path.join(__dirname, 'pos-admin.css'), 'text/css; charset=utf-8', 'no-store');
+    }
     if (req.method === 'GET' && url.pathname === '/account-link.js') {
       return serveFile(res, path.join(__dirname, 'account-link.js'), 'text/javascript; charset=utf-8', 'no-cache');
     }
@@ -3198,9 +3320,6 @@ export const server = http.createServer(async (req, res) => {
     // has no route for them and otherwise returns its HTML fallback with 200.
     if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.js') {
       return serveFile(res, path.join(__dirname, 'red-cosmos-v2.js'), 'text/javascript; charset=utf-8', 'no-cache');
-    }
-    if (req.method === 'GET' && url.pathname === '/red-cosmos-v2.css') {
-      return serveFile(res, path.join(__dirname, 'red-cosmos-v2.css'), 'text/css; charset=utf-8', 'no-cache');
     }
 
     if (req.method === 'GET' && url.pathname === '/legal/privacy') {
@@ -3393,6 +3512,31 @@ export const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await getUnifiedMonthlyLeaderboard(user.id));
     }
 
+    if (url.pathname === '/api/run/start' || url.pathname === '/api/run/score' || url.pathname === '/api/run/leaderboard') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      const canonical = await canonicalUserId(pool, user.id);
+      if (!canonical) return sendJson(res, 404, { error: 'Пользователь не найден.' });
+      if (req.method === 'GET' && url.pathname === '/api/run/leaderboard') {
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/start') {
+        return sendJson(res, 200, { ticket: issueRunTicket(sessionSecret, canonical) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run/score') {
+        const body = parseJsonBody(await readRequestBody(req));
+        const run = readRunTicket(sessionSecret, body.ticket, canonical);
+        const score = Number(body.score);
+        if (!run || !plausibleScore(score, Date.now() - run.startedAt)) {
+          return sendJson(res, 422, { error: 'Результат не принят.' });
+        }
+        if (score > 0) await submitRunScore(pool, canonical, score, normalizeRunChar(body.character));
+        return sendJson(res, 200, await runBoard(pool, canonical));
+      }
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/admin/users') {
       const user = await requireGatewayUser(req);
       if (!user.termsAccepted) {
@@ -3503,8 +3647,10 @@ export const server = http.createServer(async (req, res) => {
 
     return await proxyRequest(req, res);
   } catch (error) {
-    console.error('Universal server error:', error?.code || error?.message || 'unknown');
-    return sendJson(res, Number(error.statusCode || 500), {
+    const status = Number(error.statusCode || 500);
+    // A 4xx here is an ordinary refusal (not signed in, rules not accepted), not a server fault.
+    if (status >= 500) console.error('Universal server error:', error?.code || error?.message || 'unknown');
+    return sendJson(res, status, {
       error: error.statusCode ? error.message : 'Внутренняя ошибка сервера.'
     });
   }
@@ -3517,6 +3663,11 @@ if (!isTestImport) {
       await waitForChild();
       await initPlatformDatabase();
       await refreshDatabaseFingerprint();
+      // Achievement settings from PIVNIK Business; server.js keeps its own copy the same way.
+      onRuntimeConfig('achievements', configureAchievements);
+      onRuntimeConfig('loyalty', configureLoyalty);
+      onRuntimeConfig('wheel', configureWheel);
+      startRuntimeConfigRefresh(pool);
     } catch (error) {
       console.error(
         'Platform initialization failed:',

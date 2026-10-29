@@ -1,0 +1,15 @@
+{
+  "checks": [
+    "Loyalty add/toggle/remove",
+    "Wheel add/toggle/remove",
+    "Достижения editor open/cancel",
+    "Магазин editor open/cancel",
+    "Акции editor open/cancel",
+    "Branding edit/save",
+    "Settings toggle/save",
+    "Logout"
+  ],
+  "console_errors": [],
+  "page_errors": [],
+  "failed_requests": []
+}

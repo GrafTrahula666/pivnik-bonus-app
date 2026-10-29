@@ -76,7 +76,7 @@ async function applyReleaseHardening() {
     `function blockUnacceptedAction(event) {
   if (state.profile?.termsAccepted) return;
   const consentSafeTarget = event.target?.closest?.(
-    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, .spaceverse-business-screen'
+    '#consentModal, #helpModal, #deleteAccountModal, #deleteAccountFromConsent, #openSpaceverseBusiness, #halloweenToBusiness, .spaceverse-business-screen'
   );
   if (consentSafeTarget) return;
   const interactive = event.target?.closest?.(

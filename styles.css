@@ -6459,6 +6459,16 @@ body,
   box-shadow: inset 1px 0 0 rgba(193,145,59,.10);
 }
 
+.home-run-card { display: none; }
+@keyframes homeDuoPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.22); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-halloween.platform-telegram body .home-run-caption i,
+  html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta { animation: none !important; }
+}
+
 .home-wheel-card {
   position: relative;
   display: grid;
@@ -10008,3 +10018,1129 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   background: rgba(255, 252, 247, .8);
   color: #6b5a43;
 }
+
+/* Readable fields and text buttons on the white-gold sheets: the old dark field (#0e0b09)
+   kept dark text, and the light-gold text buttons were hard to read on white. */
+.text-input {
+  border-color: rgba(151, 112, 59, .22);
+  background: rgba(255, 255, 255, .92);
+  color: #2b241c;
+}
+.text-input::placeholder { color: #8f8476; }
+.text-btn,
+.text-link { color: #8a5a0c; }
+
+/* Achievements: minimalist line icons and visible progress */
+.ach-icon { display: block; width: 62%; height: 62%; }
+.achievement-tile .achievement-progress { height: 6px; background: rgba(133, 100, 54, .2); }
+.achievement-tile.locked .achievement-progress > i { opacity: .9; }
+.achievement-tile.locked .achievement-state { color: #8a5a0c; font-weight: 800; font-size: 10px; }
+.achievement-tile small { font-size: 10px; }
+.achievement-next {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(181, 121, 24, .34);
+  border-radius: 18px;
+  background: linear-gradient(160deg, #fffef9, #f6e8cb);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98), 0 8px 20px rgba(130, 84, 18, .1);
+}
+.achievement-next-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(177, 119, 25, .26);
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(235, 218, 188, .94));
+  color: #9b650f;
+}
+.achievement-next b { display: block; margin: 1px 0 6px; color: #2a231b; font-size: 14px; }
+.achievement-next small { display: block; color: #786e62; font-size: 10px; line-height: 1.3; }
+.achievement-next .achievement-progress { height: 6px; margin-bottom: 5px; background: rgba(133, 100, 54, .2); }
+.achievement-next .achievement-progress i { background: linear-gradient(90deg, #b47a20, #e5be70); }
+.achievement-next > strong { color: #9a650f; font-size: 17px; font-weight: 800; }
+
+/* ============================================================
+   Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
+   app.js applyDesign() toggles html.theme-halloween. Every rule below is
+   scoped to that class, so with the flag off nothing changes.
+   Assets live in /assets/halloween/. Blocks are added one at a time.
+   ============================================================ */
+
+/* Scale units: the art was measured at 390 css px (header, nav) and 364 css px (cards). Every size below is multiplied by
+   these, so on any phone width the drawings keep their proportions and live text stays inside its drawn slot. */
+html.theme-halloween {
+  --hal-nu: calc(min(100vw, 480px) / 390);
+  --hal-cu: calc((min(100vw, 480px) - 26px) / 364);
+}
+
+/* Background: castle night sky */
+html.theme-halloween body {
+  background: #0b0716 !important;
+}
+html.theme-halloween .app-shell::before {
+  background: url('/assets/halloween/night-bg.webp?v=1') center top / cover no-repeat !important;
+}
+html.theme-halloween .app-shell::after {
+  background: linear-gradient(180deg, rgba(8,4,20,.10), rgba(8,4,20,.18) 60%, rgba(8,4,20,.30)) !important;
+}
+
+/* Block 1: hero card. Art 1916x821 (stored 1092x468) with empty slots; live data is placed over the drawn slots.
+   Horizontal in % of the card, vertical in px (card is 156px tall). Slot geometry measured from the art at 364px width. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero {
+  background: url('/assets/halloween/hero-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  border-color: transparent !important;
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  top: calc(var(--hal-cu) * 47) !important;
+  left: 10.5% !important;
+  width: calc(var(--hal-cu) * 56) !important;
+  height: calc(var(--hal-cu) * 56) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-identity,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  left: 31.4% !important;
+  width: 37.4% !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-identity {
+  top: calc(var(--hal-cu) * 21) !important;
+  height: calc(var(--hal-cu) * 28) !important;
+  display: flex !important;
+  align-items: center !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .hero-identity-copy {
+  flex-direction: row !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: calc(var(--hal-cu) * 6) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-name {
+  color: #fff1dc !important;
+  font-size: calc(var(--hal-cu) * 16) !important;
+  line-height: calc(var(--hal-cu) * 20) !important;
+  text-shadow: 0 0 calc(var(--hal-cu) * 10) rgba(255,138,31,.35) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  flex: 0 0 auto !important;
+  color: #c9b8e6 !important;
+  font-size: calc(var(--hal-cu) * 9) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance {
+  top: calc(var(--hal-cu) * 52) !important;
+  height: calc(var(--hal-cu) * 26) !important;
+  align-items: center !important;
+  font-size: calc(var(--hal-cu) * 22) !important;
+  line-height: calc(var(--hal-cu) * 26) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance > span {
+  background: linear-gradient(110deg, #ffb347, #ff8a1f 60%, #ffd08a) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance small {
+  color: #d8c8f0 !important;
+  font-size: calc(var(--hal-cu) * 11) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button {
+  top: calc(var(--hal-cu) * 82) !important;
+  height: calc(var(--hal-cu) * 22) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button > div {
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: calc(var(--hal-cu) * 6) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-caption {
+  color: #b9a6dc !important;
+  font-size: calc(var(--hal-cu) * 9) !important;
+  line-height: calc(var(--hal-cu) * 22) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-name {
+  margin: 0 !important;
+  color: #ffe2b0 !important;
+  font-size: calc(var(--hal-cu) * 13) !important;
+  line-height: calc(var(--hal-cu) * 22) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .progress {
+  top: calc(var(--hal-cu) * 108.7) !important;
+  left: 30.1% !important;
+  width: 39.9% !important;
+  height: calc(var(--hal-cu) * 5) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .progress i {
+  background: linear-gradient(90deg, #ff8a1f, #ffc266 70%, #ff9a3c) !important;
+  box-shadow: 0 0 calc(var(--hal-cu) * 8) rgba(255,138,31,.55) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  top: calc(var(--hal-cu) * 119) !important;
+  height: calc(var(--hal-cu) * 13) !important;
+  color: #c9b8e6 !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line > span,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line > strong {
+  color: #c9b8e6 !important;
+  font-size: calc(var(--hal-cu) * 9) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .hero-name-row {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-name {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+/* SPACEVERSE mark in the free right zone of the art */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 74.8% !important;
+  width: 22.2% !important;
+  display: grid !important;
+  place-items: center !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand::before {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-logo-full,
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-wordmark {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .spaceverse-hero-brand::after {
+  content: '' !important;
+  display: block !important;
+  width: calc(var(--hal-cu) * 80) !important;
+  height: calc(var(--hal-cu) * 65) !important;
+  background: url('/assets/halloween/spaceverse-logo-20261010.webp') center / contain no-repeat !important;
+  filter: drop-shadow(0 0 calc(var(--hal-cu) * 6) rgba(255,170,60,.35)) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero #balanceLabel {
+  display: none !important;
+}
+
+/* Block 2: SPACEVERSE business card. Art 2059x764 (stored 1092x405) with one baked button pill; static copy is live text.
+   Geometry measured from the art at 364x135: pill x31-166 y92.5-117.5. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-card {
+  height: calc(var(--hal-cu) * 135) !important;
+  min-height: calc(var(--hal-cu) * 135) !important;
+  background: url('/assets/halloween/business-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-card::after {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::before {
+  content: 'SPACEVERSE';
+  position: absolute;
+  top: calc(var(--hal-cu) * 15);
+  left: 8.5%;
+  color: #ffdca8;
+  font-size: calc(var(--hal-cu) * 9);
+  font-weight: 800;
+  letter-spacing: .24em;
+  text-shadow: 0 0 calc(var(--hal-cu) * 6) rgba(255,150,40,.6);
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > strong {
+  top: calc(var(--hal-cu) * 31) !important;
+  left: 8.5% !important;
+  width: 45% !important;
+  color: #fff1dc !important;
+  font-size: calc(var(--hal-cu) * 14) !important;
+  line-height: calc(var(--hal-cu) * 17) !important;
+  text-shadow: 0 0 calc(var(--hal-cu) * 10) rgba(255,138,31,.35) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > em {
+  top: calc(var(--hal-cu) * 70) !important;
+  left: 8.5% !important;
+  width: 45% !important;
+  color: #ffcf9a !important;
+  font-size: calc(var(--hal-cu) * 10) !important;
+  font-weight: 700 !important;
+  line-height: calc(var(--hal-cu) * 13) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta {
+  top: calc(var(--hal-cu) * 92.5) !important;
+  bottom: auto !important;
+  left: 8.5% !important;
+  width: calc(var(--hal-cu) * 135) !important;
+  height: calc(var(--hal-cu) * 25) !important;
+  min-height: calc(var(--hal-cu) * 25) !important;
+  padding: 0 !important;
+  color: #ffe2b0 !important;
+  font-size: calc(var(--hal-cu) * 10) !important;
+  text-shadow: 0 0 calc(var(--hal-cu) * 6) rgba(255,150,40,.5) !important;
+}
+
+/* Block 3: wheel card. Fully drawn art 2000x733 (stored 1092x400): wheel, title, prize lines and the button are baked in, as in
+   the standard home card. Only the timer pill (empty in the art) is live; the live title/prize/button text stays invisible. */
+html.theme-halloween body .client-home.home-v2 .home-wheel-card {
+  height: calc(var(--hal-cu) * 133.5) !important;
+  min-height: calc(var(--hal-cu) * 133.5) !important;
+  background: url('/assets/halloween/wheel-card-midnight.webp?v=4') center / 100% 100% no-repeat !important;
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-wheel-timer {
+  top: calc(var(--hal-cu) * 5.1) !important;
+  left: 80.4% !important;
+  width: 18.1% !important;
+  height: calc(var(--hal-cu) * 16.8) !important;
+  padding-left: calc(var(--hal-cu) * 18) !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-wheel-timer > i {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-wheel-timer em {
+  color: #ffe2b0 !important;
+  font-size: calc(var(--hal-cu) * 9) !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-wheel-cta {
+  top: calc(var(--hal-cu) * 98.3) !important;
+  left: 14.7% !important;
+  width: 42.5% !important;
+  height: calc(var(--hal-cu) * 28.2) !important;
+  color: transparent !important;
+  text-shadow: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-wheel-cta > i {
+  display: none !important;
+}
+
+/* Block 4: liters card. Art 2508x627 (stored 1456x364) with the heading, mug and gift baked in and three empty slots
+   (text line, number badge, long progress track); all changing values stay live. Geometry measured from the art at 364x91. */
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact {
+  height: calc(var(--hal-cu) * 91) !important;
+  min-height: calc(var(--hal-cu) * 91) !important;
+  background: url('/assets/halloween/liters-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head {
+  top: calc(var(--hal-cu) * 40.3) !important;
+  right: calc(46.7% + calc(var(--hal-cu) * 6)) !important;
+  left: calc(20.1% + calc(var(--hal-cu) * 6)) !important;
+  height: calc(var(--hal-cu) * 13.6) !important;
+  color: #ffe2b0 !important;
+  font-size: calc(var(--hal-cu) * 8.5) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-head b {
+  color: #ffcf9a !important;
+  font-size: calc(var(--hal-cu) * 8.5) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter {
+  top: calc(var(--hal-cu) * 29.7) !important;
+  right: auto !important;
+  left: 71.8% !important;
+  width: 10.6% !important;
+  height: calc(var(--hal-cu) * 29.5) !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter strong {
+  color: #ffe2b0 !important;
+  font-size: calc(var(--hal-cu) * 14) !important;
+  text-shadow: 0 0 calc(var(--hal-cu) * 8) rgba(255,138,31,.5) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-gift-counter small {
+  color: #ffcf9a !important;
+  font-size: calc(var(--hal-cu) * 6) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments {
+  top: calc(var(--hal-cu) * 64.1) !important;
+  right: auto !important;
+  left: calc(17.4% + calc(var(--hal-cu) * 2)) !important;
+  width: calc(64.8% - calc(var(--hal-cu) * 4)) !important;
+  height: calc(var(--hal-cu) * 8) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment {
+  background: rgba(255,226,176,.08) !important;
+}
+html.theme-halloween body .client-home.home-v2 .beer-loyalty-card--compact .beer-progress-segments .beer-progress-segment > span {
+  background: linear-gradient(90deg, #ff8a1f, #ffc266 70%, #ff9a3c) !important;
+  box-shadow: 0 0 calc(var(--hal-cu) * 6) rgba(255,138,31,.55) !important;
+  opacity: 1 !important;
+}
+
+/* Block 5: league card. Art 1994x789 (stored 1456x576) with title, caption, button and three empty rings baked in;
+   avatars, names and amounts are live and sit in the drawn rings and slots. Geometry measured from the art at 364x144.
+   Ring centres x 72 / 180 / 290, y 74.8; name slots y 102.5-114; amount slots y 116.8-128.3. */
+html.theme-halloween body .client-home.home-v2 .home-league-card {
+  height: calc(var(--hal-cu) * 144) !important;
+  min-height: calc(var(--hal-cu) * 144) !important;
+  background: url('/assets/halloween/league-card-midnight.webp?v=1') center / 100% 100% no-repeat !important;
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.45) !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-card::before,
+html.theme-halloween body .client-home.home-v2 .home-league-card::after {
+  display: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-head .home-card-kicker,
+html.theme-halloween body .client-home.home-v2 .home-league-head h2 {
+  visibility: hidden !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-head .home-league-prev {
+  color: #ffcf9a !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-head > span {
+  position: absolute !important;
+  top: calc(var(--hal-cu) * 13.5) !important;
+  left: 69.8% !important;
+  right: auto !important;
+  width: calc(var(--hal-cu) * 85.5) !important;
+  height: calc(var(--hal-cu) * 20.3) !important;
+  color: transparent !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-podium > span:nth-child(1) { left: 5.77% !important; }
+html.theme-halloween body .client-home.home-v2 .home-league-podium > span:nth-child(2) { left: 35.4% !important; }
+html.theme-halloween body .client-home.home-v2 .home-league-podium > span:nth-child(3) { left: 65.7% !important; }
+html.theme-halloween body .client-home.home-v2 .home-league-podium .leader-avatar {
+  top: 51.9% !important;
+  width: 42% !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-podium b {
+  top: calc(var(--hal-cu) * 102.5) !important;
+  line-height: calc(var(--hal-cu) * 11.4) !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .home-league-podium strong {
+  top: calc(var(--hal-cu) * 116.8) !important;
+  line-height: calc(var(--hal-cu) * 11.5) !important;
+  color: #ffcf9a !important;
+}
+
+/* Halloween Block 6: bottom navigation (fully baked art 390x97 css px; buttons stay live but invisible) */
+html.theme-halloween .bottom-nav {
+  display: block !important;
+  height: calc(calc(var(--hal-nu) * 97) + env(safe-area-inset-bottom)) !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent url('/assets/halloween/nav-midnight.webp?v=2') top center / 100% calc(var(--hal-nu) * 97) no-repeat !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.theme-halloween .bottom-nav button {
+  position: absolute !important;
+  top: calc(var(--hal-nu) * 17);
+  width: calc(var(--hal-nu) * 64);
+  height: calc(var(--hal-nu) * 72);
+  min-height: 0 !important;
+  display: block !important;
+  transform: translateX(-50%);
+  background: transparent !important;
+  color: transparent !important;
+}
+html.theme-halloween .bottom-nav button > span,
+html.theme-halloween .bottom-nav button > small {
+  opacity: 0 !important;
+}
+html.theme-halloween .bottom-nav button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(var(--hal-nu) * 29);
+  width: calc(var(--hal-nu) * 50);
+  height: calc(var(--hal-nu) * 50);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+}
+html.theme-halloween .bottom-nav button.active::after {
+  opacity: 1;
+  box-shadow: 0 0 calc(var(--hal-nu) * 12) calc(var(--hal-nu) * 2) rgba(255,190,80,.75), inset 0 0 calc(var(--hal-nu) * 10) rgba(255,190,80,.45);
+}
+html.theme-halloween .bottom-nav button:nth-child(1) { left: 13.25%; }
+html.theme-halloween .bottom-nav button:nth-child(2) { left: 30.4%; }
+html.theme-halloween .bottom-nav button:nth-child(3) { left: 50%; top: calc(var(--hal-nu) * 14); }
+html.theme-halloween .bottom-nav button:nth-child(3)::after { top: calc(var(--hal-nu) * 28); width: calc(var(--hal-nu) * 56); height: calc(var(--hal-nu) * 56); }
+html.theme-halloween .bottom-nav button:nth-child(4) { left: 69.65%; }
+html.theme-halloween .bottom-nav button:nth-child(5) { left: 86.85%; }
+
+/* Halloween Block 7: top header (art 390x60 css px; title, status chip and refresh button stay live) */
+html.theme-halloween .topbar {
+  box-sizing: border-box;
+  height: calc(calc(var(--hal-nu) * 60) + env(safe-area-inset-top)) !important;
+  padding: env(safe-area-inset-top) calc(var(--hal-nu) * 14) 0 !important;
+  border: 0 !important;
+  background: #0b0a24 url('/assets/halloween/header-midnight.webp?v=1') bottom center / 100% calc(var(--hal-nu) * 60) no-repeat !important;
+  box-shadow: none !important;
+  color: #ffe2b0;
+}
+html.theme-halloween .topbar h1 { color: #ffe2b0 !important; text-shadow: 0 0 calc(var(--hal-nu) * 12) rgba(233,168,59,.45); }
+html.theme-halloween .topbar-actions { position: static !important; }
+html.theme-halloween .network-badge {
+  position: absolute !important;
+  left: 55.1%;
+  top: calc(env(safe-area-inset-top) + calc(var(--hal-nu) * 11.3));
+  width: 22.9%;
+  height: calc(var(--hal-nu) * 35.5);
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--hal-nu) * 5);
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffe2b0 !important;
+  font-size: calc(var(--hal-nu) * 11);
+}
+html.theme-halloween .icon-btn {
+  position: absolute !important;
+  left: 86.4%;
+  top: calc(env(safe-area-inset-top) + calc(var(--hal-nu) * 8.9));
+  width: calc(var(--hal-nu) * 43);
+  height: calc(var(--hal-nu) * 43);
+  margin-left: calc(var(--hal-nu) * -21.5);
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween .topbar .brand-lockup { position: relative; top: calc(var(--hal-nu) * -10); }
+
+/* Halloween Block 8: "Night of Cauldrons" tab. One drawn board (764x2057) holds every heading, rule and prize, so nothing
+   can drift; the tickets, the timer and the weekly invite counter are live text placed in the board's empty slots (in %),
+   and the whole "Пригласи друга" card is a transparent button that shares the invite link. */
+html.theme-halloween .halloween-screen { color: #ffe2b0; padding-top: 4px !important; padding-bottom: 4px; }
+html.theme-halloween .halloween-screen.active { display: grid; gap: 12px; }
+html.theme-halloween .halloween-board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 764 / 2056;
+  background: url('/assets/halloween/halloween-tab.webp?v=4') center / 100% 100% no-repeat;
+}
+html.theme-halloween .halloween-tickets,
+html.theme-halloween .halloween-timer {
+  position: absolute;
+  top: 7.39%;
+  height: 2.72%;
+  display: grid;
+  place-items: center;
+  color: #ffd27a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: calc(var(--hal-cu) * 19);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 0 calc(var(--hal-cu) * 10) rgba(233,168,59,.6);
+}
+html.theme-halloween .halloween-tickets { left: 7.33%; width: 40.05%; }
+html.theme-halloween .halloween-timer { left: 55.1%; width: 39.1%; }
+html.theme-halloween .halloween-invite {
+  position: absolute;
+  left: 7.2%;
+  top: 15.42%;
+  width: 85.7%;
+  height: 5.59%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--hal-cu) * 14);
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+html.theme-halloween .halloween-invite:active { box-shadow: 0 0 calc(var(--hal-cu) * 16) rgba(255,170,60,.65), inset 0 0 calc(var(--hal-cu) * 14) rgba(255,170,60,.35); }
+html.theme-halloween .halloween-invite:focus-visible { outline: 2px solid #ffcf7a; outline-offset: 2px; }
+html.theme-halloween .halloween-invite b {
+  position: absolute;
+  left: 75.1%;
+  top: 24.3%;
+  width: 22.6%;
+  height: 53.9%;
+  display: grid;
+  place-items: center;
+  color: #ffc24a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: calc(var(--hal-cu) * 21);
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 calc(var(--hal-cu) * 8) rgba(255,150,40,.7), 0 1px 0 rgba(90,40,0,.8);
+}
+html.theme-halloween .halloween-board-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+html.theme-halloween .halloween-business-link {
+  justify-self: center;
+  padding: 8px 16px;
+  border: 1px solid rgba(233,168,59,.55);
+  border-radius: 999px;
+  background: rgba(11,10,36,.8);
+  color: #ffe2b0;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* Halloween Block 9: the rest of the client (Лига, Профиль, Колесо, Акции, SpaceVerse для бизнеса).
+   Light white-gold cards become night glass with an amber edge and every text on them turns light,
+   so nothing dark is left on the night background. Modal sheets stay white-gold; only their backdrop darkens. */
+html.theme-halloween { background: #0b0716 !important; }
+html.theme-halloween .app-shell { background-color: #0b0716 !important; }
+html.theme-halloween body .modal { background: rgba(8, 4, 20, .72) !important; }
+
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) {
+  color: #f6e7c8 !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(h1, h2, h3, h4, b, strong, em, label, summary, li, span, div, a, button, input, textarea) {
+  color: #f6e7c8 !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(p, small, .muted, .kicker, input::placeholder, textarea::placeholder) {
+  color: #cdb68f !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(.client-page-title .muted, .spaceverse-business-page-head small, .spaceverse-business-page-kicker, .spaceverse-business-section-kicker) {
+  color: #f0b54a !important;
+}
+
+/* Cards and rows: night glass */
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"], [data-screen="spaceverse-business"]) :is(
+  .vip-glass-card, .league-summary, #leaderboardPreview > span, #leaderboardPrizeNote, .leaderboard-row,
+  .history-tabs, .operation-list > *, #currentShiftTeam, .wheel-history, .premium-offer,
+  .spaceverse-business-page-card, .spaceverse-business-benefits > span, .spaceverse-business-trial, .spaceverse-lead-card,
+  #openProfileAvatar, #openProfileFrames, #openProfileAchievements, #openProfileStatistics, #openProfileSettings,
+  .profile-menu button > span:first-child, .spaceverse-business-benefits > span > i
+) {
+  background: linear-gradient(145deg, rgba(34, 22, 74, .94), rgba(12, 10, 36, .95)) !important;
+  border: 1px solid rgba(233, 168, 59, .45) !important;
+  box-shadow: 0 0 14px rgba(233, 168, 59, .12), inset 0 1px 0 rgba(255, 226, 176, .06) !important;
+}
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="actions"]) :is(.leaderboard-row.is-me, .premium-offer.active-offer) {
+  border-color: rgba(240, 181, 74, .85) !important;
+}
+html.theme-halloween body .screen:is([data-screen="profile"], [data-screen="spaceverse-business"]) :is(input, textarea) {
+  background: rgba(8, 6, 26, .9) !important;
+  border: 1px solid rgba(233, 168, 59, .45) !important;
+}
+
+/* Back buttons, here and in sheets */
+html.theme-halloween body :is(.service-back, #leagueBackButton, #wheelBackButton, #actionsBackButton, .v2-modal-back) {
+  border: 1px solid rgba(233, 168, 59, .6) !important;
+  background: rgba(11, 10, 36, .86) !important;
+  color: #ffe2b0 !important;
+  box-shadow: 0 0 10px rgba(233, 168, 59, .25) !important;
+}
+
+/* Primary actions: amber with dark text */
+html.theme-halloween body .screen:is([data-screen="profile"], [data-screen="wheel"], [data-screen="spaceverse-business"]) :is(#wheelSpinButton, #spaceverseLeadSubmit, .history-tabs button.active) {
+  border: 1px solid rgba(255, 214, 140, .7) !important;
+  background: linear-gradient(145deg, #f4cf82, #b97916) !important;
+  box-shadow: 0 0 16px rgba(233, 168, 59, .45) !important;
+  color: #2e210f !important;
+}
+html.theme-halloween body .screen:is([data-screen="profile"], [data-screen="wheel"], [data-screen="spaceverse-business"]) :is(#wheelSpinButton, #spaceverseLeadSubmit, .history-tabs button.active) * {
+  color: #2e210f !important;
+}
+html.theme-halloween body .screen[data-screen="profile"] .history-tabs button:not(.active) { background: transparent !important; }
+html.theme-halloween body .screen[data-screen="profile"] :is(#profileAvatarMirror, #profileAvatarMirror *, .person .avatar) { color: #2e210f !important; }
+html.theme-halloween body .screen:is([data-screen="league"], [data-screen="profile"], [data-screen="wheel"], [data-screen="actions"]) :is(.client-page-title, .client-page-title *, .wheel-page-head, .wheel-page-head *, #wheelAvailability, #wheelNextFreeHint, #wheelBalanceHint, .section-title h2) {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 12px rgba(8, 4, 20, .85) !important;
+}
+
+/* Halloween Block 10: hero and SPACEVERSE cards keep the art's proportions on every phone width, so the drawn
+   avatar ring stays a circle and the avatar sits exactly in it. Vertical slots are now in % of the card height
+   (same geometry as Block 1 at 364x156). The SPACEVERSE card becomes the event entry with one big button. */
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero {
+  height: auto !important;
+  min-height: 0 !important;
+  aspect-ratio: 1092 / 468;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .profile-avatar {
+  top: 30.77% !important;
+  left: 10.3% !important;
+  width: 15.4% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+  margin: 0 !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .client-identity { top: 13.46% !important; height: 17.95% !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .balance { top: 33.33% !important; height: 16.67% !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button {
+  top: 52.56% !important;
+  height: 14.1% !important;
+  display: flex !important;
+  align-items: center !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .status-button > div { flex: 1 1 auto !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .progress { top: 69.68% !important; height: 3.2% !important; }
+html.theme-halloween body .client-home.home-v2 .spaceverse-home-hero .max-status-line {
+  top: 76.28% !important;
+  height: 8.33% !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-card {
+  height: auto !important;
+  min-height: 0 !important;
+  aspect-ratio: 1092 / 405;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::before {
+  content: 'SPACEVERSE ДЛЯ БИЗНЕСА';
+  top: 9.5%;
+  letter-spacing: .18em;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy::after {
+  content: '';
+  position: absolute;
+  top: 20.5%;
+  left: 8.5%;
+  width: 40%;
+  height: calc(var(--hal-cu) * 1);
+  background: linear-gradient(90deg, rgba(255,170,60,.9), rgba(255,170,60,0));
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > strong {
+  top: 24.5% !important;
+  width: 47% !important;
+  font-size: calc(var(--hal-cu) * 14) !important;
+  line-height: calc(var(--hal-cu) * 18) !important;
+  white-space: nowrap !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-copy > em {
+  top: 39% !important;
+  width: 46% !important;
+  color: #e9d4b4 !important;
+  font-size: calc(var(--hal-cu) * 10) !important;
+  font-weight: 600 !important;
+  line-height: calc(var(--hal-cu) * 12.5) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta {
+  top: 62% !important;
+  left: 6% !important;
+  width: 50% !important;
+  height: 30% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: calc(var(--hal-cu) * 6) !important;
+  border: 0 !important;
+  border-radius: calc(var(--hal-cu) * 999) !important;
+  background: linear-gradient(180deg, #ffd98a 0%, #f7a02a 48%, #c9600c 100%) !important;
+  box-shadow: inset 0 0 0 calc(var(--hal-cu) * 1.5) rgba(255,236,190,.85), inset 0 calc(var(--hal-cu) * -3) calc(var(--hal-cu) * 6) rgba(120,40,0,.35), 0 0 calc(var(--hal-cu) * 18) rgba(255,138,31,.75), 0 0 calc(var(--hal-cu) * 36) rgba(255,110,20,.35) !important;
+  color: #2b1405 !important;
+  font-size: calc(var(--hal-cu) * 15) !important;
+  font-weight: 900 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 calc(var(--hal-cu) * 1) 0 rgba(255,230,180,.6) !important;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta::before {
+  content: '🎃';
+  font-size: calc(var(--hal-cu) * 17);
+  letter-spacing: 0;
+  text-shadow: none;
+}
+html.theme-halloween body .client-home.home-v2 .spaceverse-business-cta i {
+  color: #2b1405 !important;
+  font-size: calc(var(--hal-cu) * 18) !important;
+  font-style: normal !important;
+}
+/* Home under the night skin: cards take their drawn height (scaled), the page scrolls when a phone is short, and the
+   last card always ends above the fixed bottom panel. */
+html.theme-halloween body .client-home.home-v2.active {
+  height: auto !important;
+  min-height: 0 !important;
+  grid-template-rows: none !important;
+  grid-auto-rows: auto !important;
+  align-content: start !important;
+  gap: calc(var(--hal-cu) * 6) !important;
+}
+html.theme-halloween .app-shell:not(.service-mode):not(.wheel-mode) {
+  padding-bottom: calc(var(--hal-nu) * 97 + env(safe-area-inset-bottom) + 12px) !important;
+}
+
+/* Halloween Block 11: "Пригласи друга" sheet (white-gold modal like the others) and the full-screen promo banner. */
+html.theme-halloween .halloween-invite-sheet { text-align: left; }
+html.theme-halloween .halloween-invite-sheet h2 { margin: 4px 0 8px; }
+html.theme-halloween .halloween-invite-sheet p { margin: 0 0 12px; font-size: 13px; line-height: 1.45; }
+html.theme-halloween .halloween-code-box {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 4px 0 12px;
+  padding: 14px 12px;
+  border: 1px dashed rgba(185,121,22,.6);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(255,247,230,.9), rgba(246,231,200,.9));
+}
+html.theme-halloween .halloween-code-box small { color: #8a6a3a; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+html.theme-halloween .halloween-code-box b {
+  color: #2e210f;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 26px;
+  letter-spacing: .14em;
+  user-select: all;
+}
+html.theme-halloween .halloween-code-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+html.theme-halloween .halloween-code-actions button,
+html.theme-halloween .halloween-enter-row button { min-height: 42px; border-radius: 14px; font-weight: 800; }
+html.theme-halloween .halloween-invite-progress { color: #6b5536; font-weight: 700; }
+html.theme-halloween .halloween-enter-code {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(185,121,22,.25);
+}
+html.theme-halloween .halloween-enter-code[hidden] { display: none; }
+html.theme-halloween .halloween-enter-code > small { color: #6b5536; font-size: 12px; font-weight: 700; }
+html.theme-halloween .halloween-enter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+html.theme-halloween .halloween-enter-row input {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(185,121,22,.45);
+  border-radius: 14px;
+  background: #fffaf2;
+  color: #2e210f;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+html.theme-halloween .halloween-enter-hint { min-height: 16px; color: #b0461c; font-size: 12px; font-weight: 700; }
+html.theme-halloween .halloween-invited-note { color: #2f7a3a; font-weight: 800; }
+html.theme-halloween .halloween-invited-note[hidden] { display: none; }
+
+html.theme-halloween .promo-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  background: rgba(6, 3, 16, .86);
+}
+html.theme-halloween .promo-banner.open { display: flex; }
+html.theme-halloween .promo-banner-card {
+  position: relative;
+  width: min(100%, 480px, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px) * 941 / 1672));
+  aspect-ratio: 941 / 1672;
+}
+html.theme-halloween .promo-banner-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  box-shadow: 0 0 30px rgba(255,138,31,.35);
+}
+html.theme-halloween .promo-banner-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,226,176,.7);
+  border-radius: 50%;
+  background: rgba(11,7,22,.78);
+  color: #ffe2b0;
+  font-size: 26px;
+  line-height: 1;
+}
+/* The two value windows are drawn in the art; the numbers sit over them, on a dark plate that hides the placeholder marks. */
+html.theme-halloween .promo-banner-value {
+  position: absolute;
+  top: 44.2%;
+  height: 6.6%;
+  display: grid;
+  place-items: center;
+  padding: 0 4%;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #1a1030, #0b0716);
+  border: 1px solid rgba(244,207,130,.55);
+  color: #ffe2b0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 800;
+  font-size: clamp(16px, 5.4cqw, 26px);
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0,0,0,.6);
+  white-space: nowrap;
+  container-type: inline-size;
+}
+html.theme-halloween .promo-banner-days { left: 8.4%; width: 37.6%; }
+html.theme-halloween .promo-banner-tickets { left: 54.2%; width: 38%; }
+html.theme-halloween .halloween-invite-sheet :is(#halloweenShareCode, #halloweenApplyCode) {
+  border: 0;
+  background: linear-gradient(180deg, #f4cf82, #b97916);
+  color: #2e210f;
+  box-shadow: 0 4px 12px rgba(185,121,22,.3);
+}
+html.theme-halloween .halloween-invite-sheet #halloweenApplyCode { padding: 0 16px; }
+html.theme-halloween .halloween-invite-sheet #halloweenCopyCode {
+  border: 1px solid rgba(185,121,22,.55);
+  background: #fffaf2;
+  color: #2e210f;
+}
+
+/* Profile work modes: the bartender button was cream on a light fill, the admin one cream on gold */
+html.theme-halloween body .screen[data-screen="profile"] #profileStaffNav {
+  border: 1px solid rgba(233, 168, 59, .6) !important;
+  background: rgba(11, 10, 36, .86) !important;
+  color: #ffe2b0 !important;
+}
+html.theme-halloween body .screen[data-screen="profile"] #profileAdminNav {
+  border: 1px solid rgba(255, 214, 140, .7) !important;
+  background: linear-gradient(145deg, #f4cf82, #b97916) !important;
+  color: #2e210f !important;
+}
+
+/* Halloween: achievements sheet in the night design, with two pumpkins in the background */
+html.theme-halloween #achievementsModal .achievements-sheet {
+  border: 1px solid rgba(233, 168, 59, .55);
+  background:
+    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%2090'%3E%3Cdefs%3E%3CradialGradient%20id='g'%20cx='50%25'%20cy='42%25'%20r='62%25'%3E%3Cstop%20offset='0'%20stop-color='%23ffc04a'/%3E%3Cstop%20offset='1'%20stop-color='%23d4540c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cellipse%20cx='28'%20cy='54'%20rx='24'%20ry='31'%20fill='url(%23g)'/%3E%3Cellipse%20cx='72'%20cy='54'%20rx='24'%20ry='31'%20fill='url(%23g)'/%3E%3Cellipse%20cx='50'%20cy='54'%20rx='25'%20ry='33'%20fill='url(%23g)'%20stroke='%239c3a06'%20stroke-width='1.2'/%3E%3Cpath%20d='M46%2022c1-9%207-14%2014-15l2%205c-6%201-8%205-8%2011z'%20fill='%234b8a2e'/%3E%3Cpath%20d='M33%2047l11%201-6-12zM56%2048l11-1-5-11zM50%2053l-4%208h8z'%20fill='%232a0f33'/%3E%3Cpath%20d='M32%2066c6%208%2010%205%2013%209%203-4%207-1%2010-5%203%204%207%201%2013-4-4%2012-10%2016-18%2016s-14-6-18-16z'%20fill='%232a0f33'/%3E%3C/svg%3E") no-repeat right -14px top 118px / 92px auto,
+    linear-gradient(170deg, rgba(39, 22, 88, .72), rgba(13, 10, 38, .86) 70%),
+    url("/assets/halloween/night-bg.webp?v=1") center top / cover no-repeat,
+    #0d0a26;
+  color: #f6e7c8;
+  box-shadow: 0 0 28px rgba(233, 168, 59, .22), inset 0 1px 0 rgba(255, 226, 176, .08);
+}
+html.theme-halloween #achievementsModal .achievements-sheet > .muted { color: #f0b54a; }
+html.theme-halloween #achievementsModal .achievements-sheet h2 { color: #ffe2b0; text-shadow: 0 0 14px rgba(240, 160, 50, .4); }
+html.theme-halloween #achievementsModal .help-intro { color: #cdb68f; }
+html.theme-halloween #achievementsModal .close {
+  border-color: rgba(233, 168, 59, .55);
+  background: rgba(11, 10, 36, .86);
+  color: #ffe2b0;
+  box-shadow: 0 0 10px rgba(233, 168, 59, .25);
+}
+html.theme-halloween #achievementsModal .achievement-tabs button {
+  border: 1px solid rgba(233, 168, 59, .3);
+  background: rgba(20, 14, 52, .8);
+  color: #cdb68f;
+  box-shadow: none;
+}
+html.theme-halloween #achievementsModal .achievement-tabs button.active {
+  border-color: rgba(255, 214, 140, .7);
+  background: linear-gradient(145deg, #f4cf82, #b97916);
+  color: #2e210f;
+  box-shadow: 0 0 14px rgba(233, 168, 59, .4);
+}
+html.theme-halloween #achievementsModal .achievement-summary { color: #cdb68f; }
+html.theme-halloween #achievementsModal .achievement-summary b { color: #f0b54a; }
+html.theme-halloween #achievementsModal .achievement-next {
+  border: 1px solid rgba(240, 181, 74, .7);
+  background: linear-gradient(145deg, rgba(60, 34, 92, .92), rgba(20, 12, 50, .94));
+  box-shadow: 0 0 16px rgba(233, 168, 59, .22), inset 0 1px 0 rgba(255, 226, 176, .08);
+}
+html.theme-halloween #achievementsModal .achievement-next b { color: #ffe2b0; }
+html.theme-halloween #achievementsModal .achievement-next small { color: #cdb68f; }
+html.theme-halloween #achievementsModal .achievement-next > strong { color: #ffb347; }
+html.theme-halloween #achievementsModal .achievement-next-icon,
+html.theme-halloween #achievementsModal .achievement-tile-icon {
+  border-color: rgba(233, 168, 59, .5);
+  background: radial-gradient(circle at 50% 35%, rgba(70, 40, 110, .95), rgba(14, 10, 38, .95));
+  color: #ffb347;
+  box-shadow: 0 0 12px rgba(233, 168, 59, .22);
+}
+html.theme-halloween #achievementsModal .achievement-tile,
+html.theme-halloween #achievementsModal .achievement-tile.rarity-rare,
+html.theme-halloween #achievementsModal .achievement-tile.rarity-epic,
+html.theme-halloween #achievementsModal .achievement-tile.rarity-legendary {
+  border: 1px solid rgba(233, 168, 59, .5);
+  background: linear-gradient(150deg, rgba(48, 28, 86, .88), rgba(14, 10, 38, .9));
+  color: #f6e7c8;
+  box-shadow: 0 0 12px rgba(233, 168, 59, .12), inset 0 1px 0 rgba(255, 226, 176, .06);
+}
+html.theme-halloween #achievementsModal .achievement-tile.locked {
+  border-color: rgba(233, 168, 59, .26);
+  background: linear-gradient(150deg, rgba(32, 22, 62, .86), rgba(12, 9, 32, .9));
+  opacity: 1;
+  filter: none;
+}
+html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-tile-icon { color: #b99a6a; border-color: rgba(233, 168, 59, .28); box-shadow: none; }
+html.theme-halloween #achievementsModal .achievement-tile.earned {
+  border: 1px solid #ffd27a;
+  background:
+    radial-gradient(circle at 85% 6%, rgba(255, 233, 160, .5), transparent 42%),
+    linear-gradient(150deg, #d9951f, #8a4e0c 62%, #5c3208);
+  box-shadow: 0 0 20px rgba(255, 190, 70, .5), inset 0 1px 0 rgba(255, 244, 205, .55);
+  opacity: 1;
+  filter: none;
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned b { color: #fff6dc; text-shadow: 0 1px 2px rgba(60, 28, 0, .6); }
+html.theme-halloween #achievementsModal .achievement-tile.earned p,
+html.theme-halloween #achievementsModal .achievement-tile.earned small { color: #ffeccb; }
+html.theme-halloween #achievementsModal .achievement-tile.earned > strong { color: #fff0b8; }
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-tile-icon {
+  border-color: #ffe9a8;
+  background: radial-gradient(circle at 50% 30%, #ffe9a8, #f2b53c 70%);
+  color: #5c3208;
+  box-shadow: 0 0 14px rgba(255, 220, 120, .6);
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-state {
+  border-color: #ffe9a8;
+  background: #fff1c2;
+  color: #6b3c05;
+  font-weight: 800;
+}
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-progress { background: rgba(60, 28, 0, .45); }
+html.theme-halloween #achievementsModal .achievement-tile.earned .achievement-progress > i {
+  background: linear-gradient(90deg, #fff0b8, #ffd45c);
+  box-shadow: 0 0 8px rgba(255, 233, 160, .7);
+}
+html.theme-halloween #achievementsModal .achievement-tile b { color: #ffe2b0; }
+html.theme-halloween #achievementsModal .achievement-tile p,
+html.theme-halloween #achievementsModal .achievement-tile small { color: #cdb68f; }
+html.theme-halloween #achievementsModal .achievement-tile .achievement-state {
+  border: 1px solid rgba(233, 168, 59, .4);
+  background: rgba(11, 10, 36, .85);
+  color: #ffd68a;
+}
+html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-state { color: #f0b54a; }
+html.theme-halloween #achievementsModal .achievement-progress { background: rgba(255, 226, 176, .14); }
+html.theme-halloween #achievementsModal .achievement-progress i,
+html.theme-halloween #achievementsModal .achievement-tile.locked .achievement-progress > i {
+  background: linear-gradient(90deg, #d4540c, #ffb347);
+  box-shadow: 0 0 8px rgba(255, 150, 40, .45);
+  opacity: 1;
+}
+html.theme-halloween #achievementsModal .achievement-tile > strong,
+html.theme-halloween #achievementsModal .achievement-tile.earned > strong,
+html.theme-halloween #achievementsModal .achievement-tile.locked > strong { color: #ffb347; }
+html.theme-halloween #achievementsModal .achievement-catalog-empty {
+  border-color: rgba(233, 168, 59, .3);
+  background: rgba(20, 14, 52, .8);
+  color: #cdb68f;
+}
+
+/* ============================================================
+   Halloween home duo: Pivnik Run tile (left) + wheel tile (right), 4:3 art 1448x1086 each.
+   Only for Telegram/web (the VK static bundle has no /run). Wheel timer and button sit on the two empty glass windows of the art.
+   ============================================================ */
+html.theme-halloween.platform-telegram body .client-home.home-v2.active {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: calc(var(--hal-cu) * 6);
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > * { grid-column: 1 / -1; }
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-run-card,
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-wheel-card {
+  grid-column: auto;
+  display: block;
+  position: relative;
+  width: 100%;
+  height: calc(var(--hal-cu) * 134.25);
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: calc(var(--hal-cu) * 14);
+  box-shadow: 0 calc(var(--hal-cu) * 10) calc(var(--hal-cu) * 24) rgba(8,4,20,.5) !important;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .16s ease, filter .16s ease;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-run-card {
+  background: url('/assets/halloween/run-tile-night.webp?v=1') center / 100% 100% no-repeat !important;
+  color: #fff;
+  text-decoration: none;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-wheel-card {
+  background: url('/assets/halloween/wheel-tile-night.webp?v=1') center / 100% 100% no-repeat !important;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-run-card:active,
+html.theme-halloween.platform-telegram body .client-home.home-v2.active > .home-wheel-card:active { transform: scale(.975); filter: brightness(1.12); }
+
+html.theme-halloween.platform-telegram body .home-run-caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--hal-cu) * 4);
+  padding: calc(var(--hal-cu) * 14) calc(var(--hal-cu) * 7) calc(var(--hal-cu) * 6);
+  background: linear-gradient(0deg, rgba(10,4,24,.92), rgba(10,4,24,0));
+}
+html.theme-halloween.platform-telegram body .home-run-caption b {
+  font: 900 calc(var(--hal-cu) * 12.5)/1 system-ui, sans-serif;
+  letter-spacing: .04em;
+  color: #ffd27a;
+  text-shadow: 0 0 calc(var(--hal-cu) * 7) rgba(255,140,30,.7), 0 1px 0 #3a1500;
+}
+html.theme-halloween.platform-telegram body .home-run-caption i {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--hal-cu) * 2);
+  padding: calc(var(--hal-cu) * 3.5) calc(var(--hal-cu) * 7);
+  border-radius: 999px;
+  font: 900 calc(var(--hal-cu) * 9)/1 system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: .06em;
+  color: #2a0c00;
+  background: linear-gradient(180deg, #ffd36a, #ff8a1f);
+  box-shadow: 0 0 calc(var(--hal-cu) * 9) rgba(255,150,40,.65);
+  animation: homeDuoPulse 2.4s ease-in-out infinite;
+}
+html.theme-halloween.platform-telegram body .home-run-caption i em { font-style: normal; font-size: 1.3em; line-height: .8; }
+
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer,
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta {
+  position: absolute !important;
+  left: 5.73% !important;
+  width: 33.56% !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  border-radius: calc(var(--hal-cu) * 7);
+  background: linear-gradient(180deg, rgba(34,12,58,.97), rgba(20,6,38,.97)) !important;
+  border: calc(var(--hal-cu) * 1.4) solid rgba(255,150,45,.9);
+  box-shadow: 0 0 calc(var(--hal-cu) * 7) rgba(255,120,20,.45), inset 0 0 calc(var(--hal-cu) * 6) rgba(150,60,255,.3);
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer {
+  top: 56.35% !important;
+  height: 11.1% !important;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer > span { width: auto; }
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-timer em {
+  font: 800 calc(var(--hal-cu) * 10.5)/1 system-ui, sans-serif;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .03em;
+  color: #ffe2b0 !important;
+  text-shadow: 0 0 calc(var(--hal-cu) * 5) rgba(255,150,40,.7);
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta {
+  top: 72.95% !important;
+  height: 16.5% !important;
+  color: #fff0cc !important;
+  font: 900 calc(var(--hal-cu) * 9.6)/1 system-ui, sans-serif;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  text-shadow: 0 0 calc(var(--hal-cu) * 7) rgba(255,140,30,.85), 0 1px 0 #2a0c00 !important;
+  animation: homeDuoPulse 2.4s ease-in-out infinite;
+}
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta > i { display: none !important; }
+html.theme-halloween.platform-telegram body .client-home.home-v2.active .home-wheel-cta > span { color: inherit; }
+
+/* Visible actions and loading/error state for the Halloween ticket counters. */
+html.theme-halloween .halloween-controls { display: grid; gap: 10px; padding: 12px 16px; }
+html.theme-halloween .halloween-controls p { margin: 0; font-size: 13px; line-height: 1.45; }
+html.theme-halloween .halloween-controls button { min-height: 44px; white-space: normal; }
+html.theme-halloween .halloween-controls button[hidden] { display: none; }

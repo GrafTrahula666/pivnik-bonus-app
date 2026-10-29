@@ -6,8 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const paths = {
   app: path.join(root, 'app.js'),
   index: path.join(root, 'index.html'),
-  gateway: path.join(root, 'universal-server.js'),
-  redCss: path.join(root, 'red-cosmos-v2.css')
+  gateway: path.join(root, 'universal-server.js')
 };
 
 async function read(key) { return fs.readFile(paths[key], 'utf8'); }
@@ -90,17 +89,6 @@ gateway = replaceRequired(
 );
 await write('gateway', gateway);
 
-let redCss = await read('redCss');
-if (!redCss.includes('.platform-vk #qrToken,.platform-vk #copyQrCode')) {
-  redCss = replaceRequired(
-    redCss,
-    '.platform-vk #qrModal .qr-warning{display:none!important}',
-    '.platform-vk #qrModal .qr-warning{display:none!important}\n.platform-vk #qrToken,.platform-vk #copyQrCode{display:none!important}',
-    'VK QR technical controls CSS'
-  );
-}
-await write('redCss', redCss);
-
 const failures = [];
 if (!app.includes("$$('.screen').forEach") || app.includes("\n  $('.screen').forEach")) failures.push('navigation');
 if (!app.includes("$('#openProfileShop')?.addEventListener('click'")) failures.push('profile shop handler');
@@ -108,7 +96,6 @@ if (!index.includes('id="openProfileShop"')) failures.push('profile shop entry')
 if (!gateway.includes('href="/styles.css$1"') || !gateway.includes('src="/app.js$1"')) failures.push('root assets');
 if (gateway.includes("if (platform !== 'vk') {\n    return withLinking.replace(\n      /<!-- telegram-wheel-legacy:start")) failures.push('Telegram primary actions');
 if (!gateway.includes("platform === 'vk' ? 'platform-vk' : 'platform-telegram'")) failures.push('platform class');
-if (!redCss.includes('.platform-vk #qrToken,.platform-vk #copyQrCode{display:none!important}')) failures.push('VK QR cleanup');
 if (failures.length) throw new Error(`release candidate verification failed: ${failures.join(', ')}`);
 
 console.log('Release candidate interaction fixes are applied and verified.');
