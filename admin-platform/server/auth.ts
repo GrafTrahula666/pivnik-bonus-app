@@ -55,6 +55,10 @@ export async function login(
   const email = normalizeEmail(emailRaw)
   const password = String(passwordRaw ?? '')
   const ip = requestIp(req)
+  // Process-local limits: each instance must still sit behind shared ingress protection.
+  // Aggregate buckets prevent rotating accounts or IPs from bypassing the pair cap.
+  enforceRateLimit(`admin-login-ip:${ip}`, 30, 15 * 60 * 1000)
+  enforceRateLimit(`admin-login-account:${email}`, 15, 15 * 60 * 1000)
   enforceRateLimit(`admin-login:${ip}:${email}`, 6, 15 * 60 * 1000)
 
   const result = await pool.query<AccountRow>(

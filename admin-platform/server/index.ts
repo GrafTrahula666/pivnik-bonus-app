@@ -8,6 +8,8 @@ import { closeOnboardingTargetRegistry } from './onboarding-database-registry.js
 import { purgeExpiredSessions } from './auth.js'
 import { handleApi, sendApiError } from './router.js'
 import { securityHeaders } from './security.js'
+import { createEvotorMarketInbox, evotorMarketSettings } from './evotor-market.js'
+import { pool } from './db.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -60,10 +62,13 @@ async function serveStatic(res: http.ServerResponse, pathname: string): Promise<
 }
 
 validateRuntimeConfig()
+evotorMarketSettings()
+const evotorMarket = createEvotorMarketInbox(pool)
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+    if (await evotorMarket.handle(req, res, url)) return
     if (await handleApi(req, res, url)) return
     if (url.pathname.startsWith('/api/')) {
       res.statusCode = 404

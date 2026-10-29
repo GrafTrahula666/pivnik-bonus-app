@@ -1,6 +1,6 @@
 # PIVNIK Admin Platform
 
-React + Vite admin frontend and Node.js Admin API for the isolated PIVNIK staging environment. The server publishes the compiled frontend and exposes only the `/api/admin/*` namespace.
+React + Vite admin frontend and Node.js Admin API. The server publishes the compiled frontend and `/api/admin/*`. Optional authenticated Evotor cloud callbacks use three exact `/api/v1/*` paths; they are disabled by default. See [the Marketplace runbook](../ops/EVOTOR-MARKET-RUNBOOK.md) for the contract and remaining release gates.
 
 ## Safety boundary
 

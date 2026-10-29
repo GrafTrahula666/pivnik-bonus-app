@@ -343,4 +343,39 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect(JSON.stringify(o)).not.toContain('postgres://')
   })
 
+  it('CRM pagination uses stable numeric ordering and excludes another bar on every page',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getClients}=await import('../data.js')
+    const scope=await resolveVenueScope(pivnikAdmin,pivnikVenue)
+    const inserted=await setup!.query<{id:string}>(`INSERT INTO users(first_name,created_at)
+      SELECT 'PaginationFixture '||i,NOW()-INTERVAL '30 days' FROM generate_series(1,205) i ORDER BY i DESC
+      RETURNING id::text`)
+    const ids=inserted.rows.map(row=>row.id).sort((a,b)=>Number(a)-Number(b))
+    await setup!.query(`INSERT INTO bar_customers(bar_id,user_id)
+      SELECT $1::bigint,id FROM users WHERE first_name LIKE 'PaginationFixture %'`,[scope.legacyBarId])
+    const other=(await setup!.query<{id:string}>(`INSERT INTO users(first_name)
+      VALUES('PaginationFixture Foreign') RETURNING id::text`)).rows[0]!.id
+    await setup!.query(`INSERT INTO bar_customers(bar_id,user_id)
+      SELECT legacy_bar_id,$1::bigint FROM venues WHERE id=$2::bigint`,[other,northVenue])
+    for(const sort of ['lastActivity','spend','balance','created']){
+      const actual:string[]=[]
+      for(const offset of [0,100,200]){
+        const page=await getClients(scope,new URL(`http://fixture/?q=PaginationFixture&sort=${sort}&limit=100&offset=${offset}`))
+        expect(page.total).toBe(205);expect(page.offset).toBe(offset)
+        actual.push(...page.rows.map(row=>row.id))
+      }
+      expect(actual).toEqual(ids);expect(new Set(actual).size).toBe(205);expect(actual).not.toContain(other)
+    }
+    // Response fields are serialized as text in SQL; ORDER BY must use numeric sources.
+    for(const [index,amount] of [9,100,20].entries()){
+      await setup!.query('INSERT INTO wallets(user_id,balance) VALUES($1,$2)',[ids[index],amount])
+      await setup!.query(`INSERT INTO transactions(client_id,mode,status,check_amount_cents,cash_paid_cents)
+        VALUES($1,'accrue','completed',$2,$2)`,[ids[index],amount])
+    }
+    for(const sort of ['balance','spend']){
+      const page=await getClients(scope,new URL(`http://fixture/?q=PaginationFixture&sort=${sort}&limit=3`))
+      expect(page.rows.map(row=>row.id)).toEqual([ids[1],ids[2],ids[0]])
+    }
+  })
+
 })

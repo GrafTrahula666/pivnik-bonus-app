@@ -4,6 +4,64 @@ Written 2026-09-28 after a live audit of the running code (not from memory/docs)
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
 
+## Admin Pilot Marketplace inbox (2026-10-23, default off)
+
+`admin-platform/server/evotor-market.ts` handles only POST `/api/v1/user/token`,
+`/api/v1/installation/event` and `/api/v1/subscription/event` before the browser
+Admin router. `ADMIN_ENABLE_EVOTOR_MARKET_WEBHOOKS=false` hides these routes.
+Enabling requires a UUID4 product, exact strong app-level Authorization and
+the existing onboarding secret keyring. Manual Admin migration 020 contains
+provider identities, encrypted tokens, durable deduplicated events and a
+contiguous subscription projection; none is a new tenant or company grant.
+Unknown properties/products/versions, conflicting retries and cross-user
+subscriptions fail closed. Event and projection commit together before 200;
+SQL/commit failures return 503 without provider/SQL/credential text. Uninstall
+cannot be undone by an older install. Sequence gaps are explicit; large
+contiguous backlogs drain in batches. Terms/add-on changes require review.
+Termination requested remains resumable, distinct from terminal termination.
+No token consumer, tenant binding, license authorizer, commercial activation,
+provider call or billing is introduced. App-vs-user notification auth differs
+between official documents and remains a mandatory real-provider test gate.
+See `EVOTOR-MARKET-RUNBOOK.md` and `ADMIN-PILOT-MARKET-PROGRESS.md`.
+`server/tests/evotor-market.spec.ts` exercises real HTTP and disposable SQL;
+`SPACEVERSE_TEST_NATIVE_POSTGRES_URL` selects independent native connections.
+This Admin-only mount has no duplicate route in root `server.js` or
+`universal-server.js`; neither root server is changed by this feature.
+
+25 October hardening requires manual Admin migration **021 after 020**. Conflicting
+same-key deliveries preserve only the changed SHA256 plus the original event key
+and set sticky `reconciliation_required` on the **original** provider user and
+subscription before returning 409. Failed writes/COMMIT return 503 without a
+partial hold; exact retries, token rotation and later events cannot clear it.
+An installation conflict remains ambiguous across reinstall. There is no reset
+API/reconciler yet. A later sequence with a different provider userId for the
+same subscription also persists a sticky hold on the ORIGINAL subscription before
+409 (503/rollback if COMMIT fails). Its conflicting event is durable evidence,
+but the original user row is not additionally locked, avoiding a cross-user
+lock-order deadlock. A future license consumer must check BOTH user and subscription
+holds, installation, complete sequence and fresh verified canonical ownership;
+another subscription's `active` projection alone never authorizes access.
+A termination request after terminal termination now enters `review_required`,
+so a subsequent renewal cannot reopen it. HTTP/disposable SQL regression covers
+identity substitution, concurrent retries and failure recovery. No customer or
+financial tables, root route copies or startup migrations are changed.
+
+`auth.ts:login` retains the six-attempt IP/account limit and adds independent
+30-per-IP and 15-per-normalized-account limits per 15 minutes, before password
+SQL/scrypt. `login-rate-limit.spec.ts` covers rotating identities/IPs and expiry.
+Limits are process-local, not a distributed ingress protection guarantee.
+
+`ProductionCRM.tsx` now requests bounded 100-row pages with offset and accessible
+Previous/Next controls. Search/sort/segment changes reset the page; exact-path
+results hide stale rows and reject late responses. Existing keyed scope/drawer
+isolation remains. `data.ts:getClients` orders by typed numeric balance/spend
+and timestamp sources (not response text aliases), then `u.id ASC` for stable
+ties. Native PostgreSQL integration covers 205 equal-sort customers, a foreign
+bar and 9/20/100 numeric ordering; existing legacy tenant guard is retained.
+`crm-pagination.config.ts` and its named fixtures run desktop/mobile browser
+regressions. Ordinary offset pagination does not promise a frozen snapshot
+while another operator changes the database. Vitest is pinned to 4.1.12 to fix
+the two currently reported moderate dev-only @vitest/mocker advisories.
 ## Empty dedicated CRM database bootstrap (2026-10-20, default off)
 
 `ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=false` extends the existing explicit
@@ -292,6 +350,12 @@ cannot hide their scrim behind the sidebar. The drawer/modal surfaces stack
 above their own scrims; customer actions, tenant scope and data routes are unchanged.
 
 ## SPACEVERSE sortable operational tables (2026-10-28)
+
+CRM pagination retains the whitelisted server sorting and direction from the
+current main. Search, segment, dropdown and column-header sort changes reset the
+offset; subsequent pages retain direction. Page responses are bound to the exact
+request path so late results cannot replace another page, filter or venue.
+`e2e/crm-pagination.spec.ts` covers pagination with column-header sorting.
 
 `src/phaseC/TableSort.tsx` supplies accessible column-header controls and
 missing-value-safe numeric/text comparators for complete client-side lists.
