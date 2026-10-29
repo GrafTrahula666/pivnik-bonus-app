@@ -28,6 +28,7 @@ export const config = {
   enableOnboardingIntegrations: bool('ADMIN_ENABLE_ONBOARDING_INTEGRATIONS', false),
   enableOnboardingInvitations: bool('ADMIN_ENABLE_ONBOARDING_INVITATIONS', false),
   enableOnboardingProvisioning: bool('ADMIN_ENABLE_ONBOARDING_PROVISIONING', false),
+  enableOnboardingDatabaseBootstrap: bool('ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP', false),
   enableOnboardingSupport: bool('ADMIN_ENABLE_ONBOARDING_SUPPORT', false),
   enableOnboardingWorkflow: bool('ADMIN_ENABLE_ONBOARDING_WORKFLOW', false),
   enableOnboardingPosProxy: bool('ADMIN_ENABLE_ONBOARDING_POS_PROXY', false),

@@ -2059,3 +2059,64 @@ source/test/env/migration файлов совпали до/после финал
 самостоятельный запуск нового клиента остаются непроверенными/незавершёнными.
 Новые production функции выключены. Следующий минимальный шаг — отдельный
 Draft PR этой ветки и его CI. Никакого merge/deploy/устройств.
+
+
+## Empty CRM database bootstrap — 2026-10-20
+
+Ветка `spaceverse/crm-empty-database-bootstrap-20261020`, база main
+`0d7314c735ec636091e50dab4aecb3d96dd2bf88` после объединённого #295.
+Реализован следующий небольшой участок C13, не полный self-service resource
+allocator: существующий binding/run может подготовить canonical customer schema
+только в заранее выделенной/зарегистрированной полностью пустой базе.
+
+- Default-off `ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=false` во всех трёх
+  env examples; отдельная capability объясняет действие в существующем мастере.
+- Нет нового tenant registry/ledger/step. Сохраняются canonical manifest,
+  company/venue/customer/runtime, scoped owner/manager grants, signed session,
+  Origin/CSRF, rate limits и пустое POST-тело. Владелец не теряет другие точки.
+- Новый numbered tenant migration 001 + неизменённые root 009/017–020 исполняются
+  одной target-транзакцией вместе с binding. Пустые клиентские таблицы, без
+  переноса данных. SQL/URLs/credentials из запроса не принимаются.
+- Nonempty targets отклоняются; учтены routines/types/schema/sequence/temp/large
+  objects. Safe search path и квалифицированный системный to_regclass защищают
+  сам preflight от подставной SQL-функции. DDL/binding fault откатывает всё.
+- Existing exact binding только сверяется. Потерянный ответ/audit/lease failure
+  не симулирует успех; повтор восстанавливает тот же binding без нового DDL.
+  Account/grants перепроверяются при claim и finish, lease — wall-clock после
+  metadata lock waits. Default-off не затрагивает прежний ручной режим.
+- Даже успех оставляет venue inactive и runtime not_provisioned/unpublished.
+  Касса и лицензия не подтверждаются этим действием.
+
+Личные проверки этой итерации: materialize ×2 — idempotent/SHA256;
+`node --test` — 650 passed; root check/VK parity/bundle — exit 0;
+root и Business audit (обычный и production-focused) — zero vulnerabilities;
+Business typecheck/lint/build/isolation — exit 0; Business Vitest с native PostgreSQL test contour —
+476 passed/39 files; дополнительные новые PGlite — 23 passed.
+Полный браузерный набор — 54 passed: bootstrap 4, support 4, preparation 4,
+owner search 4, activation 10, tenant CRM 6, disabled 2, invitations 4,
+cash/CRM 12, onboarding 4. Все 26 стадий проверки завершились с exit 0.
+12 прежних Fast Refresh warnings и прежний chunk warning не исправлялись попутно.
+
+Чистый materialize снова даёт прежний diff по achievements.js, app.js,
+index.html, red-cosmos-v2.js, scripts/v22-data-audit-and-repair.mjs, server.js,
+universal-server.js. Он сохранён отдельно, не исправлялся молча; исходные байты
+после root tests восстановлены и сверены SHA256. Новые fixtures используют
+новые отдельные loopback test DBs, прежние данные не удаляют. Логи/команды:
+`/workspace/spaceverse-verification/bootstrap-20261020`.
+
+Независимый параллельный агент провёл узкий read-only review; найденные
+search-path/lease проблемы исправлены до финальной регрессии. Его четыре
+синтетические PGlite-проверки не выдаются за мои дополнительные native/E2E.
+Результат review сохранён отдельно, новых blocking P0/P1 в этом scope не найдено.
+
+Production/CI/Railway secrets/env/БД/устройства не менялись, merge/deploy этой
+ветки не выполнялись. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`;
+MODULE-MAP обновлён в том же PR. `/mnt/project-files/owner-panel` не смонтирован;
+этот файл — versioned журнал. Общий чек-лист остаётся 48% (12/25): C13 требует
+выделения самого ресурса/безопасного runner, а не только подготовки его схемы.
+
+Параллельно вне repo подготовлены 20 исследовательских заданий обычным чатам,
+без разрешения менять production/код. Результаты пока не получены. Drive tools
+в этой сессии не подключены; доступный handoff — `.result.md`
+файлы одним ZIP здесь. Требования установки/подписки/модерации не выдумываются
+до подтверждения реального контракта существующего кабинета Эвотора.

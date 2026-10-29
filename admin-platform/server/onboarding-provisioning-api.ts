@@ -10,6 +10,7 @@ import {loadOnboardingPosProxyProjection} from './onboarding-pos-proxy.js'
 
 const provisioning=createOnboardingProvisioningService({
   metadata:pool,
+  allowEmptyDatabaseBootstrap:config.enableOnboardingDatabaseBootstrap,
   resolveTargetDatabase:runtimeKey=>onboardingTargetRegistry.resolveTargetDatabase(runtimeKey),
   assembleRuntimeBundle:assembleApprovedRuntimeBundle,
   requireCodeRelease:true,
