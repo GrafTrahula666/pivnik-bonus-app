@@ -15,6 +15,7 @@ import { loadOwnedOnboardingRuntimeSource } from './venue-onboarding.js'
 import { HttpError, type AdminPrincipal, type VenueScope } from './types.js'
 import { tenantCrmProviderReadiness } from './tenant-crm-readiness.js'
 import type { OnboardingPosProxyView } from './onboarding-pos-proxy.js'
+import {bootstrapEmptyTenant,loadEmptyTenantMigrations} from './onboarding-tenant-bootstrap.js'
 
 const BINDING_STEP='runtime_database_binding' as const
 const SCHEMA_READINESS_STEP='tenant_schema_readiness' as const
@@ -71,6 +72,7 @@ type Client=PoolClient
 
 export interface OnboardingProvisioningOptions {
   metadata:Connectable
+  allowEmptyDatabaseBootstrap?:boolean
   // Credentials stay server-side. A request can select only its frozen runtime
   // key; it can never provide a database URL, host or credential.
   resolveTargetDatabase:(runtimeKey:string)=>Promise<Connectable|null>
@@ -159,7 +161,7 @@ async function connect(database:Connectable):Promise<Client> {
 }
 
 async function selectStep(client:Pick<PoolClient,'query'>,draftId:string,step:StepName,lock=false):Promise<StepRow|undefined> {
-  const columns=step===CRM_ACTIVATION_STEP?stepColumns.replace('lease_expires_at>NOW()','lease_expires_at>clock_timestamp()'):stepColumns
+  const columns=step===CRM_ACTIVATION_STEP||step===BINDING_STEP?stepColumns.replace('lease_expires_at>NOW()','lease_expires_at>clock_timestamp()'):stepColumns
   const result=await client.query<StepRow>(`SELECT ${columns}
     FROM admin_onboarding_provisioning_steps
     WHERE draft_id=$1::uuid AND step=$2${lock?' FOR UPDATE':''}`,[draftId,step])
@@ -183,7 +185,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
-    if(step===CRM_ACTIVATION_STEP)await lockCrmActor(client,admin)
+    if(step===CRM_ACTIVATION_STEP||(step===BINDING_STEP&&options.allowEmptyDatabaseBootstrap))await lockCrmActor(client,admin)
     const source=sourceValue(await loadOwnedOnboardingRuntimeSource(client,admin,draftId,true))
     if(step!==BINDING_STEP) {
       const dependencyStep=step===SCHEMA_READINESS_STEP?BINDING_STEP:SCHEMA_READINESS_STEP
@@ -194,11 +196,13 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
             'Сначала подтвердите схему и ownership-границы выделенной базы приложения.')
       }
     }
+    // A metadata lock wait must not consume the binding lease before it is issued.
+    const leaseClock=step===BINDING_STEP?'clock_timestamp()':'NOW()'
     const initialToken=crypto.randomUUID()
     const inserted=await client.query<{lease_token:string}>(`INSERT INTO admin_onboarding_provisioning_steps(
       draft_id,step,runtime_key,manifest_sha256,application_revision,company_id,venue_id,
       status,attempt_count,lease_token,lease_expires_at)
-      VALUES($1::uuid,$2,$3,$4,$5,$6::bigint,$7::bigint,'running',1,$8::uuid,NOW()+INTERVAL '${LEASE_SECONDS} seconds')
+      VALUES($1::uuid,$2,$3,$4,$5,$6::bigint,$7::bigint,'running',1,$8::uuid,${leaseClock}+INTERVAL '${LEASE_SECONDS} seconds')
       ON CONFLICT (draft_id,step) DO NOTHING RETURNING lease_token::text`,[
       source.draftId,step,source.manifest.runtimeKey,source.manifest.manifestSha256,
       source.manifest.source.applicationRevision,source.manifest.scope.companyId,source.manifest.scope.venueId,
@@ -222,7 +226,7 @@ async function claim(options:OnboardingProvisioningOptions,admin:AdminPrincipal,
     const token=crypto.randomUUID()
     await client.query(`UPDATE admin_onboarding_provisioning_steps SET
       status='running',attempt_count=attempt_count+1,lease_token=$3::uuid,
-      lease_expires_at=NOW()+INTERVAL '${LEASE_SECONDS} seconds',last_error_code=NULL,result=NULL,updated_at=NOW()
+      lease_expires_at=${leaseClock}+INTERVAL '${LEASE_SECONDS} seconds',last_error_code=NULL,result=NULL,updated_at=NOW()
       WHERE draft_id=$1::uuid AND step=$2`,[source.draftId,step,token])
     row=await selectStep(client,source.draftId,step,true)
     if(!row) throw unavailable()
@@ -253,16 +257,25 @@ function bindingMatches(row:BindingRow,source:RuntimeSource):boolean {
     row.isolation_policy==='dedicated_database'&&row.status==='prepared'
 }
 
-async function bindTarget(database:Connectable,source:RuntimeSource):Promise<TargetResult> {
+async function bindTarget(database:Connectable,source:RuntimeSource,bootstrap=false):Promise<TargetResult> {
+  const migrations=bootstrap?await loadEmptyTenantMigrations():null
   let client:Client
   try {client=await database.connect()}
   catch {throw new TargetStepFailure('retryable_error','TARGET_DATABASE_UNAVAILABLE')}
   try {
     await client.query('BEGIN')
+    if(bootstrap){
+      await client.query("SET LOCAL statement_timeout='10s'")
+      await client.query("SET LOCAL lock_timeout='3s'")
+      // pg_catalog is implicitly FIRST; public remains the creation schema.
+      await client.query('SET LOCAL search_path=public,pg_temp')
+      await client.query("SELECT pg_catalog.pg_advisory_xact_lock(7346189201301::bigint)")
+    }
     const relation=await client.query<{table_name:string|null}>(
-      "SELECT to_regclass('public.spaceverse_runtime_binding')::text AS table_name")
+      "SELECT pg_catalog.to_regclass('public.spaceverse_runtime_binding')::text AS table_name")
     if(!relation.rows[0]?.table_name) {
-      throw new TargetStepFailure('action_required','TARGET_BINDING_SCHEMA_REQUIRED')
+      if(!migrations)throw new TargetStepFailure('action_required','TARGET_BINDING_SCHEMA_REQUIRED')
+      if(!await bootstrapEmptyTenant(client,migrations))throw new TargetStepFailure('action_required','TARGET_DATABASE_NOT_EMPTY')
     }
     const columns=await client.query<{column_name:string}>(`SELECT column_name FROM information_schema.columns
       WHERE table_schema='public' AND table_name='spaceverse_runtime_binding'`)
@@ -271,7 +284,7 @@ async function bindTarget(database:Connectable,source:RuntimeSource):Promise<Tar
     if(required.some(column=>!available.has(column))) {
       throw new TargetStepFailure('action_required','TARGET_BINDING_SCHEMA_REQUIRED')
     }
-    const inserted=await client.query<BindingRow>(`INSERT INTO spaceverse_runtime_binding(
+    const inserted=await client.query<BindingRow>(`INSERT INTO public.spaceverse_runtime_binding(
       singleton,runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status)
       VALUES(TRUE,$1,$2,$3,$4,$5,'dedicated_database','prepared')
       ON CONFLICT (singleton) DO NOTHING
@@ -281,7 +294,7 @@ async function bindTarget(database:Connectable,source:RuntimeSource):Promise<Tar
     ])
     const current=await client.query<BindingRow>(`SELECT
       runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
-      FROM spaceverse_runtime_binding WHERE singleton=TRUE FOR UPDATE`)
+      FROM public.spaceverse_runtime_binding WHERE singleton=TRUE FOR UPDATE`)
     if(current.rows.length!==1||!bindingMatches(current.rows[0]!,source)) {
       throw new TargetStepFailure('action_required','TARGET_BINDING_CONFLICT')
     }
@@ -490,7 +503,7 @@ async function finish(
   const client=await connect(options.metadata)
   try {
     await client.query('BEGIN')
-    if(claimValue.step===CRM_ACTIVATION_STEP){
+    if(claimValue.step===CRM_ACTIVATION_STEP||(claimValue.step===BINDING_STEP&&options.allowEmptyDatabaseBootstrap)){
       // Same lock order as claim(): current grant -> draft -> operation. The
       // frozen prepared source guard is unchanged; this cannot activate rows.
       await lockCrmActor(client,admin)
@@ -502,7 +515,7 @@ async function finish(
     // A worker that lost its lease can never overwrite a newer attempt. The
     // target binding is idempotent, so the newer worker will reconcile it.
     if(current.status!=='running'||current.lease_token!==claimValue.token||
-      (claimValue.step===CRM_ACTIVATION_STEP&&!current.lease_active)) {
+      ((claimValue.step===CRM_ACTIVATION_STEP||(claimValue.step===BINDING_STEP&&options.allowEmptyDatabaseBootstrap))&&!current.lease_active)) {
       await client.query('COMMIT')
       return view(claimValue.source,claimValue.step,current,options)
     }
@@ -622,7 +635,7 @@ export function createOnboardingProvisioningService(options:OnboardingProvisioni
       try {
         const target=await options.resolveTargetDatabase(claimed.source.manifest.runtimeKey)
         if(!target) throw new TargetStepFailure('action_required','TARGET_DATABASE_NOT_REGISTERED')
-        const result=await bindTarget(target,claimed.source)
+        const result=await bindTarget(target,claimed.source,options.allowEmptyDatabaseBootstrap)
         try {await options.afterTargetCommit?.({draftId:claimed.source.draftId,runtimeKey:claimed.source.manifest.runtimeKey})}
         catch {throw new TargetStepFailure('retryable_error','TARGET_CONFIRMATION_UNCERTAIN')}
         return await finish(options,admin,claimed,{status:'succeeded',result})

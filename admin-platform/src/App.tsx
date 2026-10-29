@@ -19,6 +19,7 @@ import { AppLoyaltyManager } from './phaseC/AppLoyaltyManager'
 import { AppWheelManager } from './phaseC/AppWheelManager'
 import { SettingsPage } from './phaseC/SettingsPage'
 import { BeerIntake } from './phaseC/BeerIntake'
+import { BeerInventory } from './phaseC/BeerInventory'
 import { AccountSecurityPanel } from './phaseC/AccountSecurity'
 import { BroadcastPage } from './phaseC/BroadcastPage'
 import {OnboardingSupportQueue} from './phaseC/OnboardingSupportQueue'
@@ -101,7 +102,7 @@ export default function App(){
   if(authState==='guest'||!session)return <Login onDemo={demoAvailable?startDemo:undefined} onInvite={invitationAvailable?()=>setInviteToken(''):undefined} onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
 
   return <div className="app-shell">
-    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} intakeEnabled={session.capabilities.beerIntake===true} open={mobileNav} onClose={()=>setMobileNav(false)}
+    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} intakeEnabled={session.capabilities.beerIntake===true} inventoryEnabled={session.capabilities.beerInventory===true} open={mobileNav} onClose={()=>setMobileNav(false)}
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
@@ -128,6 +129,7 @@ export default function App(){
           {selected&&!isTrusted&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
           {selected&&page==='promotions'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
           {selected&&session.capabilities.beerIntake&&!isTrusted&&page==='intake'&&<BeerIntake key={'intake:'+session.admin.id+':'+selected.id} venue={selected}/>}
+          {selected&&session.capabilities.beerInventory&&!isTrusted&&page==='inventory'&&<BeerInventory key={'inventory:'+session.admin.id+':'+selected.companyId+':'+selected.id} venue={selected} actorId={session.admin.id}/>}
           {selected&&!spaceversePanel&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&(isTrusted?<AccountSecurityPanel session={session}/>:<SettingsPage venue={selected} session={session}/>)}

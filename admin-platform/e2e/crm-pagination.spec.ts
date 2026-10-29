@@ -106,6 +106,25 @@ test('pending page cannot duplicate requests and a late response cannot replace 
   await expect(page.locator('tbody tr')).toHaveCount(2)
 })
 
+test('column sorting resets paging and retains direction on the next page', async ({ page }) => {
+  const requests = await app(page)
+  await next(page).click()
+  await expect(status(page)).toHaveText('101–200 из 205')
+  const balanceHeader = page.getByRole('columnheader', { name: /Баланс/ })
+  await balanceHeader.getByRole('button').click()
+  await expect(status(page)).toHaveText('1–100 из 205')
+  expect(requests.at(-1)?.searchParams.get('offset')).toBe('0')
+  expect(requests.at(-1)?.searchParams.get('sort')).toBe('balance')
+  expect(requests.at(-1)?.searchParams.get('direction')).toBe('desc')
+  await next(page).click()
+  await expect(status(page)).toHaveText('101–200 из 205')
+  expect(requests.at(-1)?.searchParams.get('direction')).toBe('desc')
+  await balanceHeader.getByRole('button').click()
+  await expect(status(page)).toHaveText('1–100 из 205')
+  expect(requests.at(-1)?.searchParams.get('direction')).toBe('asc')
+  await expect(balanceHeader).toHaveAttribute('aria-sort', 'ascending')
+})
+
 for (const scope of ['102', '201']) test(`scope ${scope} resets paging and rejects late previous-scope data`, async ({ page }) => {
   const delayed = gate()
   const requests = await app(page, { delayed })

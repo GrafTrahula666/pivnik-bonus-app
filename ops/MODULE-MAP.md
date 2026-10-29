@@ -164,6 +164,33 @@ bar and 9/20/100 numeric ordering; existing legacy tenant guard is retained.
 regressions. Ordinary offset pagination does not promise a frozen snapshot
 while another operator changes the database. Vitest is pinned to 4.1.12 to fix
 the two currently reported moderate dev-only @vitest/mocker advisories.
+## Empty dedicated CRM database bootstrap (2026-10-20, default off)
+
+`ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=false` extends the existing explicit
+`runtime-database-binding/run` command and its existing lease/audit ledger.
+It does not create a target resource or accept URLs/SQL/scope from a request.
+Only an existing server registry entry may resolve a target. With the flag on,
+a missing public binding permits a conservative empty-database preflight;
+existing relations, routines, types, user-defined collations, extra schemas, extensions, event triggers,
+logical publications, default ACL grants, foreign servers, large objects and current-session temporary objects refuse
+bootstrap. A target with `ALTER DEFAULT PRIVILEGES` grants is not empty: those
+permissions could expose newly created customer tables to unintended roles. `onboarding-tenant-bootstrap.ts` loads new manual numbered
+`tenant-migrations/001_customer_core.sql` and the unchanged canonical root
+migrations 009/017–020. Their outer transaction wrappers are removed so all DDL
+and exact binding commit atomically. No customer/identity/wallet/transaction
+data is seeded or copied. Existing binding follows the old exact-match path;
+this does not upgrade or adopt an arbitrary existing database.
+
+The target uses a fixed advisory lock, bounded statement/lock waits and safe
+search path; public objects cannot shadow the preflight's system functions.
+Account role/active and canonical grants are rechecked before claim and metadata
+confirmation. Binding leases use wall-clock time after lock waits. DDL errors
+roll back all new objects; lost target confirmation reconciles the same exact
+binding without reapplying DDL. No compensating data deletion occurs. Schema
+readiness remains a separate read-only check; venue/runtime remain inactive,
+not_provisioned and unpublished. Core SQL supports the existing minimal
+customer/auth/wallet contracts, not the complete legacy runtime or financial
+operations. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
@@ -336,6 +363,59 @@ alongside existing cash dashboard checks. No production APIs are called by them.
 
 ## Owner panel appearance and cash interval (2026-10-25)
 
+### CRM calculated beer inventory (2026-10-26, separate default-off flag)
+
+The owner's corrected task is **independent CRM calculation**, with no provider
+quantity writes. `ADMIN_ENABLE_BEER_INVENTORY` gates the separate owner-only
+`GET/POST /api/admin/venues/:id/beer-inventory` route. Global Admin writes also
+gate POST. Session, Origin/CSRF, rate limit and canonical owner grants remain;
+trusted directors have no new access. `BeerInventory.tsx` replaces only the
+"Оформление" menu entry with "Остатки пива" when enabled in working mode.
+The older intake route, APK, bonus logic and `evotor-stock-safety.ts` are unchanged.
+
+Manual Admin metadata migration **026** is an append-only movement journal,
+not a replacement fiscal store or cached stock balance. Products are identified
+by exact bound store/product ID from existing normalized `pos_documents`, never
+the handwritten catalog. Only verified liter quantities are eligible. Initial
+and count movements start a new baseline; later close times are deducted, old
+or equal close times are included in the physical baseline. Late imports are
+reprojected by close time; receipt PK deduplication and no mutable sale counter
+prevent repeated consumption. PAYBACK alone restores nothing; an explicit linked
+physical return can restore at most its quantity once. Manual writeoff requires
+an explicit acknowledgement that the expense is absent from cash receipts.
+
+`beer-inventory.ts` rechecks active canonical company/venue/account/owner grants,
+uses per-product transaction locks, payload-hashed operation IDs and same-commit
+audit. Receipt queries run in a separate read-only repeatable-read transaction;
+there is **no atomic transaction between the two databases**. Projection limits
+fail closed rather than silently truncate. Full history is paged in 100s.
+`beer-inventory-model.ts` uses integer thousandths/BigInt, retains negative
+balances and exposes incomplete/awaiting-sync/uninitialized states. Existing
+history scan watermark/errors/cursor are reported independently. Optional manual
+POS migration026 adds `pos_recent_sync_status`; the existing recent-first importer
+records complete two-day ranges, page truncation and errors there after receipt
+commit. Its absence/failure never changes ingestion or bonus processing. Before
+that migration/first observed run, recent completeness is explicitly unknown.
+"Current" means covered through the displayed cutoff, never mere API reachability.
+The working worker interval is 120s (observed logs); freshness budget is three
+cycles of the matching `PIVNIK_POS_SYNC_SECONDS` setting, not a completeness proof.
+
+Runbook and release/rollback boundaries:
+`ops/CRM-BEER-INVENTORY-20261026.md`. Native PostgreSQL tests use two disposable
+databases and real concurrent writers; model tests compare existing cash
+analytics with its monetary-return convention separated. Desktop/mobile browser
+fixtures exercise actual UI and lost-reply recovery without production APIs.
+
+The default **«На учёте»** subtab (2026-10-27) shows only products with an
+initial/count baseline, including zero, negative and unsupported balances.
+Each row displays the saved quantity/date, deliveries/physical returns, deducted
+sales, manual writeoffs and remaining liters from the same server projection.
+Balances ≤10 liters are highlighted and sorted first by default. **«Все товары»**
+retains discovery, initialization and historical period controls. After an initial
+save the UI opens the tracked list. Refresh stays at 120 seconds; sync quality
+and warnings remain visible, with detailed watermarks in a disclosure. This is a
+UI-only view: no second counter, migration, provider write or importer change.
+
 ### Evotor stock intake safety (2026-10-25)
 
 PR #309 introduced the intake screen; #310 changed it to the existing cloud
@@ -367,6 +447,29 @@ boundary. The requested end-to-end intake is **not operational**.
 
 `admin-platform/src/spaceverse.css` is the final presentation layer imported by
 `src/main.tsx`; it preserves the existing page components, handlers and RBAC.
+CRM customer drawers use a body-level portal so the `.main` isolation context
+cannot hide their scrim behind the sidebar. The drawer/modal surfaces stack
+above their own scrims; customer actions, tenant scope and data routes are unchanged.
+
+## SPACEVERSE sortable operational tables (2026-10-28)
+
+CRM pagination retains the whitelisted server sorting and direction from the
+current main. Search, segment, dropdown and column-header sort changes reset the
+offset; subsequent pages retain direction. Page responses are bound to the exact
+request path so late results cannot replace another page, filter or venue.
+`e2e/crm-pagination.spec.ts` covers pagination with column-header sorting.
+
+`src/phaseC/TableSort.tsx` supplies accessible column-header controls and
+missing-value-safe numeric/text comparators for complete client-side lists.
+The CRM directory requests whitelisted `sort` and `direction` from
+`server/data.ts:getClients` so the full permitted tenant-scoped result is
+ordered before the 100-row cap. Monetary/wallet/order-count fields use numeric
+SQL expressions instead of text result aliases; stable `u.id` breaks ties.
+The original CRM filters and write permissions are unchanged. Cash product
+columns and both beer-stock views sort complete returned product collections
+by underlying exact integer amounts, not localized display strings. No fiscal
+or inventory mutation, schema or patch-chain code changes. Operation and audit lists now accept whitelisted `sort`/`direction` through their existing authorized routes, order within the tenant-scope SQL query before their 150/180 row caps, and retain stable ID tie-breakers. Company summary and developer DB tables sort complete returned collections locally. Broadcast history and the developer's recent-event tables sort only the bounded entries returned by those APIs; they are not a whole-history index.
+
 `src/branding.ts` centralizes brand raster paths. `Login.tsx` keeps the existing
 auth/demo/invitation flow; `BlackHole.tsx` animates only the background, with a
 static image fallback, reduced-motion support and a pause control. The cube

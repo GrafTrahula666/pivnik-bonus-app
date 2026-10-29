@@ -32,6 +32,10 @@ jobs:
       - name: Venue onboarding on desktop and mobile (fixtures only, synthetic Evotor response)
         run: npm run test:e2e:onboarding
         working-directory: admin-platform
+      - name: CRM pagination and column sorting on desktop and mobile (fixtures only)
+        if: hashFiles('admin-platform/crm-pagination.config.ts') != ''
+        run: npx playwright test --config crm-pagination.config.ts
+        working-directory: admin-platform
       - uses: actions/upload-artifact@v4
         if: always()
         with:
