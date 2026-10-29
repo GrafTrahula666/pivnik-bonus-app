@@ -1,4 +1,5 @@
 import { useEffect,useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Coins,Database,Gift,Megaphone,MoreHorizontal,Search,ShieldCheck,
   SlidersHorizontal,Trophy,X,
@@ -12,6 +13,7 @@ import { ErrorCard,LivePill,LoadingCard,SourceNote,WriteGatePill,dt,useResource 
 import { businessLabel } from './labels'
 import { isPivnikAppVenue } from './AppContentManagers'
 import { GuestRewardsPanel } from './AppRewardsManagers'
+import { SortTh, type SortDirection } from './TableSort'
 
 interface Client {
   id:string;name:string;username:string|null;registeredAt:string;membershipStatus:string;balance:number;
@@ -39,17 +41,18 @@ interface DetailResponse extends Client {
 interface AchievementConfigResponse {items:Array<{code:string;title:string}>}
 
 export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;session:AdminSession;onBroadcast?:(segment:string)=>void}){
-  const [query,setQuery]=useState(''),[sort,setSort]=useState('lastActivity'),[selected,setSelected]=useState<string|null>(null),[segment,setSegment]=useState<Segment|''>('')
-  const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&limit=100${segment?`&segment=${segment}`:''}`
-  const {data,error,loading,reload}=useResource<ListResponse>(path,[query,sort,segment])
+  const [query,setQuery]=useState(''),[sort,setSort]=useState('lastActivity'),[direction,setDirection]=useState<SortDirection>('desc'),[selected,setSelected]=useState<string|null>(null),[segment,setSegment]=useState<Segment|''>('')
+  const changeSort=(column:string,next:SortDirection)=>{setSort(column);setDirection(next)}
+  const path=`/api/admin/venues/${venue.id}/clients?q=${encodeURIComponent(query)}&sort=${sort}&direction=${direction}&limit=100${segment?`&segment=${segment}`:''}`
+  const {data,error,loading,reload}=useResource<ListResponse>(path,[query,sort,direction,segment])
   const segments=useResource<{segments:Record<Segment,number>}>(`/api/admin/venues/${venue.id}/clients/segments`)
   return <div className="page">
     <PageHead eyebrow="БАЗА КЛИЕНТОВ" title="Клиенты" sub={data?`${rub.format(data.total)} клиентов в выбранном заведении`:'Загрузка клиентской базы'}
       actions={<><LivePill/>{venue.accessKind!=='trusted'&&<WriteGatePill enabled={session.capabilities.productionBonusWrites} label="БОНУСЫ"/>}</>}/>
     <div className="toolbar card">
       <label className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Имя, @ник или ID клиента…"/></label>
-      <div className="toolbar-filters"><select value={sort} onChange={e=>setSort(e.target.value)}>
-        <option value="lastActivity">Последняя активность</option><option value="spend">Сумма покупок</option><option value="balance">Баланс</option><option value="created">Регистрация</option>
+      <div className="toolbar-filters"><select aria-label="Сортировка клиентов" value={sort} onChange={e=>changeSort(e.target.value,e.target.value==='name'?'asc':'desc')}>
+        <option value="lastActivity">Последняя активность</option><option value="spend">Сумма покупок</option><option value="balance">Баланс</option><option value="operations">Операции</option><option value="averageCheck">Средний чек</option><option value="name">Имя клиента</option><option value="created">Регистрация</option><option value="segment">Сегмент</option><option value="channel">Канал</option><option value="status">Статус</option>
       </select><div className="live-source-pill"><span/><Database/>АКТУАЛЬНЫЕ ДАННЫЕ</div></div>
     </div>
     {segments.data&&<div className="segment-row">
@@ -60,7 +63,7 @@ export function ProductionCRM({venue,session,onBroadcast}:{venue:ApiVenue;sessio
     {error&&<ErrorCard error={error} onRetry={reload}/>}
     {loading&&!data&&<LoadingCard/>}
     {data&&<div className={loading?'table-card card loading-dim':'table-card card'}><div className="table-scroll"><table>
-      <thead><tr><th>Клиент</th><th>Баланс</th><th>Кэшбэк</th><th>Уровень</th><th>Операции</th><th>Сумма покупок</th><th>Средний чек</th><th>Последняя активность</th><th>Сегмент</th><th>Канал</th><th>Статус</th><th/></tr></thead>
+      <thead><tr><SortTh label="Клиент" column="name" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Баланс" column="balance" sort={sort} direction={direction} onSort={changeSort}/><th>Кэшбэк</th><th>Уровень</th><SortTh label="Операции" column="operations" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Сумма покупок" column="spend" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Средний чек" column="averageCheck" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Последняя активность" column="lastActivity" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Сегмент" column="segment" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Канал" column="channel" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Статус" column="status" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><th/></tr></thead>
       <tbody>{data.rows.map(c=><tr key={c.id} onClick={()=>setSelected(c.id)}>
         <td><div className="person"><div className="avatar">{c.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{c.name||'Без имени'}</b><span>{c.username?`@${c.username}`:`ID ${c.id}`}</span></div></div></td>
         <td><strong>{rub.format(c.balance)}</strong></td><td>{c.cashbackPercent}%</td><td><LevelBadge level={c.level}/></td>
@@ -87,7 +90,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
   const refresh=()=>{setReload(v=>v+1);onChanged()}
   // In the PIVNIK app achievements and frames are given through the app (GuestRewardsPanel).
   const linked=isPivnikAppVenue(venue)
-  return <div className="drawer-layer">
+  return createPortal(<div className="drawer-layer">
     <button className="drawer-scrim" onClick={onClose} aria-label="Закрыть карточку"/>
     <aside className="drawer">
       <div className="drawer-head"><div><span className="eyebrow">КАРТОЧКА КЛИЕНТА</span><h2>{client?.name||'Загрузка…'}</h2><span className="drawer-sub">{venue.companyName} → {venue.name} · клиент #{userId}</span></div><button className="icon-btn" onClick={onClose}><X/></button></div>
@@ -123,7 +126,7 @@ function CustomerDrawer({venue,session,userId,onClose,onChanged}:{venue:ApiVenue
     {achievementOpen&&client&&<AchievementGrantModal venue={venue} client={client} onCancel={()=>setAchievementOpen(false)} onSaved={()=>{setAchievementOpen(false);refresh()}}/>}
     {cashbackOpen&&client&&<CashbackModal venue={venue} client={client} onCancel={()=>setCashbackOpen(false)} onSaved={()=>{setCashbackOpen(false);refresh()}}/>}
     {entitlementOpen&&client&&<EntitlementModal venue={venue} session={session} client={client} onCancel={()=>setEntitlementOpen(false)} onSaved={()=>{setEntitlementOpen(false);refresh()}}/>}
-  </div>
+  </div>, document.body)
 }
 
 function BonusModal({venue,client,mode,onCancel,onSaved}:{venue:ApiVenue;client:DetailResponse;mode:'credit'|'debit';onCancel:()=>void;onSaved:()=>void}){

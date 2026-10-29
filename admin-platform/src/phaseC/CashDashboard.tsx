@@ -5,6 +5,7 @@ import { CircleHelp,Database } from 'lucide-react'
 import { CardTitle,cn,rub } from '../ui'
 
 import type { CashReport } from './cash-report'
+import { SortTh, sortTableRows, type SortDirection } from './TableSort'
 export type { CashReport } from './cash-report'
 
 
@@ -19,7 +20,7 @@ function CashKpi({label,value,source}:{label:string;value:string;source:string})
 
 
 type CashProduct=NonNullable<PosSummary['products']>[number]
-type ProductSort='revenue'|'quantity'|'returns'
+type ProductSort='name'|'revenue'|'quantity'|'sales'|'returns'
 
 function cashQuantity(value:string,measure:string){
   const millis=BigInt(value),absolute=millis<0n?-millis:millis
@@ -85,7 +86,9 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
   const [query,setQuery]=useState('')
   const [grouping,setGrouping]=useState<'hours'|'days'>('hours')
   const [sort,setSort]=useState<ProductSort>('revenue')
+  const [direction,setDirection]=useState<SortDirection>('desc')
   const [limit,setLimit]=useState(10)
+  const changeSort=(column:string,next:SortDirection)=>{setSort(column as ProductSort);setDirection(next);setLimit(10)}
   const hours=summary.hours
   const maximum=(hours||[]).reduce((largest,row)=>{
     const value=cashAbs(BigInt(row.amountCents))
@@ -93,11 +96,7 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
   },0n)
   const products=summary.products
   const filtered=(products||[]).filter(p=>p.name.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru')))
-  const metric=(p:CashProduct)=>BigInt(sort==='quantity'?p.quantityMillis:sort==='returns'?p.returnCents:p.netCents)
-  const ordered=[...filtered].sort((a,b)=>{
-    const x=metric(a),y=metric(b)
-    return x===y?a.name.localeCompare(b.name,'ru'):x>y?-1:1
-  })
+  const ordered=sortTableRows(filtered,(p:CashProduct)=>sort==='name'?p.name:BigInt(sort==='quantity'?p.quantityMillis:sort==='returns'?p.returnCents:sort==='sales'?p.salesCents:p.netCents),direction)
   const dateLabel=(value:number)=>new Date(value).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})
   const from=period?dateLabel(Date.parse(period.from)):null
   const until=period?dateLabel(Date.parse(period.until)-1):null
@@ -137,16 +136,18 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
            <input aria-label="Поиск товара" type="search" placeholder="Поиск товара" value={query}
              onChange={e=>{setQuery(e.target.value);setLimit(10)}}/>
            <label>Сортировка
-             <select aria-label="Сортировка товаров" value={sort} onChange={e=>{setSort(e.target.value as ProductSort);setLimit(10)}}>
+             <select aria-label="Сортировка товаров" value={sort} onChange={e=>changeSort(e.target.value,e.target.value==='name'?'asc':'desc')}>
                <option value="revenue">По выручке</option>
                <option value="quantity">По количеству</option>
+               <option value="sales">По продажам</option>
                <option value="returns">По возвратам</option>
+               <option value="name">По названию</option>
              </select>
            </label>
          </div>
          <div className="table-scroll">
            <table className="cash-product-table"><thead><tr>
-             <th>Товар</th><th>Количество</th><th>Продажи</th><th>Возвраты</th><th>Выручка</th>
+             <SortTh label="Товар" column="name" sort={sort} direction={direction} onSort={changeSort} initialDirection="asc"/><SortTh label="Количество" column="quantity" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Продажи" column="sales" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Возвраты" column="returns" sort={sort} direction={direction} onSort={changeSort}/><SortTh label="Выручка" column="revenue" sort={sort} direction={direction} onSort={changeSort}/>
            </tr></thead><tbody>
              {ordered.slice(0,limit).map((p,index)=><tr key={p.name+'|'+p.measure+'|'+index}>
                <td>{p.name}</td><td>{cashQuantity(p.quantityMillis,p.measure)}</td>
