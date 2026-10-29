@@ -8,6 +8,10 @@ on:
       - 'admin-platform/server/tests/evotor-market-owner-proof-issuer-postgres.spec.ts'
       - 'admin-platform/server/evotor-market-binding-guard.ts'
       - 'admin-platform/server/evotor-market-store-binding.ts'
+      - 'admin-platform/server/evotor-market-license-policy.ts'
+      - 'admin-platform/server/evotor-market-license-guard.ts'
+      - 'admin-platform/server/tests/evotor-market-license-policy.spec.ts'
+      - 'admin-platform/server/tests/evotor-market-license-guard-postgres.spec.ts'
       - 'admin-platform/server/tests/evotor-market-store-binding-postgres.spec.ts'
       - 'admin-platform/admin-migrations/024_evotor_store_bindings.sql'
       - 'admin-platform/server/evotor-market-owner-nonce.ts'
@@ -82,3 +86,10 @@ jobs:
         env:
           ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
         run: npm test --prefix admin-platform -- server/tests/evotor-market-postgres.spec.ts
+
+      - name: Signed license policy negative regression (synthetic)
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-license-policy.spec.ts
+      - name: Native PostgreSQL license guard scope, revocation and row locks
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-license-guard-postgres.spec.ts
