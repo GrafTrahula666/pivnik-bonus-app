@@ -370,6 +370,76 @@ deadlock; будущий license gate обязан проверять subscripti
 текущем окружении не запускались**. Результаты прежних SHA ниже не являются
 результатами этого изменения. Без merge/deploy/production migration.
 
+## Агент №1: синхронизация #302 с #299 (25 октября 2026)
+
+Merge commit [dc94c24](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/dc94c24530493ee2d2390649ee562f0d38b2cba2)
+обновил Draft #302 до callback hardening head #299 `7d2a310e`, не
+объединяя ни один PR с `main`. В GitHub compare для #302 относительно
+#299 теперь `ahead=9, behind=0`, PR `mergeable=true`, `draft=true`.
+Два файла store adapter/tests сохранены побайтово (их blob SHA не менялись);
+три документа сведены с сохранением P0.1 sticky-hold и P0.2 ограничений.
+Перед записью обе версии документов проверены на отсутствие потери разделов.
+Это синхронизация ветки, не включение provider API/tenant/license.
+
+GitHub CI для merge commit запущен (release gate и browser E2E), но на момент
+записи выполняется. Локальные команды, native PostgreSQL и реальные provider
+E2E в этой итерации не запускались: локальный shell недоступен.
+Следующий шаг — проверить CI, затем только авторизованный test flow и
+подтверждённый owner proof; `market_contract_not_configured` не снимается.
+
+## Агент №1, 25 октября: uncached store verification (Draft #302)
+
+Добавлен `cache: 'no-store'` для каждого запроса GET `/stores` в read-only
+adapter; регрессионная проверка фиксирует этот режим на всех страницах.
+Это только требование к HTTP fetch, **не доказательство свежести/владения**:
+до binding по-прежнему необходимы canonical owner proof, повторная проверка
+provider user/token revision, актуальные ACL и разрешённый тестовый API flow.
+На момент изменения GitHub не показал CI для нового head; локальный shell
+недоступен, тесты этой итерации не запускались. PR #302 отстаёт от #299,
+синхронизация нужна отдельно до интеграции. Без merge/deploy/live calls.
+
+## Следующий независимый этап25 октября — P0.2 store evidence
+
+Ветка `spaceverse/evotor-store-ownership-20261025`, [Draft #302](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/302) поверх #299.
+Код этого этапа: [10218e2](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/10218e2d2cd68ae78c4a41b83a188971fb345f74).
+GitHub browser CI #299 на fa5cec9: success (run40149963628); release gate на момент записи ещё выполнялся. CI #302 проверяется отдельно.
+База — [inbox hardening fa5cec9](https://github.com/GrafTrahula666/pivnik-bonus-app/commit/fa5cec97dbcab208816cd7df50d84ca291a4c03a),
+[Draft #299](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/299).
+Реализация: новые `evotor-market-stores.ts` +44 проверок; MODULE-MAP/runbook
+в том же scope. Не смешивается с #296, #300, POS или денежной интеграцией.
+
+Делегированный инженер создал adapter и43 теста, подтвердил официальный Bearer/
+v2 headers. Координатор лично прочитал код/источники, потребовал exact200 вместо
+любого2xx, добавил206 regression и выполнил итоговую верификацию. Независимое
+read-only review не нашло blocking/must-fix. Результат возвращается только после
+полной пагинации и проверки каждого owner; redirect/foreign/duplicates/timeout/
+byte/page caps не дают частичного успеха. Error text/token не раскрываются.
+
+Проверки координатора итогового candidate:
+- Focused HTTP inbox15 + stores44 = **59/59 PASS**, synthetic/PGlite/fake transport.
+- Business full: **499 pass/21 skip/0 fail**,41 files;21 native PostgreSQL skip
+  остаются непроверенными. Typecheck/build/lint/isolation PASS,13 прежних lint
+  warnings и прежний chunk warning. Собственных DB writes этот adapter не имеет.
+- Root на базе main6ec4350: **656/656 PASS**, check PASS, materialize×2 SHA256,
+ 7 generated diffs восстановлены. Root/Admin full+prod audits:0 vulnerabilities.
+- Desktop/mobile regression ранее в этой же сессии: **24/24 PASS**; frontend
+  этим adapter не меняется. Native PostgreSQL и real-provider E2E заблокированы
+  окружением/тестовыми доступами; имитация не считается живой установкой.
+
+**Доступно только как Draft-модуль:** adapter не mounted, не вызывает провайдера
+в production, не записывает binding/лицензию/tenant activation. Нет нового env,
+миграции, платного API или зависимости. Одноразовый canonical owner proof,
+consumer с повторной проверкой token revision/grants, terminal allocation и
+runtime license gates всё ещё не реализованы. P0.2 в целом НЕ закрыт.
+
+Для продолжения account flow нужны подтверждённые настройки test app/user/verify
+и разрешённый test user/store/terminal. Нельзя принимать произвольный userId
+или полный список stores за право на компанию SPACEVERSE. Лицензии дополнительно
+ждут утверждённых product/plan/addon/trial/expiry правил и reconciliation источника.
+Не снимаются existing legacy guard и `market_contract_not_configured`.
+#296 уже содержит проверяемую подготовку пустой target-схемы; без разрешённого
+ресурса DB/owner/license его нельзя выдавать за активный клиентский SaaS путь.
+
 ## Продолжение 25 октября 2026 — P0.1, только Draft #299
 
 **Авторитетен этот новый раздел; результаты 23 октября ниже — история, не новый прогон.**

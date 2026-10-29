@@ -1,8 +1,110 @@
 # Module map and "do not break" list
 
+## Evotor durable store binding (2026-10-26, UNMOUNTED)
+
+Manual additive Admin migration `024_evotor_store_bindings.sql` (after 020/021,
+not startup-applied) creates one unique (product_id,store_id) binding. The
+server-only `evotor-market-store-binding.ts` calls the existing
+`withEvotorOwnerBindingGuard` to consume an HMAC one-time proof, verify the
+complete provider GET /stores and current token revision, then persist the
+binding inside canonical owner/session/company/venue/provider `FOR SHARE`
+locks. Identical fresh verified retries are idempotent; a verified competing
+owner/company/venue claim makes a **sticky hold** committed before returning
+409. Neither retries nor token rotation clear hold/revoked; a newly verified
+proof can refresh a pending revision. Diagnostic reads recheck current owner
+session and provider install/reconciliation/revision, return no foreign scope,
+and NEVER authorize CRM, fiscal data or license. Explicit server-only
+`revokeEvotorStoreBinding` requires a fresh active canonical owner/session,
+company and venue, locks them in the same order as binding, and sets the
+scoped store to sticky `revoked` with exactly one `admin_audit_log` row
+inside the transaction. Foreign/missing scope returns null; repeat disconnect
+is idempotent and does not duplicate audit. It does NOT revoke a provider token
+or expose an HTTP route. New records stay `pending`;
+there is no `ready` transition or HTTP route. Native PG negative/concurrency
+regression: `server/tests/evotor-market-store-binding-postgres.spec.ts`,
+`evotor-owner-nonce-postgres.yml`. No production migration, merge or deploy.
+OAuth `state` echo and live provider owner proof are still external P0 gates.
+
+
+## Evotor durable OAuth state (2026-10-26, UNMOUNTED)
+
+`admin-platform/server/evotor-market-oauth-state.ts` and manual additive Admin migration
+`023_evotor_oauth_states.sql` add a cryptographically random 32-byte OAuth
+state stored only by SHA-256, tied to the current Admin session token hash,
+canonical owner/company/venue, fixed productId and server-configured HTTPS
+redirect. Issuance checks active account/session, company/venue and owner-only
+grant with SQL row locks. Consumption serializes competing callbacks with
+`FOR UPDATE`, rechecks the same session and current grants under `FOR SHARE`,
+then marks the state consumed in one transaction. Invalid foreign session,
+redirect or product cannot burn another session's state. Expiry is 5 minutes,
+checked with `clock_timestamp()` after any lock wait. No provider token/code
+is stored in the state table. Native PostgreSQL tests:
+`admin-platform/server/tests/evotor-market-oauth-state-postgres.spec.ts`,
+CI: `evotor-owner-nonce-postgres.yml`.
+
+This is a CSRF/session-binding prerequisite, **NOT Evotor identity proof**.
+It has no HTTP route, OAuth issuer, signed store proof, license, binding write,
+production migration or provider call. Never enable it until the independent
+provider owner verification and full P0.2 authorization chain are implemented.
+
+## Evotor OAuth authorization_code transport (2026-10-26, UNMOUNTED)
+
+`admin-platform/server/evotor-market-oauth-exchange.ts` adds a fail-closed, bounded server-side OAuth code exchange using the official `https://oauth.evotor.ru/oauth/token` endpoint, Basic client credentials, exact registered HTTPS redirect URI and mandatory `store:read` scope. Redirects, non-200, malformed/oversized/stalled responses and provider errors fail without disclosing tokens. It intentionally returns only access token, expiry and scope, never refresh token, user identity, owner proof, binding, tenant or license. A real issuer still needs session-bound durable one-time OAuth state, independent store/user ownership verification, canonical grants, current token revision and transactional binding checks. No HTTP route, production config, migration or provider call is mounted. Synthetic negative tests: `server/tests/evotor-market-oauth-exchange.spec.ts`.
+
 Written 2026-09-28 after a live audit of the running code (not from memory/docs).
 Purpose: ground any future "cut by layers" work in what is actually here, so a
 refactor doesn't quietly drop an edge case that only exists as inline logic.
+
+## Evotor Market store evidence adapter (2026-10-25, not mounted)
+
+`admin-platform/server/evotor-market-stores.ts:verifyEvotorMarketStores` is an
+unmounted read-only building block. It uses server-supplied cloud credentials
+and expected provider user, fixed `https://api.evotor.ru/stores`, both v2 headers,
+Bearer auth and opaque encoded cursors. Every store must match the exact user;
+only a complete chain ending in empty paging returns immutable ID/user records.
+Non-200, foreign owner, malformed data, duplicate IDs/cursors, redirects or caps
+fail closed without partial results. One 15s deadline covers headers and streamed
+bodies across all pages; bounds are 50 pages/5000 stores, 1MiB per page/5MiB total.
+Timeout/late-response cleanup and secret-free errors have focused tests.
+`verifyEvotorMarketStoresAtRevision` is an additional unmounted server-only
+wrapper: it requires a trusted primary-DB revision reader, denies missing/stale
+revision before provider GET and rechecks after complete pagination. Revocation,
+rotation or DB read errors fail closed without returning store evidence. Its
+revision checks are not owner proof and cannot replace atomic binding-time
+revision/grant verification. Negative tests cover mid-flight revoke.
+It has no route, feature switch, environment mutation, DB writes or live caller.
+It does not prove canonical company ownership, installation, selected-store
+binding, terminal allocation or license. Empty stores proves no ownership.
+Integration must recheck current canonical grants and unchanged token revision,
+provider identity, installation/hold state and exact store before persisting any
+binding. No legacy POS source is changed. See `EVOTOR-MARKET-RUNBOOK.md`.
+
+`admin-platform/server/evotor-market-binding-guard.ts` is an additional **unmounted** transaction prerequisite (Draft #302). It checks the exact selected provider store via the complete server-side GET, verifies a short-lived one-time claim including **canonical venueId**, then under native PostgreSQL FOR SHARE locks rechecks active session/account, canonical company/venue, exact owner grant (not trusted director), installed/unheld provider identity and token revision. It runs a future idempotent binding write only through the same transaction client. Missing, foreign, revoked or rotated state denies. No route, issuer, license, runtime revocation enforcement, binding table or production call exists. Native tests/CI must be verified independently.
+
+`admin-platform/server/evotor-market-owner-proof.ts` is a separate **unmounted**
+server-side one-time signed-claim verifier. It requires an exact SPACEVERSE
+session/provider/product/company/venue/store/token-revision scope, a short-lived
+HMAC claim, and an atomic durable nonce-consumption callback. Missing, expired,
+replayed, foreign, malformed or wrong-key claims fail closed. Its signing key
+must never be browser-controlled. The new **unmounted**
+`evotor-market-owner-proof-issuer.ts` consumes the single-use session-bound OAuth
+state, exchanges the authorization code only with server credentials, checks
+complete provider stores against an installed callback identity and current
+token revision, then rechecks canonical owner grants and provider state under
+PostgreSQL row locks before signing a 5-minute-or-less claim. The expected
+provider user is only a lookup hint, never sufficient ownership evidence.
+Native PostgreSQL negative tests and CI cover the issuer. It is NOT a mounted
+HTTP route, an authorized provider launch, a license or a tenant activation.
+Official OAuth `state` echo and live owner/store E2E remain unverified.
+The separate unmounted `evotor-market-owner-nonce.ts` provides a fail-closed
+native PostgreSQL insert-if-absent nonce consumer, with manual additive Admin
+migration 022. It hashes nonces before storage and rejects replay/expired claims;
+a new disposable PostgreSQL regression and dedicated CI workflow are prepared,
+but results must be verified before integration. Migration 022 is **not applied**
+to production and the consumer is **not mounted**. A valid internal signature
+is NOT Evotor ownership evidence. No HTTP route, tenant activation, provider
+call, license or production integration is added.
+
 
 ## Admin Pilot Marketplace inbox (2026-10-23, default off)
 

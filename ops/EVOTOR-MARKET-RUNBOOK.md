@@ -1,5 +1,76 @@
 # Admin Pilot — облачное приложение Эвотор.Маркета
 
+## P0.2 — durable store binding (26 октября, UNMOUNTED)
+
+Подготовлены ручная additive migration `024_evotor_store_bindings.sql`
+(после 020/021; не применять автоматически), модуль
+`admin-platform/server/evotor-market-store-binding.ts` и native PostgreSQL
+тесты. Это **не** подключённый API и не активная лицензия.
+
+Вход только через `bindEvotorStoreWithOwnerProof`: одноразовая подпись,
+повторная проверка полного GET stores, текущей установки и token revision,
+owner-only grant, действующей SPACEVERSE-сессии, company/venue. Запись
+выполняется в той же транзакции с `FOR SHARE` locks. Уникальность
+(product_id,store_id) не даёт закрепить один магазин за двумя компаниями.
+Повторный свежий proof того же владельца идемпотентен; подтверждённая
+конкурирующая претензия устанавливает sticky `hold` и возвращает 409
+**после COMMIT**. Никаких данных чужой компании ответ не раскрывает.
+`hold` и `revoked` не снимаются повтором. Новый proof после ротации
+может обновить только `pending` token revision.
+
+`readEvotorStoreBindingStatus` служит **только** для диагностики владельца:
+отзывает видимость при потере session/owner grant, показывает
+`disconnected` после token revision mismatch, uninstall или reconciliation.
+Ни `pending`, ни диагностический ответ не дают права на CRM/кассу.
+`ready` не выставляется; license authorizer и live provider E2E отсутствуют.
+Проверки выполняются в disposable native PostgreSQL через workflow
+`evotor-owner-nonce-postgres.yml`. Для полноценного HTTP-монтажа сначала
+проверить официальный возврат OAuth `state` и владельца на разрешённом
+тестовом аккаунте. Production, Эвотор, реальные БД и киоск не трогать.
+
+
+## Durable OAuth state: одноразовый session-bound callback (26 октября, UNMOUNTED)
+
+Добавлена **ручная** additive Admin migration `023_evotor_oauth_states.sql`
+(после 022, без startup auto-migrate) и `evotor-market-oauth-state.ts`.
+Вход в OAuth может инициировать только серверный обработчик с текущей
+аутентифицированной SPACEVERSE-сессией, подтверждённым owner grant и
+canonical company/venue. Issuer создаёт случайный 32-byte `state`, в БД
+хранится только SHA-256. TTL 5 минут. Callback должен предъявить тот же
+`state` и ту же действующую SPACEVERSE-сессию; `productId` и точный HTTPS
+`redirectUri` берутся из серверной конфигурации. После транзакционного
+consume состояние нельзя использовать повторно, включая конкурентные вызовы.
+Чужая сессия, URL или product не уничтожают законный state. При провале
+code exchange требуется начать OAuth заново.
+
+Проверки состояния: активный аккаунт, неистёкшая сессия, active company/venue,
+owner-only grant при выдаче и при consume; `FOR UPDATE` сериализует callback,
+`FOR SHARE` удерживает текущие grants до commit. Native disposable PostgreSQL
+регрессия: `server/tests/evotor-market-oauth-state-postgres.spec.ts` в
+`evotor-owner-nonce-postgres.yml`. В таблице **нет** OAuth code/token/secret.
+Не выполнять migration в production без отдельного разрешения.
+
+OAuth `state` сам по себе защищает только от CSRF/replay и НЕ удостоверяет
+владельца Эвотора. Дополнительно создан **UNMOUNTED**
+`evotor-market-owner-proof-issuer.ts`: одноразовый state → server-side code
+exchange → полный GET stores по OAuth-токену с точным provider user из
+callback installation → проверка token revision до/после GET → финальные
+`FOR SHARE` блокировки активной сессии, owner grant, company/venue и
+installation/reconciliation/token revision → HMAC proof на 5 минут или меньше.
+Браузерный store ID лишь выбор, не доказательство; OAuth token и clientSecret
+не попадают в proof/БД. Native PostgreSQL 16 regression содержит 11 тестов
+(replay, foreign session/store/provider, revoked owner, hold/uninstall,
+mid-flight token rotation, owner downgrade, session revoke, concurrency,
+cross-tenant). Вызов не смонтирован
+в HTTP. Нет смонтированного store binding, лицензии, production-активации и live provider E2E.
+До монтажа проверить возврат OAuth `state` реальным провайдером и официальный
+owner flow; затем добавить signed HTTP binding с независимой проверкой
+текущих grants и revocation. Миграции 022/023 в production не применялись.
+
+## OAuth authorization_code: безопасная заготовка (26 октября, default-off)
+
+Официальная [OAuth инструкция](https://developer.evotor.ru/docs/rest_oauth20_authorization_guide.html) подтверждает server-side `authorization_code` → `POST https://oauth.evotor.ru/oauth/token` с Basic clientId/clientSecret и тем же registered redirect URI. Scope `store:read` нужен для независимой проверки магазинов. Новый `evotor-market-oauth-exchange.ts` реализует только ограниченный обмен кода; возвращённый access token **не является доказательством identity**, не даёт роль, лицензию или право на компанию. Модуль не подключён к HTTP и не вызывается production. Перед реальным HTTP-подключением обязательны одноразовый OAuth state в durable storage, привязка state к действующей SPACEVERSE-сессии, независимая проверка GET stores/owner и текущих canonical grants/token revision. Не принимать произвольный code/redirect/clientId/secret из браузера как авторитет. Refresh token не возвращается из модуля и не сохраняется.
+
 Обновлено 25 октября 2026. Реализация: `admin-platform/server/evotor-market.ts`,
 ручные Admin migrations `020_evotor_market_inbox.sql`, затем
 `021_evotor_market_reconciliation.sql`.
@@ -202,3 +273,68 @@ production deploy. Нынешний Draft PR не является разреш�
 История начинается с настройки событий версии приложения; этот поток нельзя
 выдавать за безусловный current-state oracle или подтверждение полноты старой
 подписки. Тарифные права и provider test остаются отдельными gates.
+
+## P0.2: проверка магазинов — отдельный Draft, без включения
+
+`verifyEvotorMarketStores` в `server/evotor-market-stores.ts` реализует bounded
+read-only GET, но пока не вызывается runtime. Источники проверены25 октября:
+[GET /stores](https://developer.evotor.ru/docs/rest_stores.html) подтверждает
+items/id/user_id и paging/next_cursor; [overview](https://developer.evotor.ru/docs/rest_overview.html)
+подтверждает Bearer и оба заголовка v2. Cursor — opaque query value на том же
+фиксированном host, никогда URL перехода. Требуется HTTP200;206 не считается
+полной коллекцией. Сохраняется только минимальная immutable проекция ID/user.
+
+Все страницы проверяются до возврата любого результата. Устанавливаются
+защитные **локальные**, не провайдерские лимиты:15s на всю операцию,50 страниц,
+5000 магазинов,1MiB/страница и5MiB суммарно. При их превышении результат unavailable,
+а не «магазинов нет». Нет автоматических повторов, фоновых calls или обхода TLS.
+Чужой user_id, повтор ID/курсора, неверный envelope/JSON/UTF-8/headers, redirect,
+401/403/429/ошибка/timeout завершают проверку без частичного подтверждения.
+Транспортные ошибки/payload/token не возвращаются вызывающему коду.
+
+Для будущего подключения обязательны одновременно:
+1. Проверенный canonical owner/grants и одноразовый account proof, а не userId из формы.
+2. Exact product/user/install и отсутствие user/subscription reconciliation holds.
+3. Извлечение cloud token только сервером; фиксация revision до GET и повторная
+   проверка этой revision, grants и source после GET в атомарной операции binding.
+4. Выбор существующего store только из полного проверенного результата; terminal
+   permissions/allocations проверяются отдельно. Пустая коллекция не подтверждает
+   ownership и не активирует CRM. Лицензия отдельная.
+
+Дополнительно `verifyEvotorMarketStoresAtRevision` требует серверный
+`expectedTokenRevision` (каноническая десятичная строка положительного
+PostgreSQL BIGINT без JS Number coercion) и async reader текущей revision
+из primary Admin DB. До GET и после полного списка сравнивает revision:
+отсутствие, отзыв, ротация или ошибка чтения возвращают только
+`EVOTOR_MARKET_STORES_TOKEN_REVISION_STALE`, без результатов/секретов.
+Проверены тестами preflight rejection, mid-flight revocation, ошибки DB и
+валидный двойной read. Это **не** доказательство владельца и не готовый
+consumer; после GET binding transaction всё равно обязан повторно проверить
+revision, install/holds и canonical grants под актуальными блокировками.
+Реальный провайдер не вызывался.
+
+Пока этот consumer не реализован, функция — подготовленный adapter, **не безопасная
+каноническая привязка бизнеса целиком**. Настройки кабинета/реальные запросы/DB
+binding/активация и финансовые операции в этой итерации не выполнялись.
+
+P0.2 nonce consumer: manual Admin migration `022_evotor_owner_proof_nonces.sql` follows Marketplace inbox `020`/`021`; no automatic migration or provider binding.
+
+
+### P0.2 binding-time guard (Draft, not mounted)
+
+`server/evotor-market-binding-guard.ts` composes a complete read-only provider GET,
+revision checks before/after GET, a short-lived HMAC one-time proof with **signed
+canonical venueId**, and native PostgreSQL transaction checks with `FOR SHARE`.
+The exact active SPACEVERSE session hash, active account, active canonical company
+and venue, owner-only `admin_company_access` grant, installed/unheld provider
+identity, nonempty encrypted credential and unchanged token revision must all
+match before an `onVerified(client)` callback can write in that SAME transaction.
+The issuer is not implemented. The proof must be issued server-side after
+independent Evotor authentication; neither a browser-supplied ID nor an
+internal signature alone proves ownership. Binding callers must use idempotent
+writes and a new proof after uncertain COMMIT, and enforce revocation for every
+subsequent licensed API read. No new table, route, feature flag, issuer, license,
+actual binding or production migration is added by this guard. Canonical inactive
+onboarding scopes need a separate explicit reviewed policy before activation;
+the current guard intentionally denies them. Native PostgreSQL regression and
+CI are required; do not claim release readiness from a green unit suite.

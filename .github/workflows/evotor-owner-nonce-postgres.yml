@@ -1,0 +1,84 @@
+name: Evotor owner nonce native PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/server/evotor-market-owner-proof.ts'
+      - 'admin-platform/server/evotor-market-owner-proof-issuer.ts'
+      - 'admin-platform/server/tests/evotor-market-owner-proof-issuer-postgres.spec.ts'
+      - 'admin-platform/server/evotor-market-binding-guard.ts'
+      - 'admin-platform/server/evotor-market-store-binding.ts'
+      - 'admin-platform/server/tests/evotor-market-store-binding-postgres.spec.ts'
+      - 'admin-platform/admin-migrations/024_evotor_store_bindings.sql'
+      - 'admin-platform/server/evotor-market-owner-nonce.ts'
+      - 'admin-platform/server/tests/evotor-market-owner-proof.spec.ts'
+      - 'admin-platform/server/tests/evotor-market-binding-guard-postgres.spec.ts'
+      - 'admin-platform/server/tests/evotor-market-owner-nonce-postgres.spec.ts'
+      - 'admin-platform/admin-migrations/022_evotor_owner_proof_nonces.sql'
+      - 'admin-platform/admin-migrations/023_evotor_oauth_states.sql'
+      - 'admin-platform/server/evotor-market-oauth-state.ts'
+      - 'admin-platform/server/tests/evotor-market-oauth-state-postgres.spec.ts'
+      - '.github/workflows/evotor-owner-nonce-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  owner-nonce-native:
+    name: Owner proof nonce / PostgreSQL 16 (disposable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: codex_admin_test_evotor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_evotor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install exact Business dependencies
+        run: npm ci --prefix admin-platform
+      - name: Business TypeScript server and web build
+        run: npm run build --prefix admin-platform
+      - name: Business lint
+        run: npm run lint --prefix admin-platform
+      - name: Native PostgreSQL owner nonce regression
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-owner-nonce-postgres.spec.ts
+      - name: Signed owner proof negative regression
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-owner-proof.spec.ts
+      - name: Native canonical owner binding and token revocation regression
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-binding-guard-postgres.spec.ts
+      - name: Native durable store binding conflict, revoke and concurrency
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-store-binding-postgres.spec.ts
+      - name: Durable OAuth state / native PostgreSQL concurrency and tenant denial
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-oauth-state-postgres.spec.ts
+      - name: Native trusted OAuth owner proof issuer and revocation regression
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-owner-proof-issuer-postgres.spec.ts
+      - name: Native callback inbox regression inherited from #299
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/evotor-market-postgres.spec.ts
