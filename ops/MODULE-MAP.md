@@ -62,6 +62,33 @@ bar and 9/20/100 numeric ordering; existing legacy tenant guard is retained.
 regressions. Ordinary offset pagination does not promise a frozen snapshot
 while another operator changes the database. Vitest is pinned to 4.1.12 to fix
 the two currently reported moderate dev-only @vitest/mocker advisories.
+## Empty dedicated CRM database bootstrap (2026-10-20, default off)
+
+`ADMIN_ENABLE_ONBOARDING_DATABASE_BOOTSTRAP=false` extends the existing explicit
+`runtime-database-binding/run` command and its existing lease/audit ledger.
+It does not create a target resource or accept URLs/SQL/scope from a request.
+Only an existing server registry entry may resolve a target. With the flag on,
+a missing public binding permits a conservative empty-database preflight;
+existing relations, routines, types, user-defined collations, extra schemas, extensions, event triggers,
+logical publications, default ACL grants, foreign servers, large objects and current-session temporary objects refuse
+bootstrap. A target with `ALTER DEFAULT PRIVILEGES` grants is not empty: those
+permissions could expose newly created customer tables to unintended roles. `onboarding-tenant-bootstrap.ts` loads new manual numbered
+`tenant-migrations/001_customer_core.sql` and the unchanged canonical root
+migrations 009/017–020. Their outer transaction wrappers are removed so all DDL
+and exact binding commit atomically. No customer/identity/wallet/transaction
+data is seeded or copied. Existing binding follows the old exact-match path;
+this does not upgrade or adopt an arbitrary existing database.
+
+The target uses a fixed advisory lock, bounded statement/lock waits and safe
+search path; public objects cannot shadow the preflight's system functions.
+Account role/active and canonical grants are rechecked before claim and metadata
+confirmation. Binding leases use wall-clock time after lock waits. DDL errors
+roll back all new objects; lost target confirmation reconciles the same exact
+binding without reapplying DDL. No compensating data deletion occurs. Schema
+readiness remains a separate read-only check; venue/runtime remain inactive,
+not_provisioned and unpublished. Core SQL supports the existing minimal
+customer/auth/wallet contracts, not the complete legacy runtime or financial
+operations. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 

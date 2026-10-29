@@ -95,7 +95,7 @@ interface Integration {
 type IntegrationCommand={requestKey:string;revision:number;storeId:string;token:string}
 interface Invite {id:string;draftId:string;status:'pending'|'revoked'|'claimed';expiresAt:string;createdAt:string;revokedAt:string|null;claimedAt:string|null}
 type ProvisioningStatus='not_started'|'running'|'retryable_error'|'action_required'|'succeeded'
-type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'
+type ProvisioningErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_SCHEMA_REQUIRED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_CONFIRMATION_UNCERTAIN'|'TARGET_DATABASE_NOT_EMPTY'
 type SchemaReadinessErrorCode='TARGET_DATABASE_NOT_REGISTERED'|'TARGET_BINDING_CONFLICT'|'TARGET_DATABASE_UNAVAILABLE'|'TARGET_TENANT_SCHEMA_REQUIRED'|'TARGET_TENANT_DATA_OWNERSHIP_REQUIRED'
 type RuntimeBundleErrorCode='RUNTIME_ARTIFACT_INCOMPATIBLE'|'RUNTIME_RELEASE_NOT_REGISTERED'|'RUNTIME_RELEASE_INVALID'|'RUNTIME_RELEASE_UNAVAILABLE'|'RUNTIME_RELEASE_MISMATCH'|'RUNTIME_IMAGE_NOT_REGISTERED'|'RUNTIME_IMAGE_MISMATCH'|'RUNTIME_IMAGE_CONTRACT_INVALID'
 interface ProvisioningStep {
@@ -250,7 +250,7 @@ function inviteResponse(raw:unknown):Invite {
 
 const provisioningErrors:ProvisioningErrorCode[]=[
   'TARGET_DATABASE_NOT_REGISTERED','TARGET_BINDING_SCHEMA_REQUIRED','TARGET_BINDING_CONFLICT',
-  'TARGET_DATABASE_UNAVAILABLE','TARGET_CONFIRMATION_UNCERTAIN',
+  'TARGET_DATABASE_UNAVAILABLE','TARGET_CONFIRMATION_UNCERTAIN','TARGET_DATABASE_NOT_EMPTY',
 ]
 function provisioningResponse(raw:unknown):ProvisioningStep {
   const value=raw as Partial<ProvisioningStep>|null,scope=value?.scope,result=value?.result
@@ -288,6 +288,7 @@ const provisioningGuidance=(value:ProvisioningStep)=>{
     TARGET_BINDING_CONFLICT:'Выделенная база уже связана с другой областью. Не перезаписывайте привязку — проверьте защищённый реестр.',
     TARGET_DATABASE_UNAVAILABLE:'Выделенная база недоступна. Проверьте серверную регистрацию и повторите после восстановления.',
     TARGET_CONFIRMATION_UNCERTAIN:'Запись могла сохраниться. Повтор безопасно сверит ту же привязку без создания дубля.',
+    TARGET_DATABASE_NOT_EMPTY:'В выбранной базе уже есть объекты. Подготовка остановлена, данные не изменены. Поддержке нужно проверить выделение новой пустой базы для этой точки.',
   }
   return actions[value.errorCode!]
 }
@@ -915,7 +916,9 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
           <div><span><b>Попытки</b><small>{provisioning.attemptCount===0?'Запусков ещё не было':'Попытка '+provisioning.attemptCount}</small></span></div>
           <div><span><b>Приложение</b><small>Не запущено · не опубликовано</small></span></div>
         </div>}
-        <p className="onboarding-note">Шаг создаёт или сверяет только точную привязку уже подготовленной выделенной базы. Он не создаёт базу, не запускает миграции, не включает заведение и не публикует приложение.</p>
+        <p className="onboarding-note">{session.capabilities.onboardingDatabaseBootstrap?
+          'Шаг подготовит клиентскую схему в заранее выделенной пустой базе и привяжет её только к этой точке. При существующих объектах подготовка остановится. CRM пока не запущена; касса и подписка проверяются отдельно.':
+          'Шаг создаёт или сверяет только точную привязку уже подготовленной выделенной базы. Он не создаёт базу, не запускает миграции, не включает заведение и не публикует приложение.'}</p>
         <div className="onboarding-actions">
           <button className="btn" type="button" disabled={!canWrite||provisioningBusy||provisioningLoading||provisioningUncertain||!provisioning?.startAllowed} onClick={()=>void startProvisioning()}><Database size={16}/>{provisioningButtonLabel}</button>
           <button className="btn secondary" type="button" disabled={provisioningBusy||provisioningLoading} onClick={()=>void loadProvisioning(current)}><RefreshCw size={16}/>Обновить состояние</button>
