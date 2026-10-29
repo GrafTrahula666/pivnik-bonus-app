@@ -4,7 +4,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import pg from 'pg'
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
-import { bindEvotorStoreWithOwnerProof, readEvotorStoreBindingStatus } from '../evotor-market-store-binding.js'
+import { bindEvotorStoreWithOwnerProof, readEvotorStoreBindingStatus, revokeEvotorStoreBinding } from '../evotor-market-store-binding.js'
 import { createEvotorOwnerNonceConsumer } from '../evotor-market-owner-nonce.js'
 
 const connectionString = String(process.env.ADMIN_INTEGRATION_TEST_DATABASE_URL || '')
@@ -186,4 +186,69 @@ native('Evotor durable binding persistence / native PostgreSQL', () => {
     await expect(bind(storeB)).rejects.toMatchObject({code:'EVOTOR_STORE_BINDING_CONFLICT'})
     expect(await status(storeB)).toBe('revoked')
   })
+  it('immediately denies a revoked company owner grant on existing and new store bindings', async () => {
+    const unboundStore = 'fixture-store-revoked-owner'
+    const removed = await db.query(
+      'DELETE FROM admin_company_access WHERE admin_id=$1 AND company_id=$2 AND access_kind=$3 RETURNING admin_id',
+      [ownerA, companyA, 'owner'],
+    )
+    expect(removed.rowCount).toBe(1)
+    try {
+      expect(await status(storeB)).toBeNull()
+      await expect(bind(unboundStore)).rejects.toMatchObject({
+        code: 'EVOTOR_BINDING_DENIED', statusCode: 403,
+      })
+      const count = await db.query<{n:string}>(
+        'SELECT count(*)::text AS n FROM admin_evotor_store_bindings WHERE store_id=$1',
+        [unboundStore],
+      )
+      expect(count.rows[0]!.n).toBe('0')
+    } finally {
+      await db.query(
+        "INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES($1,$2,'owner')",
+        [ownerA, companyA],
+      )
+    }
+    expect(await status(storeB)).toBe('revoked')
+  })
+
+  it('hides a persisted binding when its company or venue is disabled', async () => {
+    for (const [table, entityId] of [['companies', companyA], ['venues', venueA]] as const) {
+      await db.query('UPDATE ' + table + ' SET active=FALSE WHERE id=$1', [entityId])
+      try {
+        expect(await status(storeB)).toBeNull()
+        await expect(bind('fixture-store-inactive-' + table)).rejects.toMatchObject({
+          code: 'EVOTOR_BINDING_DENIED', statusCode: 403,
+        })
+      } finally {
+        await db.query('UPDATE ' + table + ' SET active=TRUE WHERE id=$1', [entityId])
+      }
+      expect(await status(storeB)).toBe('revoked')
+    }
+  })
+
+  it('audits an owner-scoped local disconnect exactly once and cannot revive it', async () => {
+    const storeId = 'fixture-store-local-disconnect'
+    expect(await bind(storeId)).toEqual({state:'pending',created:true})
+    expect(await status(storeId)).toBe('pending')
+    const disconnect = (foreign = false) => revokeEvotorStoreBinding({
+      database:db, productId, storeId,
+      companyId:foreign ? companyB : companyA,
+      venueId:foreign ? venueB : venueA,
+      actorId:foreign ? ownerB : ownerA,
+      sessionTokenHash:foreign ? sessionB : sessionA,
+    })
+    expect(await disconnect(true)).toBeNull()
+    expect(await status(storeId,true)).toBeNull()
+    expect(await disconnect()).toEqual({state:'revoked',changed:true})
+    expect(await status(storeId)).toBe('revoked')
+    expect(await disconnect()).toEqual({state:'revoked',changed:false})
+    await expect(bind(storeId)).rejects.toMatchObject({code:'EVOTOR_STORE_BINDING_CONFLICT'})
+    const audit = await db.query<{n:string}>(
+      "SELECT count(*)::text AS n FROM admin_audit_log WHERE action='evotor_store_disconnect' AND entity_id=$1 AND company_id=$2",
+      [storeId,companyA],
+    )
+    expect(audit.rows[0]!.n).toBe('1')
+  })
+
 })

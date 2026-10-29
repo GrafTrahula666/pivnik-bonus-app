@@ -20,7 +20,8 @@ test('owner design retains login, demo navigation and stationary brand on deskto
  await page.getByRole('button',{name:'Свернуть показатели',exact:true}).click()
  await expect(page.locator('.kpi')).toHaveCount(4)
  await page.screenshot({path:info.outputPath('overview.png'),fullPage:true})
- for(const section of ['Клиенты','Операции','Аналитика','Лояльность','Колесо','Достижения','Магазин','Акции','Рассылки','Оформление','Настройки','Журнал','Платформа','Компании','Заведения','Разработчик']){
+ await expect(page.locator('.sidebar').getByRole('button',{name:'Оформление',exact:true})).toHaveCount(0)
+ for(const section of ['Клиенты','Операции','Аналитика','Лояльность','Колесо','Достижения','Магазин','Акции','Рассылки','Настройки','Журнал','Платформа','Компании','Заведения','Разработчик']){
   const menu=page.getByRole('button',{name:'Открыть меню',exact:true})
   if(await menu.isVisible())await menu.click()
   await page.locator('.sidebar').getByRole('button',{name:section,exact:true}).click()

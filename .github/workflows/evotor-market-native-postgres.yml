@@ -45,3 +45,7 @@ jobs:
         env:
           ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
         run: npm test --prefix admin-platform -- server/tests/evotor-market-postgres.spec.ts
+      - name: Native PostgreSQL CRM pagination, numeric ordering and tenant scope
+        env:
+          ADMIN_INTEGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_evotor
+        run: npm test --prefix admin-platform -- server/tests/postgres.integration.spec.ts

@@ -9,7 +9,7 @@
  * provider authorization AND license; this status API grants no data access.
  */
 import type { Pool, PoolClient } from 'pg'
-import { withEvotorOwnerBindingGuard } from './evotor-market-binding-guard.js'
+import { EvotorBindingGuardError, withEvotorOwnerBindingGuard } from './evotor-market-binding-guard.js'
 import type { EvotorOwnerProofScope } from './evotor-market-owner-proof.js'
 
 export class EvotorStoreBindingError extends Error {
@@ -149,4 +149,79 @@ export async function readEvotorStoreBindingStatus({
   const state = row.rows[0]!.state
   if (state === 'hold' || state === 'revoked') return state
   return row.rows[0]!.connected === true ? 'pending' : 'disconnected'
+}
+
+/**
+ * Explicit LOCAL disconnect. No provider call, license activation or public route.
+ * A currently authenticated canonical company owner may revoke a binding even
+ * after the provider token is uninstalled. Revocation is sticky and audited.
+ * Foreign/missing scope returns null without revealing the bound tenant.
+ */
+export async function revokeEvotorStoreBinding({
+  database, productId, storeId, companyId, venueId, actorId, sessionTokenHash,
+}: {
+  database: Pick<Pool, 'connect'>
+  productId: string; storeId: string; companyId: string; venueId: string
+  actorId: string; sessionTokenHash: string
+}): Promise<Readonly<{state:'revoked'; changed:boolean}> | null> {
+  if (!database || typeof database.connect !== 'function'
+    || !uuid.test(productId) || !store.test(storeId)
+    || !id(companyId) || !id(venueId) || !id(actorId)
+    || !session.test(sessionTokenHash)) return null
+
+  let client: PoolClient
+  try { client = await database.connect() }
+  catch { throw new EvotorBindingGuardError('EVOTOR_BINDING_UNAVAILABLE') }
+  let begun = false
+  try {
+    await client.query('BEGIN')
+    begun = true
+    // Same canonical lock order as the owner binding guard. A revoked owner,
+    // inactive venue or expired session cannot disconnect someone else's scope.
+    const checks: Array<[string, string[]]> = [
+      ['SELECT id FROM admin_accounts WHERE id=$1::bigint AND active=TRUE FOR SHARE', [actorId]],
+      ['SELECT token_hash FROM admin_sessions WHERE token_hash=$1 AND admin_id=$2::bigint AND expires_at>NOW() FOR SHARE', [sessionTokenHash, actorId]],
+      ['SELECT id FROM companies WHERE id=$1::bigint AND active=TRUE FOR SHARE', [companyId]],
+      ['SELECT id FROM venues WHERE id=$1::bigint AND company_id=$2::bigint AND active=TRUE FOR SHARE', [venueId, companyId]],
+      ["SELECT admin_id FROM admin_company_access WHERE admin_id=$1::bigint AND company_id=$2::bigint AND access_kind='owner' FOR SHARE", [actorId, companyId]],
+    ]
+    for (const [sql, params] of checks) {
+      if ((await client.query(sql, params)).rowCount !== 1) {
+        await client.query('ROLLBACK')
+        begun = false
+        return null
+      }
+    }
+    const bound = await client.query<{state:string}>(
+      `SELECT state FROM admin_evotor_store_bindings
+       WHERE product_id=$1::uuid AND store_id=$2 AND company_id=$3::bigint
+         AND venue_id=$4::bigint FOR UPDATE`,
+      [productId, storeId, companyId, venueId],
+    )
+    if (bound.rowCount !== 1) {
+      await client.query('ROLLBACK')
+      begun = false
+      return null
+    }
+    const changed = bound.rows[0]!.state !== 'revoked'
+    if (changed) {
+      await client.query(
+        `UPDATE admin_evotor_store_bindings SET state='revoked',updated_at=NOW()
+         WHERE product_id=$1::uuid AND store_id=$2 AND company_id=$3::bigint AND venue_id=$4::bigint`,
+        [productId, storeId, companyId, venueId],
+      )
+      await client.query(
+        `INSERT INTO admin_audit_log(admin_id,company_id,venue_id,action,entity_type,entity_id,before_value,after_value)
+         VALUES($1::bigint,$2::bigint,$3::bigint,'evotor_store_disconnect','evotor_store_binding',$4,
+           jsonb_build_object('state',$5::text),jsonb_build_object('state','revoked'))`,
+        [actorId, companyId, venueId, storeId, bound.rows[0]!.state],
+      )
+    }
+    await client.query('COMMIT')
+    begun = false
+    return Object.freeze({state:'revoked',changed})
+  } catch {
+    if (begun) await client.query('ROLLBACK').catch(() => undefined)
+    throw new EvotorBindingGuardError('EVOTOR_BINDING_UNAVAILABLE')
+  } finally { client.release() }
 }
