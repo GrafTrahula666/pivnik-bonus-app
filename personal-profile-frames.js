@@ -1,18 +1,42 @@
 export const GOLD_BARS_FRAME = Object.freeze({ code: 'gold-bars', title: 'Золотая орбитальная рамка' });
 export const PERSONAL_FRAME_GIFT_CODE = 'personal-frame-gift-20261002';
 const MONEY_FRAME = Object.freeze({ code: 'money', title: 'Долларовая рамка' });
+export const REWARD_FRAMES = Object.freeze([
+  Object.freeze({ code: 'halloween-pumpkin', title: 'Злые тыквы · Хэллоуин' }),
+  Object.freeze({ code: 'infernal-warden', title: 'Адский страж · III место' }),
+  Object.freeze({ code: 'frost-tyrant', title: 'Ледяной тиран · II место' }),
+  Object.freeze({ code: 'eclipse-sovereign', title: 'Владыка затмения · I место' })
+]);
+export const CREATOR_FRAME = Object.freeze({ code: 'creator-violet', title: 'CREATOR · Алмазный дракон' });
+const REWARD_FRAME_CODES = new Set(REWARD_FRAMES.map((frame) => frame.code));
+// Shared by startup repair and both authentication implementations.
+export const OWNER_FRAME_REPAIR_SQL = `CASE WHEN profile_frame IN (${[GOLD_BARS_FRAME, ...REWARD_FRAMES, CREATOR_FRAME].map((frame) => `'${frame.code}'`).join(', ')}) THEN profile_frame ELSE 'money' END`;
+
+export function isCreatorFrameOwner(row, ownerTelegramId, ownerVkId) {
+  return Boolean(ownerTelegramId && String(row?.telegram_id || row?.telegramId || '') === String(ownerTelegramId))
+    || Boolean(ownerVkId && Array.isArray(row?.frame_vk_identity_ids) && row.frame_vk_identity_ids.some((id) => String(id) === String(ownerVkId)));
+}
+
+export function selectedRewardFrame(row) {
+  const code = String(row?.profile_frame || row?.profileFrame || '');
+  return REWARD_FRAME_CODES.has(code) ? code : null;
+}
 // Frames PIVNIK Business can give to any guest: each has its own animation in styles.css.
 export const GRANTABLE_FRAMES = Object.freeze([
   MONEY_FRAME,
   GOLD_BARS_FRAME,
   Object.freeze({ code: 'fire', title: 'Огненная рамка' }),
-  Object.freeze({ code: 'diamond', title: 'Алмазная рамка' })
+  Object.freeze({ code: 'diamond', title: 'Алмазная рамка' }),
+  ...REWARD_FRAMES
 ]);
 export const GRANTABLE_FRAME_CODES = new Set(GRANTABLE_FRAMES.map((frame) => frame.code));
+// Database-owned identities, never request body fields or a generic admin role.
+export const FRAME_OWNER_IDENTITY_SQL = `ARRAY(SELECT pfi.provider_user_id FROM user_identities pfi WHERE pfi.user_id = u.id AND pfi.provider = 'vk') AS frame_vk_identity_ids`;
 export const PERSONAL_FRAME_OWNERSHIP_SQL = `
   EXISTS(SELECT 1 FROM user_frames pf WHERE pf.user_id = u.id AND pf.frame_id = 'money') AS owns_money_frame,
   EXISTS(SELECT 1 FROM user_frames pf WHERE pf.user_id = u.id AND pf.frame_id = 'gold-bars') AS owns_gold_bars_frame,
-  ARRAY(SELECT pf.frame_id FROM user_frames pf WHERE pf.user_id = u.id) AS owned_frame_ids`;
+  ARRAY(SELECT pf.frame_id FROM user_frames pf WHERE pf.user_id = u.id) AS owned_frame_ids,
+  ${FRAME_OWNER_IDENTITY_SQL}`;
 
 // Persisted gifts remain selectable without relying on mutable usernames.
 export function giftedFrameChoices(row) {
@@ -24,6 +48,9 @@ export function giftedFrameChoices(row) {
   if (owned.has('fire')) choices.push({ ...GRANTABLE_FRAMES[2] });
   // The caller already lists a diamond frame bought earlier or currently selected.
   if (owned.has('diamond') && !row?.owns_diamond_frame && code !== 'diamond') choices.push({ ...GRANTABLE_FRAMES[3] });
+  for (const frame of REWARD_FRAMES) {
+    if (owned.has(frame.code)) choices.push({ ...frame });
+  }
   return choices;
 }
 

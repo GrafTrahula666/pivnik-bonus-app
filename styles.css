@@ -10064,6 +10064,133 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 .achievement-next .achievement-progress i { background: linear-gradient(90deg, #b47a20, #e5be70); }
 .achievement-next > strong { color: #9a650f; font-size: 17px; font-weight: 800; }
 
+/* Reward collection: fixed portrait/art with independent light and particle layers. */
+.avatar-frame-reward,
+.profile-avatar.has-reward-frame,
+.profile-avatar.has-reward-frame .avatar-render-inner { overflow: visible !important; }
+.avatar-frame-reward::before,
+.avatar-frame-reward::after { content: none; animation: none; }
+.avatar-frame-reward > img,
+.avatar-frame-reward > .avatar-fallback { border-radius: 50%; clip-path: circle(50%); }
+.avatar-frame-halloween-pumpkin { --reward-art: url('/assets/frames/halloween-pumpkin.png'); }
+.avatar-frame-infernal-warden { --reward-art: url('/assets/frames/infernal-warden.png'); }
+.avatar-frame-frost-tyrant { --reward-art: url('/assets/frames/frost-tyrant.png'); }
+.avatar-frame-eclipse-sovereign { --reward-art: url('/assets/frames/eclipse-sovereign.png'); }
+.avatar-frame-creator-violet { --reward-art: url('/assets/frames/creator-violet-base.png'); }
+.reward-frame-shell {
+  position: absolute;
+  inset: -38%;
+  z-index: 7;
+  pointer-events: none;
+  --reward-color: #ff982f;
+  --reward-glint: #ffda99;
+}
+.reward-frame-creator { inset: -29%; --reward-color: #a658ff; --reward-glint: #f0dcff; }
+.reward-frame-frost { --reward-color: #50b9ff; --reward-glint: #d5f0ff; }
+.reward-frame-sovereign { --reward-color: #ff293f; --reward-glint: #ffe3a2; }
+.reward-frame-base,
+.reward-frame-light,
+.creator-dragon-orbit { position: absolute; inset: 0; pointer-events: none; }
+.reward-frame-base { background: var(--reward-art) center / contain no-repeat; }
+.reward-frame-creator .reward-frame-base { z-index: 3; }
+.reward-frame-creator .reward-frame-light { z-index: 4; }
+.reward-frame-creator .reward-frame-particle { z-index: 5; }
+.reward-frame-pumpkin { animation: rewardPumpkinOrbit 24s linear infinite; }
+.reward-frame-pumpkin .reward-frame-light { display: none; }
+.reward-frame-ember .reward-frame-base { animation: rewardHeat 3.8s ease-in-out infinite; }
+.reward-frame-frost .reward-frame-base { animation: rewardFrost 5s ease-in-out infinite; }
+.reward-frame-sovereign .reward-frame-base,
+.reward-frame-creator .reward-frame-base { animation: rewardRegal 6s ease-in-out infinite; }
+.reward-frame-light {
+  overflow: hidden;
+  -webkit-mask: var(--reward-art) center / contain no-repeat;
+  mask: var(--reward-art) center / contain no-repeat;
+  mix-blend-mode: screen;
+}
+.reward-frame-light::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 15%, var(--reward-color), transparent 42%),
+    radial-gradient(ellipse at 20% 65%, var(--reward-color), transparent 30%);
+  animation: rewardEnergy 4.8s ease-in-out infinite;
+}
+.reward-frame-light::after {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background: linear-gradient(112deg, transparent 43%, var(--reward-glint) 49%, #fff 50%, transparent 56%);
+  animation: rewardShine 6.2s ease-in-out infinite;
+}
+.reward-frame-frost .reward-frame-light::after { animation-duration: 7.3s; }
+.reward-frame-sovereign .reward-frame-light::after { animation-duration: 5.6s; }
+.reward-frame-particle {
+  position: absolute;
+  left: var(--spark-x);
+  top: var(--spark-y);
+  width: 3%;
+  height: 3%;
+  border-radius: 50%;
+  background: var(--reward-glint);
+  box-shadow: 0 0 4px var(--reward-color);
+  animation: rewardSpark 4s ease-out var(--spark-delay) infinite;
+}
+.reward-frame-frost .reward-frame-particle,
+.reward-frame-creator .reward-frame-particle,
+.reward-frame-sovereign .reward-frame-particle:nth-child(3n) {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  animation-name: rewardCrystal;
+}
+.reward-frame-sovereign .reward-frame-particle:nth-child(3n) { background: #e52547; }
+.creator-dragon-orbit {
+  inset: -12%;
+  z-index: 2;
+  background: url('/assets/frames/creator-diamond-dragon.png') center / contain no-repeat;
+  animation: creatorDragonOrbit 18s linear infinite;
+}
+.profile-frame-choice .frame-choice-preview:has(.reward-frame-shell) {
+  position: relative;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+}
+.frame-choice-preview .reward-frame-shell { inset: -12%; }
+.frame-choice-preview .creator-dragon-orbit { inset: -7%; }
+html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-frame {
+  left: calc(11% - 18px) !important;
+}
+@keyframes rewardPumpkinOrbit { to { transform: rotate(360deg); } }
+@keyframes creatorDragonOrbit { to { transform: rotate(360deg); } }
+@keyframes rewardHeat { 0%, 100% { filter: brightness(1); } 45% { filter: brightness(1.2) drop-shadow(0 0 3px #ff790066); } }
+@keyframes rewardFrost { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.15) drop-shadow(0 0 3px #50b9ff88); } }
+@keyframes rewardRegal { 0%, 100% { filter: brightness(1); } 45% { filter: brightness(1.16); } }
+@keyframes rewardEnergy { 0%, 100% { opacity: .03; } 50% { opacity: .4; } }
+@keyframes rewardShine {
+  0%, 35% { transform: translateX(-90%); opacity: 0; }
+  43%, 64% { opacity: .32; }
+  76%, 100% { transform: translateX(90%); opacity: 0; }
+}
+@keyframes rewardSpark {
+  0% { opacity: 0; transform: translateY(100%) scale(.4); }
+  20% { opacity: .95; }
+  100% { opacity: 0; transform: translateY(-350%) scale(.1); }
+}
+@keyframes rewardCrystal {
+  0%, 100% { opacity: .1; transform: translateY(90%) rotate(0deg); }
+  50% { opacity: .95; transform: translateY(-90%) rotate(55deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reward-frame-shell,
+  .reward-frame-base,
+  .reward-frame-light::before,
+  .reward-frame-light::after,
+  .reward-frame-particle,
+  .creator-dragon-orbit { animation: none !important; }
+  .reward-frame-light::after { opacity: 0; }
+  .reward-frame-particle { opacity: .35; }
+}
+
 /* ============================================================
    Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
    app.js applyDesign() toggles html.theme-halloween. Every rule below is

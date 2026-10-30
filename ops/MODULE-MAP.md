@@ -1,5 +1,20 @@
 # Module map and "do not break" list
 
+## Animated reward frames and private CREATOR (2026-10-30)
+
+`personal-profile-frames.js` defines four giftable reward frames and the private
+`creator-violet` frame. Existing Business rewards/grant/revoke routes and CRM UI
+reuse `GRANTABLE_FRAMES` and `user_frames`; CREATOR is excluded from that catalog.
+Both root servers resolve the same reward codes and expose CREATOR only for the
+configured `OWNER_TELEGRAM_ID` or database-verified `OWNER_VK_ID`, not an arbitrary admin role or username. Shared
+`OWNER_FRAME_REPAIR_SQL` preserves these selections during startup/auth repair.
+`app.js` renders fixed art plus independent light/particle layers; only the
+separate half-circle diamond dragon orbits the stationary CREATOR plaque.
+`styles.css` respects reduced motion; `assets/frames` is included by the existing
+VK bundle asset copy. No startup patch, schema or automatic gift distribution.
+Regression: `test/reward-profile-frames.test.js`, `test/personal-profile-frames.test.js`.
+Release evidence and usage: `ops/REWARD-PROFILE-FRAMES-20261030.md`.
+
 ## Evotor durable store binding (2026-10-26, UNMOUNTED)
 
 Manual additive Admin migration `024_evotor_store_bindings.sql` (after 020/021,
