@@ -35,6 +35,14 @@ export async function createApplication({ db, accounts, origin, secure = true, r
   const route = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   const cookie = (res, token, age) => res.cookie('pivnik_live', token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: age });
   app.get('/health', (_req, res) => res.json({ ok: true, mode: db.demo ? 'demo' : 'live' }));
+  app.post('/api/demo-scanner', route(async (req, res) => {
+    if (!db.demo) throw new LiveError('forbidden', 403);
+    const current = await auth.session(cookieToken(req));
+    if (current && allowedViews[current.role]?.includes('scanner')) return res.json(current);
+    const session = await auth.openDemoScanner();
+    cookie(res, session.token, 12 * 3600_000);
+    res.json({ account: session.account, role: session.role });
+  }));
   app.post('/api/login', route(async (req, res) => {
     const session = await auth.login(req.body?.account, req.body?.password, req.ip);
     cookie(res, session.token, 12 * 3600_000);
@@ -127,7 +135,8 @@ export async function start(env = process.env) {
   const mode = env.LIVE_MODE;
   const port = Number(env.PORT || 4317);
   const dataDir = env.LIVE_DATA_DIR || fileURLToPath(new URL('../.data/demo', import.meta.url));
-  const origin = env.LIVE_PUBLIC_ORIGIN || (mode === 'demo' ? `http://localhost:${port}` : '');
+  const railwayOrigin = env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : '';
+  const origin = env.LIVE_PUBLIC_ORIGIN || (mode === 'demo' ? railwayOrigin || `http://localhost:${port}` : '');
   if (!origin || new URL(origin).origin !== origin || (mode === 'live' && !origin.startsWith('https://'))) throw new Error('LIVE_PUBLIC_ORIGIN must be the exact HTTPS origin.');
   const db = await connectDatabase({ mode, url: env.LIVE_DATABASE_URL, dataDir });
   let accountConfig = env.LIVE_ACCOUNTS_JSON;

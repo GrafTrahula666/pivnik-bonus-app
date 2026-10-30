@@ -31,6 +31,7 @@ const errors = {
   main_verification_failed: 'Проверка главного розыгрыша не пройдена.', snapshot_mismatch: 'Снимок билетов не прошёл проверку.'
 };
 let view = location.pathname.slice(1) || 'control';
+let passwordlessScanner = false;
 if (!['control', 'scanner', 'screen'].includes(view)) view = 'control';
 document.body.dataset.view = view;
 let state, actor, stream, connected = false, selectedPrize = '', busy = false, camera, scannerBusy = false, torch = false, stageTimer, lastStageId, audioContext;
@@ -78,7 +79,7 @@ function listen() {
 }
 const branding = `<a class="brand" href="/${view}"><img src="/icon.svg" alt=""/><span>PIVNIK<small>HALLOWEEN LIVE</small></span></a>`;
 function header() {
-  return `<header>${branding}<div class="header-right"><span class="event-date">31 октября 2026 <i>·</i> Ночь котлов</span><span data-connection class="connection">Подключение</span><button class="icon-button" data-action="logout" aria-label="Выйти">${icon('logout')}</button></div></header>`;
+  return `<header>${branding}<div class="header-right"><span class="event-date">31 октября 2026 <i>·</i> Ночь котлов</span><span data-connection class="connection">Подключение</span>${passwordlessScanner ? '' : `<button class="icon-button" data-action="logout" aria-label="Выйти">${icon('logout')}</button>`}</div></header>`;
 }
 function cauldron(cls = '') {
   return `<div class="cauldron-scene ${cls}" aria-hidden="true"><div class="halo"></div><div class="smoke smoke-a"></div><div class="smoke smoke-b"></div><div class="embers"></div><div class="flames"><i></i><i></i><i></i><i></i></div><div class="pot"><div class="pot-rim"></div><div class="potion"></div><div class="pot-glint"></div><span>П</span><i class="foot left"></i><i class="foot right"></i></div><div class="floor-glow"></div></div>`;
@@ -251,7 +252,9 @@ async function bootSession() { await refresh(); listen(); }
 async function init() {
   if (view === 'scanner' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   try {
-    actor = await api('me');
+    const health = view === 'scanner' ? await fetch('/health', { cache: 'no-store' }).then(r => r.json()) : null;
+    passwordlessScanner = health?.mode === 'demo';
+    actor = passwordlessScanner ? await api('demo-scanner', { method: 'POST', body: '{}' }) : await api('me');
     if (actor.role === 'scanner' && view !== 'scanner' || actor.role === 'screen' && view !== 'screen') { location.replace(`/${actor.role}`); return; }
     await bootSession();
   } catch { login(); }

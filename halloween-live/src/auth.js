@@ -40,6 +40,15 @@ export class Auth {
       }
     });
     if (!checkPassword(password, found?.passwordHash) || !found) throw new LiveError('invalid_login', 401);
+    return this.createSession(found);
+  }
+  async openDemoScanner() {
+    if (!this.db.demo) throw new LiveError('forbidden', 403);
+    const account = this.accounts.find(a => a.role === 'scanner');
+    if (!account) throw new LiveError('service_unavailable', 503);
+    return this.createSession(account);
+  }
+  async createSession(found) {
     const token = randomBytes(32).toString('hex');
     await this.db.exclusive(c => c.query(`INSERT INTO halloween_live.sessions(hash,account,role,credential_version,expires_at)
       VALUES($1,$2,$3,$4,now()+interval '12 hours')`, [digest(token), found.name, found.role, digest(found.passwordHash)]));

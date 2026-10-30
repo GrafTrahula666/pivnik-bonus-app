@@ -192,6 +192,34 @@ test('HTTP auth, CSRF, role isolation, SSE sync and session revocation after log
   assert.equal((await fetch(url + '/api/me', { headers: { Cookie: cookie } })).status, 401);
 });
 
+test('passwordless demo scanner opens without credentials and cannot operate the raffle or bypass live auth', async t => {
+  const { db } = await fixture(t);
+  const accounts = ['owner', 'scanner'].map(role => ({ name: role, role, passwordHash: passwordHash('test-password-123456') }));
+  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false });
+  const server = application.app.listen(0, '127.0.0.1');
+  await new Promise(r => server.once('listening', r));
+  t.after(async () => { application.close(); await new Promise(r => server.close(r)); });
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body = {}, cookie = '', origin = 'http://localhost') => fetch(url + path, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', Cookie: cookie, 'Idempotency-Key': randomUUID() }, body: JSON.stringify(body) });
+  assert.equal((await post('/api/demo-scanner', {}, '', 'https://evil.invalid')).status, 403);
+  const login = await post('/api/demo-scanner');
+  assert.equal(login.status, 200);
+  assert.equal((await login.json()).role, 'scanner');
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(url + '/api/state?view=scanner', { headers: { Cookie: cookie } })).status, 200);
+  assert.equal((await fetch(url + '/api/state?view=control', { headers: { Cookie: cookie } })).status, 403);
+  assert.equal((await post('/api/actions/draw-local', { prizeId: 'beer1' }, cookie)).status, 403);
+  assert.equal((await post('/api/actions/register', { payload: 'PVK-DEMO-0001' }, cookie)).status, 200);
+  const ownerLogin = await post('/api/login', { account: 'owner', password: 'test-password-123456' });
+  const ownerCookie = ownerLogin.headers.get('set-cookie').split(';')[0];
+  const preserved = await post('/api/demo-scanner', {}, ownerCookie);
+  assert.equal((await preserved.json()).role, 'owner');
+  assert.equal(preserved.headers.get('set-cookie'), null);
+  db.demo = false;
+  try { assert.equal((await post('/api/demo-scanner')).status, 403); }
+  finally { db.demo = true; }
+});
+
 test('credential rotation revokes sessions; demo refuses to fallback from missing live configuration', async t => {
   const { db } = await fixture(t);
   const original = { name: 'owner', role: 'owner', passwordHash: passwordHash('test-password-123456') };
