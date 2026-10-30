@@ -318,6 +318,68 @@ async function inspectModal(caseName, config, modalId, setup) {
   }
 }
 
+async function inspectRewardFrames(caseName, config) {
+  const { context, page, pageErrors, failedLocal } = await openPage(config);
+  const loaded = new Set();
+  page.on('response', (response) => {
+    if (response.status() === 200 && response.url().includes('/assets/frames/')) loaded.add(response.url().split('/').pop());
+  });
+  try {
+    const source = await fs.readFile(path.join(root, 'app.js'), 'utf8');
+    const renderer = source.slice(source.indexOf('function avatarAssetUrl'), source.indexOf('function profileDraftFromCurrent'));
+    await page.addScriptTag({ content: `const escapeHtml = value => String(value).replace(/[&<>"']/g, '');\n${renderer}` });
+    await page.evaluate(() => {
+      document.querySelectorAll('.screen').forEach((el) => el.classList.toggle('active', el.classList.contains('client-home')));
+      const hero = document.querySelector('.spaceverse-home-hero');
+      const parent = hero.parentElement;
+      parent.replaceChildren(hero);
+      document.querySelector('#clientName').textContent = 'CREATOR';
+      renderAvatarInto(document.querySelector('#profileAvatar'), { profileFrame: 'creator-violet', avatarSource: 'preset_male' });
+      const gallery = document.createElement('div');
+      gallery.id = 'rewardFramesAcceptance';
+      gallery.style.cssText = 'display:grid;justify-items:center;gap:100px;padding:100px 0;color:#aa78e5;background:#10101a;';
+      const codes = ['halloween-pumpkin', 'infernal-warden', 'frost-tyrant', 'eclipse-sovereign', 'creator-violet'];
+      for (const code of codes) {
+        const item = document.createElement('div');
+        item.style.cssText = 'text-align:center;width:150px;';
+        item.innerHTML = `<div id="accept-${code}" style="position:relative;width:150px;height:150px;margin:0 0 65px;"></div><b>${code}</b>`;
+        gallery.append(item);
+        renderAvatarInto(item.firstElementChild, { profileFrame: code, avatarSource: 'preset_male' });
+      }
+      parent.append(gallery);
+    });
+    await page.waitForFunction(() => Array.from(document.images).every((image) => image.complete));
+    await page.waitForLoadState('networkidle');
+    const snapshot = (time) => page.evaluate((at) => {
+      document.getAnimations().forEach((animation) => { animation.pause(); animation.currentTime = at; });
+      const host = document.querySelector('#accept-creator-violet');
+      const base = host.querySelector('.reward-frame-base');
+      const dragon = host.querySelector('.creator-dragon-orbit');
+      const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
+      return { base: rect(base), portrait: rect(host.querySelector('img')), dragon: getComputedStyle(dragon).transform,
+        baseZ: Number(getComputedStyle(base).zIndex), dragonZ: Number(getComputedStyle(dragon).zIndex),
+        width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
+    }, time);
+    const before = await snapshot(0), after = await snapshot(4500);
+    assert(JSON.stringify(before.base) === JSON.stringify(after.base), `${caseName}: CREATOR plaque moved`);
+    assert(JSON.stringify(before.portrait) === JSON.stringify(after.portrait), `${caseName}: portrait moved`);
+    assert(before.dragon !== after.dragon, `${caseName}: diamond dragon does not orbit`);
+    assert(after.baseZ > after.dragonZ, `${caseName}: dragon obscures the CREATOR plaque`);
+    assert(after.scrollWidth <= after.width, `${caseName}: frames cause horizontal overflow`);
+    assert(loaded.size >= 6, `${caseName}: frame artwork not loaded: ${JSON.stringify([...loaded])}`);
+    for (const time of [1500, 6000]) {
+      await snapshot(time);
+      await page.screenshot({ path: path.join(outDir, `${caseName}-reward-frames-${time}.png`), fullPage: true });
+    }
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const reduced = await page.locator('#accept-creator-violet .creator-dragon-orbit').evaluate((el) => getComputedStyle(el).animationName);
+    assert(reduced === 'none', `${caseName}: reduced motion still animates the dragon`);
+    assert(pageErrors.length === 0, `${caseName}: reward page errors: ${pageErrors.join(' | ')}`);
+    assert(failedLocal.length === 0, `${caseName}: reward asset requests failed`);
+    return { before, after, reduced, loaded: [...loaded] };
+  } finally { await context.close(); }
+}
+
 try {
   const cases = [
     { name: 'vk-ios', platform: 'vk', android: false, viewport: { width: 390, height: 844 } },
@@ -326,6 +388,7 @@ try {
   ];
 
   for (const config of cases) {
+    results[`${config.name}-reward-frames`] = await inspectRewardFrames(config.name, config);
     results[`${config.name}-league`] = await inspectScreen(config.name, config, 'league');
     results[`${config.name}-wheel`] = await inspectScreen(config.name, config, 'wheel');
     results[`${config.name}-qr`] = await inspectModal(config.name, config, 'qrModal', 'qr');
