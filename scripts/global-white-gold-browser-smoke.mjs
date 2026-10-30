@@ -351,16 +351,22 @@ async function inspectRewardFrames(caseName, config) {
     await page.waitForFunction(() => Array.from(document.images).every((image) => image.complete));
     await page.waitForLoadState('networkidle');
     const snapshot = (time) => page.evaluate((at) => {
-      document.getAnimations().forEach((animation) => { animation.pause(); animation.currentTime = at; });
+      // Do not rewind the screen entrance animation along with the frame.
+      document.getAnimations().filter((animation) => animation.effect?.target?.closest?.('#rewardFramesAcceptance'))
+        .forEach((animation) => { animation.pause(); animation.currentTime = at; });
       const host = document.querySelector('#accept-creator-violet');
       const base = host.querySelector('.reward-frame-base');
       const dragon = host.querySelector('.creator-dragon-orbit');
-      const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
+      const origin = host.getBoundingClientRect();
+      const round = (n) => Math.round(n * 100) / 100;
+      const rect = (el) => { const r = el.getBoundingClientRect(); return { x: round(r.x - origin.x), y: round(r.y - origin.y), width: round(r.width), height: round(r.height) }; };
       return { base: rect(base), portrait: rect(host.querySelector('img')), dragon: getComputedStyle(dragon).transform,
         baseZ: Number(getComputedStyle(base).zIndex), dragonZ: Number(getComputedStyle(dragon).zIndex),
         width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
     }, time);
     const before = await snapshot(0), after = await snapshot(4500);
+    await fs.writeFile(path.join(outDir, `${caseName}-reward-frame-geometry.json`), JSON.stringify({ before, after }, null, 2));
+    await page.screenshot({ path: path.join(outDir, `${caseName}-reward-frames-inspection.png`), fullPage: true });
     assert(JSON.stringify(before.base) === JSON.stringify(after.base), `${caseName}: CREATOR plaque moved`);
     assert(JSON.stringify(before.portrait) === JSON.stringify(after.portrait), `${caseName}: portrait moved`);
     assert(before.dragon !== after.dragon, `${caseName}: diamond dragon does not orbit`);
