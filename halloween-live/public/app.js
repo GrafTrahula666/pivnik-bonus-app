@@ -28,6 +28,7 @@ const errors = {
   already_revealed: 'Этот результат уже показан.', service_unavailable: 'Сервер недоступен. Изменение не подтверждено.',
   reward_bridge_not_configured: 'Выдача бонусов не подключена. Награда остаётся в ожидании.', reward_operation_failed: 'Операция выдачи не подтверждена. Повторите с тем же ключом.',
   award_final: 'Статус выдачи уже зафиксирован.', invalid_origin: 'Адрес приложения не совпадает с настройкой сервера.',
+  invalid_scanner_link: 'Ссылка сканера устарела. Откройте новую ссылку, которую выдал владелец.',
   main_verification_failed: 'Проверка главного розыгрыша не пройдена.', snapshot_mismatch: 'Снимок билетов не прошёл проверку.'
 };
 let view = location.pathname.slice(1) || 'control';
@@ -253,8 +254,17 @@ async function init() {
   if (view === 'scanner' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   try {
     const health = view === 'scanner' ? await fetch('/health', { cache: 'no-store' }).then(r => r.json()) : null;
-    passwordlessScanner = health?.mode === 'demo';
-    actor = passwordlessScanner ? await api('demo-scanner', { method: 'POST', body: '{}' }) : await api('me');
+    const linkToken = view === 'scanner' ? new URLSearchParams(location.hash.slice(1)).get('access') : null;
+    let savedToken;
+    try { savedToken = view === 'scanner' ? sessionStorage.getItem('pivnik-scanner-access') : null; } catch { /* Cookies still keep the current session. */ }
+    const scannerToken = linkToken || savedToken;
+    passwordlessScanner = health?.mode === 'demo' || Boolean(scannerToken);
+    actor = health?.mode === 'demo' ? await api('demo-scanner', { method: 'POST', body: '{}' })
+      : scannerToken ? await api('scanner-link', { method: 'POST', body: JSON.stringify({ token: scannerToken }) }) : await api('me');
+    if (linkToken) {
+      try { sessionStorage.setItem('pivnik-scanner-access', linkToken); } catch { /* The session cookie suffices. */ }
+      history.replaceState(null, '', location.pathname + location.search);
+    }
     if (actor.role === 'scanner' && view !== 'scanner' || actor.role === 'screen' && view !== 'screen') { location.replace(`/${actor.role}`); return; }
     await bootSession();
   } catch { login(); }

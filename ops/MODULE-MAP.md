@@ -12,6 +12,9 @@ Event registration, local draws, disclosure, sessions, idempotency and audit
 are confined to manually provisioned `halloween_live` tables. Canonical
 main-draw updates and live event/audit commit in one outer transaction.
 Demo uses a separate embedded database with fake accounts and no rewards.
+Demo scanner enters automatically. Live scanner can use a private link token
+redeemed for an HttpOnly scanner session; the token grants no raffle/control access.
+The separate Dockerfile uses repository root context and starts the live server.
 There are no new financial SQL writes; optional bonus issuance delegates to
 the existing authenticated admin adjustment API with a stable request key.
 Migration 011 and all existing source files remain unchanged. Setup, grants,

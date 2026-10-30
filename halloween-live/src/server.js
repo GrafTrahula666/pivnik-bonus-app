@@ -7,13 +7,13 @@ import { randomBytes } from 'node:crypto';
 import { connectDatabase } from './db.js';
 import { Auth, readAccounts, passwordHash } from './auth.js';
 import { Engine, projection } from './engine.js';
-import { LiveError } from './source.js';
+import { LiveError, resolveGuest } from './source.js';
 
 const publicDir = fileURLToPath(new URL('../public', import.meta.url));
 const allowedViews = { owner: ['control', 'scanner', 'screen'], operator: ['control', 'scanner', 'screen'], scanner: ['scanner'], screen: ['screen'] };
 const cookieToken = req => (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('pivnik_live='))?.slice(12) || '';
 
-export async function createApplication({ db, accounts, origin, secure = true, rewardBridge }) {
+export async function createApplication({ db, accounts, origin, secure = true, rewardBridge, scannerAccessToken }) {
   const app = express();
   const auth = new Auth(db, accounts);
   const engine = new Engine(db, { rewardBridge });
@@ -43,6 +43,13 @@ export async function createApplication({ db, accounts, origin, secure = true, r
     cookie(res, session.token, 12 * 3600_000);
     res.json({ account: session.account, role: session.role });
   }));
+  app.post('/api/scanner-link', route(async (req, res) => {
+    const current = await auth.session(cookieToken(req));
+    if (current && allowedViews[current.role]?.includes('scanner')) return res.json(current);
+    const session = await auth.openScannerLink(req.body?.token, scannerAccessToken);
+    cookie(res, session.token, 12 * 3600_000);
+    res.json({ account: session.account, role: session.role });
+  }));
   app.post('/api/login', route(async (req, res) => {
     const session = await auth.login(req.body?.account, req.body?.password, req.ip);
     cookie(res, session.token, 12 * 3600_000);
@@ -55,6 +62,10 @@ export async function createApplication({ db, accounts, origin, secure = true, r
     }).catch(next);
   });
   app.get('/api/me', (req, res) => res.json(req.actor));
+  app.post('/api/qr/resolve', route(async (req, res) => {
+    if (!['owner', 'operator', 'scanner'].includes(req.actor.role)) throw new LiveError('forbidden', 403);
+    res.json({ guest: await db.exclusive(c => resolveGuest(c, req.body?.payload)) });
+  }));
   app.post('/api/logout', route(async (req, res) => { await auth.logout(cookieToken(req)); cookie(res, '', 0); res.json({ ok: true }); }));
   const viewOf = req => {
     const view = req.query.view || 'control';
@@ -150,7 +161,7 @@ export async function start(env = process.env) {
       console.log('DEMO access codes saved privately in .data/demo-access.txt');
     }
   }
-  const application = await createApplication({ db, accounts: readAccounts(accountConfig), origin, secure: mode === 'live', rewardBridge: createRewardBridge(env) });
+  const application = await createApplication({ db, accounts: readAccounts(accountConfig), origin, secure: mode === 'live', rewardBridge: createRewardBridge(env), scannerAccessToken: env.LIVE_SCANNER_ACCESS_TOKEN });
   if (env.LIVE_TRUST_PROXY === '1') application.app.set('trust proxy', 1);
   const server = application.app.listen(port, env.LIVE_BIND || '127.0.0.1', () => console.log(`PIVNIK Halloween Live (${mode}): ${origin}/control`));
   const close = async () => { application.close(); await new Promise(resolve => server.close(resolve)); await db.close(); };

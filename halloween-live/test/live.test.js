@@ -179,6 +179,8 @@ test('HTTP auth, CSRF, role isolation, SSE sync and session revocation after log
   assert.ok(login.headers.get('set-cookie').includes('HttpOnly')); assert.ok(login.headers.get('set-cookie').includes('SameSite=Strict'));
   assert.equal((await fetch(url + '/api/state?view=control', { headers: { Cookie: cookie } })).status, 403);
   assert.equal((await post('/api/actions/draw-local', { prizeId: 'beer1' }, cookie)).status, 403);
+  assert.equal((await post('/api/qr/resolve', { payload: 'PVK-DEMO-0003' }, cookie)).status, 200);
+  assert.equal((await application.engine.read()).guests.length, 0);
   assert.equal((await post('/api/actions/register', { payload: 'PVK-DEMO-0001' }, cookie)).status, 200);
   const abort = new AbortController();
   const events = await fetch(url + '/api/events?view=scanner', { headers: { Cookie: cookie }, signal: abort.signal });
@@ -195,7 +197,7 @@ test('HTTP auth, CSRF, role isolation, SSE sync and session revocation after log
 test('passwordless demo scanner opens without credentials and cannot operate the raffle or bypass live auth', async t => {
   const { db } = await fixture(t);
   const accounts = ['owner', 'scanner'].map(role => ({ name: role, role, passwordHash: passwordHash('test-password-123456') }));
-  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false });
+  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false, scannerAccessToken: 'a'.repeat(64) });
   const server = application.app.listen(0, '127.0.0.1');
   await new Promise(r => server.once('listening', r));
   t.after(async () => { application.close(); await new Promise(r => server.close(r)); });
@@ -216,7 +218,16 @@ test('passwordless demo scanner opens without credentials and cannot operate the
   assert.equal((await preserved.json()).role, 'owner');
   assert.equal(preserved.headers.get('set-cookie'), null);
   db.demo = false;
-  try { assert.equal((await post('/api/demo-scanner')).status, 403); }
+  try {
+    assert.equal((await post('/api/demo-scanner')).status, 403);
+    assert.equal((await post('/api/scanner-link', { token: 'bad' })).status, 401);
+    const linked = await post('/api/scanner-link', { token: 'a'.repeat(64) });
+    assert.equal(linked.status, 200);
+    assert.equal((await linked.json()).role, 'scanner');
+    const linkedCookie = linked.headers.get('set-cookie').split(';')[0];
+    assert.equal((await post('/api/actions/draw-local', { prizeId: 'beer1' }, linkedCookie)).status, 403);
+    assert.equal((await fetch(url + '/api/state?view=scanner', { headers: { Cookie: linkedCookie } })).status, 200);
+  }
   finally { db.demo = true; }
 });
 
