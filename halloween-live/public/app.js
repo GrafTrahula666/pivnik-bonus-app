@@ -249,7 +249,14 @@ if (view === 'scanner') document.addEventListener('pointerdown', () => {
 }, { once: true });
 window.addEventListener('online', () => { refresh().then(listen).catch(() => connection(false)); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && actor) refresh().catch(() => connection(false)); });
-async function bootSession() { await refresh(); listen(); }
+const guideRequested = () => view === 'control' && new URLSearchParams(location.search).get('download') === 'guide';
+async function bootSession() {
+  await refresh(); listen();
+  if (actor.role === 'owner' && guideRequested()) {
+    history.replaceState(null, '', location.pathname);
+    location.assign('/guide');
+  }
+}
 async function init() {
   if (view === 'scanner' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   try {
@@ -265,6 +272,7 @@ async function init() {
       try { sessionStorage.setItem('pivnik-scanner-access', linkToken); } catch { /* The session cookie suffices. */ }
       history.replaceState(null, '', location.pathname + location.search);
     }
+    if (guideRequested() && actor.role !== 'owner') { login(); return; }
     if (actor.role === 'scanner' && view !== 'scanner' || actor.role === 'screen' && view !== 'screen') { location.replace(`/${actor.role}`); return; }
     await bootSession();
   } catch { login(); }

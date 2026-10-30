@@ -197,7 +197,7 @@ test('HTTP auth, CSRF, role isolation, SSE sync and session revocation after log
 test('passwordless demo scanner opens without credentials and cannot operate the raffle or bypass live auth', async t => {
   const { db } = await fixture(t);
   const accounts = ['owner', 'scanner'].map(role => ({ name: role, role, passwordHash: passwordHash('test-password-123456') }));
-  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false, scannerAccessToken: 'a'.repeat(64) });
+  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false, scannerAccessToken: 'a'.repeat(64), ownerGuideBase64: Buffer.from('PK guide fixture').toString('base64') });
   const server = application.app.listen(0, '127.0.0.1');
   await new Promise(r => server.once('listening', r));
   t.after(async () => { application.close(); await new Promise(r => server.close(r)); });
@@ -214,6 +214,13 @@ test('passwordless demo scanner opens without credentials and cannot operate the
   assert.equal((await post('/api/actions/register', { payload: 'PVK-DEMO-0001' }, cookie)).status, 200);
   const ownerLogin = await post('/api/login', { account: 'owner', password: 'test-password-123456' });
   const ownerCookie = ownerLogin.headers.get('set-cookie').split(';')[0];
+  const protectedGuide = await fetch(url + '/guide', { headers: { Cookie: cookie }, redirect: 'manual' });
+  assert.equal(protectedGuide.status, 302);
+  assert.equal(protectedGuide.headers.get('location'), '/control?download=guide');
+  const guide = await fetch(url + '/guide', { headers: { Cookie: ownerCookie } });
+  assert.equal(guide.status, 200);
+  assert.ok(guide.headers.get('content-disposition').includes('attachment'));
+  assert.equal(await guide.text(), 'PK guide fixture');
   const preserved = await post('/api/demo-scanner', {}, ownerCookie);
   assert.equal((await preserved.json()).role, 'owner');
   assert.equal(preserved.headers.get('set-cookie'), null);

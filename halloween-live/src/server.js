@@ -13,7 +13,7 @@ const publicDir = fileURLToPath(new URL('../public', import.meta.url));
 const allowedViews = { owner: ['control', 'scanner', 'screen'], operator: ['control', 'scanner', 'screen'], scanner: ['scanner'], screen: ['screen'] };
 const cookieToken = req => (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('pivnik_live='))?.slice(12) || '';
 
-export async function createApplication({ db, accounts, origin, secure = true, rewardBridge, scannerAccessToken }) {
+export async function createApplication({ db, accounts, origin, secure = true, rewardBridge, scannerAccessToken, ownerGuideBase64 }) {
   const app = express();
   const auth = new Auth(db, accounts);
   const engine = new Engine(db, { rewardBridge });
@@ -35,6 +35,14 @@ export async function createApplication({ db, accounts, origin, secure = true, r
   const route = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   const cookie = (res, token, age) => res.cookie('pivnik_live', token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: age });
   app.get('/health', (_req, res) => res.json({ ok: true, mode: db.demo ? 'demo' : 'live' }));
+  app.get('/guide', route(async (req, res) => {
+    const actor = await auth.session(cookieToken(req));
+    res.set('Cache-Control', 'private, no-store');
+    if (actor?.role !== 'owner') return res.redirect('/control?download=guide');
+    if (!ownerGuideBase64) return res.status(404).send('Инструкция ещё не загружена.');
+    res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'Content-Disposition': 'attachment; filename="PIVNIK-LIVE-Guide.docx"' });
+    res.send(Buffer.from(ownerGuideBase64, 'base64'));
+  }));
   app.post('/api/demo-scanner', route(async (req, res) => {
     if (!db.demo) throw new LiveError('forbidden', 403);
     const current = await auth.session(cookieToken(req));
@@ -161,7 +169,7 @@ export async function start(env = process.env) {
       console.log('DEMO access codes saved privately in .data/demo-access.txt');
     }
   }
-  const application = await createApplication({ db, accounts: readAccounts(accountConfig), origin, secure: mode === 'live', rewardBridge: createRewardBridge(env), scannerAccessToken: env.LIVE_SCANNER_ACCESS_TOKEN });
+  const application = await createApplication({ db, accounts: readAccounts(accountConfig), origin, secure: mode === 'live', rewardBridge: createRewardBridge(env), scannerAccessToken: env.LIVE_SCANNER_ACCESS_TOKEN, ownerGuideBase64: (env.LIVE_OWNER_GUIDE_DOCX_BASE64 || '') + (env.LIVE_OWNER_GUIDE_DOCX_BASE64_PART2 || '') });
   if (env.LIVE_TRUST_PROXY === '1') application.app.set('trust proxy', 1);
   const server = application.app.listen(port, env.LIVE_BIND || '127.0.0.1', () => console.log(`PIVNIK Halloween Live (${mode}): ${origin}/control`));
   const close = async () => { application.close(); await new Promise(resolve => server.close(resolve)); await db.close(); };
