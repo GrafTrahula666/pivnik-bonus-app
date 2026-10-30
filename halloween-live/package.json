@@ -1,0 +1,70 @@
+{
+  "name": "pivnik-halloween-live",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "demo": "node src/demo.js",
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.mjs",
+    "desktop": "electron desktop",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "password": "node scripts/password.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "@zxing/browser": "0.1.5",
+    "express": "4.22.3",
+    "helmet": "8.1.0",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "electron": "^42.2.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.12",
+    "@playwright/test": "^1.55.0"
+  },
+  "build": {
+    "appId": "ru.pivnik.halloween.live",
+    "productName": "PIVNIK Halloween Live",
+    "artifactName": "PIVNIK-Halloween-Setup.${ext}",
+    "directories": {
+      "output": "release",
+      "app": "desktop"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "setup.*",
+      "icon.ico",
+      "package.json",
+      "!node_modules{,/**/*}"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PIVNIK Halloween Live",
+      "script": "desktop/installer.nsi",
+      "packElevateHelper": false,
+      "installerLanguages": [
+        "ru_RU",
+        "en_US"
+      ]
+    },
+    "afterPack": "scripts/prepare-installer.mjs",
+    "publish": []
+  },
+  "description": "Самостоятельный сервис розыгрышей и сканер PIVNIK",
+  "author": "PIVNIK"
+}

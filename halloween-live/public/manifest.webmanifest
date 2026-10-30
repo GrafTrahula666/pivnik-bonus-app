@@ -1,0 +1,15 @@
+{
+  "id": "/scanner",
+  "name": "PIVNIK Halloween Scanner",
+  "short_name": "PIVNIK Scanner",
+  "lang": "ru",
+  "start_url": "/scanner",
+  "scope": "/scanner",
+  "display": "standalone",
+  "background_color": "#100e18",
+  "theme_color": "#100e18",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

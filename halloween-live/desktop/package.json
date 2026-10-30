@@ -1,0 +1,9 @@
+{
+  "name": "pivnik-halloween-desktop",
+  "version": "1.0.0",
+  "description": "Пульт и телевизионный экран PIVNIK Halloween Live",
+  "author": "PIVNIK",
+  "main": "main.cjs",
+  "private": true,
+  "dependencies": {}
+}
