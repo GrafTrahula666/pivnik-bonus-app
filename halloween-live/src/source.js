@@ -1,6 +1,6 @@
-import { resolvePersonalQrRecord } from '../../qr-resolver.js';
+import { resolvePersonalQrRecord } from '../qr-resolver.js';
 import { isDeepStrictEqual } from 'node:util';
-import { closeDraw, drawNight, DRAW_ID, snapshotHash, pickResults, createSeededRandomInt } from '../../halloween-raffle.js';
+import { closeDraw, drawNight, DRAW_ID, snapshotHash, pickResults, createSeededRandomInt } from '../halloween-raffle.js';
 
 export class LiveError extends Error {
   constructor(code, status = 409) { super(code); this.code = code; this.status = status; }
