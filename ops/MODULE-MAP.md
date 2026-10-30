@@ -19,7 +19,11 @@ There are no new financial SQL writes; optional bonus issuance delegates to
 the existing authenticated admin adjustment API with a stable request key.
 Migration 011 and all existing source files remain unchanged. Setup, grants,
 limits and device validation are documented in `halloween-live/README.md`
-and `halloween-live/VALIDATION.md`. No production migration, merge or deploy.
+and `halloween-live/VALIDATION.md`. On 2026-10-30, following the owner's live-launch
+instruction, the additive schema and dedicated role were manually provisioned,
+with a fresh pg_dump backup first. The isolated `halloween-event` Railway service
+is pinned to a reviewed-by-tests branch commit; the main application was not
+merged or redeployed. Current live evidence is in `halloween-live/RELEASE-LIVE.md`.
 
 ## Evotor durable store binding (2026-10-26, UNMOUNTED)
 
