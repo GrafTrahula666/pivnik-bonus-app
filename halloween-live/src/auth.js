@@ -46,6 +46,13 @@ export class Auth {
     if (!this.db.demo) throw new LiveError('forbidden', 403);
     return this.scannerSession();
   }
+  async openOwnerLink(token, expected) {
+    if (typeof token !== 'string' || typeof expected !== 'string' || expected.length < 32
+      || !timingSafeEqual(Buffer.from(digest(token)), Buffer.from(digest(expected)))) throw new LiveError('invalid_owner_link', 401);
+    const account = this.accounts.find(a => a.role === 'owner');
+    if (!account) throw new LiveError('service_unavailable', 503);
+    return this.createSession(account);
+  }
   async openScannerLink(token, expected) {
     if (typeof token !== 'string' || typeof expected !== 'string' || expected.length < 32
       || !timingSafeEqual(Buffer.from(digest(token)), Buffer.from(digest(expected)))) throw new LiveError('invalid_scanner_link', 401);
