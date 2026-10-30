@@ -13,7 +13,7 @@ const publicDir = fileURLToPath(new URL('../public', import.meta.url));
 const allowedViews = { owner: ['control', 'scanner', 'screen'], operator: ['control', 'scanner', 'screen'], scanner: ['scanner'], screen: ['screen'] };
 const cookieToken = req => (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('pivnik_live='))?.slice(12) || '';
 
-export async function createApplication({ db, accounts, origin, secure = true, rewardBridge, scannerAccessToken, ownerGuideBase64 }) {
+export async function createApplication({ db, accounts, origin, secure = true, rewardBridge, scannerAccessToken, ownerAccessToken, ownerGuideBase64 }) {
   const app = express();
   const auth = new Auth(db, accounts);
   const engine = new Engine(db, { rewardBridge });
@@ -55,6 +55,13 @@ export async function createApplication({ db, accounts, origin, secure = true, r
     const current = await auth.session(cookieToken(req));
     if (current && allowedViews[current.role]?.includes('scanner')) return res.json(current);
     const session = await auth.openScannerLink(req.body?.token, scannerAccessToken);
+    cookie(res, session.token, 12 * 3600_000);
+    res.json({ account: session.account, role: session.role });
+  }));
+  app.post('/api/owner-link', route(async (req, res) => {
+    const current = await auth.session(cookieToken(req));
+    if (current?.role === 'owner') return res.json(current);
+    const session = await auth.openOwnerLink(req.body?.token, ownerAccessToken);
     cookie(res, session.token, 12 * 3600_000);
     res.json({ account: session.account, role: session.role });
   }));
@@ -169,7 +176,7 @@ export async function start(env = process.env) {
       console.log('DEMO access codes saved privately in .data/demo-access.txt');
     }
   }
-  const application = await createApplication({ db, accounts: readAccounts(accountConfig), origin, secure: mode === 'live', rewardBridge: createRewardBridge(env), scannerAccessToken: env.LIVE_SCANNER_ACCESS_TOKEN, ownerGuideBase64: (env.LIVE_OWNER_GUIDE_DOCX_BASE64 || '') + (env.LIVE_OWNER_GUIDE_DOCX_BASE64_PART2 || '') });
+  const application = await createApplication({ db, accounts: readAccounts(accountConfig), origin, secure: mode === 'live', rewardBridge: createRewardBridge(env), scannerAccessToken: env.LIVE_SCANNER_ACCESS_TOKEN, ownerAccessToken: env.LIVE_OWNER_ACCESS_TOKEN, ownerGuideBase64: (env.LIVE_OWNER_GUIDE_DOCX_BASE64 || '') + (env.LIVE_OWNER_GUIDE_DOCX_BASE64_PART2 || '') });
   if (env.LIVE_TRUST_PROXY === '1') application.app.set('trust proxy', 1);
   const server = application.app.listen(port, env.LIVE_BIND || '127.0.0.1', () => console.log(`PIVNIK Halloween Live (${mode}): ${origin}/control`));
   const close = async () => { application.close(); await new Promise(resolve => server.close(resolve)); await db.close(); };

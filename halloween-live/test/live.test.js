@@ -197,7 +197,7 @@ test('HTTP auth, CSRF, role isolation, SSE sync and session revocation after log
 test('passwordless demo scanner opens without credentials and cannot operate the raffle or bypass live auth', async t => {
   const { db } = await fixture(t);
   const accounts = ['owner', 'scanner'].map(role => ({ name: role, role, passwordHash: passwordHash('test-password-123456') }));
-  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false, scannerAccessToken: 'a'.repeat(64), ownerGuideBase64: Buffer.from('PK guide fixture').toString('base64') });
+  const application = await createApplication({ db, accounts, origin: 'http://localhost', secure: false, scannerAccessToken: 'a'.repeat(64), ownerAccessToken: 'b'.repeat(64), ownerGuideBase64: Buffer.from('PK guide fixture').toString('base64') });
   const server = application.app.listen(0, '127.0.0.1');
   await new Promise(r => server.once('listening', r));
   t.after(async () => { application.close(); await new Promise(r => server.close(r)); });
@@ -234,6 +234,17 @@ test('passwordless demo scanner opens without credentials and cannot operate the
     const linkedCookie = linked.headers.get('set-cookie').split(';')[0];
     assert.equal((await post('/api/actions/draw-local', { prizeId: 'beer1' }, linkedCookie)).status, 403);
     assert.equal((await fetch(url + '/api/state?view=scanner', { headers: { Cookie: linkedCookie } })).status, 200);
+    assert.equal((await post('/api/owner-link', { token: 'wrong' })).status, 401);
+    assert.equal((await post('/api/owner-link', { token: 'b'.repeat(64) }, '', 'https://evil.invalid')).status, 403);
+    assert.equal((await post('/api/owner-link', { token: 'a'.repeat(64) })).status, 401);
+    const ownerLinked = await post('/api/owner-link', { token: 'b'.repeat(64) });
+    assert.equal(ownerLinked.status, 200);
+    assert.equal((await ownerLinked.json()).role, 'owner');
+    const ownerLinkedCookie = ownerLinked.headers.get('set-cookie').split(';')[0];
+    assert.equal((await fetch(url + '/api/state?view=control', { headers: { Cookie: ownerLinkedCookie } })).status, 200);
+    assert.equal((await fetch(url + '/api/audit', { headers: { Cookie: ownerLinkedCookie } })).status, 200);
+    assert.equal((await fetch(url + '/api/audit', { headers: { Cookie: linkedCookie } })).status, 403);
+    assert.equal((await post('/api/owner-link', { token: 'wrong' }, ownerLinkedCookie)).status, 200);
   }
   finally { db.demo = true; }
 });
