@@ -98,7 +98,13 @@ function login() {
     } catch (error) { $('.form-error', form).textContent = error.message; } finally { button.disabled = false; }
   };
 }
-function demoBanner() { return state.mode === 'demo' ? '<div class="demo-banner">ДЕМО · вымышленные гости и билеты · финансовые операции отключены</div>' : ''; }
+function demoBanner() {
+  if (state.mode !== 'demo') return '';
+  const liveLink = location.hostname === 'halloween-live-production.up.railway.app'
+    ? '<a href="https://halloween-event-production.up.railway.app/scanner">Открыть рабочий сканер для настоящих QR</a>'
+    : '';
+  return '<div class="demo-banner" role="alert">ДЕМО: здесь только вымышленные пользователи. Настоящие QR Пивника не работают. ' + liveLink + '</div>';
+}
 function render() {
   if (!actor || !state) return;
   if (view === 'scanner') renderScanner(); else if (view === 'screen') renderScreen(); else renderControl();
@@ -159,7 +165,12 @@ async function register(payload) {
       navigator.vibrate?.([70, 30, 70]);
       try { audioContext ||= new AudioContext(); const tone = audioContext.createOscillator(), gain = audioContext.createGain(); gain.gain.value = 0.08; tone.frequency.value = 880; tone.connect(gain).connect(audioContext.destination); tone.start(); tone.stop(audioContext.currentTime + 0.1); } catch { /* Audio feedback is optional on iOS. */ }
     }
-  } catch (error) { toast(error.message || 'Регистрация не подтверждена сервером. Повторите сканирование.', true); }
+  } catch (error) {
+    const message = state?.mode === 'demo' && error.code === 'guest_not_found'
+      ? 'Это демоверсия: настоящие QR пользователей здесь не зарегистрированы. Откройте рабочий сканер.'
+      : error.message || 'Регистрация не подтверждена сервером. Повторите сканирование.';
+    toast(message, true);
+  }
   finally { setTimeout(() => scannerBusy = false, 1900); }
 }
 function renderScreen() {
