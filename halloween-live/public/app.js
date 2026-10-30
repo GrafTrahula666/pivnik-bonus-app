@@ -29,10 +29,11 @@ const errors = {
   reward_bridge_not_configured: 'Выдача бонусов не подключена. Награда остаётся в ожидании.', reward_operation_failed: 'Операция выдачи не подтверждена. Повторите с тем же ключом.',
   award_final: 'Статус выдачи уже зафиксирован.', invalid_origin: 'Адрес приложения не совпадает с настройкой сервера.',
   invalid_scanner_link: 'Ссылка сканера устарела. Откройте новую ссылку, которую выдал владелец.',
+  invalid_owner_link: 'Личная ссылка пульта недействительна. Откройте новую приватную ссылку.',
   main_verification_failed: 'Проверка главного розыгрыша не пройдена.', snapshot_mismatch: 'Снимок билетов не прошёл проверку.'
 };
 let view = location.pathname.slice(1) || 'control';
-let passwordlessScanner = false;
+let passwordlessAccess = false;
 if (!['control', 'scanner', 'screen'].includes(view)) view = 'control';
 document.body.dataset.view = view;
 let state, actor, stream, connected = false, selectedPrize = '', busy = false, camera, scannerBusy = false, torch = false, stageTimer, lastStageId, audioContext;
@@ -80,7 +81,7 @@ function listen() {
 }
 const branding = `<a class="brand" href="/${view}"><img src="/icon.svg" alt=""/><span>PIVNIK<small>HALLOWEEN LIVE</small></span></a>`;
 function header() {
-  return `<header>${branding}<div class="header-right"><span class="event-date">31 октября 2026 <i>·</i> Ночь котлов</span><span data-connection class="connection">Подключение</span>${passwordlessScanner ? '' : `<button class="icon-button" data-action="logout" aria-label="Выйти">${icon('logout')}</button>`}</div></header>`;
+  return `<header>${branding}<div class="header-right"><span class="event-date">31 октября 2026 <i>·</i> Ночь котлов</span><span data-connection class="connection">Подключение</span>${passwordlessAccess ? '' : `<button class="icon-button" data-action="logout" aria-label="Выйти">${icon('logout')}</button>`}</div></header>`;
 }
 function cauldron(cls = '') {
   return `<div class="cauldron-scene ${cls}" aria-hidden="true"><div class="halo"></div><div class="smoke smoke-a"></div><div class="smoke smoke-b"></div><div class="embers"></div><div class="flames"><i></i><i></i><i></i><i></i></div><div class="pot"><div class="pot-rim"></div><div class="potion"></div><div class="pot-glint"></div><span>П</span><i class="foot left"></i><i class="foot right"></i></div><div class="floor-glow"></div></div>`;
@@ -261,15 +262,18 @@ async function init() {
   if (view === 'scanner' && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   try {
     const health = view === 'scanner' ? await fetch('/health', { cache: 'no-store' }).then(r => r.json()) : null;
-    const linkToken = view === 'scanner' ? new URLSearchParams(location.hash.slice(1)).get('access') : null;
+    const usePrivateLink = view === 'scanner' || view === 'control';
+    const storageKey = view === 'scanner' ? 'pivnik-scanner-access' : 'pivnik-owner-access';
+    const linkToken = usePrivateLink ? new URLSearchParams(location.hash.slice(1)).get('access') : null;
     let savedToken;
-    try { savedToken = view === 'scanner' ? sessionStorage.getItem('pivnik-scanner-access') : null; } catch { /* Cookies still keep the current session. */ }
-    const scannerToken = linkToken || savedToken;
-    passwordlessScanner = health?.mode === 'demo' || Boolean(scannerToken);
+    try { savedToken = usePrivateLink ? sessionStorage.getItem(storageKey) : null; } catch { /* Cookies still keep the current session. */ }
+    const accessToken = linkToken || savedToken;
+    passwordlessAccess = health?.mode === 'demo' || Boolean(accessToken);
     actor = health?.mode === 'demo' ? await api('demo-scanner', { method: 'POST', body: '{}' })
-      : scannerToken ? await api('scanner-link', { method: 'POST', body: JSON.stringify({ token: scannerToken }) }) : await api('me');
+      : accessToken ? await api(view === 'scanner' ? 'scanner-link' : 'owner-link', { method: 'POST', body: JSON.stringify({ token: accessToken }) })
+      : await api('me');
     if (linkToken) {
-      try { sessionStorage.setItem('pivnik-scanner-access', linkToken); } catch { /* The session cookie suffices. */ }
+      try { sessionStorage.setItem(storageKey, linkToken); } catch { /* The session cookie suffices. */ }
       history.replaceState(null, '', location.pathname + location.search);
     }
     if (guideRequested() && actor.role !== 'owner') { login(); return; }
