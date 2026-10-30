@@ -6,7 +6,7 @@
   "main": "desktop/main.cjs",
   "scripts": {
     "start": "node src/server.js",
-    "demo": "LIVE_MODE=demo node src/server.js",
+    "demo": "node src/demo.js",
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.js",
     "check": "node scripts/check.mjs",
