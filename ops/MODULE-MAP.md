@@ -1,5 +1,23 @@
 # Module map and "do not break" list
 
+## PIVNIK Halloween Live (isolated, not mounted)
+
+`halloween-live/` is a separate Node service with `/scanner`, `/control`,
+`/screen` and an Electron Windows controller. It is not imported by either
+existing server entrypoint, startup patch chain, kiosk or CRM. Personal QR
+resolution imports the unchanged `qr-resolver.js` / `platform-core.js`.
+Ticket counts and the main draw use the existing canonical tables and
+`closeDraw` / `drawNight`, with no force-close or closes_at write permission.
+Event registration, local draws, disclosure, sessions, idempotency and audit
+are confined to manually provisioned `halloween_live` tables. Canonical
+main-draw updates and live event/audit commit in one outer transaction.
+Demo uses a separate embedded database with fake accounts and no rewards.
+There are no new financial SQL writes; optional bonus issuance delegates to
+the existing authenticated admin adjustment API with a stable request key.
+Migration 011 and all existing source files remain unchanged. Setup, grants,
+limits and device validation are documented in `halloween-live/README.md`
+and `halloween-live/VALIDATION.md`. No production migration, merge or deploy.
+
 ## Evotor durable store binding (2026-10-26, UNMOUNTED)
 
 Manual additive Admin migration `024_evotor_store_bindings.sql` (after 020/021,
