@@ -1,3 +1,7 @@
+## 2026-11-01: seasonal Halloween raffle/ticket retirement (draft; no production migration)
+
+The seasonal 'Night of Cauldrons' draw, tickets, friend-invite bonuses, purchase/refund hooks and live prize issuance are being removed from the active runtimes. The ordinary wheel retains its approved regular bonus/beer probabilities; archive wheel-spins keep their original code for safe read-only display. The Halloween cosmetic theme is not the raffle and remains separately controlled. Historical SQL migrations 011 and 015 remain on disk and existing DB rows are NOT deleted; no rollback/drop SQL is run. Existing money/bonus and transaction semantics are unchanged. The release must pass double materialization, tests, package audit, VK browser smoke and production rollout review before merge/deploy.
+
 # Module map and "do not break" list
 
 ## Evotor durable store binding (2026-10-26, UNMOUNTED)
