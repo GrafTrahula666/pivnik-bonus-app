@@ -1,5 +1,20 @@
 # Module map and "do not break" list
 
+## Animated pumpkin frame and private CREATOR (2026-11-01)
+
+`personal-profile-frames.js` defines one grantable animated `halloween-pumpkin`
+frame and the private `creator-violet` frame. The existing Business customer-card
+frame grant/revoke workflow persists the pumpkin in `user_frames` and allows
+later selection; CREATOR never enters the gift catalog. Only the configured
+Telegram owner ID or the database-verified VK owner identity can use CREATOR.
+Both server implementations reuse the same owner appearance repair and identity
+projection. The client keeps the CREATOR plaque stationary while a separate
+half-circle diamond dragon rotates. Motion preferences are respected. Only
+three PNG assets are included; the I/II/III prize frames are excluded.
+No patch-chain script, schema, kiosk, money, or automatic gift is changed.
+Regression: `test/reward-profile-frames.test.js`, `test/personal-profile-frames.test.js`.
+Usage: `ops/PUMPKIN-CREATOR-FRAMES-20261101.md`.
+
 ## Evotor durable store binding (2026-10-26, UNMOUNTED)
 
 Manual additive Admin migration `024_evotor_store_bindings.sql` (after 020/021,

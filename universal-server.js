@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { GOLD_BARS_FRAME, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
+import { GOLD_BARS_FRAME, REWARD_FRAMES, CREATOR_FRAME, isCreatorFrameOwner, selectedRewardFrame, OWNER_FRAME_REPAIR_SQL, FRAME_OWNER_IDENTITY_SQL, giftedFrameChoices, PERSONAL_FRAME_OWNERSHIP_SQL } from './personal-profile-frames.js';
 import { isAutomaticStartupMigration } from './migration-startup-policy.js';
 import { guardSpaceverseRuntimeStartup } from './spaceverse-runtime-manifest.js';
 import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
@@ -389,6 +389,8 @@ const OWNER_FRAME_CATALOG = Object.freeze([
   { code: 'none', title: 'Без рамки' },
   { code: 'money', title: 'Долларовая рамка' },
   GOLD_BARS_FRAME,
+  ...REWARD_FRAMES,
+  CREATOR_FRAME,
   { code: 'fire', title: 'Огненная рамка' },
   { code: 'diamond', title: 'Алмазная рамка' },
   { code: 'beer-mugs', title: 'Пивные кружки' },
@@ -404,6 +406,9 @@ const OWNER_FRAME_CATALOG = Object.freeze([
 const OWNER_FRAME_CODES = new Set(OWNER_FRAME_CATALOG.map((frame) => frame.code));
 
 function profileFrameFromRow(row) {
+  if (String(row?.profile_frame || row?.profileFrame || '') === CREATOR_FRAME.code) {
+    return isCreatorFrameOwner(row, ownerTelegramId, ownerVkId) ? CREATOR_FRAME.code : 'none';
+  }
   if (isIceCream69ARow(row)) return 'icecream69a';
   if (isOwnerRow(row)) {
     const selectedFrame = String(row?.profile_frame || row?.profileFrame || '');
@@ -412,6 +417,7 @@ function profileFrameFromRow(row) {
   if (isAnnaRow(row) || String(row?.profile_frame || row?.profileFrame || '') === 'anna') return 'anna';
   if (row?.role === 'viewer') return 'fire';
   const storedFrame = String(row?.profile_frame || '');
+  if (selectedRewardFrame(row)) return selectedRewardFrame(row);
   if (storedFrame === 'gold-bars') return 'gold-bars';
   if (storedFrame === 'olesya') return 'olesya';
   if (storedFrame === 'vladislav') return 'vladislav';
@@ -421,12 +427,14 @@ function profileFrameFromRow(row) {
 
 function availableFramesFromRow(row) {
   if (isIceCream69ARow(row)) return [{ code: 'icecream69a', title: 'Персональная рамка 🔞 😈' }];
-  if (isOwnerRow(row)) return OWNER_FRAME_CATALOG.map((frame) => ({ ...frame }));
+  if (isOwnerRow(row)) return OWNER_FRAME_CATALOG.map((frame) => ({ ...frame }))
+    .filter((frame) => frame.code !== CREATOR_FRAME.code || isCreatorFrameOwner(row, ownerTelegramId, ownerVkId));
   if (isAnnaRow(row)) return [{ code: 'anna', title: 'Персональная рамка Анны' }];
   if (String(row?.profile_frame || '') === 'olesya') return [{ code: 'olesya', title: 'Рамка из множества сердечек' }];
   if (String(row?.profile_frame || '') === 'vladislav') return [{ code: 'vladislav', title: 'Рамка из 12 пульсирующих какашек' }];
   if (row?.role === 'viewer') return [{ code: 'fire', title: 'Огненная рамка' }];
   const frames = [{ code: 'none', title: 'Без рамки' }, ...giftedFrameChoices(row)];
+  if (isCreatorFrameOwner(row, ownerTelegramId, ownerVkId)) frames.push({ ...CREATOR_FRAME });
   if (row?.owns_diamond_frame || String(row?.profile_frame || '') === 'diamond') frames.push({ code: 'diamond', title: 'Алмазная рамка' });
   return frames;
 }
@@ -1015,7 +1023,7 @@ async function getUnifiedPreviousMonthTop(canonical) {
      )
      SELECT u.id, u.first_name, u.last_name, u.photo_url,
             u.avatar_source, u.avatar_key, u.profile_frame, u.role,
-            u.telegram_id, u.unlimited_bonus,
+            u.telegram_id, u.unlimited_bonus, ${FRAME_OWNER_IDENTITY_SQL},
             u.profile_public, u.show_name, u.show_avatar, u.show_leaderboard_amount,
             ms.spend_cents,
             RANK() OVER (ORDER BY ms.spend_cents DESC, u.id ASC) AS rank
@@ -1082,7 +1090,7 @@ async function getUnifiedMonthlyLeaderboard(currentUserId) {
      ), ranked AS (
        SELECT u.id, u.first_name, u.last_name, u.photo_url,
               u.avatar_source, u.avatar_key, u.profile_frame, u.role,
-              u.telegram_id, u.unlimited_bonus,
+              u.telegram_id, u.unlimited_bonus, ${FRAME_OWNER_IDENTITY_SQL},
               u.profile_public, u.show_name, u.show_avatar, u.show_leaderboard_amount,
               COALESCE(ms.spend_cents, 0)::bigint AS spend_cents,
               RANK() OVER (ORDER BY COALESCE(ms.spend_cents, 0) DESC, u.id ASC) AS rank
@@ -1621,7 +1629,7 @@ async function resolveProviderUser(provider, externalUser) {
                language_code = $6,
                role = CASE WHEN $7 = 'admin' THEN 'admin' ELSE role END,
                unlimited_bonus = CASE WHEN $7 = 'admin' THEN TRUE ELSE unlimited_bonus END,
-               profile_frame = CASE WHEN $7 = 'admin' AND profile_frame <> 'gold-bars' THEN 'money' ELSE profile_frame END,
+               profile_frame = CASE WHEN $7 = 'admin' THEN ${OWNER_FRAME_REPAIR_SQL} ELSE profile_frame END,
                telegram_id = CASE WHEN $8 = 'telegram' THEN COALESCE(telegram_id, $9::bigint) ELSE telegram_id END,
                updated_at = NOW()
            WHERE id = $1::bigint`,
