@@ -2365,7 +2365,6 @@ async function acceptTerms() {
     renderProfile();
     toast('Правила приняты');
     void loadSecondaryData();
-    schedulePromoBanner();
   } finally {
     if (button) button.disabled = false;
   }
@@ -3570,6 +3569,7 @@ $('#heroQrButton')?.addEventListener('click', () => showQr().catch((error) => to
 $('#openPromosButton')?.addEventListener('click', () => switchScreen('actions'));
 $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); renderShopCatalog(); });
 $('#openWheelButton')?.addEventListener('click', openWheel);
+$('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
 $('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
 $('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
