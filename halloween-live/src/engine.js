@@ -143,7 +143,12 @@ export class Engine {
         draw.revealedAt = new Date().toISOString();
         winner = draw.winner; prize = draw.prize.title; slot = draw.id; kind = 'local';
       }
-      state.stage = { id: randomUUID(), status: 'reveal', kind, slot, winner, prize, startedAt: new Date().toISOString() };
+      // Display-only: prefer the user's registered PIVNIK handle on the show screen.
+      // Preserve the canonical winner, ticket number, draw and counters unchanged.
+      const profile = (await c.query('SELECT username FROM users WHERE id=$1', [winner.userId])).rows[0];
+      const nickname = typeof profile?.username === 'string' ? profile.username.trim().replace(/^@+/, '') : '';
+      const announcedWinner = nickname ? { ...winner, name: nickname } : winner;
+      state.stage = { id: randomUUID(), status: 'reveal', kind, slot, winner: announcedWinner, prize, startedAt: new Date().toISOString() };
       return { stageId: state.stage.id, slot };
     }
     if (action === 'waiting') { state.stage = { id: randomUUID(), status: 'waiting' }; return { waiting: true }; }
