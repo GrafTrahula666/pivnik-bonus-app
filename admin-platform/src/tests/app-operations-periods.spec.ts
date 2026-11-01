@@ -64,6 +64,19 @@ describe('app operations time controls use own data source, never POS',()=>{
     expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/test-1/dashboard/operations?from=2026-09-30&to=2026-10-03')
     expect(vi.mocked(apiGet).mock.calls.filter(([path])=>path.includes('/dashboard/operations?')).length).toBeGreaterThanOrEqual(5)
   })
+  it('does not request an invalid operation range and resets validation on a preset URL',async()=>{
+    await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'30 дней',compare:false,onNavigate:()=>{}})))
+    await click('Операции приложения')
+    await setDate('Начало периода операций','2026-10-09')
+    await setDate('Конец периода операций','2026-10-08')
+    const count=vi.mocked(apiGet).mock.calls.length
+    await click('Показать период')
+    expect(vi.mocked(apiGet)).toHaveBeenCalledTimes(count)
+    expect(node.querySelector('[role="alert"]')?.textContent).toContain('Начало периода')
+    await click('7 дней')
+    expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/test-1/dashboard/operations?days=7')
+    expect(node.querySelector('[role="alert"]')).toBeNull()
+  })
   it('toggles hourly/day trends and preserves unavailable visits without inventing activity',async()=>{
     await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'7 дней',compare:false,onNavigate:()=>{}})))
     await click('Операции приложения')

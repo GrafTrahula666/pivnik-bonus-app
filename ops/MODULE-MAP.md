@@ -501,7 +501,13 @@ logo is stationary in the upper-right corner.
 
 `phaseC/SalesDashboard.tsx` adds inclusive `from`/`to` controls to the existing
 POS read endpoint. `cash-period.ts` follows its existing 1–366-day/Moscow
-contract. `CashDashboard.tsx` switches the existing `summary.hours` and
+contract. POS period URL parsing in `server/evotor-read.ts:evotorPeriod`
+rejects mixed `days/date/from/to` modes or duplicated keys with HTTP 400,
+matching the already strict app-operations parser; normal inclusive dates,
+presets and unrelated authorized query keys retain their semantics.
+`SalesDashboard.tsx` clears a stale form error when a valid preset/day
+replaces a draft invalid range, so the visible state matches the applied
+API query. `CashDashboard.tsx` switches the existing `summary.hours` and
 `summary.days` projections without changing totals, products, comparison,
 permissions, monetary logic or API contracts. Arbitrary-day and preset controls
 remain. `pages/Dashboard.tsx` initially shows four demo KPIs and keeps all twelve
