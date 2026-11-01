@@ -278,8 +278,9 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     }
     json(res,200,await listTenantCrmCustomers(session.admin,tenantCustomer[1]!,{
       q:url.searchParams.get('q')??'',limit:integer('limit',25),offset:integer('offset',0),
-      sort:url.searchParams.get('sort')??'id',direction:url.searchParams.get('direction')??'asc',
-      wallet:url.searchParams.get('wallet')??'all',
+      sort:(url.searchParams.get('sort')??'id') as 'id'|'name'|'username',
+      direction:(url.searchParams.get('direction')??'asc') as 'asc'|'desc',
+      wallet:(url.searchParams.get('wallet')??'all') as 'all'|'present'|'missing',
     }));return true
   }
   const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
