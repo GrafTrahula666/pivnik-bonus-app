@@ -825,9 +825,25 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
     {error&&<div className="onboarding-feedback error" role="alert">{error}</div>}
     {notice&&<p className="onboarding-feedback" role="status">{notice}</p>}
     {!canWrite&&<p className="onboarding-feedback">Вам доступен просмотр. Изменения выполняет владелец или управляющий этой точки.</p>}
-    {editing&&current&&session.capabilities.onboardingWorkflow&&<OnboardingProgress key={'progress:'+current.id} draftId={current.id} canWrite={canWrite}
-      onSaved={()=>setConnectionRefresh(value=>value+1)} refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt,connectionRefresh].join(':')}/>}
-    {editing&&<form onSubmit={event=>{event.preventDefault();void save()}}>
+    {editing&&<nav className="onboarding-jump-nav" aria-label="Разделы мастера подключения">
+      <div className="onboarding-jump-heading"><b>Этапы подключения</b><span>Заведение ещё не запущено · переходы не сохраняют и не включают настройки</span></div>
+      <div className="onboarding-jump-links">
+        {current&&session.capabilities.onboardingWorkflow&&<a href="#sv-onboarding-progress">Статусы и терминал</a>}
+        <a href="#sv-onboarding-details">Данные заведения</a>
+        {current&&scope&&canWrite&&session.capabilities.onboardingSupport&&<a href="#sv-onboarding-support">Помощь</a>}
+        {current&&scope&&canWrite&&session.capabilities.tenantCrmReads&&<a href="#sv-onboarding-crm">Клиенты CRM</a>}
+        {current&&scope&&canWrite&&session.capabilities.tenantCrmActivationChecks&&<a href="#sv-onboarding-activation">Проверка CRM</a>}
+        {current&&!crmMode&&<a href="#sv-onboarding-application">Приложение</a>}
+        {current&&<a href="#sv-onboarding-scope">Организация и точка</a>}
+        {current&&scope&&<a href="#sv-onboarding-provisioning">База и схема</a>}
+        {current&&scope&&<a href="#sv-onboarding-provider">Касса · Эвотор</a>}
+        {current&&scope&&session.capabilities.onboardingPosProxy&&<a href="#sv-onboarding-pos-proxy">Прокси кассы</a>}
+        {current&&scope&&legacyInvitesAllowed&&<a href="#sv-onboarding-invites">Приглашения</a>}
+      </div>
+    </nav>}
+    {editing&&current&&session.capabilities.onboardingWorkflow&&<div id="sv-onboarding-progress"><OnboardingProgress key={'progress:'+current.id} draftId={current.id} canWrite={canWrite}
+      onSaved={()=>setConnectionRefresh(value=>value+1)} refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt,connectionRefresh].join(':')}/></div>}}
+    {editing&&<form id="sv-onboarding-details" onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
         <label className="field"><span>Название заведения</span><input required maxLength={120} value={data.venueName} onChange={event=>{
@@ -857,15 +873,15 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
       </div>
     </form>}
     {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.onboardingSupport&&
-      <OnboardingSupport actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>}
+      <div id="sv-onboarding-support"><OnboardingSupport actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/></div>}
     {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmReads&&
-      <div className="tenant-crm-sections">
+      <div id="sv-onboarding-crm" className="tenant-crm-sections">
         <TenantCrmReadiness actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
         <TenantCustomerDirectory actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
       </div>}
     {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmActivationChecks&&
-      <TenantCrmActivationCheck actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>}
-    {editing&&current&&!crmMode&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
+      <div id="sv-onboarding-activation"><TenantCrmActivationCheck actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/></div>}
+    {editing&&current&&!crmMode&&<form id="sv-onboarding-application" className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
       <div className="onboarding-step"><Smartphone size={18}/><b>Приложение</b><span>{application?'Конфигурация сохранена':'Не настроено'} · приложение ещё не опубликовано</span></div>
       {appError&&<div className="onboarding-feedback error" role="alert">{appError}</div>}
       {appNotice&&<p className="onboarding-feedback" role="status">{appNotice}</p>}
@@ -891,7 +907,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         <button className="btn secondary" type="button" disabled={appBusy||appLoading||scopeBusy} onClick={()=>void loadApplication(current)}><RefreshCw size={16}/>Открыть сохранённую конфигурацию</button>
       </div>
     </form>}
-    {editing&&current&&<section className="onboarding-scope" aria-label="Область заведения">
+    {editing&&current&&<section id="sv-onboarding-scope" className="onboarding-scope" aria-label="Область заведения">
       <div className="onboarding-step"><MapPinned size={18}/><b>Организация и заведение</b><span>{scope?'Подготовлено · выключено':'Не подготовлено'}</span></div>
       {scopeError&&<div className="onboarding-feedback error" role="alert">{scopeError}</div>}
       {scopeNotice&&<p className="onboarding-feedback" role="status">{scopeNotice}</p>}
@@ -906,7 +922,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         <button className="btn secondary" type="button" disabled={scopeBusy||scopeLoading} onClick={()=>void loadScope(current)}><RefreshCw size={16}/>Открыть сохранённую область</button>
       </div>
     </section>}
-    {editing&&current&&scope&&<section className="onboarding-provisioning" aria-label="Подготовка базы приложения">
+    {editing&&current&&scope&&<section id="sv-onboarding-provisioning" className="onboarding-provisioning" aria-label="Подготовка базы приложения">
       <div className="onboarding-step"><Database size={18}/><b>База приложения</b><span>{provisioningAllowed?(provisioning?provisioningStatusLabel(provisioning):provisioningLoading?'Загружаем…':'Состояние недоступно'):'Недоступно в этой среде'}</span></div>
       {!provisioningAllowed?<p className="onboarding-note">Серверная подготовка выключена или недоступна для этой учётной записи. Область и остальные необязательные шаги остаются сохранены.</p>:<>
         {provisioningError&&<div className="onboarding-feedback error" role="alert">{provisioningError}</div>}
@@ -965,7 +981,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         </div>
       </>}
     </section>}
-    {editing&&current&&scope&&<form className="onboarding-integration" aria-label="Подключение Эвотора" onSubmit={event=>{event.preventDefault();void saveIntegration()}}>
+    {editing&&current&&scope&&<form id="sv-onboarding-provider" className="onboarding-integration" aria-label="Подключение Эвотора" onSubmit={event=>{event.preventDefault();void saveIntegration()}}>
       <div className="onboarding-step"><Link2 size={18}/><b>Касса · Эвотор</b><span>{integrationsAllowed?integrationStatusLabel(integration):'Недоступно в этой среде'}</span></div>
       {!integrationsAllowed?<p className="onboarding-note">Защищённые подключения выключены. Черновик и остальные шаги можно продолжить без кассы.</p>:<>
         {integrationError&&<div className="onboarding-feedback error" role="alert">{integrationError}</div>}
@@ -987,8 +1003,8 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         </div>
       </>}
     </form>}
-    {editing&&current&&scope&&session.capabilities.onboardingPosProxy&&<OnboardingPosProxy key={'proxy:'+current.id} draftId={current.id} canWrite={canWrite} refreshKey={String(connectionRefresh)} onChanged={()=>setConnectionRefresh(value=>value+1)}/>}
-    {legacyInvitesAllowed&&editing&&current&&scope&&<section className="onboarding-invite" aria-label="Приглашение владельцу">
+    {editing&&current&&scope&&session.capabilities.onboardingPosProxy&&<div id="sv-onboarding-pos-proxy"><OnboardingPosProxy key={'proxy:'+current.id} draftId={current.id} canWrite={canWrite} refreshKey={String(connectionRefresh)} onChanged={()=>setConnectionRefresh(value=>value+1)}/></div>}
+    {legacyInvitesAllowed&&editing&&current&&scope&&<section id="sv-onboarding-invites" className="onboarding-invite" aria-label="Приглашение владельцу">
       <div className="onboarding-step"><Link2 size={18}/><b>Приглашение владельцу</b><span>{invites.some(invite=>invite.status==='pending')?'Активная ссылка есть':'Ссылки нет'}</span></div>
       {inviteError&&<div className="onboarding-feedback error" role="alert">{inviteError}</div>}
       {inviteToken&&<div className="onboarding-contract" aria-label="Новая ссылка приглашения">
