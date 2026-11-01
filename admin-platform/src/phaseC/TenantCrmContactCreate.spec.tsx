@@ -97,6 +97,25 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(Object.keys(data)).toEqual(['requestKey','contact'])
     expect(findInput('Имя *').value).toBe('')
   })
+  it('does not send a second POST while the first creation is in flight',async()=>{
+    let finish!:()=>void
+    post.mockImplementationOnce(async(_path,body)=>new Promise<never>(resolve=>{
+      finish=()=>resolve(confirmed(body) as never)
+    }))
+    await fill()
+    await act(async()=>{
+      const form=host.querySelector('form')!
+      // A rapid double-submit must not generate another UUID or POST while
+      // the first request has not yet received an acknowledgement.
+      form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))
+      form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))
+    })
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    await act(async()=>{finish()})
+    expect(host.textContent).toContain('Контакт №93 создан')
+    expect(localStorage.length).toBe(0)
+  })
   it('retains request key and disabled inputs after uncertain 503, then replays',async()=>{
     post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
