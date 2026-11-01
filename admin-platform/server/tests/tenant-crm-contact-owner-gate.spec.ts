@@ -78,7 +78,9 @@ describe('unmounted manual CRM contact owner/session-grant admission',()=>{
     await expect(gate()({...admins.owner,role:'SUPER_ADMIN'},token(11),draft(),requestKey,async()=>created))
       .rejects.toMatchObject({statusCode:404})
     await fixture.metadata.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=11")
-    await expect(gate()(admins.owner,token(11),draft(),requestKey,writer)).rejects.toMatchObject({statusCode:404})
+    // The existing onboarding access guard rejects this revoked owner grant with 403
+    // before the manual-contact gate's own 404 denial. Both are fail-closed.
+    await expect(gate()(admins.owner,token(11),draft(),requestKey,writer)).rejects.toMatchObject({statusCode:403})
     expect(calls).toBe(0)
   })
   it('allows a current draft-scoped owner invitation, not a manager promotion by implication',async()=>{
