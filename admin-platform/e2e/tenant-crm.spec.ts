@@ -71,6 +71,24 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
+test('the full 355-customer directory remains reachable through all server pages on desktop and mobile',async({page})=>{
+  await login(page,'root')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
+  for(let pageNumber=2;pageNumber<=15;pageNumber++){
+    const next=section.getByRole('button',{name:'Далее',exact:true})
+    await expect(next).toBeEnabled()
+    await next.click()
+    await expect(section.getByText('Страница '+pageNumber,{exact:true})).toBeVisible()
+    await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
+  }
+  await expect(section.getByRole('button',{name:'Pagination fixture 349 Кошелёк не создан',exact:true})).toBeVisible()
+  await expect(section.getByRole('button',{name:'Далее',exact:true})).toBeDisabled()
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(5)
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+})
+
 test('changing venue clears customers and the server denies another company owner',async({page})=>{
   await login(page)
   const drafts=await page.request.get('/api/admin/onboarding/drafts').then(response=>response.json())
