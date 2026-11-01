@@ -342,4 +342,46 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
   })
 
+  it('does not reuse an owner invitation request key for a sibling venue', async () => {
+    const venueA = fixture.manifests[0]!
+    const venueB = fixture.manifests[1]!
+    const requestKey = randomUUID()
+    const path = '/api/admin/onboarding/invitations'
+    const command = {
+      requestKey, companyId: venueA.scope.companyId, venueId: venueA.scope.venueId,
+      role: 'viewer', expiresInHours: 24,
+    }
+    const created = await request('owner', 'POST', path, command)
+    expect(created.status).toBe(200)
+    const original = await created.json() as { invitation: { id: string; venueId: string } }
+    expect(original.invitation.venueId).toBe(venueA.scope.venueId)
+
+    const rows = () => state.metadata!.query(
+      'SELECT id::text,company_id::text,venue_id::text,request_key::text FROM admin_onboarding_invites WHERE request_key=$1::uuid ORDER BY id',
+      [requestKey],
+    )
+    const auditCount = () => state.metadata!.query(
+      "SELECT count(*)::int AS count FROM admin_audit_log WHERE action='onboarding.invitation_create'",
+    )
+    const before = await rows()
+    expect(before.rows).toHaveLength(1)
+    const auditBefore = await auditCount()
+
+    // Reusing the same UUID for venue B must not return venue A's token or create B's grant.
+    const conflict = await request('owner', 'POST', path, {
+      ...command, venueId: venueB.scope.venueId,
+    })
+    expect(conflict.status).toBe(409)
+    expect(await conflict.json()).toMatchObject({ code: 'INVITATION_REQUEST_CONFLICT' })
+    expect((await rows()).rows).toEqual(before.rows)
+    expect((await auditCount()).rows).toEqual(auditBefore.rows)
+
+    const replay = await request('owner', 'POST', path, command)
+    expect(replay.status).toBe(200)
+    expect((await replay.json() as { invitation: { id: string } }).invitation.id)
+      .toBe(original.invitation.id)
+    expect((await rows()).rows).toEqual(before.rows)
+    expect((await auditCount()).rows).toEqual(auditBefore.rows)
+  })
+
 })
