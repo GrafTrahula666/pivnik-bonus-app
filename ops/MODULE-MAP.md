@@ -297,11 +297,24 @@ independently tested. Clearing browser storage externally or concurrent tabs
 cannot be treated as an exactly-once guarantee: the server request ledger and
 per-venue contact uniqueness remain essential.
 
-Still pending: explicit manual migration review/application lifecycle,
-live production owner permissions and E2E authorization, two-database audit
-deduplication policy, safe handling if browser storage is externally erased,
-and CHAT01 coordinator integration. This Draft form does NOT prove
-commercial readiness. Never merge, activate or deploy automatically.
+Read-only manual migration preflight is defined in
+`admin-platform/server/tenant-crm-manual-migration-preflight.ts`. It checks
+the exact expected database name, public schema, 017–019 prerequisites,
+prepared runtime/manifest/company/venue binding and absence of already/partially
+applied 002 tables. It issues only SELECT statements and returns
+`review_required` with `approvalGranted:false`; it never connects to a
+database, resolves credentials, applies SQL or enables a feature. Fixture
+tests confirm fail-closed mismatches. Operator runbook:
+`ops/CHAT03-MANUAL-CRM-MIGRATION-002-RUNBOOK.md`. This does NOT establish
+real company ownership or target isolation by itself: a separately verified
+Admin grant/manifest and the protected target registry are mandatory.
+
+Still pending: **actual** manual migration review/owner approval and
+explicit application to a confirmed tenant target, live owner permissions
+and E2E authorization, global two-database audit policy, safe handling if
+browser storage is externally erased, and CHAT01 coordinator integration.
+This Draft form does NOT prove commercial readiness. Never merge, activate
+or deploy automatically.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
