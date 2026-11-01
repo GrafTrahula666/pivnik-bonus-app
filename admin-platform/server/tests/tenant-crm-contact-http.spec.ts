@@ -11,13 +11,25 @@ import {tenantCrmFixture} from './tenant-crm-fixture.js'
 import type {TenantCrmFixtureDatabase} from './tenant-crm-database-fixture.js'
 
 const state=vi.hoisted(()=>({metadata:null as TenantCrmFixtureDatabase|null,
-  targets:new Map<string,TenantCrmFixtureDatabase>(),targetResolutions:0}))
+  targets:new Map<string,TenantCrmFixtureDatabase>(),targetResolutions:0,failAuditOnce:false}))
 const connect=(db:TenantCrmFixtureDatabase)=>db.connect?db.connect():Promise.resolve({
   query:db.query.bind(db),release:()=>{}
 })
 vi.mock('../db.js',()=>{
-  const db={query:(sql:string,params?:unknown[])=>state.metadata!.query(sql,params),
-    connect:()=>connect(state.metadata!)}
+  const guarded=async(query:(sql:string,params?:unknown[])=>Promise<unknown>,
+    sql:string,params?:unknown[])=>{
+    if(state.failAuditOnce&&sql.startsWith('INSERT INTO admin_audit_log')){
+      state.failAuditOnce=false
+      throw new Error('synthetic-metadata-private-error')
+    }
+    return query(sql,params)
+  }
+  const db={query:(sql:string,params?:unknown[])=>guarded(state.metadata!.query.bind(state.metadata!),sql,params),
+    connect:async()=>{
+      const client=await connect(state.metadata!)
+      return {query:(sql:string,params?:unknown[])=>guarded(client.query.bind(client),sql,params),
+        release:()=>client.release()}
+    }}
   return {pool:db,readPool:db,writePool:null,tableExists:async()=>false,productionTableExists:async()=>false}
 })
 vi.mock('../onboarding-database-registry.js',()=>({
@@ -83,6 +95,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
   },90_000)
   afterEach(async()=>{
     config.enableTenantCrmContactCreate=false
+    state.failAuditOnce=false
     state.targetResolutions=0
     const {__resetRateLimitBucketsForTests}=await import('../security.js')
     __resetRateLimitBucketsForTests()
@@ -150,6 +163,25 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       "SELECT company_id::text,venue_id::text,admin_id::text FROM admin_audit_log WHERE action='crm.manual_contact_create_request' ORDER BY id DESC LIMIT 1")
     expect(audit.rows[0]).toMatchObject({company_id:fixture.manifests[0]!.scope.companyId,
       venue_id:fixture.manifests[0]!.scope.venueId,admin_id:'11'})
+  })
+  it('recovers one tenant contact after Admin audit failure by replaying the exact request key',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('recoverable@fixture.invalid')
+    const before=Number(await count(0,'spaceverse_crm_contacts'))
+    const auditBefore=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
+    state.failAuditOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(JSON.stringify(await uncertain.json())).not.toContain('synthetic-metadata-private-error')
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
+    const replay=await send('owner',path(),c)
+    expect(replay.status).toBe(200)
+    expect((await replay.json()).requestKey).toBe(c.requestKey)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
+    const auditAfter=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
+    expect(Number(auditAfter)).toBe(Number(auditBefore)+1)
   })
   it('rejects a duplicate channel from a different request and does not expose PII across venues',async()=>{
     config.enableTenantCrmContactCreate=true
