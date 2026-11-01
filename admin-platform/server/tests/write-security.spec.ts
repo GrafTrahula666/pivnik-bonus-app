@@ -54,13 +54,13 @@ describe('loyalty validation',()=>{
       tier[field]=bad
       expect(()=>validateLoyalty({
         baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[tier],
-      })).toThrow(expect.objectContaining({status:400}))
+      })).toThrow(expect.objectContaining({statusCode:400}))
     }
   })
   it.each([{tier:null},{tier:false},{tier:[]},{tier:'bad'}])('rejects a malformed loyalty level object $tier with a client error',({tier})=>{
     expect(()=>validateLoyalty({
       baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[tier],
-    })).toThrow(expect.objectContaining({status:400}))
+    })).toThrow(expect.objectContaining({statusCode:400}))
   })
   it.each(['registrationBonus','referralBonus'] as const)('rejects missing %s instead of silently converting it to 0',field=>{
     const body:Record<string,unknown>={baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
