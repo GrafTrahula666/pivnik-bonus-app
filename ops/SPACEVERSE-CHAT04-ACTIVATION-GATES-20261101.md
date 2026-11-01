@@ -29,3 +29,21 @@ Date: 2026-11-01. Scope: **task 39 only**. Base `origin/main@c92ed7cd65f1a96d943
 ## Handoff
 
 Coordinator CHAT_01: review the existing negative tests and this evidence matrix, then request official provider/owner authorization and a separately approved non-production E2E. Once those external gates exist, resume task 39 in a **new minimal isolated change**, verify exact-head CI and only then consider task 40. No other chat PRs, `server.js`/`universal-server.js`, secrets, migrations, Railway or production were changed.
+
+## Дополнительная проверка публичного контракта Эвотора (2026-11-01)
+
+Источники ниже **публичные**. Это не подписанный договор, не право на вызов чужого API и не live E2E. Эти сведения не меняют `BLOCKED_EXTERNAL_EVIDENCE` и не разрешают `active/ready`.
+
+| Вопрос | Публичная документация | Что подтверждено / чего ещё нет |
+| --- | --- | --- |
+| OAuth authorization code | https://developer.evotor.ru/docs/rest_oauth20_authorization_guide.html | Документирует web client, `authorization_code`, зарегистрированный `redirect_uri`, `POST https://oauth.evotor.ru/oauth/token`, scope `store:read`. Пример перенаправления содержит `?code=...`, но не показывает возврат `state`. **Это не доказательство отсутствия поддержки**; нельзя считать echo проверенным без официального ответа и разрешённого тестового roundtrip. |
+| Независимая принадлежность магазина | https://developer.evotor.ru/docs/rest_stores.html | `GET /stores` возвращает `items[].id`, `items[].user_id` и постраничный `paging.next_cursor`; список должен быть прочитан полностью и сопоставлен с тем же авторизованным provider user и canonical company/venue. Публичный ответ не подтверждает права владельца нашего тестового аккаунта. |
+| Установка / отзыв | https://developer.evotor.ru/docs/rest_api_webhooks_post_installation_event.html | Документированы `ApplicationInstalled`/`ApplicationUninstalled`, `id`, `productId`, `userId` и входящий `Authorization`; callback сам по себе не заменяет серверную проверку текущей установки, сессии и grants. |
+| Подписка / последовательность | https://developer.evotor.ru/docs/rest_api_webhooks_post_subscription_event.html | `subscriptionId`, `sequenceNumber` (в рамках одной подписки; при переустановке новая последовательность), `planId`, `SubscriptionActivated`, `Renewed`, `Terminated` и изменения условий документированы. Событие `active` не равно действующей SPACEVERSE-лицензии без доказанной компании/точки, политики тарифа и актуального server-side reconcile. |
+| Повторная доставка событий | https://developer.evotor.ru/docs/doc_subscriptions.html и https://developer.evotor.ru/docs/rest_api_webhooks_post_subscription_event.html | **Несоответствие источников:** общая статья «Подписки» утверждает повторную доставку до 3 дней, справочник `POST /subscription/event` до 2 суток. Не кодировать ни один интервал как гарантию и не основывать разрешение на доступе только на предположительном retry horizon. Требуется уточнение у Эвотора и reconciliation независимо от вебхуков. |
+
+### Конкретный запрос для закрытия внешнего gate
+
+Проверить с официальным техническим контактом/тестовым аккаунтом: (1) сохраняется ли произвольный OAuth `state` дословно на callback и как корректно связать `code` с независимым owner/store proof; (2) какая схема API и какое доказательство гарантируют текущие installation/owner/store/terminal rights; (3) какие условия лицензирования доступны для cloud CRM, что является оплаченной единицей (company/venue/terminal), как подтверждать платный план, trial/grace, истечение и revoke; (4) какая реально гарантирована доставка subscription webhooks, существуют ли поддерживаемые API reconciliation и тестовое окружение. Запрос должен идти без токенов, client secret и персональных данных.
+
+**Test gate после получения ответов и отдельного разрешения:** isolated provider test account + server-only OAuth exchange + exact `state` replay/expiry/foreign session negative cases + all-pages `GET /stores` + current canonical owner grant and store/terminal scope + installation/subscription/revocation/sequence tests + отдельный native DB E2E. Ни один из этих пунктов **не был выполнен на реальном провайдере** в текущей итерации. SQL-ограничение на `crm_activation_check=succeeded` и флаги по умолчанию не менять до независимого лицензирования и утверждённой активационной транзакции.
