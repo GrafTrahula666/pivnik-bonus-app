@@ -49,7 +49,7 @@ async function contactDigest(contact:Command['contact'],nonce:string):Promise<st
   return Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('')
 }
 
-function verifyResult(raw:unknown,key:string):Result{
+function verifyResult(raw:unknown,key:string,expected:Command['contact']):Result{
   const value=raw as Partial<Result>|null
   const contact=value?.contact
   if(!value||value.schemaVersion!==1||value.requestKey!==key||!contact||
@@ -59,7 +59,11 @@ function verifyResult(raw:unknown,key:string):Result{
     value.walletStatus!=='not_created'||contact.identityStatus!=='unlinked'||contact.walletStatus!=='not_created'||
     !(contact.lastName===null||typeof contact.lastName==='string')||
     !(contact.phone===null||typeof contact.phone==='string')||
-    !(contact.email===null||typeof contact.email==='string'))throw new Error('Некорректное подтверждение контакта')
+    !(contact.email===null||typeof contact.email==='string')||
+    // A matching request key alone cannot prove that the returned contact is ours.
+    contact.firstName!==expected.firstName||contact.lastName!==expected.lastName||
+    contact.phone!==expected.phone||contact.email!==expected.email)
+    throw new Error('Некорректное подтверждение контакта')
   return value as Result
 }
 function errorMessage(error:unknown){
@@ -179,7 +183,7 @@ function ContactForm({actorId,draftId}:Props){
         setBlocked(true);setError(storageError)
         return
       }
-      const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey)
+      const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey,command.contact)
       if(!clearCheckpoint())return
       pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
       setFirstName('');setLastName('');setPhone('');setEmail('')
