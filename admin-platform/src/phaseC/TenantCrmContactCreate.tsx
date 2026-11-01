@@ -161,6 +161,7 @@ function ContactForm({actorId,draftId}:Props){
           const nonce=crypto.randomUUID()
           const digest=await contactDigest(input.contact,nonce)
           if(!persist({version:1,requestKey:input.requestKey,nonce,digest}))return
+          command=input
         }
         pending.current=command
       }
