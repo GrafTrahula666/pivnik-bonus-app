@@ -41,6 +41,8 @@ test('manual CRM contact migration is explicit, additive, and never provisions a
   assert.match(sql,/spaceverse\.crm_contacts_migration/);
   assert.match(sql,/spaceverse_crm_contacts_phone_uq/);
   assert.match(sql,/spaceverse_crm_contacts_email_uq/);
+  assert.equal((sql.match(/^COMMIT;$/gm)||[]).length,1);
+  assert.equal(sql.slice(sql.indexOf('\nCOMMIT;\n')+9).trim(),'');
   assert.doesNotMatch(sql,/^\s*(?:INSERT|UPDATE|DELETE|DROP|TRUNCATE)\b/im);
   const db=new PGlite();
   try {
