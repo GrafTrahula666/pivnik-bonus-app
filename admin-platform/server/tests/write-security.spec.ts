@@ -38,6 +38,16 @@ describe('loyalty validation',()=>{
       levels:[{code:'new',title:'New',thresholdRub:0,bonusPercent:0}],
     })).toThrow()
   })
+  it.each([[],[0],{},false,null] as unknown[])('rejects non-scalar global loyalty config %j',bad=>{
+    for(const field of ['baseCashbackPercent','registrationBonus','referralBonus']) {
+      const body:Record<string,unknown>={
+        baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
+        levels:[{code:'zero',title:'Zero',thresholdRub:0,bonusPercent:0}],
+      }
+      body[field]=bad
+      expect(()=>validateLoyalty(body)).toThrow()
+    }
+  })
   it.each(['registrationBonus','referralBonus'] as const)('rejects missing %s instead of silently converting it to 0',field=>{
     const body:Record<string,unknown>={baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
       levels:[{code:'new',title:'New',thresholdRub:0,bonusPercent:0}]}
