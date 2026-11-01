@@ -262,7 +262,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     enforceRateLimit(`tenant-crm-read:${session.admin.id}`,30,60_000)
     json(res,200,await checkTenantCrmReadiness(session.admin,tenantCrmReadiness[1]!));return true
   }
-  const manualCrmContact=/^\\/api\\/admin\\/onboarding\\/drafts\\/([^/]+)\\/crm\\/contacts$/.exec(url.pathname)
+  const manualCrmContact=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/contacts$/.exec(url.pathname)
   if(manualCrmContact){
     if(!isMethod(req,'POST'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Контакт создаётся только POST-запросом.')
     if(url.search)throw new HttpError(400,'TENANT_CRM_CONTACT_REQUEST_SCOPE_FORBIDDEN',
