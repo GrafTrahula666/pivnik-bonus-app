@@ -231,4 +231,32 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('trusted', 'POST', support(0), { topic: 'connection' }, true,
       'https://foreign.fixture.invalid')).status).toBe(403)
   })
+  it('does not expose a persisted sibling support ticket through signed reads or the platform queue', async () => {
+    const sibling = fixture.manifests[1]!.source.draftId
+    const own = fixture.manifests[0]!.source.draftId
+
+    // A real stored ticket distinguishes authorization denial from an empty sibling.
+    const created = await request('owner', 'POST', support(1), { topic: 'activation' })
+    expect(created.status).toBe(200)
+    expect(await created.json()).toMatchObject({
+      draftId: sibling,
+      requests: [expect.objectContaining({ draftId: sibling, topic: 'activation' })],
+    })
+    expect((await request('owner', 'GET', support(1))).status).toBe(200)
+
+    expect((await request('trusted', 'GET', support(1))).status).toBe(404)
+    const allowed = await request('trusted', 'GET', support(0))
+    expect(allowed.status).toBe(200)
+    const body = await allowed.json() as { draftId: string; requests: { draftId: string }[] }
+    expect(body.draftId).toBe(own)
+    expect(body.requests.some(item => item.draftId === sibling)).toBe(false)
+    expect((await request('trusted', 'GET', '/api/admin/onboarding/support')).status).toBe(403)
+
+    const persisted = await state.metadata!.query<{ draft_id: string; topic: string }>(
+      'SELECT draft_id::text,topic FROM admin_onboarding_support_requests WHERE draft_id=$1::uuid',
+      [sibling],
+    )
+    expect(persisted.rows).toEqual([{ draft_id: sibling, topic: 'activation' }])
+  })
+
 })
