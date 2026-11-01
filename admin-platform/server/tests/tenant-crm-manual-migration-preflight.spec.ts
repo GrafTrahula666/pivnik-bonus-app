@@ -79,6 +79,24 @@ describe('CHAT03 #24 migration 002 read-only tenant target preflight',()=>{
         .rejects.toMatchObject({code:'MIGRATION_ALREADY_OR_PARTIALLY_PRESENT'})
     }finally{await db.close()}
   })
+  it('rejects a partially present contact table without attempting migration repair',async()=>{
+    const {db,expectation}=await fixture()
+    try{
+      // Simulate an operator-created partial schema, not the atomic 002 SQL.
+      await db.exec('CREATE TABLE public.spaceverse_crm_contacts (id BIGINT PRIMARY KEY)')
+      const commands:string[]=[]
+      const readOnly={query:async<Row=Record<string,unknown>>(sql:string,params?:unknown[])=>{
+        commands.push(sql)
+        if(!/^SELECT\\b/i.test(sql.trim()))throw new Error('Unexpected preflight write')
+        return db.query<Row>(sql,params)
+      }}
+      await expect(inspectManualCrmMigrationTarget(readOnly,expectation))
+        .rejects.toMatchObject({code:'MIGRATION_ALREADY_OR_PARTIALLY_PRESENT'})
+      expect(commands).toHaveLength(1)
+      expect(commands.every(sql=>/^SELECT\\b/i.test(sql.trim()))).toBe(true)
+    }finally{await db.close()}
+  })
+
   it('rejects malformed input before reading database or retrieving credentials',async()=>{
     let calls=0
     const target={query:async()=>{calls++;return {rows:[]}}}
