@@ -38,3 +38,24 @@
 - The Chat 10 hourly automation could **not** be created: there are already five active scheduled tasks and the current plan limit is five. No existing task was disabled or repurposed.
 - **Next safe step**: pick the smallest existing Admin `getManagedLoyalty` / frontend API-consumer boundary to preserve `not_configured` versus explicit 0, then add negative tests without touching PIVNIK behavior. Continue #91, **not** #92.
 - Handoff target: coordinator CHAT 01; do not merge/deploy this branch independently.
+
+
+## Continuation checkpoint · 2026-11-01 · #91 implementation candidate (NOT ACCEPTED)
+
+The latest inspected `main` remains `c92ed7cd65f1a96d94363c2b7e212424ab078a73`; #333 remains Draft. Existing other-agent #325–#336 work was not modified. GitHub connector is available; no local git checkout or resolvable GitHub clone host exists in this execution container.
+
+**Actual branch changes prepared in this continuation:**
+- `admin-platform/server/writes.ts`:
+  - A non-PIVNIK venue with missing/incomplete settings returns `source:'not_configured'` with three `null` amounts, never synthetic zero. A fully persisted row with explicit 0 retains zero.
+  - The legacy fallback now requires exact `scope.companyCode==='pivnik'`, `scope.code==='pivnik'` and non-null `scope.legacyBarId`; other venues of the company cannot inherit PIVNIK levels. This avoids hard-coding a database-generated bar ID.
+  - `validateLoyalty` rejects absent/blank/boolean global settings, so `Number(null)` can no longer silently publish 0 on a direct API call.
+- `admin-platform/src/phaseC/ProductionManagers.tsx`: a new tenant shows blank numeric inputs and visible `Не настроено`; save remains disabled until three values and at least one level are specified. The first added level begins at a 0 ₽ threshold. Legacy PIVNIK numbers stay unchanged.
+- `admin-platform/server/tests/write-security.spec.ts`: direct contract tests for explicit zeros and rejecting null/empty settings.
+- `admin-platform/server/tests/postgres.integration.spec.ts`: exact PIVNIK legacy fallback, non-PIVNIK missing config, same-company sibling venue without legacy fallback, forbidden foreign venue, explicit 0 persisted after an existing nonzero config.
+- No production data, DB schema/migration, runtime POS, wallet, PIVNIK guest application, `server.js`, `universal-server.js`, keys, or deploy changes.
+- `ops/MODULE-MAP.md` currently has **no reference** to `admin-platform/server/writes.ts`, `getManagedLoyalty`, `venue_settings` or `loyalty_levels`; invariants/mounts did not change. This exact scoped contract is recorded in this dedicated checkpoint to avoid unrelated edits in a shared 1,599-line map.
+
+**Implementation commits:** `985b63a5` (read contract), `59d5f760` (UI), `f2e07ea4` (validator tests), `807ec19a` (PostgreSQL tests), `890e4fa4` (PIVNIK exact-venue guard). All belong to Draft PR #333.
+
+**Verification limits**: GitHub PR diff fetched and reviewed; five files changed before this checkpoint append. The latest commit's GitHub Actions included `Pivnik release gate` pending, `CRM beer inventory native PostgreSQL` queued and `Business cash dashboard browser check` pending when checked. **Not passed:** local `npm run materialize` twice/byte-compare, `node --test`, `npm run check`, `npm audit`, Admin `npm test`, Admin `npm run typecheck`, Admin `npm run build`, real UI/mobile/Telegram/VK/POS. Do not claim they passed.
+**Next step**: inspect actual CI results and repair failures only within #91; run root and Admin regressions with a supported checkout if one becomes available. Keep #91 IN PROGRESS and do not proceed to #92, merge, deploy or touch any other agent's task.
