@@ -1,0 +1,8 @@
+node_modules/
+.data/
+release/
+test-results/
+.env
+.env.*
+!.env.example
+public/app.bundle.js
