@@ -6,6 +6,13 @@ const PHONE = /^\+[1-9][0-9]{7,14}$/;
 const EMAIL = /^[a-z0-9.!#$%&'*+/=?^`{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
 function failure(code, message) { return new SpaceverseRuntimeError(code, message); }
+// Bind the authenticated Admin principal on the server, never from request JSON.
+function verifiedActorId(raw) {
+  if (typeof raw !== 'string' || !/^[1-9][0-9]{0,18}$/.test(raw) ||
+      BigInt(raw) > 9223372036854775807n)
+    throw new TypeError('actorId must be a verified Admin principal ID');
+  return raw;
+}
 function exact(raw, keys) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
       Object.keys(raw).some(key => !keys.includes(key))) {
@@ -62,14 +69,14 @@ WHERE singleton=TRUE AND runtime_key=$1 AND manifest_sha256=$2 AND manifest_revi
   AND company_id=$4 AND venue_id=$5 AND isolation_policy='dedicated_database'
   AND status='prepared' LIMIT 1 FOR SHARE`;
 const FIND = `SELECT request_key::text,request_fingerprint,contact_id::text,completed_at,
-  runtime_key,company_id,venue_id
+  runtime_key,company_id,venue_id,created_by_admin_id::text
 FROM spaceverse_crm_contact_create_requests
 WHERE runtime_key=$1 AND request_key=$2::uuid LIMIT 1 FOR UPDATE`;
 const CONTACT = `SELECT id::text,first_name,last_name,phone_e164,email_normalized,creation_origin,archived_at
 FROM spaceverse_crm_contacts WHERE id=$1::bigint AND runtime_key=$2 AND company_id=$3 AND venue_id=$4`;
 const INSERT_REQUEST = `INSERT INTO spaceverse_crm_contact_create_requests
-(runtime_key,request_key,request_fingerprint,company_id,venue_id)
-VALUES ($1,$2::uuid,$3,$4,$5)`;
+(runtime_key,request_key,request_fingerprint,company_id,venue_id,created_by_admin_id)
+VALUES ($1,$2::uuid,$3,$4,$5,$6::bigint)`;
 const INSERT_CONTACT = `INSERT INTO spaceverse_crm_contacts
 (runtime_key,company_id,venue_id,first_name,last_name,phone_e164,email_normalized)
 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id::text`;
@@ -92,11 +99,13 @@ function verifyScope(row, runtime) {
     row.venue_id !== venue || row.isolation_policy !== 'dedicated_database' ||
     row.status !== 'prepared') throw failure('SPACEVERSE_CRM_CONTACT_SCOPE_REJECTED','Contact source is not verified.');
 }
-function verifyReplay(row, input, runtime) {
+function verifyReplay(row, input, runtime, actorId) {
   if (!row || String(row.request_key).toLowerCase() !== input.requestKey ||
     row.runtime_key !== runtime.binding.runtimeKey || row.company_id !== runtime.context.tenantId ||
     row.venue_id !== runtime.context.locationId)
     throw failure('SPACEVERSE_CRM_CONTACT_SCOPE_REJECTED','Contact source is not verified.');
+  if (row.created_by_admin_id !== actorId)
+    throw failure('SPACEVERSE_CRM_CONTACT_ACTOR_MISMATCH','Request key belongs to another Admin actor.');
   if (row.request_fingerprint !== input.fingerprint)
     throw failure('SPACEVERSE_CRM_CONTACT_REPLAY_CONFLICT','Request key was used for different contact data.');
   if (!row.contact_id || !row.completed_at)
@@ -108,8 +117,8 @@ function result(id, input) {
     requestKey:input.requestKey
   });
 }
-async function replay(client, input, runtime, row) {
-  verifyReplay(row,input,runtime);
+async function replay(client, input, runtime, row, actorId) {
+  verifyReplay(row,input,runtime,actorId);
   const found=one(await client.query(CONTACT,[row.contact_id,runtime.binding.runtimeKey,runtime.context.tenantId,runtime.context.locationId]));
   if (!found || found.archived_at !== null || found.creation_origin !== 'manual' ||
     found.first_name !== input.contact.firstName || found.last_name !== input.contact.lastName ||
@@ -117,17 +126,17 @@ async function replay(client, input, runtime, row) {
     throw failure('SPACEVERSE_CRM_CONTACT_INVALID_RESULT','Contact replay could not be verified.');
   return result(String(found.id),input);
 }
-async function createInTransaction(client, input, runtime) {
+async function createInTransaction(client, input, runtime, actorId) {
   const [key,hash,revision,company,venue]=scopeOf(runtime);
   await client.query('BEGIN');
   verifyScope(one(await client.query(LOCK,[key,hash,revision,company,venue])),runtime);
   const previous=one(await client.query(FIND,[key,input.requestKey]));
   if (previous) {
-    const current=await replay(client,input,runtime,previous);
+    const current=await replay(client,input,runtime,previous,actorId);
     await client.query('COMMIT');
     return current;
   }
-  await client.query(INSERT_REQUEST,[key,input.requestKey,input.fingerprint,company,venue]);
+  await client.query(INSERT_REQUEST,[key,input.requestKey,input.fingerprint,company,venue,actorId]);
   const row=one(await client.query(INSERT_CONTACT,[key,company,venue,
     input.contact.firstName,input.contact.lastName,input.contact.phone,input.contact.email]));
   if (!row?.id) throw failure('SPACEVERSE_CRM_CONTACT_INVALID_RESULT','Contact insert was not confirmed.');
@@ -143,8 +152,9 @@ async function createInTransaction(client, input, runtime) {
  * Never creates/links an authenticated user, provider identity, or wallet.
  * Connecting this to Admin HTTP requires a separate permission+CSRF+audit gate.
  */
-export function createSpaceverseManualCrmContactService({connect,runtime}={}) {
+export function createSpaceverseManualCrmContactService({connect,runtime,actorId}={}) {
   if (typeof connect !== 'function') throw new TypeError('connect must be a function');
+  const actor = verifiedActorId(actorId);
   const trusted = requireSpaceverseTenantRuntime(runtime);
   return async function createManualContact(raw) {
     const input=command(raw);
@@ -153,7 +163,7 @@ export function createSpaceverseManualCrmContactService({connect,runtime}={}) {
       try {
         client=await connect();
         if (!client || typeof client.query !== 'function') throw new TypeError('Invalid database connection');
-        return await createInTransaction(client,input,trusted);
+        return await createInTransaction(client,input,trusted,actor);
       } catch(err) {
         if (client?.query) await client.query('ROLLBACK').catch(()=>undefined);
         if (err instanceof SpaceverseRuntimeError) throw err;
@@ -175,7 +185,7 @@ export const manualCrmContactContract=Object.freeze({
   state:'unmounted',source:'dedicated-tenant-database-only',
   identityLinking:false,createsWallet:false,createsAppUser:false,
   acceptedFields:Object.freeze(['firstName','lastName','phone','email']),
-  serverOwnedScope:true,idempotency:'UUID v4 + SHA-256 fingerprint',
+  serverOwnedScope:true,serverOwnedActor:true,idempotency:'UUID v4 + SHA-256 fingerprint',
   requiresExplicitMigration:'002_manual_crm_contacts.sql',
   productionWiringEnabled:false
 });

@@ -43,7 +43,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS spaceverse_crm_contacts_email_uq
 CREATE TABLE IF NOT EXISTS spaceverse_crm_contact_create_requests (
   runtime_key TEXT NOT NULL,
   request_key UUID NOT NULL,
-  request_fingerprint TEXT NOT NULL CHECK (request_fingerprint ~ '^[0-9a-f]{64}$'),
+  request_fingerprint TEXT NOT NULL CHECK (request_fingerprint ~ '^[0-9a-f]{64}
+  company_id TEXT NOT NULL,
+  venue_id TEXT NOT NULL,
+  contact_id BIGINT UNIQUE REFERENCES spaceverse_crm_contacts(id) ON DELETE RESTRICT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  PRIMARY KEY(runtime_key,request_key),
+  CONSTRAINT spaceverse_crm_contact_request_scope_fkey
+    FOREIGN KEY(runtime_key,company_id,venue_id)
+    REFERENCES spaceverse_runtime_binding(runtime_key,company_id,venue_id)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT spaceverse_crm_contact_request_complete
+    CHECK ((contact_id IS NULL) = (completed_at IS NULL))
+);
+
+COMMIT;
+),
+  -- Metadata Admin principal, never an identity supplied by a contact form.
+  created_by_admin_id BIGINT NOT NULL CHECK (created_by_admin_id > 0),
   company_id TEXT NOT NULL,
   venue_id TEXT NOT NULL,
   contact_id BIGINT UNIQUE REFERENCES spaceverse_crm_contacts(id) ON DELETE RESTRICT,

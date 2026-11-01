@@ -59,7 +59,7 @@ test('manual CRM contact migration is explicit, additive, and never provisions a
 test('single transaction creates only a normalized, unlinked tenant contact',async()=>{
   const {db,runtime,connect}=await fixture();
   try {
-    const create=createSpaceverseManualCrmContactService({runtime,connect});
+    const create=createSpaceverseManualCrmContactService({runtime,connect,actorId:'11'});
     const row=await create(contact());
     assert.equal(row.contact.id,'1');
     assert.equal(row.contact.firstName,'Анна');
@@ -78,7 +78,7 @@ test('single transaction creates only a normalized, unlinked tenant contact',asy
 test('exact request replay is idempotent while conflicting replay and duplicates fail closed',async()=>{
   const {db,runtime,connect}=await fixture('b');
   try {
-    const create=createSpaceverseManualCrmContactService({runtime,connect});
+    const create=createSpaceverseManualCrmContactService({runtime,connect,actorId:'11'});
     const first=await create(contact(key(2)));
     assert.deepEqual(await create(contact(key(2))),first);
     await assert.rejects(create(contact(key(2),{firstName:'Пётр'})),{code:'SPACEVERSE_CRM_CONTACT_REPLAY_CONFLICT'});
@@ -88,17 +88,22 @@ test('exact request replay is idempotent while conflicting replay and duplicates
       {code:'SPACEVERSE_CRM_CONTACT_DUPLICATE'});
     assert.equal((await db.query('SELECT COUNT(*)::integer AS count FROM spaceverse_crm_contacts')).rows[0].count,1);
     assert.equal((await db.query('SELECT COUNT(*)::integer AS count FROM spaceverse_crm_contact_create_requests')).rows[0].count,1);
+    assert.equal((await db.query('SELECT created_by_admin_id::text AS actor FROM spaceverse_crm_contact_create_requests')).rows[0].actor,'11');
+    const otherActor=createSpaceverseManualCrmContactService({runtime,connect,actorId:'12'});
+    await assert.rejects(otherActor(contact(key(2))),{code:'SPACEVERSE_CRM_CONTACT_ACTOR_MISMATCH'});
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS count FROM spaceverse_crm_contacts')).rows[0].count,1);
   } finally {await db.close();}
 });
 
 test('invalid data and request-derived tenant scope never touch the DB',async()=>{
   const {db,runtime}=await fixture('c');
   let queries=0;
-  const create=createSpaceverseManualCrmContactService({runtime,connect:async()=>({
+  const create=createSpaceverseManualCrmContactService({runtime,actorId:'11',connect:async()=>({
     query:async()=>{queries++;throw new Error('unexpected SQL');},release(){}})});
   try {
     for(const raw of [
       { ...contact(key(5)),companyId:'999'},
+      { ...contact(key(5)),actorId:'999'},
       contact('wrong key'),
       contact(key(5),{phone:'123',email:''}),
       contact(key(5),{phone:null,email:null}),
@@ -106,7 +111,9 @@ test('invalid data and request-derived tenant scope never touch the DB',async()=
       contact(key(5),{email:'invalid@@email'})
     ]) await assert.rejects(create(raw));
     assert.equal(queries,0);
-    assert.throws(()=>createSpaceverseManualCrmContactService({runtime:{...runtime},connect:async()=>{}}),
+    assert.throws(()=>createSpaceverseManualCrmContactService({runtime,connect:async()=>{}}),/actorId/);
+    assert.throws(()=>createSpaceverseManualCrmContactService({runtime,connect:async()=>{},actorId:'9223372036854775808'}),/actorId/);
+    assert.throws(()=>createSpaceverseManualCrmContactService({runtime:{...runtime},connect:async()=>{},actorId:'11'}),
       {code:'SPACEVERSE_RUNTIME_CONTEXT_UNVERIFIED'});
   } finally {await db.close();}
 });
@@ -114,8 +121,8 @@ test('invalid data and request-derived tenant scope never touch the DB',async()=
 test('separate company/venue fixtures never adopt identical contact details across tenants',async()=>{
   const left=await fixture('d','50','51'),right=await fixture('e','60','61');
   try {
-    const first=await createSpaceverseManualCrmContactService({runtime:left.runtime,connect:left.connect})(contact(key(6)));
-    const second=await createSpaceverseManualCrmContactService({runtime:right.runtime,connect:right.connect})(contact(key(6)));
+    const first=await createSpaceverseManualCrmContactService({runtime:left.runtime,connect:left.connect,actorId:'11'})(contact(key(6)));
+    const second=await createSpaceverseManualCrmContactService({runtime:right.runtime,connect:right.connect,actorId:'11'})(contact(key(6)));
     assert.equal(first.contact.id,'1');assert.equal(second.contact.id,'1');
     assert.equal((await left.db.query('SELECT company_id,venue_id FROM spaceverse_crm_contacts')).rows[0].venue_id,'51');
     assert.equal((await right.db.query('SELECT company_id,venue_id FROM spaceverse_crm_contacts')).rows[0].venue_id,'61');
@@ -134,7 +141,7 @@ test('manual CRM contact failures rollback both ledger and contact before a clea
     return db.query(sql,params);
   },release(){}});
   try {
-    const create=createSpaceverseManualCrmContactService({runtime,connect});
+    const create=createSpaceverseManualCrmContactService({runtime,connect,actorId:'11'});
     await assert.rejects(create(contact(key(7))),{code:'SPACEVERSE_CRM_CONTACT_UNAVAILABLE'});
     assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,0);
     assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contact_create_requests')).rows[0].n,0);
@@ -156,7 +163,7 @@ test('manual CRM contact uncertain COMMIT is reconciled by exact idempotent repl
     return result;
   },release(){}});
   try {
-    const create=createSpaceverseManualCrmContactService({runtime,connect});
+    const create=createSpaceverseManualCrmContactService({runtime,connect,actorId:'11'});
     await assert.rejects(create(contact(key(8))),{code:'SPACEVERSE_CRM_CONTACT_UNAVAILABLE'});
     assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,1);
     const recovered=await create(contact(key(8)));
@@ -171,7 +178,7 @@ test('manual CRM contact uncertain COMMIT is reconciled by exact idempotent repl
 test('manual CRM contact refuses a valid runtime connected to a different tenant database',async()=>{
   const left=await fixture('b','50','51'),right=await fixture('c','60','61');
   try {
-    const wrong=createSpaceverseManualCrmContactService({runtime:left.runtime,connect:right.connect});
+    const wrong=createSpaceverseManualCrmContactService({runtime:left.runtime,connect:right.connect,actorId:'11'});
     await assert.rejects(wrong(contact(key(9))),{code:'SPACEVERSE_CRM_CONTACT_SCOPE_REJECTED'});
     assert.equal((await right.db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,0);
     assert.equal((await right.db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contact_create_requests')).rows[0].n,0);
