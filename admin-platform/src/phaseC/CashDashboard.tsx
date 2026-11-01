@@ -175,9 +175,14 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
   // pass is routine, the totals are those of the last full pass.
   const refreshing=state==='syncing'&&Boolean(report?.connection.lastSuccessAt)
   const status=error?'Не удалось обновить кассу':loading?'Обновляем кассу':state==='error'?'Не удалось обновить кассу':state==='syncing'&&!refreshing?'Идёт первая загрузка кассы':state==='awaiting_sync'?'Ожидаем загрузку кассы':all?'Данные Эвотора':'Касса не подключена'
-  const kpis=[
+  // A POS sale receipt is not a document operation. Unknown customer identity is never zero.
+  const primaryKpis=[
     ['Выручка',cashMoney(all?.netCents),'Продажи за вычетом возвратов'],
-    ['Средний чек',cashMoney(all?.averageCents),'Сумма продаж / число чеков продажи'],
+    ['Чеков продажи',all?count(all.receiptCount):'Нет данных','Подтверждённые чеки продажи; при неполных данных количество неизвестно'],
+    ['Клиентов PIVNIK',all?count(report?.app?.activeBuyers):'Нет данных','Только покупатели со связанными с приложением SELL; не все гости кассы'],
+    ['Средний чек',cashMoney(all?.averageCents),'Сумма продаж / число подтверждённых чеков продажи'],
+  ]
+  const secondaryKpis=[
     ['Операций',all?count(all.saleDocuments+all.returnDocuments):'Нет данных','Документы продажи и возврата'],
   ]
   const tables=all?[
@@ -186,8 +191,7 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
   ]:[]
   if(mode==='app'){
     const app=all as PosSummary|null|undefined
-    kpis.push(['Покупателей',count(app?.activeBuyers),'Только достоверно связанные SELL периода'],
-      ['Повторных покупателей',count(app?.repeatBuyers),'Не менее двух связанных продаж в периоде'],
+    secondaryKpis.push(['Повторных покупателей',count(app?.repeatBuyers),'Не менее двух связанных продаж в периоде'],
       ['Повторные покупки',app?.repeatPurchaseRate==null?'Нет данных':app.repeatPurchaseRate+'%','Покупатели с 2+ покупками / все покупатели периода'],
       ['Частота покупок',app?.purchaseFrequency==null?'Нет данных':app.purchaseFrequency.toFixed(2),'Связанные продажи / покупатели периода'])
   }
@@ -199,8 +203,13 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
       {report?.period&&<p className="comparison-note">Период: {new Date(report.period.from).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})} — {new Date(Date.parse(report.period.until)-1).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})}. Границы дня — по Москве.</p>}
       {report?.connection.lastSuccessAt&&<p className="comparison-note">Последняя полная сверка: {new Date(report.connection.lastSuccessAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})}. Время — по Москве.</p>}
     </section>
-    <div className="kpi-grid">{kpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
+    <div className="kpi-grid cash-primary-kpis" aria-label="Основные показатели кассы">{primaryKpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
+    <p className="cash-insight-period">Изменение выручки и среднего чека доступно в сравнении периодов ниже. Оно загружается только по запросу, без фонового повторного сканирования кассы.</p>
     {comparison}
+    <details className="card cash-secondary-metrics">
+      <summary>Другие показатели кассы</summary>
+      <div className="kpi-grid cash-secondary-kpis">{secondaryKpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
+    </details>
     {all&&<details className="card cash-calculation-details"><summary>Подробности расчёта</summary>
       <dl>
         <div><dt>Продажи до возвратов</dt><dd>{cashMoney(all.salesCents)}</dd></div>
