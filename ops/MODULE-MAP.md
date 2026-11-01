@@ -836,38 +836,66 @@ risk if split carelessly.
 
 ## The two-server split is the sharpest edge
 
-`universal-server.js` does not proxy everything. It **directly implements**
-(never forwarding to `server.js`) 12 paths, split into two genuinely different
-situations — conflating them was the one inaccuracy an earlier pass of this
-document had:
+**Verified against main `c92ed7cd65f1a96d94363c2b7e212424ab078a73` on 2026-11-01.**
+`universal-server.js` is the actual gateway launched by `package.json:start`.
+It directly handles selected requests before its fallback `proxyRequest` to the
+Express `server.js` child. The following inventory is by **HTTP method + exact
+literal path** in current source, not by stale line counts or an assumed shared
+handler. There is **no demonstrated automated parity test for all these routes**;
+review and regression must compare their actual semantics, not only filenames.
 
-**A) Truly duplicated — `server.js` defines the exact same path independently**,
-with its own copy of the handler logic (verified by path, not assumed):
-`/api/auth` (`server.js:1580`), `/api/me` GET (`server.js:1674`),
-`/api/me/consent` (`server.js:1721`), `/api/me/beta-tester/claim`
-(`server.js:1738`), `/api/leaderboard/monthly` (`server.js:1893`),
-`/api/staff/activate` (`server.js:2066`), `/api/staff/qr/resolve`
-(`server.js:2108`), `/api/admin/users` (`server.js:2911`).
+**A) Ten overlapping user-facing routes: separate handlers in both servers.**
 
-These are **not dead code** — they're what runs when a test imports `server.js`
-directly, or if `server.js` is ever run standalone — but in the real deployed
-gateway path, the `universal-server.js` copy wins and `server.js`'s copy for
-these specific paths is never reached by real traffic.
+| Method and path | Express `server.js` | Gateway `universal-server.js` |
+| --- | ---: | ---: |
+| `POST /api/auth` | 1652 | 3376 |
+| `GET /api/me` | 1745 | 3420 |
+| `PUT /api/me/profile` | 1873 | 3453 |
+| `DELETE /api/me/account` | 1757 | 3465 |
+| `POST /api/me/consent` | 1792 | 3520 |
+| `POST /api/me/beta-tester/claim` | 1809 | 3529 |
+| `GET /api/leaderboard/monthly` | 1964 | 3476 |
+| `POST /api/staff/activate` | 2119 | 3597 |
+| `POST /api/staff/qr/resolve` | 2161 | 3578 |
+| `GET /api/admin/users` | 3450 | 3509 |
 
-**Consequence for any refactor:** if you change auth, staff-activation or
-similar behavior, you must change it in `universal-server.js`, and you
-should check whether `server.js`'s same-named route needs the identical change
-for test/standalone parity — they are two independent implementations today,
-not one shared handler.
+These are **route overlaps, not proof that the two implementations return
+identical responses**. The gateway applies its own identity, consent, VK/TG
+and role checks, sometimes proxying only after a gateway guard. A code change
+to one copy must audit both implementations and the client contract.
+Deployment traffic follows the universal gateway; standalone/legacy test
+scenarios can still exercise Express directly. Avoid changing both files
+automatically if their legitimate security models differ; first prove
+which behaviour must be preserved and test the two contexts explicitly.
 
-**B) Gateway-only — `server.js` has no route for this path at all**:
-`/api/bootstrap`, `/api/wheel/status`, `/api/wheel/spin`,
-`/api/account-link/*`. There is nothing to keep in parity here, but it means
-searching only `server.js` for these will find nothing, which is its own trap.
-The wheel is the sharpest case: it calls into `wheel.js` for the prize
-table/draw, then does its own transaction/wallet SQL inline
-(`spinTelegramWheel`, `universal-server.js:1858`) — there is no
-`server.js`-side wheel logic to fall back to or compare against.
+**Special case, not an identical business handler:** `GET /api/health` also
+exists in both files (`server.js:1638`, `universal-server.js:3302`). The
+gateway first enforces startup readiness, probes the child endpoint and
+adds release/account metadata. Treat their distinct response roles as a
+health contract, **not** a requirement for byte-identical JSON.
+
+**B) Gateway-only direct handlers: no corresponding route in `server.js`.**
+Examples: `GET /api/bootstrap`, `GET /api/wheel/status`,
+`GET /api/wheel/history`, `POST /api/wheel/spin`, `/api/account-link/*`
+and `/api/run/start|score|leaderboard`. `spinTelegramWheel` uses `wheel.js`
+plus gateway-side transaction/wallet logic. Searching only the Express
+entrypoint misses these handlers; do not invent an Express parity target.
+
+**C) Separate SpaceVerse Admin service:**
+`admin-platform/server/index.ts` serves the independent typed Admin router
+`admin-platform/server/router.ts`, whose guard starts with `/api/admin/`.
+It uses Admin session-cookie/CSRF/Origin and company/venue access checks
+(see `admin-platform/server/auth.ts`, `tenant.ts`). Its `/api/admin/venues/*`
+paths are **not** automatically served by the guest gateway. Conversely
+the guest `/api/admin/users` and POS paths are not an Admin Platform CRM
+route. The **service origin** and authentication scheme are part of the
+API contract even where the path prefix happens to match.
+
+Before touching these boundaries, examine open tenant/auth, onboarding,
+loyalty and kiosk PRs for actual file/path overlap and preserve the
+"Do not break" invariants. Do not extract route files during patch-chain
+retirement. See `ops/CHAT-01-ROUTE-CONTRACT-CHECKPOINT-20261101.md`
+(CHAT01-04 Draft, not deployed).
 
 ## Route inventory (everything else — `server.js`, proxied as-is)
 
