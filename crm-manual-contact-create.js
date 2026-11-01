@@ -63,6 +63,13 @@ function command(raw) {
   return Object.freeze({requestKey,contact,fingerprint});
 }
 
+// Pure, fail-closed body validation before opening a tenant connection.
+// Reuse exactly the same normalization as the transactional writer.
+export function validateSpaceverseManualCrmContactInput(raw) {
+  const input=command(raw);
+  return Object.freeze({requestKey:input.requestKey,contact:input.contact});
+}
+
 const LOCK = `SELECT runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status
 FROM spaceverse_runtime_binding
 WHERE singleton=TRUE AND runtime_key=$1 AND manifest_sha256=$2 AND manifest_revision=$3
