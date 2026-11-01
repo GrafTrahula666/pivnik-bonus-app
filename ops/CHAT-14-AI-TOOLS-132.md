@@ -100,10 +100,10 @@ Source/coverage и ограничение метрики доступны пол
 ## 7. Scope, checkpoint, передача
 
 - **Задача CHAT 14:** 132. Сделано: контракт четырёх только-читающих AI tools и границ авторизации без произвольного SQL; без runtime и production изменений.
-- **Base SHA:** c92ed7cd65f1a96d94363c2b7e212424ab078a73. **Branch:** spaceverse/chat14-ai-tools-132-20261101. Commit, PR и CI необходимо зафиксировать после публикации.
+- **Base SHA:** c92ed7cd65f1a96d94363c2b7e212424ab078a73. **Branch:** spaceverse/chat14-ai-tools-132-20261101. **Первый commit:** 4ab734485b350d990c4959e856c09364c505e22c. **Draft PR:** [#352](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/352). Актуальный HEAD/CI уточнять после каждого обновления.
 - **Соседний пункт:** 131 в [Draft #341](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/341), HEAD 2c15c9371294de46ac5084d77142db1168a0c634; CI [#2298](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41267009833) = success; передан координатору CHAT 01, но не смержен.
 - **Проверено перед работой:** main, ветки и PR по CHAT 14, Do not break, код auth.ts/tenant.ts/types.ts/router.ts/evotor-read.ts/pos/analytics.js, Vitest evotor-read/tenant-security, архитектура AI, каталог метрик в CHAT 09 #332.
-- **Не проверено/блокеры:** реальный AI runtime отсутствует; локальные npm/materialize/check/audit/browser тесты не запускались (в окружении нет checkout и github.com DNS); CI read-back после публикации отдельно.
+- **Не проверено/блокеры:** реальный AI runtime отсутствует; локальные npm/materialize/check/audit/browser тесты не запускались (в окружении нет checkout и github.com DNS); GitHub CI должен быть проверен на **актуальном** HEAD #352, не на предыдущем коммите.
 - **Не допускать:** merge, deploy, changes к БД/секретам/Эвотору, платные API, PII, изменение дублей в server.js/universal-server.js.
 - **Передача:** открыть Draft PR → дождаться применимого CI → передать CHAT 01 для review. Пункт 133 брать только отдельной следующей итерацией после технического завершения и передачи 132.
 - **Hourly auto-resume:** предыдущая попытка была отклонена лимитом 5/5; не трогать чужие пять автоматизаций без согласования.
