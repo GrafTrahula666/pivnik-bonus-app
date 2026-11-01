@@ -31,9 +31,14 @@ function auditId(value) {
     && /^[a-zA-Z0-9:_-]+$/.test(value);
 }
 
+function approvedTextHash(value) {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
 /**
  * Evaluate the *latest persisted* record for exactly one channel/purpose/scope.
  * Input values are trusted server-derived context, never browser-provided scope.
+ * consentTextSha256 is a server-approved digest of the complete displayed text.
  * A `null`/missing/invalid/unknown record always denies.
  */
 export function evaluateMarketingConsent({
@@ -42,12 +47,13 @@ export function evaluateMarketingConsent({
   channel,
   providerIdentityId,
   consentTextVersion,
+  consentTextSha256,
   latestEvent
 } = {}) {
   if (!scopedId(tenantId) || !scopedId(customerId)) return deny('scope_invalid');
   if (!Object.hasOwn(ALLOWED_SURFACES, channel)) return deny('channel_invalid');
   if (!scopedId(providerIdentityId)) return deny('identity_unverified');
-  if (!auditId(consentTextVersion)) return deny('consent_text_unconfigured');
+  if (!auditId(consentTextVersion) || !approvedTextHash(consentTextSha256)) return deny('consent_text_unconfigured');
   if (latestEvent == null) return deny('consent_absent');
   if (typeof latestEvent !== 'object' || Array.isArray(latestEvent)) return deny('evidence_invalid');
 
@@ -74,7 +80,8 @@ export function evaluateMarketingConsent({
     || latestEvent.sourceSurface !== ALLOWED_SURFACES[channel]
     || latestEvent.explicitOptIn !== true) return deny('consent_not_proven');
   if (latestEvent.providerIdentityId !== providerIdentityId) return deny('identity_changed');
-  if (latestEvent.consentTextVersion !== consentTextVersion) return deny('consent_text_outdated');
+  if (latestEvent.consentTextVersion !== consentTextVersion
+    || latestEvent.consentTextSha256 !== consentTextSha256) return deny('consent_text_outdated');
 
   return Object.freeze({ allowed: true, reason: 'consent_proven' });
 }
