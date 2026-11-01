@@ -206,7 +206,7 @@ export async function getManagedLoyalty(scope:VenueScope) {
     return {source:'db',editable:true,baseCashbackPercent:Number(s.base_cashback_percent),registrationBonus:Number(s.registration_bonus),referralBonus:Number(s.referral_bonus),
       levels:levels.rows.map((r:any)=>({code:r.code,title:r.title,thresholdRub:Number(r.threshold_cents)/100,bonusPercent:Number(r.bonus_percent),discountPercent:Number(r.discount_percent),enabled:r.enabled,sortOrder:r.sort_order}))}
   }
-  if(scope.companyCode==='pivnik'&&String(scope.legacyBarId??'')==='1') return {source:'legacy-fallback',editable:true,baseCashbackPercent:5,registrationBonus:100,referralBonus:0,
+  if(scope.companyCode==='pivnik'&&scope.code==='pivnik'&&scope.legacyBarId!=null) return {source:'legacy-fallback',editable:true,baseCashbackPercent:5,registrationBonus:100,referralBonus:0,
     levels:PIVNIK_LEGACY_STATUS_LEVELS.map((l,i)=>({code:`legacy-${i+1}`,title:l.name,thresholdRub:l.minCents/100,bonusPercent:l.bonusPercent,discountPercent:l.discountPercent,enabled:true,sortOrder:i}))}
   return {source:'not_configured',editable:true,baseCashbackPercent:null,registrationBonus:null,referralBonus:null,levels:[]}
 }
