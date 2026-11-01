@@ -61,9 +61,14 @@ jobs:
       - name: Install Chromium browser
         working-directory: admin-platform
         run: npx playwright install --with-deps chromium
-      - name: Verify search, filters, 355 customers and mobile UI on native SQL
+      # Split projects into separate server processes: the production-style
+      # 30-read/min actor limiter must stay intact within every browser suite.
+      - name: Desktop tenant CRM with all 355 customers
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop
+      - name: Mobile tenant CRM with all 355 customers
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile
       - name: Upload synthetic browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
