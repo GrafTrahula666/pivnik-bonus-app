@@ -216,6 +216,25 @@ not_provisioned and unpublished. Core SQL supports the existing minimal
 customer/auth/wallet contracts, not the complete legacy runtime or financial
 operations. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`.
 
+## Manual CRM contacts — CHAT 03 / item 24, UNMOUNTED draft (2026-11-01)
+
+`crm-manual-contact-create.js` is a separate, **unmounted** write boundary for
+owner-entered contact details in a dedicated prepared tenant database. It does
+**not** turn a manually entered phone/email into authenticated app identity,
+add wallet balances or auto-link legacy guests. Existing
+`customer-provisioning.js` is provider-authenticated registration and must
+not be reused for unverified owner-entered contacts. The reviewed,
+**explicit-only** `admin-platform/tenant-migrations/002_manual_crm_contacts.sql`
+introduces scoped manual-contact and request-key ledger tables, partial unique
+indexes for normalized email/phone per venue, and no automatic startup migration.
+The service requires a verified tenant runtime, locks the exact prepared
+binding, accepts only validated manual fields and UUIDv4 idempotency key, and
+wraps contact + request completion in one target transaction. No server route,
+Admin UI, activation, migration startup, `users`, `user_identities`,
+`wallets`, legacy PIVNIK data or production settings are changed.
+Live owner write permissions, Origin/CSRF, audit and migration provisioning
+must be separately integrated and tested before enabling this feature.
+
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
 `GET /api/admin/onboarding/venues` accepts optional `q` (up to 100 characters,
