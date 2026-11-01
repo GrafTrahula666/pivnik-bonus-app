@@ -81,6 +81,22 @@ describe('explicit empty tenant bootstrap: existing scope and binding ledger',()
         .toEqual([{runtime_key:fixture.manifests[i]!.runtimeKey,company_id:fixture.manifests[i]!.scope.companyId,venue_id:fixture.manifests[i]!.scope.venueId}])
     }
   })
+  it('bootstraps only the selected CRM database and leaves sibling targets untouched',async()=>{
+    const selected=fixture.manifests[1]!
+    expect(await service().runRuntimeDatabaseBinding(owner,draft(1)))
+      .toMatchObject({status:'succeeded',scope:selected.scope,result:{binding:'created'}})
+    expect((await fixture.targets[1]!.query('SELECT runtime_key,company_id,venue_id FROM spaceverse_runtime_binding')).rows)
+      .toEqual([{runtime_key:selected.runtimeKey,company_id:selected.scope.companyId,venue_id:selected.scope.venueId}])
+    for(const index of [0,2]){
+      expect(await relations(index)).toEqual([])
+      expect((await fixture.targets[index]!.query("SELECT pg_catalog.to_regclass('public.spaceverse_runtime_binding') AS binding")).rows)
+        .toEqual([{binding:null}])
+    }
+    expect((await fixture.metadata.query("SELECT draft_id FROM admin_onboarding_provisioning_steps WHERE step='runtime_database_binding'")).rows)
+      .toEqual([{draft_id:selected.source.draftId}])
+    expect((await fixture.metadata.query('SELECT active FROM venues WHERE id=$1',[selected.scope.venueId])).rows)
+      .toEqual([{active:false}])
+  })
   it.each([
     'CREATE TABLE users(id BIGINT PRIMARY KEY)',
     'CREATE SCHEMA existing_business',
