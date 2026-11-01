@@ -169,6 +169,12 @@ export interface LoyaltyPayload {
 }
 export function validateLoyalty(raw:unknown):LoyaltyPayload {
   const b=(raw||{}) as Record<string,unknown>
+  // Missing input is not an explicitly configured 0%/0 bonus.
+  for(const key of ['baseCashbackPercent','registrationBonus','referralBonus']){
+    const value=b[key]
+    if(value==null||typeof value==='boolean'||(typeof value==='string'&&!value.trim()))
+      throw new HttpError(400,'LOYALTY_SETTING_REQUIRED',`${key}: укажите значение явно.`)
+  }
   const levels=Array.isArray(b.levels)?b.levels:[]
   if(levels.length<1||levels.length>20) throw new HttpError(400,'INVALID_LEVELS','Нужно от 1 до 20 уровней.')
   const parsed=levels.map((entry,i)=>{
@@ -195,14 +201,14 @@ export function validateLoyalty(raw:unknown):LoyaltyPayload {
 export async function getManagedLoyalty(scope:VenueScope) {
   const settings=await pool.query(`SELECT base_cashback_percent,registration_bonus,referral_bonus FROM venue_settings WHERE venue_id=$1::bigint`,[scope.id])
   const levels=await pool.query(`SELECT code,title,threshold_cents,bonus_percent,discount_percent,enabled,sort_order FROM loyalty_levels WHERE venue_id=$1::bigint ORDER BY sort_order,id`,[scope.id])
-  if(settings.rowCount&&levels.rowCount){
-    const s=settings.rows[0] as any
+  const s=settings.rows[0]
+  if(settings.rowCount&&levels.rowCount&&s?.base_cashback_percent!=null&&s?.registration_bonus!=null&&s?.referral_bonus!=null){
     return {source:'db',editable:true,baseCashbackPercent:Number(s.base_cashback_percent),registrationBonus:Number(s.registration_bonus),referralBonus:Number(s.referral_bonus),
       levels:levels.rows.map((r:any)=>({code:r.code,title:r.title,thresholdRub:Number(r.threshold_cents)/100,bonusPercent:Number(r.bonus_percent),discountPercent:Number(r.discount_percent),enabled:r.enabled,sortOrder:r.sort_order}))}
   }
-  if(scope.companyCode==='pivnik') return {source:'legacy-fallback',editable:true,baseCashbackPercent:5,registrationBonus:100,referralBonus:0,
+  if(scope.companyCode==='pivnik'&&String(scope.legacyBarId??'')==='1') return {source:'legacy-fallback',editable:true,baseCashbackPercent:5,registrationBonus:100,referralBonus:0,
     levels:PIVNIK_LEGACY_STATUS_LEVELS.map((l,i)=>({code:`legacy-${i+1}`,title:l.name,thresholdRub:l.minCents/100,bonusPercent:l.bonusPercent,discountPercent:l.discountPercent,enabled:true,sortOrder:i}))}
-  return {source:'unconfigured',editable:true,baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[]}
+  return {source:'not_configured',editable:true,baseCashbackPercent:null,registrationBonus:null,referralBonus:null,levels:[]}
 }
 export async function saveLoyalty(admin:AdminPrincipal,scope:VenueScope,raw:unknown){
   requireWrites();const value=validateLoyalty(raw);const client=await pool.connect()
