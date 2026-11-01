@@ -842,7 +842,7 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
       </div>
     </nav>}
     {editing&&current&&session.capabilities.onboardingWorkflow&&<div id="sv-onboarding-progress"><OnboardingProgress key={'progress:'+current.id} draftId={current.id} canWrite={canWrite}
-      onSaved={()=>setConnectionRefresh(value=>value+1)} refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt,connectionRefresh].join(':')}/></div>}}
+      onSaved={()=>setConnectionRefresh(value=>value+1)} refreshKey={[current.revision,application?.revision,scope?.revision,integration?.revision,provisioning?.updatedAt,schemaReadiness?.updatedAt,runtimeBundle?.updatedAt,connectionRefresh].join(':')}/></div>}
     {editing&&<form id="sv-onboarding-details" onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="onboarding-step"><Building2 size={18}/><b>Данные заведения</b><span>Черновик · ещё не подключено</span></div>
       <fieldset className="onboarding-fields" disabled={!canWrite||busy||uncertain||appBusy||scopeBusy||scopeLoading||integrationBusy||Boolean(scope)}>
