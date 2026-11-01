@@ -1,0 +1,9 @@
+# CHAT 09 / 83 · Рейтинг товаров по подтверждённым чекам
+
+- Scope: only task 83, independent branch `spaceverse/chat09-receipt-product-ranking-20261101` based on `main@c92ed7cd65f1a96d94363c2b7e212424ab078a73`. Draft PR only; **no merge/deploy**.
+- Verified source: normalized immutable Evotor SELL/PAYBACK snapshot from authorized venue -> exact bound store -> filtered period. Fiscal proof = **exactly one** print with a real numeric receipt identifier, `receiptCount===1`, `linkable===true`. Also require matching product position total, stable `productId`, positive quantity; do not use unverified records in ranking. The standard `all.products` inventory-oriented projection is preserved.
+- New `receiptRanking` is added to existing scoped Admin POS GET payload, with `products`, `status`, counts of accepted/excluded documents, and `coverage=imported_read_model_only`. Exact BigInt net amounts; negative refunds retained. It does NOT assert real Evotor historical completeness.
+- Not possible to calculate authentic category ranking: normalized POS has **no category ID**, so response explicitly sends `categories.available=false; items=null`. No guessed categories, no synthetic turnover or loyalty data.
+- Empty imported range differs from all records lacking proofs; unavailable linkage/sync gives `receiptRanking:null`. No new route, migration, env, paid service, raw receipt PII or client identity.
+- Root tests `test/evotor-receipt-ranking.test.js` plus Admin disposable PostgreSQL/WASM adapter test. Source code read-back and CI on exact SHA required; do not call test passed until Actions concludes. Local clone/npm not available in connector-only environment.
+- Pending: true category classification requires authorized Evotor product-catalog feed with verifiable categoryId and tenant-safe store mapping, separately scoped and tested; not a fabricated shortcut.

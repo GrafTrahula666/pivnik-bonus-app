@@ -1,4 +1,5 @@
 import { posDashboards } from '../../pos/analytics.js'
+import { rankVerifiedPosProducts } from '../../pos/receipt-ranking.js'
 import { loadPosDocuments,posConnectionStatus,type PosReadDb } from '../../pos/repository.js'
 import { HttpError,type PeriodRange,type VenueScope } from './types.js'
 
@@ -35,7 +36,7 @@ export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
 // No legacy bar id, provider env store, request company id, or global fallback.
 export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:PeriodRange){
   const period={from:range.from.toISOString(),until:range.to.toISOString(),timeZone:'Europe/Moscow'}
-  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null})
+  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null,receiptRanking:null})
   const schema=await db.query(`SELECT to_regclass('public.pos_store_bindings') IS NOT NULL
     AND to_regclass('public.pos_documents') IS NOT NULL AND to_regclass('public.pos_customer_links') IS NOT NULL
     AND to_regclass('public.pos_sync_state') IS NOT NULL AS ready`)
@@ -47,5 +48,5 @@ export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:Period
   const connection=await posConnectionStatus(db,{enabled:true,readOnly:true,storeId})
   if(!connection.lastSuccessAt)return {...empty(connection.state),connection}
   const documents=await loadPosDocuments(db,storeId,period)
-  return {period,connection,...posDashboards(documents)}
+  return {period,connection,...posDashboards(documents),receiptRanking:rankVerifiedPosProducts(documents,{storeId})}
 }
