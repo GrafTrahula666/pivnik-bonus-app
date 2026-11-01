@@ -38,7 +38,7 @@ describe('loyalty validation',()=>{
       levels:[{code:'new',title:'New',thresholdRub:0,bonusPercent:0}],
     })).toThrow()
   })
-  it.each([[],[0],{},false,null] as unknown[])('rejects non-scalar global loyalty config %j',bad=>{
+  it.each([{bad:[]},{bad:[0]},{bad:{}},{bad:false},{bad:null}])('rejects non-scalar global loyalty config $bad',({bad})=>{
     for(const field of ['baseCashbackPercent','registrationBonus','referralBonus']) {
       const body:Record<string,unknown>={
         baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
