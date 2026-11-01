@@ -142,3 +142,40 @@ test('audit rows cannot be altered after consent was recorded',async()=>{
       [result.eventId]));
   }finally{await f.db.close();}
 });
+
+test('stale grant replay after a later revoke cannot re-enable marketing',async()=>{
+  const f=await fixture('2','1100','1101');
+  try {
+    const writer=createSpaceverseMarketingConsentWriter({runtime:f.runtime,pool:f.pool,approvedCopies:copies});
+    const reader=createSpaceverseMarketingConsentReader({runtime:f.runtime,query:f.db.query.bind(f.db),approvedCopies:copies});
+    const request={userId:'11',channel:'telegram',providerUserId:'1001'};
+    const grant=await writer(base);
+    const revoke=await writer({...base,action:'revoke',requestId:'req_2',
+      idempotencyKey:'idem_2',explicitActionConfirmed:false});
+    assert.equal((await reader(request)).reason,'consent_revoked');
+    assert.deepEqual(await writer(base),{status:'replayed',eventId:grant.eventId});
+    assert.equal((await reader(request)).reason,'consent_revoked');
+    const head=await f.db.query("SELECT latest_event_id::text AS id FROM spaceverse_marketing_consent_heads WHERE channel='telegram'");
+    assert.equal(head.rows[0].id,revoke.eventId);
+    assert.equal((await f.db.query('SELECT COUNT(*)::int AS n FROM spaceverse_marketing_consent_events')).rows[0].n,2);
+  } finally {await f.db.close();}
+});
+
+test('Telegram opt-out never revokes an independently granted VK consent',async()=>{
+  const f=await fixture('3','1200','1201');
+  try {
+    const writer=createSpaceverseMarketingConsentWriter({runtime:f.runtime,pool:f.pool,approvedCopies:copies});
+    const reader=createSpaceverseMarketingConsentReader({runtime:f.runtime,query:f.db.query.bind(f.db),approvedCopies:copies});
+    const vk={...base,channel:'vk',providerUserId:'2002',requestId:'req_vk',
+      idempotencyKey:'idem_vk'};
+    await writer(base);
+    await writer(vk);
+    await writer({...base,action:'revoke',requestId:'req_tg_revoke',
+      idempotencyKey:'idem_tg_revoke',explicitActionConfirmed:false});
+    assert.equal((await reader({userId:'11',channel:'telegram',providerUserId:'1001'})).reason,'consent_revoked');
+    assert.deepEqual(await reader({userId:'11',channel:'vk',providerUserId:'2002'}),
+      {allowed:true,reason:'consent_proven'});
+    const heads=await f.db.query('SELECT channel FROM spaceverse_marketing_consent_heads ORDER BY channel');
+    assert.deepEqual(heads.rows.map(x=>x.channel),['telegram','vk']);
+  } finally {await f.db.close();}
+});
