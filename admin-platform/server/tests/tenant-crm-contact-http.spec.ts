@@ -135,6 +135,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
   })
   it('throttles repeated invalid create attempts before tenant resolution',async()=>{
     config.enableTenantCrmContactCreate=true
+    const before=await count(0,'spaceverse_crm_contacts')
     const malformed={requestKey:'not-a-uuid',contact:{firstName:'A'}}
     for(let attempt=0;attempt<10;attempt++){
       const response=await send('owner',path(),malformed)
@@ -144,7 +145,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(limited.status).toBe(429)
     expect(await limited.json()).toMatchObject({code:'RATE_LIMITED'})
     expect(state.targetResolutions).toBe(0)
-    expect(await count(0,'spaceverse_crm_contacts')).toBe('0')
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(before)
   })
   it('denies invited manager and a foreign company owner even if a target is connected',async()=>{
     config.enableTenantCrmContactCreate=true
