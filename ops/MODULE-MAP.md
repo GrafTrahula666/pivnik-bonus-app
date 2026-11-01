@@ -274,11 +274,27 @@ the manager can open/edit that draft but cannot see the create-contact form
 or use its signed Admin POST. Both viewport checks use actual Chromium.
 None of this proves production tenant permissions or live activation.
 
-Still pending: exact-head aggregate CI; explicit manual migration
-review/application lifecycle, uncertain response recovery across browser
-reload, real production owner permissions, live E2E and CHAT01 coordinator
-integration. This Draft form does NOT prove commercial readiness. Never
-merge, activate or deploy the Draft automatically.
+The form now persists a **request UUIDv4, random nonce and salted SHA-256
+fingerprint only** in same-origin browser localStorage, separately keyed by
+the exact actor and draft. It does not persist names, phone or email. Before
+the first POST, storing and rereading that checkpoint must succeed; corrupted
+or inaccessible storage blocks new submission. On browser reload/reopen,
+the form requires re-entering identical normalized contact fields; differing
+input cannot consume the saved UUID or create another contact. Once matched,
+the same UUID is retried through uncertain HTTP responses (also 401/429).
+Confirmed success or definitive initial rejection removes the checkpoint.
+React unit tests and built desktop/mobile Playwright cover the reload,
+mismatch/no-network, retry and storage-corruption controls. These browser
+checks use intercepted contact writes; native PostgreSQL signed HTTP is
+independently tested. Clearing browser storage externally or concurrent tabs
+cannot be treated as an exactly-once guarantee: the server request ledger and
+per-venue contact uniqueness remain essential.
+
+Still pending: explicit manual migration review/application lifecycle,
+live production owner permissions and E2E authorization, two-database audit
+deduplication policy, safe handling if browser storage is externally erased,
+and CHAT01 coordinator integration. This Draft form does NOT prove
+commercial readiness. Never merge, activate or deploy automatically.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
