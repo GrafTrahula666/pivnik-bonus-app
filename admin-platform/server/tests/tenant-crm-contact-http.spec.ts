@@ -72,8 +72,9 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     fixture.manifests.forEach((m,i)=>state.targets.set(m.runtimeKey,fixture.targets[i]!))
     const sql=await fs.readFile(new URL('../../tenant-migrations/002_manual_crm_contacts.sql',import.meta.url),'utf8')
     for(const target of fixture.targets){
-      await target.exec("SET spaceverse.crm_contacts_migration='approved'")
-      await target.exec(sql)
+      // Keep the explicit migration guard and SQL in one native PG session.
+      // Pool.query may otherwise allocate different clients between two calls.
+      await target.exec("SET spaceverse.crm_contacts_migration='approved';\n"+sql)
     }
     config.enableWrites=config.enableOnboardingDrafts=config.enableOnboardingInvitations=true
     config.publicOrigin='https://crm-contact.fixture.invalid'
