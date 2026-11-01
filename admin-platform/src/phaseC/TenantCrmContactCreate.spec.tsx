@@ -22,8 +22,14 @@ const confirmed=(body:unknown)=>{
 }
 
 describe('CHAT03 #24 owner manual contact form',()=>{
-  beforeEach(()=>writer.mockReset())
-  afterEach(()=>cleanup())
+  let nextKey=0
+  beforeEach(()=>{
+    writer.mockReset()
+    nextKey=0
+    // JSDOM does not guarantee browser crypto.randomUUID.
+    vi.stubGlobal('crypto',{randomUUID:()=>`aaaaaaaa-aaaa-4aaa-8aaa-${String(++nextKey).padStart(12,'0')}`})
+  })
+  afterEach(()=>{cleanup();vi.unstubAllGlobals()})
 
   it('does not send invalid contact and keeps fields usable for correction',async()=>{
     renderForm()
