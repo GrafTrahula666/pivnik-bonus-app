@@ -1,95 +1,116 @@
 // @vitest-environment jsdom
+// No new test dependency: React 19 act + react-dom/client + built-in JSDOM.
+import {act} from 'react'
+import {createRoot,type Root} from 'react-dom/client'
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest'
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {ApiError,apiPost} from '../api'
 import {TenantCrmContactCreate} from './TenantCrmContactCreate'
 
 vi.mock('../api',async(importOriginal)=>{
-  const real=await importOriginal<typeof import('../api')>()
-  return {...real,apiPost:vi.fn()}
+  const actual=await importOriginal<typeof import('../api')>()
+  return {...actual,apiPost:vi.fn()}
 })
-const writer=vi.mocked(apiPost)
-const renderForm=()=>render(<TenantCrmContactCreate actorId="11" draftId="123e4567-e89b-42d3-a456-426614174000"/>)
-const fill=()=>{
-  fireEvent.change(screen.getByRole('textbox',{name:'Имя *'}),{target:{value:'Мария'}})
-  fireEvent.change(screen.getByRole('textbox',{name:'Email'}),{target:{value:'  Maria@Example.org '}})
-}
-const confirmed=(body:unknown)=>{
-  const input=body as {requestKey:string;contact:{firstName:string;lastName:string|null;email:string|null;phone:string|null}}
-  return {schemaVersion:1,requestKey:input.requestKey,
-    contact:{id:'93',...input.contact,identityStatus:'unlinked',walletStatus:'not_created'},
+const post=vi.mocked(apiPost)
+const confirmed=(raw:unknown)=>{
+  const data=raw as {requestKey:string;contact:{firstName:string;lastName:string|null;email:string|null;phone:string|null}}
+  return {schemaVersion:1,requestKey:data.requestKey,
+    contact:{id:'93',...data.contact,identityStatus:'unlinked',walletStatus:'not_created'},
     identityStatus:'unlinked',walletStatus:'not_created'}
 }
-
-describe('CHAT03 #24 owner manual contact form',()=>{
-  let nextKey=0
+describe('CHAT03 #24: manual CRM owner contact form',()=>{
+  let host:HTMLDivElement,root:Root,sequence=0
   beforeEach(()=>{
-    writer.mockReset()
-    nextKey=0
-    // JSDOM does not guarantee browser crypto.randomUUID.
-    vi.stubGlobal('crypto',{randomUUID:()=>`aaaaaaaa-aaaa-4aaa-8aaa-${String(++nextKey).padStart(12,'0')}`})
+    post.mockReset();sequence=0
+    vi.stubGlobal('crypto',{randomUUID:()=>`aaaaaaaa-aaaa-4aaa-8aaa-${String(++sequence).padStart(12,'0')}`})
+    ;(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true
+    host=document.createElement('div');document.body.appendChild(host)
+    root=createRoot(host)
+    act(()=>root.render(<TenantCrmContactCreate actorId="11" draftId="123e4567-e89b-42d3-a456-426614174000"/>))
   })
-  afterEach(()=>{cleanup();vi.unstubAllGlobals()})
-
-  it('does not send invalid contact and keeps fields usable for correction',async()=>{
-    renderForm()
-    fireEvent.change(screen.getByRole('textbox',{name:'Имя *'}),{target:{value:'Мария'}})
-    fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
-    expect(await screen.findByRole('alert')).toHaveTextContent('хотя бы один контакт')
-    expect(writer).not.toHaveBeenCalled()
-    expect(screen.getByRole('textbox',{name:'Имя *'})).toBeEnabled()
+  afterEach(()=>{
+    act(()=>root.unmount());host.remove();vi.unstubAllGlobals()
   })
+  const findInput=(label:string)=>{
+    const field=[...host.querySelectorAll('label')].find(el=>el.textContent?.trim()===label)
+    const input=field?.querySelector('input')
+    if(!input)throw new Error('Input unavailable: '+label)
+    return input
+  }
+  const set=async(label:string,value:string)=>{
+    const input=findInput(label)
+    await act(async()=>{
+      const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set
+      if(!setter)throw new Error('Native input setter unavailable')
+      setter.call(input,value)
+      input.dispatchEvent(new Event('input',{bubbles:true}))
+      input.dispatchEvent(new Event('change',{bubbles:true}))
+    })
+  }
+  const fill=async()=>{
+    await set('Имя *','Мария')
+    await set('Email','Maria@Example.org')
+  }
+  const submit=async()=>{
+    await act(async()=>{
+      host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))
+    })
+  }
+  const click=async(text:string)=>{
+    const button=[...host.querySelectorAll('button')].find(el=>el.textContent?.includes(text))
+    if(!button)throw new Error('Button unavailable: '+text)
+    await act(async()=>{button.click()})
+  }
 
-  it('sends only allowed fields and acknowledges only a confirmed unlinked contact',async()=>{
-    writer.mockImplementation(async (_path,body)=>confirmed(body) as never)
-    renderForm();fill()
-    fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
-    await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('Контакт №93 создан'))
-    expect(screen.getByRole('status')).toHaveTextContent('кошелёк не создан')
-    expect(writer).toHaveBeenCalledTimes(1)
-    const [path,raw]=writer.mock.calls[0]!
-    const body=raw as {requestKey:string;contact:{firstName:string;email:string}}
-    expect(path).toBe('/api/admin/onboarding/drafts/123e4567-e89b-42d3-a456-426614174000/crm/contacts')
-    expect(body.requestKey).toMatch(/^[0-9a-f-]{36}$/)
-    expect(body.contact).toMatchObject({firstName:'Мария',email:'maria@example.org'})
-    expect(Object.keys(body)).toEqual(['requestKey','contact'])
-    expect(screen.getByRole('textbox',{name:'Имя *'})).toHaveValue('')
+  it('rejects missing phone/email before any request',async()=>{
+    await set('Имя *','Мария')
+    await submit()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('хотя бы один контакт')
+    expect(post).not.toHaveBeenCalled()
+    expect(findInput('Имя *').disabled).toBe(false)
   })
-
-  it('locks data and reuses exactly the same request key after uncertain 503',async()=>{
-    writer.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_ACCESS_UNAVAILABLE','unconfirmed'))
+  it('sends strict contact fields; success confirms no app identity or wallet',async()=>{
+    post.mockImplementation(async (_path,body)=>confirmed(body) as never)
+    await fill();await submit()
+    expect(host.textContent).toContain('Контакт №93 создан')
+    expect(host.textContent).toContain('кошелёк не создан')
+    expect(post).toHaveBeenCalledTimes(1)
+    const [url,raw]=post.mock.calls[0]!
+    const data=raw as {requestKey:string;contact:{firstName:string;email:string}}
+    expect(url).toBe('/api/admin/onboarding/drafts/123e4567-e89b-42d3-a456-426614174000/crm/contacts')
+    expect(data.requestKey).toMatch(/^[0-9a-f-]{36}$/)
+    expect(data.contact).toMatchObject({firstName:'Мария',email:'maria@example.org'})
+    expect(Object.keys(data)).toEqual(['requestKey','contact'])
+    expect(findInput('Имя *').value).toBe('')
+  })
+  it('retains request key and disabled inputs after uncertain 503, then replays',async()=>{
+    post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
-    renderForm();fill()
-    fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
-    expect(await screen.findByRole('alert')).toHaveTextContent('повторите с тем же ключом')
-    expect(screen.getByRole('textbox',{name:'Имя *'})).toBeDisabled()
-    fireEvent.click(screen.getByRole('button',{name:'Повторить с тем же ключом'}))
-    await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('Контакт №93 создан'))
-    expect(writer).toHaveBeenCalledTimes(2)
-    expect(writer.mock.calls[0]![1]).toEqual(writer.mock.calls[1]![1])
+    await fill();await submit()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('повторите с тем же ключом')
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    await click('Повторить с тем же ключом')
+    expect(host.textContent).toContain('Контакт №93 создан')
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(post.mock.calls[0]![1]).toEqual(post.mock.calls[1]![1])
   })
-
-  it('does not present malformed success as a completed write and preserves replay key',async()=>{
-    writer.mockResolvedValueOnce({schemaVersion:1,contact:{id:'93'}})
-    renderForm();fill()
-    fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Подтверждение не получено')
-    expect(screen.getByRole('button',{name:'Повторить с тем же ключом'})).toBeEnabled()
-    expect(screen.queryByText(/Контакт №93 создан/)).not.toBeInTheDocument()
+  it('rejects a malformed successful response and keeps the replay key',async()=>{
+    post.mockResolvedValueOnce({schemaVersion:1,contact:{id:'93'}} as never)
+    await fill();await submit()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Подтверждение не получено')
+    expect(host.textContent).toContain('Повторить с тем же ключом')
+    expect(host.textContent).not.toContain('Контакт №93 создан')
   })
-
-  it('allows correction after definitive duplicate refusal, without reusing an old key',async()=>{
-    writer.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
+  it('permits corrected input with a fresh key after a definitive duplicate',async()=>{
+    post.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
-    renderForm();fill()
-    fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
-    expect(await screen.findByRole('alert')).toHaveTextContent('уже используется')
-    expect(screen.getByRole('textbox',{name:'Email'})).toBeEnabled()
-    fireEvent.change(screen.getByRole('textbox',{name:'Email'}),{target:{value:'new@example.org'}})
-    fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
-    await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('Контакт №93 создан'))
-    const first=writer.mock.calls[0]![1] as {requestKey:string}
-    const second=writer.mock.calls[1]![1] as {requestKey:string}
+    await fill();await submit()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('уже используется')
+    expect(findInput('Email').disabled).toBe(false)
+    await set('Email','new@example.org');await submit()
+    expect(host.textContent).toContain('Контакт №93 создан')
+    expect(post).toHaveBeenCalledTimes(2)
+    const first=post.mock.calls[0]![1] as {requestKey:string}
+    const second=post.mock.calls[1]![1] as {requestKey:string}
     expect(first.requestKey).not.toBe(second.requestKey)
   })
 })
