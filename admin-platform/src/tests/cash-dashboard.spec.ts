@@ -32,7 +32,12 @@ describe('cash register dashboard',()=>{
     expect(html).toContain('Продажи за вычетом возвратов')
     expect(html).not.toContain('Повторных клиентов')
     expect(html).not.toContain('Клиентов всего')
-    expect((html.match(/class="kpi card live-kpi"/g)||[])).toHaveLength(3)
+    expect((html.match(/class="kpi card live-kpi"/g)||[])).toHaveLength(5)
+    expect(html).toContain('Чеков продажи')
+    expect(html).toContain('Клиентов PIVNIK')
+    expect(html).toContain('Другие показатели кассы')
+    expect(html).toContain('Клиентов PIVNIK</span>')
+    expect(html).toContain('Только покупатели со связанными с приложением SELL')
     expect(html).toContain('<details class="card cash-calculation-details">')
     expect(html).toContain('Подтверждённые чеки продажи')
     expect(html).toContain('Выручка = продажи − возвраты')
@@ -40,6 +45,21 @@ describe('cash register dashboard',()=>{
     expect(unknown).toContain('Нет данных')
   })
 
+  it('prioritizes confirmed receipts without manufacturing total unique cash customers',()=>{
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report}))
+    const primary=html.split('<div class="kpi-grid cash-primary-kpis"')[1]?.split('</div><p class="cash-insight-period">')[0]||''
+    expect(primary).toContain('Чеков продажи')
+    expect(primary).toContain('Клиентов PIVNIK')
+    expect(primary).toContain('Нет данных')
+    expect(primary.indexOf('Выручка')).toBeLessThan(primary.indexOf('Чеков продажи'))
+    expect(primary.indexOf('Чеков продажи')).toBeLessThan(primary.indexOf('Клиентов PIVNIK'))
+    expect(primary.indexOf('Клиентов PIVNIK')).toBeLessThan(primary.indexOf('Средний чек'))
+    const withLinked={...report,app:{...report.all!,activeBuyers:1}}
+    const linkedHtml=renderToStaticMarkup(createElement(CashDashboard,{report:withLinked}))
+    expect(linkedHtml).toContain('Только покупатели со связанными с приложением SELL')
+    expect(linkedHtml).toContain('Клиентов PIVNIK')
+    expect(linkedHtml).toContain('>1</div>')
+  })
   it('uses only already-synchronized POS hours and items, including returns and fractional quantities',()=>{
     const detailed:CashReport={...report,all:{...report.all!,
       hours:[{label:'09',amountCents:'75050'},{label:'10',amountCents:'-50'}],
