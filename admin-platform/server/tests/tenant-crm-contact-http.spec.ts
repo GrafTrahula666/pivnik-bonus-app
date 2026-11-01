@@ -11,7 +11,8 @@ import {tenantCrmFixture} from './tenant-crm-fixture.js'
 import type {TenantCrmFixtureDatabase} from './tenant-crm-database-fixture.js'
 
 const state=vi.hoisted(()=>({metadata:null as TenantCrmFixtureDatabase|null,
-  targets:new Map<string,TenantCrmFixtureDatabase>(),targetResolutions:0,failAuditOnce:false}))
+  targets:new Map<string,TenantCrmFixtureDatabase>(),targetResolutions:0,failAuditOnce:false,
+  loseAuditCommitAckOnce:false}))
 const connect=(db:TenantCrmFixtureDatabase)=>db.connect?db.connect():Promise.resolve({
   query:db.query.bind(db),release:()=>{}
 })
@@ -22,7 +23,14 @@ vi.mock('../db.js',()=>{
       state.failAuditOnce=false
       throw new Error('synthetic-metadata-private-error')
     }
-    return query(sql,params)
+    const result=await query(sql,params)
+    // Simulate the metadata COMMIT succeeding while its acknowledgement is lost.
+    // The next signed retry must recover from durable audit evidence.
+    if(state.loseAuditCommitAckOnce&&sql==='COMMIT'){
+      state.loseAuditCommitAckOnce=false
+      throw new Error('synthetic-metadata-commit-ack-lost')
+    }
+    return result
   }
   const db={query:(sql:string,params?:unknown[])=>guarded(state.metadata!.query.bind(state.metadata!),sql,params),
     connect:async()=>{
@@ -97,6 +105,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
   afterEach(async()=>{
     config.enableTenantCrmContactCreate=false
     state.failAuditOnce=false
+    state.loseAuditCommitAckOnce=false
     state.targetResolutions=0
     const {__resetRateLimitBucketsForTests}=await import('../security.js')
     __resetRateLimitBucketsForTests()
@@ -242,6 +251,27 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     const auditAgain=(await fixture.metadata.query<{n:string}>(
       "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
     expect(auditAgain).toBe(auditAfter)
+  })
+  it('recovers after metadata COMMIT succeeds but its acknowledgement is lost',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('lost-commit-ack@fixture.invalid')
+    const before=Number(await count(0,'spaceverse_crm_contacts'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+    state.loseAuditCommitAckOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(JSON.stringify(await uncertain.json())).not.toContain('synthetic-metadata-commit-ack-lost')
+    // Both databases committed, but the HTTP client did not receive success.
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
+    const replay=await send('owner',path(),c)
+    expect(replay.status).toBe(200)
+    expect((await replay.json()).requestKey).toBe(c.requestKey)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
   })
   it('rejects a duplicate channel from a different request and does not expose PII across venues',async()=>{
     config.enableTenantCrmContactCreate=true
