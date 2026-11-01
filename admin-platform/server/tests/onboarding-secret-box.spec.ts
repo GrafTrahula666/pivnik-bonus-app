@@ -76,8 +76,8 @@ describe('shared onboarding secret box: venue isolation and key rotation',()=>{
       keyring('synthetic-v1',{'synthetic-v1':Buffer.alloc(16,1).toString('base64')}),
       keyring('synthetic-v1',{'synthetic-v1':v1+'='}),
       keyring('synthetic-v1',{}),
-      keyring('synthetic-v1',Object.fromEntries(
-        Array.from({length:6},(_,index)=>['key-'+index,v1]))),
+      keyring('synthetic-v1',Object.fromEntries([
+        ['synthetic-v1',v1],...Array.from({length:5},(_,index)=>['key-'+index,v1])])),
     ]
     for(const env of invalid)expectUnavailable(()=>onboardingSecretBox(env))
   })
