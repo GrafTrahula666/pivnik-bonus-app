@@ -84,3 +84,18 @@ The latest inspected `main` remains `c92ed7cd65f1a96d94363c2b7e212424ab078a73`; 
 **Status**: #91 implementation and automated regression **completed**, but **NOT INTEGRATION-ACCEPTED** while independent PR review is missing. Review submissions to PR #333: 0 when checked. Keep Draft / no autonomous merge or deployment. No live POS/Kiosk/Telegram/VK/Evotor physical end-to-end proof is claimed. Coordinator CHAT 01 receives the PR with these direct evidence links; next queue item #92 must await its review/acceptance.
 
 The new workflow itself makes no production or irreversible infrastructure changes. Existing five hourly automations remain untouched; CHAT 10 did not acquire a sixth scheduling slot.
+
+
+## Continuation · 2026-11-01 · #91 validation hardening + reviewer handoff
+
+**Current implementation HEAD:** `b80fc91b4bca17ce13c61155926100329200054e` (branch `spaceverse/chat10-loyalty-boundary-91-20261101`; main last observed `c92ed7cd65f1a96d94363c2b7e212424ab078a73`).
+
+- Additional validator fix in `admin-platform/server/writes.ts` rejects array/object/boolean/null global bonus inputs instead of `Number([]) === 0`, while accepting explicit numeric zero and decimal numeric input. Matched by `write-security.spec.ts` tests with `bad:[]`, `[0]`, `{}`, `false`, `null` passed as single Vitest test cases.
+- Added `loyalty-tenant-boundary.spec.ts` regression for **two fully configured venues within the same company** having distinct persisted percent, registration, referral, and tier policy; cross-company scope is denied.
+- **Evidence at the exact implementation SHA**:
+  - [Release gate run 41269320833](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41269320833) **success**: root Node tests **606 passed, 0 failed**, Admin Vitest **665 passed, 92 skipped**, including `loyalty-tenant-boundary.spec.ts` **7/7** and `write-security.spec.ts` **34/34**. Materialize twice/idempotence and high-threshold audit verified by the same gate.
+  - [SPACEVERSE loyalty native PostgreSQL run 41269321019](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41269321019) **success**, `postgres.integration.spec.ts` **23/23** in a disposable PostgreSQL 16 container (not Railway).
+  - [CRM inventory native PostgreSQL run 41269320851](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41269320851) **success**; [Business cash browser run 41269320873](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41269320873) **success**.
+- Independent reviewer handoff left as PR #333 conversation comment **6552902371**, addressed to CHAT 01 integration coordinator. **No review submissions recorded** at the last check. A self-comment is **not** an approved review or merge authorization.
+- Admin `npm audit --audit-level=high` still reported **12 moderate-severity dependency findings** and passed the high/critical gate. No unrelated dependency upgrade in #91.
+- **Status:** #91 code changes, isolated native database check, and regression checks green; **awaiting independent review / coordinator acceptance**. Do not change PR from Draft, merge, deploy, write production records, touch real kiosk/POS, or start #92. The workflow can re-run once for this documentation-only checkpoint.
