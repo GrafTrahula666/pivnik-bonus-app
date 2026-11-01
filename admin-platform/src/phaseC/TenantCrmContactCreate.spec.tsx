@@ -35,7 +35,7 @@ describe('CHAT03 #24 owner manual contact form',()=>{
   })
 
   it('sends only allowed fields and acknowledges only a confirmed unlinked contact',async()=>{
-    writer.mockImplementation(async (_path,body)=>confirmed(body))
+    writer.mockImplementation(async (_path,body)=>confirmed(body) as never)
     renderForm();fill()
     fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
     await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('Контакт №93 создан'))
@@ -52,7 +52,7 @@ describe('CHAT03 #24 owner manual contact form',()=>{
 
   it('locks data and reuses exactly the same request key after uncertain 503',async()=>{
     writer.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_ACCESS_UNAVAILABLE','unconfirmed'))
-      .mockImplementationOnce(async(_path,body)=>confirmed(body))
+      .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
     renderForm();fill()
     fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
     expect(await screen.findByRole('alert')).toHaveTextContent('повторите с тем же ключом')
@@ -74,7 +74,7 @@ describe('CHAT03 #24 owner manual contact form',()=>{
 
   it('allows correction after definitive duplicate refusal, without reusing an old key',async()=>{
     writer.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
-      .mockImplementationOnce(async(_path,body)=>confirmed(body))
+      .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
     renderForm();fill()
     fireEvent.click(screen.getByRole('button',{name:'Создать контакт'}))
     expect(await screen.findByRole('alert')).toHaveTextContent('уже используется')
