@@ -631,6 +631,9 @@ read financial/customer rows. A successful connection probe does not bypass
 (`GET /api/admin/onboarding/venues`, 25 entries/page) under the existing default-off
 workflow switch. It combines the canonical active-venue resolver with scoped
 draft access; inactive prepared points reuse `onboarding-workflow.ts` projection.
+The list includes a prepared venue ID only when the canonical venue belongs to
+its saved company and remains inactive. Mismatched or already-active scopes
+retain their draft and failed status but omit the unverified venue ID.
 Company/venue/status input cannot choose scope. An existing active metadata row
 without verified connectivity remains pending/unknown, never false connected or
 zero revenue. Device and operator activity are distinct. `OwnerVenues.tsx`
