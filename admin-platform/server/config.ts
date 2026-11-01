@@ -32,6 +32,8 @@ export const config = {
   enableOnboardingSupport: bool('ADMIN_ENABLE_ONBOARDING_SUPPORT', false),
   enableOnboardingWorkflow: bool('ADMIN_ENABLE_ONBOARDING_WORKFLOW', false),
   enableOnboardingPosProxy: bool('ADMIN_ENABLE_ONBOARDING_POS_PROXY', false),
+  // Separate AI add-on, independent of CRM and guest rewards. Always off unless explicitly configured.
+  enableAi: bool('ADMIN_ENABLE_AI', false),
   enableTenantCrmReads: bool('ADMIN_ENABLE_TENANT_CRM_READS', false),
   enableTenantCrmActivationChecks: bool('ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS', false),
   enableCrmOnboarding: bool('ADMIN_ENABLE_CRM_ONBOARDING', false),
