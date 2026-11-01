@@ -232,8 +232,19 @@ binding, accepts only validated manual fields and UUIDv4 idempotency key, and
 wraps contact + request completion in one target transaction. No server route,
 Admin UI, activation, migration startup, `users`, `user_identities`,
 `wallets`, legacy PIVNIK data or production settings are changed.
-Live owner write permissions, Origin/CSRF, audit and migration provisioning
-must be separately integrated and tested before enabling this feature.
+The separate `tenant-crm-contact-owner-gate.ts` is an **unmounted**
+Admin metadata authorization adapter. It holds the active session/account,
+prepared draft and owner-grant locks across a trusted tenant write callback,
+denies invited managers and foreign/revoked scopes, and persists a scoped
+Admin request audit after confirmed callback completion. It is explicitly
+default-off and has no HTTP entrypoint. The target database's actor-bound
+idempotency ledger remains necessary because the two databases cannot share
+a COMMIT; an uncertain Admin audit COMMIT requires a replay/reconciliation
+path, not a new contact. Synthetic metadata tests cover the gate, while
+native PostgreSQL concurrency covers the tenant writer separately.
+Origin/CSRF/rate-limit enforcement, request-body validation at a mounted
+POST, full signed HTTP integration, manual migration provisioning and live
+permissions must still be separately verified before enabling this feature.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
