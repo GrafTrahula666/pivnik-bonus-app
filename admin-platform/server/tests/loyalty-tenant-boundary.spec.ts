@@ -108,6 +108,24 @@ describe('tenant-scoped loyalty settings (in-memory PostgreSQL)',()=>{
     expect(incomplete).toMatchObject({source:'not_configured',baseCashbackPercent:null,registrationBonus:null,levels:[]})
   })
 
+  it('keeps distinct saved values for two configured venues in the same company',async()=>{
+    await state.db!.exec(`
+      INSERT INTO venues(id,company_id,code,name) VALUES
+        (301,2,'north-a','North A'),(302,2,'north-b','North B');
+      INSERT INTO venue_settings(venue_id,base_cashback_percent,registration_bonus,referral_bonus)
+      VALUES(301,2.5,30,5),(302,12.5,0,150);
+      INSERT INTO loyalty_levels(venue_id,code,title,threshold_cents,bonus_percent,discount_percent,enabled,sort_order)
+      VALUES(301,'entry','Entry',0,2.5,0,TRUE,0),(302,'entry','Entry',0,12.5,0,TRUE,0);
+    `)
+    const first=await getManagedLoyalty(await resolveVenueScope(northAdmin,'301'))
+    const second=await getManagedLoyalty(await resolveVenueScope(northAdmin,'302'))
+    expect(first).toMatchObject({source:'db',baseCashbackPercent:2.5,registrationBonus:30,referralBonus:5})
+    expect(second).toMatchObject({source:'db',baseCashbackPercent:12.5,registrationBonus:0,referralBonus:150})
+    expect(first.levels[0]?.bonusPercent).toBe(2.5)
+    expect(second.levels[0]?.bonusPercent).toBe(12.5)
+    await expect(resolveVenueScope(pivnikAdmin,'301')).rejects.toMatchObject({code:'VENUE_NOT_FOUND'})
+  })
+
   it('denies access to any foreign-company venue before reading loyalty settings',async()=>{
     await expect(resolveVenueScope(northAdmin,'101')).rejects.toMatchObject({code:'VENUE_NOT_FOUND'})
     await expect(resolveVenueScope(pivnikAdmin,'201')).rejects.toMatchObject({code:'VENUE_NOT_FOUND'})
