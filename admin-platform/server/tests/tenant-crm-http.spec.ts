@@ -207,6 +207,31 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
     expect(ids).toHaveLength(350);expect(new Set(ids).size).toBe(350)
     expect(ids[0]).toBe('1000');expect(ids.at(-1)).toBe('1349')
   })
+  it('sorts before pagination and filters wallet presence inside the verified tenant',async()=>{
+    const desc=await request('owner',directory(0,'?q=Pagination%20fixture&limit=100&sort=id&direction=desc'))
+    expect(desc.status).toBe(200)
+    const first=await desc.json()
+    expect(first).toMatchObject({total:'350',sort:'id',direction:'desc',wallet:'all',hasMore:true})
+    expect(first.items[0].customer.id).toBe('1349')
+    expect(first.items.at(-1).customer.id).toBe('1250')
+    const second=await request('owner',directory(0,'?q=Pagination%20fixture&limit=100&offset=100&sort=id&direction=desc'))
+    expect(second.status).toBe(200)
+    expect((await second.json()).items[0].customer.id).toBe('1249')
+    const present=await request('owner',directory(0,'?wallet=present&sort=id&direction=desc'))
+    expect(present.status).toBe(200)
+    const presentData=await present.json()
+    expect(presentData).toMatchObject({total:'3',wallet:'present',hasMore:false})
+    expect(presentData.items.map((item:{customer:{id:string}})=>item.customer.id)).toEqual(['7','6','1'])
+    const missing=await request('owner',directory(0,'?wallet=missing&limit=2&sort=id&direction=desc'))
+    expect(missing.status).toBe(200)
+    const missingData=await missing.json()
+    expect(missingData).toMatchObject({total:'352',wallet:'missing',hasMore:true})
+    expect(missingData.items.map((item:{customer:{id:string}})=>item.customer.id)).toEqual(['1349','1348'])
+    const byName=await request('owner',directory(0,'?q=Pagination%20fixture&sort=name&direction=asc&limit=2'))
+    expect(byName.status).toBe(200)
+    expect((await byName.json()).items[0].customer.id).toBe('1000')
+    expect((await request('owner',directory(2,'?wallet=present&sort=id&direction=desc'))).status).toBe(404)
+  })
   it('supports literal wildcard, Cyrillic and ID search without SQL injection',async()=>{
     for(const q of ['Анна','_100%','8']){
       const response=await request('owner',directory(0,'?q='+encodeURIComponent(q)))
@@ -243,7 +268,8 @@ describe('tenant CRM preparation read: signed HTTP, canonical metadata and isola
   it('rejects scope, duplicate and noncanonical pagination parameters before target resolution',async()=>{
     for(const query of ['companyId=20','venueId=20','runtimeKey=foreign','databaseUrl=postgres://fixture.invalid',
       'q=a&q=b','limit=1&limit=2','offset=0&offset=1','limit=0','limit=101','limit=01','limit=1e2','limit=-1',
-      'offset=1000001','offset=00','offset=0.5','q='+('x'.repeat(101))])
+      'offset=1000001','offset=00','offset=0.5','sort=balance','direction=sideways','wallet=bogus',
+      'sort=id&sort=name','wallet=present&wallet=missing','q='+('x'.repeat(101))])
       expect((await request('owner',directory(0,'?'+query))).status).toBe(400)
     expect(state.resolutions).toBe(0)
   })
