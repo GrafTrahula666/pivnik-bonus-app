@@ -268,7 +268,7 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и источник клиента определяются сервером; параметры запроса не принимаются.')
       json(res,200,await readTenantCrmCustomer(session.admin,tenantCustomer[1]!,tenantCustomer[2]));return true
     }
-    if([...url.searchParams.keys()].some(key=>!['q','limit','offset'].includes(key)||url.searchParams.getAll(key).length!==1))
+    if([...url.searchParams.keys()].some(key=>!['q','limit','offset','sort','direction','wallet'].includes(key)||url.searchParams.getAll(key).length!==1))
       throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и источник клиентов определяются сервером.')
     const integer=(name:string,fallback:number)=>{
       const raw=url.searchParams.get(name)
@@ -278,6 +278,8 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     }
     json(res,200,await listTenantCrmCustomers(session.admin,tenantCustomer[1]!,{
       q:url.searchParams.get('q')??'',limit:integer('limit',25),offset:integer('offset',0),
+      sort:url.searchParams.get('sort')??'id',direction:url.searchParams.get('direction')??'asc',
+      wallet:url.searchParams.get('wallet')??'all',
     }));return true
   }
   const posProxy=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/integrations\/pos-proxy(?:\/(verify))?$/.exec(url.pathname)
