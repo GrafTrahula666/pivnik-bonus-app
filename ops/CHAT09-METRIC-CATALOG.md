@@ -8,7 +8,7 @@
 
 Существуют **два разных источника**, которые нельзя называть одной «выручкой»:
 
-1. **Evotor POS**: `pos/evotor-document.js` нормализует только `SELL` и `PAYBACK`; `pos/repository.js` читает закрытые документы разрешённого магазина; `pos/analytics.js:summarizePos/posDashboards` формирует `all`, `app` и `unlinked`; `admin-platform/server/evotor-read.ts:getEvotorReport` находит привязку магазина по **`tenant_id=scope.companyId`, `location_id=scope.id`**. `app` и `unlinked` являются частями `all`, а не дополнительной выручкой. Отсутствие схемы/привязки/успешного sync даёт `all:null`, не нули.
+1. **Evotor POS**: `pos/evotor-document.js` нормализует только `SELL` и `PAYBACK`; `pos/repository.js` читает импортированные документы разрешённого магазина с допустимым `close_date`; `pos/analytics.js:summarizePos/posDashboards` формирует `all`, `app` и `unlinked`; `admin-platform/server/evotor-read.ts:getEvotorReport` находит привязку магазина по **`tenant_id=scope.companyId`, `location_id=scope.id`**. `app` и `unlinked` являются частями `all`, а не дополнительной выручкой. Отсутствие схемы/привязки/успешного sync даёт `all:null`, не нули.
 2. **Legacy loyalty ledger PIVNIK**: `admin-platform/server/data.ts:periodMetrics/getVenueDashboard` читает `transactions`, `users`, `bar_customers`, `wallets`. `requireLegacyBar` запрещает иной `companyCode` и требует `legacyBarId`. Это **не** полная фискальная выручка кассы и **не** универсальный источник для других tenants. Записи покупки и операций могут не соответствовать друг другу 1:1.
 
 **Scope/authorization.** Перед вызовом read-моделей сервер обязан определить `VenueScope` из текущей Admin session (`resolveVenueScope`) и проверить право на читаемый ресурс (`requireVenueAccess`). Сам `venueId` из URL не является разрешением. Существующий grant проверяется на уровне компании; право на будущий конструктор или CSV/PII **не следует** из права GET dashboard. Aggregation по нескольким venue допустима только после повторного разрешения каждой точки и проверки совместимости источников/валют. Cross-tenant запрос запрещён.
@@ -19,7 +19,7 @@
 
 ## 2. Текущие подтверждённые POS-показатели
 
-Префикс ID `pos.*` ниже — **предлагаемая стабильная нотация каталога v0, не существующие endpoint keys**. Все POS-метрики: population = подтверждённые прочитанные закрытые документы разрешённого `storeId`, timestamp `closedAt`, scope = `companyId + venueId + storeId`, source = `pos/analytics.js` после `getEvotorReport`. Валюта RUB только при подтверждённом денежном контексте источника; при отсутствующей currency metadata новая cross-venue денежная сумма недоступна.
+Префикс ID `pos.*` ниже — **предлагаемая стабильная нотация каталога v0, не существующие endpoint keys**. Все POS-метрики: population = импортированные нормализованные `SELL/PAYBACK` документы разрешённого `storeId` с валидным `close_date`, timestamp `closedAt`, scope = `companyId + venueId + storeId`, source = `pos/analytics.js` после `getEvotorReport`. Валюта RUB только при подтверждённом денежном контексте источника; при отсутствующей currency metadata новая cross-venue денежная сумма недоступна.
 
 | ID каталога | Фактическое поле | Формула / единица | Важная граница |
 |---|---|---|---|
@@ -41,7 +41,7 @@
 | `pos.hour_net` | `all.hours[]` | Σ signed SELL/PAYBACK по часу 00–23, коп. | Для диапазона дни **схлопываются в одинаковый час** |
 | `pos.product_net` | `all.products[]` | Для пары `productId/name/measure`: `salesCents-returnCents`, коп. | Категория товара не выводится из названия; quantity в `quantityMillis` |
 
-Присутствие `lastSuccessAt` означает зафиксированную успешную синхронизацию, **не доказательство полноты конкретного периода**. Данные с отсутствующей связью/схемой/синхронизацией нельзя превращать в «0 продаж».
+`close_date` в нормализаторе не подтверждает наличие фискального чека: без `pos_print_results` число чеков остаётся неизвестным. Присутствие `lastSuccessAt` означает зафиксированную успешную синхронизацию, **не доказательство полноты конкретного периода**. Данные с отсутствующей связью/схемой/синхронизацией нельзя превращать в «0 продаж».
 
 ## 3. Текущие legacy PIVNIK-показатели
 
@@ -62,7 +62,7 @@
 | `loyalty.bonus_balance_current_ex_gifts` | `outstandingBonusBalance.value` | Σ по текущим wallets `GREATEST(balance - completed positive staff/admin/manual gift awards,0)`; баллы, не ₽ |
 | `loyalty.bonus_redemption_rate` | `redemptionRate.value` | `bonusRedeemed/bonusEarned × 100`; **null**, если earned=0; доля баллов, не денежная ставка |
 
-**Оговорка источника:** `data.ts` подписывает `returningCustomers` словами «registered before period», но SQL определяет наличие **предыдущей операции accrue/redeem**. Старый `admin-platform/PRODUCTION-METRICS.md` тоже описывает эту метрику через дату регистрации; это **дрейф описания**, а не доказательство ошибки подсчёта. Изменение UI/API/теста вынести отдельным scope после согласования. Тот же старый документ описывает bonus balance без исключения подарков, а актуальный код их исключает. Эти расхождения не исправляются документом.
+**Оговорка источника:** исторические операции в запросе `previous_tx` проверяются по `client_id`, без отдельного фильтра прошлой операции на тот же `bar_id`; это ограничение семантики `returningCustomers`, а не подтверждённая cross-venue метрика. `data.ts` подписывает `returningCustomers` словами «registered before period», но SQL определяет наличие **предыдущей операции accrue/redeem**. Старый `admin-platform/PRODUCTION-METRICS.md` тоже описывает эту метрику через дату регистрации; это **дрейф описания**, а не доказательство ошибки подсчёта. Изменение UI/API/теста вынести отдельным scope после согласования. Тот же старый документ описывает bonus balance без исключения подарков, а актуальный код их исключает. Эти расхождения не исправляются документом.
 
 ## 4. Что остаётся unavailable и правила будущего API
 
