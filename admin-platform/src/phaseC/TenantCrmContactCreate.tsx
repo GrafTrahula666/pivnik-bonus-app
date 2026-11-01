@@ -117,6 +117,9 @@ function ContactForm({actorId,draftId}:Props){
   function persist(record:Checkpoint):boolean {
     try {
       const serialized=JSON.stringify(record)
+      // An already-pending request in this tab or another tab must not be
+      // overwritten with a fresh UUID, even if this form mounted earlier.
+      if(localStorage.getItem(storageKey)!==null)throw new Error('Pending request exists')
       localStorage.setItem(storageKey,serialized)
       if(localStorage.getItem(storageKey)!==serialized)throw new Error('Storage write failed')
       checkpoint.current=record
@@ -197,7 +200,7 @@ function ContactForm({actorId,draftId}:Props){
       <p className="tenant-crm-contact-hint">* Обязательное поле. Нужен хотя бы один способ связи: телефон или email.</p>
       {error&&<p role="alert" className="tenant-crm-contact-error">{error}</p>}
       {uncertain&&<p role="status">{reenter?recoveryNotice:'Данные заблокированы до проверки результата. Повтор использует прежний ключ запроса.'}</p>}
-      {blocked&&<p role="alert">{storageError}</p>}
+
       {saved&&<p role="status" className="tenant-crm-contact-success">Контакт №{saved.contact.id} создан. Аккаунт не привязан, кошелёк не создан.</p>}
       <div className="tenant-crm-contact-actions">
         {uncertain?<button type="button" className="btn secondary" disabled={busy||blocked||(!pending.current&&!reenter)}
