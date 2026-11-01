@@ -216,35 +216,41 @@ not_provisioned and unpublished. Core SQL supports the existing minimal
 customer/auth/wallet contracts, not the complete legacy runtime or financial
 operations. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`.
 
-## Manual CRM contacts — CHAT 03 / item 24, UNMOUNTED draft (2026-11-01)
+## Manual CRM contacts — CHAT 03 / item 24, DEFAULT-OFF POST draft (2026-11-01)
 
-`crm-manual-contact-create.js` is a separate, **unmounted** write boundary for
-owner-entered contact details in a dedicated prepared tenant database. It does
-**not** turn a manually entered phone/email into authenticated app identity,
-add wallet balances or auto-link legacy guests. Existing
-`customer-provisioning.js` is provider-authenticated registration and must
-not be reused for unverified owner-entered contacts. The reviewed,
-**explicit-only** `admin-platform/tenant-migrations/002_manual_crm_contacts.sql`
-introduces scoped manual-contact and request-key ledger tables, partial unique
-indexes for normalized email/phone per venue, and no automatic startup migration.
-The service requires a verified tenant runtime, locks the exact prepared
-binding, accepts only validated manual fields and UUIDv4 idempotency key, and
-wraps contact + request completion in one target transaction. No server route,
-Admin UI, activation, migration startup, `users`, `user_identities`,
-`wallets`, legacy PIVNIK data or production settings are changed.
-The separate `tenant-crm-contact-owner-gate.ts` is an **unmounted**
-Admin metadata authorization adapter. It holds the active session/account,
-prepared draft and owner-grant locks across a trusted tenant write callback,
-denies invited managers and foreign/revoked scopes, and persists a scoped
-Admin request audit after confirmed callback completion. It is explicitly
-default-off and has no HTTP entrypoint. The target database's actor-bound
-idempotency ledger remains necessary because the two databases cannot share
-a COMMIT; an uncertain Admin audit COMMIT requires a replay/reconciliation
-path, not a new contact. Synthetic metadata tests cover the gate, while
-native PostgreSQL concurrency covers the tenant writer separately.
-Origin/CSRF/rate-limit enforcement, request-body validation at a mounted
-POST, full signed HTTP integration, manual migration provisioning and live
-permissions must still be separately verified before enabling this feature.
+`crm-manual-contact-create.js` writes only separate owner-entered contact
+records to a **dedicated prepared tenant DB**, never authenticated `users`,
+`user_identities`, `wallets`, guest bonuses or legacy PIVNIK identities.
+Do not use provider-authenticated `customer-provisioning.js` for manually
+entered phone/email. The **explicit-only**, NOT startup-mounted
+`admin-platform/tenant-migrations/002_manual_crm_contacts.sql` must be
+reviewed and applied to the exact tenant target before enabling this feature;
+no production migration has been performed.
+
+New `POST /api/admin/onboarding/drafts/:draftId/crm/contacts` in
+`admin-platform/server/router.ts` is default-off behind
+`ADMIN_ENABLE_TENANT_CRM_CONTACT_CREATE=false`, plus existing Admin writes
+and onboarding draft switches. It requires signed Admin session,
+Origin/CSRF, per-actor/IP rate limiting, no URL/query-supplied tenant scope,
+strict pure contact validation **before** tenant DB resolution and an existing
+prepared owner-scoped draft. `tenant-crm-contact-owner-gate.ts` locks
+active account/session, canonical draft and current owner or explicit owner
+invite while `tenant-crm-contact-create.ts` verifies the exact tenant
+binding and calls the existing actor-bound transactional idempotent writer.
+A scoped metadata Admin audit is committed after target write confirmation.
+The target contact/request-ledger transaction is atomic; the two DB commits
+are not. If metadata audit/response fails after target commit, retry the SAME
+UUIDv4 request key for replay and audit recovery. Replays may create additional
+audit rows; this is NOT exactly-once metadata audit or a proof of active venue.
+The HTTP endpoint is **not enabled or deployed** in any production environment.
+
+Synthetic signed HTTP tests exercise owner, invited manager denial, other
+company, CSRF/Origin, malformed scope, replay and duplicate channels. Native
+PG16 concurrency covers the underlying tenant writer independently. Still
+pending: final exact-head CI, native PostgreSQL end-to-end HTTP acceptance,
+manual migration review/application lifecycle, Admin create UI,
+explicit live permissions, live E2E and coordinator integration. Do not merge,
+activate, or deploy this draft automatically.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
