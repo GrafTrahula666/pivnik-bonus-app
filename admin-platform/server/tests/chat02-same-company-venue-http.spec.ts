@@ -245,6 +245,8 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('owner', 'GET', support(1))).status).toBe(200)
 
     expect((await request('trusted', 'GET', support(1))).status).toBe(404)
+    // An existing sibling ticket must not make a foreign mutation possible.
+    expect((await request('trusted', 'POST', support(1), { topic: 'connection' })).status).toBe(404)
     const allowed = await request('trusted', 'GET', support(0))
     expect(allowed.status).toBe(200)
     const body = await allowed.json() as { draftId: string; requests: { draftId: string }[] }
