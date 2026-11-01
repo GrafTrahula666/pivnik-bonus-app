@@ -33,8 +33,8 @@ describe('CHAT 14 / 134: honest synthetic preview only',()=>{
   })
 
   it('mounts the preview exclusively on the existing demo analytics page',async()=>{
-    const demo=await readFile(new URL('../phaseC/DemoMode.tsx',import.meta.url),'utf8')
-    const app=await readFile(new URL('../App.tsx',import.meta.url),'utf8')
+    const demo=await readFile('src/phaseC/DemoMode.tsx','utf8')
+    const app=await readFile('src/App.tsx','utf8')
     expect(demo).toContain("page==='analytics'&&<><AnalyticsPage/><AiSyntheticPreview/></>")
     expect(app).not.toContain("import { AiSyntheticPreview }")
     expect(app).toContain("import { DemoMode }")
