@@ -129,6 +129,25 @@ describe('unmounted manual CRM contact owner/session-grant admission',()=>{
       statusCode:503,code:'TENANT_CRM_CONTACT_ACCESS_UNAVAILABLE'})
     expect(await audit()).toBe(before+1)
   })
+  it('fails closed on two matching audit rows instead of accepting duplicate evidence',async()=>{
+    enabled=true
+    const key='dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    const result={...created,requestKey:key}
+    const replay=async()=>result
+    await expect(gate()(admins.owner,token(11),draft(),key,replay)).resolves.toEqual(result)
+    // Simulate historical/out-of-band duplicate metadata, without deleting it.
+    await fixture.metadata.query(`INSERT INTO admin_audit_log(
+      admin_id,admin_role,company_id,venue_id,action,entity_type,entity_id,
+      before_value,after_value,reason,metadata)
+      SELECT admin_id,admin_role,company_id,venue_id,action,entity_type,entity_id,
+        before_value,after_value,reason,metadata FROM admin_audit_log
+      WHERE admin_id=11 AND action='crm.manual_contact_create_request'
+        AND metadata->>'requestKey'=$1`,[key])
+    const before=await audit()
+    await expect(gate()(admins.owner,token(11),draft(),key,replay)).rejects.toMatchObject({
+      statusCode:503,code:'TENANT_CRM_CONTACT_ACCESS_UNAVAILABLE'})
+    expect(await audit()).toBe(before)
+  })
   it('rolls back metadata audit when the tenant write callback fails',async()=>{
     enabled=true
     const before=await audit()
