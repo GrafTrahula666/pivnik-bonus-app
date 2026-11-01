@@ -201,6 +201,24 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     await click('Создать контакт')
     expect(post).toHaveBeenCalledTimes(1)
   })
+  it('blocks a mounted form as soon as another tab creates a pending key',async()=>{
+    const key='spaceverse:crm-manual-contact:pending:v1:11:123e4567-e89b-42d3-a456-426614174000'
+    const foreign=JSON.stringify({version:1,
+      requestKey:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      nonce:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',digest:'a'.repeat(64)})
+    await act(async()=>{
+      // Browsers emit this event in the *other* tab, not the writer tab.
+      localStorage.setItem(key,foreign)
+      window.dispatchEvent(new StorageEvent('storage',{
+        key,oldValue:null,newValue:foreign,storageArea:localStorage,
+      }))
+    })
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+    await submit()
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.getItem(key)).toBe(foreign)
+  })
   it('pre-mounted second tab cannot overwrite an uncertain contact request key',async()=>{
     // Simulate another tab opened before the first tab persists its request.
     // Both forms initially saw empty storage, but the second must recheck
