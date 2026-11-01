@@ -2,6 +2,8 @@
 
 **Scope:** add a separate, default-off AI add-on entitlement foundation. **Not** an AI provider, subscription purchase, activation flow, AI chat endpoint or commercial rollout. Work is staged in an independent Draft branch; no merge/deploy.
 
+**Branch:** `spaceverse/chat14-ai-entitlement-133-20261101` · **Draft PR:** [#356](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/356) · **initial commit:** `65a31cf3c6bb5e2e43f2168fdd9819a393486bdf` · **PR creation HEAD:** `417eb9d9f01f04aeb8fcb1fe915e36fe5e49ecd7`. Actual latest HEAD and CI must be checked after each update.
+
 ## Verified basis (2026-11-01)
 
 - Checked `main c92ed7cd65f1a96d94363c2b7e212424ab078a73` and `ops/MODULE-MAP.md` / Do not break. No patch-chain, fiscal, kiosk or auth route modifications.
