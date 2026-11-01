@@ -265,13 +265,18 @@ The feature is enabled **only** in that explicit test process through
 `SPACEVERSE_E2E_CRM_CONTACTS=true`; the browser's manual contact POST
 responses are synthetic and intercepted. Real signed HTTP owner/scope/CSRF
 and PostgreSQL 16 remain independently covered by the native workflow.
-Browser checks prove form visibility for synthetic SUPER_ADMIN, request
-payload/CSRF, 503→429→success retry with the same UUID and no mobile
-horizontal overflow; **they do not prove a real VENUE_ADMIN owner grant**.
+Browser checks prove synthetic SUPER_ADMIN and VENUE_ADMIN owner form
+visibility, request payload/CSRF, 503→429→success retry with the same UUID
+and no mobile overflow. The isolated fixture also demonstrates that an
+uninvited trusted director cannot read another owner's draft; after a real
+scoped **synthetic** manager invitation is recorded in disposable metadata,
+the manager can open/edit that draft but cannot see the create-contact form
+or use its signed Admin POST. Both viewport checks use actual Chromium.
+None of this proves production tenant permissions or live activation.
 
-Still pending: exact-head aggregate CI; real owner/mobile permission
-acceptance, explicit manual migration review/application lifecycle, uncertain
-response recovery across browser reload, live E2E and CHAT01 coordinator
+Still pending: exact-head aggregate CI; explicit manual migration
+review/application lifecycle, uncertain response recovery across browser
+reload, real production owner permissions, live E2E and CHAT01 coordinator
 integration. This Draft form does NOT prove commercial readiness. Never
 merge, activate or deploy the Draft automatically.
 
