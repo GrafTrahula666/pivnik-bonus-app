@@ -44,3 +44,8 @@
 - Disabling comparison, switching period, request failure and stale current reports remove the top-card deltas; the original detailed comparison and previous/custom period controls stay intact. No production endpoints, accounting formulas, permissions, or extra background POS reads changed.
 - Added Vitest for callback disable, four KPIs, missing buyers and stale state; browser e2e verifies the top changes appear only after opt-in and disappear on failure.
 - **Verification pending:** GitHub Actions on the new HEAD after this documentation/test commit must pass. Prior green run on `6771876` was before this feature and is not proof for new code. PR still Draft; independently review with CHAT 01; no merge/deploy. Do not start #73 before review/acceptance of #72.
+
+## Пункт 72 · направление KPI приложения (исправление)
+- Аудит выявил дефект UI: `LiveKpi` стирал знак изменения (`Math.abs`) и показывал стрелку роста при точном нуле. По факту снижение выглядело как нейтральные `50%`, а отсутствие изменений как рост.
+- Изменены только направление/символ процента и стрелка в `ProductionDashboard.tsx`; добавлен тест уменьшения, нуля и роста в `app-operations-periods.spec.ts`. Финансовые источники, период и API не изменены.
+- Подтверждение CI нового SHA обязательно; прежний зелёный CI #41269203480 относится к коду **до** этого исправления. Остаётся независимое review координатора; Draft, без merge/deploy.

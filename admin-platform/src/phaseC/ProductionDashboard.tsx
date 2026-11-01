@@ -34,11 +34,12 @@ function delta(current:number|null,previous:number|null|undefined){
 }
 function LiveKpi({label,metric,kind,previous}:{label:string;metric:Metric;kind:'money'|'number'|'percent';previous?:number|null}){
   const change=metric.available?delta(metric.value,previous):null
+  const trendLabel=change===null?'сравнение недоступно':change===0?'0%':`${change<0?'−':'+'}${pct.format(Math.abs(change))}%`
   return <div className={cn('kpi card live-kpi',!metric.available&&'kpi-unavailable')}>
     <div className="kpi-top"><span>{label}</span><span className="ghost-icon info-icon" role="img" aria-label="Источник метрики" title={metric.source||metric.reason||''}><CircleHelp size={14}/></span></div>
     <div className="kpi-value">{format(metric,kind)}</div>
     {metric.available?<div className={cn('delta',change!==null&&change<0&&'negative')}>
-      {change===null?null:change<0?<TrendingDown/>:<TrendingUp/>}{change===null?'сравнение недоступно':`${pct.format(Math.abs(change))}%`}<span>к периоду</span>
+      {change!==null&&change<0?<TrendingDown/>:change!==null&&change>0?<TrendingUp/>:null}{trendLabel}<span>к периоду</span>
     </div>:<div className="kpi-reason">{metric.reason||'Пока недостаточно данных'}</div>}
   </div>
 }

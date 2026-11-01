@@ -521,6 +521,9 @@ records, distinct customers with completed operations, and mean purchase-record
 amount. Other eight indicators, including total customers / bonus-balance
 snapshots and unavailable visits, remain reachable through native `details`.
 Previous-period deltas are only shown for known values with a nonzero baseline.
+Their direction is explicit in text (+ or −); an unchanged metric renders 0%
+without a misleading upward arrow. This is cosmetic only: prior/current
+metric values and API contracts do not change.
 
 `CashDashboard.tsx` uses four primary **POS** cards in both all/app modes:
 net revenue (SELL less PAYBACK), confirmed SELL receipts (null stays unavailable),
