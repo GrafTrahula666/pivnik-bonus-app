@@ -6,6 +6,20 @@ on:
     branches:
       - main
       - 'audit/**'
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact 40-character main commit SHA to deploy (not a PR SHA)'
+        type: string
+        required: true
+      release_confirm:
+        description: 'Explicit production release approval'
+        type: choice
+        required: true
+        options:
+          - CANCEL
+          - DEPLOY_PIVNIK_PRODUCTION
+        default: CANCEL
 
 concurrency:
   # Keep release checks serialized per ref and never cancel any queued run.
@@ -124,7 +138,11 @@ jobs:
            (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
           (github.event_name == 'pull_request' &&
            github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
+           github.head_ref == 'audit/final-release-gate-20260804') ||
+          (github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION')
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
@@ -156,7 +174,11 @@ jobs:
         run: node scripts/railway-repair-anna-frame-and-consent.mjs
 
       - name: Deploy exact commit and verify both production services
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
@@ -164,17 +186,29 @@ jobs:
         run: node scripts/railway-deploy-and-verify-production.mjs
 
       - name: Probe production documents and public endpoints
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
         run: node scripts/probe-current-production.mjs
 
       - name: Verify separate Telegram and VK production accounts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
         env:
           RELEASE_COMMIT_SHA: ${{ github.sha }}
         run: node scripts/verify-platform-separation-production.mjs
 
       - name: Verify signed Telegram and VK production sessions
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RELEASE_COMMIT_SHA: ${{ github.sha }}
