@@ -24,10 +24,10 @@ async function fixture(seed, companyId, venueId) {
   ]) await db.exec(await fs.readFile(new URL(path, import.meta.url), 'utf8'));
 
   const manifest = createSpaceverseRuntimeManifest({
-    draftId: `\${seed.repeat(8)}-\${seed.repeat(4)}-4\${seed.repeat(3)}-8\${seed.repeat(3)}-\${seed.repeat(12)}`,
-    runtimeKey: `sv-\${seed.repeat(32)}`, draftRevision: 1, applicationRevision: 1,
+    draftId: `${seed.repeat(8)}-${seed.repeat(4)}-4${seed.repeat(3)}-8${seed.repeat(3)}-${seed.repeat(12)}`,
+    runtimeKey: `sv-${seed.repeat(32)}`, draftRevision: 1, applicationRevision: 1,
     scopeRevision: 1, scope: { companyId, venueId },
-    config: { displayName: `Venue \${venueId}`,theme: 'dark',primaryColor:'#112233',secondaryColor:'#445566',shopEnabled:true,loyaltyEnabled:true }
+    config: { displayName: `Venue ${venueId}`,theme: 'dark',primaryColor:'#112233',secondaryColor:'#445566',shopEnabled:true,loyaltyEnabled:true }
   });
   await db.query(`INSERT INTO spaceverse_runtime_binding(singleton,runtime_key,manifest_sha256,manifest_revision,company_id,venue_id,isolation_policy,status)
     VALUES(TRUE,$1,$2,1,$3,$4,'dedicated_database','prepared')`,
