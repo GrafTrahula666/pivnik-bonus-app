@@ -4,17 +4,16 @@ import test from 'node:test';
 
 const releaseGate = new URL('../.github/workflows/release-gate.yml', import.meta.url);
 
-test('main release verification is never cancelled or replaced by a newer push', async () => {
+test('main release checks remain serialized without cancelling active or pending runs', async () => {
   const workflow = await readFile(releaseGate, 'utf8');
-  // A cancelled GitHub check suite can be ignored by Railway Wait for CI when
-  // another suite succeeds. Prevent both running and queued main cancellations.
-  assert.match(workflow,
-    /group: release-gate-\$\{\{ github\.ref == 'refs\/heads\/main' && github\.run_id \|\| github\.ref \}\}/);
-  assert.match(workflow,
-    /cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/);
+  // Railway Wait for CI can ignore cancelled workflows when another CI passes.
+  // The same workflow deploys to production, so overlapping runs must also be
+  // serialized to avoid older commits racing newer deployments.
+  assert.match(workflow, /group: release-gate-\$\{\{ github\.ref \}\}/);
+  assert.match(workflow, /queue: max/);
+  assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /push:\s+branches:\s+- main/);
-  // The deployment gate remains restricted to main pushes. This is a static
-  // contract test, not proof that Railway Wait for CI is enabled in production.
+  // This static contract does not prove Wait for CI is enabled on Railway.
   assert.match(workflow,
     /- name: Deploy exact commit and verify both production services\s+if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
 });
