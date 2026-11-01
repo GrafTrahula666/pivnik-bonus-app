@@ -830,9 +830,9 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
       <div className="onboarding-jump-links">
         {current&&session.capabilities.onboardingWorkflow&&<a href="#sv-onboarding-progress">Статусы и терминал</a>}
         <a href="#sv-onboarding-details">Данные заведения</a>
-        {current&&scope&&canWrite&&session.capabilities.onboardingSupport&&<a href="#sv-onboarding-support">Помощь</a>}
-        {current&&scope&&canWrite&&session.capabilities.tenantCrmReads&&<a href="#sv-onboarding-crm">Клиенты CRM</a>}
-        {current&&scope&&canWrite&&session.capabilities.tenantCrmActivationChecks&&<a href="#sv-onboarding-activation">Проверка CRM</a>}
+        {current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.onboardingSupport&&<a href="#sv-onboarding-support">Помощь</a>}
+        {current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmReads&&<a href="#sv-onboarding-crm">Клиенты CRM</a>}
+        {current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmActivationChecks&&<a href="#sv-onboarding-activation">Проверка CRM</a>}
         {current&&!crmMode&&<a href="#sv-onboarding-application">Приложение</a>}
         {current&&<a href="#sv-onboarding-scope">Организация и точка</a>}
         {current&&scope&&<a href="#sv-onboarding-provisioning">База и схема</a>}
