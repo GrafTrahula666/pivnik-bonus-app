@@ -44,6 +44,7 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     enableOnboardingDrafts: config.enableOnboardingDrafts,
     enableOnboardingInvitations: config.enableOnboardingInvitations,
     enableOnboardingSupport: config.enableOnboardingSupport,
+    enableOnboardingWorkflow: config.enableOnboardingWorkflow,
     publicOrigin: config.publicOrigin,
     csrfSecret: config.csrfSecret,
   }
@@ -68,7 +69,8 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
 
   beforeAll(async () => {
     config.enableWrites = config.enableOnboardingDrafts =
-      config.enableOnboardingInvitations = config.enableOnboardingSupport = true
+      config.enableOnboardingInvitations = config.enableOnboardingSupport =
+      config.enableOnboardingWorkflow = true
     config.publicOrigin = 'https://chat02-venue-http.fixture.invalid'
     config.csrfSecret = 'synthetic-chat02-venue-http-secret-123456789'
     fixture = await tenantCrmFixture()
@@ -148,6 +150,36 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     )
     expect((await request('trusted', 'GET', draft(0))).status).toBe(403)
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+  })
+
+  it('does not leak a sibling prepared venue through onboarding list endpoints', async () => {
+    const own = fixture.manifests[0]!.source.draftId
+    const sibling = fixture.manifests[1]!.source.draftId
+    const foreignCompany = fixture.manifests[2]!.source.draftId
+
+    for (const path of ['/api/admin/onboarding/drafts', '/api/admin/onboarding/venues']) {
+      const visibleDraftIds = async (who: 'owner' | 'trusted') => {
+        const response = await request(who, 'GET', path)
+        expect(response.status).toBe(200)
+        const data = await response.json() as {
+          drafts?: { id: string }[]
+          venues?: { kind: string; id: string }[]
+        }
+        return path.endsWith('/drafts')
+          ? (data.drafts ?? []).map(item => item.id)
+          : (data.venues ?? []).filter(item => item.kind === 'draft').map(item => item.id)
+      }
+
+      const trusted = await visibleDraftIds('trusted')
+      expect(trusted).toContain(own)
+      expect(trusted).not.toContain(sibling)
+      expect(trusted).not.toContain(foreignCompany)
+
+      const owner = await visibleDraftIds('owner')
+      expect(owner).toContain(own)
+      expect(owner).toContain(sibling)
+      expect(owner).not.toContain(foreignCompany)
+    }
   })
 
   it('rejects URL and body company/venue substitution without creating support rows', async () => {
