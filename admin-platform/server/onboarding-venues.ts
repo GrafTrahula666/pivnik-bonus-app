@@ -22,7 +22,8 @@ export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string
   // Canonical venue resolver retains existing active-venue access. Draft access
   // adds prepared inactive scopes; neither name filtering nor UI chooses scope.
   const legacy=await listAuthorizedVenues(admin)
-  const drafts=await pool.query<DraftRow>(`SELECT d.id::text,s.venue_id::text,
+  const drafts=await pool.query<DraftRow>(`SELECT d.id::text,
+    CASE WHEN v.id IS NOT NULL AND v.active=FALSE THEN s.venue_id::text ELSE NULL END AS venue_id,
     COALESCE(s.company_id,d.company_id)::text AS company_id,
     COALESCE(c.name,d.data->>'companyName','') AS company_name,
     COALESCE(v.name,d.data->>'venueName','') AS venue_name,d.updated_at::text
