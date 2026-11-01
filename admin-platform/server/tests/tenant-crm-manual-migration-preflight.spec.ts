@@ -62,7 +62,7 @@ describe('CHAT03 #24 migration 002 read-only tenant target preflight',()=>{
     }finally{await db.close()}
   })
   it('refuses missing ownership migration or missing prepared binding',async()=>{
-    for(const options of [{ownership:false},{binding:false}]){
+    for(const options of [{ownership:false},{binding:false}] as {ownership?:boolean;binding?:boolean}[]){
       const {db,expectation}=await fixture(options)
       try{
         await expect(inspectManualCrmMigrationTarget(db,expectation))
@@ -74,7 +74,7 @@ describe('CHAT03 #24 migration 002 read-only tenant target preflight',()=>{
     const {db,expectation}=await fixture()
     try{
       await db.exec("SET spaceverse.crm_contacts_migration='approved'")
-      await db.exec(await fs.readFile(new URL('../tenant-migrations/002_manual_crm_contacts.sql',import.meta.url),'utf8'))
+      await db.exec(await fs.readFile(new URL('../../tenant-migrations/002_manual_crm_contacts.sql',import.meta.url),'utf8'))
       await expect(inspectManualCrmMigrationTarget(db,expectation))
         .rejects.toMatchObject({code:'MIGRATION_ALREADY_OR_PARTIALLY_PRESENT'})
     }finally{await db.close()}
