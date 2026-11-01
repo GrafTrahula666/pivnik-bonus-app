@@ -145,7 +145,7 @@ test('manual CRM contact failures rollback both ledger and contact before a clea
 });
 
 test('manual CRM contact uncertain COMMIT is reconciled by exact idempotent replay',async()=>{
-  const {db,runtime}=await fixture('g');
+  const {db,runtime}=await fixture('a');
   let lostAcknowledgement=true;
   const connect=async()=>({query:async(sql,params)=>{
     const result=await db.query(sql,params);
@@ -169,7 +169,7 @@ test('manual CRM contact uncertain COMMIT is reconciled by exact idempotent repl
 });
 
 test('manual CRM contact refuses a valid runtime connected to a different tenant database',async()=>{
-  const left=await fixture('h','50','51'),right=await fixture('i','60','61');
+  const left=await fixture('b','50','51'),right=await fixture('c','60','61');
   try {
     const wrong=createSpaceverseManualCrmContactService({runtime:left.runtime,connect:right.connect});
     await assert.rejects(wrong(contact(key(9))),{code:'SPACEVERSE_CRM_CONTACT_SCOPE_REJECTED'});
