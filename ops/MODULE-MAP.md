@@ -1,3 +1,24 @@
+## 2026-11-01: CHAT 09 same-company venue POS comparison (Draft only)
+
+The new GET-only `/api/admin/venue-comparison?venueIds=101,102&date=YYYY-MM-DD`
+uses the existing authenticated Admin session, resolves every active venue via
+`resolveVenueScope`, and checks each one with `requireVenueAccess` for
+read-only POS before loading any cash data. An inaccessible, disabled or
+different-company venue rejects the **entire** request. SUPER_ADMIN still
+cannot combine companies within one comparison. Inputs are 2-6 unique,
+bounded numeric IDs. One Moscow [from,to) range applies to every venue.
+
+Rows are read through the existing scoped Evotor POS adapter inside a single
+REPEATABLE READ READ ONLY transaction; failure rolls back without partial
+results. Returns only allowlisted per-venue aggregate money/count fields,
+never customer identities. Unconnected sources stay null rather than zero.
+Currency is not proved by the normalized POS snapshot; response explicitly
+sets `currency:null`, `comparableMoney:false`, `total:null` and displays
+separate venue rows, no cross-venue sum/rank or cross-source mixing.
+Existing single-venue APIs and RBAC implementation are unchanged.
+No migration, secret, runtime patch, DB write, external provider call or
+production deployment is part of this Draft.
+
 ## 2026-11-01: seasonal Halloween raffle/ticket retirement (draft; no production migration)
 
 The seasonal 'Night of Cauldrons' draw, tickets, friend-invite bonuses, purchase/refund hooks and live prize issuance are being removed from the active runtimes. The ordinary wheel retains its approved regular bonus/beer probabilities; archive wheel-spins keep their original code for safe read-only display. The Halloween cosmetic theme is not the raffle and remains separately controlled. Historical SQL migrations 011 and 015 remain on disk and existing DB rows are NOT deleted; no rollback/drop SQL is run. Existing money/bonus and transaction semantics are unchanged. The release must pass double materialization, tests, package audit, VK browser smoke and production rollout review before merge/deploy.
