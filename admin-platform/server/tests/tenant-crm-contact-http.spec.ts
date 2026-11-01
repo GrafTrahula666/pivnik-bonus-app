@@ -283,4 +283,31 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('south',path(2),command(c.contact.email))).status).toBe(200)
     expect(await count(2,'spaceverse_crm_contacts')).toBe('1')
   })
+  // Native PostgreSQL only: PGlite's single connection cannot model two
+  // independent HTTP transactions waiting on the same Admin draft lock.
+  it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
+    'two concurrent signed owner POSTs with the same email create one contact and one audit',
+    async()=>{
+      config.enableTenantCrmContactCreate=true
+      const email='simultaneous-tabs@fixture.invalid'
+      const beforeContacts=Number(await count(0,'spaceverse_crm_contacts'))
+      const beforeRequests=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+      const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+        "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+      )).rows[0]!.n)
+      const beforeAudits=await audits()
+      // Distinct UUIDs simulate separate tabs; only the normalized channel
+      // is shared. Neither tab may bypass the tenant unique index or audit.
+      const [first,second]=await Promise.all([
+        send('owner',path(),command(email)),
+        send('owner',path(),command(email.toUpperCase())),
+      ])
+      expect([first.status,second.status].sort((a,b)=>a-b)).toEqual([200,409])
+      const rejected=first.status===409?first:second
+      expect(await rejected.json()).toMatchObject({code:'TENANT_CRM_CONTACT_DUPLICATE'})
+      expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(beforeContacts+1)
+      expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(beforeRequests+1)
+      expect(await audits()).toBe(beforeAudits+1)
+    },30_000)
+
 })
