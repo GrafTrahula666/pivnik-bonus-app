@@ -9,7 +9,7 @@ import {readCrmActivationSummary} from './onboarding-provisioning-api.js'
 import {unavailableCrmActivationSummary} from './tenant-crm-activation-state.js'
 
 interface DraftRow extends QueryResultRow{
- id:string;venue_id:string|null;company_id:string|null;company_name:string;venue_name:string;updated_at:string
+ id:string;venue_id:string|null;matched_venue_id:string|null;company_id:string|null;company_name:string;venue_name:string;updated_at:string
 }
 const severity:Record<string,number>={failed:5,degraded:4,suspended:3,verifying:2,pending:1,not_configured:0}
 export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string|null,rawQuery:string|null=null){
@@ -24,6 +24,7 @@ export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string
   const legacy=await listAuthorizedVenues(admin)
   const drafts=await pool.query<DraftRow>(`SELECT d.id::text,
     CASE WHEN v.id IS NOT NULL AND v.active=FALSE THEN s.venue_id::text ELSE NULL END AS venue_id,
+    v.id::text AS matched_venue_id,
     COALESCE(s.company_id,d.company_id)::text AS company_id,
     COALESCE(c.name,d.data->>'companyName','') AS company_name,
     COALESCE(v.name,d.data->>'venueName','') AS venue_name,d.updated_at::text
@@ -31,7 +32,9 @@ export async function listOnboardingVenues(admin:AdminPrincipal,rawOffset:string
     LEFT JOIN companies c ON c.id=COALESCE(s.company_id,d.company_id)
     LEFT JOIN venues v ON v.id=s.venue_id AND v.company_id=s.company_id
     WHERE ${onboardingDraftAccessSql('d','$1')}`,[admin.id])
-  const prepared=new Set(drafts.rows.map(row=>row.venue_id).filter(Boolean))
+  // Keep an accidentally active *matching* prepared venue out of the legacy list
+  // while never hiding a legitimate foreign venue on a corrupted scope.
+  const prepared=new Set(drafts.rows.map(row=>row.matched_venue_id).filter(Boolean))
   const entries=[...drafts.rows.map(row=>({kind:'draft' as const,id:row.id,venueId:row.venue_id,
     companyId:row.company_id,companyName:row.company_name,name:row.venue_name,updatedAt:row.updated_at})),
    ...legacy.filter(venue=>!prepared.has(venue.id)).map(venue=>({kind:'existing' as const,id:venue.id,venueId:venue.id,
