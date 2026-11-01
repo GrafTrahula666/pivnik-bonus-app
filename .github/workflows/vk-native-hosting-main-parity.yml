@@ -100,7 +100,9 @@ jobs:
       - name: Install isolated Playwright runtime
         run: |
           npm install --no-save --package-lock=false playwright@1.55.0
-          npx playwright install --with-deps chromium
+          # ubuntu-24.04 GitHub runner already has browser runtime libraries.
+          # --with-deps re-runs apt against an unreachable Azure mirror and hangs until cancelled.
+          npx playwright install chromium
       - name: Run VK static bundle browser smoke
         run: node scripts/vk-native-hosting-browser-smoke.mjs
       - name: Run VK bootstrap auth/session smoke

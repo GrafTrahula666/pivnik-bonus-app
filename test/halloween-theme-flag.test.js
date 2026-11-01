@@ -22,9 +22,8 @@ test('Halloween skin is behind design.theme and every rule is scoped to html.the
   const [app, css] = await Promise.all([read('app.js'), read('styles.css')]);
   assert.match(app, /classList\.toggle\('theme-halloween', design\.theme === 'halloween'\)/);
 
-  assert.match(app, /applyHalloweenCopy\(design\.theme === 'halloween'\)/);
-  assert.match(app, /Хэллоуин в SpaceVerse/);
-  assert.match(app, /cta: 'К котлам'/);
+  // Decorative Halloween colors remain, but the ticket/draw UI has been retired.
+  assert.doesNotMatch(app, /\/api\/halloween\//);
 
   const marker = css.indexOf('Halloween "Midnight" theme');
   assert.ok(marker > 0, 'Halloween block is missing');
