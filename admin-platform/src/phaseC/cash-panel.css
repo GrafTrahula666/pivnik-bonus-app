@@ -87,3 +87,11 @@
 .app-operations-extra .kpi-grid{margin-bottom:12px}
 @media(max-width:860px){.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:400px){.app-operations-extra{padding:14px 12px}}
+
+/* POS receipts and linked buyers are separate from sale/return document count. */
+.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.cash-secondary-metrics{padding:16px 20px}
+.cash-secondary-metrics summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
+.cash-secondary-metrics[open] summary{margin-bottom:16px}
+@media(max-width:860px){.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.cash-secondary-metrics{padding:14px 12px}}
