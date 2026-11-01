@@ -16,7 +16,7 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
   })
   it('selects yesterday and arbitrary valid calendar days with exclusive Moscow midnight bounds',()=>{
     const now=new Date('2026-10-10T21:30:00Z') // Already October 11 in Moscow.
-    for(const date of ['2026-10-10','2026-09-30','2024-02-29']){
+    for(const date of ['2026-10-10','2026-09-30','2024-02-29','2021-08-17']){
       const selected=evotorPeriod(new URL('https://fixture.invalid/?date='+date),now)
       expect(selected.from.getTime()).toBe(Date.parse(date+'T00:00:00+03:00'))
       expect(selected.to.getTime()-selected.from.getTime()).toBe(86400000)
