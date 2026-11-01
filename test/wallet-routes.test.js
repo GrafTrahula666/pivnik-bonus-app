@@ -42,7 +42,7 @@ async function mount(config) {
   const serverSource = await source('server.js');
   vm.runInNewContext(
     between(serverSource, 'async function authRequired(', '\nfunction requireRole(')
-      + between(serverSource, 'registerWalletRoutes(app, {', "\napp.get('/api/halloween/summary'"),
+      + between(serverSource, 'registerWalletRoutes(app, {', "\napp.get('/api/staff/session'"),
     { ...globals, ...config, app, registerWalletRoutes, getProfile: async () => ({
       id: row.id, role: row.role, qrShortCode: config.qrShortCode, termsAccepted: consent
     }) }

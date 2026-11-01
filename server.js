@@ -51,16 +51,6 @@ import { createStaffTransactionPersistence } from './staff-transaction-persisten
 import { createBeerGiftTransactionPersistence } from './beer-gift-transaction-persistence.js';
 import { createBroadcastCampaignStore } from './broadcast-campaign-store.js';
 import {
-  claimInvite as claimHalloweenInvite,
-  getInviteSummary as getHalloweenInviteSummary,
-  identityTombstoneSecretFromEnv,
-  inviteCodeFromStartParam,
-  recordCancellation as recordHalloweenCancellation,
-  recordPurchase as recordHalloweenPurchase,
-  recordPurchaseReturn as recordHalloweenPurchaseReturn,
-  runHalloweenHook
-} from './halloween-invite.js';
-import {
   adminUserCrmStatus,
   adminUserDisplayName,
   adminUserDisplayUsername,
@@ -1653,30 +1643,6 @@ async function cancelCompletedTransaction(db, transactionId, actorId, reason, re
   return updated.rows[0];
 }
 
-// Halloween "Night of Cauldrons" hooks (halloween-invite.js). Each runs on its own connection after the main
-// operation has committed and never throws, so a missing manual migration 011 or a ticket error can never
-// break login, a staff purchase or a cancel.
-// Same secret as the gateway's deleted_identity_tombstones hash: a re-created account cannot be invited again.
-const halloweenTombstoneSecret = identityTombstoneSecretFromEnv();
-
-async function claimHalloweenInviteFromStartParam(initData, userId) {
-  const code = initData ? inviteCodeFromStartParam(initData) : null;
-  if (!code) return;
-  await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
-    inviteeId: userId, code, channel: 'telegram_start_param', tombstoneSecret: halloweenTombstoneSecret
-  }));
-}
-
-async function halloweenAfterPurchase(transactionId) {
-  if (!transactionId) return;
-  await runHalloweenHook(pool, 'purchase', (db) => recordHalloweenPurchase(db, { transactionId }));
-}
-
-async function halloweenAfterCancel(transactionId) {
-  if (!transactionId) return;
-  await runHalloweenHook(pool, 'cancel', (db) => recordHalloweenCancellation(db, { transactionId }));
-}
-
 app.get('/api/health', async (_req, res) => {
   try {
     const result = await pool.query(`
@@ -1759,8 +1725,6 @@ app.post('/api/auth', async (req, res, next) => {
       await client.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
       await ensurePersonalQr(client, userId);
       await client.query('COMMIT');
-      await claimHalloweenInviteFromStartParam(initData, userId);
-
       const profile = await getProfile(userId);
       const designResult = await pool.query('SELECT published FROM app_settings WHERE id = 1');
       const sessionResult = await pool.query(
@@ -2128,22 +2092,6 @@ registerWalletRoutes(app, {
   googleWalletIssuerUrl
 });
 
-app.get('/api/halloween/summary', authRequired, async (req, res, next) => {
-  try {
-    res.json(await getHalloweenInviteSummary(pool, { userId: req.user.id, secret: sessionSecret }));
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/halloween/invite/claim', authRequired, async (req, res) => {
-  // A bad, foreign or stale code is never an error for the client: it just does not attach.
-  const result = await runHalloweenHook(pool, 'invite claim', (db) => claimHalloweenInvite(db, {
-    inviteeId: req.user.id, code: req.body?.code, channel: 'claim', tombstoneSecret: halloweenTombstoneSecret
-  }));
-  res.json({ ok: true, ...(result || { attached: false, reason: 'unavailable' }) });
-});
-
 app.get('/api/staff/session', authRequired, requireRole('staff', 'admin'), async (req, res, next) => {
   try {
     const shift = await getCurrentShift();
@@ -2274,7 +2222,6 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
         beerMl
       });
       await client.query('COMMIT');
-      await halloweenAfterPurchase(existing.rows[0].id);
       await syncUserAchievements(pool, existing.rows[0].client_id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
       return res.json({
         transaction: transactionResponse(existing.rows[0]),
@@ -2351,7 +2298,6 @@ app.post('/api/staff/transactions', authRequired, requireRole('staff', 'admin'),
       [newPaidMl, newGiftBalanceMl, targetUser.id]
     );
     await client.query('COMMIT');
-    await halloweenAfterPurchase(persistedTransaction?.id);
     await syncUserAchievements(pool, targetUser.id).catch((error) => console.warn('Purchase achievements sync failed:', error.code || 'unknown'));
 
     const tx = persistedTransaction;
@@ -2637,7 +2583,6 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
     ) {
       return res.status(409).json({ error: 'requestKey отмены уже использован для другой операции.' });
     }
-    await halloweenAfterCancel(replay.rows[0].id); // repairs a cancel hook that failed the first time
     return res.json({
       ok: true,
       transaction: transactionResponse(replay.rows[0]),
@@ -2672,7 +2617,6 @@ app.post('/api/staff/transactions/:id/cancel', authRequired, requireRole('staff'
       ownerUnlimitedCancel ? {} : { staffId: actingStaff.id, notBefore: quota.countFrom }
     );
     await client.query('COMMIT');
-    await halloweenAfterCancel(tx?.id);
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена.
 Причина: ${reason}
@@ -2815,16 +2759,10 @@ const posBonusLedger = {
     if (tx) await db.query('INSERT INTO beer_loyalty (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [tx.client_id]);
     return cancelCompletedTransaction(db, transactionId, null, reason, requestKey);
   },
-  async afterReturn(result) {
-    await runHalloweenHook(pool, 'return', (db) => recordHalloweenPurchaseReturn(db, {
-      transactionId: result.baseTransactionId, returnedCents: result.returnedCents, returnKey: result.returnKey
-    }));
-  },
   async afterCommit(result) {
-    // A failed achievement sync must not drop the Halloween hook or the guest's message.
+    // Failed achievement sync must not hide the guest's POS message.
     await syncUserAchievements(pool, result.user.id).catch((error) => console.warn('POS achievements sync failed:', error.message));
     if (result.kind === 'accrue') {
-      await halloweenAfterPurchase(result.transaction.id);
       await sendTelegramMessage(result.user.telegram_id, `Покупка в баре «Пивник»
 
 Чек: ${rubles(result.amountCents).toFixed(2)} ₽
@@ -2834,7 +2772,6 @@ const posBonusLedger = {
 Если вы не совершали эту покупку, обратитесь к администратору.`);
       return;
     }
-    if (result.cancelledTransactionId) await halloweenAfterCancel(result.cancelledTransactionId);
     if (result.removed > 0) {
       await sendTelegramMessage(result.user.telegram_id, `Возврат в баре «Пивник»
 
@@ -3780,7 +3717,6 @@ app.post('/api/admin/transactions/:id/cancel', authRequired, requireRole('admin'
       requestKey
     );
     await client.query('COMMIT');
-    await halloweenAfterCancel(tx?.id);
     const profile = await getProfile(tx.client_id);
     if (!tx.__idempotentReplay) await sendTelegramMessage(profile.telegramId, `Операция в баре «Пивник» отменена владельцем.
 Причина: ${reason}

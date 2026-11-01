@@ -36,12 +36,8 @@ import {
   verifySession as verifyCoreSession
 } from './platform-core.js';
 import { resolvePersonalQrRecord } from './qr-resolver.js';
-import { claimInvite as claimHalloweenInvite, inviteCodeFromStartParam, runHalloweenHook } from './halloween-invite.js';
-import { grantTickets as grantHalloweenTickets } from './halloween-raffle.js';
 import { issueRunTicket, readRunTicket, plausibleScore, normalizeRunChar, submitRunScore, runBoard } from './run-leaderboard.js';
 import {
-  HALLOWEEN_TICKET_PRIZE,
-  HALLOWEEN_TICKET_PRIZE_CODE,
   WHEEL_PRIZES,
   configureWheel,
   drawWheelPrize,
@@ -1770,18 +1766,6 @@ async function authenticateTelegram(body) {
   }
   enforceRateLimit(`auth-identity:telegram:${user.id}`, 60, 10 * 60 * 1000);
   const data = await resolveProviderUser('telegram', user);
-  // Halloween invite from the signed start_param (inv_<code>); best-effort, never breaks login.
-  try {
-    const inviteCode = initData ? inviteCodeFromStartParam(initData) : null;
-    const inviteeId = inviteCode ? verifySession(data?.token)?.uid : null;
-    if (inviteeId) {
-      await runHalloweenHook(pool, 'invite start_param', (db) => claimHalloweenInvite(db, {
-        inviteeId, code: inviteCode, channel: 'telegram_start_param', tombstoneSecret: identityTombstoneSecret
-      }));
-    }
-  } catch (error) {
-    console.warn('Halloween invite start_param skipped:', error?.code || error?.message || 'unknown');
-  }
   return data;
 }
 
@@ -1819,18 +1803,9 @@ async function grantReward(db, userId, code, amount, source, reason, mode = 'adj
 }
 
 function wheelPrizeByCode(code) {
-  if (code === HALLOWEEN_TICKET_PRIZE_CODE) return HALLOWEEN_TICKET_PRIZE;
+  // Decode historical spins without changing their recorded prize or issuing new tickets.
+  if (code === 'halloween-ticket') return { code: 'halloween-ticket', title: 'Архивный приз', bonus: 0, beerMl: 0, annualSupply: false };
   return WHEEL_PRIZES.find((item) => item.code === code) || null;
-}
-
-// The Halloween ticket replaces the beer glass only while the theme is published and the raffle tables exist.
-async function halloweenWheelActive(client) {
-  const result = await client.query(
-    `SELECT (SELECT published->>'theme' FROM app_settings WHERE id = 1) AS theme,
-            to_regclass('halloween_ticket_ledger') IS NOT NULL AS has_tables`
-  );
-  const row = result.rows[0] || {};
-  return row.theme === 'halloween' && row.has_tables === true;
 }
 
 function wheelPrizeResponse(row) {
@@ -1976,7 +1951,7 @@ async function spinTelegramWheel(userId, rawRequestKey) {
       }
 
       const chargedCost = unlimitedBonus ? 0 : listedCost;
-      const { ticket, prize } = drawWheelPrize(undefined, { halloween: await halloweenWheelActive(client) });
+      const { ticket, prize } = drawWheelPrize();
       let balanceAfter = currentBalance;
       if (unlimitedBonus && prize.bonus > 0) {
         const walletResult = await client.query(
@@ -2052,12 +2027,6 @@ async function spinTelegramWheel(userId, rawRequestKey) {
           `wheel:${prize.code}`
         ]
       );
-
-      if (prize.halloweenTicket) {
-        await grantHalloweenTickets(client, {
-          userId, delta: 1, reason: 'wheel', sourceKey: `wheel:${spinRow.id}`, note: 'Билет с колеса Пивника'
-        });
-      }
 
       if (prize.annualSupply) {
         await client.query(
