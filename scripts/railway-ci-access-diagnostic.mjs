@@ -89,6 +89,11 @@ export async function diagnoseRailwayCiAccess({ token, fetchImpl, production = R
         mutations: 0
       };
     }
+    // A broken project-token query is not evidence that Bearer credentials were revoked.
+    // Only an actual alternate-header authorization denial leaves Bearer scope unresolved.
+    if (project.kind !== 'not_authorized') {
+      return { status: 'api_response_unexpected', stage: service, mutations: 0 };
+    }
     return { status: 'bearer_access_unresolved', stage: service, mutations: 0 };
   }
   return { status: 'variable_read_authorized', checkedServices: targets.map(([name]) => name), mutations: 0 };

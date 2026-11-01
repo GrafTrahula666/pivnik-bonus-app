@@ -127,6 +127,25 @@ test('does not mislabel fallback 429/5xx or invalid JSON as an authorization den
   }
 });
 
+test('does not call a broken project-token metadata contract a Bearer-scope failure', async () => {
+  const brokenMetadata = [
+    result({ errors: [{ message: 'Cannot query field projectToken on Query' }] }),
+    result({ errors: [{ message: secret }] }, 400),
+    result({ data: { projectToken: null } }),
+    result({ data: { projectToken: { projectId: 'expected-project' } } }),
+    result({})
+  ];
+  for (const fallback of brokenMetadata) {
+    const { fetchImpl, requests } = recorder([denied(), fallback]);
+    const output = await diagnoseRailwayCiAccess({ token: secret, fetchImpl, production });
+    assert.deepEqual(output, { status: 'api_response_unexpected', stage: 'telegram', mutations: 0 });
+    assert.equal(requests.length, 2, 'only one metadata probe is permitted');
+    assert.equal(requests[1].headers['Project-Access-Token'], secret);
+    assert.ok(!JSON.stringify(output).includes(secret));
+    assert.ok(!JSON.stringify(output).includes('expected-project'));
+  }
+});
+
 test('does not send a request when secret is missing', async () => {
   const { fetchImpl, requests } = recorder([]);
   const output = await diagnoseRailwayCiAccess({ token: '', fetchImpl, production });
