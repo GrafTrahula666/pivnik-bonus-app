@@ -90,15 +90,18 @@ async function load(client:Pick<PoolClient,'query'>,admin:AdminPrincipal,draftId
     WHERE d.id=$1::uuid AND ${onboardingDraftAccessSql('d','$2',write)}`,[draftId,admin.id])
   if(!result.rows[0])throw new HttpError(404,'ONBOARDING_DRAFT_NOT_FOUND','Черновик не найден или недоступен.')
   const resultRow=result.rows[0]
-  if(resultRow.venue_id&&resultRow.app_revision)resultRow.posProxy=await loadOnboardingPosProxyProjection(client,admin,draftId)
+  // An absent/misbound or prematurely active venue is not a valid POS source.
+  if(resultRow.venue_id&&resultRow.venue_active===false&&resultRow.app_revision)resultRow.posProxy=await loadOnboardingPosProxyProjection(client,admin,draftId)
   return resultRow
 }
 function view(row:WorkflowRow){
-  const saved=progress(row),scope=Boolean(row.venue_id),steps:{id:Step;status:Status;code:string;nextAction:string}[]=[]
+  const saved=progress(row),scope=Boolean(row.venue_id),invalidVenue=scope&&row.venue_active!==false
+  const steps:{id:Step;status:Status;code:string;nextAction:string}[]=[]
   const add=(id:Step,status:Status,code:string,nextAction:string)=>steps.push({id,status,code,nextAction})
   add('organization',row.company_active===true?'active':'pending',row.company_active===true?'organization_exists':'organization_pending',
     row.company_active===true?'Организация выбрана.':'Организация сохранена. Её включение требует подтверждённого развёртывания.')
-  add('venue',scope?'pending':'not_configured',scope?'venue_reserved':'venue_not_reserved',
+  add('venue',invalidVenue?'failed':scope?'pending':'not_configured',invalidVenue?'scope_changed':scope?'venue_reserved':'venue_not_reserved',
+    invalidVenue?'Подготовленная точка не принадлежит указанной организации или уже включена. Проверьте область и права доступа.':
     scope?'Точка подготовлена и выключена.':'Сохраните данные и приложение, затем подготовьте область.')
   add('application',row.app_revision?'pending':'not_configured',row.app_revision?'application_saved':'application_missing',
     row.app_revision?'Настройки сохранены. Приложение ещё не развёрнуто.':'Сохраните настройки приложения.')
@@ -166,7 +169,7 @@ function view(row:WorkflowRow){
       }
     }
   }
-  const inconsistent=row.venue_active===true
+  const inconsistent=invalidVenue
   return {draftId:row.id,revision:row.progress_revision??0,progress:saved,steps,
     status:inconsistent||steps.some(step=>step.status==='failed')?'failed':steps.some(step=>step.status==='degraded')?'degraded':steps.some(step=>step.status==='verifying')?'verifying':'pending',requiresAttention:true,
     attentionCode:inconsistent?'scope_changed':'runtime_not_provisioned',runtimeStatus:'not_provisioned',published:false,
