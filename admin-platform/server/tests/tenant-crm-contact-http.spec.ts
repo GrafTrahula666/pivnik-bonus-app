@@ -219,14 +219,24 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(uncertain.status).toBe(503)
     expect(JSON.stringify(await uncertain.json())).not.toContain('synthetic-metadata-private-error')
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
-    const replay=await send('owner',path(),c)
+    // Recovery must survive a fresh signed session for the SAME Admin actor.
+    // The tenant ledger binds the actor, not the previous session cookie.
+    const reauth=await send(null,'/api/admin/auth/login',
+      {email:'owner@fixture.invalid',password:fixturePassword})
+    expect(reauth.status).toBe(200)
+    const renewed=await reauth.json()
+    const renewedHeaders={
+      cookie:reauth.headers.get('set-cookie')!.split(';')[0]!,
+      'x-csrf-token':renewed.csrfToken as string,
+    }
+    const replay=await send('owner',path(),c,{headers:renewedHeaders})
     expect(replay.status).toBe(200)
     expect((await replay.json()).requestKey).toBe(c.requestKey)
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
     const auditAfter=(await fixture.metadata.query<{n:string}>(
       "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
     expect(Number(auditAfter)).toBe(Number(auditBefore)+1)
-    const replayAgain=await send('owner',path(),c)
+    const replayAgain=await send('owner',path(),c,{headers:renewedHeaders})
     expect(replayAgain.status).toBe(200)
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
     const auditAgain=(await fixture.metadata.query<{n:string}>(
