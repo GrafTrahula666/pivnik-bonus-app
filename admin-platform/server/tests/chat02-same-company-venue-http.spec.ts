@@ -1,0 +1,159 @@
+// @vitest-environment node
+import http from 'node:http'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { config } from '../config.js'
+import { fixturePassword } from './onboarding-fixture.js'
+import { tenantCrmFixture } from './tenant-crm-fixture.js'
+import type { TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
+
+const state = vi.hoisted(() => ({ metadata: null as TenantCrmFixtureDatabase | null }))
+vi.mock('../db.js', () => {
+  const query = async (sql: string, params?: unknown[]) => {
+    const result = await state.metadata!.query(sql, params)
+    return { ...result, rowCount: result.affectedRows ?? result.rows.length }
+  }
+  const pool = {
+    query,
+    connect: async () => {
+      const client = state.metadata!.connect
+        ? await state.metadata!.connect()
+        : { query: state.metadata!.query.bind(state.metadata!), release() {} }
+      return {
+        query: async (sql: string, params?: unknown[]) => {
+          const result = await client.query(sql, params)
+          return { ...result, rowCount: result.affectedRows ?? result.rows.length }
+        },
+        release: () => client.release(),
+      }
+    },
+  }
+  return { pool, readPool: pool, writePool: null,
+    tableExists: async () => false, productionTableExists: async () => false }
+})
+
+// CHAT 02 #15: the same-company company grant must not widen a venue invitation.
+// The fixture uses PGlite by default, or isolated loopback PostgreSQL when
+// SPACEVERSE_TEST_NATIVE_POSTGRES_URL is explicitly provided.
+describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
+  let server: http.Server
+  let origin = ''
+  let fixture: Awaited<ReturnType<typeof tenantCrmFixture>>
+  const sessions = new Map<string, { cookie: string; csrf: string }>()
+  const oldFlags = {
+    enableWrites: config.enableWrites,
+    enableOnboardingDrafts: config.enableOnboardingDrafts,
+    enableOnboardingInvitations: config.enableOnboardingInvitations,
+    enableOnboardingSupport: config.enableOnboardingSupport,
+    publicOrigin: config.publicOrigin,
+    csrfSecret: config.csrfSecret,
+  }
+  const draft = (index: number) =>
+    `/api/admin/onboarding/drafts/${fixture.manifests[index]!.source.draftId}`
+  const support = (index: number) => draft(index) + '/support'
+  const request = (who: string | null, method: 'GET' | 'POST', path: string,
+    body?: unknown, csrf = true, requestOrigin = config.publicOrigin) => {
+    const session = who ? sessions.get(who) : undefined
+    return fetch(origin + path, {
+      method,
+      headers: {
+        ...(session ? { cookie: session.cookie } : {}),
+        ...(method === 'POST' ? {
+          origin: requestOrigin, 'content-type': 'application/json',
+          ...(csrf ? { 'x-csrf-token': session?.csrf ?? '' } : {}),
+        } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+  }
+
+  beforeAll(async () => {
+    config.enableWrites = config.enableOnboardingDrafts =
+      config.enableOnboardingInvitations = config.enableOnboardingSupport = true
+    config.publicOrigin = 'https://chat02-venue-http.fixture.invalid'
+    config.csrfSecret = 'synthetic-chat02-venue-http-secret-123456789'
+    fixture = await tenantCrmFixture()
+    state.metadata = fixture.metadata
+    const { handleApi, sendApiError } = await import('../router.js')
+    server = http.createServer((req, res) => {
+      void handleApi(req, res, new URL(req.url!, origin))
+        .catch(error => sendApiError(res, error, req))
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    origin = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`
+    for (const who of ['owner', 'trusted']) {
+      const response = await fetch(origin + '/api/admin/auth/login', {
+        method: 'POST',
+        headers: { origin: config.publicOrigin, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: who + '@fixture.invalid', password: fixturePassword }),
+      })
+      expect(response.status).toBe(200)
+      sessions.set(who, {
+        cookie: response.headers.get('set-cookie')!.split(';')[0]!,
+        csrf: (await response.json() as { csrfToken: string }).csrfToken,
+      })
+    }
+  }, 90_000)
+
+  afterEach(async () => {
+    await state.metadata!.query(
+      "UPDATE admin_onboarding_access SET role='manager',revoked_at=NULL WHERE invitation_id=$1",
+      [fixture.viewerInvite],
+    )
+    const { __resetRateLimitBucketsForTests } = await import('../security.js')
+    __resetRateLimitBucketsForTests()
+  })
+
+  afterAll(async () => {
+    if (server) await new Promise<void>(resolve => server.close(() => resolve()))
+    for (const db of fixture?.targets ?? []) await db.close()
+    await state.metadata?.close()
+    Object.assign(config, oldFlags)
+  })
+
+  it('keeps a trusted company director limited to the specifically invited venue', async () => {
+    const trustedGrant = await state.metadata!.query<{ access_kind: string }>(
+      'SELECT access_kind FROM admin_company_access WHERE admin_id=12 AND company_id=10',
+    )
+    expect(trustedGrant.rows).toEqual([{ access_kind: 'trusted' }])
+    expect(fixture.manifests[0]!.scope.companyId).toBe(fixture.manifests[1]!.scope.companyId)
+    expect(fixture.manifests[0]!.scope.venueId).not.toBe(fixture.manifests[1]!.scope.venueId)
+
+    expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
+    expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
+    expect((await request('trusted', 'POST', support(0), { topic: 'connection' })).status).toBe(200)
+    expect((await request('trusted', 'POST', support(1), { topic: 'connection' })).status).toBe(404)
+    const foreign = await state.metadata!.query(
+      'SELECT id FROM admin_onboarding_support_requests WHERE draft_id=$1',
+      [fixture.manifests[1]!.source.draftId],
+    )
+    expect(foreign.rows).toEqual([])
+
+    // The explicit company owner remains company-wide, by existing policy.
+    expect((await request('owner', 'GET', draft(0))).status).toBe(200)
+    expect((await request('owner', 'GET', draft(1))).status).toBe(200)
+  })
+
+  it('rechecks viewer downgrade and revocation on the same signed session', async () => {
+    expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
+    await state.metadata!.query(
+      "UPDATE admin_onboarding_access SET role='viewer' WHERE invitation_id=$1",
+      [fixture.viewerInvite],
+    )
+    expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
+    expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+    expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
+    await state.metadata!.query(
+      'UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',
+      [fixture.viewerInvite],
+    )
+    expect((await request('trusted', 'GET', draft(0))).status).toBe(403)
+    expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+  })
+
+  it('rejects unsigned and CSRF/origin-bypassing support writes', async () => {
+    expect((await request(null, 'GET', draft(0))).status).toBe(401)
+    expect((await request('trusted', 'POST', support(0), { topic: 'connection' }, false)).status).toBe(403)
+    expect((await request('trusted', 'POST', support(0), { topic: 'connection' }, true,
+      'https://foreign.fixture.invalid')).status).toBe(403)
+  })
+})
