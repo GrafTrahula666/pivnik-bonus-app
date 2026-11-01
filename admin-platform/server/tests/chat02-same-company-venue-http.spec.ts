@@ -136,6 +136,22 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('owner', 'GET', draft(1))).status).toBe(200)
   })
 
+  it('denies sibling prepared application and scope reads on a signed trusted session', async () => {
+    for (const resource of ['application', 'scope'] as const) {
+      const own = await request('trusted', 'GET', `${draft(0)}/${resource}`)
+      expect(own.status).toBe(200)
+      expect((await own.json() as Record<string, unknown>)[resource]).toBeTruthy()
+
+      const ownerSibling = await request('owner', 'GET', `${draft(1)}/${resource}`)
+      expect(ownerSibling.status).toBe(200)
+      expect((await ownerSibling.json() as Record<string, unknown>)[resource]).toBeTruthy()
+
+      const denied = await request('trusted', 'GET', `${draft(1)}/${resource}`)
+      expect(denied.status).toBe(404)
+      expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_DRAFT_NOT_FOUND' })
+    }
+  })
+
   it('rechecks viewer downgrade and revocation on the same signed session', async () => {
     expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
     await state.metadata!.query(
