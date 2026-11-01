@@ -3,7 +3,7 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import type { PGlite } from '@electric-sql/pglite'
-import { afterAll,beforeAll,describe,expect,it,vi } from 'vitest'
+import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false}))
 vi.mock('../db.js',()=>{
@@ -55,6 +55,12 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
       sessions.set(who,{cookie:response.headers.get('set-cookie')!.split(';')[0]!,csrf:body.csrfToken})
     }
   },30_000)
+  // These tests cover invitation semantics, not HTTP rate limiting. Keep each
+  // scenario's request budget independent, as in the other onboarding suites.
+  afterEach(async()=>{
+    const {__resetRateLimitBucketsForTests}=await import('../security.js')
+    __resetRateLimitBucketsForTests()
+  })
   afterAll(async()=>{if(server)await new Promise<void>(resolve=>server.close(()=>resolve()));await state.db?.close()})
 
   it('manual migration is additive and repeatable without touching PIVNIK rows',async()=>{
