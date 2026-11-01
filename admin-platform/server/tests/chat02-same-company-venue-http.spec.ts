@@ -200,6 +200,30 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     }
   })
 
+  it('does not widen invitation target selectors for a trusted company director', async () => {
+    const path = '/api/admin/onboarding/invitations'
+    const trusted = await request('trusted', 'GET', path)
+    expect(trusted.status).toBe(200)
+    const restricted = await trusted.json() as {
+      invitations: unknown[]; companies: { id: string }[]; venues: { id: string }[]
+    }
+    expect(restricted.invitations).toEqual([])
+    expect(restricted.companies).toEqual([])
+    expect(restricted.venues).toEqual([])
+
+    // Company ownership, unlike a trusted grant, permits choosing both venues.
+    const owner = await request('owner', 'GET', path)
+    expect(owner.status).toBe(200)
+    const permitted = await owner.json() as {
+      companies: { id: string }[]; venues: { id: string }[]
+    }
+    expect(permitted.companies.map(item => item.id)).toContain('10')
+    const venueIds = permitted.venues.map(item => item.id)
+    expect(venueIds).toContain(fixture.manifests[0]!.scope.venueId)
+    expect(venueIds).toContain(fixture.manifests[1]!.scope.venueId)
+    expect(venueIds).not.toContain(fixture.manifests[2]!.scope.venueId)
+  })
+
   it('rejects URL and body company/venue substitution without creating support rows', async () => {
     const siblingVenue = fixture.manifests[1]!.scope.venueId
     const ownVenue = fixture.manifests[0]!.scope.venueId
