@@ -162,7 +162,9 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     localStorage.setItem(key,'{"version":1,"requestKey":"bad"}')
     remount()
     expect(host.textContent).toContain('Нельзя безопасно восстановить')
-    expect(findInput('Имя *').disabled).toBe(true)
+    // Disabled fieldset is authoritative: HTMLInputElement.disabled remains
+    // false for an input disabled by its ancestor in JSDOM.
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
     await click('Создать контакт')
     expect(post).toHaveBeenCalledTimes(1)
   })
