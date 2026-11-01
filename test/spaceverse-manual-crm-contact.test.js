@@ -121,3 +121,59 @@ test('separate company/venue fixtures never adopt identical contact details acro
     assert.equal((await right.db.query('SELECT company_id,venue_id FROM spaceverse_crm_contacts')).rows[0].venue_id,'61');
   } finally {await left.db.close();await right.db.close();}
 });
+
+
+test('manual CRM contact failures rollback both ledger and contact before a clean retry',async()=>{
+  const {db,runtime}=await fixture('f');
+  let failCompletion=true;
+  const connect=async()=>({query:async(sql,params)=>{
+    if(failCompletion&&String(sql).startsWith('UPDATE spaceverse_crm_contact_create_requests')){
+      failCompletion=false;
+      throw new Error('synthetic completion failure');
+    }
+    return db.query(sql,params);
+  },release(){}});
+  try {
+    const create=createSpaceverseManualCrmContactService({runtime,connect});
+    await assert.rejects(create(contact(key(7))),{code:'SPACEVERSE_CRM_CONTACT_UNAVAILABLE'});
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,0);
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contact_create_requests')).rows[0].n,0);
+    const first=await create(contact(key(7)));
+    assert.deepEqual(await create(contact(key(7))),first);
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,1);
+  } finally {await db.close();}
+});
+
+test('manual CRM contact uncertain COMMIT is reconciled by exact idempotent replay',async()=>{
+  const {db,runtime}=await fixture('g');
+  let lostAcknowledgement=true;
+  const connect=async()=>({query:async(sql,params)=>{
+    const result=await db.query(sql,params);
+    if(sql==='COMMIT'&&lostAcknowledgement){
+      lostAcknowledgement=false;
+      throw new Error('synthetic lost COMMIT acknowledgement');
+    }
+    return result;
+  },release(){}});
+  try {
+    const create=createSpaceverseManualCrmContactService({runtime,connect});
+    await assert.rejects(create(contact(key(8))),{code:'SPACEVERSE_CRM_CONTACT_UNAVAILABLE'});
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,1);
+    const recovered=await create(contact(key(8)));
+    assert.equal(recovered.contact.phone,'+79991112233');
+    await assert.rejects(create(contact(key(8),{firstName:'Другой'})),
+      {code:'SPACEVERSE_CRM_CONTACT_REPLAY_CONFLICT'});
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,1);
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contact_create_requests')).rows[0].n,1);
+  } finally {await db.close();}
+});
+
+test('manual CRM contact refuses a valid runtime connected to a different tenant database',async()=>{
+  const left=await fixture('h','50','51'),right=await fixture('i','60','61');
+  try {
+    const wrong=createSpaceverseManualCrmContactService({runtime:left.runtime,connect:right.connect});
+    await assert.rejects(wrong(contact(key(9))),{code:'SPACEVERSE_CRM_CONTACT_SCOPE_REJECTED'});
+    assert.equal((await right.db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,0);
+    assert.equal((await right.db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contact_create_requests')).rows[0].n,0);
+  } finally {await left.db.close();await right.db.close();}
+});
