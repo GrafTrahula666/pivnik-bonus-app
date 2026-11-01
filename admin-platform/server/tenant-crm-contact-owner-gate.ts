@@ -75,7 +75,7 @@ export function createTenantCrmContactOwnerGate(options:{
         const invited=await client.query(`SELECT invitation_id FROM admin_onboarding_access
           WHERE admin_id=$1::bigint AND company_id=$2::bigint AND role='owner'
             AND revoked_at IS NULL
-            AND (draft_id=$3::uuid OR (venue_id IS NULL AND draft_id IS NULL))
+            AND (draft_id=$3::uuid OR venue_id IS NULL)
           FOR SHARE`,[admin.id,scope.companyId,draftId])
         if(owner.rows.length===0&&invited.rows.length===0)throw denied()
       }
