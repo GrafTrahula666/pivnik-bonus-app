@@ -236,7 +236,7 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
       expect(await rows()).toEqual([expect.objectContaining({status:'running',result:null,leased:true})])
       expect(await auditCount()).toBe(before)
       expect(state.readOnly).toEqual(['on'])
-      expect(state.queries.filter(query=>/^(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\\b/i.test(query))).toEqual([])
+      expect(state.queries.filter(query=>/^(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b/i.test(query))).toEqual([])
     } finally {
       await state.metadata!.query('UPDATE venues SET active=FALSE WHERE id=$1',[venueId])
     }
