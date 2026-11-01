@@ -9,13 +9,25 @@ const summary={salesCents:'10000',returnsCents:'1000',netCents:'9000',averageCen
 const current:CashReport={period:{from:'2026-10-03T21:00:00Z',until:'2026-10-10T21:00:00Z',timeZone:'Europe/Moscow'},connection:{state:'connected',lastSuccessAt:'2026-10-11T01:00:00Z'},all:summary,app:{...summary,salesCents:'2000',returnsCents:'0',netCents:'2000',averageCents:'1000',returnDocuments:0}}
 const previous:CashReport={...current,all:{...summary,salesCents:'4000',returnsCents:'0',netCents:'4000',averageCents:'2000',returnDocuments:0},app:{...summary,salesCents:'1000',returnsCents:'0',netCents:'1000',averageCents:'500',returnDocuments:0}}
 let node:HTMLDivElement,root:Root
-async function render(report=current,mode:'all'|'app'='all',venueId='a',unavailable=false){await act(async()=>root.render(createElement(CashComparison,{report,mode,venueId,unavailable,key:venueId})))}
+async function render(report=current,mode:'all'|'app'='all',venueId='a',unavailable=false,onResult?:(snapshot:import('../phaseC/CashComparison').CashComparisonSnapshot|null)=>void){await act(async()=>root.render(createElement(CashComparison,{report,mode,venueId,unavailable,onResult,key:venueId})))}
 async function enable(){await act(async()=>node.querySelector<HTMLInputElement>('input[type=checkbox]')!.click())}
 async function button(label:string){await act(async()=>[...node.querySelectorAll('button')].find(b=>b.textContent===label)!.click())}
 async function change(selector:string,value:string){await act(async()=>{const input=node.querySelector<HTMLInputElement|HTMLSelectElement>(selector)!;const prototype=input instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event(input instanceof HTMLSelectElement?'change':'input',{bubbles:true}))})}
 beforeEach(()=>{Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});vi.mocked(apiGet).mockReset();node=document.createElement('div');document.body.append(node);root=createRoot(node)})
 afterEach(async()=>{await act(async()=>root.unmount());node.remove()})
 describe('cash comparison of real report projections',()=>{
+ it('publishes loaded benchmark to top KPI cards and clears it on disable without another POS request',async()=>{
+  const onResult=vi.fn()
+  vi.mocked(apiGet).mockResolvedValue(previous as never)
+  await render(current,'all','a',false,onResult)
+  expect(apiGet).not.toHaveBeenCalled()
+  await enable()
+  expect(apiGet).toHaveBeenCalledTimes(1)
+  expect(onResult).toHaveBeenLastCalledWith({report:previous,periodLabel:'27.09.2026 — 03.10.2026'})
+  await enable()
+  expect(onResult).toHaveBeenLastCalledWith(null)
+  expect(apiGet).toHaveBeenCalledTimes(1)
+ })
  it('requests the adjacent equal Moscow period only when enabled, switches all three metrics and the app cohort',async()=>{
   vi.mocked(apiGet).mockResolvedValue(previous as never);await render();expect(apiGet).not.toHaveBeenCalled()
   await enable();expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?from=2026-09-27&to=2026-10-03')

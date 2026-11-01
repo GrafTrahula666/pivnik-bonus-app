@@ -95,3 +95,8 @@
 .cash-secondary-metrics[open] summary{margin-bottom:16px}
 @media(max-width:860px){.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:400px){.cash-secondary-metrics{padding:14px 12px}}
+
+/* Task 72: comparisons stay alongside the primary POS figures on narrow screens. */
+.cash-kpi-trend{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap;align-items:baseline;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.cash-kpi-trend b{color:var(--text);font-variant-numeric:tabular-nums}
+.cash-kpi-trend span{width:100%;font-size:10px}

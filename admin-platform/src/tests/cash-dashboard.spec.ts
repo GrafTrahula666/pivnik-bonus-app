@@ -10,6 +10,22 @@ const report:CashReport={connection:{state:'connected',lastSuccessAt:'2026-10-02
   days:[{label:'2026-10-02',amountCents:'75000'}],payments:[{label:'CASH',amountCents:'75000'}],
 }}
 describe('cash register dashboard',()=>{
+  it('shows opt-in period changes on the primary KPIs, without inventing customer data',()=>{
+    const current={...report,app:{...report.all!,activeBuyers:1}}
+    const other={...report,all:{...report.all!,netCents:'50000',receiptCount:1,averageCents:'40000'},app:{...report.all!,activeBuyers:2}}
+    const comparisonSnapshot={report:other,periodLabel:'01.10.2026 — 02.10.2026'}
+    const before=renderToStaticMarkup(createElement(CashDashboard,{report:current}))
+    expect(before).not.toContain('cash-kpi-trend')
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report:current,comparisonSnapshot}))
+    expect((html.match(/class="cash-kpi-trend"/g)||[])).toHaveLength(4)
+    for(const value of ['+50%','+100%','−50%','+25%'])expect(html).toContain(value)
+    expect(html).toContain('01.10.2026 — 02.10.2026')
+    const missing=renderToStaticMarkup(createElement(CashDashboard,{report,comparisonSnapshot}))
+    expect((missing.match(/class="cash-kpi-trend"/g)||[])).toHaveLength(3)
+    const stale=renderToStaticMarkup(createElement(CashDashboard,{report:{...current,connection:{...current.connection,state:'error'}},comparisonSnapshot}))
+    expect(stale).not.toContain('cash-kpi-trend')
+  })
+
   it('does not turn missing, disabled or incomplete cash data into zeros or loyalty revenue',()=>{
     for(const value of [undefined,{...report,connection:{state:'not_connected'}},{...report,connection:{state:'syncing'}}]){
       const html=renderToStaticMarkup(createElement(CashDashboard,{report:value}))

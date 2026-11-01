@@ -1,6 +1,6 @@
 import { useEffect,useState } from 'react'
 import { apiGet } from '../api'
-import { cashMoney } from './cash-format'
+import { cashMoney,cashPercentDelta } from './cash-format'
 import { isCashReport,type CashReport } from './cash-report'
 
 const day=(value:number)=>new Date(value+3*3600000).toISOString().slice(0,10)
@@ -13,7 +13,9 @@ function readable(report:CashReport|undefined,mode:'all'|'app'){
   return report?.connection.lastSuccessAt&&!['not_connected','schema_required','error','awaiting_sync'].includes(report.connection.state)?(mode==='all'?report.all:report.app):null
 }
 
-export function CashComparison({venueId,report,mode,unavailable}:{venueId:string;report:CashReport;mode:'all'|'app';unavailable:boolean}){
+export type CashComparisonSnapshot={report:CashReport;periodLabel:string}
+export function CashComparison({venueId,report,mode,unavailable,onResult}:{venueId:string;report:CashReport;mode:'all'|'app';unavailable:boolean;onResult?:(snapshot:CashComparisonSnapshot|null)=>void}){
+  useEffect(()=>{if(unavailable)onResult?.(null)},[unavailable,onResult])
   const [enabled,setEnabled]=useState(false),[custom,setCustom]=useState(false)
   const period=report.period!
   const start=Date.parse(period.from),end=Date.parse(period.until),duration=end-start
@@ -30,7 +32,7 @@ export function CashComparison({venueId,report,mode,unavailable}:{venueId:string
   const path=`/api/admin/venues/${venueId}/pos?from=${second.from}&to=${second.to}`
   return <section className="card cash-comparison" aria-label="Сравнение кассовых периодов">
     <div className="cash-comparison-heading"><h3>Сравнение периодов</h3>
-      <label><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)}/>Сравнить</label></div>
+      <label><input type="checkbox" checked={enabled} onChange={e=>{setEnabled(e.target.checked);if(!e.target.checked)onResult?.(null)}}/>Сравнить</label></div>
     {enabled&&<>
       <div className="cash-comparison-controls"><label>С чем сравнить<select aria-label="Период для сравнения" value={custom?'custom':'previous'} onChange={e=>{setCustom(e.target.value==='custom');setValidation('')}}>
         <option value="previous">Предыдущий такой же период</option><option value="custom">Выбрать период в календаре</option>
@@ -42,21 +44,22 @@ export function CashComparison({venueId,report,mode,unavailable}:{venueId:string
       </div>}</div>
       {validation&&<p role="alert">{validation}</p>}
       {unavailable?<p className="cash-comparison-note">Обновите основной отчёт, чтобы сравнить актуальные данные.</p>:
-        <ComparisonResult key={path} path={path} report={report} mode={mode} currentLabel={label(current.from,current.to)} secondLabel={label(second.from,second.to)}/>}
+        <ComparisonResult key={path} path={path} report={report} mode={mode} currentLabel={label(current.from,current.to)} secondLabel={label(second.from,second.to)} onResult={onResult}/>}
       <p className="cash-comparison-note">Границы дней — по Москве. {current.to===today?'Текущий период включает сегодня: день ещё не завершён. ':''}{(Date.parse(second.to)-Date.parse(second.from)+86400000)!==duration?'Периоды разной длительности: сравниваются суммы за каждый период, без пересчёта на день.':''}</p>
     </>}
   </section>
 }
 
-function ComparisonResult({path,report,mode,currentLabel,secondLabel}:{path:string;report:CashReport;mode:'all'|'app';currentLabel:string;secondLabel:string}){
+function ComparisonResult({path,report,mode,currentLabel,secondLabel,onResult}:{path:string;report:CashReport;mode:'all'|'app';currentLabel:string;secondLabel:string;onResult?:(snapshot:CashComparisonSnapshot|null)=>void}){
   const [other,setOther]=useState<CashReport>(),[error,setError]=useState(''),[loading,setLoading]=useState(true),[attempt,setAttempt]=useState(0)
   const [metric,setMetric]=useState<Metric>('revenue')
   useEffect(()=>{
     let cancelled=false
+    onResult?.(null)
     apiGet<unknown>(path).then(value=>{
       if(!isCashReport(value))throw new Error('Некорректный ответ кассового API.')
-      if(!cancelled){setOther(value);setError('')}
-    }).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Не удалось загрузить сравнение')})
+      if(!cancelled){setOther(value);setError('');onResult?.({report:value,periodLabel:secondLabel})}
+    }).catch(e=>{if(!cancelled){setError(e instanceof Error?e.message:'Не удалось загрузить сравнение');onResult?.(null)}})
       .finally(()=>{if(!cancelled)setLoading(false)})
     return()=>{cancelled=true}
   },[path,attempt])
@@ -71,11 +74,7 @@ function ComparisonResult({path,report,mode,currentLabel,secondLabel}:{path:stri
   const span=maximum-minimum||1n
   const percent=(n:bigint)=>Number((n-minimum)*10000n/span)/100
   const change=a!==null&&b!==null?a-b:null
-  const absolute=(n:bigint)=>n<0n?-n:n
-  const scaled=change!==null&&b!==null&&b!==0n?absolute(change)*10000n/absolute(b):0n
-  const percentLabel=(scaled/100n).toLocaleString('ru-RU')+(scaled%100n?','+String(scaled%100n).padStart(2,'0'):'')
-  const deltaPercent=change===null||b===null?null:b===0n?(change===0n?'0%':'Нет базы для %'):
-    (change>0n?'+':change<0n?'−':'')+percentLabel+'%'
+  const deltaPercent=cashPercentDelta(a,b)
   return <>
     <div className="segmented cash-comparison-metrics" role="group" aria-label="Показатель сравнения">{metrics.map(([id,title])=><button key={id} type="button" aria-pressed={metric===id} className={metric===id?'active':''} onClick={()=>setMetric(id)}>{title}</button>)}</div>
     <div className="cash-comparison-chart" role="img" aria-label={`${metrics.find(([id])=>id===metric)?.[1]}: ${currentLabel} — ${a===null?'Нет данных':format(a)}; ${secondLabel} — ${b===null?'Нет данных':format(b)}`}>
