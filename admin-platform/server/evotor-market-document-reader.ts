@@ -159,11 +159,15 @@ async function oneCloudPage({
     const page = raw as Record<string,unknown>
     if (!Array.isArray(page.items) || page.items.length > 1000
       || (page.paging !== undefined && (!page.paging || typeof page.paging !== 'object' || Array.isArray(page.paging)))) throw unavailable()
+    // Unknown paging fields are not proof of end-of-history. A present
+    // continuation must be a valid nonempty opaque cursor, never null.
     const paging = page.paging as Record<string,unknown> | undefined
+    if (paging && Object.keys(paging).some(key => key !== 'next_cursor')) throw unavailable()
+    const hasMore = Boolean(paging && Object.hasOwn(paging, 'next_cursor'))
     const next = paging?.next_cursor
-    if (next !== undefined && next !== null
-      && (typeof next !== 'string' || next.length < 1 || next.length > 4096 || Array.from(next).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))) throw unavailable()
-    return {items:page.items,hasMore:typeof next === 'string'}
+    if (hasMore && (typeof next !== 'string' || next.length < 1 || next.length > 4096
+      || Array.from(next).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))) throw unavailable()
+    return {items:page.items,hasMore}
   }
   try { return await Promise.race([work(),deadline]) }
   catch { throw unavailable() }
