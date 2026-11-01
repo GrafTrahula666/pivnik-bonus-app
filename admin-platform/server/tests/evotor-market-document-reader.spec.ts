@@ -151,6 +151,30 @@ describe('CHAT_06 task 52: unmounted read-only, fail-closed licensed cloud page'
     }
     expect(defaultFetch).not.toHaveBeenCalled()
   })
+  it('rejects ambiguous paging instead of silently declaring complete history',async () => {
+    for (const paging of [
+      {cursor:'alternate-continuation'},
+      {next_cursor:null},
+      {next_cursor:''},
+      {next_cursor:'safe',previous_cursor:'unexpected'},
+      {next_cursor:23},
+    ]) {
+      const fetchImpl = vi.fn(async () => response([doc],paging))
+      await expect(call({fetchImpl:fetchImpl as typeof fetch}))
+        .rejects.toMatchObject({code:'EVOTOR_DOCUMENT_READ_UNAVAILABLE'})
+    }
+  })
+  it('keeps an absent fiscal print count unknown and an empty provider page empty',async () => {
+    const raw = {...doc,body:{...doc.body,pos_print_results:[]}}
+    const fetchImpl = vi.fn(async () => response([raw]))
+    const result=await call({fetchImpl:fetchImpl as typeof fetch})
+    expect(result.documents[0]?.receiptCount).toBeNull()
+    expect(result.documents[0]?.amountCents).toBe(1234)
+    const empty=vi.fn(async () => response([]))
+    const none=await call({fetchImpl:empty as typeof fetch})
+    expect(none.documents).toEqual([])
+    expect(none.hasMore).toBe(false)
+  })
   it('rejects redirects, bad status/headers, malformed envelope and unsafe paging',async () => {
     for(const fetchImpl of [
       vi.fn(async()=>new Response('no',{status:403})),
