@@ -63,8 +63,8 @@ AI получает только **проверенные разрешённые
 ## Checkpoint (для ежечасной итерации)
 
 - **Текущая задача:** 131. Документ подготовлен; интеграционное принятие CHAT 01, доступные CI и формальная приёмка ещё нужны. Следующий запуск **продолжает 131**, пока не закрыты гейты; автоматически 132 не начинать.
-- **Base SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`. **Ветка:** `spaceverse/chat14-ai-scenarios-131-20261101`; итоговый commit SHA и PR фиксируются по GitHub после записи.
-- **Проверено:** основной код/документация/PR #101 и #332 через GitHub read-only; создание ветки; read-back diff/CI после коммита отдельно.
+- **Base SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`. **Ветка:** `spaceverse/chat14-ai-scenarios-131-20261101`; **первый docs commit:** `6c539d7d07376a15a0f73e4e36bf00bd2f92dc16`; **Draft PR:** [#341](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/341). Проверить фактический HEAD PR после каждого изменения.
+- **Проверено:** основной код/документация/PR #101 и #332 через GitHub read-only; создана ветка, первый commit, Draft PR #341. GitHub read-back: один новый Markdown, compare base→head: 70 additions, 0 deletions, ahead 1. Первичный workflow `Pivnik release gate` был **in_progress**, не PASS.
 - **Не проверено:** локальные `npm run materialize` (дважды), `node --test`, `npm run check`, `npm audit`, browser/POS E2E (нет локального checkout, не имитировать PASS); review координатора.
 - **Автоматизация:** предыдущая попытка создать hourly task для CHAT 14 была отклонена лимитом 5/5; другие пять задач не останавливать без разрешения.
 - **Передача:** CHAT 01 review, затем только после подтверждения пункта 131 переходить к 132. Никакого merge/deploy/production writes.
