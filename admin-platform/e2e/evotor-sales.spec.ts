@@ -28,6 +28,7 @@ test('actual dashboard: loading, all/client split, refresh, stale failure, auth 
  await page.getByRole('searchbox',{name:'Поиск товара'}).fill('')
  await page.getByRole('combobox',{name:'Сортировка товаров'}).selectOption('quantity')
  await page.getByRole('button',{name:'Клиенты приложения',exact:true}).click();await expect(money).toHaveText(/100\s*000,00/)
+ await page.getByText('Другие показатели кассы',{exact:true}).click()
  await expect(page.getByText('Частота покупок',{exact:true})).toBeVisible()
  await expect(page.getByText('Выручка по часам')).toHaveCount(0)
  await page.getByRole('button',{name:'Все продажи кассы',exact:true}).click()
@@ -97,7 +98,10 @@ test('compact cash KPIs and period comparison: revenue, average, operations, cus
   return route.fulfill({json:{...report,period:{from:'2026-10-03T21:00:00Z',until:'2026-10-10T21:00:00Z',timeZone:'Europe/Moscow'}}})
  })
  await page.goto('/e2e/fixtures/evotor.html')
- await expect(page.locator('.kpi')).toHaveCount(3)
+ await expect(page.locator('.kpi')).toHaveCount(5)
+ await expect(page.locator('[aria-label="Основные показатели кассы"] .live-kpi')).toHaveCount(4)
+ await expect(page.getByText('Чеков продажи',{exact:true})).toBeVisible()
+ await expect(page.getByText('Клиентов PIVNIK',{exact:true})).toBeVisible()
  await expect(page.locator('.cash-calculation-details')).not.toHaveAttribute('open','')
  await page.getByText('Подробности расчёта',{exact:true}).click()
  await expect(page.getByText('Подтверждённые чеки продажи',{exact:true})).toBeVisible()
@@ -123,7 +127,7 @@ test('compact cash KPIs and period comparison: revenue, average, operations, cus
  fail=true;await page.getByLabel('Конец периода сравнения').fill('2026-09-08');await page.getByRole('button',{name:'Применить',exact:true}).click()
  await expect(page.getByText('Comparison unavailable')).toBeVisible()
  await expect(comparison.locator('.cash-comparison-chart')).toHaveCount(0)
- await expect(page.locator('.kpi')).toHaveCount(3)
+ await expect(page.locator('.kpi')).toHaveCount(5)
 })
 
 
