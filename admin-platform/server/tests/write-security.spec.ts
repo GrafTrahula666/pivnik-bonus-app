@@ -48,6 +48,20 @@ describe('loyalty validation',()=>{
       expect(()=>validateLoyalty(body)).toThrow()
     }
   })
+  it.each([{bad:null},{bad:''},{bad:'  '},{bad:[]},{bad:[0]},{bad:{}},{bad:false}])('rejects missing or malformed tier numeric settings $bad',({bad})=>{
+    for(const field of ['thresholdRub','bonusPercent']){
+      const tier:Record<string,unknown>={code:'new',title:'New',thresholdRub:0,bonusPercent:0}
+      tier[field]=bad
+      expect(()=>validateLoyalty({
+        baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[tier],
+      })).toThrow(expect.objectContaining({status:400}))
+    }
+  })
+  it.each([{tier:null},{tier:false},{tier:[]},{tier:'bad'}])('rejects a malformed loyalty level object $tier with a client error',({tier})=>{
+    expect(()=>validateLoyalty({
+      baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[tier],
+    })).toThrow(expect.objectContaining({status:400}))
+  })
   it.each(['registrationBonus','referralBonus'] as const)('rejects missing %s instead of silently converting it to 0',field=>{
     const body:Record<string,unknown>={baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
       levels:[{code:'new',title:'New',thresholdRub:0,bonusPercent:0}]}
