@@ -121,6 +121,17 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
     // Both requests use the signed session issued before the grant changed.
     expect((await request('trusted', 'GET', path(0))).status).toBe(200)
     expect((await request('trusted', 'GET', path(1))).status).toBe(404)
+
+    // A sibling with persisted progress must still be invisible to the invited manager.
+    const siblingSaved = await request('owner', 'PUT', path(1))
+    expect(siblingSaved.status).toBe(200)
+    expect(await siblingSaved.json()).toMatchObject({ revision: 1, progress: command.progress })
+    expect((await request('trusted', 'GET', path(1))).status).toBe(404)
+    expect((await request('trusted', 'PUT', path(1))).status).toBe(404)
+    expect((await state.metadata!.query<{ revision: number }>(
+      'SELECT revision FROM admin_onboarding_progress WHERE draft_id=$1::uuid', [siblingDraft],
+    )).rows).toEqual([{ revision: 1 }])
+
     await state.metadata!.query(
       "UPDATE admin_onboarding_access SET role='viewer' WHERE invitation_id=$1",
       [fixture.viewerInvite],
@@ -130,8 +141,8 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
     expect((await request('trusted', 'PUT', path(0))).status).toBe(403)
     expect((await request('trusted', 'PUT', path(1))).status).toBe(403)
     expect((await state.metadata!.query(
-      'SELECT draft_id FROM admin_onboarding_progress WHERE draft_id IN ($1::uuid,$2::uuid)',
-      [ownDraft, siblingDraft],
+      'SELECT draft_id FROM admin_onboarding_progress WHERE draft_id=$1::uuid',
+      [ownDraft],
     )).rows).toEqual([])
 
     // The owner retains the existing company-wide permission to save progress.
@@ -143,8 +154,8 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
     expect((await state.metadata!.query<{ revision: number }>(
       'SELECT revision FROM admin_onboarding_progress WHERE draft_id=$1::uuid', [ownDraft],
     )).rows).toEqual([{ revision: 1 }])
-    expect((await state.metadata!.query(
-      'SELECT draft_id FROM admin_onboarding_progress WHERE draft_id=$1::uuid', [siblingDraft],
-    )).rows).toEqual([])
+    expect((await state.metadata!.query<{ revision: number }>(
+      'SELECT revision FROM admin_onboarding_progress WHERE draft_id=$1::uuid', [siblingDraft],
+    )).rows).toEqual([{ revision: 1 }])
   })
 })
