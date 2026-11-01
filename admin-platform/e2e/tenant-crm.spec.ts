@@ -71,14 +71,10 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
-test('desktop visits all 15 pages of the 355-customer directory without truncation',async({page},testInfo)=>{
-  // Tenant CRM intentionally rate-limits every signed actor to 30 reads/min.
-  // The standard mobile journey already exercises real next-page/search/filter;
-  // repeating all 15 pages for the same shared actor would test only rate-limiting.
-  test.skip(testInfo.project.name!=='desktop','Full directory traversal is covered on desktop; mobile uses bounded real UI reads.')
-  // The real 30/min actor guard stays enabled: split desktop/mobile traversal
-  // between two already-authorized fixture accounts instead of weakening it.
-  await login(page,test.info().project.name==='mobile'?'owner':'root')
+test('all 355 customers remain reachable through paginated desktop and mobile UI',async({page})=>{
+  // Both projects run as separate Playwright processes with isolated fixture servers.
+  // Keep the production 30/min per-actor read limit unchanged in every process.
+  await login(page,'root')
   const section=await open(page,'CRM 1')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
