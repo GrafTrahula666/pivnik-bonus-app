@@ -133,6 +133,19 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('owner',path(),{...c,contact:{...c.contact,email:'wrong'}})).status).toBe(400)
     expect(state.targetResolutions).toBe(0)
   })
+  it('throttles repeated invalid create attempts before tenant resolution',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const malformed={requestKey:'not-a-uuid',contact:{firstName:'A'}}
+    for(let attempt=0;attempt<10;attempt++){
+      const response=await send('owner',path(),malformed)
+      expect(response.status).toBe(400)
+    }
+    const limited=await send('owner',path(),malformed)
+    expect(limited.status).toBe(429)
+    expect(await limited.json()).toMatchObject({code:'RATE_LIMITED'})
+    expect(state.targetResolutions).toBe(0)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe('0')
+  })
   it('denies invited manager and a foreign company owner even if a target is connected',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('foreign@fixture.invalid')
