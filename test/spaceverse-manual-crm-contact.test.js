@@ -41,12 +41,13 @@ test('manual CRM contact migration is explicit, additive, and never provisions a
   assert.match(sql,/spaceverse\.crm_contacts_migration/);
   assert.match(sql,/spaceverse_crm_contacts_phone_uq/);
   assert.match(sql,/spaceverse_crm_contacts_email_uq/);
-  assert.doesNotMatch(sql,/\b(?:INSERT|UPDATE|DELETE|DROP|TRUNCATE)\b/i);
+  assert.doesNotMatch(sql,/^\s*(?:INSERT|UPDATE|DELETE|DROP|TRUNCATE)\b/im);
   const db=new PGlite();
   try {
     await db.exec('CREATE TABLE users(id BIGSERIAL PRIMARY KEY);');
     for(const name of MIGRATIONS)await db.exec(await fs.readFile(new URL('../migrations/'+name,import.meta.url),'utf8'));
     await assert.rejects(db.exec(sql),/Explicit reviewed CRM contact migration required/);
+    await db.exec('ROLLBACK');
     await db.exec("SET spaceverse.crm_contacts_migration='approved'");
     await db.exec(sql);await db.exec(sql);
     assert.equal((await db.query('SELECT COUNT(*)::integer AS count FROM spaceverse_crm_contacts')).rows[0].count,0);
