@@ -65,7 +65,7 @@ const FIND = `SELECT request_key::text,request_fingerprint,contact_id::text,comp
   runtime_key,company_id,venue_id
 FROM spaceverse_crm_contact_create_requests
 WHERE runtime_key=$1 AND request_key=$2::uuid LIMIT 1 FOR UPDATE`;
-const CONTACT = `SELECT id::text,first_name,last_name,phone_e164,email_normalized,source,archived_at
+const CONTACT = `SELECT id::text,first_name,last_name,phone_e164,email_normalized,creation_origin,archived_at
 FROM spaceverse_crm_contacts WHERE id=$1::bigint AND runtime_key=$2 AND company_id=$3 AND venue_id=$4`;
 const INSERT_REQUEST = `INSERT INTO spaceverse_crm_contact_create_requests
 (runtime_key,request_key,request_fingerprint,company_id,venue_id)
@@ -111,7 +111,7 @@ function result(id, input) {
 async function replay(client, input, runtime, row) {
   verifyReplay(row,input,runtime);
   const found=one(await client.query(CONTACT,[row.contact_id,runtime.binding.runtimeKey,runtime.context.tenantId,runtime.context.locationId]));
-  if (!found || found.archived_at !== null || found.source !== 'manual' ||
+  if (!found || found.archived_at !== null || found.creation_origin !== 'manual' ||
     found.first_name !== input.contact.firstName || found.last_name !== input.contact.lastName ||
     found.phone_e164 !== input.contact.phone || found.email_normalized !== input.contact.email)
     throw failure('SPACEVERSE_CRM_CONTACT_INVALID_RESULT','Contact replay could not be verified.');
