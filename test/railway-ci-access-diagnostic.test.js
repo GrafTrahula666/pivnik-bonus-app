@@ -92,3 +92,16 @@ test('detects second-service denial after first successful check', async () => {
   assert.equal(output.stage, 'vk');
   assert.equal(requests.length, 3);
 });
+
+
+test('operator diagnosis is manual, main-only and read-only before discovery', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const workflow = await readFile(new URL('../.github/workflows/railway-operator.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /permissions:\s+contents: read/);
+  assert.match(workflow, /run: node scripts\/railway-ci-access-diagnostic\.mjs --check/);
+  assert.ok(workflow.indexOf('run: node scripts/railway-ci-access-diagnostic.mjs --check')
+    < workflow.indexOf('run: node scripts/railway-discover.mjs'));
+  assert.doesNotMatch(workflow, /railway-deploy-and-verify-production|variableCollectionUpsert/);
+});
