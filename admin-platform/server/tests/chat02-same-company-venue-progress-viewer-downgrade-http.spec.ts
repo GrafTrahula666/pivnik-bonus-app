@@ -58,7 +58,7 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
       cashReports: false,
     },
   }
-  const request = (who: 'owner' | 'trusted', method: 'GET' | 'PUT', url: string) => {
+  const request = (who: 'owner' | 'trusted', method: 'GET' | 'PUT', url: string, revision = command.revision) => {
     const session = sessions.get(who)!
     return fetch(origin + url, {
       method,
@@ -70,7 +70,7 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
           'x-csrf-token': session.csrf,
         } : {}),
       },
-      ...(method === 'PUT' ? { body: JSON.stringify(command) } : {}),
+      ...(method === 'PUT' ? { body: JSON.stringify({ ...command, revision }) } : {}),
     })
   }
 
@@ -127,7 +127,8 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
     expect(siblingSaved.status).toBe(200)
     expect(await siblingSaved.json()).toMatchObject({ revision: 1, progress: command.progress })
     expect((await request('trusted', 'GET', path(1))).status).toBe(404)
-    expect((await request('trusted', 'PUT', path(1))).status).toBe(404)
+    // A matching revision must not bypass the sibling-venue access check.
+    expect((await request('trusted', 'PUT', path(1), 1)).status).toBe(404)
     expect((await state.metadata!.query<{ revision: number }>(
       'SELECT revision FROM admin_onboarding_progress WHERE draft_id=$1::uuid', [siblingDraft],
     )).rows).toEqual([{ revision: 1 }])
@@ -139,7 +140,7 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
     expect((await request('trusted', 'GET', path(0))).status).toBe(200)
     expect((await request('trusted', 'GET', path(1))).status).toBe(404)
     expect((await request('trusted', 'PUT', path(0))).status).toBe(403)
-    expect((await request('trusted', 'PUT', path(1))).status).toBe(403)
+    expect((await request('trusted', 'PUT', path(1), 1)).status).toBe(403)
     expect((await state.metadata!.query(
       'SELECT draft_id FROM admin_onboarding_progress WHERE draft_id=$1::uuid',
       [ownDraft],
@@ -150,7 +151,8 @@ describe('CHAT 02 #15: signed HTTP progress viewer downgrade is immediate', () =
     expect(saved.status).toBe(200)
     expect(await saved.json()).toMatchObject({ revision: 1, progress: command.progress })
     expect((await request('trusted', 'GET', path(0))).status).toBe(200)
-    expect((await request('trusted', 'PUT', path(0))).status).toBe(403)
+    // Even with the current saved revision, a downgraded viewer cannot overwrite progress.
+    expect((await request('trusted', 'PUT', path(0), 1)).status).toBe(403)
     expect((await state.metadata!.query<{ revision: number }>(
       'SELECT revision FROM admin_onboarding_progress WHERE draft_id=$1::uuid', [ownDraft],
     )).rows).toEqual([{ revision: 1 }])
