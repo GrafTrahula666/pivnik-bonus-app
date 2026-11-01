@@ -16,7 +16,7 @@
 **Обязательный server-side gate перед каждым запросом и каждым tool call:**
 
 1. Живая Admin session → canonical `companyId/venueId` → проверка owner/role и прав метрик; доверенный директор не наследует AI из разрешения `GET pos`. SUPER_ADMIN не обходит entitlement.
-2. Независимый AI entitlement со статусом `active` на **точно выбранную** точку и валидной датой, плюс глобальный/tenant feature flag. `null`, отсутствующая таблица, невыданное право, expired, suspended, недоступная БД → **deny**, не `true`.
+2. Отдельная проверка допустимости CRM-плана (когда она требуется контрактом продукта) **и** независимый AI entitlement со статусом `active` на **точно выбранную** точку и валидной датой, плюс глобальный/tenant feature flag. `null`, отсутствующая таблица, невыданное право, expired, suspended, недоступная БД → **deny**, не `true`.
 3. Глобальный kill switch, tenant kill switch и provider/model kill switch все однозначно **allow**; любое missing/unknown/deny → `AI_DISABLED`.
 4. Только зарегистрированный провайдер, разрешённая модель и HTTPS destination из server registry, credential должен быть действительным и храниться серверно, не в браузере. Нет произвольного base URL, ключей в prompt/snapshot/log.
 5. Одобренная `pricingVersion`, `currency`, строгий pricing unit и оценка **верхней** стоимости, основанная на ограниченном max input/output. Если цену, единицу или верхнюю границу стоимости нельзя доказать, **не вызывать платный API**.
