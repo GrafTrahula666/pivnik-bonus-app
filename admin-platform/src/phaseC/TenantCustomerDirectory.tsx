@@ -19,6 +19,9 @@ export function TenantCustomerDirectory(props:Props){
 function Directory({draftId,scope}:Props){
   const {companyId,venueId}=scope
   const [started,setStarted]=useState(false),[query,setQuery]=useState(''),[q,setQ]=useState(''),[offset,setOffset]=useState(0)
+  const [sort,setSort]=useState<'id'|'name'|'username'>('id')
+  const [direction,setDirection]=useState<'asc'|'desc'>('asc')
+  const [wallet,setWallet]=useState<'all'|'present'|'missing'>('all')
   const [page,setPage]=useState<DirectoryPage|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[revision,setRevision]=useState(0)
   const [selected,setSelected]=useState<{id:string;revision:number}|null>(null)
   const sequence=useRef(0),selection=useRef(0),limit=25
@@ -27,16 +30,16 @@ function Directory({draftId,scope}:Props){
     if(!started)return
     let cancelled=false;const current=++sequence.current
     setLoading(true);setPage(null);setError('')
-    const request={q,limit,offset},params=new URLSearchParams({q,limit:String(limit),offset:String(offset)})
+    const request={q,limit,offset,sort,direction,wallet},params=new URLSearchParams({q,limit:String(limit),offset:String(offset),sort,direction,wallet})
     void apiGet<unknown>(path+'?'+params).then(raw=>{
       if(!cancelled&&current===sequence.current)setPage(directoryPage(raw,{companyId,venueId},request))
     }).catch(error=>{if(!cancelled&&current===sequence.current)setError(message(error))})
       .finally(()=>{if(!cancelled&&current===sequence.current)setLoading(false)})
     return()=>{cancelled=true}
-  },[path,companyId,venueId,started,q,offset,revision])
-  function change(nextQ:string,nextOffset:number){
+  },[path,companyId,venueId,started,q,offset,sort,direction,wallet,revision])
+  function change(nextQ:string,nextOffset:number,nextSort=sort,nextDirection=direction,nextWallet=wallet){
     sequence.current++;setPage(null);setSelected(null);setError('');setLoading(true)
-    setQ(nextQ);setOffset(nextOffset);setRevision(value=>value+1);setStarted(true)
+    setQ(nextQ);setOffset(nextOffset);setSort(nextSort);setDirection(nextDirection);setWallet(nextWallet);setRevision(value=>value+1);setStarted(true)
   }
   return <section className="tenant-crm" aria-label="Проверка клиентской базы">
     <h3>Клиентская база</h3>
@@ -45,6 +48,9 @@ function Directory({draftId,scope}:Props){
     {started&&<>
       <form className="tenant-crm-search" onSubmit={event=>{event.preventDefault();change(query.trim(),0)}}>
         <label className="field"><span>Найти клиента</span><input maxLength={100} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Имя или идентификатор"/></label>
+        <label className="field"><span>Сортировать по</span><select value={sort} disabled={loading} onChange={event=>change(q,0,event.target.value as 'id'|'name'|'username')}><option value="id">ID клиента</option><option value="name">Имени</option><option value="username">Нику</option></select></label>
+        <label className="field"><span>Порядок</span><select value={direction} disabled={loading} onChange={event=>change(q,0,sort,event.target.value as 'asc'|'desc')}><option value="asc">По возрастанию</option><option value="desc">По убыванию</option></select></label>
+        <label className="field"><span>Бонусный кошелёк</span><select value={wallet} disabled={loading} onChange={event=>change(q,0,sort,direction,event.target.value as 'all'|'present'|'missing')}><option value="all">Все клиенты</option><option value="present">Есть кошелёк</option><option value="missing">Без кошелька</option></select></label>
         <button className="btn" disabled={loading}>Найти</button>
         <button className="btn secondary" type="button" disabled={loading} onClick={()=>change(q,offset)}>Обновить</button>
       </form>
