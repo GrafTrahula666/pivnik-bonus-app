@@ -86,8 +86,13 @@ function ContactForm({draftId}:{draftId:string}){
       setFirstName('');setLastName('');setPhone('');setEmail('')
     }catch(caught){
       setError(errorMessage(caught))
-      if(confirmedFailure(caught)){pending.current=null;setUncertain(false)}
-      else setUncertain(true)
+      // A denied RETRY says nothing about whether an earlier uncertain
+      // attempt committed. Keep the original key through 401/403/429 etc.
+      // Only an explicit replay-key conflict proves this key is unusable.
+      if(confirmedFailure(caught)&&(!uncertain||
+        (caught instanceof ApiError&&caught.code==='TENANT_CRM_CONTACT_REPLAY_CONFLICT'))){
+        pending.current=null;setUncertain(false)
+      }else setUncertain(true)
     }finally{inFlight.current=false;setBusy(false)}
   }
   return <section className="tenant-crm-contact" aria-label="Создать ручной контакт CRM" aria-busy={busy}>
