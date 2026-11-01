@@ -104,6 +104,31 @@ describe('unmounted manual CRM contact owner/session-grant admission',()=>{
       admin_id:'11',metadata:{identityLinking:false}
     })
   })
+  it('writes one scoped metadata audit for two successful exact-key replays',async()=>{
+    enabled=true
+    const key='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const before=await audit()
+    const result={...created,requestKey:key}
+    const writer=async()=>result
+    await expect(gate()(admins.owner,token(11),draft(),key,writer)).resolves.toEqual(result)
+    await expect(gate()(admins.owner,token(11),draft(),key,writer)).resolves.toEqual(result)
+    expect(await audit()).toBe(before+1)
+    const existing=await fixture.metadata.query<{n:string}>(`SELECT COUNT(*)::text AS n FROM admin_audit_log
+      WHERE admin_id=11 AND action='crm.manual_contact_create_request'
+        AND metadata->>'requestKey'=$1`,[key])
+    expect(existing.rows[0]?.n).toBe('1')
+  })
+  it('rejects conflicting audit evidence without inserting a second audit row',async()=>{
+    enabled=true
+    const key='cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    const before=await audit()
+    await expect(gate()(admins.owner,token(11),draft(),key,
+      async()=>({...created,requestKey:key}))).resolves.toMatchObject({contact:{id:'98'}})
+    await expect(gate()(admins.owner,token(11),draft(),key,
+      async()=>({contact:{id:'99'},requestKey:key}))).rejects.toMatchObject({
+      statusCode:503,code:'TENANT_CRM_CONTACT_ACCESS_UNAVAILABLE'})
+    expect(await audit()).toBe(before+1)
+  })
   it('rolls back metadata audit when the tenant write callback fails',async()=>{
     enabled=true
     const before=await audit()
