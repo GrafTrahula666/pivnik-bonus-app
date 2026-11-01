@@ -21,7 +21,16 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
   let host:HTMLDivElement,root:Root,sequence=0
   beforeEach(()=>{
     post.mockReset();sequence=0
-    vi.stubGlobal('crypto',{randomUUID:()=>`aaaaaaaa-aaaa-4aaa-8aaa-${String(++sequence).padStart(12,'0')}`})
+    localStorage.clear()
+    vi.stubGlobal('crypto',{
+      randomUUID:()=>`aaaaaaaa-aaaa-4aaa-8aaa-${String(++sequence).padStart(12,'0')}`,
+      subtle:{digest:async(_algorithm:string,input:ArrayBuffer)=>{
+        // Stable 32-byte test fingerprint. Chromium E2E tests WebCrypto SHA-256.
+        const bytes=new Uint8Array(input),hash=new Uint8Array(32)
+        for(let i=0;i<bytes.length;i++)hash[i%32]=(hash[i%32]!+bytes[i]!+i)%256
+        return hash.buffer
+      }},
+    })
     ;(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true
     host=document.createElement('div');document.body.appendChild(host)
     root=createRoot(host)
@@ -30,6 +39,12 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
   afterEach(()=>{
     act(()=>root.unmount());host.remove();vi.unstubAllGlobals()
   })
+  const remount=()=>{
+    act(()=>root.unmount())
+    host.replaceChildren()
+    root=createRoot(host)
+    act(()=>root.render(<TenantCrmContactCreate actorId="11" draftId="123e4567-e89b-42d3-a456-426614174000"/>))
+  }
   const findInput=(label:string)=>{
     const field=[...host.querySelectorAll('label')].find(el=>el.textContent?.trim()===label)
     const input=field?.querySelector('input')
@@ -113,6 +128,43 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('Подтверждение не получено')
     expect(host.textContent).toContain('Повторить с тем же ключом')
     expect(host.textContent).not.toContain('Контакт №93 создан')
+  })
+  it('reloads with only UUID/salted digest, rejects modified inputs and replays the original request',async()=>{
+    post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+      .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
+    await fill();await submit()
+    const raw=Object.values(localStorage).join(' ')
+    expect(JSON.stringify({...localStorage})).not.toContain('maria@example.org')
+    expect(JSON.stringify({...localStorage})).not.toContain('Мария')
+    expect(host.textContent).toContain('Повторить с тем же ключом')
+    const first=post.mock.calls[0]![1] as {requestKey:string}
+    remount()
+    expect(host.textContent).toContain('Есть незавершённый запрос')
+    expect(findInput('Имя *').disabled).toBe(false)
+    expect(host.textContent).toContain('Восстановить исходный запрос')
+    await set('Имя *','Мария')
+    await set('Email','not-the-same@example.org')
+    await click('Восстановить исходный запрос')
+    expect(host.textContent).toContain('Данные отличаются')
+    expect(post).toHaveBeenCalledTimes(1)
+    await set('Email','Maria@Example.org')
+    await click('Восстановить исходный запрос')
+    expect(post).toHaveBeenCalledTimes(2)
+    expect((post.mock.calls[1]![1] as {requestKey:string}).requestKey).toBe(first.requestKey)
+    expect(host.textContent).toContain('Контакт №93 создан')
+    expect(localStorage.length).toBe(0)
+    void raw
+  })
+  it('fails closed if the pending storage record is corrupted after reload',async()=>{
+    post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+    await fill();await submit()
+    const key=localStorage.key(0)!
+    localStorage.setItem(key,'{"version":1,"requestKey":"bad"}')
+    remount()
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+    expect(findInput('Имя *').disabled).toBe(true)
+    await click('Создать контакт')
+    expect(post).toHaveBeenCalledTimes(1)
   })
   it('permits corrected input with a fresh key after a definitive duplicate',async()=>{
     post.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
