@@ -162,7 +162,7 @@ async function oneCloudPage({
     const paging = page.paging as Record<string,unknown> | undefined
     const next = paging?.next_cursor
     if (next !== undefined && next !== null
-      && (typeof next !== 'string' || next.length < 1 || next.length > 4096 || /[\x00-\x1f\x7f]/.test(next))) throw unavailable()
+      && (typeof next !== 'string' || next.length < 1 || next.length > 4096 || Array.from(next).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))) throw unavailable()
     return {items:page.items,hasMore:typeof next === 'string'}
   }
   try { return await Promise.race([work(),deadline]) }
