@@ -61,6 +61,25 @@ describe('CHAT03 #24 migration 002 read-only tenant target preflight',()=>{
         .rejects.toMatchObject({code:changed.databaseName?'DATABASE_MISMATCH':'BINDING_MISMATCH_OR_NOT_PREPARED'})
     }finally{await db.close()}
   })
+  it('rejects a non-public search_path before reading the prepared binding',async()=>{
+    const {db,expectation}=await fixture()
+    try{
+      await db.exec('CREATE SCHEMA crm_shadow')
+      await db.exec('SET search_path TO crm_shadow, public')
+      const commands:string[]=[]
+      const readOnly={query:async<Row=Record<string,unknown>>(sql:string,params?:unknown[])=>{
+        commands.push(sql)
+        if(!/^SELECT\\b/i.test(sql.trim()))throw new Error('Unexpected preflight write')
+        return db.query<Row>(sql,params)
+      }}
+      await expect(inspectManualCrmMigrationTarget(readOnly,expectation))
+        .rejects.toMatchObject({code:'SCHEMA_MISMATCH'})
+      expect(commands).toHaveLength(1)
+      expect((await db.query<{schema:string}>('SELECT current_schema() AS schema')).rows[0]?.schema)
+        .toBe('crm_shadow')
+    }finally{await db.close()}
+  })
+
   it('refuses missing ownership migration or missing prepared binding',async()=>{
     for(const options of [{ownership:false},{binding:false}] as {ownership?:boolean;binding?:boolean}[]){
       const {db,expectation}=await fixture(options)
