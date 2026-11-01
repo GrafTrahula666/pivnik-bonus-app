@@ -188,6 +188,13 @@ describe('server-owned resumable workflow on canonical scope',()=>{
     expect(body.steps.find((step:{id:string})=>step.id==='venue')).toMatchObject({
       status:'failed',code:'scope_changed',
     })
+    const listResponse=await call('root','GET','/api/admin/onboarding/venues')
+    expect(listResponse.status).toBe(200)
+    const network=await listResponse.json()
+    const listed=network.venues.find((venue:{id:string})=>venue.id===draftId)
+    expect(listed).toMatchObject({kind:'draft',venueId:null,status:'failed',
+      attentionCode:'scope_changed',runtimeStatus:'not_provisioned',published:false,
+      report:{state:'unavailable',netCents:null,receiptCount:null}})
   }
   try {
     // The scope table intentionally has no composite company/venue FK: a stale
