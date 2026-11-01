@@ -9,7 +9,7 @@
 - Пункты 72–80 **не начинались**. Не переходить к #72, пока #71 не закрыт подтверждённо.
 - Base: `main@c92ed7cd65f1a96d94363c2b7e212424ab078a73`.
 - Head: `spaceverse/chat08-dashboard-kpi-71-20261101` (этот документационный checkpoint).
-- Текущий Draft PR: см. PR, созданный из этой ветки; номер добавляется в итоговом отчёте, не угадывается.
+- Draft PR: [#331](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/331), docs-only, не для самостоятельного merge/deploy.
 
 ## Источники на указанном main
 
