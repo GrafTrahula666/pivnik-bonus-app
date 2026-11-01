@@ -220,6 +220,27 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
     expect(await rows()).toEqual([expect.objectContaining({status:'running',leased:true})])
     expect(await auditCount()).toBe(before)
   })
+  it('rejects a venue activated outside onboarding while target verification is in flight',async()=>{
+    const venueId=manifests[0]!.scope.venueId
+    const before=await auditCount()
+    state.afterRead=async()=>{
+      // Another actor changes canonical venue state after target SQL succeeded,
+      // but before the metadata confirmation can be recorded.
+      await state.metadata!.query('UPDATE venues SET active=TRUE WHERE id=$1',[venueId])
+    }
+    try {
+      const response=await request('owner','POST')
+      expect(response.status).toBe(409)
+      expect((await state.metadata!.query('SELECT active FROM venues WHERE id=$1',[venueId])).rows)
+        .toEqual([{active:true}])
+      expect(await rows()).toEqual([expect.objectContaining({status:'running',result:null,leased:true})])
+      expect(await auditCount()).toBe(before)
+      expect(state.readOnly).toEqual(['on'])
+      expect(state.queries.filter(query=>/^(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\\b/i.test(query))).toEqual([])
+    } finally {
+      await state.metadata!.query('UPDATE venues SET active=FALSE WHERE id=$1',[venueId])
+    }
+  })
   it('rechecks an invited manager grant at completion, without company-wide access',async()=>{
     state.afterRead=async()=>{await state.metadata!.query('UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',[viewerInvite])}
     expect((await request('trusted','POST')).status).toBe(403)
