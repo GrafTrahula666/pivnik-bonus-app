@@ -340,6 +340,32 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(persisted.rows).toEqual([expected])
     // Issuance alone must not widen the trusted director's venue A grant.
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
+
+    // A real owner-issued sibling invitation must remain invisible to a
+    // trusted director, including its recoverable link and revoke endpoint.
+    const path = '/api/admin/onboarding/invitations'
+    const ownerList = await request('owner', 'GET', path)
+    expect(ownerList.status).toBe(200)
+    const owned = await ownerList.json() as { invitations: { id: string }[] }
+    expect(owned.invitations.some(item => item.id === issued.invitation.id)).toBe(true)
+    const trustedList = await request('trusted', 'GET', path)
+    expect(trustedList.status).toBe(200)
+    expect((await trustedList.json() as { invitations: unknown[] }).invitations).toEqual([])
+
+    const invitationState = () => state.metadata!.query(
+      'SELECT id::text,status,revoked_at::text FROM admin_onboarding_invites WHERE id=$1::uuid',
+      [issued.invitation.id],
+    )
+    const audit = () => state.metadata!.query('SELECT count(*)::int AS count FROM admin_audit_log')
+    const beforeState = await invitationState()
+    const auditBefore = await audit()
+    for (const action of ['link', 'revoke']) {
+      const denied = await request('trusted', 'POST', `${path}/${issued.invitation.id}/${action}`)
+      expect(denied.status).toBe(404)
+      expect(await denied.json()).toMatchObject({ code: 'INVITATION_NOT_FOUND' })
+    }
+    expect((await invitationState()).rows).toEqual(beforeState.rows)
+    expect((await audit()).rows).toEqual(auditBefore.rows)
   })
 
   it('does not reuse an owner invitation request key for a sibling venue', async () => {
