@@ -8,8 +8,10 @@ on:
       - 'audit/**'
 
 concurrency:
-  group: release-gate-${{ github.ref }}
-  cancel-in-progress: true
+  # A main run must never be cancelled or replaced by a later push: Railway
+  # Wait for CI may ignore cancellation if another workflow succeeds.
+  group: release-gate-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
