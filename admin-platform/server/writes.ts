@@ -172,7 +172,7 @@ export function validateLoyalty(raw:unknown):LoyaltyPayload {
   // Missing input is not an explicitly configured 0%/0 bonus.
   for(const key of ['baseCashbackPercent','registrationBonus','referralBonus']){
     const value=b[key]
-    if(value==null||typeof value==='boolean'||(typeof value==='string'&&!value.trim()))
+    if((typeof value!=='number'&&typeof value!=='string')||(typeof value==='string'&&!value.trim()))
       throw new HttpError(400,'LOYALTY_SETTING_REQUIRED',`${key}: укажите значение явно.`)
   }
   const levels=Array.isArray(b.levels)?b.levels:[]
