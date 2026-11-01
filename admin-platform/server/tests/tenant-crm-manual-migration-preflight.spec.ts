@@ -87,13 +87,13 @@ describe('CHAT03 #24 migration 002 read-only tenant target preflight',()=>{
       const commands:string[]=[]
       const readOnly={query:async<Row=Record<string,unknown>>(sql:string,params?:unknown[])=>{
         commands.push(sql)
-        if(!/^SELECT\\b/i.test(sql.trim()))throw new Error('Unexpected preflight write')
+        if(!/^SELECT\b/i.test(sql.trim()))throw new Error('Unexpected preflight write')
         return db.query<Row>(sql,params)
       }}
       await expect(inspectManualCrmMigrationTarget(readOnly,expectation))
         .rejects.toMatchObject({code:'MIGRATION_ALREADY_OR_PARTIALLY_PRESENT'})
       expect(commands).toHaveLength(1)
-      expect(commands.every(sql=>/^SELECT\\b/i.test(sql.trim()))).toBe(true)
+      expect(commands.every(sql=>/^SELECT\b/i.test(sql.trim()))).toBe(true)
     }finally{await db.close()}
   })
 
