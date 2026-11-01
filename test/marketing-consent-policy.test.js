@@ -6,16 +6,17 @@ const tenantId = 'tenant_A';
 const customerId = '42';
 const providerIdentityId = 'identity_tg_42';
 const consentTextVersion = 'marketing_tg_v1';
+const consentTextSha256 = '2'.repeat(64);
 
 const good = Object.freeze({
   eventId: 'event1', tenantId, customerId, channel: 'telegram',
   purpose: 'marketing', action: 'grant', providerIdentityId,
-  consentTextVersion, sourceSurface: 'telegram_mini_app',
+  consentTextVersion, consentTextSha256, sourceSurface: 'telegram_mini_app',
   authenticatedActorId: customerId, explicitOptIn: true,
   requestId: 'request123', idempotencyKey: 'request123',
   serverRecordedAt: '2026-11-01T00:00:00.000Z'
 });
-const ctx = Object.freeze({ tenantId, customerId, channel: 'telegram', providerIdentityId, consentTextVersion });
+const ctx = Object.freeze({ tenantId, customerId, channel: 'telegram', providerIdentityId, consentTextVersion, consentTextSha256 });
 const decision = (latestEvent, overrides = {}) =>
   evaluateMarketingConsent({ ...ctx, latestEvent, ...overrides });
 
@@ -67,6 +68,18 @@ test('tenant/customer/channel/purpose substitution cannot approve consent', () =
 test('identity rotation and obsolete copy version deny future sends', () => {
   assert.equal(decision(good, { providerIdentityId: 'identity_tg_NEW' }).reason, 'identity_changed');
   assert.equal(decision(good, { consentTextVersion: 'marketing_tg_v2' }).reason, 'consent_text_outdated');
+});
+
+test('the approved exact consent copy is bound by its SHA-256, not just version', () => {
+  assert.equal(decision(good, { consentTextSha256: '3'.repeat(64) }).reason, 'consent_text_outdated');
+  assert.equal(decision({ ...good, consentTextSha256: undefined }).reason, 'consent_text_outdated');
+  assert.equal(decision({ ...good, consentTextSha256: '3'.repeat(64) }).reason, 'consent_text_outdated');
+});
+
+test('missing or malformed approved copy digest denies before reading events', () => {
+  for (const hash of [undefined, null, '', 'deadbeef', 'A'.repeat(64), ' 2'.repeat(64)]) {
+    assert.equal(decision(good, { consentTextSha256: hash }).reason, 'consent_text_unconfigured');
+  }
 });
 
 test('an authenticated actor must be the consenting client', () => {
