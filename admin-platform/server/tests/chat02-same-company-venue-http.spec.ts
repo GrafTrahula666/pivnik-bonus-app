@@ -317,4 +317,29 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(persisted.rows).toEqual([{ draft_id: sibling, topic: 'activation' }])
   })
 
+  it('preserves company-owner invitation issuance with exact sibling venue binding', async () => {
+    const sibling = fixture.manifests[1]!
+    const response = await request('owner', 'POST', '/api/admin/onboarding/invitations', {
+      requestKey: randomUUID(), companyId: sibling.scope.companyId,
+      venueId: sibling.scope.venueId, role: 'viewer', expiresInHours: 24,
+    })
+    expect(response.status).toBe(200)
+    const issued = await response.json() as {
+      invitation: { id: string; companyId: string; venueId: string; draftId: string; role: string }
+    }
+    const expected = {
+      companyId: sibling.scope.companyId, venueId: sibling.scope.venueId,
+      draftId: sibling.source.draftId, role: 'viewer',
+    }
+    expect(issued.invitation).toMatchObject(expected)
+    const persisted = await state.metadata!.query<{
+      companyId: string; venueId: string; draftId: string; role: string
+    }>(`SELECT company_id::text AS "companyId", venue_id::text AS "venueId",
+      draft_id::text AS "draftId", role FROM admin_onboarding_invites WHERE id=$1::uuid`,
+    [issued.invitation.id])
+    expect(persisted.rows).toEqual([expected])
+    // Issuance alone must not widen the trusted director's venue A grant.
+    expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
+  })
+
 })
