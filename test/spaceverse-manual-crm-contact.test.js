@@ -175,6 +175,20 @@ test('manual CRM contact uncertain COMMIT is reconciled by exact idempotent repl
   } finally {await db.close();}
 });
 
+test('archived contact replay fails closed without recreating a contact or request',async()=>{
+  const {db,runtime,connect}=await fixture('e');
+  try {
+    const create=createSpaceverseManualCrmContactService({runtime,connect,actorId:'11'});
+    const input=contact(key(10));
+    const first=await create(input);
+    await db.query('UPDATE spaceverse_crm_contacts SET archived_at=NOW() WHERE id=$1',[first.contact.id]);
+    await assert.rejects(create(input),{code:'SPACEVERSE_CRM_CONTACT_INVALID_RESULT'});
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contacts')).rows[0].n,1);
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM spaceverse_crm_contact_create_requests')).rows[0].n,1);
+    assert.equal((await db.query('SELECT COUNT(*)::integer AS n FROM users')).rows[0].n,0);
+  } finally {await db.close();}
+});
+
 test('manual CRM contact refuses a valid runtime connected to a different tenant database',async()=>{
   const left=await fixture('b','50','51'),right=await fixture('c','60','61');
   try {
