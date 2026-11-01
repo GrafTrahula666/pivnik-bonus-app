@@ -168,6 +168,46 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     await click('Создать контакт')
     expect(post).toHaveBeenCalledTimes(1)
   })
+  it('pre-mounted second tab cannot overwrite an uncertain contact request key',async()=>{
+    // Simulate another tab opened before the first tab persists its request.
+    // Both forms initially saw empty storage, but the second must recheck
+    // shared storage immediately before issuing its own POST.
+    const otherHost=document.createElement('div')
+    document.body.appendChild(otherHost)
+    const otherRoot=createRoot(otherHost)
+    try{
+      act(()=>otherRoot.render(<TenantCrmContactCreate actorId="11" draftId="123e4567-e89b-42d3-a456-426614174000"/>))
+      post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+      await fill();await submit()
+      expect(post).toHaveBeenCalledTimes(1)
+      const storageKey=localStorage.key(0)!
+      const original=localStorage.getItem(storageKey)
+      expect(original).toContain('requestKey')
+      const secondSet=async(label:string,value:string)=>{
+        const field=[...otherHost.querySelectorAll('label')].find(el=>el.textContent?.trim()===label)
+        const input=field?.querySelector('input')
+        if(!input)throw new Error('Second form input unavailable: '+label)
+        await act(async()=>{
+          const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set
+          if(!setter)throw new Error('Native input setter unavailable')
+          setter.call(input,value)
+          input.dispatchEvent(new Event('input',{bubbles:true}))
+          input.dispatchEvent(new Event('change',{bubbles:true}))
+        })
+      }
+      await secondSet('Имя *','Другая')
+      await secondSet('Email','other@example.org')
+      await act(async()=>otherHost.querySelector('form')!.dispatchEvent(
+        new Event('submit',{bubbles:true,cancelable:true})))
+      expect(post).toHaveBeenCalledTimes(1)
+      expect(otherHost.textContent).toContain('Нельзя безопасно восстановить')
+      expect(otherHost.querySelector('fieldset')?.disabled).toBe(true)
+      expect(localStorage.getItem(storageKey)).toBe(original)
+    }finally{
+      act(()=>otherRoot.unmount())
+      otherHost.remove()
+    }
+  })
   it('permits corrected input with a fresh key after a definitive duplicate',async()=>{
     post.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
