@@ -1340,10 +1340,16 @@ Treat this as the regression contract for any refactor:
   never bundles the Telegram WebApp script
   (`test/vk-native-hosting-main-parity.test.js`, `scripts/build-vk-hosting.mjs`).
 
-Full current baseline: **433/433** `node --test` passing after `npm run
-materialize`, `npm run check` clean, `npm audit --omit=dev --audit-level=high`
-clean, VK parity 10/10, VK bundle builds clean. This is the regression bar for
-every step below.
+Historical source baseline recorded when this section was written: **433/433**
+`node --test` passing after `npm run materialize`, `npm run check` clean,
+`npm audit --omit=dev --audit-level=high` clean, VK parity 10/10 and VK
+bundle clean. **Do not treat these counts as a fresh main CI result.** At the
+2026-11-01 `main c92ed7cd` check, VK native-hosting parity completed with
+SUCCESS but the required `Pivnik release gate` completed with FAILURE due
+to Railway GraphQL `Not Authorized` during read-only production-secret
+verification. This is an independent deployment blocker; there is no proof
+that the other checks are currently all passing. Re-run the full regression
+bar for each future integration; do not disable the failed gate.
 
 ## My assessment of the proposed plan
 
