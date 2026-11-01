@@ -33,7 +33,7 @@ server-side pagination и проверенный target DB binding сущест�
 - `TenantCustomerDirectory.tsx` и `tenant-crm-contract.ts`:
   touch-доступные select, reset page/selection, ignore late responses,
   echo-check по sort/direction/wallet вместе с q/scope/offset.
-- `tenant-crm.spec.ts`: browser desktop/mobile-путь проверяет выбор сортировки и фильтра кошелька, сохранение объёма выдачи и сброс состояния.
+- `tenant-crm.spec.ts`: browser desktop/mobile-путь проверяет выбор сортировки и фильтра кошелька, сохранение объёма выдачи и сброс состояния. Дополнительно 15 последовательных страниц реального HTTP/SQL fixture с 355 клиентами, достижение последней страницы (5 записей) и отсутствие горизонтальной прокрутки.
 - `tenant-crm-http.spec.ts`: добавлены тесты
   350 пользователей с сортировкой до страниц, wallet-state/empty/zero,
   cross-scope denial и invalid filters.
@@ -51,7 +51,8 @@ GitHub API: проверены current main SHA, origin branches, merged PR #284
 Локальный checkout отсутствует: container `git ls-remote` не может разрешить github.com.
 Новые root materialize×2 / node --test / check / audit,
 Admin Vitest/Playwright desktop+mobile **ещё не выполнены**.
-Для PR #359 запущены GitHub Actions на head, но при записи checkpoint результат ещё не подтверждён.
+**Логи проверены лично для `3ca6c5fc141fe97c93758a9f5bce8e665145aafb` (до нового 15-page E2E теста):** GitHub Actions `Pivnik release gate` SUCCESS: двойная материализация, idempotence, syntax, root Node 606/606 passed, Admin Vitest 646 passed / 90 skipped (40 `tenant-crm-http.spec.ts` passed), audits `--audit-level=high` exit 0. Есть **12 moderate vulnerabilities** в результатах аудита зависимостей, не относятся к изменению сортировки и требуют отдельной задачи, не исправлять попутно. `CRM beer inventory native PostgreSQL` SUCCESS, `Business cash dashboard browser check` SUCCESS (его CRM-прогон охватывает legacy CRM, не tenant-specific новый E2E). На новом commit `4f96a3f8b501ef2ca55fdad5540db636c33281d2` CI запущен, результаты нужно проверить отдельно.
+**Новый tenant-specific Playwright e2e на desktop/mobile НЕ запускался в этих GitHub workflows.** Контейнер без GitHub DNS; offline прогон невозможен без исходников/зависимостей.
 CI, тесты и typecheck на текущем head обязательно проверить перед review;
 не считать скрипты выполненными на основании существования тестов.
 
