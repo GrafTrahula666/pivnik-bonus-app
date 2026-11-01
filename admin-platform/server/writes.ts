@@ -178,7 +178,15 @@ export function validateLoyalty(raw:unknown):LoyaltyPayload {
   const levels=Array.isArray(b.levels)?b.levels:[]
   if(levels.length<1||levels.length>20) throw new HttpError(400,'INVALID_LEVELS','Нужно от 1 до 20 уровней.')
   const parsed=levels.map((entry,i)=>{
+    if(!entry||typeof entry!=='object'||Array.isArray(entry))
+      throw new HttpError(400,'INVALID_LEVELS',`levels[${i}]: некорректный уровень лояльности.`)
     const x=entry as Record<string,unknown>
+    // Required tier numbers must not silently become zero through Number(null/[]/'').
+    for(const field of ['thresholdRub','bonusPercent']){
+      const value=x[field]
+      if((typeof value!=='number'&&typeof value!=='string')||(typeof value==='string'&&!value.trim()))
+        throw new HttpError(400,'LOYALTY_SETTING_REQUIRED',`levels[${i}].${field}: укажите значение явно.`)
+    }
     return {
       code:code(x.code,`levels[${i}].code`),title:text(x.title,`levels[${i}].title`,1,80),
       thresholdRub:nonNegativeInt(x.thresholdRub,`levels[${i}].thresholdRub`,100_000_000),
