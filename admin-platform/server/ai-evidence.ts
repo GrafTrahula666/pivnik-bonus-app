@@ -52,7 +52,7 @@ const unavailable = (reason: string): AiEvidenceResult => ({
   citedFacts: [], limitations: [reason],
 })
 
-const validReference = (s: string): boolean => /^[a-zA-Z0-9_:.\-]{1,128}$/.test(s)
+const validReference = (s: string): boolean => /^[a-zA-Z0-9_:.-]{1,128}$/.test(s)
 const validDecimal = (v: unknown): v is string =>
   typeof v === 'string' && /^-?(?:0|[1-9][0-9]{0,79})(?:\.[0-9]{1,6})?$/.test(v)
 
