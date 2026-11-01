@@ -31,8 +31,10 @@ Telegram/VK account**. Ручной ввод телефона/почты вла�
 
 ## Статус
 
-**IN PROGRESS:** исходники записаны в GitHub, ещё не проверены
-root `node --test`, CI, native PostgreSQL и security review. Нет endpoint
+**IN PROGRESS (foundation VERIFIED):** кодовый head до checkpoint `69898b6761408f9628840d0c0ef4d03d3315acfa`. 
+[Pivnik release gate #41271982966](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41271982966) **SUCCESS**: double materialize/idempotence, JS check, root Node **611 passed / 0 failed** (включая 5 новых PGlite-кейсов), Business Vitest **645 passed / 90 skipped**, high-threshold dependency audits exit 0. Остались 12 moderate advisories в зависимостях, отдельная задача. [Native PostgreSQL workflow](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41271982931) и [Business browser workflow](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41271983035) **SUCCESS**, но не являются native PostgreSQL CRUD acceptance именно для новых ручных контактов. Предыдущие CI ошибки в новой SQL-миграции (прерванное поле телефона, повторный SQL после COMMIT) и отсутствующая проверка нового .js в `npm run check` исправлены и проверены. Версия до фикса не проходила и не выпускалась.
+
+**Это пока только unmounted foundation, не завершённый пункт 24.** Нет endpoint
 или UI, нет возможности владельцу создавать контакты в production.
 До подключения обязательны existing Admin session/grants, Origin/CSRF,
 audit; только после отдельного согласования lifecycle и explicit schema
