@@ -100,8 +100,11 @@ test('operator diagnosis is manual, main-only and read-only before discovery', a
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /permissions:\s+contents: read/);
+  assert.match(workflow, /default: diagnose/);
+  assert.match(workflow, /options:\s+- diagnose\s+- discover/);
+  assert.match(workflow, /- name: Diagnose CI Railway token scope without printing secrets\s+if: inputs\.mode == 'diagnose'/);
+  assert.match(workflow, /- name: Discover Pivnik Railway services \(prints resource metadata\)\s+if: inputs\.mode == 'discover'/);
   assert.match(workflow, /run: node scripts\/railway-ci-access-diagnostic\.mjs --check/);
-  assert.ok(workflow.indexOf('run: node scripts/railway-ci-access-diagnostic.mjs --check')
-    < workflow.indexOf('run: node scripts/railway-discover.mjs'));
+  assert.match(workflow, /run: node scripts\/railway-discover\.mjs/);
   assert.doesNotMatch(workflow, /railway-deploy-and-verify-production|variableCollectionUpsert/);
 });
