@@ -240,8 +240,15 @@ binding and calls the existing actor-bound transactional idempotent writer.
 A scoped metadata Admin audit is committed after target write confirmation.
 The target contact/request-ledger transaction is atomic; the two DB commits
 are not. If metadata audit/response fails after target commit, retry the SAME
-UUIDv4 request key for replay and audit recovery. Replays may create additional
-audit rows; this is NOT exactly-once metadata audit or a proof of active venue.
+UUIDv4 request key for replay and audit recovery. The permission gate already
+locks the canonical draft `FOR UPDATE` for the full metadata transaction.
+After confirming the target ledger result, it now checks existing scoped
+`admin_audit_log` records for the same actor/venue/requestKey under this lock.
+An exact replay adds no second audit event; a mismatched recorded contact,
+entity type or safety metadata fails closed. This is **serialized replay audit
+deduplication within the canonical draft**, NOT a distributed transaction,
+database-wide unique constraint, cleanup of historical duplicates or a proof
+of active venue. Explicit review is still required before production use.
 The HTTP endpoint is **not enabled or deployed** in any production environment.
 
 Signed HTTP tests cover owner, invited manager denial, cross-company
