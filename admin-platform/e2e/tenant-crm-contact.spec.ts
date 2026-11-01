@@ -107,6 +107,38 @@ test('VENUE_ADMIN owner can see prepared manual CRM contact; trusted account can
     await expect(trusted.getByRole('region',{name:'Создать ручной контакт CRM'})).toHaveCount(0)
     const denied=await trusted.request.get('/api/admin/onboarding/drafts/'+draft.id)
     expect([403,404]).toContain(denied.status())
+
+    // The exact same trusted account now gains a genuine scoped manager
+    // invitation in disposable metadata. It can edit the draft, not create
+    // manual CRM contacts: UI and actual signed Admin route must agree.
+    const ownerSession=await (await page.request.get('/api/admin/auth/session')).json() as {
+      csrfToken:string
+    }
+    const grant=await page.request.post('/__fixture/crm-contact/manager-grant',{
+      headers:{'x-csrf-token':ownerSession.csrfToken,origin:'http://127.0.0.1:5097'},
+      data:{draftId:draft.id},
+    })
+    expect(grant.status()).toBe(200)
+    expect(await grant.json()).toMatchObject({grant:'manager',draftId:draft.id})
+    const allowed=await trusted.request.get('/api/admin/onboarding/drafts/'+draft.id)
+    expect(allowed.status()).toBe(200)
+    const managerDraft=await allowed.json() as {permissions:{canWrite:boolean;role:string}}
+    expect(managerDraft.permissions).toEqual({canWrite:true,role:'manager'})
+    await trusted.reload()
+    await expect(trusted.getByRole('button',{name:'Открыть черновик '+name,exact:true})).toBeVisible()
+    await trusted.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
+    await expect(trusted.getByLabel('Название заведения',{exact:true})).toHaveValue(name)
+    await expect(trusted.getByRole('region',{name:'Создать ручной контакт CRM'})).toHaveCount(0)
+    const managerSession=await (await trusted.request.get('/api/admin/auth/session')).json() as {
+      csrfToken:string
+    }
+    const write=await trusted.request.post('/api/admin/onboarding/drafts/'+draft.id+'/crm/contacts',{
+      headers:{'x-csrf-token':managerSession.csrfToken,origin:'http://127.0.0.1:5097'},
+      data:{requestKey:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa12',
+        contact:{firstName:'Только тест',lastName:null,phone:null,email:'manager@fixture.invalid'}},
+    })
+    expect([403,404]).toContain(write.status())
+    await expect(trusted.getByRole('region',{name:'Создать ручной контакт CRM'})).toHaveCount(0)
   }finally{
     await context.close()
   }
