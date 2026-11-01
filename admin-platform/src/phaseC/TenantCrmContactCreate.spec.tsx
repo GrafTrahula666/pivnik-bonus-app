@@ -197,8 +197,10 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
       }
       await secondSet('Имя *','Другая')
       await secondSet('Email','other@example.org')
-      await act(async()=>otherHost.querySelector('form')!.dispatchEvent(
-        new Event('submit',{bubbles:true,cancelable:true})))
+      await act(async()=>{
+        otherHost.querySelector('form')!.dispatchEvent(
+          new Event('submit',{bubbles:true,cancelable:true}))
+      })
       expect(post).toHaveBeenCalledTimes(1)
       expect(otherHost.textContent).toContain('Нельзя безопасно восстановить')
       expect(otherHost.querySelector('fieldset')?.disabled).toBe(true)
