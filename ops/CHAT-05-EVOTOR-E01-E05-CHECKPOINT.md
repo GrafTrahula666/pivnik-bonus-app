@@ -4,7 +4,7 @@
 **Scope:** только официальные требования, подтверждение тестового контура и журнал доказательств. Никаких live callback, OAuth, кассовых или production-записей.  
 **Base main:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`.  
 **Feature branch:** `spaceverse/chat05-evotor-e01-e05-evidence-20261101`.  
-**Draft PR:** см. PR этой ветки (номер добавить после открытия).  
+**Draft PR:** [#329](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/329), без merge/deploy. **Implementation/docs commit:** `0f951a27167267d54d1c03d882ff1a0d238b9935` (исходный docs commit; точный checkpoint HEAD после этой записи читать из GitHub).  
 **Смежные merged PR:** #299 (inbox), #302 (store/owner prerequisites), #312 (license preflight), #296 (CRM bootstrap). Это НЕ доказательство live-работы. #96 остаётся отдельным открытым Draft.
 
 ## Матрица E01–E05: официальное описание != проверка приложения
