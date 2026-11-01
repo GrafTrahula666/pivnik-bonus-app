@@ -21,7 +21,7 @@ server-side pagination и проверенный target DB binding сущест�
 компании **не подтверждено и зависит от отдельной activation/license работы**.
 Не подменять её чтением draft и не ослаблять legacy guard.
 
-## 23 — текущая незавершённая задача, первый минимальный срез
+## 23 — проверено на изолированном native PostgreSQL (код готов к review, не к production)
 
 В этой ветке изменены:
 - `customer-directory-repository.js` и `.d.ts`: whitelist sort id/name/username,
@@ -43,23 +43,30 @@ server-side pagination и проверенный target DB binding сущест�
 не использует чужие данные, не подключает Market/license/POS,
 не меняет `GET /api/admin/venues/:id/clients` и его ПИВНИК-only reader.
 
-## Проверки
+## Проверки и подтверждённый checkpoint 2026-11-01
 
-GitHub API: проверены current main SHA, origin branches, merged PR #284/#285,
-`ops/MODULE-MAP.md` Do not break, source files, existing HTTP fixtures,
-и compare baseline vs branch.
-Локальный checkout отсутствует: container `git ls-remote` не может разрешить github.com.
-Новые root materialize×2 / node --test / check / audit,
-Admin Vitest/Playwright desktop+mobile **ещё не выполнены**.
-**Логи проверены лично для `3ca6c5fc141fe97c93758a9f5bce8e665145aafb` (до нового 15-page E2E теста):** GitHub Actions `Pivnik release gate` SUCCESS: двойная материализация, idempotence, syntax, root Node 606/606 passed, Admin Vitest 646 passed / 90 skipped (40 `tenant-crm-http.spec.ts` passed), audits `--audit-level=high` exit 0. Есть **12 moderate vulnerabilities** в результатах аудита зависимостей, не относятся к изменению сортировки и требуют отдельной задачи, не исправлять попутно. `CRM beer inventory native PostgreSQL` SUCCESS, `Business cash dashboard browser check` SUCCESS (его CRM-прогон охватывает legacy CRM, не tenant-specific новый E2E). На новом commit `4f96a3f8b501ef2ca55fdad5540db636c33281d2` CI запущен, результаты нужно проверить отдельно.
-**Новый специализированный workflow** `.github/workflows/spaceverse-tenant-crm-browser.yml` был добавлен в Draft #359 с disposable PostgreSQL 16, ролью `crm_fixture` и отдельным real HTTP/SQL+Playwright browser проверочным контуром. На `570e7d70ed11715be7695006d188b45178f17414` native HTTP/SQL прошли; Playwright 5 passed / 3 failed: два `selectOption` не находили select через `getByLabel` (при этом combobox был виден и присутствовал в accessibility snapshot), мобильный 15-страничный повтор упёрся в существующий actor rate limit 30/min на восьмой странице. **Это не основание менять production rate limit.** В commit `f48d9f2ecfdc17e29551899795cb93fcd3ad026d` селекторы заменены на доступный `getByRole('combobox')`; 15-страничный стресс оставлен на desktop, обычная мобильная проверка сохраняет поиск/фильтры/следующую страницу. CI на новом SHA требует подтверждения. Контейнер не имеет DNS github.com и не выполнял локальные npm-test.
-CI, тесты и typecheck на текущем head обязательно проверить перед review;
-не считать скрипты выполненными на основании существования тестов.
+- **main SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73` (read-only GitHub).
+- **Кодовый head:** `73c7f235c2e913d4ad2c02bbe7343c2fec645d4d` в ветке `spaceverse/chat03-crm-tenant-list-20261101`.
+- **Draft PR:** [#359](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/359), без merge/deploy.
+- **Специализированный CI:** [tenant CRM browser and HTTP, run 41270788178](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270788178) **SUCCESS**: native PostgreSQL 16, signed HTTP/SQL **40 passed**, desktop Chromium **4 passed**, mobile Chromium **4 passed**. На обоих размерах пройдены **15 страниц из 355 клиентов** до последних пяти строк. Сценарии проверяют поиск, фильтры, сортировку, cross-tenant denial, сброс карточки и отсутствие горизонтальной прокрутки. Отдельные browser server-процессы сохраняют реальный лимит 30 чтений/мин на актора.
+- **Полный release gate:** [run 41270788123](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270788123) **SUCCESS** на том же кодовом SHA: materialize дважды + idempotence, JS check, root Node **606 passed / 0 failed**, Admin Vitest **646 passed / 90 skipped**, Business audit `--audit-level=high` exit 0, production audit exit 0. Остались **12 moderate** advisories: отдельная задача, не менялись.
+- **Смежные CI:** [native PostgreSQL](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270788022) **SUCCESS**; [Business browser](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270788025) **SUCCESS**.
+- **Railway read-only:** в доступном проекте `pivnik-admin-staging` последний обнаруженный SUCCESS deployment на ветке `admin-platform/staging-qa` (2026-08-31, SHA `cb3e7cbb`), не этот Draft. Живые данные/Market/лицензия/production E2E не проверялись.
 
-## Продолжение
+Ранее специализированный browser CI выявил реальные проблемы селекторов и
+общего тестового лимита запросов. Исправлены только доступные имена фильтров,
+селекторы и изоляция synthetic desktop/mobile fixture. Серверный rate limit,
+legacy PIVNIK guard, `server.js` и `universal-server.js` не менялись.
+Проверка PR diff на кодовом head подтвердила отсутствие правок этих двух
+legacy маршрутизаторов. Критические `Do not break` условия остаются под
+успешным release gate.
 
-Задача 23 остаётся **IN PROGRESS**, пока не будут выполнены регрессионные
-проверки и не будут исправлены их результаты. Следующий запуск продолжает
-этот же пункт, а не начинает 24.
-После зелёных тестов передать Draft PR координатору CHAT 01,
-без самостоятельного merge/deploy.
+## Передача и продолжение
+
+**Пункт 23: DONE в подготовленном default-off tenant CRM контуре.** Это не
+означает активную коммерческую CRM, подключённую кассу или разрешение релиза.
+Передать Draft PR #359 координатору CHAT 01 для review/интеграционной очереди.
+Не мержить и не деплоить самостоятельно. Следующий отдельный запуск CHAT 03
+может брать **пункт 24** только в новой изолированной ветке после проверки
+актуального main, PR и границ владения; не подменять его скрытой записью
+клиентов в legacy PIVNIK CRM.
