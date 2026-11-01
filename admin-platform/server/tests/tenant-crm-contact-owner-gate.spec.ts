@@ -81,6 +81,13 @@ describe('unmounted manual CRM contact owner/session-grant admission',()=>{
     await expect(gate()(admins.owner,token(11),draft(),requestKey,writer)).rejects.toMatchObject({statusCode:404})
     expect(calls).toBe(0)
   })
+  it('allows a current draft-scoped owner invitation, not a manager promotion by implication',async()=>{
+    enabled=true
+    await fixture.metadata.query("UPDATE admin_onboarding_access SET role='owner' WHERE admin_id=12")
+    const before=await audit()
+    await expect(gate()(admins.trusted,token(12),draft(),requestKey,async()=>created)).resolves.toEqual(created)
+    expect(await audit()).toBe(before+1)
+  })
   it('holds authorized source and records scoped Admin metadata audit on success',async()=>{
     enabled=true
     const before=await audit()
