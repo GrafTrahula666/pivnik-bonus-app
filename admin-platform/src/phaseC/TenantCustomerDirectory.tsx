@@ -48,9 +48,9 @@ function Directory({draftId,scope}:Props){
     {started&&<>
       <form className="tenant-crm-search" onSubmit={event=>{event.preventDefault();change(query.trim(),0)}}>
         <label className="field"><span>Найти клиента</span><input maxLength={100} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Имя или идентификатор"/></label>
-        <label className="field"><span>Сортировать по</span><select value={sort} disabled={loading} onChange={event=>change(q,0,event.target.value as 'id'|'name'|'username')}><option value="id">ID клиента</option><option value="name">Имени</option><option value="username">Нику</option></select></label>
-        <label className="field"><span>Порядок</span><select value={direction} disabled={loading} onChange={event=>change(q,0,sort,event.target.value as 'asc'|'desc')}><option value="asc">По возрастанию</option><option value="desc">По убыванию</option></select></label>
-        <label className="field"><span>Бонусный кошелёк</span><select value={wallet} disabled={loading} onChange={event=>change(q,0,sort,direction,event.target.value as 'all'|'present'|'missing')}><option value="all">Все клиенты</option><option value="present">Есть кошелёк</option><option value="missing">Без кошелька</option></select></label>
+        <label className="field"><span>Сортировать по</span><select aria-label="Сортировать по" value={sort} disabled={loading} onChange={event=>change(q,0,event.target.value as 'id'|'name'|'username')}><option value="id">ID клиента</option><option value="name">Имени</option><option value="username">Нику</option></select></label>
+        <label className="field"><span>Порядок</span><select aria-label="Порядок" value={direction} disabled={loading} onChange={event=>change(q,0,sort,event.target.value as 'asc'|'desc')}><option value="asc">По возрастанию</option><option value="desc">По убыванию</option></select></label>
+        <label className="field"><span>Бонусный кошелёк</span><select aria-label="Бонусный кошелёк" value={wallet} disabled={loading} onChange={event=>change(q,0,sort,direction,event.target.value as 'all'|'present'|'missing')}><option value="all">Все клиенты</option><option value="present">Есть кошелёк</option><option value="missing">Без кошелька</option></select></label>
         <button className="btn" disabled={loading}>Найти</button>
         <button className="btn secondary" type="button" disabled={loading} onClick={()=>change(q,offset)}>Обновить</button>
       </form>
