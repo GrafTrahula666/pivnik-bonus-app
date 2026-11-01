@@ -122,7 +122,8 @@ test('changing venue clears customers and the server denies another company owne
 })
 
 test('late real customer response cannot reopen a card from the previous venue',async({page})=>{
-  await login(page)
+  // Keep the independent mobile race under the real per-actor 30/min guard.
+  await login(page,test.info().project.name==='mobile'?'owner':'root')
   const section=await open(page,'CRM 1')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
