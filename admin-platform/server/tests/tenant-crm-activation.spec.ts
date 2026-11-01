@@ -311,9 +311,21 @@ describe('CRM activation preflight: signed HTTP, scoped leased operation and nat
     let response=await request('owner','POST');expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({crmStatus:'not_provisioned',activationAllowed:false,
       operation:{status:'action_required',errorCode:'CRM_MARKET_CONTRACT_REQUIRED'}})
-    await state.metadata!.query("UPDATE admin_onboarding_pos_proxy SET last_device_event_at=NOW()-INTERVAL '10 minutes' WHERE draft_id=$1",[manifests[0]!.source.draftId])
+    // A POS confirmation can become stale after target SQL is verified.
+    // Completion must reread current evidence, not trust an earlier snapshot.
+    state.afterRead=async()=>{await state.metadata!.query(
+      "UPDATE admin_onboarding_pos_proxy SET last_device_event_at=NOW()-INTERVAL '10 minutes' WHERE draft_id=$1",
+      [manifests[0]!.source.draftId])}
     response=await request('owner','POST');expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({operation:{errorCode:'CRM_PROVIDER_VERIFICATION_REQUIRED'}})
+    expect(await response.json()).toMatchObject({crmStatus:'not_provisioned',activationAllowed:false,
+      operation:{status:'action_required',errorCode:'CRM_PROVIDER_VERIFICATION_REQUIRED',result:null}})
+    expect(state.afterRead).toBeNull()
+    expect((await state.metadata!.query('SELECT active FROM venues WHERE id=$1',[manifests[0]!.scope.venueId])).rows)
+      .toEqual([{active:false}])
+    // A later retry still cannot consume the already-expired saved event.
+    response=await request('owner','POST');expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({activationAllowed:false,
+      operation:{errorCode:'CRM_PROVIDER_VERIFICATION_REQUIRED',result:null}})
     vi.stubEnv('ADMIN_ONBOARDING_SECRET_KEYRING',JSON.stringify({'other-key':Buffer.alloc(32,8).toString('base64')}))
     response=await request('owner','POST');expect(response.status).toBe(503)
     expect(JSON.stringify(await response.json())).not.toMatch(/pvpos_|secret_ciphertext|fixture-store|first_name/)
