@@ -1,4 +1,4 @@
-import {useRef,useState,type FormEvent} from 'react'
+import {useEffect,useRef,useState,type FormEvent} from 'react'
 import {ApiError,apiPost} from '../api'
 import './tenant-crm-contact-create.css'
 
@@ -99,6 +99,21 @@ function ContactForm({actorId,draftId}:Props){
   const [saved,setSaved]=useState<Result|null>(null)
   const pending=useRef<Command|null>(null),inFlight=useRef(false)
   const path='/api/admin/onboarding/drafts/'+encodeURIComponent(draftId)+'/crm/contacts'
+  // Other tabs can change a pending key without this form being remounted.
+  // Block immediately on a foreign storage event; never silently adopt or
+  // overwrite another tab's contact request.
+  useEffect(()=>{
+    const onStorage=(event:StorageEvent)=>{
+      if(event.storageArea!==localStorage||(event.key!==storageKey&&event.key!==null))return
+      const expected=checkpoint.current?JSON.stringify(checkpoint.current):null
+      if(event.key===null||event.newValue!==expected){
+        setBlocked(true)
+        setError(storageError)
+      }
+    }
+    window.addEventListener('storage',onStorage)
+    return ()=>window.removeEventListener('storage',onStorage)
+  },[storageKey])
   const locked=busy||(uncertain&&!reenter)||blocked
   function buildCommand():Command|null {
     const first=firstName.trim().replace(/\s+/g,' ')
