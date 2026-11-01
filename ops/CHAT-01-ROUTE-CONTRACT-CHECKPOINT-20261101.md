@@ -34,7 +34,7 @@ Read actual pinned `main` [`server.js`](../server.js) (3953 source lines), [`uni
 - [#340](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/340), CHAT04 wizard: `VenueOnboarding.tsx`, CSS, E2E, checkpoint. Does not modify root routes. Need role-gated UI/HTTP parity before acceptance.
 - [#343](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/343), CHAT08 dashboard: Cash/ProductionDashboard source, UI tests, checkpoint. This is **not** the root guest `/api/admin/summary` service. Avoid conflating dashboards from two origins.
 - [#333](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/333) CHAT10 touches Admin writes and tests, [#335](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/335) CHAT11 changes Railway diagnostics/CI, [#336](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/336) CHAT13 touches `package.json` and marketing consent policy; their changes require integration-specific review. None of those seven inspected PRs currently lists `ops/MODULE-MAP.md`, `server.js`, `universal-server.js` or `admin-platform/server/router.ts` as changed; this is **file list only**, not absence of semantic cross-feature dependencies.
-- Conflicting #96/#165 remain independently tracked in [CHAT01-03](CHAT-01-ORIGIN-PR-DEPENDENCIES-20261101.md), which is on a different open Draft branch; do not re-import those multi-domain drafts.
+- Conflicting #96/#165 remain independently tracked in [CHAT01-03, Draft #342](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/342), which is on a different open Draft branch; do not re-import those multi-domain drafts.
 
 ## Gates for any future implementation PR
 
