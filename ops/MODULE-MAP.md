@@ -258,11 +258,22 @@ success explicitly says the manual contact is NOT an app identity/wallet.
 Neither the read-only legacy customer list nor CHAT03 #23 directory is changed.
 Responsive CSS is scoped to this form; no fabricated metrics or statuses.
 
-Still pending: exact-head UI test/build CI, actual built UI desktop/mobile
-acceptance, manual migration review/application lifecycle, live owner and
-tenant permissions, live E2E and CHAT01 coordinator integration. The form
-does NOT prove commercial readiness. Never merge, activate or deploy the
-Draft automatically.
+An isolated `playwright.crm-contact.config.ts` and
+`e2e/tenant-crm-contact.spec.ts` run the **built real Admin panel** in
+Chromium desktop/mobile on a disposable loopback onboarding fixture.
+The feature is enabled **only** in that explicit test process through
+`SPACEVERSE_E2E_CRM_CONTACTS=true`; the browser's manual contact POST
+responses are synthetic and intercepted. Real signed HTTP owner/scope/CSRF
+and PostgreSQL 16 remain independently covered by the native workflow.
+Browser checks prove form visibility for synthetic SUPER_ADMIN, request
+payload/CSRF, 503→429→success retry with the same UUID and no mobile
+horizontal overflow; **they do not prove a real VENUE_ADMIN owner grant**.
+
+Still pending: exact-head aggregate CI; real owner/mobile permission
+acceptance, explicit manual migration review/application lifecycle, uncertain
+response recovery across browser reload, live E2E and CHAT01 coordinator
+integration. This Draft form does NOT prove commercial readiness. Never
+merge, activate or deploy the Draft automatically.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
