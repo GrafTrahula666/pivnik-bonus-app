@@ -3,7 +3,7 @@
 **Дата:** 2026-11-01
 **Направление:** только задачи 21–30 из `CHAT_03.md`.
 **База ветки:** `main@c92ed7cd65f1a96d94363c2b7e212424ab078a73`.
-**Режим:** isolated Draft PR, без merge/deploy/production writes.
+**Режим:** isolated [Draft PR #359](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/359), без merge/deploy/production writes.
 
 ## 21 — Проверено в предыдущем checkpoint
 
@@ -33,6 +33,7 @@ server-side pagination и проверенный target DB binding сущест�
 - `TenantCustomerDirectory.tsx` и `tenant-crm-contract.ts`:
   touch-доступные select, reset page/selection, ignore late responses,
   echo-check по sort/direction/wallet вместе с q/scope/offset.
+- `tenant-crm.spec.ts`: browser desktop/mobile-путь проверяет выбор сортировки и фильтра кошелька, сохранение объёма выдачи и сброс состояния.
 - `tenant-crm-http.spec.ts`: добавлены тесты
   350 пользователей с сортировкой до страниц, wallet-state/empty/zero,
   cross-scope denial и invalid filters.
@@ -50,6 +51,7 @@ GitHub API: проверены current main SHA, origin branches, merged PR #284
 Локальный checkout отсутствует: container `git ls-remote` не может разрешить github.com.
 Новые root materialize×2 / node --test / check / audit,
 Admin Vitest/Playwright desktop+mobile **ещё не выполнены**.
+Для PR #359 запущены GitHub Actions на head, но при записи checkpoint результат ещё не подтверждён.
 CI, тесты и typecheck на текущем head обязательно проверить перед review;
 не считать скрипты выполненными на основании существования тестов.
 
