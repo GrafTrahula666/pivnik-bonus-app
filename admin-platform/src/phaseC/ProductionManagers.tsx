@@ -23,7 +23,7 @@ function SaveMessage({state}:{state:SaveState}){
 const newCode=(prefix:string)=>`${prefix}-${crypto.randomUUID().slice(0,8)}`
 
 interface LoyaltyLevel {
-  code:string;title:string;thresholdRub:number;bonusPercent:number;discountPercent:number;enabled:boolean;sortOrder:number
+  code:string;title:string;thresholdRub:number|null;bonusPercent:number|null;discountPercent:number;enabled:boolean;sortOrder:number
 }
 interface LoyaltyData {
   source:string;editable:boolean;baseCashbackPercent:number|null;registrationBonus:number|null;referralBonus:number|null;levels:LoyaltyLevel[]
@@ -38,8 +38,9 @@ export function LoyaltyManager({venue,session}:{venue:ApiVenue;session:AdminSess
     if(draft.baseCashbackPercent===null||draft.registrationBonus===null||draft.referralBonus===null)
       return 'Заполните все базовые правила, прежде чем сохранять.'
     if(!draft.levels.length)return 'Добавьте хотя бы один уровень лояльности.'
+    if(draft.levels.some(x=>x.thresholdRub===null||x.bonusPercent===null))return 'Укажите порог и кешбэк каждого уровня.'
     const active=[...draft.levels].filter(x=>x.enabled).sort((a,b)=>a.sortOrder-b.sortOrder)
-    for(let i=1;i<active.length;i++)if(active[i]!.thresholdRub<=active[i-1]!.thresholdRub)return 'Пороги активных уровней должны строго возрастать.'
+    for(let i=1;i<active.length;i++)if(active[i]!.thresholdRub!<=active[i-1]!.thresholdRub!)return 'Пороги активных уровней должны строго возрастать.'
     if(new Set(draft.levels.map(x=>x.code)).size!==draft.levels.length)return 'Коды уровней должны быть уникальны.'
     return ''
   },[draft])
@@ -75,8 +76,8 @@ export function LoyaltyManager({venue,session}:{venue:ApiVenue;session:AdminSess
         {draft.levels.map((level,index)=><div className="level-row phase-level-row" key={level.code}>
           <GripVertical/><span className="level-index">{String(index+1).padStart(2,'0')}</span>
           <input value={level.title} onChange={e=>update(index,{title:e.target.value})}/>
-          <label><span>Порог ₽</span><input type="number" value={level.thresholdRub} onChange={e=>update(index,{thresholdRub:Number(e.target.value)})}/></label>
-          <label><span>Кешбэк %</span><input type="number" step=".01" value={level.bonusPercent} onChange={e=>update(index,{bonusPercent:Number(e.target.value)})}/></label>
+          <label><span>Порог ₽</span><input type="number" value={level.thresholdRub??''} onChange={e=>update(index,{thresholdRub:e.target.value.trim()===''?null:Number(e.target.value)})}/></label>
+          <label><span>Кешбэк %</span><input type="number" step=".01" value={level.bonusPercent??''} onChange={e=>update(index,{bonusPercent:e.target.value.trim()===''?null:Number(e.target.value)})}/></label>
           <label><span>Скидка %</span><input type="number" step=".01" value={level.discountPercent} onChange={e=>update(index,{discountPercent:Number(e.target.value)})}/></label>
           <Toggle value={level.enabled} onChange={v=>update(index,{enabled:v})}/>
           <button className="ghost-icon" onClick={()=>setDraft({...draft,levels:draft.levels.filter((_,i)=>i!==index).map((x,i)=>({...x,sortOrder:i}))})}>×</button>
