@@ -83,7 +83,7 @@ export async function getAuthorizedVenueComparison(
     }
     await db.query('COMMIT')
   }catch(error){
-    try{await db.query('ROLLBACK')}catch{}
+    await db.query('ROLLBACK').catch(() => undefined) // preserve the original read error
     throw error
   }finally{db.release()}
   return {
