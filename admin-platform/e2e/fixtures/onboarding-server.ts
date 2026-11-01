@@ -23,6 +23,8 @@ process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'e2e-v1':Buffer.allo
 process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS=process.env.SPACEVERSE_E2E_INVITATIONS==='true'?'true':'false'
 process.env.ADMIN_ENABLE_ONBOARDING_WORKFLOW=process.env.SPACEVERSE_E2E_WORKFLOW==='true'?'true':'false'
 process.env.ADMIN_ENABLE_ONBOARDING_POS_PROXY=process.env.SPACEVERSE_E2E_POS_PROXY==='true'?'true':'false'
+// Test-process-only capability. Never enabled without explicit Playwright opt-in.
+process.env.ADMIN_ENABLE_TENANT_CRM_CONTACT_CREATE=process.env.SPACEVERSE_E2E_CRM_CONTACTS==='true'?'true':'false'
 process.env.ADMIN_PUBLIC_ORIGIN='http://127.0.0.1:5097'
 process.env.ADMIN_CSRF_SECRET='synthetic-loopback-onboarding-csrf-secret-123456'
 process.env.ADMIN_SECURE_COOKIES='false'
