@@ -72,7 +72,9 @@ test('built panel reads and searches real isolated customer SQL with precise bal
 })
 
 test('the full 355-customer directory remains reachable through all server pages on desktop and mobile',async({page})=>{
-  await login(page,'root')
+  // The real 30/min actor guard stays enabled: split desktop/mobile traversal
+  // between two already-authorized fixture accounts instead of weakening it.
+  await login(page,test.info().project.name==='mobile'?'owner':'root')
   const section=await open(page,'CRM 1')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
