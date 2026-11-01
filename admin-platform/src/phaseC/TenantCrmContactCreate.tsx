@@ -18,7 +18,6 @@ interface Props {actorId:string;draftId:string}
 const phonePattern=/^\+[1-9][0-9]{7,14}$/
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const validId=/^[1-9][0-9]{0,18}$/
-const validUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function verifyResult(raw:unknown,key:string):Result{
   const value=raw as Partial<Result>|null
@@ -28,9 +27,9 @@ function verifyResult(raw:unknown,key:string):Result{
     typeof contact.firstName!=='string'||!contact.firstName.trim()||
     !['unlinked'].includes(String(value.identityStatus))||
     value.walletStatus!=='not_created'||contact.identityStatus!=='unlinked'||contact.walletStatus!=='not_created'||
-    !['string','object'].includes(typeof contact.lastName)||
-    !['string','object'].includes(typeof contact.phone)||
-    !['string','object'].includes(typeof contact.email))throw new Error('Некорректное подтверждение контакта')
+    !(contact.lastName===null||typeof contact.lastName==='string')||
+    !(contact.phone===null||typeof contact.phone==='string')||
+    !(contact.email===null||typeof contact.email==='string'))throw new Error('Некорректное подтверждение контакта')
   return value as Result
 }
 function errorMessage(error:unknown){
