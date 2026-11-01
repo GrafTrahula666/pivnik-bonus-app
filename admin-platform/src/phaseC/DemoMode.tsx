@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AiSyntheticPreview } from './AiSyntheticPreview'
 import type { Page } from '../appTypes'
 import { auditSeed } from '../demoData'
 import type { AuditEvent,Session } from '../domain'
@@ -27,7 +28,7 @@ export function DemoMode({page,period,compare,onPage}:{page:Page;period:Period;c
     {page==='overview'&&<VenueOverview venueName="ДЕМО · Флагманское заведение" period={period} compare={compare} onNavigate={onPage}/>}
     {page==='clients'&&<ClientsPage session={demoSession} venueId="v-pivnik-center" onAudit={onAudit} flash={notify}/>}
     {page==='operations'&&<OperationsPage venueId="v-pivnik-center"/>}
-    {page==='analytics'&&<AnalyticsPage/>}
+    {page==='analytics'&&<><AnalyticsPage/><AiSyntheticPreview/></>}
     {page==='loyalty'&&<LoyaltyPage onAudit={onAudit} flash={notify}/>}
     {page==='wheel'&&<WheelPage onAudit={onAudit} flash={notify}/>}
     {page==='achievements'&&<AchievementsPage onAudit={onAudit} flash={notify}/>}
