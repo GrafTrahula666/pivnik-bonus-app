@@ -99,3 +99,21 @@ The new workflow itself makes no production or irreversible infrastructure chang
 - Independent reviewer handoff left as PR #333 conversation comment **6552902371**, addressed to CHAT 01 integration coordinator. **No review submissions recorded** at the last check. A self-comment is **not** an approved review or merge authorization.
 - Admin `npm audit --audit-level=high` still reported **12 moderate-severity dependency findings** and passed the high/critical gate. No unrelated dependency upgrade in #91.
 - **Status:** #91 code changes, isolated native database check, and regression checks green; **awaiting independent review / coordinator acceptance**. Do not change PR from Draft, merge, deploy, write production records, touch real kiosk/POS, or start #92. The workflow can re-run once for this documentation-only checkpoint.
+
+
+## Continuation · 2026-11-01 · #91 required tier fields do not become zero
+
+**Implementation SHA:** `81814493103b1071a839cbe2334f546a275849b3`. Reviewed exact branch and unchanged `main` base `c92ed7cd65f1a96d94363c2b7e212424ab078a73` before edits; read `ops/MODULE-MAP.md` do-not-break invariants. No alternate branch or unrelated routes changed.
+
+- `validateLoyalty` explicitly checks `levels[i]` is a non-array object and requires `thresholdRub` and `bonusPercent` to be supplied as scalar, nonblank numbers or numeric strings. No implicit `Number(null/[]/'') === 0`. Invalid inputs produce `HttpError(400)`; legitimate explicit `0` remains valid. Optional `discountPercent` retains its existing default semantics.
+- Admin `LoyaltyManager` treats cleared threshold and cashback tier inputs as `null`/empty fields, blocks save with a validation message and does not fabricate 0 when a user erases a value.
+- `write-security.spec.ts` adds 11 parameterized cases (7 malformed numeric field variants plus 4 invalid tier object variants), each checks `statusCode:400`. No POS/bonus wallet/service adjustment handler changes, no migration and no data writes.
+- **CI at exact implementation SHA**:
+  - [Pivnik release gate #41270233844](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270233844) **success**: root 606/606, Admin Vitest **676 passed, 92 skipped**, `write-security.spec.ts` **45/45**, `loyalty-tenant-boundary.spec.ts` **7/7**, existing materialize×2/idempotence, check and audits.
+  - [Native PostgreSQL #41270233982](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270233982) **success**: `postgres.integration.spec.ts` **23/23**, isolated disposable PostgreSQL 16, no Railway secrets.
+  - [CRM inventory/build/lint #41270233902](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270233902) **success**.
+  - [Business cash browser #41270233932](https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/41270233932) **success**.
+- `npm audit` still reports **12 moderate vulnerabilities** in Admin dependencies while the high/critical CI gate passes. Unrelated package upgrades must be considered in a separate PR.
+- **Independent review still not done**: PR #333 remains Draft, 0 recorded review submissions at last inspection. The coordinator has the handoff comment #6552902371. Changes are technically verified but not merged/accepted/deployed. Do not start CHAT 10 item #92 until explicit CHAT 01 integration acceptance.
+
+This documentation-only update will create a separate latest-HEAD CI run; do not claim that new run has passed before observing it.
