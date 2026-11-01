@@ -84,12 +84,34 @@ export function createTenantCrmContactOwnerGate(options:{
       if(!created||!uuid.test(created.requestKey)||created.requestKey.toLowerCase()!==requestKey.toLowerCase()||
         typeof created.contact?.id!=='string'||!/^[1-9][0-9]{0,18}$/.test(created.contact.id))
         throw unavailable()
-      await recordAudit({
-        admin,scope:source.auditScope,action:'crm.manual_contact_create_request',
-        entityType:'crm_manual_contact',entityId:created.contact.id,
-        metadata:{requestKey:requestKey.toLowerCase(),source:'dedicated_tenant',
-          identityLinking:false,walletCreated:false}
-      },client as PoolClient)
+      // The earlier prepared-draft FOR UPDATE lock serializes every request
+      // for this draft until metadata COMMIT. Check the audit *after* the
+      // tenant writer confirms its actor-bound request-ledger result, so a
+      // successful replay never emits another event. This is idempotent
+      // within the verified draft, not a distributed two-DB transaction.
+      const previousAudit=await client.query<{entity_type:string;entity_id:string|null;
+        metadata:{source?:string;identityLinking?:boolean;walletCreated?:boolean}}>(
+        `SELECT entity_type,entity_id,metadata FROM admin_audit_log
+         WHERE admin_id=$1::bigint AND company_id=$2::bigint AND venue_id=$3::bigint
+           AND action='crm.manual_contact_create_request'
+           AND metadata->>'requestKey'=$4
+         ORDER BY id ASC LIMIT 2`,
+        [admin.id,scope.companyId,source.auditScope.id,requestKey.toLowerCase()])
+      if(previousAudit.rows.length>0){
+        // Even a pre-existing/corrupt audit must never be silently treated as
+        // proof that the tenant contact or its scope matches the returned row.
+        if(previousAudit.rows.some(row=>
+          row.entity_type!=='crm_manual_contact'||row.entity_id!==created.contact.id||
+          row.metadata?.source!=='dedicated_tenant'||row.metadata.identityLinking!==false||
+          row.metadata.walletCreated!==false))throw unavailable()
+      }else{
+        await recordAudit({
+          admin,scope:source.auditScope,action:'crm.manual_contact_create_request',
+          entityType:'crm_manual_contact',entityId:created.contact.id,
+          metadata:{requestKey:requestKey.toLowerCase(),source:'dedicated_tenant',
+            identityLinking:false,walletCreated:false}
+        },client as PoolClient)
+      }
       await client.query('COMMIT')
       inTransaction=false
       return created
