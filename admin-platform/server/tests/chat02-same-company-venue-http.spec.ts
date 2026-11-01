@@ -1,5 +1,6 @@
 // @vitest-environment node
 import http from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { config } from '../config.js'
 import { fixturePassword } from './onboarding-fixture.js'
@@ -222,6 +223,37 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(venueIds).toContain(fixture.manifests[0]!.scope.venueId)
     expect(venueIds).toContain(fixture.manifests[1]!.scope.venueId)
     expect(venueIds).not.toContain(fixture.manifests[2]!.scope.venueId)
+  })
+
+  it('rejects same-company invitation issuance by a venue-only trusted director', async () => {
+    const before = await state.metadata!.query(
+      'SELECT id::text,created_by_admin_id::text,company_id::text,venue_id::text FROM admin_onboarding_invites ORDER BY id',
+    )
+    const auditBefore = await state.metadata!.query(
+      "SELECT count(*)::int AS count FROM admin_audit_log WHERE action='onboarding.invitation_create'",
+    )
+
+    // A trusted company grant must not authorize invitation issuance for either
+    // the invited venue or its sibling; both are owner-only mutations.
+    for (const venueId of [
+      fixture.manifests[0]!.scope.venueId,
+      fixture.manifests[1]!.scope.venueId,
+    ]) {
+      const response = await request('trusted', 'POST', '/api/admin/onboarding/invitations', {
+        requestKey: randomUUID(), companyId: '10', venueId,
+        role: 'viewer', expiresInHours: 24,
+      })
+      expect(response.status).toBe(403)
+      expect(await response.json()).toMatchObject({ code: 'INVITATION_OWNER_REQUIRED' })
+    }
+    const after = await state.metadata!.query(
+      'SELECT id::text,created_by_admin_id::text,company_id::text,venue_id::text FROM admin_onboarding_invites ORDER BY id',
+    )
+    const auditAfter = await state.metadata!.query(
+      "SELECT count(*)::int AS count FROM admin_audit_log WHERE action='onboarding.invitation_create'",
+    )
+    expect(after.rows).toEqual(before.rows)
+    expect(auditAfter.rows).toEqual(auditBefore.rows)
   })
 
   it('rejects URL and body company/venue substitution without creating support rows', async () => {
