@@ -168,6 +168,50 @@ describe('server-owned resumable workflow on canonical scope',()=>{
    expect((await call('owner','GET','/api/admin/onboarding/drafts/'+drafts[0])).status).toBe(200)
   }finally{await state.db!.exec('ALTER TABLE fixture_saved_progress RENAME TO admin_onboarding_progress')}
  })
+ it('fails the venue step closed when a prepared scope points into another company or becomes active',async()=>{
+  const draftId=drafts[2]
+  const source=(await state.db!.query<{venue_id:string}>(`
+    SELECT venue_id::text FROM admin_onboarding_scopes WHERE draft_id=$1::uuid`,[draftId])).rows[0]!
+  const foreign=(await state.db!.query<{id:string}>(`
+    SELECT id::text FROM venues WHERE company_id=10 AND code='north-1'`)).rows[0]!
+  const before=await call('root','GET',path(draftId))
+  expect(before.status).toBe(200)
+  expect((await before.json()).steps.find((step:{id:string})=>step.id==='venue')).toMatchObject({
+    status:'pending',code:'venue_reserved',
+  })
+  const inspect=async()=>{
+    const response=await call('root','GET',path(draftId))
+    expect(response.status).toBe(200)
+    const body=await response.json()
+    expect(body).toMatchObject({status:'failed',attentionCode:'scope_changed',runtimeStatus:'not_provisioned',
+      published:false,report:{state:'unavailable',netCents:null,receiptCount:null}})
+    expect(body.steps.find((step:{id:string})=>step.id==='venue')).toMatchObject({
+      status:'failed',code:'scope_changed',
+    })
+  }
+  try {
+    // The scope table intentionally has no composite company/venue FK: a stale
+    // or administratively corrupted scope must not be reported as healthy.
+    await state.db!.query('UPDATE admin_onboarding_scopes SET venue_id=$2::bigint WHERE draft_id=$1::uuid',[draftId,foreign.id])
+    await inspect()
+    const invalidScope=await call('root','GET','/api/admin/onboarding/drafts/'+draftId+'/scope')
+    expect(invalidScope.status).toBe(503)
+    expect(await invalidScope.json()).toMatchObject({code:'ONBOARDING_SCOPE_INCONSISTENT'})
+  } finally {
+    await state.db!.query('UPDATE admin_onboarding_scopes SET venue_id=$2::bigint WHERE draft_id=$1::uuid',[draftId,source.venue_id])
+  }
+  try {
+    await state.db!.query('UPDATE venues SET active=TRUE WHERE id=$1::bigint',[source.venue_id])
+    await inspect()
+  } finally {
+    await state.db!.query('UPDATE venues SET active=FALSE WHERE id=$1::bigint',[source.venue_id])
+  }
+  const restored=await call('root','GET',path(draftId))
+  expect(restored.status).toBe(200)
+  expect((await restored.json()).steps.find((step:{id:string})=>step.id==='venue')).toMatchObject({
+    status:'pending',code:'venue_reserved',
+  })
+ })
  it('owner list unifies canonical prepared venues and existing points without inventing connectivity, activity or zero revenue',async()=>{
   const response=await call('owner','GET','/api/admin/onboarding/venues');expect(response.status).toBe(200)
   const list=await response.json()
