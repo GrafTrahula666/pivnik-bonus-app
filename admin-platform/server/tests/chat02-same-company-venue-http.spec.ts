@@ -150,6 +150,31 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
   })
 
+  it('rejects URL and body company/venue substitution without creating support rows', async () => {
+    const siblingVenue = fixture.manifests[1]!.scope.venueId
+    const ownVenue = fixture.manifests[0]!.scope.venueId
+    const before = await state.metadata!.query(
+      'SELECT draft_id::text,topic FROM admin_onboarding_support_requests ORDER BY draft_id,topic',
+    )
+
+    for (const [method, path, body] of [
+      ['GET', support(0) + '?venueId=' + siblingVenue, undefined],
+      ['POST', support(0) + '?companyId=20', { topic: 'access' }],
+      ['POST', support(0), { topic: 'access', companyId: '10', venueId: siblingVenue }],
+      ['POST', support(0), { topic: 'access', tenantId: '20' }],
+      ['POST', support(1), { topic: 'access', companyId: '10', venueId: ownVenue }],
+    ] as const) {
+      const response = await request('trusted', method, path, body)
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ code: 'ONBOARDING_SUPPORT_INVALID' })
+    }
+
+    const after = await state.metadata!.query(
+      'SELECT draft_id::text,topic FROM admin_onboarding_support_requests ORDER BY draft_id,topic',
+    )
+    expect(after.rows).toEqual(before.rows)
+  })
+
   it('rejects unsigned and CSRF/origin-bypassing support writes', async () => {
     expect((await request(null, 'GET', draft(0))).status).toBe(401)
     expect((await request('trusted', 'POST', support(0), { topic: 'connection' }, false)).status).toBe(403)
