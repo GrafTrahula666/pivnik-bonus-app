@@ -100,7 +100,7 @@
 ## Checkpoint CHAT 14 / 135
 
 - **Задача:** 135; результат — документированный механизм budget/quota/usage ledger/kill switch, **без runtime/DB изменений**. Это не основание считать AI подключённым.
-- **Base SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`. **Ветка:** `spaceverse/chat14-ai-budgets-135-20261101`. Commit SHA, Draft PR и CI вписать после записи/проверки в GitHub.
+- **Base SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`. **Ветка:** `spaceverse/chat14-ai-budgets-135-20261101`. Первый commit `f5f6bcfd26120b2588dcaa369c77b6dc0987fd0a`; уточнение `d6397bf2f0aab8c26776dd98f7f95a64823cc194`; **Draft PR [#369](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/369)**. Актуальный HEAD и CI перепроверять после каждого изменения; не считать SUCCESS до завершения.
 - **Проверено:** актуальный main, origin ветки по AI, `ops/MODULE-MAP.md` Do not break, целевая архитектура и 131–134 PR/CI. Local checkout/команды отсутствуют: не выдавать npm тесты за локально выполненные.
 - **Риски:** будущий AI payment требует финансового и security review. Никаких платных API, ключей или изменений production.
 - **Передача:** Draft координатору CHAT 01; review + применимый GitHub Release Gate; затем отдельный пункт 136: evidence/sources/insufficient data.
