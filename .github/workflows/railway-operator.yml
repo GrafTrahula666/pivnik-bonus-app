@@ -8,7 +8,9 @@ permissions:
 
 jobs:
   discover:
-    name: Discover Railway project
+    name: Diagnose Railway CI access and discover production project
+    # Secrets must not be used from an unreviewed dispatch branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -24,6 +26,11 @@ jobs:
 
       - name: Install exact dependencies
         run: npm ci
+
+      - name: Diagnose CI Railway token scope without printing secrets
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: node scripts/railway-ci-access-diagnostic.mjs --check
 
       - name: Discover Pivnik Railway services
         env:
