@@ -126,8 +126,16 @@ function ContactForm({actorId,draftId}:Props){
       return true
     }catch{setBlocked(true);setError(storageError);return false}
   }
+  function matchesStoredCheckpoint():boolean {
+    try {
+      return checkpoint.current!==null &&
+        localStorage.getItem(storageKey)===JSON.stringify(checkpoint.current)
+    }catch{return false}
+  }
   function clearCheckpoint():boolean {
     try {
+      // Never erase another tab's newer pending request after an async POST.
+      if(!matchesStoredCheckpoint())throw new Error('Pending request changed')
       localStorage.removeItem(storageKey)
       if(localStorage.getItem(storageKey)!==null)throw new Error('Storage removal failed')
       checkpoint.current=null
@@ -166,6 +174,11 @@ function ContactForm({actorId,draftId}:Props){
         pending.current=command
       }
       if(!command)throw new Error('Prepared request unavailable')
+      // A stale tab must not replay after another tab replaced/cleared its key.
+      if(!matchesStoredCheckpoint()){
+        setBlocked(true);setError(storageError)
+        return
+      }
       const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey)
       if(!clearCheckpoint())return
       pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
