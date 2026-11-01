@@ -26,6 +26,7 @@ async function queryRailway(fetchImpl, token, headerName, query, variables) {
     return { kind: 'network_error' };
   }
   if (response.status === 429) return { kind: 'rate_limited' };
+  if (response.status >= 500) return { kind: 'server_unavailable' };
   let body;
   try {
     body = await response.json();
@@ -59,7 +60,7 @@ export async function diagnoseRailwayCiAccess({ token, fetchImpl, production = R
       environmentId: production.environmentId,
       serviceId
     });
-    if (read.kind === 'rate_limited' || read.kind === 'network_error' || read.kind === 'invalid_response') {
+    if (read.kind === 'rate_limited' || read.kind === 'network_error' || read.kind === 'invalid_response' || read.kind === 'server_unavailable') {
       return { status: 'transport_unavailable', stage: service, mutations: 0 };
     }
     if (read.kind === 'ok' && read.data?.variables && typeof read.data.variables === 'object' && !Array.isArray(read.data.variables)) {
