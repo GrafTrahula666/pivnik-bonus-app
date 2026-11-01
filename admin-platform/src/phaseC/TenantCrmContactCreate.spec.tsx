@@ -210,6 +210,35 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
       otherHost.remove()
     }
   })
+  it('blocks a stale-tab retry when another tab replaced its pending key',async()=>{
+    post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+    await fill();await submit()
+    expect(post).toHaveBeenCalledTimes(1)
+    const key=localStorage.key(0)!
+    const previous=JSON.parse(localStorage.getItem(key)!) as Record<string,unknown>
+    const newer={...previous,requestKey:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}
+    localStorage.setItem(key,JSON.stringify(newer))
+    await click('Повторить с тем же ключом')
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(newer))
+  })
+  it('does not erase a newer tab checkpoint after a late successful response',async()=>{
+    const replacement='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    post.mockImplementationOnce(async(_path,body)=>{
+      const key=localStorage.key(0)!
+      const previous=JSON.parse(localStorage.getItem(key)!) as Record<string,unknown>
+      localStorage.setItem(key,JSON.stringify({...previous,requestKey:replacement}))
+      return confirmed(body) as never
+    })
+    await fill();await submit()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(host.textContent).not.toContain('Контакт №93 создан')
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+    expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey).toBe(replacement)
+  })
   it('permits corrected input with a fresh key after a definitive duplicate',async()=>{
     post.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
