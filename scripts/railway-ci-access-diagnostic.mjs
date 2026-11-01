@@ -27,6 +27,7 @@ async function queryRailway(fetchImpl, token, headerName, query, variables) {
   }
   if (response.status === 429) return { kind: 'rate_limited' };
   if (response.status >= 500) return { kind: 'server_unavailable' };
+  if (response.status === 401 || response.status === 403) return { kind: 'not_authorized' };
   let body;
   try {
     body = await response.json();
@@ -65,6 +66,11 @@ export async function diagnoseRailwayCiAccess({ token, fetchImpl, production = R
     }
     if (read.kind === 'ok' && read.data?.variables && typeof read.data.variables === 'object' && !Array.isArray(read.data.variables)) {
       continue;
+    }
+    // Schema errors, HTTP 400 and malformed success bodies do not prove an auth failure.
+    // Probe an alternate token header ONLY after a real Bearer authorization denial.
+    if (read.kind !== 'not_authorized') {
+      return { status: 'api_response_unexpected', stage: service, mutations: 0 };
     }
     // Do not print any production variables even when a previous check succeeded.
     // A project token uses a different auth header. Check only its token metadata.

@@ -90,6 +90,25 @@ test('treats Railway HTTP 5xx as an outage without probing alternate credentials
   }
 });
 
+test('does not confuse GraphQL schema, HTTP 400 or malformed success with token denial', async () => {
+  const failures = [
+    result({ errors: [{ message: 'Cannot query field variables on Query' }] }),
+    result({ errors: [{ message: secret }] }, 400),
+    result({ data: { variables: null } }),
+    result({ data: { variables: 'unexpected' } }),
+    result({ data: null }),
+    result({})
+  ];
+  for (const failure of failures) {
+    const { fetchImpl, requests } = recorder([failure]);
+    const output = await diagnoseRailwayCiAccess({ token: secret, fetchImpl, production });
+    assert.deepEqual(output, { status: 'api_response_unexpected', stage: 'telegram', mutations: 0 });
+    assert.equal(requests.length, 1, 'only authorization denials permit fallback');
+    assert.ok(!JSON.stringify(output).includes(secret));
+    assert.ok(!JSON.stringify(output).includes('expected-project'));
+  }
+});
+
 test('does not mislabel fallback 429/5xx or invalid JSON as an authorization denial', async () => {
   const responses = [
     result({}, 429),
