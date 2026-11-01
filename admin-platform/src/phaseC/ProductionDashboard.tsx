@@ -111,13 +111,16 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
   const endLabel=new Date(Date.parse(data.period.to)-1).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})
   const periodLabel=startLabel===endLabel?startLabel:startLabel+' — '+endLabel
   const m=data.metrics,p=data.previousMetrics
-  const kpis=[
+  // The top row is period-scoped; historical snapshots must not masquerade as period customers.
+  const primaryKpis=[
     ['Сумма операций приложения',m.trackedRevenue,'money',p.trackedRevenue],
     ['Записей о покупках',m.checkCount,'number',p.checkCount],
+    ['Совершали операции',m.activeCustomers,'number',p.transactionActiveCustomers],
     ['Средняя сумма записи',m.averageCheck,'money',p.averageCheck],
+  ] as const
+  const secondaryKpis=[
     ['Клиентов всего',m.totalCustomers,'number',null],
     ['Новых клиентов',m.newCustomers,'number',p.newCustomers],
-    ['Совершали операции',m.activeCustomers,'number',p.transactionActiveCustomers],
     ['Повторных клиентов',m.returningCustomers,'number',p.returningCustomers],
     ['Начислено по программе',m.bonusEarned,'number',p.bonusEarned],
     ['Списано клиентами',m.bonusRedeemed,'number',p.bonusRedeemed],
@@ -131,8 +134,13 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
       sub={periodLabel+' · '+venue.companyName}
       actions={<button className="btn secondary" onClick={reload}>Обновить</button>}/>
     <SourceNote>Операции приложения. Не являются подтверждённой кассовой выручкой и не складываются с Эвотором.</SourceNote>
-    <div className="kpi-grid">{kpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
-    <SourceNote>Ручные персональные подарки не входят в бизнес-KPI обзора. Клиентов всего и бонусы в обращении показывают текущее состояние, а не значение на историческую дату.</SourceNote>
+    <div className="kpi-grid app-operations-primary-kpis" aria-label="Основные показатели операций">{primaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
+    <p className="cash-insight-period">Изменение на карточках считается к предыдущему периоду той же длительности, если обе величины известны и есть ненулевая база.</p>
+    <details className="card app-operations-extra">
+      <summary>Ещё 8 показателей</summary>
+      <div className="kpi-grid">{secondaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
+      <SourceNote>Ручные персональные подарки не входят в бизнес-KPI обзора. «Клиентов всего» и «Бонусы в обращении» показывают текущее состояние, а не значение на историческую дату.</SourceNote>
+    </details>
     <div className="grid-main">
       <section className="card chart-card">
         <div className="card-head"><div><span className="eyebrow">ДИНАМИКА</span><h3>Операции за {periodLabel}</h3></div>
