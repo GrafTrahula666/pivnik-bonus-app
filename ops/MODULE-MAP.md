@@ -244,13 +244,25 @@ UUIDv4 request key for replay and audit recovery. Replays may create additional
 audit rows; this is NOT exactly-once metadata audit or a proof of active venue.
 The HTTP endpoint is **not enabled or deployed** in any production environment.
 
-Synthetic signed HTTP tests exercise owner, invited manager denial, other
-company, CSRF/Origin, malformed scope, replay and duplicate channels. Native
-PG16 concurrency covers the underlying tenant writer independently. Still
-pending: final exact-head CI, native PostgreSQL end-to-end HTTP acceptance,
-manual migration review/application lifecycle, Admin create UI,
-explicit live permissions, live E2E and coordinator integration. Do not merge,
-activate, or deploy this draft automatically.
+Signed HTTP tests cover owner, invited manager denial, cross-company
+isolation, CSRF/Origin, malformed scope, replay, rate limiting, duplicate
+channels and audit recovery. Native PG16 CI now exercises both the concurrent
+tenant writer and actual signed Admin HTTP on three isolated test databases.
+
+The separate `TenantCrmContactCreate.tsx` form is mounted only within a
+prepared, confirmed-owner draft in `VenueOnboarding.tsx` when the independent
+`tenantCrmContactCreate` capability is TRUE; managers and unconfirmed roles
+see no create control. Its request UUIDv4 is reused on uncertain responses and
+its disabled inputs prevent modifying a potentially committed request;
+success explicitly says the manual contact is NOT an app identity/wallet.
+Neither the read-only legacy customer list nor CHAT03 #23 directory is changed.
+Responsive CSS is scoped to this form; no fabricated metrics or statuses.
+
+Still pending: exact-head UI test/build CI, actual built UI desktop/mobile
+acceptance, manual migration review/application lifecycle, live owner and
+tenant permissions, live E2E and CHAT01 coordinator integration. The form
+does NOT prove commercial readiness. Never merge, activate or deploy the
+Draft automatically.
 
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
