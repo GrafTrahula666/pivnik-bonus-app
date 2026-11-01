@@ -164,6 +164,7 @@ function ContactForm({actorId,draftId}:Props){
         }
         pending.current=command
       }
+      if(!command)throw new Error('Prepared request unavailable')
       const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey)
       if(!clearCheckpoint())return
       pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
