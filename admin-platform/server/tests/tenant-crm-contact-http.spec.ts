@@ -183,6 +183,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     config.enableTenantCrmContactCreate=true
     const c=command('actor-bound@fixture.invalid')
     const before=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
     const created=await send('owner',path(),c)
     expect(created.status).toBe(200)
     const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
@@ -197,7 +198,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(denied).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
     expect(JSON.stringify(denied)).not.toContain(c.contact.email)
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
-    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe('1')
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
     expect(await auditCount()).toBe(audited)
   })
   it('recovers one tenant contact after Admin audit failure by replaying the exact request key',async()=>{
