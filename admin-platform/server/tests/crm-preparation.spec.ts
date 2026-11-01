@@ -136,6 +136,41 @@ describe('standalone CRM metadata preparation through signed HTTP and canonical 
   expect((await prepare(d.id,'trusted')).status).toBe(403)
   expect(await count('admin_onboarding_scopes',d.id)).toBe(1)
  })
+ it('creates a new inactive company once on identical CRM retries and refuses foreign ownership',async()=>{
+  const totals=async()=>({
+   companies:Number((await state.db!.query<{n:string}>('SELECT COUNT(*)::text AS n FROM companies')).rows[0]!.n),
+   venues:Number((await state.db!.query<{n:string}>('SELECT COUNT(*)::text AS n FROM venues')).rows[0]!.n),
+   drafts:Number((await state.db!.query<{n:string}>('SELECT COUNT(*)::text AS n FROM admin_onboarding_drafts')).rows[0]!.n),
+  })
+  const baseline=await totals()
+  const created=await call('root','POST','/api/admin/onboarding/drafts',{
+   requestKey:crypto.randomUUID(),data:{...data('Первая точка'),companyId:null,companyName:'Изолированная сеть'},
+  })
+  expect(created.status).toBe(200)
+  const d=await created.json() as {id:string;revision:number}
+  const responses=await Promise.all([prepare(d.id,'root'),prepare(d.id,'root')])
+  expect(responses.map(response=>response.status)).toEqual([200,200])
+  const first=await responses[0]!.json() as {company:{id:string;active:boolean;createdByOnboarding:boolean};venue:{id:string;active:boolean};runtimeManifest:{scope:{companyId:string;venueId:string}}}
+  expect(await responses[1]!.json()).toEqual(first)
+  expect(await (await prepare(d.id,'root')).json()).toEqual(first)
+  expect(first).toMatchObject({company:{active:false,createdByOnboarding:true},venue:{active:false}})
+  expect(first.runtimeManifest.scope).toEqual({companyId:first.company.id,venueId:first.venue.id})
+  expect(await totals()).toEqual({companies:baseline.companies+1,venues:baseline.venues+1,drafts:baseline.drafts+1})
+  expect(await count('admin_onboarding_app_configs',d.id)).toBe(1)
+  expect(await count('admin_onboarding_scopes',d.id)).toBe(1)
+  const audit=await state.db!.query<{action:string}>('SELECT action FROM admin_audit_log WHERE entity_id=$1 ORDER BY id',[d.id])
+  expect(audit.rows.filter(row=>row.action==='onboarding.scope_prepare')).toHaveLength(1)
+
+  const beforeDenied=await totals()
+  for(const deniedData of [
+   {...data('Несанкционированная компания'),companyId:null,companyName:'Чужая новая сеть'},
+   {...data('Несанкционированная точка','30'),companyName:''},
+  ]){
+   const denied=await call('network-owner','POST','/api/admin/onboarding/drafts',{requestKey:crypto.randomUUID(),data:deniedData})
+   expect(denied.status).toBe(403)
+  }
+  expect(await totals()).toEqual(beforeDenied)
+ })
  it('rolls back a new inactive company as well as its venue and profile on scope audit failure',async()=>{
   const response=await call('root','POST','/api/admin/onboarding/drafts',{requestKey:crypto.randomUUID(),data:{...data(),companyId:null,companyName:'Новая организация'}})
   expect(response.status).toBe(200);const d=await response.json()
