@@ -95,8 +95,8 @@ export async function inspectManualCrmMigrationTarget(
 
   return Object.freeze({
     state:'review_required',databaseName:present.database_name,
-    runtimeKey:actual.runtime_key,companyId:actual.company_id,
-    venueId:actual.venue_id,manifestRevision:expected.manifestRevision,
+    runtimeKey:actual.runtime_key,companyId:expected.companyId,
+    venueId:expected.venueId,manifestRevision:expected.manifestRevision,
     approvalGranted:false,
   })
 }
