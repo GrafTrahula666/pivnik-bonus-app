@@ -238,6 +238,22 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(host.textContent).toContain('Нельзя безопасно восстановить')
     expect(localStorage.getItem(key)).toBe(JSON.stringify(newer))
   })
+  it('blocks replay if another tab erased the pending checkpoint after an uncertain write',async()=>{
+    post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+    await fill();await submit()
+    expect(post).toHaveBeenCalledTimes(1)
+    const key=localStorage.key(0)!
+    expect(localStorage.getItem(key)).not.toBeNull()
+    // A different tab or browser cleanup can erase the checkpoint without
+    // notifying this mounted form. Never replay using only in-memory state.
+    localStorage.removeItem(key)
+    await click('Повторить с тем же ключом')
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+    expect(host.textContent).not.toContain('Контакт №93 создан')
+    expect(localStorage.length).toBe(0)
+  })
   it('does not erase a newer tab checkpoint after a late successful response',async()=>{
     const replacement='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
     post.mockImplementationOnce(async(_path,body)=>{
