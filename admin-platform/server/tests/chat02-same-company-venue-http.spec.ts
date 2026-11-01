@@ -352,19 +352,19 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(trustedList.status).toBe(200)
     expect((await trustedList.json() as { invitations: unknown[] }).invitations).toEqual([])
 
-    const persisted = () => state.metadata!.query(
+    const invitationState = () => state.metadata!.query(
       'SELECT id::text,status,revoked_at::text FROM admin_onboarding_invites WHERE id=$1::uuid',
       [issued.invitation.id],
     )
     const audit = () => state.metadata!.query('SELECT count(*)::int AS count FROM admin_audit_log')
-    const before = await persisted()
+    const beforeState = await invitationState()
     const auditBefore = await audit()
     for (const action of ['link', 'revoke']) {
       const denied = await request('trusted', 'POST', `${path}/${issued.invitation.id}/${action}`)
       expect(denied.status).toBe(404)
       expect(await denied.json()).toMatchObject({ code: 'INVITATION_NOT_FOUND' })
     }
-    expect((await persisted()).rows).toEqual(before.rows)
+    expect((await invitationState()).rows).toEqual(beforeState.rows)
     expect((await audit()).rows).toEqual(auditBefore.rows)
   })
 
