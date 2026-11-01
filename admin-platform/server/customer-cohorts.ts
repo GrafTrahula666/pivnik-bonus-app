@@ -6,7 +6,7 @@ import type {PeriodRange} from './types.js'
 export async function loadVerifiedPosCustomerCohorts(db:PosReadDb,storeId:string,range:PeriodRange){
   if(typeof storeId!=='string'||!storeId.trim()||
      !Number.isFinite(range.from.getTime())||!Number.isFinite(range.to.getTime())||
-     range.from>=range.to)throw new Error('INVALID_VERIFIED_CUSTOMER_COHORT_SCOPE')
+     range.from.getTime()>=range.to.getTime())throw new Error('INVALID_VERIFIED_CUSTOMER_COHORT_SCOPE')
   const result=await db.query(`
     WITH eligible AS (
       SELECT l.client_id,d.closed_at
