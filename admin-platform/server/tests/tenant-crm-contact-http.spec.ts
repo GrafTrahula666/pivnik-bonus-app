@@ -161,6 +161,9 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     const c=command('idempotent@fixture.invalid')
     const before=(await count(0,'spaceverse_crm_contacts'))
     const users=await count(0,'users'),wallets=await count(0,'wallets')
+    const auditsBefore=Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
     const first=await send('owner',path(),c)
     expect(first.status).toBe(200)
     const payload=await first.json()
@@ -174,6 +177,10 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe('1')
     expect(await count(0,'users')).toBe(users)
     expect(await count(0,'wallets')).toBe(wallets)
+    const auditTotal=Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    expect(auditTotal).toBe(auditsBefore+1)
     const audit=await fixture.metadata.query<{company_id:string;venue_id:string;admin_id:string}>(
       "SELECT company_id::text,venue_id::text,admin_id::text FROM admin_audit_log WHERE action='crm.manual_contact_create_request' ORDER BY id DESC LIMIT 1")
     expect(audit.rows[0]).toMatchObject({company_id:fixture.manifests[0]!.scope.companyId,
@@ -219,6 +226,12 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     const auditAfter=(await fixture.metadata.query<{n:string}>(
       "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
     expect(Number(auditAfter)).toBe(Number(auditBefore)+1)
+    const replayAgain=await send('owner',path(),c)
+    expect(replayAgain.status).toBe(200)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
+    const auditAgain=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
+    expect(auditAgain).toBe(auditAfter)
   })
   it('rejects a duplicate channel from a different request and does not expose PII across venues',async()=>{
     config.enableTenantCrmContactCreate=true
