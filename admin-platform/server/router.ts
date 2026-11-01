@@ -64,6 +64,7 @@ import { getOnboardingWorkflow,saveOnboardingWorkflow } from './onboarding-workf
 import {onboardingSupport,onboardingSupportQueue} from './onboarding-support.js'
 import { listOnboardingVenues } from './onboarding-venues.js'
 import { readTenantCrmCustomer, listTenantCrmCustomers, checkTenantCrmReadiness } from './tenant-crm-read.js'
+import {createTenantCrmContact} from './tenant-crm-contact-create.js'
 import { getOnboardingPosProxy,saveOnboardingPosProxy,verifyOnboardingPosProxy } from './onboarding-pos-proxy.js'
 import { acceptOnboardingInvitation,createOnboardingInvitation,listOnboardingInvitations,previewOnboardingInvitation,reopenOnboardingInvitation,revokeOnboardingInvitation } from './onboarding-invitations.js'
 import {
@@ -104,6 +105,7 @@ export const sessionCapabilities=()=>({
   onboardingWorkflow:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow,
   onboardingPosProxy:config.enableWrites&&config.enableOnboardingDrafts&&config.enableOnboardingWorkflow&&config.enableOnboardingPosProxy,
   tenantCrmReads:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmReads,
+  tenantCrmContactCreate:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmContactCreate,
   tenantCrmActivationChecks:config.enableWrites&&config.enableOnboardingDrafts&&config.enableTenantCrmActivationChecks,
   crmOnboarding:config.enableWrites&&config.enableOnboardingDrafts&&config.enableCrmOnboarding,
   beerIntake:config.enableWrites&&config.enableBeerIntake,
@@ -259,6 +261,18 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN','Область и статусы проверки определяются сервером.')
     enforceRateLimit(`tenant-crm-read:${session.admin.id}`,30,60_000)
     json(res,200,await checkTenantCrmReadiness(session.admin,tenantCrmReadiness[1]!));return true
+  }
+  const manualCrmContact=/^\\/api\\/admin\\/onboarding\\/drafts\\/([^/]+)\\/crm\\/contacts$/.exec(url.pathname)
+  if(manualCrmContact){
+    if(!isMethod(req,'POST'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Контакт создаётся только POST-запросом.')
+    if(url.search)throw new HttpError(400,'TENANT_CRM_CONTACT_REQUEST_SCOPE_FORBIDDEN',
+      'Область заведения определяется сервером, параметры URL запрещены.')
+    requireCsrf(req,session.rawToken)
+    enforceRateLimit(`tenant-crm-contact-create:${session.admin.id}`,10,60_000)
+    enforceRateLimit(`tenant-crm-contact-ip:${requestIp(req)}`,40,60_000)
+    json(res,200,await createTenantCrmContact(session.admin,session.rawToken,
+      manualCrmContact[1]!,await readJsonBody(req,2048)))
+    return true
   }
   const tenantCustomer=/^\/api\/admin\/onboarding\/drafts\/([^/]+)\/crm\/customers(?:\/([^/]+))?$/.exec(url.pathname)
   if(tenantCustomer){
