@@ -71,3 +71,43 @@ test('owner-only manual CRM contact form: real desktop/mobile UI, uncertain retr
   expect(requests[1]!.key).toBe(requests[2]!.key)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
+
+test('VENUE_ADMIN owner can see prepared manual CRM contact; trusted account cannot open it',async({page,browser},info)=>{
+  await page.goto('/')
+  await page.getByLabel('Email',{exact:true}).fill('owner@fixture.invalid')
+  await page.getByLabel('Пароль',{exact:true}).fill(fixturePassword)
+  await page.getByRole('button',{name:'Войти',exact:true}).click()
+  await expect(page.locator('.app-shell')).toBeVisible()
+  await page.getByRole('button',{name:'Добавить заведение',exact:true}).click()
+  const name='CRM owner grant '+info.project.name
+  await page.getByLabel('Название заведения',{exact:true}).fill(name)
+  await page.getByLabel('Организация',{exact:true}).selectOption('10')
+  const createdResponse=page.waitForResponse(r=>r.url().endsWith('/api/admin/onboarding/drafts')&&r.request().method()==='POST')
+  await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click()
+  const draft=await (await createdResponse).json() as {id:string}
+  expect(draft.id).toMatch(/^[0-9a-f-]{36}$/i)
+  await page.getByRole('button',{name:'Сохранить приложение',exact:true}).click()
+  const scopeResponse=page.waitForResponse(r=>r.url().endsWith('/scope')&&r.request().method()==='PUT')
+  await page.getByRole('button',{name:'Подготовить область',exact:true}).click()
+  const prepared=await (await scopeResponse).json() as {venue:{active:boolean};contract:{runtimeStatus:string}}
+  expect(prepared.venue.active).toBe(false)
+  expect(prepared.contract.runtimeStatus).toBe('not_provisioned')
+  await expect(page.getByRole('region',{name:'Создать ручной контакт CRM'})).toBeVisible()
+
+  // A trusted director is not a verified owner of this company. The server
+  // must not expose the owner's draft, regardless of the browser capability.
+  const context=await browser.newContext({viewport:page.viewportSize()||{width:1440,height:960}})
+  try{
+    const trusted=await context.newPage()
+    await trusted.goto('/')
+    await trusted.getByLabel('Email',{exact:true}).fill('trusted@fixture.invalid')
+    await trusted.getByLabel('Пароль',{exact:true}).fill(fixturePassword)
+    await trusted.getByRole('button',{name:'Войти',exact:true}).click()
+    await expect(trusted.locator('.app-shell')).toBeVisible()
+    await expect(trusted.getByRole('region',{name:'Создать ручной контакт CRM'})).toHaveCount(0)
+    const denied=await trusted.request.get('/api/admin/onboarding/drafts/'+draft.id)
+    expect([403,404]).toContain(denied.status())
+  }finally{
+    await context.close()
+  }
+})
