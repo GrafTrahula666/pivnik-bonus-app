@@ -52,6 +52,7 @@ import {
 } from './pivnik-legacy-manager-read.js'
 import { HttpError } from './types.js'
 import { evotorPeriod,getEvotorReport } from './evotor-read.js'
+import { getAuthorizedVenueComparison } from './venue-comparison.js'
 import {listEvotorStock,incrementEvotorStock} from './evotor-stock.js'
 import {getBeerInventory,writeBeerInventory} from './beer-inventory.js'
 import {
@@ -440,6 +441,10 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
       json(res,200,await updateOnboardingDraft(session.admin,id,await readJsonBody(req,8*1024)));return true
     }
     throw new HttpError(405,'METHOD_NOT_ALLOWED','Этот метод не поддерживается.')
+  }
+  if(url.pathname==='/api/admin/venue-comparison'){
+    if(!isMethod(req,'GET'))throw new HttpError(405,'METHOD_NOT_ALLOWED','Только чтение сравнения заведений.')
+    json(res,200,await getAuthorizedVenueComparison(session.admin,url));return true
   }
   if(isMethod(req,'GET')&&url.pathname==='/api/admin/venues'){
     json(res,200,{venues:await listAuthorizedVenues(session.admin)});return true
