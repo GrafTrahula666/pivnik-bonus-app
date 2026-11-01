@@ -41,6 +41,10 @@ test('production release requires an explicit manual dispatch on exact main SHA'
     const step = workflowStep(workflow, name);
     for (const clause of required) assert.ok(step.includes(clause), `${name}: missing ${clause}`);
     assert.ok(!step.includes("if: github.event_name == 'push'"), `${name}: push auto-deploy not allowed`);
+    if (name === 'Deploy exact commit and verify both production services') {
+      assert.ok(step.includes('git ls-remote --heads origin main'), 'must verify latest main immediately before deploy');
+      assert.ok(step.includes('"$current_main" != "$RELEASE_COMMIT_SHA"'), 'must fail closed when main changed');
+    }
   }
   const productionSecrets = workflowStep(workflow, 'Verify existing production secrets without changing them');
   for (const clause of required) assert.ok(productionSecrets.includes(clause), `secret check: missing ${clause}`);
