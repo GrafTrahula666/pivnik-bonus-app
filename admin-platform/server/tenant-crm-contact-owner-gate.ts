@@ -97,6 +97,7 @@ export function createTenantCrmContactOwnerGate(options:{
            AND metadata->>'requestKey'=$4
          ORDER BY id ASC LIMIT 2`,
         [admin.id,scope.companyId,source.auditScope.id,requestKey.toLowerCase()])
+      if(previousAudit.rows.length>1)throw unavailable()
       if(previousAudit.rows.length>0){
         // Even a pre-existing/corrupt audit must never be silently treated as
         // proof that the tenant contact or its scope matches the returned row.
