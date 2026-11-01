@@ -100,3 +100,29 @@
 - Подтверждён GitHub Actions \`Pivnik release gate\` run \`41266371937\`: **conclusion=success** для предыдущего HEAD Draft #329 \`11dc3e01\`; полный состав jobs/logs отдельно не анализировался, это **не** live Evotor.
 - Локального Git checkout нет: materialize×2, \`node --test\`, \`npm run check\`, \`npm audit\`, native PostgreSQL, browser и настоящие test events **лично не запускались**. Этот docs-only diff не требует production migration; результаты CI для **нового** HEAD следует проверить отдельно.
 - **Итог: задача 41 по-прежнему BLOCKED.** Внешний provider support/кабинет и реальный проверенный event необходимы. Не менять runtime auth, не merge/deploy и **не переходить к 42**.
+
+
+## Третья итерация CHAT_05/41 — проверка внешних источников и подготовка запроса (2026-11-01)
+
+**Режим:** отдельная docs-only ветка, Draft #329, не включать реальные OAuth/callback routes. **41 остаётся BLOCKED** из-за отсутствия подтверждённого тестового кабинета, event Authorization и разрешённого live OAuth. Проверка этого шага не заменяет E01–E05 acceptance.
+
+### Дополнительно проверено по актуальным публичным официальным документам
+
+1. [Авторизация входящих вебхуков](https://developer.evotor.ru/docs/doc_evotor_api_authorization.html) различает облачный `X-Authorization` и вебхуки `Authorization`, а также описывает **app-token** для install/subscription. [Схема installation](https://developer.evotor.ru/docs/rest_api_webhooks_post_installation_event.html) и [схема subscription](https://developer.evotor.ru/docs/rest_api_webhooks_post_subscription_event.html) продолжают называть **user-token**. Это контрактное расхождение **не разрешено**. Не делать OR-проверку по любому токену, не отключать строгую проверку входящего события.
+2. [Справочник subscription](https://developer.evotor.ru/docs/rest_api_webhooks_post_subscription_event.html) говорит об **2 сутках** повторной доставки, [общий guide подписок](https://developer.evotor.ru/docs/doc_subscriptions.html) говорит о **3 днях**. Единая доказанная граница времени отсутствует, нельзя объявлять ретраи ненужными.
+3. [Cloud integration guide](https://developer.evotor.ru/docs/doc_cloud_systems_integration.html) включает сценарии `/api/v1/user/create`, `/api/v1/user/verify`, `/api/v1/user/token`, `/api/v1/subscription/event`. Прочитанный в этой очереди `admin-platform/server/evotor-market.ts` обрабатывает только `user/token`, `installation/event`, `subscription/event` в default-off режиме. **Не установлено**, можно ли выбрать OAuth-only launch без create/verify или требуется отдельный поддерживаемый аккаунтный сценарий. Это вопрос к провайдеру и к пунктам 42–45; **не создавать сейчас** фиктивные create/verify без контрактного подтверждения.
+4. [OAuth guide](https://developer.evotor.ru/docs/rest_oauth20_authorization_guide.html) подтверждает серверный web-client `authorization_code`, `refresh_token`, exact `registered_redirect_uri`, но пример редиректа с `code` **не подтверждает возврат `state`**. Ошибка/отсутствие state в live test остаётся deny-by-default.
+5. [FAQ](https://developer.evotor.ru/faq/) говорит, что для cloud-интеграции требуется контакт `developer@evotor.ru` и для публикации нужны оформленные издательские права. Эту справку нельзя подменять реальным статусом юридического лица или принятой офертой.
+
+### Действие для получения ответа провайдера
+
+Через подключённый Gmail **создан, но не отправлен** отдельный черновик письма с темой «SPACEVERSE CRM — технические вопросы по авторизации и OAuth облачной интеграции», получатель `developer@evotor.ru`. Он уточняет шесть вопросов: token type для каждого callback, срок retry, OAuth `state`, create/verify vs OAuth-only, минимальные scopes, revoke/rotation в test environment. Ранее существующий юридический черновик **не изменялся**. Дублирующих GitHub PR или automations не создано. Само создание черновика не доказывает контакт или согласие провайдера. Не отправлять без отдельного пользовательского решения.
+
+### Статус верификации в этой итерации
+
+- MAIN SHA проверен через GitHub: `c92ed7cd65f1a96d94363c2b7e212424ab078a73`; checkpoint branch HEAD до обновления: `8b3717c531d4995723f9c095237d950b46b0c2b8`.
+- `ops/MODULE-MAP.md`, актуальные правила `pivnik-preflight` и обе обязательные references прочитаны в этой сессии; `Do not break` без изменений.
+- GitHub Actions на предыдущем HEAD: **Pivnik release gate: in_progress/pending, run 41269222175**. У job уже подтверждены успехи двойной materialize/idempotence и syntax, но полный run на момент проверки **не завершён**. Не утверждать PASS всех тестов/аудитов/CI. Для HEAD этого docs commit проверить CI повторно.
+- Рабочий каталог container `/` не содержит `.git` и не является checkout проекта. Локально `npm run materialize` ×2, `node --test`, `npm run check`, `npm audit`, native PG/E2E **не запускались**.
+- Чужой Draft #96, касса, реальные данные, Railway, токены, SQL, env, routes, app code и production не изменены.
+- **Следующий шаг в рамках 41:** подтвердить от провайдера test app + auth contract или получить разрешённый тестовый кабинет; после чего сделать только изолированные read-only/test events и обновить матрицу E01–E05, сохраняя UNKNOWN/FAIL/BLOCKED, если доказательство отсутствует. Не переходить к 42 и не merge/deploy.
