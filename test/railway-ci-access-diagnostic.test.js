@@ -90,6 +90,24 @@ test('treats Railway HTTP 5xx as an outage without probing alternate credentials
   }
 });
 
+test('does not mislabel fallback 429/5xx or invalid JSON as an authorization denial', async () => {
+  const responses = [
+    result({}, 429),
+    result({ errors: [{ message: 'Not Authorized' }] }, 500),
+    result({}, 502),
+    result({}, 503),
+    { ok: true, status: 200, json: async () => { throw new Error(secret); } }
+  ];
+  for (const fallback of responses) {
+    const { fetchImpl, requests } = recorder([denied(), fallback]);
+    const output = await diagnoseRailwayCiAccess({ token: secret, fetchImpl, production });
+    assert.deepEqual(output, { status: 'transport_unavailable', stage: 'telegram', mutations: 0 });
+    assert.equal(requests.length, 2, 'only one bounded fallback probe is allowed');
+    assert.ok(!JSON.stringify(output).includes(secret));
+    assert.ok(!JSON.stringify(output).includes('expected-project'));
+  }
+});
+
 test('does not send a request when secret is missing', async () => {
   const { fetchImpl, requests } = recorder([]);
   const output = await diagnoseRailwayCiAccess({ token: '', fetchImpl, production });

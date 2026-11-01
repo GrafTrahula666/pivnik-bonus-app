@@ -69,6 +69,11 @@ export async function diagnoseRailwayCiAccess({ token, fetchImpl, production = R
     // Do not print any production variables even when a previous check succeeded.
     // A project token uses a different auth header. Check only its token metadata.
     const project = await queryRailway(fetchImpl, scopedToken, 'Project-Access-Token', PROJECT_TOKEN_READ, {});
+    // A transient failure of the fallback probe is not evidence of a bad token.
+    if (project.kind === 'rate_limited' || project.kind === 'network_error' ||
+        project.kind === 'invalid_response' || project.kind === 'server_unavailable') {
+      return { status: 'transport_unavailable', stage: service, mutations: 0 };
+    }
     if (project.kind === 'ok' && project.data?.projectToken?.projectId && project.data?.projectToken?.environmentId) {
       const exactScope = project.data.projectToken.projectId === production.projectId &&
         project.data.projectToken.environmentId === production.environmentId;
