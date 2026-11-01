@@ -8,20 +8,31 @@ export const DIRECTORY_SQL=`WITH ${SPACEVERSE_VERIFIED_CUSTOMER_BINDING_SQL}, el
  ON ownership.runtime_key=binding.runtime_key AND ownership.company_id=binding.company_id AND ownership.venue_id=binding.venue_id
  JOIN users customer ON customer.id=ownership.user_id AND customer.deleted_at IS NULL
  AND customer.merged_into_user_id IS NULL AND customer.role='client'
- WHERE concat_ws(' ',customer.first_name,customer.last_name) ILIKE $6
- OR COALESCE(customer.username,'') ILIKE $6 OR customer.id::text ILIKE $6
+ LEFT JOIN wallets filter_wallet ON filter_wallet.user_id=customer.id
+ WHERE (concat_ws(' ',customer.first_name,customer.last_name) ILIKE $6
+ OR COALESCE(customer.username,'') ILIKE $6 OR customer.id::text ILIKE $6)
+ AND ($11::text='all' OR ($11::text='present' AND filter_wallet.user_id IS NOT NULL)
+ OR ($11::text='missing' AND filter_wallet.user_id IS NULL))
 ), page AS (
  SELECT eligible.id::text AS user_id,eligible.id::text AS ownership_user_id,
  eligible.ownership_runtime_key,eligible.ownership_company_id,eligible.ownership_venue_id,
  customer.username,customer.first_name,customer.last_name,customer.photo_url,customer.role,
- wallet.balance::text AS wallet_balance,wallet.updated_at AS wallet_updated_at
+ wallet.balance::text AS wallet_balance,wallet.updated_at AS wallet_updated_at,
+ ROW_NUMBER() OVER (ORDER BY
+   CASE WHEN $9::text='name' AND $10::text='asc' THEN LOWER(NULLIF(TRIM(CONCAT_WS(' ',customer.first_name,customer.last_name)),'')) END ASC NULLS LAST,
+   CASE WHEN $9::text='name' AND $10::text='desc' THEN LOWER(NULLIF(TRIM(CONCAT_WS(' ',customer.first_name,customer.last_name)),'')) END DESC NULLS LAST,
+   CASE WHEN $9::text='username' AND $10::text='asc' THEN LOWER(NULLIF(customer.username,'')) END ASC NULLS LAST,
+   CASE WHEN $9::text='username' AND $10::text='desc' THEN LOWER(NULLIF(customer.username,'')) END DESC NULLS LAST,
+   CASE WHEN $9::text='id' AND $10::text='desc' THEN eligible.id END DESC NULLS LAST,
+   eligible.id ASC
+ ) AS sort_ordinal
  FROM eligible JOIN users customer ON customer.id=eligible.id
  LEFT JOIN wallets wallet ON wallet.user_id=eligible.id
- ORDER BY eligible.id LIMIT $7::integer OFFSET $8::integer
+ ORDER BY sort_ordinal LIMIT $7::integer OFFSET $8::integer
 )
 SELECT EXISTS(SELECT 1 FROM verified_binding) AS binding_verified,
  (SELECT COUNT(*)::text FROM eligible) AS total,page.*
-FROM (SELECT TRUE) one LEFT JOIN page ON TRUE ORDER BY page.user_id::bigint`
+FROM (SELECT TRUE) one LEFT JOIN page ON TRUE ORDER BY page.sort_ordinal NULLS LAST`
 
 const fail=(code,message)=>new SpaceverseRuntimeError(code,message)
 export function createSpaceverseCustomerDirectoryRepository({query,runtime}){
@@ -29,13 +40,14 @@ export function createSpaceverseCustomerDirectoryRepository({query,runtime}){
  const verified=requireSpaceverseTenantRuntime(runtime)
  return async function list(options={}){
   if(!options||typeof options!=='object'||Array.isArray(options))throw new TypeError('Invalid directory options')
-  if(Object.keys(options).some(key=>!['q','limit','offset'].includes(key)))throw fail('SPACEVERSE_DIRECTORY_REQUEST_SCOPE_FORBIDDEN','Directory scope is server-owned.')
-  const {q='',limit=25,offset=0}=options
-  if(typeof q!=='string'||q.length>100||!Number.isInteger(limit)||limit<1||limit>100||!Number.isInteger(offset)||offset<0||offset>1000000)throw new TypeError('Invalid directory query or page')
+  if(Object.keys(options).some(key=>!['q','limit','offset','sort','direction','wallet'].includes(key)))throw fail('SPACEVERSE_DIRECTORY_REQUEST_SCOPE_FORBIDDEN','Directory scope is server-owned.')
+  const {q='',limit=25,offset=0,sort='id',direction='asc',wallet='all'}=options
+  if(typeof q!=='string'||q.length>100||!Number.isInteger(limit)||limit<1||limit>100||!Number.isInteger(offset)||offset<0||offset>1000000||
+    !['id','name','username'].includes(sort)||!['asc','desc'].includes(direction)||!['all','present','missing'].includes(wallet))throw new TypeError('Invalid directory query or page')
   const binding=verified.binding,context=verified.context
   const pattern='%'+q.trim().replace(/[\\%_]/g,'\\$&')+'%'
   let result
-  try{result=await query(DIRECTORY_SQL,[binding.runtimeKey,binding.manifestSha256,binding.manifestRevision,context.tenantId,context.locationId,pattern,limit,offset])}
+  try{result=await query(DIRECTORY_SQL,[binding.runtimeKey,binding.manifestSha256,binding.manifestRevision,context.tenantId,context.locationId,pattern,limit,offset,sort,direction,wallet])}
   catch{throw fail('SPACEVERSE_DIRECTORY_READ_UNAVAILABLE','Directory read is unavailable.')}
   const rows=result?.rows
   if(!Array.isArray(rows)||!rows.length||rows.length>Math.max(1,limit))throw fail('SPACEVERSE_DIRECTORY_INVALID_RESULT','Invalid directory result.')
@@ -61,6 +73,6 @@ export function createSpaceverseCustomerDirectoryRepository({query,runtime}){
    items.push(Object.freeze({customer:Object.freeze({id,username:row.username??null,firstName:row.first_name??null,lastName:row.last_name??null,photoUrl:row.photo_url??null,role:'client'}),wallet}))
   }
   if(items.length&&BigInt(offset+items.length)>BigInt(total))throw fail('SPACEVERSE_DIRECTORY_INVALID_RESULT','Invalid directory page size.')
-  return Object.freeze({q:q.trim(),total,limit,offset,hasMore:BigInt(offset+items.length)<BigInt(total),items:Object.freeze(items)})
+  return Object.freeze({q:q.trim(),total,limit,offset,sort,direction,wallet,hasMore:BigInt(offset+items.length)<BigInt(total),items:Object.freeze(items)})
  }
 }
