@@ -78,6 +78,18 @@ test('does not probe another auth header after rate limit or transport error', a
   }
 });
 
+test('treats Railway HTTP 5xx as an outage without probing alternate credentials', async () => {
+  for (const code of [500, 502, 503]) {
+    const { fetchImpl, requests } = recorder([
+      result({ errors: [{ message: 'Not Authorized' }] }, code)
+    ]);
+    const output = await diagnoseRailwayCiAccess({ token: secret, fetchImpl, production });
+    assert.deepEqual(output, { status: 'transport_unavailable', stage: 'telegram', mutations: 0 });
+    assert.equal(requests.length, 1, 'server errors must not trigger a second authentication attempt');
+    assert.equal(requests[0].headers.Authorization, `Bearer ${secret}`);
+  }
+});
+
 test('does not send a request when secret is missing', async () => {
   const { fetchImpl, requests } = recorder([]);
   const output = await diagnoseRailwayCiAccess({ token: '', fetchImpl, production });
