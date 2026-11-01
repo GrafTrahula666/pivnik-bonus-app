@@ -23,6 +23,7 @@ describe('CHAT 02 #14: foreign-company CRM mutations fail closed over signed HTT
   let origin = ''
   const sessions = new Map<string, { cookie: string; csrf: string }>()
   const drafts = new Map<string, string>()
+  const venuesByCompany = new Map<string, string[]>()
   const initialConfig = {
     enableWrites: config.enableWrites,
     enableOnboardingDrafts: config.enableOnboardingDrafts,
@@ -65,6 +66,17 @@ describe('CHAT 02 #14: foreign-company CRM mutations fail closed over signed HTT
         [draftId, 'sv-' + draftId.replaceAll('-', ''), JSON.stringify(appConfig)],
       )
     }
+
+    const venues = (await state.db.query<{ id: string; company_id: string }>(
+      "SELECT id::text, company_id::text FROM venues WHERE active=TRUE ORDER BY id"
+    )).rows
+    for (const venue of venues) {
+      const ids = venuesByCompany.get(venue.company_id) || []
+      ids.push(venue.id)
+      venuesByCompany.set(venue.company_id, ids)
+    }
+    expect(venuesByCompany.get('10')?.length).toBeGreaterThanOrEqual(2)
+    expect(venuesByCompany.get('20')?.length).toBeGreaterThanOrEqual(1)
 
     const { handleApi, sendApiError } = await import('../router.js')
     server = http.createServer((req, res) => {
@@ -112,14 +124,14 @@ describe('CHAT 02 #14: foreign-company CRM mutations fail closed over signed HTT
   }
 
   it('provides two positive session/ownership controls before testing writes', async () => {
-    for (const [actor, expected, forbidden] of [
-      ['owner', ['1', '2'], '3'], ['south', ['3'], '1'],
+    for (const [actor, ownCompany, foreignCompany] of [
+      ['owner', '10', '20'], ['south', '20', '10'],
     ] as const) {
       const response = await request(actor, 'GET', '/api/admin/venues')
       expect(response.status).toBe(200)
       const list = (await response.json() as { venues: Array<{ id: string }> }).venues
-      expect(list.map(venue => venue.id)).toEqual(expected)
-      expect(list.some(venue => venue.id === forbidden)).toBe(false)
+      expect(list.map(venue => venue.id)).toEqual(venuesByCompany.get(ownCompany))
+      expect(list.every(venue => !venuesByCompany.get(foreignCompany)!.includes(venue.id))).toBe(true)
     }
   })
 
@@ -135,7 +147,8 @@ describe('CHAT 02 #14: foreign-company CRM mutations fail closed over signed HTT
       ['POST', 'clients/1/frames', { frameCode: 'fixture' }],
       ['DELETE', 'clients/1/frames/fixture', {}],
     ]
-    for (const [actor, foreignVenue] of [['owner', '3'], ['south', '1']] as const) {
+    for (const [actor, foreignCompany] of [['owner', '20'], ['south', '10']] as const) {
+      const foreignVenue = venuesByCompany.get(foreignCompany)![0]!
       for (const [method, action, body] of writes) {
         const response = await request(actor, method, '/api/admin/venues/' + foreignVenue + '/' + action, body)
         expect(response.status).toBe(404)
