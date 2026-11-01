@@ -529,8 +529,13 @@ and average sale receipt. The document operation count and app repeat-purchase
 details remain reachable under `details`; the existing full calculation
 disclosure stays intact. Cash comparison is still opt-in via `CashComparison`,
 so the main dashboard never triggers a second POS history read just to show a
-delta. The source/period and stale/error states remain unchanged. Responsive
-layout: four columns desktop and two on narrow touch screens.
+delta. When the owner enables comparison, the already-fetched previous POS
+report feeds **BigInt-safe % changes directly onto the primary KPI cards**,
+without another network request. Comparisons stay unknown for missing numbers,
+a zero baseline stays explicitly uncomparable, and stale/error or disabled
+comparison clears the change labels. The source/period and stale/error states
+remain unchanged. Responsive layout: four columns desktop and two on narrow
+touch screens.
 
 Only UI, CSS, unit/browser tests and documentation changed. No server routes,
 tenancy, monetary source, migration, patch-chain, POS ingestion or runtime auth
