@@ -54,8 +54,28 @@ test('owner-only manual CRM contact form: real desktop/mobile UI, uncertain retr
   await expect(form.getByRole('alert')).toContainText('Подтверждение не получено')
   await expect(form.getByLabel('Имя *')).toBeDisabled()
   await expect(form.getByLabel('Email',{exact:true})).toBeDisabled()
-  await form.getByRole('button',{name:'Повторить с тем же ключом'}).click()
-  await expect(form).toContainText('Слишком много запросов')
+  const pendingStorage=await page.evaluate(()=>{
+    const key=Object.keys(localStorage).find(key=>key.startsWith('spaceverse:crm-manual-contact:pending:v1:'))
+    return key?{key,value:localStorage.getItem(key)}:null
+  })
+  expect(pendingStorage?.value).not.toContain('Анна')
+  expect(pendingStorage?.value).not.toContain('anna@fixture.invalid')
+  expect(JSON.parse(pendingStorage!.value!)).toMatchObject({
+    version:1,requestKey:requests[0]!.key,
+  })
+  // A full page reload must not silently mint another contact request key.
+  await page.reload()
+  await page.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
+  const restored=page.getByRole('region',{name:'Создать ручной контакт CRM'})
+  await expect(restored).toContainText('Есть незавершённый запрос')
+  await restored.getByLabel('Имя *').fill('Анна')
+  await restored.getByLabel('Email',{exact:true}).fill('wrong@fixture.invalid')
+  await restored.getByRole('button',{name:'Восстановить исходный запрос'}).click()
+  await expect(restored.getByRole('alert')).toContainText('Данные отличаются')
+  expect(requests).toHaveLength(1)
+  await restored.getByLabel('Email',{exact:true}).fill('Anna@Fixture.invalid')
+  await restored.getByRole('button',{name:'Восстановить исходный запрос'}).click()
+  await expect(restored).toContainText('Слишком много запросов')
   await expect(form.getByLabel('Имя *')).toBeDisabled()
   await form.getByRole('button',{name:'Повторить с тем же ключом'}).click()
   await expect(form.getByRole('status')).toContainText('Контакт №911 создан')
@@ -69,6 +89,7 @@ test('owner-only manual CRM contact form: real desktop/mobile UI, uncertain retr
   }
   expect(requests[0]!.key).toBe(requests[1]!.key)
   expect(requests[1]!.key).toBe(requests[2]!.key)
+  expect(await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('spaceverse:crm-manual-contact:pending:v1:')).length)).toBe(0)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
