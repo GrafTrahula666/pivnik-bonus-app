@@ -179,6 +179,27 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(audit.rows[0]).toMatchObject({company_id:fixture.manifests[0]!.scope.companyId,
       venue_id:fixture.manifests[0]!.scope.venueId,admin_id:'11'})
   })
+  it('binds the HTTP idempotency key to its authenticated Admin actor',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('actor-bound@fixture.invalid')
+    const before=Number(await count(0,'spaceverse_crm_contacts'))
+    const created=await send('owner',path(),c)
+    expect(created.status).toBe(200)
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const audited=await auditCount()
+    // Root is independently authorized for this draft, but must not be able
+    // to replay another signed actor's successful request or read its PII.
+    const foreignReplay=await send('root',path(),c)
+    expect(foreignReplay.status).toBe(409)
+    const denied=await foreignReplay.json()
+    expect(denied).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denied)).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe('1')
+    expect(await auditCount()).toBe(audited)
+  })
   it('recovers one tenant contact after Admin audit failure by replaying the exact request key',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('recoverable@fixture.invalid')
