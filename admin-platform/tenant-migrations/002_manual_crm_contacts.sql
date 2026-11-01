@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS spaceverse_crm_contacts (
   venue_id TEXT NOT NULL CHECK (venue_id ~ '^[1-9][0-9]{0,18}$'),
   first_name TEXT NOT NULL CHECK (length(trim(first_name)) BETWEEN 1 AND 120),
   last_name TEXT CHECK (last_name IS NULL OR length(trim(last_name)) BETWEEN 1 AND 120),
-  phone_e164 TEXT CHECK (phone_e164 IS NULL OR (left(phone_e164,1)='+' AND substring(phone_e164 from 2) ~ '^[1-9][0-9]{7,14}
+  phone_e164 TEXT CHECK (phone_e164 IS NULL OR (left(phone_e164,1)='+' AND substring(phone_e164 from 2) ~ '^[1-9][0-9]{7,14}$')),
   email_normalized TEXT CHECK (email_normalized IS NULL OR length(email_normalized) BETWEEN 3 AND 254),
   creation_origin TEXT NOT NULL DEFAULT 'manual' CHECK (creation_origin = 'manual'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
