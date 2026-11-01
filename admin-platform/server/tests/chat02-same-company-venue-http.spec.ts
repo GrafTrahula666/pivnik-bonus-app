@@ -144,12 +144,30 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
+
+    const listPaths = ['/api/admin/onboarding/drafts', '/api/admin/onboarding/venues']
+    for (const path of listPaths) {
+      const response = await request('trusted', 'GET', path)
+      expect(response.status).toBe(200)
+      const data = await response.json() as {
+        drafts?: { id: string }[]
+        venues?: { kind: string; id: string }[]
+      }
+      const draftIds = path.endsWith('/drafts')
+        ? (data.drafts ?? []).map(item => item.id)
+        : (data.venues ?? []).filter(item => item.kind === 'draft').map(item => item.id)
+      expect(draftIds).toContain(fixture.manifests[0]!.source.draftId)
+      expect(draftIds).not.toContain(fixture.manifests[1]!.source.draftId)
+    }
     await state.metadata!.query(
       'UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',
       [fixture.viewerInvite],
     )
     expect((await request('trusted', 'GET', draft(0))).status).toBe(403)
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+    for (const path of listPaths) {
+      expect((await request('trusted', 'GET', path)).status).toBe(403)
+    }
   })
 
   it('does not leak a sibling prepared venue through onboarding list endpoints', async () => {
