@@ -35,7 +35,7 @@
 ## Checkpoint
 
 - Пункт **136**; создан pure typed helper и negative unit tests, без изменений маршрутов, `server.js/universal-server.js`, migrations, config, package.json, секретов или production.
-- **Main base SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`; **branch:** `spaceverse/chat14-ai-evidence-136-20261101`; commit/PR/CI перепроверить на точном HEAD после публикации.
+- **Main base SHA:** `c92ed7cd65f1a96d94363c2b7e212424ab078a73`; **branch:** `spaceverse/chat14-ai-evidence-136-20261101`; initial HEAD `3dfc0c20ab137b9b471532aac8229e4a161911bc`; **Draft PR [#370](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/370)**. Текущий HEAD и GitHub CI нужно перепроверять после каждой записи; без green CI пункт не принят.
 - Локальный checkout отсутствует, поэтому `npm run materialize`×2, `node --test`, `npm run check`, `npm audit`/Vitest не запускались локально; результат GitHub CI привести отдельно, когда будет.
 - Режим: **Draft PR → координатор CHAT 01 → без merge/deploy/production writes**. Если CI красный, исправить 136, а не переходить к пункту 137.
 - Почасовой CHAT14 scheduler ранее не создан из-за лимита 5/5; другие автоматизации не отключать без разрешения.
