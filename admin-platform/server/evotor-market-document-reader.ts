@@ -26,7 +26,7 @@ const denied = () => new EvotorDocumentReadError('DENIED')
 const unavailable = () => new EvotorDocumentReadError('UNAVAILABLE')
 const storePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const safeToken = /^[\x21-\x7e]{1,4096}$/
-const positiveCents = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0
+const positiveCents = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
 
 export interface EvotorReadProjection {
   readonly source: 'evotor'
