@@ -254,6 +254,24 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
         .toBe((post.mock.calls[0]![1] as {requestKey:string}).requestKey)
     },
   )
+  it.each(['userId','walletId'] as const)(
+    'rejects unexpected %s in a successful manual-contact receipt',async(field)=>{
+      post.mockImplementationOnce(async(_path,body)=>{
+        const response=confirmed(body)
+        return (field==='userId'
+          ? {...response,contact:{...response.contact,userId:'777'}}
+          : {...response,walletId:'777'}) as never
+      })
+      await fill();await submit()
+      expect(post).toHaveBeenCalledTimes(1)
+      expect(host.textContent).not.toContain('Контакт №93 создан')
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('Подтверждение не получено')
+      expect(host.textContent).toContain('Повторить с тем же ключом')
+      expect(localStorage.length).toBe(1)
+      expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey)
+        .toBe((post.mock.calls[0]![1] as {requestKey:string}).requestKey)
+    },
+  )
   it('reloads with only UUID/salted digest, rejects modified inputs and replays the original request',async()=>{
     post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
