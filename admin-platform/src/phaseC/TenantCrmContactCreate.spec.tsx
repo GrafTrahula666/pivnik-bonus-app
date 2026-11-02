@@ -162,6 +162,24 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey)
       .toBe((post.mock.calls[0]![1] as {requestKey:string}).requestKey)
   })
+  it.each(['identity','wallet'] as const)(
+    'rejects a 200 response falsely claiming %s linkage for a manual contact',async(claim)=>{
+      post.mockImplementationOnce(async(_path,body)=>{
+        const result=confirmed(body)
+        return (claim==='identity'
+          ? {...result,contact:{...result.contact,identityStatus:'linked'}}
+          : {...result,walletStatus:'created'}) as never
+      })
+      await fill();await submit()
+      expect(post).toHaveBeenCalledTimes(1)
+      expect(host.textContent).not.toContain('Контакт №93 создан')
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('Подтверждение не получено')
+      expect(host.textContent).toContain('Повторить с тем же ключом')
+      expect(localStorage.length).toBe(1)
+      expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey)
+        .toBe((post.mock.calls[0]![1] as {requestKey:string}).requestKey)
+    },
+  )
   it('reloads with only UUID/salted digest, rejects modified inputs and replays the original request',async()=>{
     post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
