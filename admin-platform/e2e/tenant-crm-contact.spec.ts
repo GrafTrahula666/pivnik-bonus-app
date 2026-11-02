@@ -188,8 +188,8 @@ test('real cross-tab Web Lock queues creation and rechecks a foreign pending key
   await expect(page.getByRole('region',{name:'Создать ручной контакт CRM'})).toBeVisible()
 
   const other=await page.context().newPage()
-  const lockName='spaceverse:crm-manual-contact:lock:v1:11:'+draft.id
-  const storageKey='spaceverse:crm-manual-contact:pending:v1:11:'+draft.id
+  const lockName='spaceverse:crm-manual-contact:lock:v1:1:'+draft.id
+  const storageKey='spaceverse:crm-manual-contact:pending:v1:1:'+draft.id
   const foreign=JSON.stringify({version:1,
     requestKey:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     nonce:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',digest:'a'.repeat(64)})
