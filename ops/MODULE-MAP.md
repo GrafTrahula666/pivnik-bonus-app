@@ -723,7 +723,11 @@ Manual admin migration 012 stores only the operator checkpoint, terminal ID/name
 and cash-report choice for the existing draft. `server/onboarding-workflow.ts`
 derives the eight step statuses from canonical company/venue, frozen application,
 existing provider verification and provisioning ledger; request statuses and
-scope are rejected. `GET/PUT .../progress` share the same revocable read/write
+scope are rejected. A scoped venue must resolve to an inactive row belonging to
+its saved company; missing/misbound or already-active venues fail the `venue`
+step with `scope_changed` rather than showing `venue_reserved`. POS proxy
+projection is skipped for invalid scopes; this does not activate a venue.
+`GET/PUT .../progress` share the same revocable read/write
 permissions, revision/replay checks and atomic audit. `OnboardingProgress.tsx`
 restores these choices after reload. `ADMIN_ENABLE_ONBOARDING_WORKFLOW` defaults
 off. A configured terminal has no confirmed binding/event yet; its status stays
@@ -751,6 +755,9 @@ read financial/customer rows. A successful connection probe does not bypass
 (`GET /api/admin/onboarding/venues`, 25 entries/page) under the existing default-off
 workflow switch. It combines the canonical active-venue resolver with scoped
 draft access; inactive prepared points reuse `onboarding-workflow.ts` projection.
+The list includes a prepared venue ID only when the canonical venue belongs to
+its saved company and remains inactive. Mismatched or already-active scopes
+retain their draft and failed status but omit the unverified venue ID.
 Company/venue/status input cannot choose scope. An existing active metadata row
 without verified connectivity remains pending/unknown, never false connected or
 zero revenue. Device and operator activity are distinct. `OwnerVenues.tsx`
