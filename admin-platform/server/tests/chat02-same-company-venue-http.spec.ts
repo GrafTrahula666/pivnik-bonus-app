@@ -230,6 +230,16 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(await downgraded.json()).toMatchObject({
       permissions: { canWrite: false, role: 'viewer' },
     })
+    // Downgrade retains read-only access to the invited prepared venue,
+    // without widening the same signed session to its sibling venue.
+    for (const resource of ['application', 'scope'] as const) {
+      const own = await request('trusted', 'GET', `${draft(0)}/${resource}`)
+      expect(own.status).toBe(200)
+      expect((await own.json() as Record<string, unknown>)[resource]).toBeTruthy()
+      const sibling = await request('trusted', 'GET', `${draft(1)}/${resource}`)
+      expect(sibling.status).toBe(404)
+      expect(await sibling.json()).toMatchObject({ code: 'ONBOARDING_DRAFT_NOT_FOUND' })
+    }
     // A viewer must not retain a stale manager write privilege on the same
     // signed session, even with the current revision and valid draft data.
     const ownDraftId = fixture.manifests[0]!.source.draftId
