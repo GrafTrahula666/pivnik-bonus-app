@@ -335,4 +335,35 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       expect(await audits()).toBe(beforeAudits+1)
     },30_000)
 
+  // Native PostgreSQL must serialize competing payloads that reuse one UUID.
+  // Only the first payload can own the durable receipt; the other fails closed.
+  it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
+    'two concurrent signed owner POSTs with one UUID but different payloads reject replay',
+    async()=>{
+      config.enableTenantCrmContactCreate=true
+      const firstCommand=command('same-key-first@fixture.invalid')
+      const secondCommand=command('same-key-second@fixture.invalid',firstCommand.requestKey)
+      const beforeContacts=Number(await count(0,'spaceverse_crm_contacts'))
+      const beforeRequests=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+      const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+        "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+      )).rows[0]!.n)
+      const beforeAudits=await audits()
+      const [first,second]=await Promise.all([
+        send('owner',path(),firstCommand),
+        send('owner',path(),secondCommand),
+      ])
+      expect([first.status,second.status].sort((a,b)=>a-b)).toEqual([200,409])
+      const accepted=first.status===200?first:second
+      const rejected=first.status===409?first:second
+      expect((await accepted.json()).requestKey).toBe(firstCommand.requestKey)
+      const denial=await rejected.json()
+      expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+      expect(JSON.stringify(denial)).not.toContain(firstCommand.contact.email)
+      expect(JSON.stringify(denial)).not.toContain(secondCommand.contact.email)
+      expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(beforeContacts+1)
+      expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(beforeRequests+1)
+      expect(await audits()).toBe(beforeAudits+1)
+    },30_000)
+
 })
