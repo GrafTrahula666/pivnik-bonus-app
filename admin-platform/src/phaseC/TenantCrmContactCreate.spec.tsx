@@ -116,6 +116,22 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(host.textContent).toContain('Контакт №93 создан')
     expect(localStorage.length).toBe(0)
   })
+  it('fails closed when a successful POST cannot clear its pending checkpoint',async()=>{
+    post.mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
+    const remove=vi.spyOn(Storage.prototype,'removeItem')
+      .mockImplementationOnce(()=>{throw new Error('simulated storage write failure')})
+    try{
+      await fill();await submit()
+      expect(post).toHaveBeenCalledTimes(1)
+      expect(host.textContent).not.toContain('Контакт №93 создан')
+      expect(host.querySelector('fieldset')?.disabled).toBe(true)
+      expect(host.textContent).toContain('Нельзя безопасно восстановить')
+      expect(localStorage.length).toBe(1)
+      // Never issue another POST after the local checkpoint becomes uncertain.
+      await submit()
+      expect(post).toHaveBeenCalledTimes(1)
+    }finally{remove.mockRestore()}
+  })
   it('retains request key and disabled inputs after uncertain 503, then replays',async()=>{
     post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
