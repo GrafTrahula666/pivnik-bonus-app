@@ -391,6 +391,20 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(host.textContent).toContain('Нельзя безопасно восстановить')
     expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey).toBe(replacement)
   })
+  it('fails closed without WebCrypto rather than posting or persisting contact PII',async()=>{
+    // Digest availability must be checked before the first network write.
+    // A browser with disabled WebCrypto must never fall back to raw contact data.
+    vi.stubGlobal('crypto',{randomUUID:()=>
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'})
+    await fill();await submit()
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.querySelector('[role="alert"]')?.textContent)
+      .toContain('Нельзя безопасно восстановить')
+    await submit()
+    expect(post).not.toHaveBeenCalled()
+  })
   it('permits corrected input with a fresh key after a definitive duplicate',async()=>{
     post.mockRejectedValueOnce(new ApiError(409,'TENANT_CRM_CONTACT_DUPLICATE','duplicate'))
       .mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
