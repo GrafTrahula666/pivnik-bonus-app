@@ -236,6 +236,7 @@ function ContactForm({actorId,draftId}:Props){
             if(clearCheckpoint()){pending.current=null;setUncertain(false);setReenter(false)}
           }else setUncertain(true)
         }
+      }
     }
     try {
       if(typeof navigator.locks?.request!=='function')throw new Error('Web Locks unavailable')
