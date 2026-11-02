@@ -1,3 +1,19 @@
+## 2026-11-03: Tenant-scoped loyalty managed settings (integrated Draft)
+
+`admin-platform/server/writes.ts` returns `source:not_configured`, `null` for missing
+loyalty settings and an empty level list instead of fabricating 0%. Explicitly
+stored zero remains a real configured zero. The PIVNIK legacy ladder is permitted
+only for the exact PIVNIK company/venue with a non-null legacy bar mapping,
+never for a sibling venue or another tenant. Mutations reject absent, blank,
+boolean, array or object forms for required monetary and tier numeric values.
+`ProductionManagers.tsx` exposes missing values as unconfigured and blocks
+saving an incomplete loyalty configuration. Isolated PGlite and native PG16
+regressions enforce tenant isolation; the new workflow is PR-only and uses
+disposable PostgreSQL with no live secrets. No migrations, runtime flags,
+bonus transactions or existing PIVNIK money semantics are changed.
+Source: CHAT10 item 91 / PR #333; combined integration remains Draft,
+not deployed and not enabled for independent commercial tenants.
+
 ## 2026-11-01: CHAT 09 verified POS customer cohorts (Draft; not deployed)
 
 An additive `admin-platform/server/customer-cohorts.ts` reads **only**
