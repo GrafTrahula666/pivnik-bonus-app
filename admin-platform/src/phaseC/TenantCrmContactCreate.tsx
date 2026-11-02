@@ -24,6 +24,10 @@ const hasControlChars=(value:string)=>[...value].some(char=>{
   return code<=31||code===127
 })
 const digestPattern=/^[a-f0-9]{64}$/
+// Schema v1 must not silently accept account, wallet or bonus fields alongside
+// the explicit "unlinked/not_created" status of an owner-entered contact.
+const resultKeys='contact,identityStatus,requestKey,schemaVersion,walletStatus'
+const contactKeys='email,firstName,id,identityStatus,lastName,phone,walletStatus'
 const storagePrefix='spaceverse:crm-manual-contact:pending:v1:'
 type Checkpoint={version:1;requestKey:string;nonce:string;digest:string}
 type Recovery={checkpoint:Checkpoint|null;blocked:boolean}
@@ -56,7 +60,11 @@ async function contactDigest(contact:Command['contact'],nonce:string):Promise<st
 function verifyResult(raw:unknown,key:string,expected:Command['contact']):Result{
   const value=raw as Partial<Result>|null
   const contact=value?.contact
-  if(!value||value.schemaVersion!==1||value.requestKey!==key||!contact||
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+    Object.keys(value).sort().join(',')!==resultKeys||
+    value.schemaVersion!==1||value.requestKey!==key||!contact||
+    typeof contact!=='object'||Array.isArray(contact)||
+    Object.keys(contact).sort().join(',')!==contactKeys||
     typeof contact.id!=='string'||!validId.test(contact.id)||
     typeof contact.firstName!=='string'||!contact.firstName.trim()||
     !['unlinked'].includes(String(value.identityStatus))||
