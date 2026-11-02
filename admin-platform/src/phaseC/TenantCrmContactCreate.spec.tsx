@@ -157,6 +157,26 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(post.mock.calls[0]![1]).toEqual(post.mock.calls[1]![1])
     expect(post.mock.calls[1]![1]).toEqual(post.mock.calls[2]![1])
   })
+  it.each([401,403] as const)(
+    'preserves an uncertain request after an authorization denial on replay (%i)',async(status)=>{
+      post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+        .mockRejectedValueOnce(new ApiError(status,
+          status===401?'SESSION_EXPIRED':'TENANT_CRM_CONTACT_SCOPE_DENIED','denied'))
+      await fill();await submit()
+      const original=(post.mock.calls[0]![1] as {requestKey:string}).requestKey
+      await click('Повторить с тем же ключом')
+      expect(post).toHaveBeenCalledTimes(2)
+      expect((post.mock.calls[1]![1] as {requestKey:string}).requestKey).toBe(original)
+      expect(host.querySelector('fieldset')?.disabled).toBe(true)
+      expect(host.textContent).toContain('Повторить с тем же ключом')
+      expect(host.textContent).not.toContain('Контакт №93 создан')
+      expect(localStorage.length).toBe(1)
+      remount()
+      expect(host.textContent).toContain('Есть незавершённый запрос')
+      expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey).toBe(original)
+      expect(post).toHaveBeenCalledTimes(2)
+    },
+  )
   it('rejects a malformed successful response and keeps the replay key',async()=>{
     post.mockResolvedValueOnce({schemaVersion:1,contact:{id:'93'}} as never)
     await fill();await submit()
