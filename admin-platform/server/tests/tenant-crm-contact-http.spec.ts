@@ -310,4 +310,29 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       expect(await audits()).toBe(beforeAudits+1)
     },30_000)
 
+  // Native PostgreSQL exercises independent connections and the real draft
+  // row lock. Two simultaneous retries of one UUID must share one receipt.
+  it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
+    'two concurrent signed owner POSTs with one request UUID create one contact and audit',
+    async()=>{
+      config.enableTenantCrmContactCreate=true
+      const c=command('simultaneous-replay@fixture.invalid')
+      const beforeContacts=Number(await count(0,'spaceverse_crm_contacts'))
+      const beforeRequests=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+      const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+        "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+      )).rows[0]!.n)
+      const beforeAudits=await audits()
+      const [first,second]=await Promise.all([
+        send('owner',path(),c),
+        send('owner',path(),c),
+      ])
+      expect(first.status).toBe(200)
+      expect(second.status).toBe(200)
+      expect(await first.json()).toEqual(await second.json())
+      expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(beforeContacts+1)
+      expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(beforeRequests+1)
+      expect(await audits()).toBe(beforeAudits+1)
+    },30_000)
+
 })
