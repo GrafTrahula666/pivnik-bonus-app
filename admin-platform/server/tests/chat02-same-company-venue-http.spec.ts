@@ -451,6 +451,27 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     }
     expect((await request('owner', 'GET', support(1))).status).toBe(200)
 
+    // Revocation must not leave stale invitation targets in the manager's
+    // existing session, nor remove the independent owner's company targets.
+    const invitationsPath = '/api/admin/onboarding/invitations'
+    const revokedTargets = await request('trusted', 'GET', invitationsPath)
+    expect(revokedTargets.status).toBe(200)
+    expect(await revokedTargets.json()).toMatchObject({
+      invitations: [], companies: [], venues: [],
+    })
+    const ownerTargets = await request('owner', 'GET', invitationsPath)
+    expect(ownerTargets.status).toBe(200)
+    const ownerChoices = await ownerTargets.json() as {
+      companies: { id: string }[]; venues: { id: string }[]
+    }
+    expect(ownerChoices.companies.map(item => item.id)).toContain('10')
+    for (const venue of [0, 1]) {
+      expect(ownerChoices.venues.map(item => item.id))
+        .toContain(fixture.manifests[venue]!.scope.venueId)
+    }
+    expect(ownerChoices.venues.map(item => item.id))
+      .not.toContain(fixture.manifests[2]!.scope.venueId)
+
     // Revoking the only venue grant must also close the discovery lists,
     // not just direct resource URLs, without requiring a new login.
     for (const path of indexPaths) {
