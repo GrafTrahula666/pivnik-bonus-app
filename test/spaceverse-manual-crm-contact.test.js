@@ -73,6 +73,22 @@ test('manual migration refuses a pre-existing partial contact table without adop
   }finally{await db.close();}
 });
 
+
+test('manual migration refuses a pre-existing partial request ledger without adopting it',async()=>{
+  const db=new PGlite();
+  try {
+    await db.exec('CREATE TABLE spaceverse_crm_contact_create_requests(id BIGINT PRIMARY KEY)');
+    await db.exec("SET spaceverse.crm_contacts_migration='approved'");
+    await assert.rejects(db.exec(await fs.readFile(MANUAL,'utf8')),/already exists/);
+    await db.exec('ROLLBACK');
+    const columns=await db.query(`SELECT column_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='spaceverse_crm_contact_create_requests'`);
+    assert.deepEqual(columns.rows,[{column_name:'id'}]);
+    const contacts=await db.query("SELECT to_regclass('public.spaceverse_crm_contacts') AS name");
+    assert.equal(contacts.rows[0].name,null);
+  }finally{await db.close();}
+});
+
 test('single transaction creates only a normalized, unlinked tenant contact',async()=>{
   const {db,runtime,connect}=await fixture();
   try {
