@@ -428,6 +428,21 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     for (const venue of [0, 1]) {
       expect((await request('owner', 'GET', draft(venue))).status).toBe(200)
     }
+    // Owner discovery stays company-wide after another user's venue grant
+    // is revoked; neither index may silently drop either owned venue.
+    for (const path of indexPaths) {
+      const allowed = await request('owner', 'GET', path)
+      expect(allowed.status).toBe(200)
+      const body = await allowed.json() as {
+        drafts?: { id: string }[]; venues?: { kind: string; id: string }[]
+      }
+      const visible = path.endsWith('/drafts')
+        ? (body.drafts ?? []).map(item => item.id)
+        : (body.venues ?? []).filter(item => item.kind === 'draft').map(item => item.id)
+      for (const venue of [0, 1]) {
+        expect(visible).toContain(fixture.manifests[venue]!.source.draftId)
+      }
+    }
     // Revoking the only venue grant must also close the discovery lists,
     // not just direct resource URLs, without requiring a new login.
     for (const path of indexPaths) {
