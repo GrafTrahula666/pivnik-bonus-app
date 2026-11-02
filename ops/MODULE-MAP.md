@@ -1,3 +1,20 @@
+## 2026-11-01: CHAT 09 verified POS customer cohorts (Draft; not deployed)
+
+An additive `admin-platform/server/customer-cohorts.ts` reads **only**
+confirmed `pos_customer_links` joined to the **same** bound store's SELL
+documents with a single fiscal print and active unmerged user. No PII or
+client IDs leave the aggregate. No payment/time/phone matching. An explicit
+company/venue store binding and successful sync precede the query. Its fields
+distinguish first *observed* purchase in-period, purchases with earlier
+*observed* verified store history, and 2+ verified sales in the same period.
+Categories overlap: first-observed and repeat-within-period MUST NOT be added.
+Since historical purchase coverage is unproven, genuinely new customers stay
+`newCustomers:null` (unknown != zero). Current `all/app` metrics are
+unchanged; this is not an app activity/DAU/visits metric. No production change,
+migration, secret, additional permission or API route; isolated PostgreSQL/WASM
+tests exercise the semantics. PRs #332/#344/#348 share the scoped adapter and
+must be reconciled by CHAT 01 before integration.
+
 ## 2026-11-01: seasonal Halloween raffle/ticket retirement (draft; no production migration)
 
 The seasonal 'Night of Cauldrons' draw, tickets, friend-invite bonuses, purchase/refund hooks and live prize issuance are being removed from the active runtimes. The ordinary wheel retains its approved regular bonus/beer probabilities; archive wheel-spins keep their original code for safe read-only display. The Halloween cosmetic theme is not the raffle and remains separately controlled. Historical SQL migrations 011 and 015 remain on disk and existing DB rows are NOT deleted; no rollback/drop SQL is run. Existing money/bonus and transaction semantics are unchanged. The release must pass double materialization, tests, package audit, VK browser smoke and production rollout review before merge/deploy.
