@@ -198,6 +198,14 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(before.rows).toHaveLength(1)
     const auditBefore = await auditRows()
 
+    // Positive authorization control: the manager has an explicit write grant
+    // for their own venue; sibling 404 must not be mistaken for a global ban.
+    const ownDraft = await request('trusted', 'GET', draft(0))
+    expect(ownDraft.status).toBe(200)
+    expect(await ownDraft.json()).toMatchObject({
+      permissions: { canWrite: true, role: 'manager' },
+    })
+
     // A valid current-revision command must reach the draft authorization gate,
     // not be rejected merely for malformed input or a stale revision.
     const denied = await request('trusted', 'PUT', draft(1), {
