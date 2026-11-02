@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { config } from '../config.js'
 import { fixturePassword } from './onboarding-fixture.js'
-import { tenantCrmFixture } from './tenant-crm-fixture.js'
+import { tenantCrmApplication, tenantCrmFixture } from './tenant-crm-fixture.js'
 import type { TenantCrmFixtureDatabase } from './tenant-crm-database-fixture.js'
 
 const state = vi.hoisted(() => ({ metadata: null as TenantCrmFixtureDatabase | null }))
@@ -52,14 +52,14 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
   const draft = (index: number) =>
     `/api/admin/onboarding/drafts/${fixture.manifests[index]!.source.draftId}`
   const support = (index: number) => draft(index) + '/support'
-  const request = (who: string | null, method: 'GET' | 'POST', path: string,
+  const request = (who: string | null, method: 'GET' | 'POST' | 'PUT', path: string,
     body?: unknown, csrf = true, requestOrigin = config.publicOrigin) => {
     const session = who ? sessions.get(who) : undefined
     return fetch(origin + path, {
       method,
       headers: {
         ...(session ? { cookie: session.cookie } : {}),
-        ...(method === 'POST' ? {
+        ...(method !== 'GET' ? {
           origin: requestOrigin, 'content-type': 'application/json',
           ...(csrf ? { 'x-csrf-token': session?.csrf ?? '' } : {}),
         } : {}),
@@ -150,6 +150,39 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       expect(denied.status).toBe(404)
       expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_DRAFT_NOT_FOUND' })
     }
+  })
+
+  it('denies sibling prepared application and scope writes without changing persisted state', async () => {
+    const sibling = fixture.manifests[1]!
+    const draftId = sibling.source.draftId
+    const snapshot = async () => {
+      const [application, scope, audit] = await Promise.all([
+        state.metadata!.query(
+          'SELECT revision,config::text FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid',
+          [draftId],
+        ),
+        state.metadata!.query(
+          'SELECT company_id::text,venue_id::text,draft_revision,application_revision FROM admin_onboarding_scopes WHERE draft_id=$1::uuid',
+          [draftId],
+        ),
+        state.metadata!.query('SELECT count(*)::int AS count FROM admin_audit_log'),
+      ])
+      return { application: application.rows, scope: scope.rows, audit: audit.rows }
+    }
+    const before = await snapshot()
+    const commands = [
+      { resource: 'application', body: { revision: 1, config: tenantCrmApplication } },
+      { resource: 'scope', body: { draftRevision: 1, applicationRevision: 1 } },
+    ] as const
+
+    for (const { resource, body } of commands) {
+      const denied = await request('trusted', 'PUT', `${draft(1)}/${resource}`, body)
+      expect(denied.status).toBe(404)
+      expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_DRAFT_NOT_FOUND' })
+    }
+    expect(await snapshot()).toEqual(before)
+    expect((await request('owner', 'GET', `${draft(1)}/application`)).status).toBe(200)
+    expect((await request('owner', 'GET', `${draft(1)}/scope`)).status).toBe(200)
   })
 
   it('rechecks viewer downgrade and revocation on the same signed session', async () => {
