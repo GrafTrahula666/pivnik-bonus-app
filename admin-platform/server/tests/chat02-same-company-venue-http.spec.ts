@@ -359,6 +359,44 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     }
   })
 
+  it('revokes an active manager directly on the existing signed session', async () => {
+    const ownDraftId = fixture.manifests[0]!.source.draftId
+    const manager = await request('trusted', 'GET', draft(0))
+    expect(manager.status).toBe(200)
+    expect(await manager.json()).toMatchObject({
+      permissions: { canWrite: true, role: 'manager' },
+    })
+
+    const draftRows = () => state.metadata!.query<{ revision: number; data: string }>(
+      'SELECT revision,data::text AS data FROM admin_onboarding_drafts WHERE id=$1::uuid',
+      [ownDraftId],
+    )
+    const auditRows = () => state.metadata!.query(
+      'SELECT count(*)::int AS count FROM admin_audit_log',
+    )
+    const before = await draftRows()
+    expect(before.rows).toHaveLength(1)
+    const auditBefore = await auditRows()
+
+    // Direct manager -> revoked must not depend on an intermediate viewer role.
+    await state.metadata!.query(
+      'UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',
+      [fixture.viewerInvite],
+    )
+    const deniedRead = await request('trusted', 'GET', draft(0))
+    expect(deniedRead.status).toBe(403)
+    expect(await deniedRead.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+
+    const deniedWrite = await request('trusted', 'PUT', draft(0), {
+      revision: before.rows[0]!.revision,
+      data: JSON.parse(before.rows[0]!.data),
+    })
+    expect(deniedWrite.status).toBe(403)
+    expect(await deniedWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await draftRows()).rows).toEqual(before.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
+  })
+
   it('does not leak a sibling prepared venue through onboarding list endpoints', async () => {
     const own = fixture.manifests[0]!.source.draftId
     const sibling = fixture.manifests[1]!.source.draftId
