@@ -143,6 +143,33 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('owner',path(),{...c,contact:{...c.contact,email:'wrong'}})).status).toBe(400)
     expect(state.targetResolutions).toBe(0)
   })
+  it('rejects forged identity, wallet and POS attributes before tenant resolution',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('manual-only-boundary@fixture.invalid')
+    const beforeContacts=await count(0,'spaceverse_crm_contacts')
+    const beforeRequests=await count(0,'spaceverse_crm_contact_create_requests')
+    const auditsBefore=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    for(const forged of [
+      {...c,identityStatus:'verified'},
+      {...c,contact:{...c.contact,userId:'123'}},
+      {...c,contact:{...c.contact,walletBalance:5000}},
+      {...c,contact:{...c.contact,posCustomerId:'evotor-customer'}},
+    ]){
+      const response=await send('owner',path(),forged)
+      expect(response.status).toBe(400)
+      const denial=await response.json()
+      expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_INVALID'})
+      expect(JSON.stringify(denial)).not.toContain(c.contact.email)
+    }
+    expect(state.targetResolutions).toBe(0)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(beforeContacts)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(beforeRequests)
+    expect((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n).toBe(auditsBefore)
+  })
   it('throttles repeated invalid create attempts before tenant resolution',async()=>{
     config.enableTenantCrmContactCreate=true
     const before=await count(0,'spaceverse_crm_contacts')
