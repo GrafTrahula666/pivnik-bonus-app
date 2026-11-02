@@ -219,6 +219,24 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(post).not.toHaveBeenCalled()
     expect(localStorage.getItem(key)).toBe(foreign)
   })
+  it('blocks a mounted retry immediately after another tab clears localStorage',async()=>{
+    post.mockRejectedValueOnce(new ApiError(503,'TENANT_CRM_CONTACT_UNAVAILABLE','unknown'))
+    await fill();await submit()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(localStorage.length).toBe(1)
+    await act(async()=>{
+      // A cross-tab Storage.clear() event has null key and values.
+      localStorage.clear()
+      window.dispatchEvent(new StorageEvent('storage',{
+        key:null,oldValue:null,newValue:null,storageArea:localStorage,
+      }))
+    })
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+    await submit()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(localStorage.length).toBe(0)
+  })
   it('pre-mounted second tab cannot overwrite an uncertain contact request key',async()=>{
     // Simulate another tab opened before the first tab persists its request.
     // Both forms initially saw empty storage, but the second must recheck
