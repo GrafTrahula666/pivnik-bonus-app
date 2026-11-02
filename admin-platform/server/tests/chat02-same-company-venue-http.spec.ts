@@ -403,11 +403,33 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       expect((await request('trusted', 'GET', `${draft(0)}/${resource}`)).status).toBe(200)
     }
 
+    // The same signed manager session must actually see its prepared venue
+    // in both discovery lists before revocation.
+    const indexPaths = ['/api/admin/onboarding/drafts', '/api/admin/onboarding/venues'] as const
+    for (const path of indexPaths) {
+      const allowed = await request('trusted', 'GET', path)
+      expect(allowed.status).toBe(200)
+      const body = await allowed.json() as {
+        drafts?: { id: string }[]; venues?: { kind: string; id: string }[]
+      }
+      const visible = path.endsWith('/drafts')
+        ? body.drafts?.some(item => item.id === ownDraftId)
+        : body.venues?.some(item => item.kind === 'draft' && item.id === ownDraftId)
+      expect(visible).toBe(true)
+    }
+
     // Direct manager -> revoked must not depend on an intermediate viewer role.
     await state.metadata!.query(
       'UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',
       [fixture.viewerInvite],
     )
+    // Revoking the only venue grant must also close the discovery lists,
+    // not just direct resource URLs, without requiring a new login.
+    for (const path of indexPaths) {
+      const denied = await request('trusted', 'GET', path)
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    }
     for (const resource of ['application', 'scope'] as const) {
       const deniedPrepared = await request('trusted', 'GET', `${draft(0)}/${resource}`)
       expect(deniedPrepared.status).toBe(403)
