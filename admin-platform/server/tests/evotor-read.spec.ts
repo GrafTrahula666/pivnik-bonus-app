@@ -43,6 +43,22 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       expect(()=>evotorPeriod(new URL('https://fixture.invalid/?'+query),now)).toThrowError(expect.objectContaining({statusCode:400,code:'INVALID_PERIOD'}))
     }
   })
+  it('rejects mixed or duplicated period URL parameters without an ambiguous fallback',()=>{
+    const now=new Date('2026-10-11T10:00:00Z')
+    const invalid=[
+      'days=7&date=2026-10-01','days=7&from=2026-10-01&to=2026-10-02',
+      'days=30&from=2026-10-01','days=7&days=14',
+      'date=2026-10-01&date=2026-10-02',
+      'from=2026-10-01&from=2026-10-02&to=2026-10-03',
+      'from=2026-10-01&to=2026-10-02&to=2026-10-03',
+    ]
+    for(const query of invalid){
+      expect(()=>evotorPeriod(new URL('https://fixture.invalid/?'+query),now),query)
+        .toThrowError(expect.objectContaining({statusCode:400,code:'INVALID_PERIOD'}))
+    }
+    // Unrelated authorized URL parameters are not part of the period contract.
+    expect(evotorPeriod(new URL('https://fixture.invalid/?from=2026-10-01&to=2026-10-02&source=all'),now).days).toBe(2)
+  })
   it('resolves company access first and selects only an explicit company/venue store mapping',async()=>{
     const db=new PGlite()
     try{

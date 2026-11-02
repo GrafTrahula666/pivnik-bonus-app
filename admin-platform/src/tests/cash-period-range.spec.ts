@@ -32,6 +32,25 @@ describe('cash custom interval and actual chart projections',()=>{
   await act(async()=>{setInput('Начало периода кассы','2026-09-01');setInput('Конец периода кассы','2026-09-02')});await submit()
   expect(node.textContent).toContain('Range unavailable');expect(node.querySelector('.kpi-value')).toBeNull()
  })
+ it('keeps the applied from/to URL and clears an invalid draft when a preset replaces it',async()=>{
+  vi.mocked(apiGet).mockResolvedValue(report as never)
+  await act(async()=>root.render(createElement(SalesDashboard,{venue,days:30,mode:'all'})))
+  await act(async()=>{setInput('Начало периода кассы','2026-09-29');setInput('Конец периода кассы','2026-10-02')})
+  await submit()
+  expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?from=2026-09-29&to=2026-10-02')
+  const committedCount=vi.mocked(apiGet).mock.calls.length
+  await act(async()=>{setInput('Начало периода кассы','2026-10-03')})
+  await submit()
+  expect(vi.mocked(apiGet)).toHaveBeenCalledTimes(committedCount)
+  expect(node.textContent).toContain('Начало периода должно быть')
+  await act(async()=>[...node.querySelectorAll('button')].find(b=>b.textContent==='7 дней')!.click())
+  expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?days=7')
+  expect(node.querySelector('[role=alert]')).toBeNull()
+  const changedCount=vi.mocked(apiGet).mock.calls.length
+  await act(async()=>root.render(createElement(SalesDashboard,{venue,days:30,mode:'app'})))
+  expect(apiGet).toHaveBeenCalledTimes(changedCount)
+  expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?days=7')
+ })
  it('switches exact signed daily projections and 24-hour chart without changing totals',async()=>{
   await act(async()=>root.render(createElement(CashDashboard,{report})))
   const total=node.querySelector('.kpi-value')!.textContent

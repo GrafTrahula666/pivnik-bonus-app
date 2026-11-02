@@ -163,5 +163,14 @@ test('custom inclusive cash interval, daily grouping and validation preserve the
  await expect(page.getByRole('alert')).toContainText('Начало периода')
  expect(queries).toHaveLength(before)
  await expect(page.locator('.kpi-value').first()).toHaveText(total!)
+ // An invalid draft must not replace the currently applied URL; switching presets clears stale errors.
+ await page.getByRole('button',{name:'7 дней',exact:true}).click()
+ await expect(page.getByRole('alert')).toHaveCount(0)
+ expect(queries.at(-1)).toBe('?days=7')
+ expect(queries.filter(q=>q.includes('from=')).at(-1)).toBe('?from=2026-10-01&to=2026-10-02')
+ const selectedCount=queries.length
+ await page.getByRole('button',{name:'Клиенты приложения',exact:true}).click()
+ expect(queries).toHaveLength(selectedCount)
+ expect(queries.at(-1)).toBe('?days=7')
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
 })

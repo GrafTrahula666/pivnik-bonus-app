@@ -18,16 +18,17 @@ export function SalesDashboard({venue,days,mode}:{venue:ApiVenue;days:number;mod
   const date=selection==='yesterday'?yesterday:selection.startsWith('date:')?selection.slice(5):''
   const query=selection.startsWith('range:')?`from=${selection.split(':')[1]}&to=${selection.split(':')[2]}`:date?'date='+encodeURIComponent(date):'days='+selection.slice(5)
   const path=`/api/admin/venues/${venue.id}/pos?${query}`
+  const applySelection=(value:string)=>{setSelection(value);setValidation('')}
   const chooseDate=(value:string)=>{
     if(/^\d{4}-\d{2}-\d{2}$/.test(value)&&value<=today&&
-      moscowDay(new Date(value+'T00:00:00+03:00'))===value)setSelection('date:'+value)
+      moscowDay(new Date(value+'T00:00:00+03:00'))===value)applySelection('date:'+value)
   }
   return <div className="page">
     <div className="card cash-period-controls" role="group" aria-label="Период кассы">
       <div className="segmented cash-period-presets">
-        <button type="button" className={selection==='days:1'?'active':''} aria-pressed={selection==='days:1'} onClick={()=>setSelection('days:1')}>Сегодня</button>
-        <button type="button" className={selection==='yesterday'?'active':''} aria-pressed={selection==='yesterday'} onClick={()=>setSelection('yesterday')}>Вчера</button>
-        {presets.slice(1).map(([n,label])=><button type="button" key={n} className={selection==='days:'+n?'active':''} aria-pressed={selection==='days:'+n} onClick={()=>setSelection('days:'+n)}>{label}</button>)}
+        <button type="button" className={selection==='days:1'?'active':''} aria-pressed={selection==='days:1'} onClick={()=>applySelection('days:1')}>Сегодня</button>
+        <button type="button" className={selection==='yesterday'?'active':''} aria-pressed={selection==='yesterday'} onClick={()=>applySelection('yesterday')}>Вчера</button>
+        {presets.slice(1).map(([n,label])=><button type="button" key={n} className={selection==='days:'+n?'active':''} aria-pressed={selection==='days:'+n} onClick={()=>applySelection('days:'+n)}>{label}</button>)}
       </div>
       <label className="cash-date-label">Любой день<input aria-label="Дата кассового отчёта" type="date" max={today} value={date} onChange={e=>chooseDate(e.target.value)}/></label>
       <form aria-label="Произвольный период кассы" onSubmit={event=>{

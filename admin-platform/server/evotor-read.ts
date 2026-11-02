@@ -16,7 +16,11 @@ export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
     return midnight
   }
   const date=url.searchParams.get('date'),from=url.searchParams.get('from'),to=url.searchParams.get('to')
-  if(date!==null&&(from!==null||to!==null))throw new HttpError(400,'INVALID_PERIOD','Выберите день или диапазон, без смешения параметров.')
+  // Reject ambiguous API URLs, rather than silently letting searchParams.get pick the first value.
+  const keys=['days','date','from','to'] as const
+  const repeated=keys.some(key=>url.searchParams.getAll(key).length>1)
+  const modes=Number(url.searchParams.has('days'))+Number(date!==null)+Number(from!==null||to!==null)
+  if(repeated||modes>1)throw new HttpError(400,'INVALID_PERIOD','Выберите один режим периода без повторяющихся параметров.')
   if(date!==null){
     const midnight=midnightFor(date)
     return {from:new Date(midnight),to:new Date(midnight+86400000),days:1}
