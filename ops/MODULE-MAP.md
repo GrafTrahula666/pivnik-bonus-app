@@ -1,3 +1,23 @@
+## 2026-11-01: CHAT 09 receipt-verified product ranking (Draft; not deployed)
+
+`pos/receipt-ranking.js` is an **independent** optional projection from already
+authorized Evotor store documents. Only single-fiscal-print SELL/PAYBACK documents
+with a valid receipt identifier, unsplit `linkable` evidence, stable product ID,
+positive quantity and fully reconciled position cents are ranked. Unverified,
+split, incomplete and free-text product positions are excluded, with explicit
+coverage counts. A missing verified receipt is **not** interpreted as zero.
+Refunds subtract from product net in signed BigInt minor units; grouping requires
+stable product ID plus name and measure. The old `all.products` field remains
+unchanged to preserve inventory/operations functionality.
+
+Normalized Evotor snapshots contain **no authoritative category ID**. The new
+`receiptRanking.categories` is `available:false` with `items:null`, not guessed
+from a name. Reports only read the exact bound store and date range; no cross-
+company/venue ranking or new permissions are invented. `getEvotorReport`
+exposes the additive ranking only after the existing store-binding/sync checks
+and `null` before availability. Root node tests and PGlite tenant-scope
+regression are added; no new endpoints/migrations/production data writes.
+
 ## 2026-11-01: seasonal Halloween raffle/ticket retirement (draft; no production migration)
 
 The seasonal 'Night of Cauldrons' draw, tickets, friend-invite bonuses, purchase/refund hooks and live prize issuance are being removed from the active runtimes. The ordinary wheel retains its approved regular bonus/beer probabilities; archive wheel-spins keep their original code for safe read-only display. The Halloween cosmetic theme is not the raffle and remains separately controlled. Historical SQL migrations 011 and 015 remain on disk and existing DB rows are NOT deleted; no rollback/drop SQL is run. Existing money/bonus and transaction semantics are unchanged. The release must pass double materialization, tests, package audit, VK browser smoke and production rollout review before merge/deploy.
