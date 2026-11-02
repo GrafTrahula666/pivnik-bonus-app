@@ -301,6 +301,13 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       [fixture.viewerInvite],
     )
     expect((await request('trusted', 'GET', draft(0))).status).toBe(403)
+    // Revocation must also invalidate prepared application/scope reads on the
+    // same signed session, even though a viewer could read both before revoke.
+    for (const resource of ['application', 'scope'] as const) {
+      const deniedRead = await request('trusted', 'GET', `${draft(0)}/${resource}`)
+      expect(deniedRead.status).toBe(403)
+      expect(await deniedRead.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    }
     // Revocation must also invalidate the old signed session for mutations,
     // even when the client supplies the last valid draft revision and payload.
     const revokedWrite = await request('trusted', 'PUT', draft(0), {
