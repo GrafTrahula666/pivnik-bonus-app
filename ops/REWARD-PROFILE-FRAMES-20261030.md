@@ -28,8 +28,15 @@ it is available only to the configured creator identities in Telegram/VK, even w
 account has the admin role. No startup script grants frames or changes a
 guest's selection. Owner startup/auth repair preserves newly selected frames.
 
-The Halloween Live raffle (#318) is not changed and does not automatically
-distribute these prizes. This feature does not apply production data changes.
+The seasonal Halloween raffle was retired on main in #324 (commit `c92ed7cd65f1a96d94363c2b7e212424ab078a73`). This PR remains strictly a frame catalog/renderer change and does not reinstate or automatically distribute seasonal prizes. This feature does not apply production data changes.
+
+## Integration check against current main (2026-11-02)
+
+- This branch was originally validated against `febca6ae6ce7be85a53eaf0e4a38fe1f087385ff` and is 5 commits behind main after #324.
+- PR #321 affects `app.js`, `server.js`, and `universal-server.js`, also edited by #324. GitHub reports the PR mergeable, but that does not verify the combined behavior.
+- This documentation-only update triggers pull-request CI against the current main via GitHub's pull_request workflow; check all new results before merging.
+- Do not interpret prior green CI on `8a63db87bac7b6126e669148d1964cfcffeacc17` as proof for the updated main; physical mobile acceptance and owner identity configuration remain separate production gates.
+
 
 ## Validation and release boundary
 
