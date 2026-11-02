@@ -292,6 +292,41 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('south',path(2),command(c.contact.email))).status).toBe(200)
     expect(await count(2,'spaceverse_crm_contacts')).toBe('1')
   })
+  it('normalizes phone-only contacts and rejects a formatted duplicate within the same venue',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const phone='+7 (999) 333-44-55'
+    const canonical='+79993334455'
+    const first={requestKey:crypto.randomUUID(),
+      contact:{firstName:'Мария',lastName:'Тест',phone,email:null}}
+    const accepted=await send('owner',path(),first)
+    expect(accepted.status).toBe(200)
+    expect(await accepted.json()).toMatchObject({
+      identityStatus:'unlinked',walletStatus:'not_created',
+      contact:{phone:canonical,email:null,identityStatus:'unlinked',walletStatus:'not_created'},
+    })
+    const beforeContacts=await count(0,'spaceverse_crm_contacts')
+    const beforeRequests=await count(0,'spaceverse_crm_contact_create_requests')
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const beforeAudits=await audits()
+    const duplicate=await send('owner',path(),{
+      requestKey:crypto.randomUUID(),
+      contact:{firstName:'Другой',lastName:null,phone:canonical,email:null},
+    })
+    expect(duplicate.status).toBe(409)
+    const denial=await duplicate.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_DUPLICATE'})
+    expect(JSON.stringify(denial)).not.toContain(canonical)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(beforeContacts)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(beforeRequests)
+    expect(await audits()).toBe(beforeAudits)
+    // A different prepared venue owns a separate uniqueness scope.
+    expect((await send('south',path(2),{
+      requestKey:crypto.randomUUID(),
+      contact:{firstName:'Мария',lastName:null,phone:canonical,email:null},
+    })).status).toBe(200)
+  })
   // Native PostgreSQL only: PGlite's single connection cannot model two
   // independent HTTP transactions waiting on the same Admin draft lock.
   it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
