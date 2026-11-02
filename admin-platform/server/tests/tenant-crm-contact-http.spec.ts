@@ -327,6 +327,39 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       contact:{firstName:'Мария',lastName:null,phone:canonical,email:null},
     })).status).toBe(200)
   })
+  it('replays canonical-equivalent email, phone and UUID without a second contact or audit',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const requestKey='ABCDEFAB-ABCD-4ABC-8ABC-ABCDEFABCDEF'
+    const beforeContacts=Number(await count(0,'spaceverse_crm_contacts'))
+    const beforeRequests=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const beforeAudits=await audits()
+    const first=await send('owner',path(),{
+      requestKey,
+      contact:{firstName:'  Мария  ',lastName:'Тест',phone:'+7 (999) 555-66-77',
+        email:' Canonical.Replay@Example.INVALID '},
+    })
+    expect(first.status).toBe(200)
+    const receipt=await first.json()
+    expect(receipt.requestKey).toBe(requestKey.toLowerCase())
+    expect(receipt.contact).toMatchObject({
+      firstName:'Мария',phone:'+79995556677',email:'canonical.replay@example.invalid',
+      identityStatus:'unlinked',walletStatus:'not_created',
+    })
+    const replay=await send('owner',path(),{
+      requestKey:requestKey.toLowerCase(),
+      contact:{firstName:'Мария',lastName:'Тест',phone:'+79995556677',
+        email:'canonical.replay@example.invalid'},
+    })
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(beforeContacts+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(beforeRequests+1)
+    expect(await audits()).toBe(beforeAudits+1)
+  })
+
   // Native PostgreSQL only: PGlite's single connection cannot model two
   // independent HTTP transactions waiting on the same Admin draft lock.
   it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
