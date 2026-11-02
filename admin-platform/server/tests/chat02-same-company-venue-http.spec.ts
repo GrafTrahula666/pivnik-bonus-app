@@ -274,6 +274,16 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       [fixture.viewerInvite],
     )
     expect((await request('trusted', 'GET', draft(0))).status).toBe(403)
+    // Revocation must also invalidate the old signed session for mutations,
+    // even when the client supplies the last valid draft revision and payload.
+    const revokedWrite = await request('trusted', 'PUT', draft(0), {
+      revision: before.rows[0]!.revision,
+      data: JSON.parse(before.rows[0]!.data),
+    })
+    expect(revokedWrite.status).toBe(403)
+    expect(await revokedWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await draftRows()).rows).toEqual(before.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
     for (const path of listPaths) {
       expect((await request('trusted', 'GET', path)).status).toBe(403)
