@@ -19,7 +19,10 @@ const phonePattern=/^\+[1-9][0-9]{7,14}$/
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const validId=/^[1-9][0-9]{0,18}$/
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const controlPattern=/[\u0000-\u001f\u007f]/u
+const hasControlChars=(value:string)=>[...value].some(char=>{
+  const code=char.charCodeAt(0)
+  return code<=31||code===127
+})
 const digestPattern=/^[a-f0-9]{64}$/
 const storagePrefix='spaceverse:crm-manual-contact:pending:v1:'
 type Checkpoint={version:1;requestKey:string;nonce:string;digest:string}
@@ -121,8 +124,8 @@ function ContactForm({actorId,draftId}:Props){
     const last=lastName.trim().replace(/\s+/g,' ')||null
     const number=phone.replace(/[\s().-]/g,'')||null
     const address=email.trim().toLowerCase()||null
-    if(!first||first.length>120||controlPattern.test(first)||
-      last&&(last.length>120||controlPattern.test(last))||
+    if(!first||first.length>120||hasControlChars(first)||
+      last&&(last.length>120||hasControlChars(last))||
       number&&!phonePattern.test(number)||address&&(!emailPattern.test(address)||address.length>254)||
       (!number&&!address)){
       setError('Укажите имя и хотя бы один контакт: телефон в формате +79991234567 или корректный email.')
