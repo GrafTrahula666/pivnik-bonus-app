@@ -185,6 +185,32 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await request('owner', 'GET', `${draft(1)}/scope`)).status).toBe(200)
   })
 
+  it('denies sibling draft PUT with a current revision without changing SQL or audit', async () => {
+    const siblingDraftId = fixture.manifests[1]!.source.draftId
+    const draftRows = () => state.metadata!.query<{ revision: number; data: string }>(
+      'SELECT revision,data::text AS data FROM admin_onboarding_drafts WHERE id=$1::uuid',
+      [siblingDraftId],
+    )
+    const auditRows = () => state.metadata!.query(
+      'SELECT count(*)::int AS count FROM admin_audit_log',
+    )
+    const before = await draftRows()
+    expect(before.rows).toHaveLength(1)
+    const auditBefore = await auditRows()
+
+    // A valid current-revision command must reach the draft authorization gate,
+    // not be rejected merely for malformed input or a stale revision.
+    const denied = await request('trusted', 'PUT', draft(1), {
+      revision: before.rows[0]!.revision,
+      data: JSON.parse(before.rows[0]!.data),
+    })
+    expect(denied.status).toBe(404)
+    expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_DRAFT_NOT_FOUND' })
+    expect((await draftRows()).rows).toEqual(before.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
+    expect((await request('owner', 'GET', draft(1))).status).toBe(200)
+  })
+
   it('rechecks viewer downgrade and revocation on the same signed session', async () => {
     expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
     await state.metadata!.query(
