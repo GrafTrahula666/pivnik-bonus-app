@@ -301,6 +301,18 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(await revokedWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
     expect((await draftRows()).rows).toEqual(before.rows)
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
+
+    // A revoked invitation must also deny app-config writes through the old
+    // signed session, even when the payload and revision are still valid.
+    const revokedAppWrite = await request('trusted', 'PUT', `${draft(0)}/application`, {
+      revision: appBefore.rows[0]!.revision,
+      config: JSON.parse(appBefore.rows[0]!.config),
+    })
+    expect(revokedAppWrite.status).toBe(403)
+    expect(await revokedAppWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await appRows()).rows).toEqual(appBefore.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
+
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
     for (const path of listPaths) {
       expect((await request('trusted', 'GET', path)).status).toBe(403)
