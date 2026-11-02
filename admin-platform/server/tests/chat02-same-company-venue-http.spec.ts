@@ -225,7 +225,11 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       "UPDATE admin_onboarding_access SET role='viewer' WHERE invitation_id=$1",
       [fixture.viewerInvite],
     )
-    expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
+    const downgraded = await request('trusted', 'GET', draft(0))
+    expect(downgraded.status).toBe(200)
+    expect(await downgraded.json()).toMatchObject({
+      permissions: { canWrite: false, role: 'viewer' },
+    })
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
 
