@@ -131,6 +131,31 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(post).toHaveBeenCalledTimes(1)
     expect(host.textContent).toContain('Контакт №93 создан')
   })
+  it('rechecks a foreign pending key after waiting for the exclusive Web Lock',async()=>{
+    let release!:()=>void
+    const wait=new Promise<void>(resolve=>{release=resolve})
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{
+      request:async(_name:string,_options:unknown,run:()=>Promise<unknown>)=>{
+        await wait
+        return run()
+      },
+    }})
+    await fill();await submit()
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    // A second tab commits its pending request while this tab is queued.
+    // Deliberately omit the storage event: the lock holder must re-read.
+    const key='spaceverse:crm-manual-contact:pending:v1:11:123e4567-e89b-42d3-a456-426614174000'
+    const foreign=JSON.stringify({version:1,
+      requestKey:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      nonce:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',digest:'a'.repeat(64)})
+    localStorage.setItem(key,foreign)
+    await act(async()=>{release();await wait;await new Promise(resolve=>setTimeout(resolve,0))})
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.getItem(key)).toBe(foreign)
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Нельзя безопасно восстановить')
+  })
   it('rejects missing phone/email before any request',async()=>{
     await set('Имя *','Мария')
     await submit()
