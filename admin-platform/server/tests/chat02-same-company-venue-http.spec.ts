@@ -230,6 +230,28 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(await downgraded.json()).toMatchObject({
       permissions: { canWrite: false, role: 'viewer' },
     })
+    // A viewer must not retain a stale manager write privilege on the same
+    // signed session, even with the current revision and valid draft data.
+    const ownDraftId = fixture.manifests[0]!.source.draftId
+    const draftRows = () => state.metadata!.query<{ revision: number; data: string }>(
+      'SELECT revision,data::text AS data FROM admin_onboarding_drafts WHERE id=$1::uuid',
+      [ownDraftId],
+    )
+    const auditRows = () => state.metadata!.query(
+      'SELECT count(*)::int AS count FROM admin_audit_log',
+    )
+    const before = await draftRows()
+    expect(before.rows).toHaveLength(1)
+    const auditBefore = await auditRows()
+    const deniedWrite = await request('trusted', 'PUT', draft(0), {
+      revision: before.rows[0]!.revision,
+      data: JSON.parse(before.rows[0]!.data),
+    })
+    expect(deniedWrite.status).toBe(403)
+    expect(await deniedWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await draftRows()).rows).toEqual(before.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
+
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
 
