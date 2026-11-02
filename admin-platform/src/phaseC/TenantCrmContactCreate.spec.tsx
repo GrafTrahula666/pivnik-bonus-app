@@ -88,6 +88,19 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('Укажите имя')
     expect(host.querySelector('fieldset')?.disabled).toBe(false)
   })
+  it.each([
+    'user@-example.org',
+    'user@example..org',
+    'тест@example.org',
+  ])('rejects server-invalid email before persisting or posting: %s',async(address)=>{
+    await set('Имя *','Мария')
+    await set('Email',address)
+    await submit()
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Укажите имя')
+    expect(host.querySelector('fieldset')?.disabled).toBe(false)
+  })
   it('rejects missing phone/email before any request',async()=>{
     await set('Имя *','Мария')
     await submit()

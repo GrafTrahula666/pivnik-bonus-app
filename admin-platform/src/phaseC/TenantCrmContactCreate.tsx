@@ -16,7 +16,7 @@ type Result={
 }
 interface Props {actorId:string;draftId:string}
 const phonePattern=/^\+[1-9][0-9]{7,14}$/
-const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const emailPattern=/^[a-z0-9.!#$%&'*+/=?^`{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
 const validId=/^[1-9][0-9]{0,18}$/
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const hasControlChars=(value:string)=>[...value].some(char=>{
