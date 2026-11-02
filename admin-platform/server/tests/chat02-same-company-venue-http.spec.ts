@@ -377,6 +377,13 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     const before = await draftRows()
     expect(before.rows).toHaveLength(1)
     const auditBefore = await auditRows()
+    const supportRows = () => state.metadata!.query(
+      'SELECT id::text,draft_id::text,topic FROM admin_onboarding_support_requests WHERE draft_id=$1::uuid ORDER BY id',
+      [ownDraftId],
+    )
+    const supportBefore = await supportRows()
+    // Positive control: the same manager session can read its venue support.
+    expect((await request('trusted', 'GET', support(0))).status).toBe(200)
 
     // Direct manager -> revoked must not depend on an intermediate viewer role.
     await state.metadata!.query(
@@ -393,6 +400,15 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     })
     expect(deniedWrite.status).toBe(403)
     expect(await deniedWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    // Direct revocation must also close support reads and writes without
+    // relying on an intermediate viewer downgrade or a fresh login.
+    for (const method of ['GET', 'POST'] as const) {
+      const denied = await request('trusted', method, support(0),
+        method === 'POST' ? { topic: 'access' } : undefined)
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    }
+    expect((await supportRows()).rows).toEqual(supportBefore.rows)
     expect((await draftRows()).rows).toEqual(before.rows)
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
   })
