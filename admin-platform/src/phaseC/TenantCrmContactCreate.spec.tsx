@@ -77,8 +77,8 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
   }
 
   it.each([
-    ['Имя *','Ма\\u0001рия'],
-    ['Фамилия','Иван\\u007fова'],
+    ['Имя *','Ма\u0001рия'],
+    ['Фамилия','Иван\u007fова'],
   ])('rejects control characters in %s without persisting or posting',async(label,value)=>{
     await fill()
     await set(label,value)
