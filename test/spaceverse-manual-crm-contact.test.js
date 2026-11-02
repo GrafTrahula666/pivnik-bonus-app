@@ -51,9 +51,26 @@ test('manual CRM contact migration is explicit, additive, and never provisions a
     await assert.rejects(db.exec(sql),/Explicit reviewed CRM contact migration required/);
     await db.exec('ROLLBACK');
     await db.exec("SET spaceverse.crm_contacts_migration='approved'");
-    await db.exec(sql);await db.exec(sql);
+    await db.exec(sql);
+    await assert.rejects(db.exec(sql),/already exists/);
+    await db.exec('ROLLBACK');
     assert.equal((await db.query('SELECT COUNT(*)::integer AS count FROM spaceverse_crm_contacts')).rows[0].count,0);
   } finally {await db.close();}
+});
+
+test('manual migration refuses a pre-existing partial contact table without adopting it',async()=>{
+  const db=new PGlite();
+  try {
+    await db.exec('CREATE TABLE spaceverse_crm_contacts(id BIGINT PRIMARY KEY)');
+    await db.exec("SET spaceverse.crm_contacts_migration='approved'");
+    await assert.rejects(db.exec(await fs.readFile(MANUAL,'utf8')),/already exists/);
+    await db.exec('ROLLBACK');
+    const columns=await db.query(`SELECT column_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='spaceverse_crm_contacts'`);
+    assert.deepEqual(columns.rows,[{column_name:'id'}]);
+    const ledger=await db.query("SELECT to_regclass('public.spaceverse_crm_contact_create_requests') AS name");
+    assert.equal(ledger.rows[0].name,null);
+  }finally{await db.close();}
 });
 
 test('single transaction creates only a normalized, unlinked tenant contact',async()=>{
