@@ -164,3 +164,80 @@ test('VENUE_ADMIN owner can see prepared manual CRM contact; trusted account can
     await context.close()
   }
 })
+
+
+test('real cross-tab Web Lock queues creation and rechecks a foreign pending key before POST',async({page},info)=>{
+  await page.goto('/')
+  await page.getByLabel('Email',{exact:true}).fill('root@fixture.invalid')
+  await page.getByLabel('Пароль',{exact:true}).fill(fixturePassword)
+  await page.getByRole('button',{name:'Войти',exact:true}).click()
+  await expect(page.locator('.app-shell')).toBeVisible()
+  await page.getByRole('button',{name:'Добавить заведение',exact:true}).click()
+  const name='CRM Web Lock '+info.project.name
+  await page.getByLabel('Название заведения',{exact:true}).fill(name)
+  await page.getByLabel('Адрес',{exact:true}).fill('Синтетический адрес')
+  await page.getByLabel('Email владельца',{exact:true}).fill('owner@fixture.invalid')
+  const draftResponse=page.waitForResponse(r=>r.url().endsWith('/api/admin/onboarding/drafts')&&r.request().method()==='POST')
+  await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click()
+  const draft=await (await draftResponse).json() as {id:string}
+  await page.getByRole('button',{name:'Сохранить приложение',exact:true}).click()
+  const scopeResponse=page.waitForResponse(r=>r.url().endsWith('/scope')&&r.request().method()==='PUT')
+  await page.getByRole('button',{name:'Подготовить область',exact:true}).click()
+  expect((await (await scopeResponse).json() as {contract:{runtimeStatus:string}}).contract.runtimeStatus)
+    .toBe('not_provisioned')
+  await expect(page.getByRole('region',{name:'Создать ручной контакт CRM'})).toBeVisible()
+
+  const other=await page.context().newPage()
+  const lockName='spaceverse:crm-manual-contact:lock:v1:11:'+draft.id
+  const storageKey='spaceverse:crm-manual-contact:pending:v1:11:'+draft.id
+  const foreign=JSON.stringify({version:1,
+    requestKey:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    nonce:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',digest:'a'.repeat(64)})
+  let postCount=0
+  try{
+    await other.goto('/')
+    await other.getByRole('button',{name:'Открыть черновик '+name,exact:true}).click()
+    const form=other.getByRole('region',{name:'Создать ручной контакт CRM'})
+    await expect(form).toBeVisible()
+    await other.route('**/api/admin/onboarding/drafts/*/crm/contacts',async route=>{
+      postCount++
+      await route.fulfill({status:503,contentType:'application/json',
+        body:JSON.stringify({code:'TENANT_CRM_CONTACT_UNAVAILABLE'})})
+    })
+    // Hold the actual browser lock in tab A, not a mocked navigator.locks.
+    await page.evaluate(async name=>{
+      let signalHeld!:()=>void
+      const held=new Promise<void>(resolve=>{signalHeld=resolve})
+      void navigator.locks.request(name,async()=>{
+        signalHeld()
+        await new Promise<void>(resolve=>{
+          (window as typeof window & {releaseCrmTestLock?:()=>void}).releaseCrmTestLock=resolve
+        })
+      })
+      await held
+    },lockName)
+    try{
+      await form.getByLabel('Имя *').fill('Мария')
+      await form.getByLabel('Email',{exact:true}).fill('queued@fixture.invalid')
+      await form.getByRole('button',{name:'Создать контакт',exact:true}).click()
+      // Browser Web Locks must show tab B queued behind tab A.
+      await expect.poll(()=>other.evaluate(async name=>
+        (await navigator.locks.query()).pending?.some(lock=>lock.name===name)===true,
+      lockName)).toBe(true)
+      expect(postCount).toBe(0)
+      // Write in the waiting tab itself: no cross-tab storage event is fired
+      // there. The queued callback must independently re-read localStorage.
+      await other.evaluate(({key,value})=>localStorage.setItem(key,value),
+        {key:storageKey,value:foreign})
+    }finally{
+      await page.evaluate(()=>
+        (window as typeof window & {releaseCrmTestLock?:()=>void}).releaseCrmTestLock?.())
+    }
+    await expect(form.getByRole('alert')).toContainText('Нельзя безопасно восстановить')
+    await expect(form.locator('fieldset')).toBeDisabled()
+    expect(postCount).toBe(0)
+    expect(await other.evaluate(key=>localStorage.getItem(key),storageKey)).toBe(foreign)
+  }finally{
+    await other.close()
+  }
+})
