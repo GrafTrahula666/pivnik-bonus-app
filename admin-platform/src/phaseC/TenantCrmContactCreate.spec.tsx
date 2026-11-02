@@ -76,6 +76,18 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     await act(async()=>{button.click()})
   }
 
+  it.each([
+    ['Имя *','Ма\\u0001рия'],
+    ['Фамилия','Иван\\u007fова'],
+  ])('rejects control characters in %s without persisting or posting',async(label,value)=>{
+    await fill()
+    await set(label,value)
+    await submit()
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Укажите имя')
+    expect(host.querySelector('fieldset')?.disabled).toBe(false)
+  })
   it('rejects missing phone/email before any request',async()=>{
     await set('Имя *','Мария')
     await submit()
