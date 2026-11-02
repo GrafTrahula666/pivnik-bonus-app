@@ -382,6 +382,18 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       [ownDraftId],
     )
     const supportBefore = await supportRows()
+    const appRows = () => state.metadata!.query<{ revision: number; config: string }>(
+      'SELECT revision,config::text AS config FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid',
+      [ownDraftId],
+    )
+    const scopeRows = () => state.metadata!.query(
+      'SELECT company_id::text,venue_id::text,draft_revision,application_revision FROM admin_onboarding_scopes WHERE draft_id=$1::uuid',
+      [ownDraftId],
+    )
+    const appBefore = await appRows()
+    const scopeBefore = await scopeRows()
+    expect(appBefore.rows).toHaveLength(1)
+    expect(scopeBefore.rows).toHaveLength(1)
     // Positive control: the same manager session can read its venue support.
     expect((await request('trusted', 'GET', support(0))).status).toBe(200)
 
@@ -411,6 +423,22 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     })
     expect(deniedWrite.status).toBe(403)
     expect(await deniedWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    // A direct manager revoke must deny prepared writes with current revisions,
+    // without altering the application, prepared scope or audit ledger.
+    for (const { resource, body } of [
+      { resource: 'application', body: {
+        revision: appBefore.rows[0]!.revision, config: JSON.parse(appBefore.rows[0]!.config),
+      } },
+      { resource: 'scope', body: {
+        draftRevision: before.rows[0]!.revision, applicationRevision: appBefore.rows[0]!.revision,
+      } },
+    ] as const) {
+      const denied = await request('trusted', 'PUT', `${draft(0)}/${resource}`, body)
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    }
+    expect((await appRows()).rows).toEqual(appBefore.rows)
+    expect((await scopeRows()).rows).toEqual(scopeBefore.rows)
     // Direct revocation must also close support reads and writes without
     // relying on an intermediate viewer downgrade or a fresh login.
     for (const method of ['GET', 'POST'] as const) {
