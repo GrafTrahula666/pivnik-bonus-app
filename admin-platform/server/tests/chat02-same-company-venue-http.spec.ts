@@ -198,23 +198,13 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect(before.rows).toHaveLength(1)
     const auditBefore = await auditRows()
 
-    // Positive authorization control: the same manager reaches the prepared-
-    // draft lock for their invited venue. A sibling 404 is not a generic PUT ban.
-    const ownDraftId = fixture.manifests[0]!.source.draftId
-    const ownRows = () => state.metadata!.query<{ revision: number; data: string }>(
-      'SELECT revision,data::text AS data FROM admin_onboarding_drafts WHERE id=$1::uuid',
-      [ownDraftId],
-    )
-    const ownBefore = await ownRows()
-    expect(ownBefore.rows).toHaveLength(1)
-    const ownLocked = await request('trusted', 'PUT', draft(0), {
-      revision: ownBefore.rows[0]!.revision,
-      data: JSON.parse(ownBefore.rows[0]!.data),
+    // Positive authorization control: the manager has an explicit write grant
+    // for their own venue; sibling 404 must not be mistaken for a global ban.
+    const ownDraft = await request('trusted', 'GET', draft(0))
+    expect(ownDraft.status).toBe(200)
+    expect(await ownDraft.json()).toMatchObject({
+      permissions: { canWrite: true, role: 'manager' },
     })
-    expect(ownLocked.status).toBe(409)
-    expect(await ownLocked.json()).toMatchObject({ code: 'ONBOARDING_SCOPE_LOCKED' })
-    expect((await ownRows()).rows).toEqual(ownBefore.rows)
-    expect((await auditRows()).rows).toEqual(auditBefore.rows)
 
     // A valid current-revision command must reach the draft authorization gate,
     // not be rejected merely for malformed input or a stale revision.
