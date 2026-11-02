@@ -4,6 +4,7 @@ import { config } from './config.js'
 import { loadPivnikStatusLevels,resolvePivnikLegacyStatus } from './legacy-compat.js'
 import { HttpError, type PeriodRange, type VenueScope } from './types.js'
 import { parsePositiveId } from './tenant.js'
+import { buildServerTimeSeries } from './time-series.js'
 
 const NO_ACTIVITY_EVENTS =
   'В production БД нет отдельного события открытия приложения/визита; метрика не вычисляется по косвенным признакам.'
@@ -257,7 +258,7 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange, o
          AND u.role = 'client'
      )
      SELECT
-       ${options.hourly ? "(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::date::text" : "DATE_TRUNC('day', COALESCE(t.completed_at, t.created_at))::date::text"} AS day,
+       (COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Europe/Moscow')::date::text AS day,
        COALESCE(SUM(t.cash_paid_cents) FILTER (WHERE t.mode IN ('accrue','redeem')),0)::bigint AS revenue_cents,
        COUNT(*) FILTER (WHERE t.mode IN ('accrue','redeem') AND t.check_amount_cents > 0)::bigint AS checks,
        COUNT(*)::bigint AS operations,
@@ -383,6 +384,15 @@ export async function getVenueDashboard(scope: VenueScope, range: PeriodRange, o
       to: range.to.toISOString(),
       days: range.days,
     },
+    timeSeries: buildServerTimeSeries({
+      source:'pivnik_loyalty',metric:'tracked_cash',currency:'RUB',
+      companyId:scope.companyId,venueId:scope.id,
+      period:{from:range.from.toISOString(),to:range.to.toISOString()},
+      days:trendResult.rows.map(row=>({label:row.day,amountCents:row.revenue_cents})),
+      hours:hourlyResult===null?null:hourlyResult.rows.map(row=>({
+        label:String(row.hour).padStart(2,'0'),amountCents:row.revenue_cents,
+      })),
+    }),
     metrics: {
       trackedRevenue: available(current.trackedRevenue, 'transactions.cash_paid_cents'),
       checkCount: available(current.checkCount, 'transactions[completed accrue/redeem]'),

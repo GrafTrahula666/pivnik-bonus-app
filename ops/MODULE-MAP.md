@@ -1,3 +1,19 @@
+## 2026-11-01: CHAT 09 shared chart aggregate envelope (Draft; not deployed)
+
+The new additive `admin-platform/server/time-series.ts` builds a single versioned
+hour/day contract after existing scoped readers authorize a venue. It preserves
+signed decimal-string minor units, explicit source/metric/company/venue, fixed
+Europe/Moscow grouping, and `hours:null` when that aggregate was not requested.
+The fiscal Evotor POS `net_cash` and the PIVNIK loyalty `tracked_cash` remain
+separate sources and MUST NOT be summed together. POS currency remains unknown
+rather than guessed; the envelope states `read_model_only`, not provider completeness.
+Existing `days`/`hours`/`trend`/`hourly` response fields and UI behavior remain
+unchanged; the new contract is additive. The legacy dashboard day expression now
+uses Europe/Moscow regardless of optional hourly projection, matching its hour
+expression. Pure tests cover negatives, >2^53 cents, null/empty and malformed/
+duplicate buckets; Evotor PostgreSQL/WASM regression covers scoped data.
+No new API route, data migration, billing, secrets or live consumer.
+
 ## 2026-11-01: seasonal Halloween raffle/ticket retirement (draft; no production migration)
 
 The seasonal 'Night of Cauldrons' draw, tickets, friend-invite bonuses, purchase/refund hooks and live prize issuance are being removed from the active runtimes. The ordinary wheel retains its approved regular bonus/beer probabilities; archive wheel-spins keep their original code for safe read-only display. The Halloween cosmetic theme is not the raffle and remains separately controlled. Historical SQL migrations 011 and 015 remain on disk and existing DB rows are NOT deleted; no rollback/drop SQL is run. Existing money/bonus and transaction semantics are unchanged. The release must pass double materialization, tests, package audit, VK browser smoke and production rollout review before merge/deploy.
