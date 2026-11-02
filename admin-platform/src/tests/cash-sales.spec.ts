@@ -17,6 +17,8 @@ describe('cash cohorts never create another revenue source',()=>{
   it('client cohort uses only linked cash with CRM and subset explanation',()=>{
     const html=renderToStaticMarkup(createElement(CashDashboard,{report,mode:'app'}))
     expect(html).toContain('₽ 100,00');expect(html).not.toContain('₽ 290,00');expect(html).toContain('Это часть общей кассы')
+    expect(html).toContain('Чеков продажи');expect(html).toContain('Клиентов PIVNIK')
+    expect(html).toContain('Повторных покупателей');expect(html).toContain('Другие показатели кассы')
     expect(html).toContain('Повторные покупки');expect(html).toContain('Частота покупок')
   })
   it('keeps previous confirmed data visibly stale, but validates malformed transport and subset conflicts',()=>{

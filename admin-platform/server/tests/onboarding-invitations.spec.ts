@@ -3,7 +3,7 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import type { PGlite } from '@electric-sql/pglite'
-import { afterAll,beforeAll,describe,expect,it,vi } from 'vitest'
+import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from 'vitest'
 
 const state=vi.hoisted(()=>({db:null as PGlite|null,failAudit:false}))
 vi.mock('../db.js',()=>{
@@ -55,6 +55,12 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
       sessions.set(who,{cookie:response.headers.get('set-cookie')!.split(';')[0]!,csrf:body.csrfToken})
     }
   },30_000)
+  // These tests cover invitation semantics, not HTTP rate limiting. Keep each
+  // scenario's request budget independent, as in the other onboarding suites.
+  afterEach(async()=>{
+    const {__resetRateLimitBucketsForTests}=await import('../security.js')
+    __resetRateLimitBucketsForTests()
+  })
   afterAll(async()=>{if(server)await new Promise<void>(resolve=>server.close(()=>resolve()));await state.db?.close()})
 
   it('manual migration is additive and repeatable without touching PIVNIK rows',async()=>{
@@ -127,6 +133,57 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
     try{expect((await request(null,'POST',base+'/accept',{token:failed.token,email:'audit-fail@fixture.invalid',displayName:'Новый',password})).status).toBe(503)}finally{state.failAudit=false}
     expect((await state.db!.query('SELECT count(*)::int AS n FROM admin_accounts')).rows).toEqual(before.rows)
     expect((await state.db!.query('SELECT claimed_at AS accepted_at FROM admin_onboarding_invites WHERE id=$1::uuid',[failed.invitation.id])).rows[0]).toEqual({accepted_at:null})
+  })
+  it('revoking an upstream owner grant invalidates delegated pending invitations without new accounts or grants',async()=>{
+    const rootIssued=await request('root','POST',base,command({role:'owner',expiresInHours:1}))
+    expect(rootIssued.status).toBe(200)
+    const upstream=await rootIssued.json() as {token:string;invitation:{id:string}}
+    const accepted=await request(null,'POST',base+'/accept',{token:upstream.token,
+      email:'temporary-network-owner@fixture.invalid',displayName:'Временный владелец',password})
+    expect(accepted.status).toBe(200)
+    const session=await accepted.json() as {csrfToken:string;admin:{id:string}}
+    sessions.set('temporary-owner',{cookie:accepted.headers.get('set-cookie')!.split(';')[0]!,csrf:session.csrfToken})
+    const delegatedResponse=await request('temporary-owner','POST',base,command({role:'manager',expiresInHours:24}))
+    expect(delegatedResponse.status).toBe(200)
+    const delegated=await delegatedResponse.json() as {token:string;invitation:{id:string}}
+    const outstanding=await state.db!.query<{n:string}>('SELECT COUNT(*)::text AS n FROM admin_onboarding_access WHERE invitation_id=$1::uuid',[delegated.invitation.id])
+    expect(Number(outstanding.rows[0]?.n)).toBe(0)
+
+    expect((await request('root','POST',base+'/'+upstream.invitation.id+'/revoke',{})).status).toBe(200)
+    expect((await request('root','POST',base+'/'+upstream.invitation.id+'/revoke',{})).status).toBe(200)
+    const revokedGrant=await state.db!.query<{revoked_at:string|null}>(
+      'SELECT revoked_at::text FROM admin_onboarding_access WHERE invitation_id=$1::uuid',[upstream.invitation.id])
+    expect(revokedGrant.rows).toHaveLength(1)
+    expect(revokedGrant.rows[0]?.revoked_at).not.toBeNull()
+    const baseline=await Promise.all([
+      state.db!.query('SELECT id FROM admin_accounts ORDER BY id'),
+      state.db!.query('SELECT * FROM admin_onboarding_access ORDER BY invitation_id'),
+    ])
+    const attempted=await request(null,'POST',base+'/accept',{token:delegated.token,
+      email:'blocked-delegate@fixture.invalid',displayName:'Заблокированный управляющий',password})
+    expect(attempted.status).toBe(403)
+    expect(await attempted.json()).toMatchObject({code:'INVITATION_OWNER_REQUIRED'})
+    expect((await request('temporary-owner','POST',base,command({role:'manager'}))).status).toBe(403)
+    const after=await Promise.all([
+      state.db!.query('SELECT id FROM admin_accounts ORDER BY id'),
+      state.db!.query('SELECT * FROM admin_onboarding_access ORDER BY invitation_id'),
+    ])
+    expect(after.map(result=>result.rows)).toEqual(baseline.map(result=>result.rows))
+    const next=await state.db!.query<{claimed_at:string|null}>(
+      'SELECT claimed_at::text FROM admin_onboarding_invites WHERE id=$1::uuid',[delegated.invitation.id])
+    expect(next.rows[0]?.claimed_at).toBeNull()
+    const capabilities=await request('temporary-owner','GET','/api/admin/auth/session')
+    expect(await capabilities.json()).toMatchObject({capabilities:{onboardingAccess:false}})
+  })
+  it('rejects out-of-range invitation lifetimes without storing a new invitation',async()=>{
+    const before=await state.db!.query<{n:string}>('SELECT COUNT(*)::text AS n FROM admin_onboarding_invites')
+    for(const hours of [0,-1,169,1.5,24.1]){
+      const response=await request('owner','POST',base,command({expiresInHours:hours}))
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({code:'INVITATION_INVALID'})
+    }
+    const after=await state.db!.query<{n:string}>('SELECT COUNT(*)::text AS n FROM admin_onboarding_invites')
+    expect(after.rows).toEqual(before.rows)
   })
   it('a prepared new organization uses canonical scope for owner access and additional pending points',async()=>{
     const data={companyId:null,companyName:'Новая сеть',venueName:'Первое кафе',address:'',timeZone:'Europe/Moscow',venueType:'cafe',ownerEmail:''}

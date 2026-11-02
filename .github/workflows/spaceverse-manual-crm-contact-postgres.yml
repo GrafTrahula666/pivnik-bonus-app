@@ -1,0 +1,91 @@
+name: SPACEVERSE manual CRM contact native PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - 'crm-manual-contact-create.js'
+      - 'admin-platform/tenant-migrations/002_manual_crm_contacts.sql'
+      - 'test/spaceverse-manual-crm-contact-postgres.test.js'
+      - 'crm-manual-contact-create.d.ts'
+      - 'admin-platform/server/config.ts'
+      - 'admin-platform/server/tenant-crm-contact-create.ts'
+      - 'admin-platform/server/tenant-crm-contact-owner-gate.ts'
+      - 'admin-platform/server/tests/tenant-crm-contact-http.spec.ts'
+      - 'admin-platform/server/router.ts'
+      - '.github/workflows/spaceverse-manual-crm-contact-postgres.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-manual-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manual-contact-native:
+    name: Native PostgreSQL 16 concurrent creation (disposable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: codex_admin_test_crm_contacts
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_crm_contacts"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install pinned root dependencies
+        run: npm ci
+      - name: Verify native concurrent manual contact creation
+        env:
+          SPACEVERSE_CRM_TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_crm_contacts
+        run: |
+          test -n "$SPACEVERSE_CRM_TEST_POSTGRES_URL"
+          node --test test/spaceverse-manual-crm-contact-postgres.test.js
+
+  signed-http-native:
+    name: Signed owner HTTP contact create on disposable PostgreSQL 16
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: codex_admin_test_crm_contact_http
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_crm_contact_http"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SPACEVERSE_TEST_NATIVE_POSTGRES_URL: postgres://crm_fixture:crm_fixture_ci_only@127.0.0.1:5432/codex_admin_test_crm_contact_http
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install exact Business dependencies
+        run: npm ci --prefix admin-platform
+      - name: Prepare local-only CRM fixture role (CREATEDB, no production access)
+        run: |
+          node -e "const pg=require('./admin-platform/node_modules/pg');const p=new pg.Pool({connectionString:'postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_crm_contact_http'});p.query(\"CREATE ROLE crm_fixture LOGIN PASSWORD 'crm_fixture_ci_only' CREATEDB\").then(()=>p.end()).catch(e=>{console.error(e.message);process.exitCode=1;p.end()})"
+      - name: Signed Admin HTTP, owner isolation, replay and audit on three dedicated PostgreSQL databases
+        run: npm test --prefix admin-platform -- server/tests/tenant-crm-contact-http.spec.ts

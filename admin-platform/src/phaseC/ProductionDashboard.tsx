@@ -34,11 +34,12 @@ function delta(current:number|null,previous:number|null|undefined){
 }
 function LiveKpi({label,metric,kind,previous}:{label:string;metric:Metric;kind:'money'|'number'|'percent';previous?:number|null}){
   const change=metric.available?delta(metric.value,previous):null
+  const trendLabel=change===null?'сравнение недоступно':change===0?'0%':`${change<0?'−':'+'}${pct.format(Math.abs(change))}%`
   return <div className={cn('kpi card live-kpi',!metric.available&&'kpi-unavailable')}>
     <div className="kpi-top"><span>{label}</span><span className="ghost-icon info-icon" role="img" aria-label="Источник метрики" title={metric.source||metric.reason||''}><CircleHelp size={14}/></span></div>
     <div className="kpi-value">{format(metric,kind)}</div>
     {metric.available?<div className={cn('delta',change!==null&&change<0&&'negative')}>
-      {change===null?null:change<0?<TrendingDown/>:<TrendingUp/>}{change===null?'сравнение недоступно':`${pct.format(Math.abs(change))}%`}<span>к периоду</span>
+      {change!==null&&change<0?<TrendingDown/>:change!==null&&change>0?<TrendingUp/>:null}{trendLabel}<span>к периоду</span>
     </div>:<div className="kpi-reason">{metric.reason||'Пока недостаточно данных'}</div>}
   </div>
 }
@@ -111,13 +112,16 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
   const endLabel=new Date(Date.parse(data.period.to)-1).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})
   const periodLabel=startLabel===endLabel?startLabel:startLabel+' — '+endLabel
   const m=data.metrics,p=data.previousMetrics
-  const kpis=[
+  // The top row is period-scoped; historical snapshots must not masquerade as period customers.
+  const primaryKpis=[
     ['Сумма операций приложения',m.trackedRevenue,'money',p.trackedRevenue],
     ['Записей о покупках',m.checkCount,'number',p.checkCount],
+    ['Совершали операции',m.activeCustomers,'number',p.transactionActiveCustomers],
     ['Средняя сумма записи',m.averageCheck,'money',p.averageCheck],
+  ] as const
+  const secondaryKpis=[
     ['Клиентов всего',m.totalCustomers,'number',null],
     ['Новых клиентов',m.newCustomers,'number',p.newCustomers],
-    ['Совершали операции',m.activeCustomers,'number',p.transactionActiveCustomers],
     ['Повторных клиентов',m.returningCustomers,'number',p.returningCustomers],
     ['Начислено по программе',m.bonusEarned,'number',p.bonusEarned],
     ['Списано клиентами',m.bonusRedeemed,'number',p.bonusRedeemed],
@@ -131,8 +135,13 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
       sub={periodLabel+' · '+venue.companyName}
       actions={<button className="btn secondary" onClick={reload}>Обновить</button>}/>
     <SourceNote>Операции приложения. Не являются подтверждённой кассовой выручкой и не складываются с Эвотором.</SourceNote>
-    <div className="kpi-grid">{kpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
-    <SourceNote>Ручные персональные подарки не входят в бизнес-KPI обзора. Клиентов всего и бонусы в обращении показывают текущее состояние, а не значение на историческую дату.</SourceNote>
+    <div className="kpi-grid app-operations-primary-kpis" aria-label="Основные показатели операций">{primaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
+    <p className="cash-insight-period">Изменение на карточках считается к предыдущему периоду той же длительности, если обе величины известны и есть ненулевая база.</p>
+    <details className="card app-operations-extra">
+      <summary>Ещё 8 показателей</summary>
+      <div className="kpi-grid">{secondaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
+      <SourceNote>Ручные персональные подарки не входят в бизнес-KPI обзора. «Клиентов всего» и «Бонусы в обращении» показывают текущее состояние, а не значение на историческую дату.</SourceNote>
+    </details>
     <div className="grid-main">
       <section className="card chart-card">
         <div className="card-head"><div><span className="eyebrow">ДИНАМИКА</span><h3>Операции за {periodLabel}</h3></div>

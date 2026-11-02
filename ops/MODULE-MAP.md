@@ -1,3 +1,72 @@
+## 2026-11-03: Tenant-scoped loyalty managed settings (integrated Draft)
+
+`admin-platform/server/writes.ts` returns `source:not_configured`, `null` for missing
+loyalty settings and an empty level list instead of fabricating 0%. Explicitly
+stored zero remains a real configured zero. The PIVNIK legacy ladder is permitted
+only for the exact PIVNIK company/venue with a non-null legacy bar mapping,
+never for a sibling venue or another tenant. Mutations reject absent, blank,
+boolean, array or object forms for required monetary and tier numeric values.
+`ProductionManagers.tsx` exposes missing values as unconfigured and blocks
+saving an incomplete loyalty configuration. Isolated PGlite and native PG16
+regressions enforce tenant isolation; the new workflow is PR-only and uses
+disposable PostgreSQL with no live secrets. No migrations, runtime flags,
+bonus transactions or existing PIVNIK money semantics are changed.
+Source: CHAT10 item 91 / PR #333; combined integration remains Draft,
+not deployed and not enabled for independent commercial tenants.
+
+## 2026-11-01: CHAT 09 verified POS customer cohorts (Draft; not deployed)
+
+An additive `admin-platform/server/customer-cohorts.ts` reads **only**
+confirmed `pos_customer_links` joined to the **same** bound store's SELL
+documents with a single fiscal print and active unmerged user. No PII or
+client IDs leave the aggregate. No payment/time/phone matching. An explicit
+company/venue store binding and successful sync precede the query. Its fields
+distinguish first *observed* purchase in-period, purchases with earlier
+*observed* verified store history, and 2+ verified sales in the same period.
+Categories overlap: first-observed and repeat-within-period MUST NOT be added.
+Since historical purchase coverage is unproven, genuinely new customers stay
+`newCustomers:null` (unknown != zero). Current `all/app` metrics are
+unchanged; this is not an app activity/DAU/visits metric. No production change,
+migration, secret, additional permission or API route; isolated PostgreSQL/WASM
+tests exercise the semantics. PRs #332/#344/#348 share the scoped adapter and
+must be reconciled by CHAT 01 before integration.
+
+## 2026-11-01: CHAT 09 receipt-verified product ranking (Draft; not deployed)
+
+`pos/receipt-ranking.js` is an **independent** optional projection from already
+authorized Evotor store documents. Only single-fiscal-print SELL/PAYBACK documents
+with a valid receipt identifier, unsplit `linkable` evidence, stable product ID,
+positive quantity and fully reconciled position cents are ranked. Unverified,
+split, incomplete and free-text product positions are excluded, with explicit
+coverage counts. A missing verified receipt is **not** interpreted as zero.
+Refunds subtract from product net in signed BigInt minor units; grouping requires
+stable product ID plus name and measure. The old `all.products` field remains
+unchanged to preserve inventory/operations functionality.
+
+Normalized Evotor snapshots contain **no authoritative category ID**. The new
+`receiptRanking.categories` is `available:false` with `items:null`, not guessed
+from a name. Reports only read the exact bound store and date range; no cross-
+company/venue ranking or new permissions are invented. `getEvotorReport`
+exposes the additive ranking only after the existing store-binding/sync checks
+and `null` before availability. Root node tests and PGlite tenant-scope
+regression are added; no new endpoints/migrations/production data writes.
+
+## 2026-11-01: CHAT 09 shared chart aggregate envelope (Draft; not deployed)
+
+The new additive `admin-platform/server/time-series.ts` builds a single versioned
+hour/day contract after existing scoped readers authorize a venue. It preserves
+signed decimal-string minor units, explicit source/metric/company/venue, fixed
+Europe/Moscow grouping, and `hours:null` when that aggregate was not requested.
+The fiscal Evotor POS `net_cash` and the PIVNIK loyalty `tracked_cash` remain
+separate sources and MUST NOT be summed together. POS currency remains unknown
+rather than guessed; the envelope states `read_model_only`, not provider completeness.
+Existing `days`/`hours`/`trend`/`hourly` response fields and UI behavior remain
+unchanged; the new contract is additive. The legacy dashboard day expression now
+uses Europe/Moscow regardless of optional hourly projection, matching its hour
+expression. Pure tests cover negatives, >2^53 cents, null/empty and malformed/
+duplicate buckets; Evotor PostgreSQL/WASM regression covers scoped data.
+No new API route, data migration, billing, secrets or live consumer.
+
 ## 2026-11-01: seasonal Halloween raffle/ticket retirement (draft; no production migration)
 
 The seasonal 'Night of Cauldrons' draw, tickets, friend-invite bonuses, purchase/refund hooks and live prize issuance are being removed from the active runtimes. The ordinary wheel retains its approved regular bonus/beer probabilities; archive wheel-spins keep their original code for safe read-only display. The Halloween cosmetic theme is not the raffle and remains separately controlled. Historical SQL migrations 011 and 015 remain on disk and existing DB rows are NOT deleted; no rollback/drop SQL is run. Existing money/bonus and transaction semantics are unchanged. The release must pass double materialization, tests, package audit, VK browser smoke and production rollout review before merge/deploy.
@@ -231,6 +300,106 @@ not_provisioned and unpublished. Core SQL supports the existing minimal
 customer/auth/wallet contracts, not the complete legacy runtime or financial
 operations. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`.
 
+## Manual CRM contacts — CHAT 03 / item 24, DEFAULT-OFF POST draft (2026-11-01)
+
+`crm-manual-contact-create.js` writes only separate owner-entered contact
+records to a **dedicated prepared tenant DB**, never authenticated `users`,
+`user_identities`, `wallets`, guest bonuses or legacy PIVNIK identities.
+Do not use provider-authenticated `customer-provisioning.js` for manually
+entered phone/email. The **explicit-only**, NOT startup-mounted
+`admin-platform/tenant-migrations/002_manual_crm_contacts.sql` must be
+reviewed and applied to the exact tenant target before enabling this feature;
+no production migration has been performed.
+
+New `POST /api/admin/onboarding/drafts/:draftId/crm/contacts` in
+`admin-platform/server/router.ts` is default-off behind
+`ADMIN_ENABLE_TENANT_CRM_CONTACT_CREATE=false`, plus existing Admin writes
+and onboarding draft switches. It requires signed Admin session,
+Origin/CSRF, per-actor/IP rate limiting, no URL/query-supplied tenant scope,
+strict pure contact validation **before** tenant DB resolution and an existing
+prepared owner-scoped draft. `tenant-crm-contact-owner-gate.ts` locks
+active account/session, canonical draft and current owner or explicit owner
+invite while `tenant-crm-contact-create.ts` verifies the exact tenant
+binding and calls the existing actor-bound transactional idempotent writer.
+A scoped metadata Admin audit is committed after target write confirmation.
+The target contact/request-ledger transaction is atomic; the two DB commits
+are not. If metadata audit/response fails after target commit, retry the SAME
+UUIDv4 request key for replay and audit recovery. The permission gate already
+locks the canonical draft `FOR UPDATE` for the full metadata transaction.
+After confirming the target ledger result, it now checks existing scoped
+`admin_audit_log` records for the same actor/venue/requestKey under this lock.
+An exact replay adds no second audit event; a mismatched recorded contact,
+entity type or safety metadata fails closed. This is **serialized replay audit
+deduplication within the canonical draft**, NOT a distributed transaction,
+database-wide unique constraint, cleanup of historical duplicates or a proof
+of active venue. Explicit review is still required before production use.
+The HTTP endpoint is **not enabled or deployed** in any production environment.
+
+Signed HTTP tests cover owner, invited manager denial, cross-company
+isolation, CSRF/Origin, malformed scope, replay, rate limiting, duplicate
+channels and audit recovery. Native PG16 CI now exercises both the concurrent
+tenant writer and actual signed Admin HTTP on three isolated test databases.
+
+The separate `TenantCrmContactCreate.tsx` form is mounted only within a
+prepared, confirmed-owner draft in `VenueOnboarding.tsx` when the independent
+`tenantCrmContactCreate` capability is TRUE; managers and unconfirmed roles
+see no create control. Its request UUIDv4 is reused on uncertain responses and
+its disabled inputs prevent modifying a potentially committed request;
+success explicitly says the manual contact is NOT an app identity/wallet.
+Neither the read-only legacy customer list nor CHAT03 #23 directory is changed.
+Responsive CSS is scoped to this form; no fabricated metrics or statuses.
+
+An isolated `playwright.crm-contact.config.ts` and
+`e2e/tenant-crm-contact.spec.ts` run the **built real Admin panel** in
+Chromium desktop/mobile on a disposable loopback onboarding fixture.
+The feature is enabled **only** in that explicit test process through
+`SPACEVERSE_E2E_CRM_CONTACTS=true`; the browser's manual contact POST
+responses are synthetic and intercepted. Real signed HTTP owner/scope/CSRF
+and PostgreSQL 16 remain independently covered by the native workflow.
+Browser checks prove synthetic SUPER_ADMIN and VENUE_ADMIN owner form
+visibility, request payload/CSRF, 503→429→success retry with the same UUID
+and no mobile overflow. The isolated fixture also demonstrates that an
+uninvited trusted director cannot read another owner's draft; after a real
+scoped **synthetic** manager invitation is recorded in disposable metadata,
+the manager can open/edit that draft but cannot see the create-contact form
+or use its signed Admin POST. Both viewport checks use actual Chromium.
+None of this proves production tenant permissions or live activation.
+
+The form now persists a **request UUIDv4, random nonce and salted SHA-256
+fingerprint only** in same-origin browser localStorage, separately keyed by
+the exact actor and draft. It does not persist names, phone or email. Before
+the first POST, storing and rereading that checkpoint must succeed; corrupted
+or inaccessible storage blocks new submission. On browser reload/reopen,
+the form requires re-entering identical normalized contact fields; differing
+input cannot consume the saved UUID or create another contact. Once matched,
+the same UUID is retried through uncertain HTTP responses (also 401/429).
+Confirmed success or definitive initial rejection removes the checkpoint.
+React unit tests and built desktop/mobile Playwright cover the reload,
+mismatch/no-network, retry and storage-corruption controls. These browser
+checks use intercepted contact writes; native PostgreSQL signed HTTP is
+independently tested. Clearing browser storage externally or concurrent tabs
+cannot be treated as an exactly-once guarantee: the server request ledger and
+per-venue contact uniqueness remain essential.
+
+Read-only manual migration preflight is defined in
+`admin-platform/server/tenant-crm-manual-migration-preflight.ts`. It checks
+the exact expected database name, public schema, 017–019 prerequisites,
+prepared runtime/manifest/company/venue binding and absence of already/partially
+applied 002 tables. It issues only SELECT statements and returns
+`review_required` with `approvalGranted:false`; it never connects to a
+database, resolves credentials, applies SQL or enables a feature. Fixture
+tests confirm fail-closed mismatches. Operator runbook:
+`ops/CHAT03-MANUAL-CRM-MIGRATION-002-RUNBOOK.md`. This does NOT establish
+real company ownership or target isolation by itself: a separately verified
+Admin grant/manifest and the protected target registry are mandatory.
+
+Still pending: **actual** manual migration review/owner approval and
+explicit application to a confirmed tenant target, live owner permissions
+and E2E authorization, global two-database audit policy, safe handling if
+browser storage is externally erased, and CHAT01 coordinator integration.
+This Draft form does NOT prove commercial readiness. Never merge, activate
+or deploy automatically.
+
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
 `GET /api/admin/onboarding/venues` accepts optional `q` (up to 100 characters,
@@ -368,6 +537,15 @@ capability inside the existing `VenueOnboarding`; it does not activate a venue.
 `playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
 on three dedicated local native PostgreSQL targets, including disabled mode.
 The directory/UI was merged in #285 after the read diagnostic #284.
+
+CHAT 03, task 23 isolated draft: the **prepared tenant-only** directory now accepts
+server-validated `sort=id|name|username`, `direction=asc|desc`, and
+`wallet=all|present|missing`. The verified binding/ownership join filters
+before count and 1..100-row server pagination; SQL orders before LIMIT with
+stable customer ID ties, then returns the selected order. Client validates
+scope and echoed filters, clears stale selections and resets page on changes.
+The default-off onboarding boundary and legacy PIVNIK guard are unchanged.
+This does NOT activate third-party main CRM or license/Market access.
 The readiness slice #286 adds GET
 `.../crm/readiness` with the same read/access/audit boundary. It uses a real
 scoped DB count and the existing encrypted POS projection; saved provider
@@ -516,7 +694,13 @@ logo is stationary in the upper-right corner.
 
 `phaseC/SalesDashboard.tsx` adds inclusive `from`/`to` controls to the existing
 POS read endpoint. `cash-period.ts` follows its existing 1–366-day/Moscow
-contract. `CashDashboard.tsx` switches the existing `summary.hours` and
+contract. POS period URL parsing in `server/evotor-read.ts:evotorPeriod`
+rejects mixed `days/date/from/to` modes or duplicated keys with HTTP 400,
+matching the already strict app-operations parser; normal inclusive dates,
+presets and unrelated authorized query keys retain their semantics.
+`SalesDashboard.tsx` clears a stale form error when a valid preset/day
+replaces a draft invalid range, so the visible state matches the applied
+API query. `CashDashboard.tsx` switches the existing `summary.hours` and
 `summary.days` projections without changing totals, products, comparison,
 permissions, monetary logic or API contracts. Arbitrary-day and preset controls
 remain. `pages/Dashboard.tsx` initially shows four demo KPIs and keeps all twelve
@@ -527,6 +711,42 @@ Browser coverage: `e2e/owner-design.spec.ts`, custom interval coverage in
 `playwright.evotor.config.ts` on desktop/mobile with synthetic fixture data.
 Release evidence and the separately discovered dependency blocker are recorded
 in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
+
+### CHAT 08 · owner KPI hierarchy (2026-11-01, Draft #343)
+
+The `ProductionDashboard.tsx` operations-ledger mode uses four primary **period**
+KPI cards: tracked ledger amount (explicitly **not** POS/fiscal revenue), purchase
+records, distinct customers with completed operations, and mean purchase-record
+amount. Other eight indicators, including total customers / bonus-balance
+snapshots and unavailable visits, remain reachable through native `details`.
+Previous-period deltas are only shown for known values with a nonzero baseline.
+Their direction is explicit in text (+ or −); an unchanged metric renders 0%
+without a misleading upward arrow. This is cosmetic only: prior/current
+metric values and API contracts do not change.
+
+`CashDashboard.tsx` uses four primary **POS** cards in both all/app modes:
+net revenue (SELL less PAYBACK), confirmed SELL receipts (null stays unavailable),
+known PIVNIK-linked buyers (app cohort, **not** all unique anonymous customers),
+and average sale receipt. The document operation count and app repeat-purchase
+details remain reachable under `details`; the existing full calculation
+disclosure stays intact. Cash comparison is still opt-in via `CashComparison`,
+so the main dashboard never triggers a second POS history read just to show a
+delta. When the owner enables comparison, the already-fetched previous POS
+report feeds **BigInt-safe % changes directly onto the primary KPI cards**,
+without another network request. Comparisons stay unknown for missing numbers,
+a zero baseline stays explicitly uncomparable, and stale/error or disabled
+comparison clears the change labels. The source/period and stale/error states
+remain unchanged. Responsive layout: four columns desktop and two on narrow
+touch screens.
+
+Only UI, CSS, unit/browser tests and documentation changed. No server routes,
+tenancy, monetary source, migration, patch-chain, POS ingestion or runtime auth
+modifications. E2E regression is `admin-platform/e2e/evotor-sales.spec.ts`,
+component coverage is `src/tests/cash-dashboard.spec.ts`,
+`cash-sales.spec.ts`, and `app-operations-periods.spec.ts`.
+Approval and deploy are separately gated; this section describes a Draft branch,
+**not** the deployed production version.
+
 
 ## Application operations overview: calendar filters (2026-10-25)
 
@@ -614,7 +834,11 @@ Manual admin migration 012 stores only the operator checkpoint, terminal ID/name
 and cash-report choice for the existing draft. `server/onboarding-workflow.ts`
 derives the eight step statuses from canonical company/venue, frozen application,
 existing provider verification and provisioning ledger; request statuses and
-scope are rejected. `GET/PUT .../progress` share the same revocable read/write
+scope are rejected. A scoped venue must resolve to an inactive row belonging to
+its saved company; missing/misbound or already-active venues fail the `venue`
+step with `scope_changed` rather than showing `venue_reserved`. POS proxy
+projection is skipped for invalid scopes; this does not activate a venue.
+`GET/PUT .../progress` share the same revocable read/write
 permissions, revision/replay checks and atomic audit. `OnboardingProgress.tsx`
 restores these choices after reload. `ADMIN_ENABLE_ONBOARDING_WORKFLOW` defaults
 off. A configured terminal has no confirmed binding/event yet; its status stays
@@ -642,6 +866,9 @@ read financial/customer rows. A successful connection probe does not bypass
 (`GET /api/admin/onboarding/venues`, 25 entries/page) under the existing default-off
 workflow switch. It combines the canonical active-venue resolver with scoped
 draft access; inactive prepared points reuse `onboarding-workflow.ts` projection.
+The list includes a prepared venue ID only when the canonical venue belongs to
+its saved company and remains inactive. Mismatched or already-active scopes
+retain their draft and failed status but omit the unverified venue ID.
 Company/venue/status input cannot choose scope. An existing active metadata row
 without verified connectivity remains pending/unknown, never false connected or
 zero revenue. Device and operator activity are distinct. `OwnerVenues.tsx`

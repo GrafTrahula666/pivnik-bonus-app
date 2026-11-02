@@ -2,7 +2,7 @@ import { useEffect,useState } from 'react'
 import { apiGet,ApiError,type ApiVenue } from '../api'
 import { PageHead } from '../ui'
 import { CashDashboard,type CashReport } from './CashDashboard'
-import { CashComparison } from './CashComparison'
+import { CashComparison,type CashComparisonSnapshot } from './CashComparison'
 import { isCashReport } from './cash-report'
 import { validateCashRange } from './cash-period'
 import { ErrorCard,LoadingCard } from './common'
@@ -18,16 +18,17 @@ export function SalesDashboard({venue,days,mode}:{venue:ApiVenue;days:number;mod
   const date=selection==='yesterday'?yesterday:selection.startsWith('date:')?selection.slice(5):''
   const query=selection.startsWith('range:')?`from=${selection.split(':')[1]}&to=${selection.split(':')[2]}`:date?'date='+encodeURIComponent(date):'days='+selection.slice(5)
   const path=`/api/admin/venues/${venue.id}/pos?${query}`
+  const applySelection=(value:string)=>{setSelection(value);setValidation('')}
   const chooseDate=(value:string)=>{
     if(/^\d{4}-\d{2}-\d{2}$/.test(value)&&value<=today&&
-      moscowDay(new Date(value+'T00:00:00+03:00'))===value)setSelection('date:'+value)
+      moscowDay(new Date(value+'T00:00:00+03:00'))===value)applySelection('date:'+value)
   }
   return <div className="page">
     <div className="card cash-period-controls" role="group" aria-label="Период кассы">
       <div className="segmented cash-period-presets">
-        <button type="button" className={selection==='days:1'?'active':''} aria-pressed={selection==='days:1'} onClick={()=>setSelection('days:1')}>Сегодня</button>
-        <button type="button" className={selection==='yesterday'?'active':''} aria-pressed={selection==='yesterday'} onClick={()=>setSelection('yesterday')}>Вчера</button>
-        {presets.slice(1).map(([n,label])=><button type="button" key={n} className={selection==='days:'+n?'active':''} aria-pressed={selection==='days:'+n} onClick={()=>setSelection('days:'+n)}>{label}</button>)}
+        <button type="button" className={selection==='days:1'?'active':''} aria-pressed={selection==='days:1'} onClick={()=>applySelection('days:1')}>Сегодня</button>
+        <button type="button" className={selection==='yesterday'?'active':''} aria-pressed={selection==='yesterday'} onClick={()=>applySelection('yesterday')}>Вчера</button>
+        {presets.slice(1).map(([n,label])=><button type="button" key={n} className={selection==='days:'+n?'active':''} aria-pressed={selection==='days:'+n} onClick={()=>applySelection('days:'+n)}>{label}</button>)}
       </div>
       <label className="cash-date-label">Любой день<input aria-label="Дата кассового отчёта" type="date" max={today} value={date} onChange={e=>chooseDate(e.target.value)}/></label>
       <form aria-label="Произвольный период кассы" onSubmit={event=>{
@@ -49,9 +50,10 @@ export function SalesDashboard({venue,days,mode}:{venue:ApiVenue;days:number;mod
 
 function CashReportContent({venue,mode,path}:{venue:ApiVenue;mode:'all'|'app';path:string}){
   const [report,setReport]=useState<CashReport>(),[error,setError]=useState(''),[loading,setLoading]=useState(true),[attempt,setAttempt]=useState(0)
+  const [comparisonSnapshot,setComparisonSnapshot]=useState<CashComparisonSnapshot|null>(null)
   useEffect(()=>{
     let cancelled=false
-    setLoading(true);setError('')
+    setLoading(true);setError('');setComparisonSnapshot(null)
     apiGet<unknown>(path).then(value=>{
       if(!isCashReport(value))throw new Error('Некорректный ответ кассового API.')
       if(!cancelled)setReport(value)
@@ -66,7 +68,7 @@ function CashReportContent({venue,mode,path}:{venue:ApiVenue;mode:'all'|'app';pa
     <PageHead eyebrow="ПРОДАЖИ · ЭВОТОР" title={mode==='all'?'Все продажи кассы':'Клиенты приложения'} sub={venue.name}
       actions={<button className="btn secondary" disabled={loading} onClick={()=>setAttempt(n=>n+1)}>Обновить</button>}/>
     {loading&&!report?<LoadingCard text="Загрузка кассовых документов…"/>:error&&!report?<ErrorCard error={error} onRetry={()=>setAttempt(n=>n+1)}/>:
-      <CashDashboard report={report} mode={mode} loading={loading} error={error}
-        comparison={report?.period&&<CashComparison venueId={venue.id} report={report} mode={mode} unavailable={loading||Boolean(error)}/>}/>}
+      <CashDashboard report={report} mode={mode} loading={loading} error={error} comparisonSnapshot={comparisonSnapshot}
+        comparison={report?.period&&<CashComparison venueId={venue.id} report={report} mode={mode} unavailable={loading||Boolean(error)} onResult={setComparisonSnapshot}/>}/>}
   </div>
 }

@@ -1,6 +1,9 @@
 import { posDashboards } from '../../pos/analytics.js'
+import { rankVerifiedPosProducts } from '../../pos/receipt-ranking.js'
 import { loadPosDocuments,posConnectionStatus,type PosReadDb } from '../../pos/repository.js'
 import { HttpError,type PeriodRange,type VenueScope } from './types.js'
+import { buildServerTimeSeries } from './time-series.js'
+import { loadVerifiedPosCustomerCohorts } from './customer-cohorts.js'
 
 export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
   const today=new Date(now.getTime()+3*3600000).toISOString().slice(0,10)
@@ -13,7 +16,11 @@ export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
     return midnight
   }
   const date=url.searchParams.get('date'),from=url.searchParams.get('from'),to=url.searchParams.get('to')
-  if(date!==null&&(from!==null||to!==null))throw new HttpError(400,'INVALID_PERIOD','Выберите день или диапазон, без смешения параметров.')
+  // Reject ambiguous API URLs, rather than silently letting searchParams.get pick the first value.
+  const keys=['days','date','from','to'] as const
+  const repeated=keys.some(key=>url.searchParams.getAll(key).length>1)
+  const modes=Number(url.searchParams.has('days'))+Number(date!==null)+Number(from!==null||to!==null)
+  if(repeated||modes>1)throw new HttpError(400,'INVALID_PERIOD','Выберите один режим периода без повторяющихся параметров.')
   if(date!==null){
     const midnight=midnightFor(date)
     return {from:new Date(midnight),to:new Date(midnight+86400000),days:1}
@@ -35,7 +42,7 @@ export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
 // No legacy bar id, provider env store, request company id, or global fallback.
 export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:PeriodRange){
   const period={from:range.from.toISOString(),until:range.to.toISOString(),timeZone:'Europe/Moscow'}
-  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null})
+  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null,timeSeries:null,receiptRanking:null,verifiedCustomerCohorts:null})
   const schema=await db.query(`SELECT to_regclass('public.pos_store_bindings') IS NOT NULL
     AND to_regclass('public.pos_documents') IS NOT NULL AND to_regclass('public.pos_customer_links') IS NOT NULL
     AND to_regclass('public.pos_sync_state') IS NOT NULL AS ready`)
@@ -47,5 +54,12 @@ export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:Period
   const connection=await posConnectionStatus(db,{enabled:true,readOnly:true,storeId})
   if(!connection.lastSuccessAt)return {...empty(connection.state),connection}
   const documents=await loadPosDocuments(db,storeId,period)
-  return {period,connection,...posDashboards(documents)}
+  const dashboards=posDashboards(documents)
+  const verifiedCustomerCohorts=await loadVerifiedPosCustomerCohorts(db,storeId,range)
+  return {period,connection,...dashboards,timeSeries:buildServerTimeSeries({
+    source:'evotor_pos',metric:'net_cash',currency:null,
+    companyId:scope.companyId,venueId:scope.id,
+    period:{from:period.from,to:period.until},
+    days:dashboards.all.days,hours:dashboards.all.hours??null,
+  }),receiptRanking:rankVerifiedPosProducts(documents,{storeId}),verifiedCustomerCohorts}
 }

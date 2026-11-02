@@ -9,6 +9,10 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await page.getByLabel('Пароль',{exact:true}).fill(fixturePassword)
   await page.getByRole('button',{name:'Войти',exact:true}).click()
   await page.getByRole('button',{name:'Добавить заведение',exact:true}).click()
+  const wizardNav=page.getByRole('navigation',{name:'Разделы мастера подключения'})
+  await expect(wizardNav).toBeVisible()
+  await expect(wizardNav.getByRole('link',{name:'Данные заведения'})).toHaveAttribute('href','#sv-onboarding-details')
+  await expect(wizardNav.getByRole('link',{name:'Приложение'})).toHaveCount(0)
   await page.getByLabel('Название заведения',{exact:true}).fill(name)
   await expect(page.getByLabel('Название организации',{exact:true})).toHaveValue(name)
   await page.getByLabel('Адрес',{exact:true}).fill('Мулино, тестовая улица')
@@ -17,6 +21,9 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await page.getByRole('button',{name:'Сохранить черновик',exact:true}).dblclick()
   const created=await (await post).json() as {id:string;revision:number}
   expect(created.revision).toBe(1)
+  await expect(wizardNav.getByRole('link',{name:'Приложение'})).toHaveAttribute('href','#sv-onboarding-application')
+  await expect(wizardNav.getByRole('link',{name:'Организация и точка'})).toHaveAttribute('href','#sv-onboarding-scope')
+  await expect(wizardNav.getByRole('link',{name:'База и схема'})).toHaveCount(0)
   await expect(page.getByRole('status')).toContainText('Заведение ещё не подключено')
   await expect(page.getByLabel('Название приложения',{exact:true})).toHaveValue(name)
   await page.getByLabel('Название приложения',{exact:true}).fill(name+' App')
@@ -49,6 +56,11 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await expect(page.getByLabel('Название заведения',{exact:true})).toBeDisabled()
   await expect(page.getByText('ID '+prepared.company.id+' · создана выключенной',{exact:true})).toBeVisible()
   await expect(page.getByText('ID '+prepared.venue.id+' · выключено',{exact:true})).toBeVisible()
+  await expect(wizardNav.getByRole('link',{name:'База и схема'})).toHaveAttribute('href','#sv-onboarding-provisioning')
+  await expect(wizardNav.getByRole('link',{name:'Касса · Эвотор'})).toHaveAttribute('href','#sv-onboarding-provider')
+  await wizardNav.getByRole('link',{name:'База и схема'}).click()
+  await expect(page).toHaveURL(/#sv-onboarding-provisioning$/)
+  await expect(page.locator('#sv-onboarding-provisioning')).toBeInViewport()
   const provisioning=page.getByLabel('Подготовка базы приложения')
   let schemaRequests=0
   let runtimeBundleRequests=0
@@ -95,6 +107,7 @@ test('real panel saves, reloads, updates and recovers an uncertain server save',
   await page.unroute('**/provisioning/runtime-bundle*')
   const evotor=page.getByLabel('Подключение Эвотора')
   await expect(evotor).toBeVisible()
+  await expect(evotor.getByLabel('Токен Эвотора',{exact:true})).toHaveCount(1)
   await evotor.getByLabel('ID магазина Эвотора',{exact:true}).fill('fixture-'+testInfo.project.name)
   const syntheticToken='synthetic-e2e-evotor-token-'+testInfo.project.name
   await evotor.getByLabel('Токен Эвотора',{exact:true}).fill(syntheticToken)
@@ -158,5 +171,6 @@ test('venue owners cannot see or directly use the master',async({page})=>{
   await page.getByRole('button',{name:'Войти',exact:true}).click()
   await expect(page.locator('.app-shell')).toBeVisible()
   await expect(page.getByRole('button',{name:'Добавить заведение',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('navigation',{name:'Разделы мастера подключения'})).toHaveCount(0)
   expect((await page.request.get('/api/admin/onboarding/drafts')).status()).toBe(403)
 })

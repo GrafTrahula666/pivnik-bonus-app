@@ -41,3 +41,14 @@
 .owner-venue-support{margin-top:14px}.owner-venue-support summary{cursor:pointer;font-size:13px}.owner-venue-support .field{margin:12px 0}.owner-venue-support textarea{resize:vertical;width:100%;min-height:80px}
 
 .support-reference{overflow-wrap:anywhere}.tenant-crm select{max-width:100%;width:100%}
+
+/* Section index for the existing wizard; links only scroll, never mutate or unlock steps. */
+.onboarding-jump-nav{margin:16px 0 20px;padding:14px;border:1px solid var(--border-soft);border-radius:12px;background:rgba(255,255,255,.02);min-width:0}
+.onboarding-jump-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px 18px;flex-wrap:wrap;margin-bottom:10px}
+.onboarding-jump-heading b{font-size:13px}
+.onboarding-jump-heading span{font-size:11px;color:var(--muted)}
+.onboarding-jump-links{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.onboarding-jump-links a{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;color:inherit;text-decoration:none;font-size:12px;line-height:1.25;white-space:nowrap}
+.onboarding-jump-links a:hover,.onboarding-jump-links a:focus-visible{border-color:var(--accent);outline-offset:3px}
+.onboarding [id^="sv-onboarding-"]{scroll-margin-top:24px}
+@media(max-width:600px){.onboarding-jump-nav{padding:12px}.onboarding-jump-links{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:6px}.onboarding-jump-links a{flex:0 0 auto}}

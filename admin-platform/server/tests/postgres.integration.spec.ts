@@ -168,6 +168,34 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
     expect(Number((await setup!.query(`SELECT balance FROM wallets WHERE user_id=$1`,[pivnikUser])).rows[0]!.balance)).toBe(20)
   })
 
+  it('unconfigured tenant and a sibling PIVNIK venue never inherit the PIVNIK loyalty ladder',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getManagedLoyalty}=await import('../writes.js')
+    const pivnik=await resolveVenueScope(pivnikAdmin,pivnikVenue)
+    const north=await resolveVenueScope(northAdmin,northVenue)
+    const legacy=await getManagedLoyalty(pivnik)
+    expect(legacy.source).toBe('legacy-fallback')
+    expect(legacy.registrationBonus).toBe(100)
+    expect(legacy.levels.length).toBeGreaterThan(0)
+
+    const unconfigured=await getManagedLoyalty(north)
+    expect(unconfigured).toMatchObject({
+      source:'not_configured',baseCashbackPercent:null,registrationBonus:null,referralBonus:null,levels:[],
+    })
+
+    const siblingId=(await setup!.query<{id:string}>(
+      `INSERT INTO venues(company_id,code,name) VALUES($1,'pivnik-sibling-test','Sibling test venue') RETURNING id::text`,
+      [pivnik.companyId],
+    )).rows[0]!.id
+    const sibling=await resolveVenueScope(pivnikAdmin,siblingId)
+    expect(sibling.companyCode).toBe('pivnik')
+    expect(sibling.legacyBarId).toBeNull()
+    expect(await getManagedLoyalty(sibling)).toMatchObject({
+      source:'not_configured',baseCashbackPercent:null,registrationBonus:null,levels:[],
+    })
+    await expect(resolveVenueScope(northAdmin,siblingId)).rejects.toMatchObject({code:'VENUE_NOT_FOUND'})
+  })
+
   it('loyalty config persists valid ordered levels, rejects invalid thresholds and audits the mutation',async()=>{
     const {resolveVenueScope}=await import('../tenant.js')
     const {getManagedLoyalty,saveLoyalty}=await import('../writes.js')
@@ -186,6 +214,25 @@ suite('Phase C PostgreSQL tenant + financial integration',()=>{
       {...valid.levels[1],thresholdRub:100},
     ]})).rejects.toMatchObject({code:'INVALID_LEVEL_THRESHOLDS'})
     expect((await setup!.query(`SELECT COUNT(*) AS n FROM admin_audit_log WHERE venue_id=$1 AND action='loyalty.config.save'`,[northVenue])).rows[0]!.n).toBe('1')
+  })
+
+  it('explicit zero tenant loyalty stays zero in the database and cannot overwrite PIVNIK',async()=>{
+    const {resolveVenueScope}=await import('../tenant.js')
+    const {getManagedLoyalty,saveLoyalty}=await import('../writes.js')
+    const north=await resolveVenueScope(northAdmin,northVenue)
+    await saveLoyalty(northAdmin,north,{
+      baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
+      levels:[{code:'zero',title:'Zero',thresholdRub:0,bonusPercent:0,discountPercent:0,enabled:true,sortOrder:0}],
+    })
+    const stored=await getManagedLoyalty(north)
+    expect(stored.source).toBe('db')
+    expect(stored.baseCashbackPercent).toBe(0)
+    expect(stored.registrationBonus).toBe(0)
+    expect(stored.referralBonus).toBe(0)
+    expect(stored.levels[0]?.bonusPercent).toBe(0)
+    const pivnik=await getManagedLoyalty(await resolveVenueScope(pivnikAdmin,pivnikVenue))
+    expect(pivnik.source).toBe('legacy-fallback')
+    expect(pivnik.registrationBonus).toBe(100)
   })
 
   it('NORTH wheel preserves exact tiny probability, ignores disabled prizes, rejects invalid total and stays tenant scoped',async()=>{

@@ -22,6 +22,52 @@ describe('loyalty validation',()=>{
       {code:'b',title:'B',thresholdRub:10000,bonusPercent:7,discountPercent:0,enabled:true,sortOrder:1},
     ],
   }).levels).toHaveLength(2))
+  it('accepts explicitly configured zero without inheriting PIVNIK values',()=>{
+    const value=validateLoyalty({
+      baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
+      levels:[{code:'new',title:'Без бонусов',thresholdRub:0,bonusPercent:0,discountPercent:0,enabled:true,sortOrder:0}],
+    })
+    expect(value.baseCashbackPercent).toBe(0)
+    expect(value.registrationBonus).toBe(0)
+    expect(value.referralBonus).toBe(0)
+    expect(value.levels[0]?.bonusPercent).toBe(0)
+  })
+  it.each([null,undefined,'', '  ',false])('rejects absent or empty base cashback %s',value=>{
+    expect(()=>validateLoyalty({
+      baseCashbackPercent:value,registrationBonus:0,referralBonus:0,
+      levels:[{code:'new',title:'New',thresholdRub:0,bonusPercent:0}],
+    })).toThrow()
+  })
+  it.each([{bad:[]},{bad:[0]},{bad:{}},{bad:false},{bad:null}])('rejects non-scalar global loyalty config $bad',({bad})=>{
+    for(const field of ['baseCashbackPercent','registrationBonus','referralBonus']) {
+      const body:Record<string,unknown>={
+        baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
+        levels:[{code:'zero',title:'Zero',thresholdRub:0,bonusPercent:0}],
+      }
+      body[field]=bad
+      expect(()=>validateLoyalty(body)).toThrow()
+    }
+  })
+  it.each([{bad:null},{bad:''},{bad:'  '},{bad:[]},{bad:[0]},{bad:{}},{bad:false}])('rejects missing or malformed tier numeric settings $bad',({bad})=>{
+    for(const field of ['thresholdRub','bonusPercent']){
+      const tier:Record<string,unknown>={code:'new',title:'New',thresholdRub:0,bonusPercent:0}
+      tier[field]=bad
+      expect(()=>validateLoyalty({
+        baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[tier],
+      })).toThrow(expect.objectContaining({statusCode:400}))
+    }
+  })
+  it.each([{tier:null},{tier:false},{tier:[]},{tier:'bad'}])('rejects a malformed loyalty level object $tier with a client error',({tier})=>{
+    expect(()=>validateLoyalty({
+      baseCashbackPercent:0,registrationBonus:0,referralBonus:0,levels:[tier],
+    })).toThrow(expect.objectContaining({statusCode:400}))
+  })
+  it.each(['registrationBonus','referralBonus'] as const)('rejects missing %s instead of silently converting it to 0',field=>{
+    const body:Record<string,unknown>={baseCashbackPercent:0,registrationBonus:0,referralBonus:0,
+      levels:[{code:'new',title:'New',thresholdRub:0,bonusPercent:0}]}
+    body[field]=null
+    expect(()=>validateLoyalty(body)).toThrow()
+  })
   it('rejects non-increasing active thresholds',()=>expect(()=>validateLoyalty({
     baseCashbackPercent:5,registrationBonus:100,referralBonus:0,
     levels:[
