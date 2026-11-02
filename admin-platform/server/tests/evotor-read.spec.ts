@@ -57,7 +57,7 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       for(const f of ['012_evotor_sales.sql','013_evotor_pos_scope_devices.sql'])await db.exec(await readFile(new URL('../../../migrations/'+f,import.meta.url),'utf8'))
       await db.exec(`INSERT INTO pos_store_bindings VALUES('a','10','101',TRUE),('b','20','202',TRUE);
         INSERT INTO pos_sync_state(store_id,last_success_at) VALUES('a',NOW()),('b',NOW());`)
-      const doc=(id:string,storeId:string,amount:number,type='SELL',baseDocumentId:string|null=null)=>({source:'evotor',documentId:id,storeId,closedAt:'2026-10-02T10:00:00Z',type,amountCents:amount,receiptCount:1,linkable:true,positions:[],payments:[{type:'CASH',method:'',amountCents:amount}],baseDocumentId})
+      const doc=(id:string,storeId:string,amount:number,type='SELL',baseDocumentId:string|null=null)=>({source:'evotor',documentId:id,storeId,closedAt:'2026-10-02T10:00:00Z',type,amountCents:amount,receiptCount:1,linkable:true,fiscal:[{receiptNumber:8}],positions:[{productId:'beer-1',name:'Пиво',measure:'л',quantityMillis:1000,amountCents:amount}],payments:[{type:'CASH',method:'',amountCents:amount}],baseDocumentId})
       for(const d of [doc('linked','a',11000),doc('anonymous','a',19000),doc('return','a',1000,'PAYBACK','linked'),doc('foreign','b',99000),
         {...doc('before','a',88000),closedAt:'2026-10-01T20:59:59.999Z'},
         {...doc('after','a',77000),closedAt:'2026-10-02T21:00:00.000Z'}]){
@@ -69,6 +69,9 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       expect((await db.query(query.text,query.params)).rows).toHaveLength(0)
       const report=await getEvotorReport(db,scope,range)
       expect(report.all?.salesCents).toBe('30000');expect(report.all?.netCents).toBe('29000')
+      expect(report.receiptRanking?.status).toBe('verified')
+      expect(report.receiptRanking?.products).toEqual([expect.objectContaining({productId:'beer-1',netCents:'29000'})])
+      expect(report.receiptRanking?.categories.items).toBeNull()
       expect(report.timeSeries?.groups.days.buckets).toEqual([{label:'2026-10-02',amountCents:'29000'}])
       expect(report.timeSeries?.groups.hours?.buckets).toEqual([{label:'13',amountCents:'29000'}])
       expect(report.timeSeries?.scope).toEqual({companyId:'10',venueId:'101'})
@@ -86,6 +89,7 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
       expect(compared.all?.netCents).toBe('117000')
       expect(compared.app?.salesCents).toBe('11000')
       expect((await getEvotorReport(db,{...scope,id:'202'},range)).all).toBeNull()
+      expect((await getEvotorReport(db,{...scope,id:'202'},range)).receiptRanking).toBeNull()
       expect((await getEvotorReport(db,{...scope,id:'202'},range)).timeSeries).toBeNull()
       expect((await getEvotorReport(db,{...scope,companyId:'20'},range)).all).toBeNull()
       await db.query("UPDATE pos_store_bindings SET enabled=FALSE WHERE store_id='a'")

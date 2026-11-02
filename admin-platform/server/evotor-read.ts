@@ -1,4 +1,5 @@
 import { posDashboards } from '../../pos/analytics.js'
+import { rankVerifiedPosProducts } from '../../pos/receipt-ranking.js'
 import { loadPosDocuments,posConnectionStatus,type PosReadDb } from '../../pos/repository.js'
 import { HttpError,type PeriodRange,type VenueScope } from './types.js'
 import { buildServerTimeSeries } from './time-series.js'
@@ -36,7 +37,7 @@ export function evotorPeriod(url:URL, now=new Date()):PeriodRange {
 // No legacy bar id, provider env store, request company id, or global fallback.
 export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:PeriodRange){
   const period={from:range.from.toISOString(),until:range.to.toISOString(),timeZone:'Europe/Moscow'}
-  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null,timeSeries:null})
+  const empty=(state:string)=>({period,connection:{state,lastSuccessAt:null},all:null,app:null,unlinked:null,linkedRevenueSharePercent:null,timeSeries:null,receiptRanking:null})
   const schema=await db.query(`SELECT to_regclass('public.pos_store_bindings') IS NOT NULL
     AND to_regclass('public.pos_documents') IS NOT NULL AND to_regclass('public.pos_customer_links') IS NOT NULL
     AND to_regclass('public.pos_sync_state') IS NOT NULL AS ready`)
@@ -54,5 +55,5 @@ export async function getEvotorReport(db:PosReadDb,scope:VenueScope,range:Period
     companyId:scope.companyId,venueId:scope.id,
     period:{from:period.from,to:period.until},
     days:dashboards.all.days,hours:dashboards.all.hours??null,
-  })}
+  }),receiptRanking:rankVerifiedPosProducts(documents,{storeId})}
 }
