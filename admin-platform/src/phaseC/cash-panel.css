@@ -78,3 +78,25 @@
 .app-operation-comparison .cash-comparison-bar{top:1px}
 .app-operation-comparison .cash-comparison-bar.previous{top:14px}
 .app-operation-comparison .cash-comparison-row{min-width:0}
+
+/* CHAT 08 · 72: prioritize period-scoped KPIs, keep the full ledger detail on demand. */
+.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.app-operations-extra{padding:16px 20px}
+.app-operations-extra summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
+.app-operations-extra[open] summary{margin-bottom:16px}
+.app-operations-extra .kpi-grid{margin-bottom:12px}
+@media(max-width:860px){.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.app-operations-extra{padding:14px 12px}}
+
+/* POS receipts and linked buyers are separate from sale/return document count. */
+.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.cash-secondary-metrics{padding:16px 20px}
+.cash-secondary-metrics summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
+.cash-secondary-metrics[open] summary{margin-bottom:16px}
+@media(max-width:860px){.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.cash-secondary-metrics{padding:14px 12px}}
+
+/* Task 72: comparisons stay alongside the primary POS figures on narrow screens. */
+.cash-kpi-trend{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap;align-items:baseline;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.cash-kpi-trend b{color:var(--text);font-variant-numeric:tabular-nums}
+.cash-kpi-trend span{width:100%;font-size:10px}

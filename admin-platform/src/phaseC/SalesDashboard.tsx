@@ -2,7 +2,7 @@ import { useEffect,useState } from 'react'
 import { apiGet,ApiError,type ApiVenue } from '../api'
 import { PageHead } from '../ui'
 import { CashDashboard,type CashReport } from './CashDashboard'
-import { CashComparison } from './CashComparison'
+import { CashComparison,type CashComparisonSnapshot } from './CashComparison'
 import { isCashReport } from './cash-report'
 import { validateCashRange } from './cash-period'
 import { ErrorCard,LoadingCard } from './common'
@@ -49,9 +49,10 @@ export function SalesDashboard({venue,days,mode}:{venue:ApiVenue;days:number;mod
 
 function CashReportContent({venue,mode,path}:{venue:ApiVenue;mode:'all'|'app';path:string}){
   const [report,setReport]=useState<CashReport>(),[error,setError]=useState(''),[loading,setLoading]=useState(true),[attempt,setAttempt]=useState(0)
+  const [comparisonSnapshot,setComparisonSnapshot]=useState<CashComparisonSnapshot|null>(null)
   useEffect(()=>{
     let cancelled=false
-    setLoading(true);setError('')
+    setLoading(true);setError('');setComparisonSnapshot(null)
     apiGet<unknown>(path).then(value=>{
       if(!isCashReport(value))throw new Error('Некорректный ответ кассового API.')
       if(!cancelled)setReport(value)
@@ -66,7 +67,7 @@ function CashReportContent({venue,mode,path}:{venue:ApiVenue;mode:'all'|'app';pa
     <PageHead eyebrow="ПРОДАЖИ · ЭВОТОР" title={mode==='all'?'Все продажи кассы':'Клиенты приложения'} sub={venue.name}
       actions={<button className="btn secondary" disabled={loading} onClick={()=>setAttempt(n=>n+1)}>Обновить</button>}/>
     {loading&&!report?<LoadingCard text="Загрузка кассовых документов…"/>:error&&!report?<ErrorCard error={error} onRetry={()=>setAttempt(n=>n+1)}/>:
-      <CashDashboard report={report} mode={mode} loading={loading} error={error}
-        comparison={report?.period&&<CashComparison venueId={venue.id} report={report} mode={mode} unavailable={loading||Boolean(error)}/>}/>}
+      <CashDashboard report={report} mode={mode} loading={loading} error={error} comparisonSnapshot={comparisonSnapshot}
+        comparison={report?.period&&<CashComparison venueId={venue.id} report={report} mode={mode} unavailable={loading||Boolean(error)} onResult={setComparisonSnapshot}/>}/>}
   </div>
 }
