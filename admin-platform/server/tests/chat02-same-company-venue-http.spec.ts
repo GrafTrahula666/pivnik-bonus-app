@@ -423,6 +423,11 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
       'UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',
       [fixture.viewerInvite],
     )
+    // Revoking one manager's venue grant must not revoke the separate
+    // company's owner grant or hide the owner's sibling venue.
+    for (const venue of [0, 1]) {
+      expect((await request('owner', 'GET', draft(venue))).status).toBe(200)
+    }
     // Revoking the only venue grant must also close the discovery lists,
     // not just direct resource URLs, without requiring a new login.
     for (const path of indexPaths) {
