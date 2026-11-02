@@ -360,6 +360,40 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(await audits()).toBe(beforeAudits+1)
   })
 
+  it('uses the same UUID independently in two prepared venues of one company',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('same-key-two-venues@fixture.invalid')
+    const before=[0,1].map(()=>({contacts:0,requests:0}))
+    for(const i of [0,1]){
+      before[i]!.contacts=Number(await count(i,'spaceverse_crm_contacts'))
+      before[i]!.requests=Number(await count(i,'spaceverse_crm_contact_create_requests'))
+    }
+    const first=await send('owner',path(0),c)
+    const second=await send('owner',path(1),c)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const receipts=[await first.json(),await second.json()]
+    for(const i of [0,1]){
+      expect(receipts[i]).toMatchObject({requestKey:c.requestKey,
+        identityStatus:'unlinked',walletStatus:'not_created',
+        contact:{email:c.contact.email,identityStatus:'unlinked',walletStatus:'not_created'}})
+      expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(before[i]!.contacts+1)
+      expect(Number(await count(i,'spaceverse_crm_contact_create_requests'))).toBe(before[i]!.requests+1)
+      const replay=await send('owner',path(i),c)
+      expect(replay.status).toBe(200)
+      expect(await replay.json()).toEqual(receipts[i])
+    }
+    const audit=await fixture.metadata.query<{company_id:string;venue_id:string;admin_id:string}>(
+      `SELECT company_id::text,venue_id::text,admin_id::text FROM admin_audit_log
+       WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1`,
+      [c.requestKey])
+    expect(audit.rows).toHaveLength(2)
+    expect(new Set(audit.rows.map(row=>row.venue_id))).toEqual(new Set([
+      fixture.manifests[0]!.scope.venueId,fixture.manifests[1]!.scope.venueId,
+    ]))
+    for(const row of audit.rows)expect(row).toMatchObject({company_id:'10',admin_id:'11'})
+  })
+
   // Native PostgreSQL only: PGlite's single connection cannot model two
   // independent HTTP transactions waiting on the same Admin draft lock.
   it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
