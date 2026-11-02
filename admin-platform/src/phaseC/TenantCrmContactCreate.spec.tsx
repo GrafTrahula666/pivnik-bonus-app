@@ -184,6 +184,19 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(host.textContent).toContain('Повторить с тем же ключом')
     expect(host.textContent).not.toContain('Контакт №93 создан')
   })
+  it('rejects a 200 response carrying a different request key',async()=>{
+    post.mockImplementationOnce(async(_path,body)=>({
+      ...confirmed(body),requestKey:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    }) as never)
+    await fill();await submit()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(host.textContent).not.toContain('Контакт №93 создан')
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Подтверждение не получено')
+    expect(host.textContent).toContain('Повторить с тем же ключом')
+    expect(localStorage.length).toBe(1)
+    expect(JSON.parse(localStorage.getItem(localStorage.key(0)!)!).requestKey)
+      .toBe((post.mock.calls[0]![1] as {requestKey:string}).requestKey)
+  })
   it('rejects a 200 response with another contact under the same request key',async()=>{
     post.mockImplementationOnce(async(_path,body)=>({
       ...confirmed(body),
