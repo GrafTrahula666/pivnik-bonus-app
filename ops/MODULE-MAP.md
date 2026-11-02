@@ -231,6 +231,106 @@ not_provisioned and unpublished. Core SQL supports the existing minimal
 customer/auth/wallet contracts, not the complete legacy runtime or financial
 operations. Runbook: `ops/SPACEVERSE-EMPTY-DATABASE-RUNBOOK.md`.
 
+## Manual CRM contacts — CHAT 03 / item 24, DEFAULT-OFF POST draft (2026-11-01)
+
+`crm-manual-contact-create.js` writes only separate owner-entered contact
+records to a **dedicated prepared tenant DB**, never authenticated `users`,
+`user_identities`, `wallets`, guest bonuses or legacy PIVNIK identities.
+Do not use provider-authenticated `customer-provisioning.js` for manually
+entered phone/email. The **explicit-only**, NOT startup-mounted
+`admin-platform/tenant-migrations/002_manual_crm_contacts.sql` must be
+reviewed and applied to the exact tenant target before enabling this feature;
+no production migration has been performed.
+
+New `POST /api/admin/onboarding/drafts/:draftId/crm/contacts` in
+`admin-platform/server/router.ts` is default-off behind
+`ADMIN_ENABLE_TENANT_CRM_CONTACT_CREATE=false`, plus existing Admin writes
+and onboarding draft switches. It requires signed Admin session,
+Origin/CSRF, per-actor/IP rate limiting, no URL/query-supplied tenant scope,
+strict pure contact validation **before** tenant DB resolution and an existing
+prepared owner-scoped draft. `tenant-crm-contact-owner-gate.ts` locks
+active account/session, canonical draft and current owner or explicit owner
+invite while `tenant-crm-contact-create.ts` verifies the exact tenant
+binding and calls the existing actor-bound transactional idempotent writer.
+A scoped metadata Admin audit is committed after target write confirmation.
+The target contact/request-ledger transaction is atomic; the two DB commits
+are not. If metadata audit/response fails after target commit, retry the SAME
+UUIDv4 request key for replay and audit recovery. The permission gate already
+locks the canonical draft `FOR UPDATE` for the full metadata transaction.
+After confirming the target ledger result, it now checks existing scoped
+`admin_audit_log` records for the same actor/venue/requestKey under this lock.
+An exact replay adds no second audit event; a mismatched recorded contact,
+entity type or safety metadata fails closed. This is **serialized replay audit
+deduplication within the canonical draft**, NOT a distributed transaction,
+database-wide unique constraint, cleanup of historical duplicates or a proof
+of active venue. Explicit review is still required before production use.
+The HTTP endpoint is **not enabled or deployed** in any production environment.
+
+Signed HTTP tests cover owner, invited manager denial, cross-company
+isolation, CSRF/Origin, malformed scope, replay, rate limiting, duplicate
+channels and audit recovery. Native PG16 CI now exercises both the concurrent
+tenant writer and actual signed Admin HTTP on three isolated test databases.
+
+The separate `TenantCrmContactCreate.tsx` form is mounted only within a
+prepared, confirmed-owner draft in `VenueOnboarding.tsx` when the independent
+`tenantCrmContactCreate` capability is TRUE; managers and unconfirmed roles
+see no create control. Its request UUIDv4 is reused on uncertain responses and
+its disabled inputs prevent modifying a potentially committed request;
+success explicitly says the manual contact is NOT an app identity/wallet.
+Neither the read-only legacy customer list nor CHAT03 #23 directory is changed.
+Responsive CSS is scoped to this form; no fabricated metrics or statuses.
+
+An isolated `playwright.crm-contact.config.ts` and
+`e2e/tenant-crm-contact.spec.ts` run the **built real Admin panel** in
+Chromium desktop/mobile on a disposable loopback onboarding fixture.
+The feature is enabled **only** in that explicit test process through
+`SPACEVERSE_E2E_CRM_CONTACTS=true`; the browser's manual contact POST
+responses are synthetic and intercepted. Real signed HTTP owner/scope/CSRF
+and PostgreSQL 16 remain independently covered by the native workflow.
+Browser checks prove synthetic SUPER_ADMIN and VENUE_ADMIN owner form
+visibility, request payload/CSRF, 503→429→success retry with the same UUID
+and no mobile overflow. The isolated fixture also demonstrates that an
+uninvited trusted director cannot read another owner's draft; after a real
+scoped **synthetic** manager invitation is recorded in disposable metadata,
+the manager can open/edit that draft but cannot see the create-contact form
+or use its signed Admin POST. Both viewport checks use actual Chromium.
+None of this proves production tenant permissions or live activation.
+
+The form now persists a **request UUIDv4, random nonce and salted SHA-256
+fingerprint only** in same-origin browser localStorage, separately keyed by
+the exact actor and draft. It does not persist names, phone or email. Before
+the first POST, storing and rereading that checkpoint must succeed; corrupted
+or inaccessible storage blocks new submission. On browser reload/reopen,
+the form requires re-entering identical normalized contact fields; differing
+input cannot consume the saved UUID or create another contact. Once matched,
+the same UUID is retried through uncertain HTTP responses (also 401/429).
+Confirmed success or definitive initial rejection removes the checkpoint.
+React unit tests and built desktop/mobile Playwright cover the reload,
+mismatch/no-network, retry and storage-corruption controls. These browser
+checks use intercepted contact writes; native PostgreSQL signed HTTP is
+independently tested. Clearing browser storage externally or concurrent tabs
+cannot be treated as an exactly-once guarantee: the server request ledger and
+per-venue contact uniqueness remain essential.
+
+Read-only manual migration preflight is defined in
+`admin-platform/server/tenant-crm-manual-migration-preflight.ts`. It checks
+the exact expected database name, public schema, 017–019 prerequisites,
+prepared runtime/manifest/company/venue binding and absence of already/partially
+applied 002 tables. It issues only SELECT statements and returns
+`review_required` with `approvalGranted:false`; it never connects to a
+database, resolves credentials, applies SQL or enables a feature. Fixture
+tests confirm fail-closed mismatches. Operator runbook:
+`ops/CHAT03-MANUAL-CRM-MIGRATION-002-RUNBOOK.md`. This does NOT establish
+real company ownership or target isolation by itself: a separately verified
+Admin grant/manifest and the protected target registry are mandatory.
+
+Still pending: **actual** manual migration review/owner approval and
+explicit application to a confirmed tenant target, live owner permissions
+and E2E authorization, global two-database audit policy, safe handling if
+browser storage is externally erased, and CHAT01 coordinator integration.
+This Draft form does NOT prove commercial readiness. Never merge, activate
+or deploy automatically.
+
 ## Owner network search (2026-10-19, existing default-off workflow gate)
 
 `GET /api/admin/onboarding/venues` accepts optional `q` (up to 100 characters,

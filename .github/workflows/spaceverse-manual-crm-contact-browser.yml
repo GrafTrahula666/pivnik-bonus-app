@@ -1,0 +1,54 @@
+name: SPACEVERSE manual CRM contact browser
+
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/src/api.ts'
+      - 'admin-platform/src/phaseC/VenueOnboarding.tsx'
+      - 'admin-platform/src/phaseC/TenantCrmContactCreate.tsx'
+      - 'admin-platform/src/phaseC/tenant-crm-contact-create.css'
+      - 'admin-platform/e2e/tenant-crm-contact.spec.ts'
+      - 'admin-platform/e2e/fixtures/onboarding-server.ts'
+      - 'admin-platform/playwright.crm-contact.config.ts'
+      - '.github/workflows/spaceverse-manual-crm-contact-browser.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-contact-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owner-form:
+    name: Built Admin owner contact form, desktop/mobile (synthetic loopback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install pinned Business dependencies
+        run: npm ci --prefix admin-platform
+      - name: Install Chromium for real browser checks
+        working-directory: admin-platform
+        run: npx playwright install --with-deps chromium
+      # Independent server per project: no shared sessions/ratelimit or fixtures
+      # between desktop and mobile, no external tenant database.
+      - name: Owner contact creation on desktop
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.crm-contact.config.ts --project=desktop
+      - name: Owner contact creation on mobile
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.crm-contact.config.ts --project=mobile
+      - name: Upload browser failure screenshots and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat03-crm-contact-browser-failures
+          path: admin-platform/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

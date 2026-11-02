@@ -1,6 +1,7 @@
 // Loopback-only proof: built real App + real signed-session router + disposable PGlite.
 // No connection to Railway, provider, production DB or external recipients.
 import http from 'node:http'
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
@@ -23,6 +24,8 @@ process.env.ADMIN_ONBOARDING_SECRET_KEYRING=JSON.stringify({'e2e-v1':Buffer.allo
 process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS=process.env.SPACEVERSE_E2E_INVITATIONS==='true'?'true':'false'
 process.env.ADMIN_ENABLE_ONBOARDING_WORKFLOW=process.env.SPACEVERSE_E2E_WORKFLOW==='true'?'true':'false'
 process.env.ADMIN_ENABLE_ONBOARDING_POS_PROXY=process.env.SPACEVERSE_E2E_POS_PROXY==='true'?'true':'false'
+// Test-process-only capability. Never enabled without explicit Playwright opt-in.
+process.env.ADMIN_ENABLE_TENANT_CRM_CONTACT_CREATE=process.env.SPACEVERSE_E2E_CRM_CONTACTS==='true'?'true':'false'
 process.env.ADMIN_PUBLIC_ORIGIN='http://127.0.0.1:5097'
 process.env.ADMIN_CSRF_SECRET='synthetic-loopback-onboarding-csrf-secret-123456'
 process.env.ADMIN_SECURE_COOKIES='false'
@@ -64,6 +67,37 @@ const root=fileURLToPath(new URL('../../dist/',import.meta.url))
 const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'}
 const server=http.createServer((req,res)=>{void (async()=>{
   const url=new URL(req.url!,'http://127.0.0.1:5097')
+  // Synthetic, loopback-only browser authorization evidence. A real existing
+  // admin account (trusted) gets a scoped manager invite in disposable metadata.
+  // No role mutation or fixture API exists outside this explicit test process.
+  if(process.env.SPACEVERSE_E2E_CRM_CONTACTS==='true'&&
+     process.env.SPACEVERSE_E2E_INVITATIONS==='true'&&
+     req.method==='POST'&&url.pathname==='/__fixture/crm-contact/manager-grant'){
+    const {requireCsrf}=await import('../../server/auth.js')
+    const session=await loadSession(req)
+    if(session.admin.id!=='11'||req.headers.origin!=='http://127.0.0.1:5097'){
+      res.statusCode=403;res.end('{}');return
+    }
+    requireCsrf(req,session.rawToken)
+    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk))
+    const body=JSON.parse(Buffer.concat(chunks).toString('utf8')) as {draftId:string}
+    const source=await loadOwnedOnboardingRuntimeSource({query} as unknown as Pool,session.admin,body.draftId)
+    if(source.manifest.scope.companyId!=='10'){res.statusCode=403;res.end('{}');return}
+    const inviteId=crypto.randomUUID()
+    await db.query(`INSERT INTO admin_onboarding_invites(
+      id,draft_id,token_hash,created_by_admin_id,status,expires_at,
+      company_id,venue_id,role,claimed_admin_id,claimed_at
+    ) VALUES($1::uuid,$2::uuid,$3,11,'claimed',NOW()+INTERVAL '1 day',$4::bigint,$5::bigint,'manager',12,NOW())`,
+      [inviteId,source.draftId,crypto.randomBytes(32).toString('hex'),
+       source.manifest.scope.companyId,source.manifest.scope.venueId])
+    await db.query(`INSERT INTO admin_onboarding_access(
+      invitation_id,admin_id,company_id,venue_id,draft_id,role
+    ) VALUES($1::uuid,12,$2::bigint,$3::bigint,$4::uuid,'manager')`,
+      [inviteId,source.manifest.scope.companyId,source.manifest.scope.venueId,source.draftId])
+    res.setHeader('Content-Type','application/json')
+    res.end(JSON.stringify({grant:'manager',draftId:source.draftId}))
+    return
+  }
   if(process.env.SPACEVERSE_E2E_INVITATIONS==='true'&&req.method==='POST'&&url.pathname==='/__fixture/release/prepare'){
     // Synthetic predecessor records isolate the real code verification UI.
     // Schema/binding workers have separate real SQL tests; this never marks a

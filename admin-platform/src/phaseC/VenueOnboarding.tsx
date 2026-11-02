@@ -5,6 +5,7 @@ import './venue-onboarding.css'
 import { OnboardingProgress } from './OnboardingProgress'
 import { OnboardingPosProxy } from './OnboardingPosProxy'
 import { TenantCustomerDirectory } from './TenantCustomerDirectory'
+import { TenantCrmContactCreate } from './TenantCrmContactCreate'
 import {OnboardingSupport} from './OnboardingSupport'
 import { TenantCrmReadiness } from './TenantCrmReadiness'
 import { TenantCrmActivationCheck } from './TenantCrmActivationCheck'
@@ -863,6 +864,10 @@ export function VenueOnboarding({session,initialDraftId,openRequest=0,onChanged}
         <TenantCrmReadiness actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
         <TenantCustomerDirectory actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>
       </div>}
+    {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&
+      session.capabilities.tenantCrmContactCreate===true&&
+      (session.admin.role==='SUPER_ADMIN'||current.permissions?.role==='owner')&&
+      <TenantCrmContactCreate actorId={session.admin.id} draftId={current.id}/>}
     {editing&&current&&scope&&scope.draftId===current.id&&!scopeLoading&&!scopeUncertain&&canWrite&&session.capabilities.tenantCrmActivationChecks&&
       <TenantCrmActivationCheck actorId={session.admin.id} draftId={current.id} scope={{companyId:scope.company.id,venueId:scope.venue.id}}/>}
     {editing&&current&&!crmMode&&<form className="onboarding-application" onSubmit={event=>{event.preventDefault();void saveApplication()}}>
