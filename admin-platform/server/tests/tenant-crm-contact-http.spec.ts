@@ -279,6 +279,40 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'")).rows[0]!.n
     expect(auditAgain).toBe(auditAfter)
   })
+  it('rejects a changed payload after uncertain audit and recovers only the original request',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const original=command('audit-retry-original@fixture.invalid')
+    const changed=command('audit-retry-changed@fixture.invalid',original.requestKey)
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+
+    // Tenant commit succeeds; metadata audit fails. Only the original payload
+    // may reconcile this pending UUID. A changed payload must not steal it.
+    state.failAuditOnce=true
+    const uncertain=await send('owner',path(),original)
+    expect(uncertain.status).toBe(503)
+    const rejected=await send('owner',path(),changed)
+    expect(rejected.status).toBe(409)
+    const denial=await rejected.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denial)).not.toContain(original.contact.email)
+    expect(JSON.stringify(denial)).not.toContain(changed.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    const recovered=await send('owner',path(),original)
+    expect(recovered.status).toBe(200)
+    expect((await recovered.json()).requestKey).toBe(original.requestKey)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
+  })
+
   it('recovers after metadata COMMIT succeeds but its acknowledgement is lost',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('lost-commit-ack@fixture.invalid')
