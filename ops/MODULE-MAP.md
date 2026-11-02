@@ -368,6 +368,15 @@ capability inside the existing `VenueOnboarding`; it does not activate a venue.
 `playwright.tenant-crm.config.ts` exercises the built App and real frozen registry
 on three dedicated local native PostgreSQL targets, including disabled mode.
 The directory/UI was merged in #285 after the read diagnostic #284.
+
+CHAT 03, task 23 isolated draft: the **prepared tenant-only** directory now accepts
+server-validated `sort=id|name|username`, `direction=asc|desc`, and
+`wallet=all|present|missing`. The verified binding/ownership join filters
+before count and 1..100-row server pagination; SQL orders before LIMIT with
+stable customer ID ties, then returns the selected order. Client validates
+scope and echoed filters, clears stale selections and resets page on changes.
+The default-off onboarding boundary and legacy PIVNIK guard are unchanged.
+This does NOT activate third-party main CRM or license/Market access.
 The readiness slice #286 adds GET
 `.../crm/readiness` with the same read/access/audit boundary. It uses a real
 scoped DB count and the existing encrypted POS projection; saved provider
