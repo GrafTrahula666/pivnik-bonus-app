@@ -165,6 +165,7 @@ function avatarFallback(entity = {}) {
 
 // PIVNIK_ICECREAM69A_FRAME_20260909
 function avatarFrameClass(entity = {}) {
+  if (rewardFrameDefinition(entity.profileFrame)) return `avatar-frame avatar-frame-reward avatar-frame-${entity.profileFrame}`;
   if (entity.profileFrame === 'gold-bars') return 'avatar-frame avatar-frame-gold-bars';
   if (entity.profileFrame === 'money') return 'avatar-frame avatar-frame-money';
   if (entity.profileFrame === 'fire') return 'avatar-frame avatar-frame-fire';
@@ -176,7 +177,26 @@ function avatarFrameClass(entity = {}) {
   return '';
 }
 
+function rewardFrameDefinition(code) {
+  const frames = {
+    'halloween-pumpkin': 'pumpkin',
+    'infernal-warden': 'ember',
+    'frost-tyrant': 'frost',
+    'eclipse-sovereign': 'sovereign',
+    'creator-violet': 'creator'
+  };
+  return Object.prototype.hasOwnProperty.call(frames, code) ? frames[code] : null;
+}
+
 function avatarOrbitHtml(entity = {}) {
+  const reward = rewardFrameDefinition(entity.profileFrame);
+  if (reward) {
+    const particles = reward === 'pumpkin' ? '' : Array.from({ length: 12 }, (_, index) => {
+      const angle = index * Math.PI / 6;
+      return `<i class="reward-frame-particle" style="--spark-x:${(50 + 43 * Math.cos(angle)).toFixed(2)}%;--spark-y:${(50 + 43 * Math.sin(angle)).toFixed(2)}%;--spark-delay:${(-index * .43).toFixed(2)}s"></i>`;
+    }).join('');
+    return `<span class="reward-frame-shell reward-frame-${reward}" aria-hidden="true"><span class="reward-frame-base"></span><span class="reward-frame-light"></span>${particles}${reward === 'creator' ? '<span class="creator-dragon-orbit"></span>' : ''}</span>`;
+  }
   if (entity.profileFrame === 'gold-bars') {
     return '<span class="gold-orbital-base" aria-hidden="true"></span>'
       + '<span class="avatar-orbit gold-bars-orbit" aria-hidden="true">'
@@ -219,6 +239,7 @@ function avatarInlineHtml(entity = {}, className = 'avatar', respectPrivacy = fa
 
 function renderAvatarInto(element, entity = {}, respectPrivacy = false) {
   if (!element) return;
+  element.classList.toggle('has-reward-frame', Boolean(rewardFrameDefinition(entity.profileFrame)));
   element.classList.toggle('has-gold-bars-frame', entity.profileFrame === 'gold-bars');
   element.classList.toggle('has-money-frame', entity.profileFrame === 'money');
   element.classList.toggle('has-anna-frame', entity.profileFrame === 'anna');

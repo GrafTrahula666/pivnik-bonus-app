@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { GOLD_BARS_FRAME, giftedFrameChoices, grantPersonalTelegramFrames, findSevTroutTelegramId } from '../personal-profile-frames.js';
+import { GOLD_BARS_FRAME, REWARD_FRAMES, CREATOR_FRAME, isCreatorFrameOwner, selectedRewardFrame, OWNER_FRAME_REPAIR_SQL, giftedFrameChoices, grantPersonalTelegramFrames, findSevTroutTelegramId } from '../personal-profile-frames.js';
 
 const read = (name) => fs.readFile(new URL(`../${name}`, import.meta.url), 'utf8');
 
@@ -12,7 +12,7 @@ test('both real servers resolve and allow the persisted personal gifts', async (
     const source = await read(name);
     const catalog = source.slice(source.indexOf('const OWNER_FRAME_CATALOG'), source.indexOf('function achievementsFromRow'));
     const available = source.slice(source.indexOf('function availableFramesFromRow'), source.indexOf('\nfunction ', source.indexOf('function availableFramesFromRow') + 1));
-    const context = vm.createContext({ GOLD_BARS_FRAME, giftedFrameChoices, isIceCream69ARow: () => false, isAnnaRow: () => false, isOwnerRow: (row) => row.telegram_id === '101' });
+    const context = vm.createContext({ GOLD_BARS_FRAME, REWARD_FRAMES, CREATOR_FRAME, isCreatorFrameOwner, selectedRewardFrame, ownerTelegramId: '101', ownerVkId: '909', giftedFrameChoices, isIceCream69ARow: () => false, isAnnaRow: () => false, isOwnerRow: (row) => row.telegram_id === '101' });
     // Gateway defines availableFrames within catalog; standalone defines it later.
     vm.runInContext(catalog + (catalog.includes('function availableFramesFromRow') ? '' : available), context);
     for (const row of [{ telegram_id: '101', profile_frame: 'gold-bars' }, { telegram_id: '202', profile_frame: 'money' }]) {
@@ -100,15 +100,18 @@ test('wrong handle, VK-only identity or ambiguous recipient fails before any gif
 test('owner appearance repair keeps the new selection after startup and reauthentication', async () => {
   const { db } = await database();
   try {
-    await db.query("UPDATE users SET profile_frame = 'gold-bars' WHERE id = 1");
     for (const name of ['server.js', 'universal-server.js']) {
       const source = await read(name);
-      const expressions = [...source.matchAll(/profile_frame = (CASE WHEN [^\n]*?END)[,\n]/g)].map((match) => match[1]).filter((sql) => sql.includes("'gold-bars'"));
-      assert.ok(expressions.length, `${name} must retain gold through owner repair`);
+      const expressions = [...source.matchAll(/profile_frame = ([^\n]*\$\{OWNER_FRAME_REPAIR_SQL\}[^\n]*), updated_at|profile_frame = ([^\n]*\$\{OWNER_FRAME_REPAIR_SQL\}[^\n]*),\n/g)]
+        .map((match) => (match[1] || match[2]).replaceAll('${OWNER_FRAME_REPAIR_SQL}', OWNER_FRAME_REPAIR_SQL));
+      assert.ok(expressions.length, `${name} must use the shared owner appearance repair`);
       for (const expression of expressions) {
         const sql = expression.replaceAll("$7", "'admin'");
-        await db.query(`UPDATE users SET profile_frame = ${sql} WHERE id = 1`);
-        assert.equal((await db.query('SELECT profile_frame FROM users WHERE id = 1')).rows[0].profile_frame, 'gold-bars');
+        for (const frame of [GOLD_BARS_FRAME, ...REWARD_FRAMES, CREATOR_FRAME]) {
+          await db.query('UPDATE users SET profile_frame = $1 WHERE id = 1', [frame.code]);
+          await db.query(`UPDATE users SET profile_frame = ${sql} WHERE id = 1`);
+          assert.equal((await db.query('SELECT profile_frame FROM users WHERE id = 1')).rows[0].profile_frame, frame.code);
+        }
       }
     }
   } finally { await db.close(); }
