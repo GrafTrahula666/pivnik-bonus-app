@@ -32,6 +32,7 @@ const storagePrefix='spaceverse:crm-manual-contact:pending:v1:'
 type Checkpoint={version:1;requestKey:string;nonce:string;digest:string}
 type Recovery={checkpoint:Checkpoint|null;blocked:boolean}
 const storageError='Нельзя безопасно восстановить незавершённый запрос. Проверьте доступ к хранилищу браузера, не отправляйте новый контакт до сверки.'
+const lockError='Браузер не поддерживает безопасную межвкладочную блокировку. Создание контакта остановлено; используйте современный браузер.'
 const recoveryNotice='Есть незавершённый запрос. Повторно введите исходные данные контакта: их значения не сохранялись в браузере. После совпадения отправим прежний запрос.'
 const mismatchNotice='Данные отличаются от незавершённого запроса. Введите те же имя, фамилию, телефон и email, что были перед обновлением страницы.'
 function readCheckpoint(key:string):Recovery {
@@ -99,8 +100,10 @@ export function TenantCrmContactCreate({actorId,draftId}:Props){
 }
 function ContactForm({actorId,draftId}:Props){
   const storageKey=storagePrefix+actorId+':'+draftId
+  const lockName='spaceverse:crm-manual-contact:lock:v1:'+actorId+':'+draftId
   const [initial]=useState(()=>readCheckpoint(storageKey))
   const checkpoint=useRef<Checkpoint|null>(initial.checkpoint)
+  const blockedByStorage=useRef(initial.blocked)
   const [blocked,setBlocked]=useState(initial.blocked)
   const [reenter,setReenter]=useState(initial.checkpoint!==null)
   const [firstName,setFirstName]=useState(''),[lastName,setLastName]=useState('')
@@ -119,6 +122,7 @@ function ContactForm({actorId,draftId}:Props){
       if(event.storageArea!==localStorage||(event.key!==storageKey&&event.key!==null))return
       const expected=checkpoint.current?JSON.stringify(checkpoint.current):null
       if(event.key===null||event.newValue!==expected){
+        blockedByStorage.current=true
         setBlocked(true)
         setError(storageError)
       }
@@ -176,57 +180,69 @@ function ContactForm({actorId,draftId}:Props){
   }
   async function send(event?:FormEvent){
     event?.preventDefault()
-    if(inFlight.current||blocked)return
+    if(inFlight.current||blocked||blockedByStorage.current)return
     inFlight.current=true
     setBusy(true);setError('');setSaved(null)
-    let command:Command|null=null
-    let retrying=uncertain
-    try {
-      if(pending.current) {
-        command=pending.current
-        retrying=true
-      } else {
-        const input=buildCommand()
-        if(!input)return
-        if(checkpoint.current) {
-          const digest=await contactDigest(input.contact,checkpoint.current.nonce)
-          if(digest!==checkpoint.current.digest){
-            setError(mismatchNotice)
-            return
-          }
-          command={...input,requestKey:checkpoint.current.requestKey}
+    // Web Locks serialize the read/checkpoint/POST/clear cycle across tabs.
+    // localStorage check-then-set alone is not an atomic reservation.
+    const perform=async()=>{
+      if(blockedByStorage.current)return
+      let command:Command|null=null
+      let retrying=uncertain
+      try {
+        if(pending.current) {
+          command=pending.current
           retrying=true
-          setReenter(false)
         } else {
-          const nonce=crypto.randomUUID()
-          const digest=await contactDigest(input.contact,nonce)
-          if(!persist({version:1,requestKey:input.requestKey,nonce,digest}))return
-          command=input
+          const input=buildCommand()
+          if(!input)return
+          if(checkpoint.current) {
+            const digest=await contactDigest(input.contact,checkpoint.current.nonce)
+            if(digest!==checkpoint.current.digest){
+              setError(mismatchNotice)
+              return
+            }
+            command={...input,requestKey:checkpoint.current.requestKey}
+            retrying=true
+            setReenter(false)
+          } else {
+            const nonce=crypto.randomUUID()
+            const digest=await contactDigest(input.contact,nonce)
+            if(!persist({version:1,requestKey:input.requestKey,nonce,digest}))return
+            command=input
+          }
+          pending.current=command
         }
-        pending.current=command
-      }
-      if(!command)throw new Error('Prepared request unavailable')
-      // A stale tab must not replay after another tab replaced/cleared its key.
-      if(!matchesStoredCheckpoint()){
-        setBlocked(true);setError(storageError)
-        return
-      }
-      const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey,command.contact)
-      if(!clearCheckpoint())return
-      pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
-      setFirstName('');setLastName('');setPhone('');setEmail('')
-    }catch(caught){
-      if(!command){
-        // This is a local browser crypto/storage failure, before any POST.
-        setBlocked(true);setError(storageError)
-      }else{
-        setError(errorMessage(caught))
-        // Only an initial definitive failure can be safely abandoned.
-        // On *any* recovery error keep the same key, even after 401/429.
-        if(confirmedFailure(caught)&&!retrying){
-          if(clearCheckpoint()){pending.current=null;setUncertain(false);setReenter(false)}
-        }else setUncertain(true)
-      }
+        if(!command)throw new Error('Prepared request unavailable')
+        // A stale tab must not replay after another tab replaced/cleared its key.
+        if(!matchesStoredCheckpoint()){
+          setBlocked(true);setError(storageError)
+          return
+        }
+        const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey,command.contact)
+        if(blockedByStorage.current){setError(storageError);return}
+        if(!clearCheckpoint())return
+        pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
+        setFirstName('');setLastName('');setPhone('');setEmail('')
+      }catch(caught){
+        if(!command){
+          // This is a local browser crypto/storage failure, before any POST.
+          setBlocked(true);setError(storageError)
+        }else{
+          setError(errorMessage(caught))
+          // Only an initial definitive failure can be safely abandoned.
+          // On *any* recovery error keep the same key, even after 401/429.
+          if(confirmedFailure(caught)&&!retrying){
+            if(clearCheckpoint()){pending.current=null;setUncertain(false);setReenter(false)}
+          }else setUncertain(true)
+        }
+    }
+    try {
+      if(typeof navigator.locks?.request!=='function')throw new Error('Web Locks unavailable')
+      await navigator.locks.request(lockName,{mode:'exclusive'},perform)
+    }catch{
+      blockedByStorage.current=true
+      setBlocked(true);setError(lockError)
     }finally{inFlight.current=false;setBusy(false)}
   }
   return <section className="tenant-crm-contact" aria-label="Создать ручной контакт CRM" aria-busy={busy}>
