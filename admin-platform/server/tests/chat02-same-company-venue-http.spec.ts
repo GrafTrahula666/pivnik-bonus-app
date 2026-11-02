@@ -221,6 +221,7 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
 
   it('rechecks viewer downgrade and revocation on the same signed session', async () => {
     expect((await request('trusted', 'GET', draft(0))).status).toBe(200)
+    expect((await request('trusted', 'GET', support(0))).status).toBe(200)
     await state.metadata!.query(
       "UPDATE admin_onboarding_access SET role='viewer' WHERE invitation_id=$1",
       [fixture.viewerInvite],
@@ -280,6 +281,11 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
 
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+    // Support GET is write-gated too: the old signed manager session must
+    // immediately lose ticket access when its venue invitation becomes viewer.
+    const viewerSupport = await request('trusted', 'GET', support(0))
+    expect(viewerSupport.status).toBe(403)
+    expect(await viewerSupport.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
 
     const listPaths = ['/api/admin/onboarding/drafts', '/api/admin/onboarding/venues']
@@ -331,6 +337,9 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
 
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+    const revokedSupport = await request('trusted', 'GET', support(0))
+    expect(revokedSupport.status).toBe(403)
+    expect(await revokedSupport.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
     for (const path of listPaths) {
       expect((await request('trusted', 'GET', path)).status).toBe(403)
     }
