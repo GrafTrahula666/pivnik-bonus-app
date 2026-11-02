@@ -31,6 +31,9 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
         return hash.buffer
       }},
     })
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{
+      request:async(_name:string,_options:unknown,run:()=>Promise<unknown>)=>run(),
+    }})
     ;(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true
     host=document.createElement('div');document.body.appendChild(host)
     root=createRoot(host)
@@ -38,6 +41,7 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
   })
   afterEach(()=>{
     act(()=>root.unmount());host.remove();vi.unstubAllGlobals()
+    Reflect.deleteProperty(navigator,'locks')
   })
   const remount=()=>{
     act(()=>root.unmount())
@@ -100,6 +104,32 @@ describe('CHAT03 #24: manual CRM owner contact form',()=>{
     expect(localStorage.length).toBe(0)
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('Укажите имя')
     expect(host.querySelector('fieldset')?.disabled).toBe(false)
+  })
+  it('fails closed without Web Locks before writing a checkpoint or POST',async()=>{
+    Object.defineProperty(navigator,'locks',{configurable:true,value:undefined})
+    await fill();await submit()
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    expect(host.querySelector('fieldset')?.disabled).toBe(true)
+    expect(host.textContent).toContain('межвкладочную блокировку')
+  })
+  it('waits for the exclusive browser lock before any checkpoint or POST',async()=>{
+    let release!:()=>void
+    const wait=new Promise<void>(resolve=>{release=resolve})
+    const request=vi.fn(async(_name:string,options:{mode:string},run:()=>Promise<unknown>)=>{
+      expect(options.mode).toBe('exclusive')
+      await wait
+      return run()
+    })
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{request}})
+    post.mockImplementationOnce(async(_path,body)=>confirmed(body) as never)
+    await fill();await submit()
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(post).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    await act(async()=>{release();await wait;await new Promise(resolve=>setTimeout(resolve,0))})
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(host.textContent).toContain('Контакт №93 создан')
   })
   it('rejects missing phone/email before any request',async()=>{
     await set('Имя *','Мария')
