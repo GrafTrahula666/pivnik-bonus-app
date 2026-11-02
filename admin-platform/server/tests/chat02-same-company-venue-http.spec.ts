@@ -443,6 +443,14 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
         expect(visible).toContain(fixture.manifests[venue]!.source.draftId)
       }
     }
+    // An independent owner grant must retain direct sibling prepared and
+    // support reads after a manager is revoked, not only list discovery.
+    for (const resource of ['application', 'scope'] as const) {
+      const allowed = await request('owner', 'GET', `${draft(1)}/${resource}`)
+      expect(allowed.status).toBe(200)
+    }
+    expect((await request('owner', 'GET', support(1))).status).toBe(200)
+
     // Revoking the only venue grant must also close the discovery lists,
     // not just direct resource URLs, without requiring a new login.
     for (const path of indexPaths) {
