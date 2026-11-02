@@ -1,3 +1,20 @@
+## 2026-11-01: CHAT 09 verified POS customer cohorts (Draft; not deployed)
+
+An additive `admin-platform/server/customer-cohorts.ts` reads **only**
+confirmed `pos_customer_links` joined to the **same** bound store's SELL
+documents with a single fiscal print and active unmerged user. No PII or
+client IDs leave the aggregate. No payment/time/phone matching. An explicit
+company/venue store binding and successful sync precede the query. Its fields
+distinguish first *observed* purchase in-period, purchases with earlier
+*observed* verified store history, and 2+ verified sales in the same period.
+Categories overlap: first-observed and repeat-within-period MUST NOT be added.
+Since historical purchase coverage is unproven, genuinely new customers stay
+`newCustomers:null` (unknown != zero). Current `all/app` metrics are
+unchanged; this is not an app activity/DAU/visits metric. No production change,
+migration, secret, additional permission or API route; isolated PostgreSQL/WASM
+tests exercise the semantics. PRs #332/#344/#348 share the scoped adapter and
+must be reconciled by CHAT 01 before integration.
+
 ## 2026-11-01: CHAT 09 receipt-verified product ranking (Draft; not deployed)
 
 `pos/receipt-ranking.js` is an **independent** optional projection from already
