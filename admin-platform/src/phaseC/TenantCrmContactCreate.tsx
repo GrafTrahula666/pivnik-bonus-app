@@ -178,69 +178,69 @@ function ContactForm({actorId,draftId}:Props){
       return true
     }catch{setBlocked(true);setError(storageError);return false}
   }
+  // The Web Locks API serializes the entire checkpoint/POST lifecycle across
+  // tabs; localStorage check-then-set by itself is not atomic.
+  async function performLockedRequest(){
+    if(blockedByStorage.current)return
+    let command:Command|null=null
+    let retrying=uncertain
+    try {
+      if(pending.current) {
+        command=pending.current
+        retrying=true
+      } else {
+        const input=buildCommand()
+        if(!input)return
+        if(checkpoint.current) {
+          const digest=await contactDigest(input.contact,checkpoint.current.nonce)
+          if(digest!==checkpoint.current.digest){
+            setError(mismatchNotice)
+            return
+          }
+          command={...input,requestKey:checkpoint.current.requestKey}
+          retrying=true
+          setReenter(false)
+        } else {
+          const nonce=crypto.randomUUID()
+          const digest=await contactDigest(input.contact,nonce)
+          if(!persist({version:1,requestKey:input.requestKey,nonce,digest}))return
+          command=input
+        }
+        pending.current=command
+      }
+      if(!command)throw new Error('Prepared request unavailable')
+      // A stale tab must not replay after another tab replaced/cleared its key.
+      if(!matchesStoredCheckpoint()){
+        setBlocked(true);setError(storageError)
+        return
+      }
+      const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey,command.contact)
+      if(blockedByStorage.current){setError(storageError);return}
+      if(!clearCheckpoint())return
+      pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
+      setFirstName('');setLastName('');setPhone('');setEmail('')
+    }catch(caught){
+      if(!command){
+        // This is a local browser crypto/storage failure, before any POST.
+        setBlocked(true);setError(storageError)
+      }else{
+        setError(errorMessage(caught))
+        // Only an initial definitive failure can be safely abandoned.
+        // On *any* recovery error keep the same key, even after 401/429.
+        if(confirmedFailure(caught)&&!retrying){
+          if(clearCheckpoint()){pending.current=null;setUncertain(false);setReenter(false)}
+        }else setUncertain(true)
+      }
+    }
+  }
   async function send(event?:FormEvent){
     event?.preventDefault()
     if(inFlight.current||blocked||blockedByStorage.current)return
     inFlight.current=true
     setBusy(true);setError('');setSaved(null)
-    // Web Locks serialize the read/checkpoint/POST/clear cycle across tabs.
-    // localStorage check-then-set alone is not an atomic reservation.
-    const perform=async()=>{
-      if(blockedByStorage.current)return
-      let command:Command|null=null
-      let retrying=uncertain
-      try {
-        if(pending.current) {
-          command=pending.current
-          retrying=true
-        } else {
-          const input=buildCommand()
-          if(!input)return
-          if(checkpoint.current) {
-            const digest=await contactDigest(input.contact,checkpoint.current.nonce)
-            if(digest!==checkpoint.current.digest){
-              setError(mismatchNotice)
-              return
-            }
-            command={...input,requestKey:checkpoint.current.requestKey}
-            retrying=true
-            setReenter(false)
-          } else {
-            const nonce=crypto.randomUUID()
-            const digest=await contactDigest(input.contact,nonce)
-            if(!persist({version:1,requestKey:input.requestKey,nonce,digest}))return
-            command=input
-          }
-          pending.current=command
-        }
-        if(!command)throw new Error('Prepared request unavailable')
-        // A stale tab must not replay after another tab replaced/cleared its key.
-        if(!matchesStoredCheckpoint()){
-          setBlocked(true);setError(storageError)
-          return
-        }
-        const result=verifyResult(await apiPost<unknown>(path,command),command.requestKey,command.contact)
-        if(blockedByStorage.current){setError(storageError);return}
-        if(!clearCheckpoint())return
-        pending.current=null;setUncertain(false);setReenter(false);setSaved(result)
-        setFirstName('');setLastName('');setPhone('');setEmail('')
-      }catch(caught){
-        if(!command){
-          // This is a local browser crypto/storage failure, before any POST.
-          setBlocked(true);setError(storageError)
-        }else{
-          setError(errorMessage(caught))
-          // Only an initial definitive failure can be safely abandoned.
-          // On *any* recovery error keep the same key, even after 401/429.
-          if(confirmedFailure(caught)&&!retrying){
-            if(clearCheckpoint()){pending.current=null;setUncertain(false);setReenter(false)}
-          }else setUncertain(true)
-        }
-      }
-    }
     try {
       if(typeof navigator.locks?.request!=='function')throw new Error('Web Locks unavailable')
-      await navigator.locks.request(lockName,{mode:'exclusive'},perform)
+      await navigator.locks.request(lockName,{mode:'exclusive'},performLockedRequest)
     }catch{
       blockedByStorage.current=true
       setBlocked(true);setError(lockError)
