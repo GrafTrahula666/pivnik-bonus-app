@@ -277,9 +277,18 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     config.enableTenantCrmContactCreate=true
     const c=command('duplicate@fixture.invalid')
     expect((await send('owner',path(),c)).status).toBe(200)
-    const duplicate=await send('owner',path(),command(c.contact.email))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await audits()
+    const duplicate=await send('owner',path(),command(c.contact.email.toUpperCase()))
     expect(duplicate.status).toBe(409)
-    expect(await duplicate.json()).toMatchObject({code:'TENANT_CRM_CONTACT_DUPLICATE'})
+    const denial=await duplicate.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_DUPLICATE'})
+    expect(JSON.stringify(denial).toLowerCase()).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore)
+    expect(await audits()).toBe(auditsBefore)
     expect((await send('south',path(2),command(c.contact.email))).status).toBe(200)
     expect(await count(2,'spaceverse_crm_contacts')).toBe('1')
   })
