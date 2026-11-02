@@ -234,7 +234,7 @@ test('real cross-tab Web Lock queues creation and rechecks a foreign pending key
         (window as typeof window & {releaseCrmTestLock?:()=>void}).releaseCrmTestLock?.())
     }
     await expect(form.getByRole('alert')).toContainText('Нельзя безопасно восстановить')
-    await expect(form.locator('fieldset')).toBeDisabled()
+    await expect(form.locator('fieldset')).toHaveAttribute('disabled','')
     expect(postCount).toBe(0)
     expect(await other.evaluate(key=>localStorage.getItem(key),storageKey)).toBe(foreign)
   }finally{
