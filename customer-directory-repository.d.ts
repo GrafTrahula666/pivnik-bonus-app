@@ -1,12 +1,18 @@
 import type { SpaceverseResolvedRuntime } from './spaceverse-runtime-manifest.js'
 import type { SpaceverseCustomerWallet } from './customer-wallet-repository.js'
 
-export interface SpaceverseCustomerDirectoryQuery {q?:string;limit?:number;offset?:number}
+export interface SpaceverseCustomerDirectoryQuery {
+  q?:string;limit?:number;offset?:number
+  sort?:'id'|'name'|'username';direction?:'asc'|'desc';wallet?:'all'|'present'|'missing'
+}
 export interface SpaceverseCustomerDirectory {
   readonly q:string
   readonly total:string
   readonly limit:number
   readonly offset:number
+  readonly sort:'id'|'name'|'username'
+  readonly direction:'asc'|'desc'
+  readonly wallet:'all'|'present'|'missing'
   readonly hasMore:boolean
   readonly items:readonly SpaceverseCustomerWallet[]
 }

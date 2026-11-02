@@ -1,0 +1,79 @@
+name: SPACEVERSE tenant CRM browser and HTTP
+
+on:
+  pull_request:
+    paths:
+      - 'customer-directory-repository.js'
+      - 'customer-directory-repository.d.ts'
+      - 'admin-platform/server/tenant-crm-read.ts'
+      - 'admin-platform/server/router.ts'
+      - 'admin-platform/server/tests/tenant-crm-http.spec.ts'
+      - 'admin-platform/server/tests/tenant-crm-fixture.ts'
+      - 'admin-platform/e2e/tenant-crm.spec.ts'
+      - 'admin-platform/e2e/fixtures/tenant-crm-*.ts'
+      - 'admin-platform/src/phaseC/TenantCustomerDirectory.tsx'
+      - 'admin-platform/src/phaseC/tenant-crm-contract.ts'
+      - 'admin-platform/playwright.tenant-crm.config.ts'
+      - '.github/workflows/spaceverse-tenant-crm-browser.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tenant-crm-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scoped-crm:
+    name: Signed HTTP and desktop/mobile on disposable PostgreSQL 16
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: codex_admin_test_crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SPACEVERSE_TEST_NATIVE_POSTGRES_URL: postgres://crm_fixture:crm_fixture_ci_only@127.0.0.1:5432/codex_admin_test_crm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install exact Business dependencies
+        run: npm ci --prefix admin-platform
+      - name: Create disposable fixture-only database role
+        run: |
+          node -e "const pg=require('./admin-platform/node_modules/pg');const p=new pg.Pool({connectionString:'postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_crm'});p.query(\"CREATE ROLE crm_fixture LOGIN PASSWORD 'crm_fixture_ci_only' CREATEDB\").then(()=>p.end()).catch(e=>{console.error(e.message);process.exitCode=1;p.end()})"
+      - name: Tenant-scoped signed HTTP and native SQL checks
+        run: npm test --prefix admin-platform -- server/tests/tenant-crm-http.spec.ts
+      - name: Install Chromium browser
+        working-directory: admin-platform
+        run: npx playwright install --with-deps chromium
+      # Split projects into separate server processes: the production-style
+      # 30-read/min actor limiter must stay intact within every browser suite.
+      - name: Desktop tenant CRM with all 355 customers
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop
+      - name: Mobile tenant CRM with all 355 customers
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile
+      - name: Upload synthetic browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tenant-crm-browser-failures
+          path: admin-platform/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

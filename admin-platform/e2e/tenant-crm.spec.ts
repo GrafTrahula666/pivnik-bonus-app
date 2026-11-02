@@ -48,6 +48,17 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await section.getByLabel('Найти клиента',{exact:true}).fill('')
   await section.getByRole('button',{name:'Найти',exact:true}).click()
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('present')
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 3.')
+  await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toBeVisible()
+  await section.getByRole('combobox',{name:'Порядок',exact:true}).selectOption('desc')
+  await expect(section.locator('.tenant-crm-list button').first()).toContainText('Large')
+  await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('missing')
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
+  await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
+  await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('all')
+  await section.getByRole('combobox',{name:'Порядок',exact:true}).selectOption('asc')
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
   await page.route('**/crm/customers?**',route=>route.abort('failed'))
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
   await expect(section.getByRole('alert')).toContainText('Не удалось подтвердить данные этого заведения.')
@@ -57,6 +68,26 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await page.unroute('**/crm/customers?**')
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+})
+
+test('all 355 customers remain reachable through paginated desktop and mobile UI',async({page})=>{
+  // Both projects run as separate Playwright processes with isolated fixture servers.
+  // Keep the production 30/min per-actor read limit unchanged in every process.
+  await login(page,'root')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
+  for(let pageNumber=2;pageNumber<=15;pageNumber++){
+    const next=section.getByRole('button',{name:'Далее',exact:true})
+    await expect(next).toBeEnabled()
+    await next.click()
+    await expect(section.getByText('Страница '+pageNumber,{exact:true})).toBeVisible()
+    await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
+  }
+  await expect(section.getByRole('button',{name:'Pagination fixture 349 Кошелёк не создан',exact:true})).toBeVisible()
+  await expect(section.getByRole('button',{name:'Далее',exact:true})).toBeDisabled()
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(5)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
@@ -87,7 +118,8 @@ test('changing venue clears customers and the server denies another company owne
 })
 
 test('late real customer response cannot reopen a card from the previous venue',async({page})=>{
-  await login(page)
+  // Keep the independent mobile race under the real per-actor 30/min guard.
+  await login(page,test.info().project.name==='mobile'?'owner':'root')
   const section=await open(page,'CRM 1')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()

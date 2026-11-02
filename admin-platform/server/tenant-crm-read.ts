@@ -93,12 +93,13 @@ export function createTenantCrmReadService(options: {
   async function listCustomers(admin:AdminPrincipal,draftId:string,query:SpaceverseCustomerDirectoryQuery={}) {
     validateDraft(draftId)
     // Validate before touching any source. The repository validates again at the SQL boundary.
-    const {q='',limit=25,offset=0}=query
-    if(Object.keys(query).some(key=>!['q','limit','offset'].includes(key))||
+    const {q='',limit=25,offset=0,sort='id',direction='asc',wallet='all'}=query
+    if(Object.keys(query).some(key=>!['q','limit','offset','sort','direction','wallet'].includes(key))||
       typeof q!=='string'||q.length>100||!Number.isInteger(limit)||limit<1||limit>100||
-      !Number.isInteger(offset)||offset<0||offset>1_000_000)
+      !Number.isInteger(offset)||offset<0||offset>1_000_000||
+      !['id','name','username'].includes(sort)||!['asc','desc'].includes(direction)||!['all','present','missing'].includes(wallet))
       throw new HttpError(400,'TENANT_CRM_PAGE_INVALID','Укажите поисковый запрос до 100 символов и допустимую страницу.')
-    return verifiedRead(admin,draftId,context=>createSpaceverseCustomerDirectoryRepository(context)({q,limit,offset}),
+    return verifiedRead(admin,draftId,context=>createSpaceverseCustomerDirectoryRepository(context)({q,limit,offset,sort,direction,wallet}),
       {action:'crm.customer_directory_read',entityType:'onboarding_draft',entityId:draftId})
   }
   async function checkReadiness(admin:AdminPrincipal,draftId:string) {
