@@ -252,6 +252,23 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await draftRows()).rows).toEqual(before.rows)
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
 
+    // A viewer downgrade must also invalidate app-config writes in the same
+    // signed session; a valid current revision cannot bypass the role change.
+    const appRows = () => state.metadata!.query<{ revision: number; config: string }>(
+      'SELECT revision,config::text AS config FROM admin_onboarding_app_configs WHERE draft_id=$1::uuid',
+      [ownDraftId],
+    )
+    const appBefore = await appRows()
+    expect(appBefore.rows).toHaveLength(1)
+    const deniedAppWrite = await request('trusted', 'PUT', `${draft(0)}/application`, {
+      revision: appBefore.rows[0]!.revision,
+      config: JSON.parse(appBefore.rows[0]!.config),
+    })
+    expect(deniedAppWrite.status).toBe(403)
+    expect(await deniedAppWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await appRows()).rows).toEqual(appBefore.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
+
     expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
     expect((await request('trusted', 'GET', draft(1))).status).toBe(404)
 
