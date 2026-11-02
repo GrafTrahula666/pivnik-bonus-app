@@ -385,11 +385,22 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     // Positive control: the same manager session can read its venue support.
     expect((await request('trusted', 'GET', support(0))).status).toBe(200)
 
+    // Prepared reads are available before the direct revocation, so a
+    // subsequent 403 cannot be mistaken for an unsupported endpoint.
+    for (const resource of ['application', 'scope'] as const) {
+      expect((await request('trusted', 'GET', `${draft(0)}/${resource}`)).status).toBe(200)
+    }
+
     // Direct manager -> revoked must not depend on an intermediate viewer role.
     await state.metadata!.query(
       'UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1',
       [fixture.viewerInvite],
     )
+    for (const resource of ['application', 'scope'] as const) {
+      const deniedPrepared = await request('trusted', 'GET', `${draft(0)}/${resource}`)
+      expect(deniedPrepared.status).toBe(403)
+      expect(await deniedPrepared.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    }
     const deniedRead = await request('trusted', 'GET', draft(0))
     expect(deniedRead.status).toBe(403)
     expect(await deniedRead.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
