@@ -280,7 +280,17 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await appRows()).rows).toEqual(appBefore.rows)
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
 
-    expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+    // A denied same-session support write must not create a ticket or audit row.
+    const supportRows = () => state.metadata!.query(
+      'SELECT id::text,draft_id::text,topic FROM admin_onboarding_support_requests WHERE draft_id=$1::uuid ORDER BY id',
+      [ownDraftId],
+    )
+    const supportBefore = await supportRows()
+    const viewerSupportWrite = await request('trusted', 'POST', support(0), { topic: 'access' })
+    expect(viewerSupportWrite.status).toBe(403)
+    expect(await viewerSupportWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await supportRows()).rows).toEqual(supportBefore.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
     // Support GET is write-gated too: the old signed manager session must
     // immediately lose ticket access when its venue invitation becomes viewer.
     const viewerSupport = await request('trusted', 'GET', support(0))
@@ -336,7 +346,11 @@ describe('CHAT 02 #15: signed HTTP venue isolation within one company', () => {
     expect((await appRows()).rows).toEqual(appBefore.rows)
     expect((await auditRows()).rows).toEqual(auditBefore.rows)
 
-    expect((await request('trusted', 'POST', support(0), { topic: 'access' })).status).toBe(403)
+    const revokedSupportWrite = await request('trusted', 'POST', support(0), { topic: 'access' })
+    expect(revokedSupportWrite.status).toBe(403)
+    expect(await revokedSupportWrite.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
+    expect((await supportRows()).rows).toEqual(supportBefore.rows)
+    expect((await auditRows()).rows).toEqual(auditBefore.rows)
     const revokedSupport = await request('trusted', 'GET', support(0))
     expect(revokedSupport.status).toBe(403)
     expect(await revokedSupport.json()).toMatchObject({ code: 'ONBOARDING_ACCESS_REQUIRED' })
