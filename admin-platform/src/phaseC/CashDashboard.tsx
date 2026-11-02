@@ -1,5 +1,6 @@
 import { useEffect,useRef,useState,type ReactNode } from 'react'
-import { cashMoney } from './cash-format'
+import { cashMoney,cashPercentDelta } from './cash-format'
+import type { CashComparisonSnapshot } from './CashComparison'
 import type { PosSummary } from '../../../pos/analytics.js'
 import { CircleHelp,Database } from 'lucide-react'
 import { CardTitle,cn,rub } from '../ui'
@@ -9,12 +10,13 @@ import { SortTh, sortTableRows, type SortDirection } from './TableSort'
 export type { CashReport } from './cash-report'
 
 
-function CashKpi({label,value,source}:{label:string;value:string;source:string}){
+function CashKpi({label,value,source,trend,trendPeriod}:{label:string;value:string;source:string;trend?:string|null;trendPeriod?:string}){
   const available=value!=='Нет данных'
   return <div className={cn('kpi card live-kpi',!available&&'kpi-unavailable')}>
     <div className="kpi-top"><span>{label}</span><span className="ghost-icon info-icon" role="img" aria-label="Источник метрики" title={source}><CircleHelp size={14}/></span></div>
     <div className="kpi-value">{value}</div>
     <div className="kpi-reason">{source}</div>
+    {trend&&<div className="cash-kpi-trend" aria-label={`Изменение к ${trendPeriod}: ${trend}`}>Изменение: <b>{trend}</b><span>к {trendPeriod}</span></div>}
   </div>
 }
 
@@ -166,7 +168,7 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
   </div>
 }
 
-export function CashDashboard({report,mode='all',loading=false,error='',comparison}:{report?:CashReport;mode?:'all'|'app';loading?:boolean;error?:string;comparison?:ReactNode}){
+export function CashDashboard({report,mode='all',loading=false,error='',comparison,comparisonSnapshot}:{report?:CashReport;mode?:'all'|'app';loading?:boolean;error?:string;comparison?:ReactNode;comparisonSnapshot?:CashComparisonSnapshot|null}){
   const readable=Boolean(report?.connection.lastSuccessAt)&&!['not_connected','schema_required'].includes(report?.connection.state||'')
   const all=readable?(mode==='app'?report?.app:report?.all):null
   const count=(n:number|null|undefined)=>n===null||n===undefined?'Нет данных':rub.format(n)
@@ -175,9 +177,24 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
   // pass is routine, the totals are those of the last full pass.
   const refreshing=state==='syncing'&&Boolean(report?.connection.lastSuccessAt)
   const status=error?'Не удалось обновить кассу':loading?'Обновляем кассу':state==='error'?'Не удалось обновить кассу':state==='syncing'&&!refreshing?'Идёт первая загрузка кассы':state==='awaiting_sync'?'Ожидаем загрузку кассы':all?'Данные Эвотора':'Касса не подключена'
-  const kpis=[
+  // Comparison comes only from the opt-in request; never show a delta on stale or unverified data.
+  const canCompare=(r:CashReport|undefined)=>Boolean(r?.connection.lastSuccessAt)&&!['not_connected','schema_required','error','awaiting_sync'].includes(r?.connection.state||'')
+  const comparisonValid=!loading&&!error&&canCompare(report)&&canCompare(comparisonSnapshot?.report)
+  const other=comparisonValid?(mode==='app'?comparisonSnapshot?.report.app:comparisonSnapshot?.report.all):null
+  const trends=all&&other?[
+    cashPercentDelta(all.netCents,other.netCents),
+    cashPercentDelta(all.receiptCount,other.receiptCount),
+    cashPercentDelta(report?.app?.activeBuyers,comparisonSnapshot?.report.app?.activeBuyers),
+    cashPercentDelta(all.averageCents,other.averageCents),
+  ]:[null,null,null,null]
+  // A POS sale receipt is not a document operation. Unknown customer identity is never zero.
+  const primaryKpis=[
     ['Выручка',cashMoney(all?.netCents),'Продажи за вычетом возвратов'],
-    ['Средний чек',cashMoney(all?.averageCents),'Сумма продаж / число чеков продажи'],
+    ['Чеков продажи',all?count(all.receiptCount):'Нет данных','Подтверждённые чеки продажи; при неполных данных количество неизвестно'],
+    ['Клиентов PIVNIK',all?count(report?.app?.activeBuyers):'Нет данных','Только покупатели со связанными с приложением SELL; не все гости кассы'],
+    ['Средний чек',cashMoney(all?.averageCents),'Сумма продаж / число подтверждённых чеков продажи'],
+  ]
+  const secondaryKpis=[
     ['Операций',all?count(all.saleDocuments+all.returnDocuments):'Нет данных','Документы продажи и возврата'],
   ]
   const tables=all?[
@@ -186,8 +203,7 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
   ]:[]
   if(mode==='app'){
     const app=all as PosSummary|null|undefined
-    kpis.push(['Покупателей',count(app?.activeBuyers),'Только достоверно связанные SELL периода'],
-      ['Повторных покупателей',count(app?.repeatBuyers),'Не менее двух связанных продаж в периоде'],
+    secondaryKpis.push(['Повторных покупателей',count(app?.repeatBuyers),'Не менее двух связанных продаж в периоде'],
       ['Повторные покупки',app?.repeatPurchaseRate==null?'Нет данных':app.repeatPurchaseRate+'%','Покупатели с 2+ покупками / все покупатели периода'],
       ['Частота покупок',app?.purchaseFrequency==null?'Нет данных':app.purchaseFrequency.toFixed(2),'Связанные продажи / покупатели периода'])
   }
@@ -199,8 +215,13 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
       {report?.period&&<p className="comparison-note">Период: {new Date(report.period.from).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})} — {new Date(Date.parse(report.period.until)-1).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow'})}. Границы дня — по Москве.</p>}
       {report?.connection.lastSuccessAt&&<p className="comparison-note">Последняя полная сверка: {new Date(report.connection.lastSuccessAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})}. Время — по Москве.</p>}
     </section>
-    <div className="kpi-grid">{kpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
+    <div className="kpi-grid cash-primary-kpis" aria-label="Основные показатели кассы">{primaryKpis.map(([label,value,source],index)=><CashKpi key={label} label={label} value={value} source={source} trend={trends[index]} trendPeriod={comparisonSnapshot?.periodLabel}/>)}</div>
+    <p className="cash-insight-period">Изменение основных показателей появится в карточках после включения сравнения ниже. Дополнительный кассовый период загружается только по запросу.</p>
     {comparison}
+    <details className="card cash-secondary-metrics">
+      <summary>Другие показатели кассы</summary>
+      <div className="kpi-grid cash-secondary-kpis">{secondaryKpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
+    </details>
     {all&&<details className="card cash-calculation-details"><summary>Подробности расчёта</summary>
       <dl>
         <div><dt>Продажи до возвратов</dt><dd>{cashMoney(all.salesCents)}</dd></div>

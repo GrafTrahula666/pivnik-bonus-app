@@ -16,7 +16,7 @@ const values={
 }
 const dashboard={
   period:{from:'2026-10-09T21:00:00.000Z',to:'2026-10-10T21:00:00.000Z',days:1},
-  metrics:values,previousMetrics:{trackedRevenue:500,checkCount:2,averageCheck:250,operationCount:2},
+  metrics:values,previousMetrics:{trackedRevenue:500,checkCount:2,transactionActiveCustomers:2,averageCheck:250,operationCount:2},
   trend:[{day:'2026-10-10',revenue:1234,checks:4,operations:5,customers:4,bonusEarned:50,bonusRedeemed:10}],
   hourly:[{hour:12,revenue:1234,checks:4,operations:5,customers:4,bonusEarned:50,bonusRedeemed:10}],
   platformSplit:{vk:8,telegram:9,both:0,unknown:3,note:'fixture'},
@@ -63,6 +63,48 @@ describe('app operations time controls use own data source, never POS',()=>{
     await click('Показать период')
     expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/test-1/dashboard/operations?from=2026-09-30&to=2026-10-03')
     expect(vi.mocked(apiGet).mock.calls.filter(([path])=>path.includes('/dashboard/operations?')).length).toBeGreaterThanOrEqual(5)
+  })
+  it('prioritizes four period KPIs with real comparison and keeps eight secondary metrics accessible',async()=>{
+    await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'7 дней',compare:false,onNavigate:()=>{}})))
+    await click('Операции приложения')
+    const primary=node.querySelector('[aria-label="Основные показатели операций"]')
+    expect(primary).toBeTruthy()
+    const cards=[...primary!.querySelectorAll('.live-kpi')]
+    expect(cards).toHaveLength(4)
+    expect(cards.map(card=>card.querySelector('.kpi-top span')?.textContent)).toEqual([
+      'Сумма операций приложения','Записей о покупках','Совершали операции','Средняя сумма записи',
+    ])
+    expect(cards[2].textContent).toContain('100%')
+    expect(cards[0].textContent).toContain('146,8%')
+    const extra=node.querySelector('details.app-operations-extra') as HTMLDetailsElement
+    expect(extra.open).toBe(false)
+    expect(extra.querySelectorAll('.live-kpi')).toHaveLength(8)
+    await act(async()=>extra.querySelector('summary')!.click())
+    expect(extra.open).toBe(true)
+    expect(extra.textContent).toContain('Клиентов всего')
+    expect(extra.textContent).toContain('Посещений')
+    expect(extra.textContent).toContain('Нет данных')
+    expect(extra.textContent).toContain('Бонусы в обращении')
+  })
+  it('distinguishes falling, rising and flat operation metrics without falsely showing growth',async()=>{
+    const modified={...dashboard,metrics:{...values,trackedRevenue:metric(250),checkCount:metric(2),activeCustomers:metric(3)}}
+    vi.mocked(apiGet).mockImplementation(async path=>path.includes('/dashboard/operations?')?modified as never:{} as never)
+    await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'7 дней',compare:false,onNavigate:()=>{}})))
+    await click('Операции приложения')
+    const cards=[...node.querySelectorAll('[aria-label="Основные показатели операций"] .live-kpi')]
+    expect(cards).toHaveLength(4)
+    const down=cards[0].querySelector('.delta')!
+    expect(down.textContent).toContain('−50%')
+    expect(down.classList.contains('negative')).toBe(true)
+    expect(down.querySelector('svg')).toBeTruthy()
+    const flat=cards[1].querySelector('.delta')!
+    expect(flat.textContent).toContain('0%')
+    expect(flat.querySelector('svg')).toBeNull()
+    expect(flat.classList.contains('negative')).toBe(false)
+    const up=cards[2].querySelector('.delta')!
+    expect(up.textContent).toContain('+50%')
+    expect(up.querySelector('svg')).toBeTruthy()
+    expect(up.classList.contains('negative')).toBe(false)
   })
   it('toggles hourly/day trends and preserves unavailable visits without inventing activity',async()=>{
     await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'7 дней',compare:false,onNavigate:()=>{}})))

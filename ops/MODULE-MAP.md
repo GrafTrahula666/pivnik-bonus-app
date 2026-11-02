@@ -528,6 +528,41 @@ Browser coverage: `e2e/owner-design.spec.ts`, custom interval coverage in
 Release evidence and the separately discovered dependency blocker are recorded
 in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
 
+### CHAT 08 · owner KPI hierarchy (2026-11-01, Draft #343)
+
+The `ProductionDashboard.tsx` operations-ledger mode uses four primary **period**
+KPI cards: tracked ledger amount (explicitly **not** POS/fiscal revenue), purchase
+records, distinct customers with completed operations, and mean purchase-record
+amount. Other eight indicators, including total customers / bonus-balance
+snapshots and unavailable visits, remain reachable through native `details`.
+Previous-period deltas are only shown for known values with a nonzero baseline.
+Their direction is explicit in text (+ or −); an unchanged metric renders 0%
+without a misleading upward arrow. This is cosmetic only: prior/current
+metric values and API contracts do not change.
+
+`CashDashboard.tsx` uses four primary **POS** cards in both all/app modes:
+net revenue (SELL less PAYBACK), confirmed SELL receipts (null stays unavailable),
+known PIVNIK-linked buyers (app cohort, **not** all unique anonymous customers),
+and average sale receipt. The document operation count and app repeat-purchase
+details remain reachable under `details`; the existing full calculation
+disclosure stays intact. Cash comparison is still opt-in via `CashComparison`,
+so the main dashboard never triggers a second POS history read just to show a
+delta. When the owner enables comparison, the already-fetched previous POS
+report feeds **BigInt-safe % changes directly onto the primary KPI cards**,
+without another network request. Comparisons stay unknown for missing numbers,
+a zero baseline stays explicitly uncomparable, and stale/error or disabled
+comparison clears the change labels. The source/period and stale/error states
+remain unchanged. Responsive layout: four columns desktop and two on narrow
+touch screens.
+
+Only UI, CSS, unit/browser tests and documentation changed. No server routes,
+tenancy, monetary source, migration, patch-chain, POS ingestion or runtime auth
+modifications. E2E regression is `admin-platform/e2e/evotor-sales.spec.ts`,
+component coverage is `src/tests/cash-dashboard.spec.ts`,
+`cash-sales.spec.ts`, and `app-operations-periods.spec.ts`.
+Approval and deploy are separately gated; this section describes a Draft branch,
+**not** the deployed production version.
+
 ## Application operations overview: calendar filters (2026-10-25)
 
 The production owner overview source "Операции приложения" is separate from
