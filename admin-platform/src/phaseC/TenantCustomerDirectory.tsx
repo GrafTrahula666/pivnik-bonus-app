@@ -55,7 +55,7 @@ function Directory({draftId,scope}:Props){
         <button className="btn secondary" type="button" disabled={loading} onClick={()=>change(q,offset)}>Обновить</button>
       </form>
       {loading&&<p role="status">Проверяем клиентскую базу…</p>}
-      {error&&<p role="alert">{error}</p>}
+      {error&&<div><p role="alert">{error}</p><button type="button" className="btn secondary" disabled={loading} onClick={()=>change(q,offset)}>Повторить проверку</button></div>}
       {page&&<>
         <p role="status">Доступ к клиентской базе проверен. Найдено клиентов: {formatExact(page.total)}.</p>
         {page.items.length===0?<p>{page.total!=='0'&&offset>0?'На этой странице клиентов нет. Вернитесь на предыдущую страницу.':q?'По запросу клиентов не найдено. Измените поиск или фильтр кошелька.':wallet==='present'?'Клиентов с бонусным кошельком не найдено.':wallet==='missing'?'Клиентов без бонусного кошелька не найдено.':'Клиентов пока нет.'}</p>:
