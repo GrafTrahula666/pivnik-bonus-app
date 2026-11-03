@@ -1,0 +1,30 @@
+name: SPACEVERSE Admin server emission
+
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/**'
+      - '.github/workflows/admin-server-emission.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compile-admin-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install pinned Admin dependencies
+        run: npm ci --prefix admin-platform
+      - name: Compile production Admin server with diagnostic output
+        run: npm run build:api --prefix admin-platform -- --pretty false
+      - name: Assert production entrypoint was emitted
+        run: test -s admin-platform/dist-server/index.js
+      - name: Reproduce exact Railway Docker build with plain diagnostic logs
+        run: docker build --progress=plain --file admin-platform/Dockerfile --tag spaceverse-admin-ci-check .
