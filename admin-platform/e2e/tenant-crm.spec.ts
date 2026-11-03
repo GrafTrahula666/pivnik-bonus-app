@@ -97,6 +97,15 @@ test('all 355 customers remain reachable through paginated desktop and mobile UI
   await expect(section.getByRole('button',{name:'Pagination fixture 349 Кошелёк не создан',exact:true})).toBeVisible()
   await expect(section.getByRole('button',{name:'Далее',exact:true})).toBeDisabled()
   await expect(section.locator('.tenant-crm-list button')).toHaveCount(5)
+  // The final partial page must navigate back without losing the server total or rows.
+  await section.getByRole('button',{name:'Назад',exact:true}).click()
+  await expect(section.getByText('Страница 14',{exact:true})).toBeVisible()
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(25)
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
+  await section.getByRole('button',{name:'Далее',exact:true}).click()
+  await expect(section.getByText('Страница 15',{exact:true})).toBeVisible()
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(5)
+  await expect(section.getByRole('button',{name:'Далее',exact:true})).toBeDisabled()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
