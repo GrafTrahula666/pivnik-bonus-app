@@ -409,6 +409,37 @@ test('directory immediately hides revoked ownership without changing stored wall
   }
 });
 
+test('directory ownership reassignment removes old customer and exposes only newly owned customer', async () => {
+  const fixture = await tenantDatabase({ seed: 'b', companyId: '934', venueId: '935', ownedBalance: 515 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.deepEqual((await list()).items.map(item => item.id), ['11']);
+
+    await fixture.db.query(
+      'UPDATE spaceverse_customer_ownership SET user_id=$1 WHERE user_id=$2',
+      [12, 11]
+    );
+
+    const after = await list();
+    assert.equal(after.total, '1');
+    assert.deepEqual(after.items.map(item => item.id), ['12']);
+    assert.equal(after.items[0].wallet.balance, '999999');
+    assert.equal((await list({ q: 'Owned' })).total, '0');
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(row => [row.id, row.balance]), [
+      ['11', '515'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('directory rejects request scope and unverified runtime objects before querying customer data', async () => {
   const fixture=await tenantDatabase({seed:'e',companyId:'920',venueId:'921',ownedBalance:0});
   try {
