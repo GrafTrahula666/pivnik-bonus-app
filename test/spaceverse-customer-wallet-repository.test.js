@@ -272,6 +272,35 @@ test('wallet ownership revocation denies subsequent direct-ID reads without alte
   }
 });
 
+test('ownership reassignment immediately revokes old direct-ID access without moving wallet balances', async () => {
+  const fixture = await tenantDatabase({ seed: 'c', companyId: '814', venueId: '815', ownedBalance: 808 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '808');
+    assert.equal(await load({ userId: '12' }), null);
+
+    await fixture.db.query(
+      'UPDATE spaceverse_customer_ownership SET user_id=$1 WHERE user_id=$2',
+      [12, 11]
+    );
+
+    assert.equal(await load({ userId: '11' }), null);
+    assert.equal((await load({ userId: '12' })).wallet.balance, '999999');
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS user_id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(({ user_id, balance }) => [user_id, balance]), [
+      ['11', '808'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('request scope, malformed ids and forged runtimes are rejected before customer SQL', async () => {
   const fixture = await tenantDatabase({ seed: 'e', companyId: '910', venueId: '911', ownedBalance: 404 });
   let queries = 0;
