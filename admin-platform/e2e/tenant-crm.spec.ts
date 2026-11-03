@@ -51,7 +51,11 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('present')
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 3.')
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toBeVisible()
+  // Changing wallet scope must close an already-open customer card before new rows arrive.
+  await section.getByRole('button',{name:'Zero 0 бонусов',exact:true}).click()
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Баланс: 0 бонусов')
   await section.getByRole('combobox',{name:'Порядок',exact:true}).selectOption('desc')
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
   await expect(section.locator('.tenant-crm-list button').first()).toContainText('Large')
   await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('missing')
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
