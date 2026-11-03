@@ -254,6 +254,28 @@ test('wallet read fails closed after a verified runtime binding manifest changes
   }
 });
 
+test('wallet read rejects a changed binding revision after initial authorization', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '816', venueId: '817', ownedBalance: 909 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '909');
+
+    await fixture.db.query(
+      'UPDATE spaceverse_runtime_binding SET manifest_revision=manifest_revision+1 WHERE singleton=TRUE'
+    );
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED'
+    });
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '909');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('wallet ownership revocation denies subsequent direct-ID reads without altering balance', async () => {
   const fixture = await tenantDatabase({ seed: 'b', companyId: '812', venueId: '813', ownedBalance: 707 });
   try {
