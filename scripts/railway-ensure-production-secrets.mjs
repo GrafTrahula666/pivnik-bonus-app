@@ -21,11 +21,16 @@ function strongSecret() {
   return randomBytes(48).toString('base64url');
 }
 
-async function graphql(query, variables = {}) {
+// Account/workspace tokens use Bearer; project tokens require a separate header.
+// Only the read-only --check path is allowed to detect and switch token type.
+let variableReadHeader = 'authorization';
+const PROJECT_TOKEN_SCOPE_QUERY = 'query DetectProjectToken { projectToken { projectId environmentId } }';
+
+async function railwayRequest(query, variables, headerName) {
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${TOKEN}`,
+      [headerName]: headerName === 'authorization' ? `Bearer ${TOKEN}` : TOKEN,
       'content-type': 'application/json',
       'user-agent': 'pivnik-production-secret-sync/1.0'
     },
@@ -33,11 +38,28 @@ async function graphql(query, variables = {}) {
     signal: AbortSignal.timeout(30_000)
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.errors?.length) {
-    throw new Error(payload.errors?.map((item) => item.message).join('; ')
-      || `Railway API returned HTTP ${response.status}`);
+  return { response, payload };
+}
+
+async function graphql(query, variables = {}) {
+  let result = await railwayRequest(query, variables, variableReadHeader);
+  const denial = result.response.status === 401 || result.response.status === 403
+    || (result.response.ok && result.payload.errors?.some(error => error?.message === 'Not Authorized'));
+  if (checkOnly && variableReadHeader === 'authorization' && denial && /^\\s*query\\b/i.test(query)) {
+    const probe = await railwayRequest(PROJECT_TOKEN_SCOPE_QUERY, {}, 'Project-Access-Token');
+    const scope = probe.payload.data?.projectToken;
+    if (!probe.response.ok || probe.payload.errors?.length
+        || scope?.projectId !== PROJECT_ID || scope?.environmentId !== ENVIRONMENT_ID) {
+      throw new Error('Railway CI token lacks verified production project/environment scope; operator review required.');
+    }
+    variableReadHeader = 'Project-Access-Token';
+    result = await railwayRequest(query, variables, variableReadHeader);
   }
-  return payload.data;
+  if (!result.response.ok || result.payload.errors?.length) {
+    // Never reflect provider GraphQL errors, environment values, or token material.
+    throw new Error(`Railway CI authorization or read failed (HTTP ${result.response.status}); operator review required.`);
+  }
+  return result.payload.data;
 }
 
 async function variables(serviceId) {
