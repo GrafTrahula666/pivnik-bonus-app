@@ -129,7 +129,12 @@ test('changing venue clears customers and the server denies another company owne
   await expect(second.getByRole('button',{name:'Owned 102 бонусов',exact:true})).toBeVisible()
   await expect(second.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
   await page.locator('.profile-button').click()
+  // Wait for server-side session revocation before the next navigation: the
+  // previous mobile trace showed logout aborted by page.goto('/') and the old
+  // session restored on /auth/session. Do not weaken the cross-owner 404 check.
+  const logoutResponse=page.waitForResponse(response=>response.url().endsWith('/api/admin/auth/logout')&&response.request().method()==='POST')
   await page.getByRole('button',{name:'Выйти',exact:true}).click()
+  expect((await logoutResponse).ok()).toBe(true)
   // Logout must render the guest login form before another owner's session starts.
   // Keep the assertion explicit: a missing form is an auth regression, not a reason to skip isolation checks.
   await expect(page.getByLabel('Email',{exact:true})).toBeVisible()
