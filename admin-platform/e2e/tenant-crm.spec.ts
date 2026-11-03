@@ -43,7 +43,7 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await section.getByLabel('Найти клиента',{exact:true}).fill('No matching customer')
   await section.getByRole('button',{name:'Найти',exact:true}).click()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 0.')
-  await expect(section.getByText('Клиенты не найдены. Измените поисковый запрос.',{exact:true})).toBeVisible()
+  await expect(section.getByText('По запросу клиентов не найдено. Измените поиск или фильтр кошелька.',{exact:true})).toBeVisible()
   // Continue the same owner journey; do not weaken the real login/read rate limits.
   await section.getByLabel('Найти клиента',{exact:true}).fill('')
   await section.getByRole('button',{name:'Найти',exact:true}).click()
@@ -66,7 +66,7 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
   await expect(section.getByRole('status')).toHaveCount(0)
   await page.unroute('**/crm/customers?**')
-  await section.getByRole('button',{name:'Обновить',exact:true}).click()
+  await section.getByRole('button',{name:'Повторить проверку',exact:true}).click()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 355.')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
