@@ -2,6 +2,7 @@
 -- Apply only to an already dedicated, prepared tenant DB after migrations 017-019.
 -- Intentionally unmounted and not part of startup or automatic bootstrap.
 -- No legacy PIVNIK rows, provider identity, wallet or customer ownership are created.
+-- Strict one-time DDL: existing or partial objects must fail, never be silently adopted.
 BEGIN;
 
 DO $$
@@ -11,7 +12,7 @@ BEGIN
   END IF;
 END $$;
 
-CREATE TABLE IF NOT EXISTS spaceverse_crm_contacts (
+CREATE TABLE spaceverse_crm_contacts (
   id BIGSERIAL PRIMARY KEY,
   runtime_key TEXT NOT NULL,
   company_id TEXT NOT NULL CHECK (company_id ~ '^[1-9][0-9]{0,18}$'),
@@ -33,14 +34,14 @@ CREATE TABLE IF NOT EXISTS spaceverse_crm_contacts (
 );
 -- Distinct contacts sharing a name are allowed; exact contact channels cannot
 -- silently be assigned to two active records at the same venue.
-CREATE UNIQUE INDEX IF NOT EXISTS spaceverse_crm_contacts_phone_uq
+CREATE UNIQUE INDEX spaceverse_crm_contacts_phone_uq
   ON spaceverse_crm_contacts(runtime_key,company_id,venue_id,phone_e164)
   WHERE phone_e164 IS NOT NULL AND archived_at IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS spaceverse_crm_contacts_email_uq
+CREATE UNIQUE INDEX spaceverse_crm_contacts_email_uq
   ON spaceverse_crm_contacts(runtime_key,company_id,venue_id,email_normalized)
   WHERE email_normalized IS NOT NULL AND archived_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS spaceverse_crm_contact_create_requests (
+CREATE TABLE spaceverse_crm_contact_create_requests (
   runtime_key TEXT NOT NULL,
   request_key UUID NOT NULL,
   request_fingerprint TEXT NOT NULL CHECK (request_fingerprint ~ '^[0-9a-f]{64}$'),
