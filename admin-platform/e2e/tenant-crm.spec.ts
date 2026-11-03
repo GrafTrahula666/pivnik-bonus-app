@@ -130,6 +130,9 @@ test('changing venue clears customers and the server denies another company owne
   await expect(second.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
   await page.locator('.profile-button').click()
   await page.getByRole('button',{name:'Выйти',exact:true}).click()
+  // Logout must render the guest login form before another owner's session starts.
+  // Keep the assertion explicit: a missing form is an auth regression, not a reason to skip isolation checks.
+  await expect(page.getByLabel('Email',{exact:true})).toBeVisible()
   await login(page,'owner')
   expect((await page.request.get(`/api/admin/onboarding/drafts/${foreign.id}/crm/customers`)).status()).toBe(404)
   await expect(page.getByRole('button',{name:'Открыть черновик CRM 3',exact:true})).toHaveCount(0)
