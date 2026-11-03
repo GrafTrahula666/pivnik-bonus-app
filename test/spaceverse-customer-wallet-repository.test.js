@@ -254,6 +254,24 @@ test('wallet read fails closed after a verified runtime binding manifest changes
   }
 });
 
+test('wallet ownership revocation denies subsequent direct-ID reads without altering balance', async () => {
+  const fixture = await tenantDatabase({ seed: 'b', companyId: '812', venueId: '813', ownedBalance: 707 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '707');
+
+    await fixture.db.query('DELETE FROM spaceverse_customer_ownership WHERE user_id=$1', [11]);
+    assert.equal(await load({ userId: '11' }), null);
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=$1', [11]);
+    assert.equal(balance.rows[0].balance, '707');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('request scope, malformed ids and forged runtimes are rejected before customer SQL', async () => {
   const fixture = await tenantDatabase({ seed: 'e', companyId: '910', venueId: '911', ownedBalance: 404 });
   let queries = 0;
