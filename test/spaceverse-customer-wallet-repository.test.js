@@ -386,6 +386,29 @@ test('directory uses explicit ownership, literal search and exact wallet values 
   } finally {await fixture.db.close();}
 });
 
+test('directory immediately hides revoked ownership without changing stored wallet balances', async () => {
+  const fixture = await tenantDatabase({ seed: 'a', companyId: '932', venueId: '933', ownedBalance: 314 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    const before = await list({ q: 'Owned' });
+    assert.equal(before.total, '1');
+    assert.equal(before.items[0].wallet.balance, '314');
+
+    await fixture.db.query('DELETE FROM spaceverse_customer_ownership WHERE user_id=$1', [11]);
+
+    const after = await list({ q: 'Owned' });
+    assert.equal(after.total, '0');
+    assert.deepEqual(after.items, []);
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=$1', [11]);
+    assert.equal(stored.rows[0].balance, '314');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('directory rejects request scope and unverified runtime objects before querying customer data', async () => {
   const fixture=await tenantDatabase({seed:'e',companyId:'920',venueId:'921',ownedBalance:0});
   try {
