@@ -22,6 +22,18 @@ jobs:
         run: npm ci --prefix admin-platform --ignore-scripts --no-audit
       - name: Verify Admin production dependency audit
         run: npm audit --prefix admin-platform --omit=dev --audit-level=high
+      - name: Verify root materialization idempotence in disposable checkout
+        shell: bash
+        run: |
+          npm ci --ignore-scripts --no-audit
+          npm run materialize
+          git diff --binary > /tmp/materialize-first.diff
+          npm run materialize
+          git diff --binary > /tmp/materialize-second.diff
+          cmp /tmp/materialize-first.diff /tmp/materialize-second.diff
+          test -f .pivnik-materialized
+      - name: Verify Admin lint
+        run: npm run lint --prefix admin-platform
       - name: Verify Admin TypeScript
         run: npm run typecheck --prefix admin-platform
       - name: Verify Admin web and API production build
