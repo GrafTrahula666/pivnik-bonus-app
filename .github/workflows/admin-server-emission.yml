@@ -12,7 +12,7 @@ permissions:
 jobs:
   compile-admin-server:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,3 +26,5 @@ jobs:
         run: npm run build:api --prefix admin-platform -- --pretty false
       - name: Assert production entrypoint was emitted
         run: test -s admin-platform/dist-server/index.js
+      - name: Reproduce exact Railway Docker build with plain diagnostic logs
+        run: docker build --progress=plain --file admin-platform/Dockerfile --tag spaceverse-admin-ci-check .
