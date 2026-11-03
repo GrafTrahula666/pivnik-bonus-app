@@ -13,6 +13,11 @@ function parseDatabaseTarget(raw, key) {
   if (!raw) throw new Error('Staging preflight refused: '+key+' missing.')
   let url
   try { url = new URL(raw) } catch { throw new Error('Staging preflight refused: invalid '+key+'.') }
+  // pg-connection-string permits ?host=... to override the URL hostname.
+  // No query parameters or fragments are needed for this internal-only staging target.
+  if (url.search || url.hash) {
+    throw new Error('Staging preflight refused: '+key+' has unsupported connection parameters.')
+  }
   if (!['postgres:','postgresql:'].includes(url.protocol) ||
       url.hostname !== EXPECTED_DB_HOST || !url.pathname || url.pathname === '/') {
     throw new Error('Staging preflight refused: '+key+' is not the approved staging database.')

@@ -31,6 +31,13 @@ for (const [label,change] of [
   ['external achievement writes enabled', {ADMIN_ENABLE_PRODUCTION_ACHIEVEMENT_WRITES:'1'}],
   ['external entitlement writes enabled', {ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES:'yes'}],
   ['Evotor stock writes enabled', {ADMIN_ENABLE_EVOTOR_STOCK_WRITES:'on'}],
+  ['primary URL host override', {ADMIN_DATABASE_URL:good().ADMIN_DATABASE_URL+'?host=prod-postgres.railway.internal'}],
+  ['reader URL host override', {ADMIN_READ_DATABASE_URL:good().ADMIN_READ_DATABASE_URL+'?host=prod-postgres.railway.internal'}],
+  ['writer URL host override', {ADMIN_PRODUCTION_WRITE_DATABASE_URL:good().ADMIN_PRODUCTION_WRITE_DATABASE_URL+'?host=prod-postgres.railway.internal'}],
+  ['primary database override', {ADMIN_DATABASE_URL:good().ADMIN_DATABASE_URL+'?db=other_database'}],
+  ['reader port override', {ADMIN_READ_DATABASE_URL:good().ADMIN_READ_DATABASE_URL+'?port=25432'}],
+  ['query with other options', {ADMIN_DATABASE_URL:good().ADMIN_DATABASE_URL+'?sslmode=require'}],
+  ['URL fragment', {ADMIN_DATABASE_URL:good().ADMIN_DATABASE_URL+'#override'}],
   ['invalid URL', {ADMIN_DATABASE_URL:'this is not a URL'}],
 ]) {
   test('staging guard rejects '+label+' without exposing credentials',()=>{
