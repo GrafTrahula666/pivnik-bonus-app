@@ -58,7 +58,7 @@ function Directory({draftId,scope}:Props){
       {error&&<p role="alert">{error}</p>}
       {page&&<>
         <p role="status">Доступ к клиентской базе проверен. Найдено клиентов: {formatExact(page.total)}.</p>
-        {page.items.length===0?<p>{q?'Клиенты не найдены. Измените поисковый запрос.':'Клиентов пока нет.'}</p>:
+        {page.items.length===0?<p>{q?'По запросу клиентов не найдено. Измените поиск или фильтр кошелька.':wallet==='present'?'Клиентов с бонусным кошельком не найдено.':wallet==='missing'?'Клиентов без бонусного кошелька не найдено.':'Клиентов пока нет.'}</p>:
           <ul className="tenant-crm-list">{page.items.map(row=><li key={row.customer.id}>
             <button type="button" className="tenant-crm-row" onClick={()=>setSelected({id:row.customer.id,revision:++selection.current})}>
               <span>{customerName(row)}</span><span>{row.wallet?formatExact(row.wallet.balance)+' бонусов':'Кошелёк не создан'}</span>
