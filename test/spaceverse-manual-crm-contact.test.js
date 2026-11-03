@@ -61,6 +61,9 @@ test('manual CRM contact migration is explicit, additive, and never provisions a
 test('manual migration refuses a pre-existing partial contact table without adopting it',async()=>{
   const db=new PGlite();
   try {
+    await db.exec('CREATE TABLE users(id BIGSERIAL PRIMARY KEY);');
+    for(const name of MIGRATIONS)
+      await db.exec(await fs.readFile(new URL('../migrations/'+name,import.meta.url),'utf8'));
     await db.exec('CREATE TABLE spaceverse_crm_contacts(id BIGINT PRIMARY KEY)');
     await db.exec("SET spaceverse.crm_contacts_migration='approved'");
     await assert.rejects(db.exec(await fs.readFile(MANUAL,'utf8')),/already exists/);
@@ -77,6 +80,9 @@ test('manual migration refuses a pre-existing partial contact table without adop
 test('manual migration refuses a pre-existing partial request ledger without adopting it',async()=>{
   const db=new PGlite();
   try {
+    await db.exec('CREATE TABLE users(id BIGSERIAL PRIMARY KEY);');
+    for(const name of MIGRATIONS)
+      await db.exec(await fs.readFile(new URL('../migrations/'+name,import.meta.url),'utf8'));
     await db.exec('CREATE TABLE spaceverse_crm_contact_create_requests(id BIGINT PRIMARY KEY)');
     await db.exec("SET spaceverse.crm_contacts_migration='approved'");
     await assert.rejects(db.exec(await fs.readFile(MANUAL,'utf8')),/already exists/);
