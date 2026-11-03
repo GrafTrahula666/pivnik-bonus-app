@@ -416,7 +416,7 @@ test('directory ownership reassignment removes old customer and exposes only new
       runtime: fixture.runtime,
       query: fixture.db.query.bind(fixture.db)
     });
-    assert.deepEqual((await list()).items.map(item => item.id), ['11']);
+    assert.deepEqual((await list()).items.map(item => item.customer.id), ['11']);
 
     await fixture.db.query(
       'UPDATE spaceverse_customer_ownership SET user_id=$1 WHERE user_id=$2',
@@ -425,7 +425,7 @@ test('directory ownership reassignment removes old customer and exposes only new
 
     const after = await list();
     assert.equal(after.total, '1');
-    assert.deepEqual(after.items.map(item => item.id), ['12']);
+    assert.deepEqual(after.items.map(item => item.customer.id), ['12']);
     assert.equal(after.items[0].wallet.balance, '999999');
     assert.equal((await list({ q: 'Owned' })).total, '0');
     const balances = await fixture.db.query(
