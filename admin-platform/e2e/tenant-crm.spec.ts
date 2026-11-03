@@ -62,6 +62,8 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   // Retry must preserve the active server-side wallet filter, not silently return all customers.
   await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('missing')
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
+  await section.getByRole('combobox',{name:'Порядок',exact:true}).selectOption('desc')
+  await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
   await page.route('**/crm/customers?**',route=>route.abort('failed'))
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
   await expect(section.getByRole('alert')).toContainText('Не удалось подтвердить данные этого заведения.')
@@ -72,6 +74,8 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await section.getByRole('button',{name:'Повторить проверку',exact:true}).click()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
   await expect(section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true})).toHaveValue('missing')
+  await expect(section.getByRole('combobox',{name:'Порядок',exact:true})).toHaveValue('desc')
+  await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toHaveCount(0)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
