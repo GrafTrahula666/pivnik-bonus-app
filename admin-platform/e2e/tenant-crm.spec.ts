@@ -30,6 +30,10 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByRole('button',{name:'No wallet Кошелёк не создан',exact:true})).toBeVisible()
   await section.getByRole('button',{name:'Large 9 007 199 254 740 993 бонусов',exact:true}).click()
   await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Баланс: 9 007 199 254 740 993 бонусов')
+  // An absent wallet must not be presented as a real zero balance.
+  await section.getByRole('button',{name:'No wallet Кошелёк не создан',exact:true}).click()
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Бонусный кошелёк ещё не создан.')
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).not.toContainText('Баланс: 0 бонусов')
   await section.getByRole('button',{name:'Далее',exact:true}).click()
   await expect(section.getByText('Страница 2',{exact:true})).toBeVisible()
   await expect(section.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
