@@ -38,14 +38,15 @@ test('read-only production secret gate supports exact-scoped Railway project tok
     "  if (requests !== expected) throw new Error('Expected ' + expected + ' safe reads, got ' + requests);",
     "});"
   ].join('\n'));
-  const run = mode => execFileSync(process.execPath, [
+  const run = (mode, useDedicatedToken = true) => execFileSync(process.execPath, [
     '--import', pathToFileURL(fixture).href,
     path.join(root, 'scripts/railway-ensure-production-secrets.mjs'), '--check'
   ], {
     encoding: 'utf8', stdio: 'pipe', timeout: 6000,
     env: {
       PATH: process.env.PATH,
-      RAILWAY_API_TOKEN: 'fixture-project-token',
+      RAILWAY_API_TOKEN: useDedicatedToken ? 'unusable-legacy-token' : 'fixture-project-token',
+      ...(useDedicatedToken ? { RAILWAY_PRODUCTION_READ_TOKEN: 'fixture-project-token' } : {}),
       EXPECTED_PROJECT: RAILWAY_PRODUCTION.projectId,
       EXPECTED_ENVIRONMENT: RAILWAY_PRODUCTION.environmentId,
       FIXTURE_MODE: mode
@@ -56,6 +57,7 @@ test('read-only production secret gate supports exact-scoped Railway project tok
     assert.equal(output.ok, true);
     assert.equal(output.mutations, 0);
     assert.deepEqual(output.checkedServices, ['telegram', 'vk']);
+    assert.equal(JSON.parse(run('authorized', false)).ok, true, 'legacy secret fallback remains supported');
     assert.throws(() => run('wrong_scope'), error => {
       assert.match(error.stderr, /operator review required/);
       assert.doesNotMatch(error.stderr, /fixture-project-token|another-project|UNEXPECTED_MUTATION/);
