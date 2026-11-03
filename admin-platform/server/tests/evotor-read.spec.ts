@@ -118,7 +118,18 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
   })
   it('schema absence never supplies loyalty amounts or invented zeros',async()=>{
     const db=new PGlite()
-    try{const report=await getEvotorReport(db,scope,range);expect(report.all).toBeNull();expect(report.connection.state).toBe('schema_required')}
+    try{
+      const report=await getEvotorReport(db,scope,range)
+      expect(report.connection.state).toBe('schema_required')
+      expect(report.all).toBeNull()
+      // Missing provider schema is unknown, never a fabricated zero or partial KPI.
+      expect(report.app).toBeNull()
+      expect(report.unlinked).toBeNull()
+      expect(report.linkedRevenueSharePercent).toBeNull()
+      expect(report.timeSeries).toBeNull()
+      expect(report.receiptRanking).toBeNull()
+      expect(report.verifiedCustomerCohorts).toBeNull()
+    }
     finally{await db.close()}
   })
 })
