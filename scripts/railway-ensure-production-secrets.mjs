@@ -2,10 +2,14 @@ import { createHash, randomBytes } from 'node:crypto';
 import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
-const TOKEN = String(process.env.RAILWAY_API_TOKEN || '').trim();
+const checkOnly = process.argv.includes('--check');
+// Read-only CI has its own least-privilege credential; never use it for provisioning.
+// Existing operator writes keep the original RAILWAY_API_TOKEN contract.
+const TOKEN = String((checkOnly
+  ? process.env.RAILWAY_PRODUCTION_READ_TOKEN || process.env.RAILWAY_API_TOKEN
+  : process.env.RAILWAY_API_TOKEN) || '').trim();
 const PROJECT_ID = RAILWAY_PRODUCTION.projectId;
 const ENVIRONMENT_ID = RAILWAY_PRODUCTION.environmentId;
-const checkOnly = process.argv.includes('--check');
 const SERVICES = Object.freeze({
   telegram: RAILWAY_PRODUCTION.services.telegram,
   vk: RAILWAY_PRODUCTION.services.vk
