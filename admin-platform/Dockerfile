@@ -7,6 +7,8 @@ COPY package.json platform-core.js qr-resolver.js spaceverse-runtime-manifest.js
 # Include every root declaration used by the Admin server's shared JS imports.
 # Missing crm-manual-contact-create.d.ts breaks final tsc -p tsconfig.server.json.
 COPY *.js *.d.ts package-lock.json ./
+# Fail early if the shared CRM declaration is missing from the production image.
+RUN test -s /app/crm-manual-contact-create.d.ts
 COPY scripts/spaceverse-runtime-container-entrypoint.mjs ./scripts/
 COPY pos ./pos
 # Synthetic Admin integration tests exercise the real native proxy handler.

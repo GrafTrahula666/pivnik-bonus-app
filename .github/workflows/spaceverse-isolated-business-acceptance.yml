@@ -1,0 +1,126 @@
+name: SPACEVERSE independent business acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/spaceverse-isolated-business-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spaceverse-isolated-business-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-recovery:
+    name: Restore rehearsal in disposable PostgreSQL 16
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-synthetic
+          POSTGRES_DB: codex_admin_test_restore_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_restore_source"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Back up, checksum and restore disposable data with the real ops scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$(docker ps -q --filter ancestor=postgres:16 | head -n 1)"
+          test -n "$cid"
+          docker cp ops/backup-postgres.sh "$cid:/tmp/spaceverse-backup.sh"
+          docker cp ops/restore-postgres.sh "$cid:/tmp/spaceverse-restore.sh"
+          docker exec "$cid" psql -v ON_ERROR_STOP=1 -U postgres -d codex_admin_test_restore_source -c 'CREATE TABLE synthetic_customer_fixture (id INTEGER PRIMARY KEY, amount BIGINT NOT NULL);'
+          docker exec "$cid" psql -v ON_ERROR_STOP=1 -U postgres -d codex_admin_test_restore_source -c 'INSERT INTO synthetic_customer_fixture VALUES (1,100), (2,200);'
+          docker exec -e DATABASE_URL=postgresql://postgres:ci-only-synthetic@127.0.0.1:5432/codex_admin_test_restore_source -e BACKUP_DIR=/tmp/spaceverse-recovery "$cid" bash /tmp/spaceverse-backup.sh
+          docker exec "$cid" createdb -U postgres codex_admin_test_restore_target
+          docker exec "$cid" bash -lc '
+            set -euo pipefail
+            backup="$(find /tmp/spaceverse-recovery -maxdepth 1 -name "*.dump" -print -quit)"
+            test -n "$backup"
+            export RESTORE_DATABASE_URL=postgresql://postgres:ci-only-synthetic@127.0.0.1:5432/codex_admin_test_restore_target
+            export BACKUP_FILE="$backup" CONFIRM_RESTORE=RESTORE_PIVNIK
+            bash /tmp/spaceverse-restore.sh
+          '
+          restored="$(docker exec "$cid" psql -U postgres -d codex_admin_test_restore_target -At -c 'SELECT COUNT(*)::text || chr(58) || SUM(amount)::text FROM synthetic_customer_fixture;')"
+          source="$(docker exec "$cid" psql -U postgres -d codex_admin_test_restore_source -At -c 'SELECT COUNT(*)::text || chr(58) || SUM(amount)::text FROM synthetic_customer_fixture;')"
+          test "$source" = '2:300'
+          test "$restored" = "$source"
+          docker exec "$cid" psql -v ON_ERROR_STOP=1 -U postgres -d codex_admin_test_restore_target -c 'INSERT INTO synthetic_customer_fixture VALUES (3,300);'
+          source_after="$(docker exec "$cid" psql -U postgres -d codex_admin_test_restore_source -At -c 'SELECT COUNT(*) FROM synthetic_customer_fixture;')"
+          test "$source_after" = '2'
+          echo 'SYNTHETIC_RESTORE_VERIFIED: checksum, archive, row count, totals and target isolation'
+
+  independent-business:
+    name: Synthetic owner, company, venue, CRM, invitations and cross-tenant isolation
+    needs: synthetic-recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-synthetic
+          POSTGRES_DB: codex_admin_test_crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install pinned Admin dependencies
+        run: npm ci --prefix admin-platform
+      - name: Create the disposable CRM fixture role
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$(docker ps -q --filter ancestor=postgres:16 | head -n 1)"
+          test -n "$cid"
+          docker exec "$cid" psql -v ON_ERROR_STOP=1 -U postgres -d codex_admin_test_crm -c "CREATE ROLE crm_fixture LOGIN PASSWORD 'crm_fixture_ci_only' CREATEDB;"
+      - name: Owner registration by invite, company, venue, CRM and tenant isolation via signed HTTP
+        run: >-
+          npm test --prefix admin-platform --
+          server/tests/venue-onboarding.spec.ts
+          server/tests/onboarding-invitations.spec.ts
+          server/tests/onboarding-workflow.spec.ts
+          server/tests/tenant-crm-http.spec.ts
+          server/tests/tenant-crm-contact-http.spec.ts
+          server/tests/tenant-security.spec.ts
+      - name: Native PostgreSQL dedicated CRM bootstrap and cross-business isolation
+        env:
+          SPACEVERSE_TEST_NATIVE_POSTGRES_URL: postgres://crm_fixture:crm_fixture_ci_only@127.0.0.1:5432/codex_admin_test_crm
+        run: npm test --prefix admin-platform -- server/tests/onboarding-tenant-bootstrap.spec.ts
+      - name: Install ephemeral Chromium browser
+        working-directory: admin-platform
+        run: npx playwright install --with-deps chromium
+      - name: Browser acceptance for company and venue creation (desktop and mobile)
+        run: npm run test:e2e:onboarding --prefix admin-platform
+      - name: Browser acceptance for owner invitations and recipient registration (desktop and mobile)
+        run: npm run test:e2e:invitations --prefix admin-platform
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: spaceverse-isolated-acceptance-failures
+          path: admin-platform/test-results/
+          if-no-files-found: ignore

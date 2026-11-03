@@ -145,6 +145,7 @@ jobs:
           inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION')
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PRODUCTION_READ_TOKEN: ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_PRODUCTION_READ_TOKEN || '' }}
         run: |
           node --check scripts/railway-ensure-production-secrets.mjs
           node scripts/railway-ensure-production-secrets.mjs --check
