@@ -45,7 +45,7 @@ async function graphql(query, variables = {}) {
   let result = await railwayRequest(query, variables, variableReadHeader);
   const denial = result.response.status === 401 || result.response.status === 403
     || (result.response.ok && result.payload.errors?.some(error => error?.message === 'Not Authorized'));
-  if (checkOnly && variableReadHeader === 'authorization' && denial && /^\\s*query\\b/i.test(query)) {
+  if (checkOnly && variableReadHeader === 'authorization' && denial && /^\s*query\b/i.test(query)) {
     const probe = await railwayRequest(PROJECT_TOKEN_SCOPE_QUERY, {}, 'Project-Access-Token');
     const scope = probe.payload.data?.projectToken;
     if (!probe.response.ok || probe.payload.errors?.length
