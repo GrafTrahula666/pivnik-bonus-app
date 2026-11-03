@@ -233,6 +233,32 @@ test('two tenants and two venues in one company cannot cross-read customer walle
   }
 });
 
+test('wallet read fails closed after a verified runtime binding is revoked or changed', async () => {
+  const fixture = await tenantDatabase({ seed: 'g', companyId: '810', venueId: '811', ownedBalance: 606 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '606');
+
+    await fixture.db.query("UPDATE spaceverse_runtime_binding SET status='pending' WHERE singleton=TRUE");
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED'
+    });
+
+    await fixture.db.query("UPDATE spaceverse_runtime_binding SET status='prepared', manifest_sha256=$1 WHERE singleton=TRUE", ['0'.repeat(64)]);
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED'
+    });
+
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '606');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('request scope, malformed ids and forged runtimes are rejected before customer SQL', async () => {
   const fixture = await tenantDatabase({ seed: 'e', companyId: '910', venueId: '911', ownedBalance: 404 });
   let queries = 0;
