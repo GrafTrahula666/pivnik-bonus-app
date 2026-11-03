@@ -234,7 +234,7 @@ test('two tenants and two venues in one company cannot cross-read customer walle
 });
 
 test('wallet read fails closed after a verified runtime binding is revoked or changed', async () => {
-  const fixture = await tenantDatabase({ seed: 'g', companyId: '810', venueId: '811', ownedBalance: 606 });
+  const fixture = await tenantDatabase({ seed: 'a', companyId: '810', venueId: '811', ownedBalance: 606 });
   try {
     const load = createSpaceverseCustomerWalletRepository({
       runtime: fixture.runtime,
