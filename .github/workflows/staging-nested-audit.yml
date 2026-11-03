@@ -20,6 +20,12 @@ jobs:
           node-version: '24'
       - name: Install pinned nested Admin dependencies without scripts
         run: npm ci --prefix admin-platform --ignore-scripts --no-audit
+      - name: Verify Admin production dependency audit
+        run: npm audit --prefix admin-platform --omit=dev --audit-level=high
+      - name: Verify Admin TypeScript
+        run: npm run typecheck --prefix admin-platform
+      - name: Verify Admin web and API production build
+        run: npm run build --prefix admin-platform
       - name: Identify production and full lockfile advisories (no secrets)
         shell: bash
         run: |
