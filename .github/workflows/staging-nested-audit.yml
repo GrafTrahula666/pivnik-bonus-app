@@ -1,0 +1,38 @@
+name: Staging nested admin dependency audit (disposable)
+
+on:
+  push:
+    branches:
+      - 'audit/staging-qa-nested-deps-20261103'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned nested Admin dependencies without scripts
+        run: npm ci --prefix admin-platform --ignore-scripts --no-audit
+      - name: Identify production and full lockfile advisories (no secrets)
+        shell: bash
+        run: |
+          npm audit --prefix admin-platform --omit=dev --json > /tmp/admin-prod-audit.json || true
+          npm audit --prefix admin-platform --json > /tmp/admin-full-audit.json || true
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          for (const [kind, path] of [['production', '/tmp/admin-prod-audit.json'], ['all', '/tmp/admin-full-audit.json']]) {
+            const d=JSON.parse(fs.readFileSync(path, 'utf8'));
+            if(d.error){console.log('AUDIT_ERROR '+kind+' '+JSON.stringify(d.error));process.exitCode=1;continue;}
+            console.log('AUDIT_METADATA '+kind+' '+JSON.stringify(d.metadata?.vulnerabilities||{}));
+            for (const [name, v] of Object.entries(d.vulnerabilities||{}).sort((a,b)=>a[0].localeCompare(b[0]))) {
+              console.log('AUDIT_PACKAGE '+kind+' '+JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,url:x.url,range:x.range,severity:x.severity})}));
+            }
+          }
+          NODE
