@@ -1,4 +1,8 @@
 import { spawnSync } from 'node:child_process'
+import {assertStagingDatabaseIsolation} from './staging-database-isolation.mjs'
+
+// Gate the entire pre-deploy chain before the first child can run SQL.
+assertStagingDatabaseIsolation()
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const steps = [

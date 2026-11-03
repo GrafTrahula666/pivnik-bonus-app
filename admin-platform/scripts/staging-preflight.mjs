@@ -1,30 +1,11 @@
 import pg from 'pg'
+import {assertStagingDatabaseIsolation, STAGING_PROJECT_ID, STAGING_SERVICE_ID} from './staging-database-isolation.mjs'
 
 const { Client } = pg
-const STAGING_PROJECT_ID = '472996fe-c85d-4bda-bb72-2c96f7e5030f'
-const STAGING_SERVICE_ID = 'c9441ae5-7fe9-4030-9b61-3cd8238f94f3'
 const INTEGRATION_DATABASE = 'codex_admin_test_staging'
 
-function requireIsolatedStaging() {
-  if (process.env.RAILWAY_PROJECT_ID !== STAGING_PROJECT_ID) {
-    throw new Error('Staging preflight refused: unexpected Railway project.')
-  }
-  if (process.env.RAILWAY_SERVICE_ID !== STAGING_SERVICE_ID) {
-    throw new Error('Staging preflight refused: unexpected Railway service.')
-  }
-  if (process.env.ADMIN_ALLOW_TEST_SEED !== 'true') {
-    throw new Error('Staging preflight refused: ADMIN_ALLOW_TEST_SEED is not true.')
-  }
-  const raw = String(process.env.ADMIN_DATABASE_URL || '')
-  if (!raw) throw new Error('ADMIN_DATABASE_URL is required.')
-  const parsed = new URL(raw)
-  if (!parsed.hostname.endsWith('.railway.internal')) {
-    throw new Error('Staging preflight refused: database is not a Railway private service.')
-  }
-  return raw
-}
-
-const databaseUrl = requireIsolatedStaging()
+// Always validate every configured reader/writer target before any SQL or fixture seed.
+const databaseUrl = assertStagingDatabaseIsolation()
 const client = new Client({ connectionString: databaseUrl, ssl: false })
 
 await client.connect()
