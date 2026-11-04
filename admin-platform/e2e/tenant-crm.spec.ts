@@ -135,6 +135,11 @@ test('denied customer detail never exposes a cached balance',async({page})=>{
   await expect(card.getByRole('status')).toHaveCount(0)
   await card.getByRole('button',{name:'Закрыть карточку',exact:true}).click()
   await expect(card).toHaveCount(0)
+  // Permission recovery must fetch actual scoped detail, not reuse the 403 state.
+  await page.unroute('**/crm/customers/1')
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  await expect(card).toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('alert')).toHaveCount(0)
 })
 
 
