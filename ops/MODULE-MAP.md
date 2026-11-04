@@ -714,11 +714,17 @@ in `ops/SPACEVERSE-OWNER-DESIGN-20261025.md`. No root runtime route changes.
 
 ### CHAT 08 · owner KPI hierarchy (2026-11-01, Draft #343)
 
-The `ProductionDashboard.tsx` operations-ledger mode uses four primary **period**
-KPI cards: tracked ledger amount (explicitly **not** POS/fiscal revenue), purchase
-records, distinct customers with completed operations, and mean purchase-record
-amount. Other eight indicators, including total customers / bonus-balance
-snapshots and unavailable visits, remain reachable through native `details`.
+The `ProductionDashboard.tsx` operations-ledger mode originally used four primary **period**
+KPI cards; the 2026-11-04 owner-approved corrective Draft branch
+`spaceverse/fix-app-dashboard-client-kpis-20261104` restores six owner-facing
+period indicators: tracked ledger amount (not POS revenue), purchase records,
+completed ledger operation count (not the same as purchase records), unique
+clients with completed operations, newly registered clients (by `users.created_at`,
+**not** installations or first-ever purchases), and mean purchase-record amount.
+Seven other indicators, including total customers / bonus-balance snapshots and
+unavailable visits, remain reachable through native `details`. This change
+only reorders existing response fields and does not alter query, accounting,
+client identity, authorization, data or route contracts.
 Previous-period deltas are only shown for known values with a nonzero baseline.
 Their direction is explicit in text (+ or −); an unchanged metric renders 0%
 without a misleading upward arrow. This is cosmetic only: prior/current

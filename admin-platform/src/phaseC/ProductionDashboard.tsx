@@ -116,12 +116,13 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
   const primaryKpis=[
     ['Сумма операций приложения',m.trackedRevenue,'money',p.trackedRevenue],
     ['Записей о покупках',m.checkCount,'number',p.checkCount],
-    ['Совершали операции',m.activeCustomers,'number',p.transactionActiveCustomers],
+    ['Операций в журнале',m.operationCount,'number',p.operationCount],
+    ['Клиентов с операциями',m.activeCustomers,'number',p.transactionActiveCustomers],
+    ['Новых клиентов (регистрация)',m.newCustomers,'number',p.newCustomers],
     ['Средняя сумма записи',m.averageCheck,'money',p.averageCheck],
   ] as const
   const secondaryKpis=[
     ['Клиентов всего',m.totalCustomers,'number',null],
-    ['Новых клиентов',m.newCustomers,'number',p.newCustomers],
     ['Повторных клиентов',m.returningCustomers,'number',p.returningCustomers],
     ['Начислено по программе',m.bonusEarned,'number',p.bonusEarned],
     ['Списано клиентами',m.bonusRedeemed,'number',p.bonusRedeemed],
@@ -136,9 +137,9 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
       actions={<button className="btn secondary" onClick={reload}>Обновить</button>}/>
     <SourceNote>Операции приложения. Не являются подтверждённой кассовой выручкой и не складываются с Эвотором.</SourceNote>
     <div className="kpi-grid app-operations-primary-kpis" aria-label="Основные показатели операций">{primaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
-    <p className="cash-insight-period">Изменение на карточках считается к предыдущему периоду той же длительности, если обе величины известны и есть ненулевая база.</p>
+    <p className="cash-insight-period">Изменение на карточках считается к предыдущему периоду той же длительности при известной ненулевой базе. «Новые клиенты» считаются по дате регистрации аккаунта, не по установке приложения и не по первой покупке. «Операции» — завершённые записи журнала, включая операции без покупки.</p>
     <details className="card app-operations-extra">
-      <summary>Ещё 8 показателей</summary>
+      <summary>Ещё 7 показателей</summary>
       <div className="kpi-grid">{secondaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
       <SourceNote>Ручные персональные подарки не входят в бизнес-KPI обзора. «Клиентов всего» и «Бонусы в обращении» показывают текущее состояние, а не значение на историческую дату.</SourceNote>
     </details>

@@ -80,7 +80,7 @@
 .app-operation-comparison .cash-comparison-row{min-width:0}
 
 /* CHAT 08 · 72: prioritize period-scoped KPIs, keep the full ledger detail on demand. */
-.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
 .app-operations-extra{padding:16px 20px}
 .app-operations-extra summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
 .app-operations-extra[open] summary{margin-bottom:16px}
