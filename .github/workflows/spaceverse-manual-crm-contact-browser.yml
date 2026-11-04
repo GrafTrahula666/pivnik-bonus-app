@@ -9,6 +9,8 @@ on:
       - 'admin-platform/src/phaseC/tenant-crm-contact-create.css'
       - 'admin-platform/e2e/tenant-crm-contact.spec.ts'
       - 'admin-platform/e2e/fixtures/onboarding-server.ts'
+      - 'admin-platform/server/tests/tenant-crm-contact-http.spec.ts'
+      - 'admin-platform/tenant-migrations/002_manual_crm_contacts.sql'
       - 'admin-platform/playwright.crm-contact.config.ts'
       - '.github/workflows/spaceverse-manual-crm-contact-browser.yml'
 
