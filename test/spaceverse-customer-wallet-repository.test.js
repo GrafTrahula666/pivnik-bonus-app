@@ -638,3 +638,34 @@ test('existing wallet and directory readers deny a customer promoted to admin wi
     await fixture.db.close();
   }
 });
+
+test('wallet rejects forged ownership company, venue and runtime fields in a returned row', async () => {
+  const fixture = await tenantDatabase({ seed: 'b', companyId: '970', venueId: '971', ownedBalance: 515 });
+  try {
+    for (const forgedScope of [
+      { ownership_company_id: '999' },
+      { ownership_venue_id: '972' },
+      { ownership_runtime_key: 'forged-runtime-key' }
+    ]) {
+      const load = createSpaceverseCustomerWalletRepository({
+        runtime: fixture.runtime,
+        query: async (sql, params) => {
+          const result = await fixture.db.query(sql, params);
+          return {
+            ...result,
+            rows: result.rows.map(row => row.user_id === '11'
+              ? { ...row, ...forgedScope }
+              : row)
+          };
+        }
+      });
+      await assert.rejects(load({ userId: '11' }), {
+        code: 'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH'
+      });
+    }
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '515');
+  } finally {
+    await fixture.db.close();
+  }
+});
