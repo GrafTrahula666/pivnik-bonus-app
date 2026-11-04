@@ -106,7 +106,7 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   // A server permission denial must fail closed, not keep showing cached customer rows.
   await page.route('**/crm/customers?**',route=>route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:'forbidden'})}))
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
-  await expect(section.getByRole('alert')).toContainText('Не удалось подтвердить данные этого заведения.')
+  await expect(section.getByRole('alert')).toContainText('Проверка недоступна или у вас нет доступа к клиентам этого заведения.')
   await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
   await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
   await page.unroute('**/crm/customers?**')
