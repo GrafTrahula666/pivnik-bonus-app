@@ -227,8 +227,10 @@ test('changing venue clears customers and the server denies another company owne
 })
 
 test('late real customer response cannot reopen a card from the previous venue',async({page})=>{
-  // Keep the independent mobile race under the real per-actor 30/min guard.
-  await login(page,test.info().project.name==='mobile'?'owner':'root')
+  // The trace on 6ccb8d6 shows owner exhausted the real 30/min read guard (429),
+  // including the CRM 2 list. Use the less-loaded root fixture for this race on
+  // both projects; never weaken the server guard or mask a 429 as an empty list.
+  await login(page,'root')
   const section=await open(page,'CRM 1')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
