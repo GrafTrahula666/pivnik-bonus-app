@@ -511,7 +511,7 @@ test('prepared binding suspension revokes both wallet and directory reads withou
     assert.equal((await load({ userId: '11' })).wallet.balance, '717');
     assert.equal((await list()).total, '1');
 
-    await fixture.db.query("UPDATE spaceverse_runtime_binding SET status='failed' WHERE singleton=TRUE");
+    await fixture.db.query("UPDATE spaceverse_runtime_binding SET status='pending' WHERE singleton=TRUE");
 
     await assert.rejects(load({ userId: '11' }), { code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED' });
     await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_BINDING_REJECTED' });
