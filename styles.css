@@ -10147,8 +10147,11 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   inset: -12%;
   z-index: 2;
   background: url('/assets/frames/creator-diamond-dragon.png') center / contain no-repeat;
-  animation: creatorDragonOrbit 18s linear infinite;
+  /* Canvas owns orbit + continuous body deformation; PNG remains a static fallback. */
 }
+.creator-dragon-mesh { display: block; width: 100%; height: 100%; opacity: 0; }
+.creator-dragon-ready { background-image: none; }
+.creator-dragon-ready .creator-dragon-mesh { opacity: 1; }
 .profile-frame-choice .frame-choice-preview:has(.reward-frame-shell) {
   position: relative;
   overflow: visible;
@@ -10161,7 +10164,6 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-
   left: calc(11% - 18px) !important;
 }
 @keyframes rewardPumpkinOrbit { to { transform: rotate(360deg); } }
-@keyframes creatorDragonOrbit { to { transform: rotate(360deg); } }
 @keyframes rewardHeat { 0%, 100% { filter: brightness(1); } 45% { filter: brightness(1.2) drop-shadow(0 0 3px #ff790066); } }
 @keyframes rewardFrost { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.15) drop-shadow(0 0 3px #50b9ff88); } }
 @keyframes rewardRegal { 0%, 100% { filter: brightness(1); } 45% { filter: brightness(1.16); } }
@@ -10187,6 +10189,8 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-
   .reward-frame-light::after,
   .reward-frame-particle,
   .creator-dragon-orbit { animation: none !important; }
+  .creator-dragon-orbit { background-image: url('/assets/frames/creator-diamond-dragon.png'); }
+  .creator-dragon-mesh { opacity: 0 !important; }
   .reward-frame-light::after { opacity: 0; }
   .reward-frame-particle { opacity: .35; }
 }

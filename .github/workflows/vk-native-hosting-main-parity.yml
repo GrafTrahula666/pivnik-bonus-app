@@ -103,6 +103,8 @@ jobs:
           # ubuntu-24.04 GitHub runner already has browser runtime libraries.
           # --with-deps re-runs apt against an unreachable Azure mirror and hangs until cancelled.
           npx playwright install chromium
+      - name: Verify dragon mobile review evidence (fixtures only)
+        run: node scripts/verify-dragon-review.mjs
       - name: Run VK static bundle browser smoke
         run: node scripts/vk-native-hosting-browser-smoke.mjs
       - name: Run VK bootstrap auth/session smoke
@@ -176,3 +178,11 @@ jobs:
             artifacts/global-white-gold-browser-smoke
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload dragon review evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dragon-review
+          path: artifacts/dragon-review/
+          if-no-files-found: warn
