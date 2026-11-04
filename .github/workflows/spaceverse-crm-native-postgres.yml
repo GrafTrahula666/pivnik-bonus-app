@@ -8,6 +8,7 @@ on:
       - 'admin-platform/server/tests/onboarding-tenant-bootstrap.spec.ts'
       - 'admin-platform/server/tests/empty-tenant-fixture.ts'
       - 'admin-platform/server/tests/tenant-crm-database-fixture.ts'
+      - 'admin-platform/server/tests/chat02-same-company-venue-http.spec.ts'
       - 'admin-platform/tenant-migrations/001_customer_core.sql'
       - '.github/workflows/spaceverse-crm-native-postgres.yml'
   workflow_dispatch:
@@ -50,3 +51,7 @@ jobs:
         env:
           SPACEVERSE_TEST_NATIVE_POSTGRES_URL: postgres://crm_fixture:crm_fixture_ci_only@127.0.0.1:5432/codex_admin_test_crm
         run: npm test --prefix admin-platform -- server/tests/onboarding-tenant-bootstrap.spec.ts
+      - name: CHAT 02 same-company venue signed HTTP / native PostgreSQL
+        env:
+          SPACEVERSE_TEST_NATIVE_POSTGRES_URL: postgres://crm_fixture:crm_fixture_ci_only@127.0.0.1:5432/codex_admin_test_crm
+        run: npm test --prefix admin-platform -- server/tests/chat02-same-company-venue-http.spec.ts
