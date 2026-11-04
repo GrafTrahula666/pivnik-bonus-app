@@ -57,6 +57,16 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('present')
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 3.')
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toBeVisible()
+  // An unmatched search under an active wallet filter must remain a genuine empty result,
+  // not silently drop the filter or misreport an empty customer database.
+  await section.getByLabel('Найти клиента',{exact:true}).fill('No wallet')
+  await section.getByRole('button',{name:'Найти',exact:true}).click()
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 0.')
+  await expect(section.getByText('По запросу клиентов не найдено. Измените поиск или фильтр кошелька.',{exact:true})).toBeVisible()
+  await expect(section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true})).toHaveValue('present')
+  await section.getByLabel('Найти клиента',{exact:true}).fill('')
+  await section.getByRole('button',{name:'Найти',exact:true}).click()
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 3.')
   // Changing wallet scope must close an already-open customer card before new rows arrive.
   await section.getByRole('button',{name:'Zero 0 бонусов',exact:true}).click()
   await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Баланс: 0 бонусов')
