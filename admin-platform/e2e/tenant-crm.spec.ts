@@ -143,6 +143,26 @@ test('denied customer detail never exposes a cached balance',async({page})=>{
 })
 
 
+test('customer detail server failure hides money and recovers on fresh request',async({page})=>{
+  await login(page,'owner')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await page.route('**/crm/customers/1',route=>route.fulfill({
+    status:500,contentType:'application/json',body:JSON.stringify({error:'internal_error'})
+  }))
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  const card=section.getByRole('region',{name:'Карточка клиента'})
+  await expect(card.getByRole('alert')).toBeVisible()
+  await expect(card).not.toContainText('Баланс: 101 бонусов')
+  await card.getByRole('button',{name:'Закрыть карточку',exact:true}).click()
+  await page.unroute('**/crm/customers/1')
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  await expect(card).toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('alert')).toHaveCount(0)
+})
+
+
 test('all 355 customers remain reachable through paginated desktop and mobile UI',async({page})=>{
   // Both projects run as separate Playwright processes with isolated fixture servers.
   // Keep the production 30/min per-actor read limit unchanged in every process.
