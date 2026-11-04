@@ -86,8 +86,12 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
   await section.getByRole('combobox',{name:'Порядок',exact:true}).selectOption('desc')
   await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
+  // A failed list refresh must not leave a previously opened customer detail visible.
+  await section.getByRole('button',{name:'Pagination fixture 349 Кошелёк не создан',exact:true}).click()
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Бонусный кошелёк ещё не создан.')
   await page.route('**/crm/customers?**',route=>route.abort('failed'))
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
   await expect(section.getByRole('alert')).toContainText('Не удалось подтвердить данные этого заведения.')
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
   await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
