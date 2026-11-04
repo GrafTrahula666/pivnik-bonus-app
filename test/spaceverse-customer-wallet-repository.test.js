@@ -585,3 +585,26 @@ test('directory rejects a forged ownership scope in query results without exposi
     await fixture.db.close();
   }
 });
+
+
+test('wallet direct-ID read rejects a forged admin role in returned customer row', async () => {
+  const fixture = await tenantDatabase({ seed: 'f', companyId: '960', venueId: '961', ownedBalance: 818 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: async (sql, params) => {
+        const result = await fixture.db.query(sql, params);
+        return { ...result, rows: result.rows.map(row => row.user_id === '11'
+          ? { ...row, role: 'admin' }
+          : row) };
+      }
+    });
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH'
+    });
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '818');
+  } finally {
+    await fixture.db.close();
+  }
+});
