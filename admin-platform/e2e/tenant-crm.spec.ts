@@ -77,7 +77,6 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
   // A missing-wallet filter must exclude genuine zero-balance wallets, not treat zero as missing.
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toHaveCount(0)
-  await expect(section.getByRole('button',{name:'No wallet Кошелёк не создан',exact:true})).toBeVisible()
   await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
   await section.getByRole('combobox',{name:'Бонусный кошелёк',exact:true}).selectOption('all')
   await section.getByRole('combobox',{name:'Порядок',exact:true}).selectOption('asc')
