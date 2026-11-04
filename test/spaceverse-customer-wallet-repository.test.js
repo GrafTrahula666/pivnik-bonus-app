@@ -555,3 +555,26 @@ test('directory refuses a changed binding even when the runtime was previously v
     await assert.rejects(list(),{code:'SPACEVERSE_DIRECTORY_BINDING_REJECTED'});
   } finally {await fixture.db.close();}
 });
+
+test('directory rejects a forged ownership scope in query results without exposing a customer', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '952', venueId: '953', ownedBalance: 424 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: async (sql, params) => {
+        const result = await fixture.db.query(sql, params);
+        return {
+          ...result,
+          rows: result.rows.map(row => row.user_id === '11'
+            ? { ...row, ownership_venue_id: '954' }
+            : row)
+        };
+      }
+    });
+    await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_SCOPE_MISMATCH' });
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '424');
+  } finally {
+    await fixture.db.close();
+  }
+});
