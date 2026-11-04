@@ -39,6 +39,8 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
   await section.getByLabel('Найти клиента',{exact:true}).fill('Pagination fixture 349')
   await section.getByRole('button',{name:'Найти',exact:true}).click()
+  // Search from page 2 must reset server pagination to page 1, not leave an empty offset.
+  await expect(section.getByText('Страница 1',{exact:true})).toBeVisible()
   await expect(section.getByRole('status')).toContainText('Найдено клиентов: 1.')
   await expect(section.getByRole('button',{name:'Pagination fixture 349 Кошелёк не создан',exact:true})).toBeVisible()
   await section.getByLabel('Найти клиента',{exact:true}).fill('_100%')
