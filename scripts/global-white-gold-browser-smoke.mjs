@@ -387,7 +387,8 @@ async function inspectRewardFrames(caseName, config) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const reduced = await page.locator('#accept-creator-violet .creator-dragon-orbit').evaluate((el) => getComputedStyle(el).animationName);
     assert(reduced === 'none', `${caseName}: reduced motion still animates the dragon`);
-    await page.waitForFunction(() => startCreatorDragonAnimation.runtime.raf === 0);
+    await page.waitForFunction(() => startCreatorDragonAnimation.runtime.raf === 0
+      && getComputedStyle(document.querySelector('#accept-creator-violet canvas')).opacity === '0');
     assert(await page.locator('#accept-creator-violet canvas').evaluate(el => getComputedStyle(el).opacity) === '0', `${caseName}: reduced motion canvas remains visible`);
     assert(pageErrors.length === 0, `${caseName}: reward page errors: ${pageErrors.join(' | ')}`);
     assert(failedLocal.length === 0, `${caseName}: reward asset requests failed`);
