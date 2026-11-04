@@ -608,3 +608,33 @@ test('wallet direct-ID read rejects a forged admin role in returned customer row
     await fixture.db.close();
   }
 });
+
+test('existing wallet and directory readers deny a customer promoted to admin without moving funds', async () => {
+  const fixture = await tenantDatabase({ seed: 'a', companyId: '962', venueId: '963', ownedBalance: 919 });
+  try {
+    const query = fixture.db.query.bind(fixture.db);
+    const load = createSpaceverseCustomerWalletRepository({ runtime: fixture.runtime, query });
+    const list = createSpaceverseCustomerDirectoryRepository({ runtime: fixture.runtime, query });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '919');
+    assert.equal((await list()).total, '1');
+
+    await fixture.db.query("UPDATE users SET role='admin' WHERE id=11");
+
+    const walletResult = await load({ userId: '11' }).then(
+      value => ({ value }),
+      error => ({ error })
+    );
+    assert.equal(walletResult.value?.customer?.role, undefined);
+    assert.ok(walletResult.error || walletResult.value === null);
+    const directoryResult = await list().then(
+      value => ({ value }),
+      error => ({ error })
+    );
+    assert.equal(directoryResult.value?.items.some(item => item.customer.id === '11'), false);
+    assert.ok(directoryResult.error || directoryResult.value?.total === '0');
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '919');
+  } finally {
+    await fixture.db.close();
+  }
+});
