@@ -233,6 +233,32 @@ test('two tenants and two venues in one company cannot cross-read customer walle
   }
 });
 
+test('directory cross-tenant database substitution fails closed before returning customer data', async () => {
+  const first = await tenantDatabase({ seed: 'a', companyId: '940', venueId: '941', ownedBalance: 111 });
+  const sibling = await tenantDatabase({ seed: 'b', companyId: '940', venueId: '942', ownedBalance: 222 });
+  const foreign = await tenantDatabase({ seed: 'c', companyId: '950', venueId: '951', ownedBalance: 333 });
+  try {
+    const own = createSpaceverseCustomerDirectoryRepository({
+      runtime: first.runtime,
+      query: first.db.query.bind(first.db)
+    });
+    assert.equal((await own()).items[0].wallet.balance, '111');
+    for (const target of [sibling, foreign]) {
+      const substituted = createSpaceverseCustomerDirectoryRepository({
+        runtime: first.runtime,
+        query: target.db.query.bind(target.db)
+      });
+      await assert.rejects(substituted(), {
+        code: 'SPACEVERSE_DIRECTORY_BINDING_REJECTED'
+      });
+    }
+  } finally {
+    await first.db.close();
+    await sibling.db.close();
+    await foreign.db.close();
+  }
+});
+
 test('wallet read fails closed after a verified runtime binding manifest changes', async () => {
   const fixture = await tenantDatabase({ seed: 'a', companyId: '810', venueId: '811', ownedBalance: 606 });
   try {
