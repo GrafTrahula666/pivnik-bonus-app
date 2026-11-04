@@ -123,6 +123,7 @@ try {
           hero: '.spaceverse-home-hero',
           business: '.spaceverse-business-card',
           wheel: '.home-wheel-card',
+          run: '.home-run-card',
           liters: '.beer-loyalty-card--compact',
           league: '.home-league-card'
         };
@@ -163,13 +164,15 @@ try {
   const geometry = evidence.homeGeometry;
   assert(geometry?.display === 'grid', `Home V2 must render as grid, got ${geometry?.display}`);
   assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844, `unexpected geometry viewport: ${JSON.stringify(geometry?.viewport)}`);
-  const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
+  const minimumHeights = { hero: 126, business: 124, wheel: 156, run: 156, liters: 84, league: 132 };
   for (const [key, minimum] of Object.entries(minimumHeights)) {
     const card = geometry?.cards?.[key];
     assert(card, `missing Home V2 ${key} geometry`);
     assert(card.height >= minimum - 0.5, `Home V2 ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
-    assert(card.width >= 350, `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
+    assert(card.width >= (key === 'wheel' || key === 'run' ? 170 : 350), `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
   }
+  assert(Math.abs(geometry.cards.run.top - geometry.cards.wheel.top) < 1, 'Run and wheel must share a row');
+  assert(Math.abs(geometry.cards.run.width - geometry.cards.wheel.width) < 1, 'Run and wheel must share the row equally');
   assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
     `Home V2 leaves an excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
 
@@ -199,15 +202,15 @@ try {
         const timerRect = card.querySelector('.home-wheel-timer').getBoundingClientRect();
         return {
           viewport: innerWidth, text,
-          artwork: getComputedStyle(card).backgroundImage,
+          artwork: getComputedStyle(card, '::after').backgroundImage,
           ctaText: cta.textContent,
-          ctaCenterErrorX: Math.abs((ctaRect.left + ctaRect.right) / 2 - (rect.left + rect.width * .2605)),
-          ctaCenterErrorY: Math.abs((ctaRect.top + ctaRect.bottom) / 2 - (rect.top + rect.height * .756)),
+          ctaCenterErrorX: Math.abs((ctaRect.left + ctaRect.right) / 2 - (rect.left + rect.width / 2)),
+          ctaCenterErrorY: Math.abs((ctaRect.top + ctaRect.bottom) / 2 - (rect.bottom - 26.5)),
           statusFits: statusNode.scrollWidth <= statusNode.clientWidth && statusRect.width <= timerRect.width && statusRect.height <= timerRect.height,
           duplicatedWheelVisible: getComputedStyle(card.querySelector('.home-wheel-visual')).display !== 'none'
         };
       }, status);
-      assert(geometry.artwork.includes('wheel-card-reference-20260926.webp'), 'supplied wheel artwork missing');
+      assert(geometry.artwork.includes('wheel-approved-20260929.png'), 'supplied wheel artwork missing');
       assert(geometry.ctaText === 'ВРАЩАТЬ', 'wheel CTA text changed');
       assert(geometry.ctaCenterErrorX <= 1 && geometry.ctaCenterErrorY <= 1, `wheel CTA is off center: ${JSON.stringify(geometry)}`);
       assert(geometry.statusFits, `wheel status overflows the clock slot: ${JSON.stringify(geometry)}`);
