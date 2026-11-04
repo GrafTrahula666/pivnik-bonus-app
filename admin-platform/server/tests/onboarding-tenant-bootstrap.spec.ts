@@ -106,6 +106,57 @@ describe('explicit empty tenant bootstrap: existing scope and binding ledger',()
     state[fault]=false
     expect(await service().runRuntimeDatabaseBinding(owner,draft())).toMatchObject({status:'succeeded',attemptCount:2})
   })
+  it('recovers a rolled-back binding and a lost confirmation without duplicate DDL or ledger rows',async()=>{
+    const selected=1
+    const selectedDraft=draft(selected)
+    const ledger=async()=>(await fixture.metadata.query(`SELECT status,attempt_count,last_error_code,lease_token,result
+      FROM admin_onboarding_provisioning_steps WHERE draft_id=$1 AND step='runtime_database_binding'`,[selectedDraft])).rows
+
+    // First attempt fails inside the target transaction: DDL and binding must both roll back.
+    state.failBinding=true
+    expect(await service().runRuntimeDatabaseBinding(owner,selectedDraft))
+      .toMatchObject({status:'retryable_error',attemptCount:1,errorCode:'TARGET_DATABASE_UNAVAILABLE',result:null})
+    expect(await relations(selected)).toEqual([])
+    expect(await ledger()).toMatchObject([{status:'retryable_error',attempt_count:1,
+      last_error_code:'TARGET_DATABASE_UNAVAILABLE',lease_token:null,result:null}])
+    state.failBinding=false
+
+    // Second attempt commits the exact target, but metadata confirmation is lost.
+    expect(await service(true,async()=>{throw new Error('synthetic-lost-confirmation')})
+      .runRuntimeDatabaseBinding(owner,selectedDraft))
+      .toMatchObject({status:'retryable_error',attemptCount:2,errorCode:'TARGET_CONFIRMATION_UNCERTAIN',result:null})
+    const committedTables=await relations(selected)
+    expect(committedTables.length).toBeGreaterThan(0)
+    expect((await fixture.targets[selected]!.query('SELECT runtime_key,company_id,venue_id FROM spaceverse_runtime_binding')).rows)
+      .toEqual([{runtime_key:fixture.manifests[selected]!.runtimeKey,
+        company_id:fixture.manifests[selected]!.scope.companyId,
+        venue_id:fixture.manifests[selected]!.scope.venueId}])
+    expect(await ledger()).toMatchObject([{status:'retryable_error',attempt_count:2,
+      last_error_code:'TARGET_CONFIRMATION_UNCERTAIN',lease_token:null,result:null}])
+
+    // A third claim must reconcile the existing binding, not rerun bootstrap.
+    // If it tries the old DDL again, the injected failure makes this test fail.
+    state.failDdl=true
+    const recovered=await service().runRuntimeDatabaseBinding(owner,selectedDraft)
+    expect(recovered).toMatchObject({status:'succeeded',attemptCount:3,
+      result:{binding:'verified_existing'},startAllowed:false})
+    expect(await service().runRuntimeDatabaseBinding(owner,selectedDraft)).toEqual(recovered)
+    expect(await relations(selected)).toEqual(committedTables)
+    expect(await relations(0)).toEqual([])
+    expect(await relations(2)).toEqual([])
+    expect(await ledger()).toMatchObject([{status:'succeeded',attempt_count:3,
+      last_error_code:null,lease_token:null,result:{binding:'verified_existing'}}])
+    expect((await fixture.metadata.query(`SELECT COUNT(*)::text AS count FROM admin_onboarding_provisioning_steps
+      WHERE draft_id=$1 AND step='runtime_database_binding'`,[selectedDraft])).rows).toEqual([{count:'1'}])
+    expect((await fixture.metadata.query(`SELECT action,COUNT(*)::text AS count FROM admin_audit_log
+      WHERE action IN ('onboarding.provisioning_step_error','onboarding.provisioning_step_succeed')
+      GROUP BY action ORDER BY action`)).rows).toEqual([
+      {action:'onboarding.provisioning_step_error',count:'2'},
+      {action:'onboarding.provisioning_step_succeed',count:'1'},
+    ])
+    expect((await fixture.metadata.query('SELECT active FROM venues WHERE id=$1',[fixture.manifests[selected]!.scope.venueId])).rows)
+      .toEqual([{active:false}])
+  })
   it('reconciles a committed target after a lost response without rerunning DDL or creating another scope',async()=>{
     expect(await service(true,async()=>{throw new Error('private-db-credential')}).runRuntimeDatabaseBinding(owner,draft()))
       .toMatchObject({status:'retryable_error',errorCode:'TARGET_CONFIRMATION_UNCERTAIN'})
