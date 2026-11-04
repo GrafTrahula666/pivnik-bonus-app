@@ -669,3 +669,32 @@ test('wallet rejects forged ownership company, venue and runtime fields in a ret
     await fixture.db.close();
   }
 });
+
+test('existing wallet and directory readers hide a soft-deleted or merged customer without moving funds', async () => {
+  const fixture = await tenantDatabase({ seed: 'c', companyId: '974', venueId: '975', ownedBalance: 626 });
+  try {
+    const query = fixture.db.query.bind(fixture.db);
+    const load = createSpaceverseCustomerWalletRepository({ runtime: fixture.runtime, query });
+    const list = createSpaceverseCustomerDirectoryRepository({ runtime: fixture.runtime, query });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '626');
+    assert.equal((await list()).total, '1');
+
+    await fixture.db.query('UPDATE users SET deleted_at=NOW() WHERE id=11');
+    assert.equal(await load({ userId: '11' }), null);
+    assert.equal((await list()).total, '0');
+
+    await fixture.db.query('UPDATE users SET deleted_at=NULL, merged_into_user_id=12 WHERE id=11');
+    assert.equal(await load({ userId: '11' }), null);
+    assert.equal((await list()).total, '0');
+    assert.equal(await load({ userId: '12' }), null);
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(row => [row.id, row.balance]), [
+      ['11', '626'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
