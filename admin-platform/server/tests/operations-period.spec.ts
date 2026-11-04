@@ -23,6 +23,7 @@ describe('application operations date windows (Moscow calendar)',()=>{
       from:'2026-10-10T21:00:00.000Z',to:'2026-10-25T21:00:00.000Z',days:15,
     })
     expect(bounds('?date=2022-02-01').days).toBe(1)
+    expect(bounds('?date=2021-08-17')).toEqual({from:'2021-08-16T21:00:00.000Z',to:'2021-08-17T21:00:00.000Z',days:1})
     expect(bounds('?from=2024-02-28&to=2024-02-29').days).toBe(2)
   })
   it('rejects future, reversed, malformed, duplicate, mixed or too-long ranges',()=>{

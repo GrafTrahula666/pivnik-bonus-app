@@ -15,6 +15,20 @@ afterEach(async()=>{await act(async()=>root.unmount());node.remove()})
 function setInput(label:string,value:string){const input=node.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}))}
 async function submit(){await act(async()=>node.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))}
 describe('cash custom interval and actual chart projections',()=>{
+ it('keeps a single historical day older than one year as a date URL in both POS modes',async()=>{
+  vi.mocked(apiGet).mockResolvedValue({...report,period:{from:'2021-08-16T21:00:00.000Z',until:'2021-08-17T21:00:00.000Z',timeZone:'Europe/Moscow'}} as never)
+  await act(async()=>root.render(createElement(SalesDashboard,{venue,days:30,mode:'all'})))
+  await act(async()=>setInput('Дата кассового отчёта','2021-08-17'))
+  expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/a/pos?date=2021-08-17')
+  const date=node.querySelector<HTMLInputElement>('[aria-label="Дата кассового отчёта"]')!
+  expect(date.value).toBe('2021-08-17')
+  expect(date.hasAttribute('min')).toBe(false)
+  const count=vi.mocked(apiGet).mock.calls.length
+  await act(async()=>root.render(createElement(SalesDashboard,{venue,days:30,mode:'app'})))
+  expect(node.querySelector<HTMLInputElement>('[aria-label="Дата кассового отчёта"]')?.value).toBe('2021-08-17')
+  expect(vi.mocked(apiGet).mock.calls.length).toBe(count)
+ })
+
  it('validates inclusive leap-day, reversed, nonexistent, future and overlong ranges',()=>{
   expect(validateCashRange('2024-02-29','2024-03-01','2026-10-25')).toBe('')
   expect(validateCashRange('2026-10-01','2026-10-01','2026-10-25')).toBe('')
