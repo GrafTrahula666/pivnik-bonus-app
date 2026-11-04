@@ -103,10 +103,14 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByRole('combobox',{name:'Порядок',exact:true})).toHaveValue('desc')
   await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toHaveCount(0)
+  // A 403 after a successful retry must also invalidate an open customer detail.
+  await section.getByRole('button',{name:'Pagination fixture 349 Кошелёк не создан',exact:true}).click()
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Бонусный кошелёк ещё не создан.')
   // A server permission denial must fail closed, not keep showing cached customer rows.
   await page.route('**/crm/customers?**',route=>route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:'forbidden'})}))
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
   await expect(section.getByRole('alert')).toContainText('Проверка недоступна или у вас нет доступа к клиентам этого заведения.')
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
   await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
   await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
   await page.unroute('**/crm/customers?**')
