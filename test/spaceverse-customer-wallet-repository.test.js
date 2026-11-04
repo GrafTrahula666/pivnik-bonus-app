@@ -497,24 +497,22 @@ test('directory refuses a changed binding revision after initial authorization',
   }
 });
 
-test('prepared binding suspension revokes both wallet and directory reads without changing balances', async () => {
+test('wallet and directory fail closed when database reads become unavailable after authorization', async () => {
   const fixture = await tenantDatabase({ seed: 'e', companyId: '938', venueId: '939', ownedBalance: 717 });
+  let unavailable = false;
+  const query = async (sql, params) => {
+    if (unavailable) throw new Error('database unavailable');
+    return fixture.db.query(sql, params);
+  };
   try {
-    const load = createSpaceverseCustomerWalletRepository({
-      runtime: fixture.runtime,
-      query: fixture.db.query.bind(fixture.db)
-    });
-    const list = createSpaceverseCustomerDirectoryRepository({
-      runtime: fixture.runtime,
-      query: fixture.db.query.bind(fixture.db)
-    });
+    const load = createSpaceverseCustomerWalletRepository({ runtime: fixture.runtime, query });
+    const list = createSpaceverseCustomerDirectoryRepository({ runtime: fixture.runtime, query });
     assert.equal((await load({ userId: '11' })).wallet.balance, '717');
     assert.equal((await list()).total, '1');
 
-    await fixture.db.query("UPDATE spaceverse_runtime_binding SET status='pending' WHERE singleton=TRUE");
-
-    await assert.rejects(load({ userId: '11' }), { code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED' });
-    await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_BINDING_REJECTED' });
+    unavailable = true;
+    await assert.rejects(load({ userId: '11' }), { code: 'SPACEVERSE_CUSTOMER_WALLET_READ_UNAVAILABLE' });
+    await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_READ_UNAVAILABLE' });
     const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
     assert.equal(stored.rows[0].balance, '717');
   } finally {
