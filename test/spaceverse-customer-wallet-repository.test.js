@@ -477,6 +477,26 @@ test('directory rejects request scope and unverified runtime objects before quer
   } finally {await fixture.db.close();}
 });
 
+test('directory refuses a changed binding revision after initial authorization', async () => {
+  const fixture = await tenantDatabase({ seed: 'c', companyId: '936', venueId: '937', ownedBalance: 616 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await list()).items[0].wallet.balance, '616');
+
+    await fixture.db.query(
+      'UPDATE spaceverse_runtime_binding SET manifest_revision=manifest_revision+1 WHERE singleton=TRUE'
+    );
+    await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_BINDING_REJECTED' });
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '616');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('directory refuses a changed binding even when the runtime was previously verified', async () => {
   const fixture=await tenantDatabase({seed:'f',companyId:'930',venueId:'931',ownedBalance:42});
   try {
