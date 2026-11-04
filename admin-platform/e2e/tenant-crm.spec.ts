@@ -119,6 +119,25 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
+
+test('denied customer detail never exposes a cached balance',async({page})=>{
+  await login(page,'owner')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await page.route('**/crm/customers/1',route=>route.fulfill({
+    status:403,contentType:'application/json',body:JSON.stringify({error:'forbidden'})
+  }))
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  const card=section.getByRole('region',{name:'Карточка клиента'})
+  await expect(card.getByRole('alert')).toContainText('Проверка недоступна или у вас нет доступа')
+  await expect(card).not.toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('status')).toHaveCount(0)
+  await card.getByRole('button',{name:'Закрыть карточку',exact:true}).click()
+  await expect(card).toHaveCount(0)
+})
+
+
 test('all 355 customers remain reachable through paginated desktop and mobile UI',async({page})=>{
   // Both projects run as separate Playwright processes with isolated fixture servers.
   // Keep the production 30/min per-actor read limit unchanged in every process.
