@@ -103,6 +103,15 @@ test('built panel reads and searches real isolated customer SQL with precise bal
   await expect(section.getByRole('combobox',{name:'Порядок',exact:true})).toHaveValue('desc')
   await expect(section.locator('.tenant-crm-list button').first()).toContainText('Pagination fixture 349')
   await expect(section.getByRole('button',{name:'Zero 0 бонусов',exact:true})).toHaveCount(0)
+  // A server permission denial must fail closed, not keep showing cached customer rows.
+  await page.route('**/crm/customers?**',route=>route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:'forbidden'})}))
+  await section.getByRole('button',{name:'Обновить',exact:true}).click()
+  await expect(section.getByRole('alert')).toContainText('Не удалось подтвердить данные этого заведения.')
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
+  await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
+  await page.unroute('**/crm/customers?**')
+  await section.getByRole('button',{name:'Повторить проверку',exact:true}).click()
+  await expect(section.getByRole('status')).toContainText('Найдено клиентов: 352.')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
