@@ -630,7 +630,7 @@ test('existing wallet and directory readers deny a customer promoted to admin wi
       value => ({ value }),
       error => ({ error })
     );
-    assert.equal(directoryResult.value?.items.some(item => item.customer.id === '11'), false);
+    assert.ok(!directoryResult.value?.items.some(item => item.customer.id === '11'));
     assert.ok(directoryResult.error || directoryResult.value?.total === '0');
     const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
     assert.equal(balance.rows[0].balance, '919');
