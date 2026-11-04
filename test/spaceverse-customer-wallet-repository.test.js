@@ -698,3 +698,35 @@ test('existing wallet and directory readers hide a soft-deleted or merged custom
     await fixture.db.close();
   }
 });
+
+test('wallet direct-ID read rejects substituted customer and ownership IDs', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '976', venueId: '977', ownedBalance: 737 });
+  try {
+    for (const forgedId of [{ user_id: '12' }, { ownership_user_id: '12' }]) {
+      const load = createSpaceverseCustomerWalletRepository({
+        runtime: fixture.runtime,
+        query: async (sql, params) => {
+          const result = await fixture.db.query(sql, params);
+          return {
+            ...result,
+            rows: result.rows.map(row => row.user_id === '11'
+              ? { ...row, ...forgedId }
+              : row)
+          };
+        }
+      });
+      await assert.rejects(load({ userId: '11' }), {
+        code: 'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH'
+      });
+    }
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(row => [row.id, row.balance]), [
+      ['11', '737'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
