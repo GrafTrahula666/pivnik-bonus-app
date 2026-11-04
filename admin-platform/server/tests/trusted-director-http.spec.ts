@@ -128,6 +128,20 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     }finally{setBroadcastFetchForTests(null)}
   })
 
+  it('revokes an existing trusted session immediately when its company grant is removed',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query('DELETE FROM admin_company_access WHERE admin_id=11 AND company_id=10')
+    try{
+      expect((await request('trusted','GET',path)).status).toBe(404)
+      expect((await request('trusted','POST',path,{title:'Must not persist'})).status).toBe(404)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Must not persist'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES(11,10,'trusted')")
+    }
+  })
+
   it('allows changing only the signed-in directors password and keeps owner credentials',async()=>{
     const before=(await state.db!.query('SELECT password_hash FROM admin_accounts WHERE id=12')).rows
     const r=await request('trusted','POST','/api/admin/auth/password',{currentPassword:password,newPassword:'New-Fixture-Password-2026!'})
