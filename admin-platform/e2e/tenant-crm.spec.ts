@@ -314,6 +314,9 @@ test('late customer list from a closed venue never appears in the next venue',as
   })
   await first.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await arrived
+  // Stop intercepting new requests before opening CRM 2. The already
+  // intercepted CRM 1 response stays blocked until release() below.
+  await page.unroute('**/crm/customers?**')
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
   const second=await open(page,'CRM 2')
   release()
