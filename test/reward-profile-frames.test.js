@@ -97,8 +97,9 @@ test('real avatar renderer isolates the moving dragon from the stationary CREATO
   const ast = parse(css);
   const animations = new Set();
   walk(ast, (node) => { if (node.type === 'Atrule' && node.name === 'keyframes') animations.add(node.prelude.children.first.name); });
-  assert(animations.has('creatorDragonOrbit'));
-  assert.match(css, /\.creator-dragon-orbit\s*\{[^}]*animation: creatorDragonOrbit/s);
+  assert(!animations.has('creatorDragonOrbit'));
+  assert.doesNotMatch(css, /animation: creatorDragonOrbit/);
+  assert.match(css, /creator-dragon-mesh/);
   const paths = [...css.matchAll(/url\(['"]?(\/assets\/frames\/(?:creator-|halloween-|infernal-|frost-|eclipse-)[^)'" ]+)/g)].map((m) => m[1]);
   assert.equal(new Set(paths).size, 6);
   for (const path of paths) { const data = await fs.readFile(new URL(`..${path}`, import.meta.url)); assert.equal(data.subarray(1,4).toString(), 'PNG'); }

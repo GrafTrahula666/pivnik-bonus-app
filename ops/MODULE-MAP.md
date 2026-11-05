@@ -94,6 +94,15 @@ configured `OWNER_TELEGRAM_ID` or database-verified `OWNER_VK_ID`, not an arbitr
 `OWNER_FRAME_REPAIR_SQL` preserves these selections during startup/auth repair.
 `app.js` renders fixed art plus independent light/particle layers; only the
 separate half-circle diamond dragon orbits the stationary CREATOR plaque.
+As of the 2026-11-05 review branch, `creatorDragonPoint` bends a shared polar
+triangle mesh of the original PNG. Negative 18s orbit keeps head ahead of neck;
+2.8s travelling radial waves run head-to-tail. One 576px buffer (384px texture plus transparent rotation guards) is shared by
+visible portraits/previews at 30fps; disconnected/hidden portraits are skipped,
+page visibility suspends RAF and reduced-motion retains the static PNG.
+Canvas failure keeps the same static artwork. The dragon layer sits above the
+glass (z-index 6) and its plane is expanded by six percentage points beyond
+the previous orbit, including picker previews, so it flies just outside the rim.
+No frame entitlement/grant changes.
 `styles.css` respects reduced motion; `assets/frames` is included by the existing
 VK bundle asset copy. No startup patch, schema or automatic gift distribution.
 Regression: `test/reward-profile-frames.test.js`, `test/personal-profile-frames.test.js`.

@@ -10144,11 +10144,19 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 }
 .reward-frame-sovereign .reward-frame-particle:nth-child(3n) { background: #e52547; }
 .creator-dragon-orbit {
-  inset: -12%;
-  z-index: 2;
+  /* Lift the flight above the glass and slightly outside its rim. */
+  inset: -18%;
+  z-index: 6;
   background: url('/assets/frames/creator-diamond-dragon.png') center / contain no-repeat;
-  animation: creatorDragonOrbit 18s linear infinite;
+  /* Canvas owns orbit + continuous body deformation; PNG remains a static fallback. */
 }
+.creator-dragon-mesh {
+  /* Match the padded backing canvas; preserve the original texture size. */
+  position: absolute; left: -25%; top: -25%;
+  display: block; width: 150%; height: 150%; opacity: 0;
+}
+.creator-dragon-ready { background-image: none; }
+.creator-dragon-ready .creator-dragon-mesh { opacity: 1; }
 .profile-frame-choice .frame-choice-preview:has(.reward-frame-shell) {
   position: relative;
   overflow: visible;
@@ -10156,12 +10164,11 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   border: 0;
 }
 .frame-choice-preview .reward-frame-shell { inset: -12%; }
-.frame-choice-preview .creator-dragon-orbit { inset: -7%; }
+.frame-choice-preview .creator-dragon-orbit { inset: -13%; }
 html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-frame {
   left: calc(11% - 18px) !important;
 }
 @keyframes rewardPumpkinOrbit { to { transform: rotate(360deg); } }
-@keyframes creatorDragonOrbit { to { transform: rotate(360deg); } }
 @keyframes rewardHeat { 0%, 100% { filter: brightness(1); } 45% { filter: brightness(1.2) drop-shadow(0 0 3px #ff790066); } }
 @keyframes rewardFrost { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.15) drop-shadow(0 0 3px #50b9ff88); } }
 @keyframes rewardRegal { 0%, 100% { filter: brightness(1); } 45% { filter: brightness(1.16); } }
@@ -10187,6 +10194,8 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-
   .reward-frame-light::after,
   .reward-frame-particle,
   .creator-dragon-orbit { animation: none !important; }
+  .creator-dragon-orbit { background-image: url('/assets/frames/creator-diamond-dragon.png'); }
+  .creator-dragon-mesh { opacity: 0 !important; }
   .reward-frame-light::after { opacity: 0; }
   .reward-frame-particle { opacity: .35; }
 }

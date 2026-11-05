@@ -350,6 +350,8 @@ async function inspectRewardFrames(caseName, config) {
     });
     await page.waitForFunction(() => Array.from(document.images).every((image) => image.complete));
     await page.waitForLoadState('networkidle');
+    await page.locator('#accept-creator-violet').scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.querySelector('#accept-creator-violet .creator-dragon-ready'));
     const snapshot = (time) => page.evaluate((at) => {
       // Do not rewind the screen entrance animation along with the frame.
       document.getAnimations().filter((animation) => animation.effect?.target?.closest?.('#rewardFramesAcceptance'))
@@ -360,17 +362,29 @@ async function inspectRewardFrames(caseName, config) {
       const origin = host.getBoundingClientRect();
       const round = (n) => Math.round(n * 100) / 100;
       const rect = (el) => { const r = el.getBoundingClientRect(); return { x: round(r.x - origin.x), y: round(r.y - origin.y), width: round(r.width), height: round(r.height) }; };
-      return { base: rect(base), portrait: rect(host.querySelector('img')), dragon: getComputedStyle(dragon).transform,
-        baseZ: Number(getComputedStyle(base).zIndex), dragonZ: Number(getComputedStyle(dragon).zIndex),
+      const canvas = dragon.querySelector('canvas');
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let edgeAlpha = 0;
+      for (let i = 0; i < canvas.width; i++) for (const index of [i, (canvas.height - 1) * canvas.width + i, i * canvas.width, i * canvas.width + canvas.width - 1]) {
+        edgeAlpha = Math.max(edgeAlpha, pixels[index * 4 + 3]);
+      }
+      let hash = 0;
+      for (const byte of pixels) hash = (Math.imul(hash, 31) + byte) >>> 0;
+      return { base: rect(base), portrait: rect(host.querySelector('img')), orbit: rect(dragon), dragon: hash,
+        edgeAlpha, baseZ: Number(getComputedStyle(base).zIndex), dragonZ: Number(getComputedStyle(dragon).zIndex),
         width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
     }, time);
-    const before = await snapshot(0), after = await snapshot(4500);
+    const before = await snapshot(0);
+    await page.waitForTimeout(450); // Observe real canvas output across multiple RAF frames.
+    const after = await snapshot(4500);
     await fs.writeFile(path.join(outDir, `${caseName}-reward-frame-geometry.json`), JSON.stringify({ before, after }, null, 2));
     await page.screenshot({ path: path.join(outDir, `${caseName}-reward-frames-inspection.png`), fullPage: true });
     assert(JSON.stringify(before.base) === JSON.stringify(after.base), `${caseName}: CREATOR plaque moved`);
     assert(JSON.stringify(before.portrait) === JSON.stringify(after.portrait), `${caseName}: portrait moved`);
     assert(before.dragon !== after.dragon, `${caseName}: diamond dragon does not orbit`);
-    assert(after.baseZ > after.dragonZ, `${caseName}: dragon obscures the CREATOR plaque`);
+    assert(before.edgeAlpha === 0 && after.edgeAlpha === 0, `${caseName}: dragon clipped at canvas edge`);
+    assert(after.dragonZ > after.baseZ, `${caseName}: dragon must fly above the glass frame`);
+    assert(after.orbit.width > after.base.width * 1.3, `${caseName}: orbit must leave visible space outside the rim`);
     assert(after.scrollWidth <= after.width, `${caseName}: frames cause horizontal overflow`);
     assert(loaded.size >= 6, `${caseName}: frame artwork not loaded: ${JSON.stringify([...loaded])}`);
     for (const time of [1500, 6000]) {
@@ -380,6 +394,9 @@ async function inspectRewardFrames(caseName, config) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const reduced = await page.locator('#accept-creator-violet .creator-dragon-orbit').evaluate((el) => getComputedStyle(el).animationName);
     assert(reduced === 'none', `${caseName}: reduced motion still animates the dragon`);
+    await page.waitForFunction(() => startCreatorDragonAnimation.runtime.raf === 0
+      && getComputedStyle(document.querySelector('#accept-creator-violet canvas')).opacity === '0');
+    assert(await page.locator('#accept-creator-violet canvas').evaluate(el => getComputedStyle(el).opacity) === '0', `${caseName}: reduced motion canvas remains visible`);
     assert(pageErrors.length === 0, `${caseName}: reward page errors: ${pageErrors.join(' | ')}`);
     assert(failedLocal.length === 0, `${caseName}: reward asset requests failed`);
     return { before, after, reduced, loaded: [...loaded] };
