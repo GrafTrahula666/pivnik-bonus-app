@@ -224,6 +224,20 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     }
   })
 
+  it('rejects an existing owner session after its account is deactivated',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE admin_accounts SET active=FALSE WHERE id=12')
+    try{
+      expect((await request('owner','GET',path)).status).toBe(401)
+      expect((await request('owner','POST',path,{title:'Inactive owner write'})).status).toBe(401)
+      expect((await request('trusted','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive owner write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE admin_accounts SET active=TRUE WHERE id=12')
+    }
+  })
+
   it('loses platform privileges immediately after role downgrade in an existing session',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('root','GET',path)).status).toBe(200)
