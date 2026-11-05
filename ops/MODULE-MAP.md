@@ -88,7 +88,10 @@ triangle mesh of the original PNG. Negative 18s orbit keeps head ahead of neck;
 2.8s travelling radial waves run head-to-tail. One 384px buffer is shared by
 visible portraits/previews at 30fps; disconnected/hidden portraits are skipped,
 page visibility suspends RAF and reduced-motion retains the static PNG.
-Canvas failure keeps the same static artwork. No frame entitlement/grant changes.
+Canvas failure keeps the same static artwork. The dragon layer sits above the
+glass (z-index 6) and its plane is expanded by six percentage points beyond
+the previous orbit, including picker previews, so it flies just outside the rim.
+No frame entitlement/grant changes.
 `styles.css` respects reduced motion; `assets/frames` is included by the existing
 VK bundle asset copy. No startup patch, schema or automatic gift distribution.
 Regression: `test/reward-profile-frames.test.js`, `test/personal-profile-frames.test.js`.

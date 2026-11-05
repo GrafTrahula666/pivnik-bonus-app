@@ -10144,8 +10144,9 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
 }
 .reward-frame-sovereign .reward-frame-particle:nth-child(3n) { background: #e52547; }
 .creator-dragon-orbit {
-  inset: -12%;
-  z-index: 2;
+  /* Lift the flight above the glass and slightly outside its rim. */
+  inset: -18%;
+  z-index: 6;
   background: url('/assets/frames/creator-diamond-dragon.png') center / contain no-repeat;
   /* Canvas owns orbit + continuous body deformation; PNG remains a static fallback. */
 }
@@ -10159,7 +10160,7 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   border: 0;
 }
 .frame-choice-preview .reward-frame-shell { inset: -12%; }
-.frame-choice-preview .creator-dragon-orbit { inset: -7%; }
+.frame-choice-preview .creator-dragon-orbit { inset: -13%; }
 html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-frame {
   left: calc(11% - 18px) !important;
 }

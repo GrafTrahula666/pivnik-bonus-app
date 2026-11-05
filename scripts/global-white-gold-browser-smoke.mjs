@@ -365,7 +365,7 @@ async function inspectRewardFrames(caseName, config) {
       const pixels = dragon.querySelector('canvas').getContext('2d').getImageData(0, 0, 384, 384).data;
       let hash = 0;
       for (const byte of pixels) hash = (Math.imul(hash, 31) + byte) >>> 0;
-      return { base: rect(base), portrait: rect(host.querySelector('img')), dragon: hash,
+      return { base: rect(base), portrait: rect(host.querySelector('img')), orbit: rect(dragon), dragon: hash,
         baseZ: Number(getComputedStyle(base).zIndex), dragonZ: Number(getComputedStyle(dragon).zIndex),
         width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
     }, time);
@@ -377,7 +377,8 @@ async function inspectRewardFrames(caseName, config) {
     assert(JSON.stringify(before.base) === JSON.stringify(after.base), `${caseName}: CREATOR plaque moved`);
     assert(JSON.stringify(before.portrait) === JSON.stringify(after.portrait), `${caseName}: portrait moved`);
     assert(before.dragon !== after.dragon, `${caseName}: diamond dragon does not orbit`);
-    assert(after.baseZ > after.dragonZ, `${caseName}: dragon obscures the CREATOR plaque`);
+    assert(after.dragonZ > after.baseZ, `${caseName}: dragon must fly above the glass frame`);
+    assert(after.orbit.width > after.base.width * 1.3, `${caseName}: orbit must leave visible space outside the rim`);
     assert(after.scrollWidth <= after.width, `${caseName}: frames cause horizontal overflow`);
     assert(loaded.size >= 6, `${caseName}: frame artwork not loaded: ${JSON.stringify([...loaded])}`);
     for (const time of [1500, 6000]) {
