@@ -10150,7 +10150,11 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-gold-ba
   background: url('/assets/frames/creator-diamond-dragon.png') center / contain no-repeat;
   /* Canvas owns orbit + continuous body deformation; PNG remains a static fallback. */
 }
-.creator-dragon-mesh { display: block; width: 100%; height: 100%; opacity: 0; }
+.creator-dragon-mesh {
+  /* Match the padded backing canvas; preserve the original texture size. */
+  position: absolute; left: -25%; top: -25%;
+  display: block; width: 150%; height: 150%; opacity: 0;
+}
 .creator-dragon-ready { background-image: none; }
 .creator-dragon-ready .creator-dragon-mesh { opacity: 1; }
 .profile-frame-choice .frame-choice-preview:has(.reward-frame-shell) {

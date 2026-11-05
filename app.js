@@ -214,7 +214,7 @@ function creatorDragonTexturePoint(x, y, seconds) {
 function creatorDragonHtml() {
   // Runs after synchronous innerHTML insertion, also covering inline leaderboard/preview avatars.
   if (typeof queueMicrotask === 'function') queueMicrotask(startCreatorDragonAnimation);
-  return '<span class="creator-dragon-orbit"><canvas class="creator-dragon-mesh" width="384" height="384"></canvas></span>';
+  return '<span class="creator-dragon-orbit"><canvas class="creator-dragon-mesh" width="576" height="576"></canvas></span>';
 }
 
 function startCreatorDragonAnimation() {
@@ -224,7 +224,9 @@ function startCreatorDragonAnimation() {
     const image = new Image();
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const buffer = document.createElement('canvas');
-    buffer.width = buffer.height = 384;
+    // A rotating square texture extends beyond its original bounds. Keep a
+    // 96px transparent guard on each side, without changing the flight scale.
+    buffer.width = buffer.height = 576;
     runtime = { image, media, buffer, targets: new Set(), visible: new Set(), raf: 0, last: -Infinity };
     startCreatorDragonAnimation.runtime = runtime;
     const wake = () => {
@@ -258,10 +260,10 @@ function startCreatorDragonAnimation() {
     function paint(seconds) {
       const ctx = buffer.getContext('2d');
       if (!ctx) return;
-      ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,384,384);
+      ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,576,576);
       const bent=vertices.map(row=>row.map(v=>{
         const p=creatorDragonTexturePoint(v.x/384,v.y/384,seconds);
-        return {x:p.x*384,y:p.y*384};
+        return {x:p.x*384+96,y:p.y*384+96};
       }));
       for(let i=0;i<sectors;i++) for(let j=0;j<rings;j++) {
         triangle(ctx,[vertices[i][j],vertices[i+1][j],vertices[i+1][j+1]],[bent[i][j],bent[i+1][j],bent[i+1][j+1]]);
@@ -270,7 +272,7 @@ function startCreatorDragonAnimation() {
       for(const target of runtime.visible) {
         const out=target.getContext('2d');
         if (!out) continue;
-        out.clearRect(0,0,384,384); out.drawImage(buffer,0,0);
+        out.clearRect(0,0,576,576); out.drawImage(buffer,0,0);
         target.parentElement.classList.add('creator-dragon-ready');
       }
     }

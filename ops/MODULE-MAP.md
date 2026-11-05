@@ -85,7 +85,7 @@ configured `OWNER_TELEGRAM_ID` or database-verified `OWNER_VK_ID`, not an arbitr
 separate half-circle diamond dragon orbits the stationary CREATOR plaque.
 As of the 2026-11-05 review branch, `creatorDragonPoint` bends a shared polar
 triangle mesh of the original PNG. Negative 18s orbit keeps head ahead of neck;
-2.8s travelling radial waves run head-to-tail. One 384px buffer is shared by
+2.8s travelling radial waves run head-to-tail. One 576px buffer (384px texture plus transparent rotation guards) is shared by
 visible portraits/previews at 30fps; disconnected/hidden portraits are skipped,
 page visibility suspends RAF and reduced-motion retains the static PNG.
 Canvas failure keeps the same static artwork. The dragon layer sits above the
