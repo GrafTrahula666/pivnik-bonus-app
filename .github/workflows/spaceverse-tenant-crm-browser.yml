@@ -61,23 +61,44 @@ jobs:
       - name: Install Chromium browser
         working-directory: admin-platform
         run: npx playwright install --with-deps chromium
-      # Split projects into separate server processes: the production-style
-      # 30-read/min actor limiter must stay intact within every browser suite.
-      # Run the late-list race in a fresh fixture-server process per viewport.
-      # The real 30-read/min actor guard remains enabled; other CRM cases can
-      # otherwise exhaust the shared root actor before this regression starts.
-      - name: Desktop tenant CRM with all 355 customers
+      # Every invocation starts a fresh disposable fixture server and actor budget.
+      # The real 30/min guard stays enabled; HTTP 429 is never suppressed.
+      - name: Desktop Directory and filters on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep-invert 'late customer list from a closed venue'
-      - name: Desktop late-list isolation with fresh fixture server
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'built panel reads and searches'
+      - name: Desktop List error recovery on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'late customer list from a closed venue'
-      - name: Mobile tenant CRM with all 355 customers
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'rate-limited customer list|server 500 on customer list'
+      - name: Desktop Detail error recovery on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep-invert 'late customer list from a closed venue'
-      - name: Mobile late-list isolation with fresh fixture server
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer detail|denied customer detail|rate-limited customer detail|customer detail server failure'
+      - name: Desktop Pagination on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'late customer list from a closed venue'
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'all 355 customers remain'
+      - name: Desktop Cross-owner isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'changing venue clears customers'
+      - name: Desktop Late-list isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'late real customer response'
+      - name: Mobile Directory and filters on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'built panel reads and searches'
+      - name: Mobile List error recovery on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'rate-limited customer list|server 500 on customer list'
+      - name: Mobile Detail error recovery on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'malformed customer detail|denied customer detail|rate-limited customer detail|customer detail server failure'
+      - name: Mobile Pagination on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'all 355 customers remain'
+      - name: Mobile Cross-owner isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'changing venue clears customers'
+      - name: Mobile Late-list isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'late real customer response'
       - name: Upload synthetic browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
