@@ -109,7 +109,7 @@ describe('cash register dashboard',()=>{
     const multi=renderToStaticMarkup(createElement(CashDashboard,{report:{...single,period:{...single.period,until:'2026-10-03T21:00:00Z'}}}))
     expect(multi).toContain('02.10.2026 — 03.10.2026 · сумма за одинаковые часы всех дней периода')
   })
-  it('does not invent POS projections when they are unavailable or leak them into app-only view',()=>{
+  it('does not invent POS projections when they are unavailable or leak them into an unavailable app cohort',()=>{
     const html=renderToStaticMarkup(createElement(CashDashboard,{report}))
     expect(html).toContain('Нет данных о продажах по часам')
     expect(html).toContain('Нет данных о товарных позициях')
@@ -117,6 +117,30 @@ describe('cash register dashboard',()=>{
     expect(app).not.toContain('Выручка по часам')
     expect(app).not.toContain('Продажи по товарам')
     expect(html).not.toContain('₽ 0,00')
+  })
+  it('shows only confirmed linked POS products and hours inside the PIVNIK purchase view',()=>{
+    const app={
+      ...report.all!,salesCents:'40000',returnsCents:'10000',netCents:'30000',receiptCount:1,
+      averageCents:'40000',saleDocuments:1,returnDocuments:1,
+      days:[{label:'2026-10-02',amountCents:'30000'}],
+      hours:[{label:'08',amountCents:'30000'}],
+      products:[{name:'Крафт PIVNIK',measure:'л',quantityMillis:'500',salesCents:'40000',returnCents:'10000',netCents:'30000'}],
+    }
+    const total={...report.all!,products:[
+      {name:'Крафт PIVNIK',measure:'л',quantityMillis:'500',salesCents:'40000',returnCents:'10000',netCents:'30000'},
+      {name:'Только общий ассортимент',measure:'шт',quantityMillis:'1000',salesCents:'60001',returnCents:'15001',netCents:'45000'},
+    ]}
+    const linked:CashReport={...report,all:total,app}
+    expect(isCashReport(linked)).toBe(true)
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report:linked,mode:'app'}))
+    expect(html).toContain('Продажи по товарам · PIVNIK')
+    expect(html).toContain('Выручка по часам · PIVNIK')
+    expect(html).toContain('Крафт PIVNIK')
+    expect(html).toContain('08:00')
+    expect(html).toContain('Только чеки с подтверждённой связью PIVNIK')
+    expect(html).not.toContain('Только общий ассортимент')
+    const overall=renderToStaticMarkup(createElement(CashDashboard,{report:linked,mode:'all'}))
+    expect(overall).toContain('Только общий ассортимент')
   })
   it('rejects malformed or inconsistent optional Evotor hour/product projections',()=>{
     const base=report.all!
