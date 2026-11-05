@@ -189,4 +189,30 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
   })
 
 
+  it('revokes a second existing owner session after a password change without revoking the current session',async()=>{
+    const loginResponse=await fetch(origin+'/api/admin/auth/login',{
+      method:'POST',
+      headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+      body:JSON.stringify({email:'owner@fixture.invalid',password}),
+    })
+    expect(loginResponse.status).toBe(200)
+    const otherCookie=loginResponse.headers.get('set-cookie')!.split(';')[0]!
+    const {csrfToken:otherCsrf}=await loginResponse.json() as {csrfToken:string}
+    const path='/api/admin/venues/101/app/promotions'
+    const otherRequest=(method:string,body?:unknown)=>fetch(origin+path,{
+      method,
+      headers:{cookie:otherCookie,origin:'https://director.fixture.invalid','content-type':'application/json','x-csrf-token':otherCsrf},
+      ...(method==='GET'?{}:{body:JSON.stringify(body)}),
+    })
+    expect((await otherRequest('GET')).status).toBe(200)
+    const changed=await request('owner','POST','/api/admin/auth/password',{
+      currentPassword:password,newPassword:'Owner-Rotated-Fixture-2026!',
+    })
+    expect(changed.status).toBe(200)
+    expect((await otherRequest('GET')).status).toBe(401)
+    expect((await otherRequest('POST',{title:'Stale owner session write'})).status).toBe(401)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Stale owner session write'")).rows[0].count).toBe(0)
+  })
+
 })
