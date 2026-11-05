@@ -147,6 +147,23 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     }finally{setBroadcastFetchForTests(null)}
   })
 
+  it('fails closed for an inactive venue in existing owner and director sessions',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE venues SET active=FALSE WHERE id=101')
+    try{
+      for(const who of ['trusted','owner']){
+        expect((await request(who,'GET',path)).status).toBe(404)
+        expect((await request(who,'POST',path,{title:'Inactive venue write'})).status).toBe(404)
+      }
+      expect((await state.db!.query(\"SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive venue write'\")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE venues SET active=TRUE WHERE id=101')
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
   it('revokes an existing trusted session immediately when its company grant is removed',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
