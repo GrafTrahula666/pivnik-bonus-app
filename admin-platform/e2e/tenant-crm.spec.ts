@@ -180,6 +180,26 @@ test('denied customer detail never exposes a cached balance',async({page})=>{
 })
 
 
+test('rate-limited customer detail never exposes money and recovers on retry',async({page})=>{
+  await login(page,'owner')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await page.route('**/crm/customers/1',route=>route.fulfill({
+    status:429,contentType:'application/json',body:JSON.stringify({error:'rate_limited'})
+  }))
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  const card=section.getByRole('region',{name:'Карточка клиента'})
+  await expect(card.getByRole('alert')).toBeVisible()
+  await expect(card).not.toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('status')).toHaveCount(0)
+  await card.getByRole('button',{name:'Закрыть карточку',exact:true}).click()
+  await page.unroute('**/crm/customers/1')
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  await expect(card).toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('alert')).toHaveCount(0)
+})
+
 test('customer detail server failure hides money and recovers on fresh request',async({page})=>{
   await login(page,'owner')
   const section=await open(page,'CRM 1')
