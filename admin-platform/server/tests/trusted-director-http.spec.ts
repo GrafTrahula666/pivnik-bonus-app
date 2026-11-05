@@ -156,6 +156,21 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     }
   })
 
+  it('loses platform privileges immediately after role downgrade in an existing session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('root','GET',path)).status).toBe(200)
+    await state.db!.query("UPDATE admin_accounts SET role='VENUE_ADMIN' WHERE id=1")
+    try{
+      expect((await request('root','GET',path)).status).toBe(404)
+      expect((await request('root','POST',path,{title:'Downgraded root write'})).status).toBe(404)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Downgraded root write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("UPDATE admin_accounts SET role='SUPER_ADMIN' WHERE id=1")
+    }
+    expect((await request('root','GET',path)).status).toBe(200)
+  })
+
   it('allows changing only the signed-in directors password and keeps owner credentials',async()=>{
     const before=(await state.db!.query('SELECT password_hash FROM admin_accounts WHERE id=12')).rows
     const r=await request('trusted','POST','/api/admin/auth/password',{currentPassword:password,newPassword:'New-Fixture-Password-2026!'})
