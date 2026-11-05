@@ -15,6 +15,8 @@ test('actual dashboard: loading, all/client split, refresh, stale failure, auth 
  })
  await page.goto('/e2e/fixtures/evotor.html');await expect(page.getByText('Загрузка кассовых документов…')).toBeVisible()
  state='normal';release();await expect(page.getByText('Внутри общей кассы')).toBeVisible()
+ await expect(page.getByRole('region',{name:'Сравнение среднего чека'})).toBeVisible()
+ await expect(page.getByText('Покупки без подтверждённой связи',{exact:true})).toBeVisible()
  await expect(page.getByRole('button',{name:'Все продажи',exact:true})).toHaveAttribute('aria-pressed','true')
  const money=page.locator('.kpi-value').first();await expect(money).toHaveText(/290\s*000,00/)
  await expect(page.getByText('Клиенты PIVNIK:',{exact:false})).toContainText(/110\s*000,00/)
