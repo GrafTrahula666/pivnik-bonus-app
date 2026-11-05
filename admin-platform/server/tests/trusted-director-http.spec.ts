@@ -106,6 +106,7 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     try{
       for(const who of ['trusted','owner']){
         expect((await request(who,'PUT','/api/admin/venues/202/app/promotions/'+promotionId,{title:'Foreign mutation attempt'})).status).toBe(404)
+        expect((await request(who,'DELETE','/api/admin/venues/202/app/promotions/'+promotionId)).status).toBe(404)
       }
       expect((await state.db!.query('SELECT title FROM promotions WHERE id=$1',[promotionId])).rows[0]).toMatchObject({title:'Original foreign title'})
     }finally{
