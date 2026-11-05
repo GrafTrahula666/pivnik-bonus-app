@@ -211,11 +211,16 @@ export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:
   const [source,setSource]=useState<'all'|'app'|'operations'>('all')
   return <div className="page">
     <div className="segmented dashboard-sources" role="group" aria-label="Продажи">
-      <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи кассы</button>
-      <button className={source==='app'?'active':''} aria-pressed={source==='app'} onClick={()=>setSource('app')}>Клиенты приложения</button>
+      <button className={source!=='operations'?'active':''} aria-pressed={source!=='operations'} onClick={()=>setSource('all')}>Продажи кассы</button>
       <button className={source==='operations'?'active':''} aria-pressed={source==='operations'} onClick={()=>setSource('operations')}>Операции приложения</button>
     </div>
     {source==='operations'?<ApplicationOperationsDashboard key={props.venue.id} {...props}/>:
-      <SalesDashboard key={props.venue.id+':'+props.period} venue={props.venue} days={days(props.period)} mode={source}/>}
+      <>
+        <div className="segmented dashboard-cash-subnav" role="group" aria-label="Аналитика кассовых покупок">
+          <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи</button>
+          <button className={source==='app'?'active':''} aria-pressed={source==='app'} onClick={()=>setSource('app')}>Покупки клиентов PIVNIK</button>
+        </div>
+        <SalesDashboard key={props.venue.id+':'+props.period} venue={props.venue} days={days(props.period)} mode={source}/>
+      </>}
   </div>
 }
