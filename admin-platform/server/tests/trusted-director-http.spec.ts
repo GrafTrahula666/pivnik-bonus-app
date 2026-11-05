@@ -209,6 +209,15 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
       currentPassword:password,newPassword:'Owner-Rotated-Fixture-2026!',
     })
     expect(changed.status).toBe(200)
+    const loginWith=(candidate:string)=>fetch(origin+'/api/admin/auth/login',{
+      method:'POST',
+      headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+      body:JSON.stringify({email:'owner@fixture.invalid',password:candidate}),
+    })
+    const staleLogin=await loginWith(password)
+    expect(staleLogin.status).toBe(401)
+    expect(await staleLogin.json()).toMatchObject({code:'INVALID_CREDENTIALS'})
+    expect((await loginWith('Owner-Rotated-Fixture-2026!')).status).toBe(200)
     expect((await otherRequest('GET')).status).toBe(401)
     expect((await otherRequest('POST',{title:'Stale owner session write'})).status).toBe(401)
     expect((await request('owner','GET',path)).status).toBe(200)
