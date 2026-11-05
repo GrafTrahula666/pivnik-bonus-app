@@ -320,7 +320,14 @@ test('late customer list from a closed venue never appears in the next venue',as
   await page.getByRole('button',{name:'Закрыть',exact:true}).click()
   const second=await open(page,'CRM 2')
   release()
+  // Capture the actual second-venue HTTP status to distinguish rate limiting
+  // from a stale-response UI regression in the failing browser scenario.
+  const secondListResponse=page.waitForResponse(response=>
+    response.url().includes('/crm/customers?') && response.request().method()==='GET'
+  )
   await second.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  const response=await secondListResponse
+  expect(response.status(),`CRM 2 list HTTP ${response.status()} at ${new URL(response.url()).pathname}`).toBe(200)
   await expect(second.getByRole('button',{name:'Owned 102 бонусов',exact:true})).toBeVisible()
   await expect(second.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
   await expect(second.getByRole('status')).toContainText('Найдено клиентов:')
