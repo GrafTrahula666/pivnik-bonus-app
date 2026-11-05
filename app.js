@@ -188,6 +188,132 @@ function rewardFrameDefinition(code) {
   return Object.prototype.hasOwnProperty.call(frames, code) ? frames[code] : null;
 }
 
+// Polar texture mesh: neighbouring vertices share the same deformation, so the
+// diamond texture bends continuously instead of moving rigid PNG slices.
+function creatorDragonPoint(angle, radius, seconds) {
+  const along = Math.max(0, Math.min(1, (angle + Math.PI / 2) / Math.PI));
+  const amplitude = .008 + .024 * along;
+  // sin(k*s - w*t): constant-phase crests travel from head (s=0) to tail (s=1).
+  const wave = amplitude * Math.sin(2 * Math.PI * (2 * along - seconds / 2.8));
+  const bentRadius = radius + wave;
+  // Negative orbit: the upper head leads, with the neck/body/tail trailing clockwise.
+  const orbit = -2 * Math.PI * seconds / 18;
+  return { x: .5 + bentRadius * Math.cos(angle + orbit),
+    y: .5 + bentRadius * Math.sin(angle + orbit) };
+}
+
+// Correct the backwards-facing source head around its neck joint. The smooth
+// join preserves the original diamond texture and connects to the unflipped body.
+function creatorDragonTexturePoint(x, y, seconds) {
+  const blend=Math.max(0,Math.min(1,(.255-y)/.055));
+  const weight=blend*blend*(3-2*blend);
+  const mx=x+(1.30-2*x)*weight, my=y+.03*weight;
+  return creatorDragonPoint(Math.atan2(my-.5,mx-.5),Math.hypot(mx-.5,my-.5),seconds);
+}
+
+function creatorDragonHtml() {
+  // Runs after synchronous innerHTML insertion, also covering inline leaderboard/preview avatars.
+  if (typeof queueMicrotask === 'function') queueMicrotask(startCreatorDragonAnimation);
+  return '<span class="creator-dragon-orbit"><canvas class="creator-dragon-mesh" width="576" height="576"></canvas></span>';
+}
+
+function startCreatorDragonAnimation() {
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return;
+  let runtime = startCreatorDragonAnimation.runtime;
+  if (!runtime) {
+    const image = new Image();
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const buffer = document.createElement('canvas');
+    // A rotating square texture extends beyond its original bounds. Keep a
+    // 96px transparent guard on each side, without changing the flight scale.
+    buffer.width = buffer.height = 576;
+    runtime = { image, media, buffer, targets: new Set(), visible: new Set(), raf: 0, last: -Infinity };
+    startCreatorDragonAnimation.runtime = runtime;
+    const wake = () => {
+      if (!runtime.raf && !document.hidden && !media.matches && image.complete && image.naturalWidth && runtime.visible.size) {
+        runtime.raf = requestAnimationFrame(tick);
+      }
+    };
+    const stop = () => { cancelAnimationFrame(runtime.raf); runtime.raf = 0; };
+    const triangle = (ctx, src, dst) => {
+      const [a,b,c] = src, [p,q,r] = dst;
+      const det = (b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y);
+      if (Math.abs(det) < 1e-8) return;
+      const ax=((q.x-p.x)*(c.y-a.y)-(r.x-p.x)*(b.y-a.y))/det;
+      const bx=((r.x-p.x)*(b.x-a.x)-(q.x-p.x)*(c.x-a.x))/det;
+      const ay=((q.y-p.y)*(c.y-a.y)-(r.y-p.y)*(b.y-a.y))/det;
+      const by=((r.y-p.y)*(b.x-a.x)-(q.y-p.y)*(c.x-a.x))/det;
+      ctx.save(); ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); ctx.lineTo(r.x,r.y); ctx.closePath(); ctx.clip();
+      ctx.setTransform(ax,ay,bx,by,p.x-ax*a.x-bx*a.y,p.y-ay*a.x-by*a.y);
+      ctx.drawImage(image,0,0,384,384); ctx.restore();
+    };
+    // Source and destination coordinates are in the same square texture space.
+    const vertices = [];
+    const sectors = 72, rings = 5;
+    for (let i=0;i<=sectors;i++) {
+      const angle = (-115 + 230*i/sectors)*Math.PI/180;
+      vertices.push(Array.from({length:rings+1},(_,j)=>{
+        const radius = .18 + .59*j/rings;
+        return {angle,radius,x:(.5+radius*Math.cos(angle))*384,y:(.5+radius*Math.sin(angle))*384};
+      }));
+    }
+    function paint(seconds) {
+      const ctx = buffer.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,576,576);
+      const bent=vertices.map(row=>row.map(v=>{
+        const p=creatorDragonTexturePoint(v.x/384,v.y/384,seconds);
+        return {x:p.x*384+96,y:p.y*384+96};
+      }));
+      for(let i=0;i<sectors;i++) for(let j=0;j<rings;j++) {
+        triangle(ctx,[vertices[i][j],vertices[i+1][j],vertices[i+1][j+1]],[bent[i][j],bent[i+1][j],bent[i+1][j+1]]);
+        triangle(ctx,[vertices[i][j],vertices[i+1][j+1],vertices[i][j+1]],[bent[i][j],bent[i+1][j+1],bent[i][j+1]]);
+      }
+      for(const target of runtime.visible) {
+        const out=target.getContext('2d');
+        if (!out) continue;
+        out.clearRect(0,0,576,576); out.drawImage(buffer,0,0);
+        target.parentElement.classList.add('creator-dragon-ready');
+      }
+    }
+    function tick(ms) {
+      runtime.raf=0;
+      for(const target of runtime.targets) if(!target.isConnected) {
+        runtime.targets.delete(target); runtime.visible.delete(target); runtime.observer?.unobserve(target);
+      }
+      if(document.hidden || media.matches || !runtime.visible.size) return;
+      if(ms-runtime.last>=1000/30) { paint(ms/1000); runtime.last=ms; }
+      wake();
+    }
+    if (typeof IntersectionObserver === 'function') {
+      runtime.observer = new IntersectionObserver(entries=>{
+        for(const entry of entries) entry.isIntersecting ? runtime.visible.add(entry.target) : runtime.visible.delete(entry.target);
+        wake();
+      });
+    }
+    runtime.wake=wake;
+    const motionChange=()=>{
+      stop();
+      for(const target of runtime.targets) target.parentElement?.classList.remove('creator-dragon-ready');
+      wake();
+    };
+    media.addEventListener('change',motionChange);
+    document.addEventListener('visibilitychange',()=>{ document.hidden ? stop() : wake(); });
+    image.onload=wake;
+    image.src='/assets/frames/creator-diamond-dragon.png';
+  }
+  // Prune on insertion too: reduced-motion mode has no RAF to do the cleanup.
+  for(const target of runtime.targets) if(!target.isConnected) {
+    runtime.targets.delete(target); runtime.visible.delete(target); runtime.observer?.unobserve(target);
+  }
+  for(const target of document.querySelectorAll('.creator-dragon-mesh')) if(!runtime.targets.has(target)) {
+    runtime.targets.add(target);
+    if(runtime.observer) runtime.observer.observe(target);
+    else if(target.getClientRects().length) runtime.visible.add(target);
+  }
+  runtime.wake();
+}
+
 function avatarOrbitHtml(entity = {}) {
   const reward = rewardFrameDefinition(entity.profileFrame);
   if (reward) {
@@ -195,7 +321,7 @@ function avatarOrbitHtml(entity = {}) {
       const angle = index * Math.PI / 6;
       return `<i class="reward-frame-particle" style="--spark-x:${(50 + 43 * Math.cos(angle)).toFixed(2)}%;--spark-y:${(50 + 43 * Math.sin(angle)).toFixed(2)}%;--spark-delay:${(-index * .43).toFixed(2)}s"></i>`;
     }).join('');
-    return `<span class="reward-frame-shell reward-frame-${reward}" aria-hidden="true"><span class="reward-frame-base"></span><span class="reward-frame-light"></span>${particles}${reward === 'creator' ? '<span class="creator-dragon-orbit"></span>' : ''}</span>`;
+    return `<span class="reward-frame-shell reward-frame-${reward}" aria-hidden="true"><span class="reward-frame-base"></span><span class="reward-frame-light"></span>${particles}${reward === 'creator' ? creatorDragonHtml() : ''}</span>`;
   }
   if (entity.profileFrame === 'gold-bars') {
     return '<span class="gold-orbital-base" aria-hidden="true"></span>'
