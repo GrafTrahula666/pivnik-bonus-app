@@ -31,6 +31,23 @@ function cashQuantity(value:string,measure:string){
 }
 function cashAbs(value:bigint){return value<0n?-value:value}
 
+// A POS receipt must be confirmed before it can contribute to the linked-client share.
+// BigInt avoids precision loss on large, but individually safe, receipt counters.
+function linkedReceiptShare(linked:number|null|undefined,total:number|null|undefined):number|null{
+  if(linked==null||total==null||!Number.isSafeInteger(linked)||!Number.isSafeInteger(total)||
+    total<=0||linked<0||linked>total)return null
+  return Number((BigInt(linked)*10000n+BigInt(total)/2n)/BigInt(total))/100
+}
+function CashShareMetric({label,percent,note}:{label:string;percent:number|null|undefined;note:string}){
+  const value=typeof percent==='number'&&Number.isFinite(percent)&&percent>=0&&percent<=100?percent:null
+  return <div className="cash-share-metric">
+    <span>{label}</span><strong>{value===null?'Нет данных':value.toLocaleString('ru-RU',{maximumFractionDigits:2})+'%'}</strong>
+    {value===null?<div className="cash-share-missing">Нет подтверждённой базы для расчёта</div>:
+      <div className="cash-share-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}><div style={{width:value+'%'}}/></div>}
+    <small>{note}</small>
+  </div>
+}
+
 function CashHourlyChart({hours,daily=false}:{hours:NonNullable<PosSummary['hours']>;daily?:boolean}){
   const [active,setActive]=useState<string|null>(null)
   const figure=useRef<HTMLElement>(null),[width,setWidth]=useState(960)
@@ -173,6 +190,8 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
   const all=readable?(mode==='app'?report?.app:report?.all):null
   const count=(n:number|null|undefined)=>n===null||n===undefined?'Нет данных':rub.format(n)
   const state=report?.connection.state
+  const amountShare=all&&report?.app&&BigInt(all.salesCents)>0n?report.linkedRevenueSharePercent:null
+  const receiptShare=all&&report?.app?linkedReceiptShare(report.app.receiptCount,all.receiptCount):null
   // The app re-reads the whole cash history every couple of minutes; after one full pass a running
   // pass is routine, the totals are those of the last full pass.
   const refreshing=state==='syncing'&&Boolean(report?.connection.lastSuccessAt)
@@ -216,6 +235,15 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
       {report?.connection.lastSuccessAt&&<p className="comparison-note">Последняя полная сверка: {new Date(report.connection.lastSuccessAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})}. Время — по Москве.</p>}
     </section>
     <div className="kpi-grid cash-primary-kpis" aria-label="Основные показатели кассы">{primaryKpis.map(([label,value,source],index)=><CashKpi key={label} label={label} value={value} source={source} trend={trends[index]} trendPeriod={comparisonSnapshot?.periodLabel}/>)}</div>
+    {mode==='all'&&all&&report?.app&&report.unlinked&&<section className="card cash-split cash-share" aria-label="Доля покупок клиентов PIVNIK">
+      <div className="cash-share-heading"><div><span className="eyebrow">ЛОЯЛЬНОСТЬ · КАССА</span><h3>Внутри общей кассы</h3></div><small>Доля подтверждённо связанных покупок PIVNIK</small></div>
+      <div className="cash-share-grid">
+        <CashShareMetric label="По сумме продаж" percent={amountShare} note="Связанные продажи / все продажи, до возвратов"/>
+        <CashShareMetric label="По количеству чеков" percent={receiptShare} note="Связанные чеки / все подтверждённые чеки продажи"/>
+      </div>
+      <div className="cash-share-totals"><span>Клиенты PIVNIK: <b>{cashMoney(report.app.salesCents)}</b></span><span>Без связи с PIVNIK: <b>{cashMoney(report.unlinked.salesCents)}</b></span></div>
+      <p className="cash-share-disclaimer">Чеки без подтверждённой связи включены в общую кассу. Нулевая доля связок не означает, что гости не использовали приложение. Суммы здесь до возвратов; клиентские покупки уже входят в общую сумму.</p>
+    </section>}
     <p className="cash-insight-period">Изменение основных показателей появится в карточках после включения сравнения ниже. Дополнительный кассовый период загружается только по запросу.</p>
     {comparison}
     <details className="card cash-secondary-metrics">
@@ -231,12 +259,6 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
       </dl>
       <p>Выручка = продажи − возвраты. Операции = документы продажи + документы возврата. Средний чек = продажи / подтверждённые чеки продажи.</p>
     </details>}
-    {mode==='all'&&all&&report?.app&&report.unlinked&&<section className="card cash-split">
-      <h3>Внутри общей кассы</h3>
-      <p>Клиенты PIVNIK: <b>{cashMoney(report.app.salesCents)}</b> · {report.linkedRevenueSharePercent==null?'Нет базы для доли':report.linkedRevenueSharePercent+'% суммы продаж'}</p>
-      <p>Без связи с PIVNIK: <b>{cashMoney(report.unlinked.salesCents)}</b></p>
-      <small>Суммы продаж до возвратов. Клиентские продажи уже включены в общий итог.</small>
-    </section>}
     {all&&<div className="two-cols">
       {tables.map(({title,label,rows})=><section className="card table-card" key={title}>
         <div className="table-section-title"><CardTitle title={title}/></div>
