@@ -157,7 +157,7 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
         expect((await request(who,'GET',path)).status).toBe(404)
         expect((await request(who,'POST',path,{title:'Inactive venue write'})).status).toBe(404)
       }
-      expect((await state.db!.query(\"SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive venue write'\")).rows[0].count).toBe(0)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive venue write'")).rows[0].count).toBe(0)
     }finally{
       await state.db!.query('UPDATE venues SET active=TRUE WHERE id=101')
     }
