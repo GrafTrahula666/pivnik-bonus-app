@@ -120,6 +120,24 @@ test('built panel reads and searches real isolated customer SQL with precise bal
 })
 
 
+test('rate-limited customer list clears stale rows and recovers without weakening guard',async({page})=>{
+  await login(page,'root')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await page.route('**/crm/customers?**',route=>route.fulfill({
+    status:429,contentType:'application/json',body:JSON.stringify({error:'rate_limited'})
+  }))
+  await section.getByRole('button',{name:'Обновить',exact:true}).click()
+  await expect(section.getByRole('alert')).toContainText('Слишком частые проверки. Повторите через минуту.')
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
+  await expect(section.getByRole('status')).toHaveCount(0)
+  await page.unroute('**/crm/customers?**')
+  await section.getByRole('button',{name:'Повторить проверку',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await expect(section.getByRole('alert')).toHaveCount(0)
+})
+
 test('denied customer detail never exposes a cached balance',async({page})=>{
   await login(page,'owner')
   const section=await open(page,'CRM 1')
