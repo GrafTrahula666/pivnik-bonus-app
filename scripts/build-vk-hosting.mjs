@@ -57,7 +57,7 @@ async function copyIfExists(relativePath) {
   }
 }
 
-const VK_BOOT_IMAGE = 'assets/boot/pivnik-halloween-20261006.webp';
+const VK_BOOT_IMAGE = 'assets/boot/vk-boot-sky-city-20261001.webp';
 
 function renderVkIndex(source) {
   let html = source
@@ -83,7 +83,7 @@ function renderVkIndex(source) {
     '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.2-main-parity"></script>\n  <script defer src="/account-link.js$1"></script>'
   );
 
-  // Bundle the shared Telegram/VK Halloween artwork locally, without an external CDN.
+  // Bundle the shared Telegram/VK sky-city artwork locally, without an external CDN.
   const bootImagePattern = /(<img class="boot-image" src=")[^"]*(")/i;
   if (!bootImagePattern.test(html)) throw new Error('index.html boot image not found.');
   html = html.replace(bootImagePattern, `$1${VK_BOOT_IMAGE}$2`);
@@ -187,6 +187,14 @@ const renderedHtml = renderVkIndex(sourceHtml);
 await fs.writeFile(path.join(outDir, 'index.html'), renderedHtml);
 
 for (const directory of ['assets', 'vendor']) await copyIfExists(directory);
+
+// Keep the existing Run navigation usable in the static VK bundle as well.
+// The standalone game already supports anonymous play; no session/leaderboard policy changes.
+await fs.cp(path.join(root, 'minigames/pivnik-run'), path.join(outDir, 'run'), { recursive: true });
+const runIndex = path.join(outDir, 'run/index.html');
+await fs.writeFile(runIndex, (await fs.readFile(runIndex, 'utf8'))
+  .replace(/<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js"><\/script>/i, ''));
+
 
 const references = new Set();
 for (const match of renderedHtml.matchAll(/(?:src|href)="([^\"]+)"/g)) {

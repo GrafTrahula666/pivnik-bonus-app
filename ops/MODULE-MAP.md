@@ -1,3 +1,14 @@
+## Temporary white-gold restoration (2026-11-05, review branch)
+
+`app.js:applyDesign` ignores the stale published Halloween skin without changing
+stored settings, copy or visibility. Existing cloud-city and white-gold CSS are
+canonical again. The Run/wheel two-column row is season-independent on both
+platforms; existing IDs and handlers remain. Shared index, loader override and
+VK builder use the existing sky-city boot image. No data, access, money, wheel
+probability or startup-patch changes. The existing Run link still targets `/run/`; the VK builder copies the existing
+standalone game there and strips its Telegram SDK include. Anonymous play is
+unchanged; the existing Telegram-only game leaderboard policy is not expanded.
+
 ## 2026-11-03: Tenant-scoped loyalty managed settings (integrated Draft)
 
 `admin-platform/server/writes.ts` returns `source:not_configured`, `null` for missing

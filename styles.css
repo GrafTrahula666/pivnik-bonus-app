@@ -10200,6 +10200,77 @@ html body .client-home.home-v2 .spaceverse-home-hero .profile-avatar.has-reward-
   .reward-frame-particle { opacity: .35; }
 }
 
+/* Temporary white-gold home: preserve the current Run + wheel row independently of season.
+   Existing buttons, IDs, navigation and wheel handlers are unchanged. */
+html:not(.theme-halloween) body .client-home.home-v2.active {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 8px;
+}
+html:not(.theme-halloween) body .client-home.home-v2.active > * { grid-column: 1 / -1; }
+html:not(.theme-halloween) body .client-home.home-v2.active > :is(.home-run-card, .home-wheel-card) {
+  grid-column: auto;
+  display: block;
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 156px;
+  aspect-ratio: 1.25;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid #d2b477;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #fffef9, #f3e6cf) !important;
+  color: #704609;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 #fff, 0 6px 16px #80602322;
+}
+html:not(.theme-halloween) body .client-home.home-v2.active > .home-run-card {
+  background: linear-gradient(180deg, #fff9ed22 30%, #fff7e8 82%),
+    url('/assets/backgrounds/spaceverse-cloud-city.webp') center / cover !important;
+}
+html:not(.theme-halloween) .home-run-caption {
+  position: absolute; inset: auto 10px 12px;
+  display: grid; gap: 8px; justify-items: start;
+}
+html:not(.theme-halloween) .home-run-caption b { font-size: 15px; color: #704609; }
+html:not(.theme-halloween) .home-run-caption i {
+  display: flex; gap: 12px; align-items: center; padding: 7px 15px;
+  border-radius: 10px; background: linear-gradient(#e8bc6b, #b77a1e);
+  color: #fff; font: 800 11px system-ui; box-shadow: inset 0 1px 0 #fff8;
+}
+html:not(.theme-halloween) .home-run-caption em { font-style: normal; }
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-copy { position: static; display: block; }
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-heading {
+  position: static; display: block; height: auto; transform: none;
+}
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-heading-copy {
+  position: absolute; top: 12px; left: 10px; right: 8px; width: auto; height: auto; margin: 0; padding: 0;
+  clip-path: none; overflow: visible; white-space: normal;
+}
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-heading-copy > small { display: none; }
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-heading-copy > strong {
+  color: #704609; font-size: 16px; line-height: 1.1; max-width: 100px;
+}
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-card::after {
+  content: ''; position: absolute; width: 82px; height: 82px; right: -7px; bottom: 35px;
+  background: url('/assets/home-v2/wheel-approved-20260929.png') center / contain no-repeat;
+  clip-path: circle(48% at 50% 50%);
+  pointer-events: none;
+}
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-timer {
+  position: absolute; top: auto; left: 10px; bottom: 54px; width: auto; max-width: 95px;
+  height: 22px; min-width: 0; padding: 0 4px; border: 0; background: #fffaf2dc;
+  z-index: 3;
+}
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-timer > i { display: none; }
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-timer em { font-size: 10px; }
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-cta {
+  position: absolute; top: auto; bottom: 12px; left: 10px; width: calc(100% - 20px);
+  height: 29px; padding: 0; border-radius: 10px;
+  color: #fff; background: linear-gradient(#e8bc6b, #b77a1e); font-size: 11px;
+}
+html:not(.theme-halloween) body .client-home.home-v2 .home-wheel-cta > i { display: none; }
+
 /* ============================================================
    Halloween "Midnight" theme (feature flag: design.theme === 'halloween').
    app.js applyDesign() toggles html.theme-halloween. Every rule below is

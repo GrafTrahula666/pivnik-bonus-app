@@ -120,6 +120,7 @@ async function inspectPlatform(platform) {
             hero: '.spaceverse-home-hero',
             business: '.spaceverse-business-card',
             wheel: '.home-wheel-card',
+            run: '.home-run-card',
             liters: '.beer-loyalty-card--compact',
             league: '.home-league-card'
           };
@@ -159,15 +160,17 @@ async function inspectPlatform(platform) {
     assert(geometry?.display === 'grid', `${platform}: Home V2 must render as grid, got ${geometry?.display}`);
     assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844,
       `${platform}: unexpected viewport ${JSON.stringify(geometry?.viewport)}`);
-    const minimumHeights = { hero: 126, business: 124, wheel: 122, liters: 84, league: 132 };
+    const minimumHeights = { hero: 126, business: 124, wheel: 156, run: 156, liters: 84, league: 132 };
     for (const [key, minimum] of Object.entries(minimumHeights)) {
       const card = geometry?.cards?.[key];
       assert(card, `${platform}: missing ${key} geometry`);
       assert(card.height >= minimum - 0.5,
         `${platform}: ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
-      assert(card.width >= 350,
+      assert(card.width >= (key === 'wheel' || key === 'run' ? 170 : 350),
         `${platform}: ${key} unexpectedly narrow at ${card.width}px`);
     }
+    assert(Math.abs(geometry.cards.run.top - geometry.cards.wheel.top) < 1, `${platform}: Run/wheel row split`);
+    assert(Math.abs(geometry.cards.run.width - geometry.cards.wheel.width) < 1, `${platform}: Run/wheel row must be equal width`);
     assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
       `${platform}: excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
     if (platform === 'telegram') {
