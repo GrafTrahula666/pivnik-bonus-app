@@ -101,7 +101,7 @@ function CashHourlyChart({hours,daily=false}:{hours:NonNullable<PosSummary['hour
   </figure>
 }
 
-function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['period']}){
+function CashInsights({summary,period,cohort}:{summary:PosSummary;period:CashReport['period'];cohort:'all'|'app'}){
   const [query,setQuery]=useState('')
   const [grouping,setGrouping]=useState<'hours'|'days'>('hours')
   const [sort,setSort]=useState<ProductSort>('revenue')
@@ -121,7 +121,7 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
   const until=period?dateLabel(Date.parse(period.until)-1):null
   return <div className="cash-insights">
     <section className="card cash-insight-section">
-      <div className="cash-insight-heading"><div><span className="eyebrow">КАССА · ВРЕМЯ</span><h3>{grouping==='hours'?'Выручка по часам':'Выручка по дням'}</h3></div>
+      <div className="cash-insight-heading"><div><span className="eyebrow">КАССА · ВРЕМЯ</span><h3>{(grouping==='hours'?'Выручка по часам':'Выручка по дням')+(cohort==='app'?' · PIVNIK':'')}</h3></div>
         <small>С учётом возвратов · время Москвы</small></div>
       <div className="segmented cash-chart-grouping" role="group" aria-label="Группировка графика выручки">
         <button type="button" aria-pressed={grouping==='hours'} className={grouping==='hours'?'active':''} onClick={()=>setGrouping('hours')}>По часам</button>
@@ -146,7 +146,7 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
       <p className="cash-insight-note">{grouping==='days'?'На графике — дни с кассовыми документами.':'На графике — все 24 часа; в списке — часы с кассовыми документами.'} Отрицательные значения означают превышение возвратов над продажами. Для выручки одного дня выберите дату в календаре.</p>
     </section>
     <section className="card cash-insight-section">
-      <div className="cash-insight-heading"><div><span className="eyebrow">КАССА · АССОРТИМЕНТ</span><h3>Продажи по товарам</h3></div>
+      <div className="cash-insight-heading"><div><span className="eyebrow">КАССА · АССОРТИМЕНТ</span><h3>{cohort==='app'?'Продажи по товарам · PIVNIK':'Продажи по товарам'}</h3></div>
         <small>Суммы после скидок · с учётом возвратов</small></div>
       {products===undefined?<p className="cash-insight-empty">Нет данных о товарных позициях.</p>:
        products.length===0?<p className="cash-insight-empty">В выбранном периоде нет товарных операций.</p>:
@@ -180,7 +180,7 @@ function CashInsights({summary,period}:{summary:PosSummary;period:CashReport['pe
            {ordered.length>limit&&<button type="button" className="btn secondary" onClick={()=>setLimit(n=>n+20)}>Показать ещё</button>}
          </div>
        </>}
-      <p className="cash-insight-note">Количество — проданное за вычетом возвращённого. Прибыль не рассчитывается: себестоимости в этих документах нет.</p>
+      <p className="cash-insight-note">{cohort==='app'?'Только чеки с подтверждённой связью PIVNIK. Отсутствие связанных товаров не доказывает отсутствия покупок через приложение. ':'Все кассовые документы выбранного заведения. '}Количество — проданное за вычетом возвращённого. Прибыль не рассчитывается: себестоимости в этих документах нет.</p>
     </section>
   </div>
 }
@@ -288,6 +288,6 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
           <tbody>{rows.length?rows.map(row=><tr key={row.label}><td>{row.label}</td><td><strong>{cashMoney(row.amountCents)}</strong></td></tr>):<tr><td colSpan={2}>За период нет данных</td></tr>}</tbody></table></div>
       </section>)}
     </div>}
-    {mode==='all'&&all&&<CashInsights summary={all} period={report?.period}/>}
+    {all&&<CashInsights key={mode} summary={all} period={report?.period} cohort={mode}/>} 
   </div>
 }
