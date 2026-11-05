@@ -100,6 +100,17 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('owner','GET','/api/admin/venues/202/app/promotions')).status).toBe(404)
     expect((await request('owner','POST','/api/admin/venues/202/app/promotions',{title:'Foreign owner injection'})).status).toBe(404)
     expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Foreign owner injection'")).rows[0].count).toBe(0)
+    // Direct foreign venue IDs must not permit updates to an existing promotion.
+    const seeded=await state.db!.query("INSERT INTO promotions(code,title,active) VALUES('foreign-scope-fixture','Original foreign title',TRUE) RETURNING id")
+    const promotionId=String((seeded.rows[0] as {id:string|number}).id)
+    try{
+      for(const who of ['trusted','owner']){
+        expect((await request(who,'PUT','/api/admin/venues/202/app/promotions/'+promotionId,{title:'Foreign mutation attempt'})).status).toBe(404)
+      }
+      expect((await state.db!.query('SELECT title FROM promotions WHERE id=$1',[promotionId])).rows[0]).toMatchObject({title:'Original foreign title'})
+    }finally{
+      await state.db!.query('DELETE FROM promotions WHERE id=$1',[promotionId])
+    }
     for(const path of ['platform','developer','audit'])expect((await request('trusted','GET','/api/admin/'+path)).status).toBe(403)
   })
 
