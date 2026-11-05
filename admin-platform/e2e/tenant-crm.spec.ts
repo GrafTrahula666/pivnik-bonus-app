@@ -138,6 +138,25 @@ test('rate-limited customer list clears stale rows and recovers without weakenin
   await expect(section.getByRole('alert')).toHaveCount(0)
 })
 
+test('server 500 on customer list clears stale rows and recovers on retry',async({page})=>{
+  await login(page,'root')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await page.route('**/crm/customers?**',route=>route.fulfill({
+    status:500,contentType:'application/json',body:JSON.stringify({error:'internal_error'})
+  }))
+  await section.getByRole('button',{name:'Обновить',exact:true}).click()
+  await expect(section.getByRole('alert')).toBeVisible()
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
+  await expect(section.getByRole('status')).toHaveCount(0)
+  await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
+  await page.unroute('**/crm/customers?**')
+  await section.getByRole('button',{name:'Повторить проверку',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await expect(section.getByRole('alert')).toHaveCount(0)
+})
+
 test('denied customer detail never exposes a cached balance',async({page})=>{
   await login(page,'owner')
   const section=await open(page,'CRM 1')
