@@ -278,3 +278,28 @@ test('late real customer response cannot reopen a card from the previous venue',
   await expect(second.getByText('101 бонусов',{exact:true})).toHaveCount(0)
   await expect(page.getByRole('region',{name:'Готовность CRM к запуску',exact:true}).getByRole('status')).toHaveCount(0)
 })
+
+test('late customer list from a closed venue never appears in the next venue',async({page})=>{
+  await login(page,'root')
+  const first=await open(page,'CRM 1')
+  let release!:()=>void
+  const pending=new Promise<void>(resolve=>{release=resolve})
+  let received!:()=>void
+  const arrived=new Promise<void>(resolve=>{received=resolve})
+  await page.route('**/crm/customers?**',async route=>{
+    if(!route.request().url().includes('/crm/customers?'))return route.continue()
+    const response=await route.fetch()
+    received()
+    await pending
+    await route.fulfill({response}).catch(()=>undefined)
+  })
+  await first.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await arrived
+  await page.getByRole('button',{name:'Закрыть',exact:true}).click()
+  const second=await open(page,'CRM 2')
+  release()
+  await second.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(second.getByRole('button',{name:'Owned 102 бонусов',exact:true})).toBeVisible()
+  await expect(second.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
+  await expect(second.getByRole('status')).toContainText('Найдено клиентов:')
+})
