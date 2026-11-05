@@ -164,6 +164,23 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('owner','GET',path)).status).toBe(200)
   })
 
+  it('fails closed when the owning company is deactivated during active sessions',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE companies SET active=FALSE WHERE id=10')
+    try{
+      for(const who of ['trusted','owner']){
+        expect((await request(who,'GET',path)).status).toBe(404)
+        expect((await request(who,'POST',path,{title:'Inactive company injection'})).status).toBe(404)
+      }
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive company injection'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE companies SET active=TRUE WHERE id=10')
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
   it('revokes an existing trusted session immediately when its company grant is removed',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
