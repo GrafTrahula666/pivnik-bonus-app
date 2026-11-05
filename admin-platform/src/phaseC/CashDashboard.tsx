@@ -192,6 +192,12 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
   const state=report?.connection.state
   const amountShare=all&&report?.app&&BigInt(all.salesCents)>0n?report.linkedRevenueSharePercent:null
   const receiptShare=all&&report?.app?linkedReceiptShare(report.app.receiptCount,all.receiptCount):null
+  // POS summary already computes sales-before-returns / confirmed SELL receipts.
+  // If receipt coverage is unknown or the cohort is empty, the average is not zero.
+  const linkedAverage=report?.app?.receiptCount?report.app.averageCents:null
+  const unlinkedAverage=report?.unlinked?.receiptCount?report.unlinked.averageCents:null
+  const averageDifference=linkedAverage!=null&&unlinkedAverage!=null&&BigInt(unlinkedAverage)>0n
+    ?cashPercentDelta(linkedAverage,unlinkedAverage):null
   // The app re-reads the whole cash history every couple of minutes; after one full pass a running
   // pass is routine, the totals are those of the last full pass.
   const refreshing=state==='syncing'&&Boolean(report?.connection.lastSuccessAt)
@@ -241,6 +247,22 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
         <CashShareMetric label="По сумме продаж" percent={amountShare} note="Связанные продажи / все продажи, до возвратов"/>
         <CashShareMetric label="По количеству чеков" percent={receiptShare} note="Связанные чеки / все подтверждённые чеки продажи"/>
       </div>
+      <section className="cash-cohort-averages" aria-label="Сравнение среднего чека">
+        <h4>Средний чек по группам</h4>
+        <div className="cash-cohort-average-grid">
+          <div className="cash-cohort-average">
+            <span>Покупки с подтверждённой связью PIVNIK</span>
+            <strong>{cashMoney(linkedAverage)}</strong>
+            <small>{report.app.receiptCount==null?'Количество чеков неизвестно':`Подтверждённых чеков: ${count(report.app.receiptCount)}`}</small>
+          </div>
+          <div className="cash-cohort-average">
+            <span>Покупки без подтверждённой связи</span>
+            <strong>{cashMoney(unlinkedAverage)}</strong>
+            <small>{report.unlinked.receiptCount==null?'Количество чеков неизвестно':`Подтверждённых чеков: ${count(report.unlinked.receiptCount)}`}</small>
+          </div>
+        </div>
+        <p>{averageDifference==null?'Для процентного сравнения нужны чеки обеих групп и ненулевой средний чек второй группы.':`Разница среднего чека связанной группы: ${averageDifference} относительно чеков без связи.`} Это сравнение групп, не доказательство влияния программы лояльности. Сумма продаж до возвратов / подтверждённые чеки SELL.</p>
+      </section>
       <div className="cash-share-totals"><span>Клиенты PIVNIK: <b>{cashMoney(report.app.salesCents)}</b></span><span>Без связи с PIVNIK: <b>{cashMoney(report.unlinked.salesCents)}</b></span></div>
       <p className="cash-share-disclaimer">Чеки без подтверждённой связи включены в общую кассу. Нулевая доля связок не означает, что гости не использовали приложение. Суммы здесь до возвратов; клиентские покупки уже входят в общую сумму.</p>
     </section>}
