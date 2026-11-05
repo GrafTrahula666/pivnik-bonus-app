@@ -51,8 +51,14 @@ export function createAdminAdjustmentPersistence({
     return Object.freeze({ rowCount: Number(result.rowCount || 0) });
   };
 
-  const scopedInsert = scopedWritesEnabled
+  const insertScopedTransaction = scopedWritesEnabled
     ? createScopedTransactionPersistence({ query })
+    : undefined;
+  const scopedInsert = insertScopedTransaction
+    ? (options) => insertScopedTransaction({
+      ...options,
+      transaction: normalizeAdjustmentTransaction(options.transaction)
+    })
     : undefined;
 
   return createMigrationGatedTransactionPersistence({
