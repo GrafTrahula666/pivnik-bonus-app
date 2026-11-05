@@ -157,6 +157,27 @@ test('server 500 on customer list clears stale rows and recovers on retry',async
   await expect(section.getByRole('alert')).toHaveCount(0)
 })
 
+test('malformed customer detail response fails closed and fresh retry recovers',async({page})=>{
+  await login(page,'owner')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  // A successful HTTP status does not establish a valid scoped CRM envelope.
+  await page.route('**/crm/customers/1',route=>route.fulfill({
+    status:200,contentType:'application/json',body:JSON.stringify({customer:{id:'1'},wallet:{balance:'101'}})
+  }))
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  const card=section.getByRole('region',{name:'Карточка клиента'})
+  await expect(card.getByRole('alert')).toContainText('Не удалось подтвердить данные этого заведения.')
+  await expect(card).not.toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('status')).toHaveCount(0)
+  await card.getByRole('button',{name:'Закрыть карточку',exact:true}).click()
+  await page.unroute('**/crm/customers/1')
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  await expect(card).toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('alert')).toHaveCount(0)
+})
+
 test('denied customer detail never exposes a cached balance',async({page})=>{
   await login(page,'owner')
   const section=await open(page,'CRM 1')
