@@ -164,6 +164,20 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('trusted','GET','/api/admin/auth/session')).status).toBe(200)
   })
 
+  it('rejects an expired trusted session with its original cookie and CSRF token',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query("UPDATE admin_sessions SET expires_at=NOW()-INTERVAL '1 minute' WHERE admin_id=11")
+    try{
+      expect((await request('trusted','GET',path)).status).toBe(401)
+      expect((await request('trusted','POST',path,{title:'Expired session write'})).status).toBe(401)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Expired session write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("UPDATE admin_sessions SET expires_at=NOW()+INTERVAL '1 day' WHERE admin_id=11")
+    }
+  })
+
   it('rejects a revoked trusted session even when its old cookie and CSRF token are reused',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
