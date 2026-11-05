@@ -96,6 +96,10 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     const foreignWrite=await request('trusted','POST','/api/admin/venues/202/app/promotions',{title:'Foreign tenant injection'})
     expect(foreignWrite.status).toBe(404)
     expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Foreign tenant injection'")).rows[0].count).toBe(0)
+    // A company owner must also fail closed for another company's direct venue ID.
+    expect((await request('owner','GET','/api/admin/venues/202/app/promotions')).status).toBe(404)
+    expect((await request('owner','POST','/api/admin/venues/202/app/promotions',{title:'Foreign owner injection'})).status).toBe(404)
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Foreign owner injection'")).rows[0].count).toBe(0)
     for(const path of ['platform','developer','audit'])expect((await request('trusted','GET','/api/admin/'+path)).status).toBe(403)
   })
 
