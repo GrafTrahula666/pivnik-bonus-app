@@ -305,8 +305,10 @@ test('late customer list from a closed venue never appears in the next venue',as
   const pending=new Promise<void>(resolve=>{release=resolve})
   let received!:()=>void
   const arrived=new Promise<void>(resolve=>{received=resolve})
+  let firstListUrl=''
   await page.route('**/crm/customers?**',async route=>{
     if(!route.request().url().includes('/crm/customers?'))return route.continue()
+    firstListUrl=route.request().url()
     const response=await route.fetch()
     received()
     await pending
@@ -323,7 +325,7 @@ test('late customer list from a closed venue never appears in the next venue',as
   // Capture the actual second-venue HTTP status to distinguish rate limiting
   // from a stale-response UI regression in the failing browser scenario.
   const secondListResponse=page.waitForResponse(response=>
-    response.url().includes('/crm/customers?') && response.request().method()==='GET'
+    response.url().includes('/crm/customers?') && response.url()!==firstListUrl && response.request().method()==='GET'
   )
   await second.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   const response=await secondListResponse
