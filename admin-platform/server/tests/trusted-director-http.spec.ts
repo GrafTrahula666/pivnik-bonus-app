@@ -162,7 +162,9 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect(r.status).toBe(200)
     expect((await state.db!.query('SELECT password_hash FROM admin_accounts WHERE id=12')).rows).toEqual(before)
     expect((await request('trusted','GET','/api/admin/auth/session')).status).toBe(200)
-  })  it('rejects a revoked trusted session even when its old cookie and CSRF token are reused',async()=>{
+  })
+
+  it('rejects a revoked trusted session even when its old cookie and CSRF token are reused',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
     await state.db!.query('DELETE FROM admin_sessions WHERE admin_id=11')
