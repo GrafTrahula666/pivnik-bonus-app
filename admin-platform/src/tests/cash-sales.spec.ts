@@ -8,6 +8,37 @@ const report:CashReport={connection:{state:'connected',lastSuccessAt:'2026-10-02
   app:{...base,salesCents:'11000',returnsCents:'1000',netCents:'10000',saleDocuments:1,activeBuyers:1,repeatBuyers:0,repeatPurchaseRate:0,purchaseFrequency:1},
   unlinked:{...base,salesCents:'19000',returnsCents:'0',netCents:'19000'},linkedRevenueSharePercent:36.66}
 describe('cash cohorts never create another revenue source',()=>{
+  it('compares verified linked and unlinked POS receipt averages, not another revenue stream',()=>{
+    const cohorts:CashReport={...report,
+      app:{...report.app!,receiptCount:1,averageCents:'11000'},
+      unlinked:{...report.unlinked!,receiptCount:1,averageCents:'19000'}}
+    expect(isCashReport(cohorts)).toBe(true)
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report:cohorts}))
+    expect(html).toContain('Сравнение среднего чека')
+    expect(html).toContain('Средний чек по группам')
+    expect(html).toContain('Покупки с подтверждённой связью PIVNIK')
+    expect(html).toContain('Покупки без подтверждённой связи')
+    expect(html).toMatch(/cash-cohort-average[^>]*><span>[^<]+<\/span><strong>₽ 110,00<\/strong>/)
+    expect(html).toMatch(/cash-cohort-average[^>]*><span>[^<]+<\/span><strong>₽ 190,00<\/strong>/)
+    expect(html).toContain('−42,10%')
+    expect(html).toContain('не доказательство влияния программы лояльности')
+    expect(html).not.toContain('₽ 390,00')
+    expect(renderToStaticMarkup(createElement(CashDashboard,{report:cohorts,mode:'app'}))).not.toContain('Средний чек по группам')
+  })
+  it('keeps cohort averages unknown when receipts are absent, incomplete or zero',()=>{
+    const noReceipts:CashReport={...report,app:{...report.app!,receiptCount:null,averageCents:null}}
+    const html=renderToStaticMarkup(createElement(CashDashboard,{report:noReceipts}))
+    expect(html).toContain('Средний чек по группам')
+    expect(html).toContain('Количество чеков неизвестно')
+    expect(html).toMatch(/cash-cohort-average[^>]*><span>[^<]+<\/span><strong>Нет данных<\/strong>/)
+    expect(html).not.toContain('Разница среднего чека связанной группы:')
+    const zero:CashReport={...report,unlinked:{...report.unlinked!,receiptCount:0,averageCents:null}}
+    const emptyHtml=renderToStaticMarkup(createElement(CashDashboard,{report:zero}))
+    expect(emptyHtml).toContain('Средний чек по группам')
+    expect(emptyHtml).not.toContain('Разница среднего чека связанной группы:')
+    const disconnected=renderToStaticMarkup(createElement(CashDashboard,{report:{...report,connection:{state:'not_connected'}}}))
+    expect(disconnected).not.toContain('Сравнение среднего чека')
+  })
   it('shows verified linked POS share by sales amount and by receipt count, without double counting',()=>{
     const linked:CashReport={...report,app:{...report.app!,receiptCount:1},unlinked:{...report.unlinked!,receiptCount:1}}
     expect(isCashReport(linked)).toBe(true)
