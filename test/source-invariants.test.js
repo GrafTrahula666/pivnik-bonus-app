@@ -238,7 +238,7 @@ test('Загрузчик снимается до профиля, начисле�
   assert.ok(finishPosition >= 0 && backgroundPosition > finishPosition);
   assert.doesNotMatch(bootSource, /loadSecondaryData\(/);
   assert.match(app, /async function hydrateAfterBoot\(\)[\s\S]*?\/api\/me[\s\S]*?loadSecondaryData\(\)/);
-  assert.match(app, /const jobs = \[[^\]]*loadAchievements\(\)/);
+  assert.match(app, /const jobs = initialLoad[\s\S]*?\[[^\]]*loadAchievements/);
   assert.match(app, /pivnik:boot-complete/);
   assert.doesNotMatch(accountLink, /addEventListener\('pivnik:boot-complete'/);
   assert.match(accountLink, /DOMContentLoaded'[\s\S]{0,160}installAchievementInbox\(\)/);
