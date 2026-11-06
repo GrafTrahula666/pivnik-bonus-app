@@ -48,7 +48,7 @@ describe('cash register dashboard',()=>{
     expect(html).toContain('Продажи за вычетом возвратов')
     expect(html).not.toContain('Повторных клиентов')
     expect(html).not.toContain('Клиентов всего')
-    expect((html.match(/class="kpi card live-kpi"/g)||[])).toHaveLength(4)
+    expect((html.match(/class="kpi card live-kpi"/g)||[])).toHaveLength(3)
     expect((html.match(/class="kpi card live-kpi kpi-unavailable"/g)||[])).toHaveLength(1)
     expect((html.match(/class="kpi card live-kpi(?: kpi-unavailable)?"/g)||[])).toHaveLength(4)
     expect(html).toContain('Чеков продажи')
