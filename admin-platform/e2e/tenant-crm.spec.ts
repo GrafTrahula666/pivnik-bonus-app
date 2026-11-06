@@ -162,12 +162,16 @@ test('unauthorized customer list 401 clears prior customers and requires a fresh
   const section=await open(page,'CRM 1')
   await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
   await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  // A session expiry on the list must also invalidate an already-open detail card.
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toContainText('Баланс: 101 бонусов')
   await page.route('**/crm/customers?**',route=>route.fulfill({
     status:401,contentType:'application/json',body:JSON.stringify({error:'unauthorized'})
   }))
   await section.getByRole('button',{name:'Обновить',exact:true}).click()
   await expect(section.getByRole('alert')).toBeVisible()
   await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
+  await expect(section.getByRole('region',{name:'Карточка клиента'})).toHaveCount(0)
   await expect(section.getByRole('status')).toHaveCount(0)
   await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
   await page.unroute('**/crm/customers?**')
