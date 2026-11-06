@@ -217,6 +217,26 @@ test('malformed customer detail response fails closed and fresh retry recovers',
   await expect(card.getByRole('alert')).toHaveCount(0)
 })
 
+test('expired session on customer detail hides money and recovers only after a fresh read',async({page})=>{
+  await login(page,'owner')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await page.route('**/crm/customers/1',route=>route.fulfill({
+    status:401,contentType:'application/json',body:JSON.stringify({error:'unauthorized'})
+  }))
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  const card=section.getByRole('region',{name:'Карточка клиента'})
+  await expect(card.getByRole('alert')).toContainText('Сессия истекла. Войдите снова.')
+  await expect(card).not.toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('status')).toHaveCount(0)
+  await card.getByRole('button',{name:'Закрыть карточку',exact:true}).click()
+  await page.unroute('**/crm/customers/1')
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  await expect(card).toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('alert')).toHaveCount(0)
+})
+
 test('denied customer detail never exposes a cached balance',async({page})=>{
   await login(page,'owner')
   const section=await open(page,'CRM 1')
