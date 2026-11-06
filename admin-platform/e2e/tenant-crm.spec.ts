@@ -157,6 +157,26 @@ test('server 500 on customer list clears stale rows and recovers on retry',async
   await expect(section.getByRole('alert')).toHaveCount(0)
 })
 
+test('malformed customer list HTTP 200 cannot masquerade as an empty CRM',async({page})=>{
+  await login(page,'root')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  // HTTP success alone does not prove that a scoped, paginated list was returned.
+  await page.route('**/crm/customers?**',route=>route.fulfill({
+    status:200,contentType:'application/json',body:JSON.stringify({customers:[],total:0})
+  }))
+  await section.getByRole('button',{name:'Обновить',exact:true}).click()
+  await expect(section.getByRole('alert')).toBeVisible()
+  await expect(section.locator('.tenant-crm-list button')).toHaveCount(0)
+  await expect(section.getByRole('status')).toHaveCount(0)
+  await expect(section.getByText('Клиентов пока нет.',{exact:true})).toHaveCount(0)
+  await page.unroute('**/crm/customers?**')
+  await section.getByRole('button',{name:'Повторить проверку',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  await expect(section.getByRole('alert')).toHaveCount(0)
+})
+
 test('malformed customer detail response fails closed and fresh retry recovers',async({page})=>{
   await login(page,'owner')
   const section=await open(page,'CRM 1')
