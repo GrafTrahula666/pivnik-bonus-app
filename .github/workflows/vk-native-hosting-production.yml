@@ -1,6 +1,10 @@
 name: VK native hosting PRODUCTION deploy
 
 on:
+  workflow_run:
+    workflows: [VK native hosting main parity]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       confirm:
@@ -11,19 +15,37 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: vk-hosting-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - name: Guard production deployment
+      - name: Check manual release confirmation
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_CONFIRM: ${{ inputs.confirm }}
         shell: bash
         run: |
           set -euo pipefail
-          test "${{ inputs.confirm }}" = "DEPLOY_VK_PRODUCTION"
+          test "$RELEASE_CONFIRM" = "DEPLOY_VK_PRODUCTION"
 
-      - name: Checkout exact selected ref
+      - name: Checkout exact release commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -79,6 +101,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          current_main="$(git ls-remote --heads origin main | cut -f1)"
+          if [[ "$RELEASE_SHA" != "$current_main" || "$RELEASE_SHA" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error title=Stale VK release::The checked commit is no longer the head of main."
+            exit 1
+          fi
           test -n "$MINI_APPS_ACCESS_TOKEN"
           log="$RUNNER_TEMP/vk-miniapps-production-deploy.log"
           npx -y @vkontakte/vk-miniapps-deploy@1.0.2 2>&1 | tee "$log"
