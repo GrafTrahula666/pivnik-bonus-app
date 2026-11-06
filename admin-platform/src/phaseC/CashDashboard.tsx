@@ -218,11 +218,13 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
     <div className="kpi-grid cash-primary-kpis" aria-label="Основные показатели кассы">{primaryKpis.map(([label,value,source],index)=><CashKpi key={label} label={label} value={value} source={source} trend={trends[index]} trendPeriod={comparisonSnapshot?.periodLabel}/>)}</div>
     <p className="cash-insight-period">Изменение основных показателей появится в карточках после включения сравнения ниже. Дополнительный кассовый период загружается только по запросу.</p>
     {comparison}
-    <details className="card cash-secondary-metrics">
-      <summary>Другие показатели кассы</summary>
-      <div className="kpi-grid cash-secondary-kpis">{secondaryKpis.map(([label,value,source])=><CashKpi key={label} label={label} value={value} source={source}/>)}</div>
-    </details>
-    {all&&<details className="card cash-calculation-details"><summary>Подробности расчёта</summary>
+    <section className="card cash-secondary-metrics" aria-label="Дополнительные показатели кассы">
+      <h3>Дополнительные показатели кассы</h3>
+      <dl className="cash-secondary-overview">{secondaryKpis.map(([label,value,source])=><div key={label}>
+        <dt>{label}</dt><dd>{value}</dd><small>{source}</small>
+      </div>)}</dl>
+    </section>
+    {all&&<section className="card cash-calculation-details" aria-label="Состав выручки"><h3>Состав выручки</h3>
       <dl>
         <div><dt>Продажи до возвратов</dt><dd>{cashMoney(all.salesCents)}</dd></div>
         <div><dt>Возвраты</dt><dd>{cashMoney(all.returnsCents)} · {count(all.returnDocuments)} документов</dd></div>
@@ -230,7 +232,7 @@ export function CashDashboard({report,mode='all',loading=false,error='',comparis
         <div><dt>Подтверждённые чеки продажи</dt><dd>{count(all.receiptCount)}</dd></div>
       </dl>
       <p>Выручка = продажи − возвраты. Операции = документы продажи + документы возврата. Средний чек = продажи / подтверждённые чеки продажи.</p>
-    </details>}
+    </section>}
     {mode==='all'&&all&&report?.app&&report.unlinked&&<section className="card cash-split">
       <h3>Внутри общей кассы</h3>
       <p>Клиенты PIVNIK: <b>{cashMoney(report.app.salesCents)}</b> · {report.linkedRevenueSharePercent==null?'Нет базы для доли':report.linkedRevenueSharePercent+'% суммы продаж'}</p>
