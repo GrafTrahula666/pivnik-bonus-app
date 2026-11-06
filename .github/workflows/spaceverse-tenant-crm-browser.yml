@@ -75,7 +75,7 @@ jobs:
       # These fail-closed list regressions were previously excluded by the narrow greps.
       - name: Desktop malformed and denied list on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer list|expired session on customer list|denied customer list'
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer list|malformed list response|unauthorized customer list 401|permission denied on list refresh'
       - name: Desktop Pagination on fresh fixture server
         working-directory: admin-platform
         run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'all 355 customers remain'
