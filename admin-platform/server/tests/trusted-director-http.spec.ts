@@ -301,6 +301,30 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
   })
 
 
+  it('rejects a revoked owner session while preserving the trusted director session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    const prior=sessions.get('owner')!
+    await state.db!.query('DELETE FROM admin_sessions WHERE admin_id=12')
+    try{
+      expect((await request('owner','GET',path)).status).toBe(401)
+      expect((await request('owner','POST',path,{title:'Revoked owner session write'})).status).toBe(401)
+      expect((await request('trusted','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Revoked owner session write'")).rows[0].count).toBe(0)
+    }finally{
+      const login=await fetch(origin+'/api/admin/auth/login',{
+        method:'POST',
+        headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+        body:JSON.stringify({email:'owner@fixture.invalid',password}),
+      })
+      expect(login.status).toBe(200)
+      const body=await login.json() as {csrfToken:string}
+      sessions.set('owner',{cookie:login.headers.get('set-cookie')!.split(';')[0]!,csrf:body.csrfToken})
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+    expect(prior.cookie).not.toBe(sessions.get('owner')!.cookie)
+  })
+
   it('revokes a second existing owner session after a password change without revoking the current session',async()=>{
     const loginResponse=await fetch(origin+'/api/admin/auth/login',{
       method:'POST',
