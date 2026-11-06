@@ -164,15 +164,13 @@ try {
   const geometry = evidence.homeGeometry;
   assert(geometry?.display === 'grid', `Home V2 must render as grid, got ${geometry?.display}`);
   assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844, `unexpected geometry viewport: ${JSON.stringify(geometry?.viewport)}`);
-  const minimumHeights = { hero: 126, business: 124, wheel: 156, run: 156, liters: 84, league: 132 };
+  const minimumHeights = { hero: 126, business: 124, liters: 84, league: 132 };
   for (const [key, minimum] of Object.entries(minimumHeights)) {
     const card = geometry?.cards?.[key];
     assert(card, `missing Home V2 ${key} geometry`);
     assert(card.height >= minimum - 0.5, `Home V2 ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
-    assert(card.width >= (key === 'wheel' || key === 'run' ? 170 : 350), `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
+    assert(card.width >= 350, `Home V2 ${key} unexpectedly narrow at ${card.width}px`);
   }
-  assert(Math.abs(geometry.cards.run.top - geometry.cards.wheel.top) < 1, 'Run and wheel must share a row');
-  assert(Math.abs(geometry.cards.run.width - geometry.cards.wheel.width) < 1, 'Run and wheel must share the row equally');
   assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,
     `Home V2 leaves an excessive blank tail before bottom navigation: ${JSON.stringify(geometry)}`);
 
@@ -184,7 +182,7 @@ try {
 
   // Exercise the supplied Home artwork at actual phone sizes with live text.
   const homeCardEvidence = [];
-  for (const viewport of [{ width: 320, height: 768 }, { width: 390, height: 844 }, { width: 430, height: 932 }]) {
+  for (const viewport of [{ width: 320, height: 768 }, { width: 375, height: 812 }, { width: 390, height: 844 }, { width: 430, height: 932 }]) {
     await page.setViewportSize(viewport);
     for (const status of ['Доступно', '24:00:00']) {
       const geometry = await page.evaluate((text) => {
@@ -195,24 +193,42 @@ try {
         });
         const card = document.querySelector('.home-wheel-card');
         const rect = card.getBoundingClientRect();
+        const run = document.querySelector('.home-run-card');
+        const runRect = run.getBoundingClientRect();
+        const ctaInside = (cta, tile) => cta.width > 0 && cta.height > 0 &&
+          cta.left >= tile.left && cta.right <= tile.right && cta.top >= tile.top && cta.bottom <= tile.bottom;
         const cta = card.querySelector('.home-wheel-cta > span');
         const ctaRect = cta.getBoundingClientRect();
         const statusNode = card.querySelector('#homeWheelStatus');
         const statusRect = statusNode.getBoundingClientRect();
         const timerRect = card.querySelector('.home-wheel-timer').getBoundingClientRect();
+        const title = card.querySelector('.home-wheel-heading-copy > strong');
         return {
           viewport: innerWidth, text,
+          run: { top: runRect.top, width: runRect.width, height: runRect.height },
+          wheel: { top: rect.top, width: rect.width, height: rect.height },
+          gap: rect.left - runRect.right,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+          buttonsFit: ctaInside(run.querySelector('.home-run-caption i').getBoundingClientRect(), runRect) &&
+            ctaInside(card.querySelector('.home-wheel-cta').getBoundingClientRect(), rect),
           artwork: getComputedStyle(card, '::after').backgroundImage,
           ctaText: cta.textContent,
           ctaCenterErrorX: Math.abs((ctaRect.left + ctaRect.right) / 2 - (rect.left + rect.width / 2)),
-          ctaCenterErrorY: Math.abs((ctaRect.top + ctaRect.bottom) / 2 - (rect.bottom - 26.5)),
+          ctaCenterErrorY: Math.abs((ctaRect.top + ctaRect.bottom) / 2 - (rect.bottom - 22)),
+          titleFits: title.scrollWidth <= title.clientWidth && title.getBoundingClientRect().bottom <= timerRect.top,
           statusFits: statusNode.scrollWidth <= statusNode.clientWidth && statusRect.width <= timerRect.width && statusRect.height <= timerRect.height,
           duplicatedWheelVisible: getComputedStyle(card.querySelector('.home-wheel-visual')).display !== 'none'
         };
       }, status);
+      assert(geometry.run.height === 96 && geometry.wheel.height === 96, `wrong tile heights: ${JSON.stringify(geometry)}`);
+      assert(geometry.run.top === geometry.wheel.top && geometry.run.width === geometry.wheel.width && geometry.gap === 12,
+        `Run and wheel must share one equal-width row with a 12px gap: ${JSON.stringify(geometry)}`);
+      if (viewport.width === 390) assert(geometry.run.width === 176, `wrong tile width at 390px: ${JSON.stringify(geometry)}`);
+      assert(geometry.buttonsFit && !geometry.overflow, `clipped buttons or horizontal scroll: ${JSON.stringify(geometry)}`);
       assert(geometry.artwork.includes('wheel-approved-20260929.png'), 'supplied wheel artwork missing');
       assert(geometry.ctaText === 'ВРАЩАТЬ', 'wheel CTA text changed');
       assert(geometry.ctaCenterErrorX <= 1 && geometry.ctaCenterErrorY <= 1, `wheel CTA is off center: ${JSON.stringify(geometry)}`);
+      assert(geometry.titleFits, `wheel title overlaps its artwork or status: ${JSON.stringify(geometry)}`);
       assert(geometry.statusFits, `wheel status overflows the clock slot: ${JSON.stringify(geometry)}`);
       assert(!geometry.duplicatedWheelVisible, 'old wheel overlay covers supplied artwork');
       homeCardEvidence.push(geometry);
