@@ -298,6 +298,17 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('trusted','POST',path,{title:'Revoked session write'})).status).toBe(401)
     expect((await request('owner','GET',path)).status).toBe(200)
     expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Revoked session write'")).rows[0].count).toBe(0)
+    // Restore an independent director login for subsequent isolation tests.
+    // The director password was rotated in an earlier test.
+    const login=await fetch(origin+'/api/admin/auth/login',{
+      method:'POST',
+      headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+      body:JSON.stringify({email:'trusted@fixture.invalid',password:'New-Fixture-Password-2026!'}),
+    })
+    expect(login.status).toBe(200)
+    const body=await login.json() as {csrfToken:string}
+    sessions.set('trusted',{cookie:login.headers.get('set-cookie')!.split(';')[0]!,csrf:body.csrfToken})
+    expect((await request('trusted','GET',path)).status).toBe(200)
   })
 
 
