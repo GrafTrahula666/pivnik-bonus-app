@@ -119,6 +119,23 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('trusted','POST','/api/admin/venues/101/app/promotions',{title:'Fixture'},false)).status).toBe(403)
   })
 
+  it('rejects a nonempty forged CSRF token on an otherwise permitted director write',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    const title='Forged director CSRF must not persist'
+    const session=sessions.get('trusted')!
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    const response=await fetch(origin+path,{
+      method:'POST',
+      headers:{cookie:session.cookie,origin:'https://director.fixture.invalid',
+        'content-type':'application/json','x-csrf-token':'forged-nonempty-csrf-token'},
+      body:JSON.stringify({title,active:false}),
+    })
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({code:'CSRF_REJECTED'})
+    expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+    expect((await request('trusted','GET',path)).status).toBe(200)
+  })
+
   it('allows creating, publishing and hiding promotions but keeps owner deletion',async()=>{
     const created=await request('trusted','POST','/api/admin/venues/101/app/promotions',{title:'Fixture',active:false})
     expect(created.status).toBe(200)
