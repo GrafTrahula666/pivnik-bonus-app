@@ -65,7 +65,7 @@ function CashReportContent({venue,mode,path}:{venue:ApiVenue;mode:'all'|'app';pa
     return()=>{cancelled=true}
   },[path,attempt])
   return <div className="page">
-    <PageHead eyebrow="ПРОДАЖИ · ЭВОТОР" title={mode==='all'?'Все продажи кассы':'Клиенты приложения'} sub={venue.name}
+    <PageHead eyebrow="ПРОДАЖИ · ЭВОТОР" title={mode==='all'?'Все продажи кассы':'Покупки клиентов PIVNIK'} sub={mode==='app'?'Только подтверждённо связанные кассовые чеки · '+venue.name:venue.name}
       actions={<button className="btn secondary" disabled={loading} onClick={()=>setAttempt(n=>n+1)}>Обновить</button>}/>
     {loading&&!report?<LoadingCard text="Загрузка кассовых документов…"/>:error&&!report?<ErrorCard error={error} onRetry={()=>setAttempt(n=>n+1)}/>:
       <CashDashboard report={report} mode={mode} loading={loading} error={error} comparisonSnapshot={comparisonSnapshot}
