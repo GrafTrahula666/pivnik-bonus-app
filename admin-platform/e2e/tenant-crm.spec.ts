@@ -501,3 +501,24 @@ test('late customer list from a closed venue never appears in the next venue',as
   await expect(second.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toHaveCount(0)
   await expect(second.getByRole('status')).toContainText('Найдено клиентов:')
 })
+
+test('failed customer detail can retry in place without showing unverified money',async({page})=>{
+  await login(page,'owner')
+  const section=await open(page,'CRM 1')
+  await section.getByRole('button',{name:'Проверить клиентскую базу',exact:true}).click()
+  await expect(section.getByRole('button',{name:'Owned 101 бонусов',exact:true})).toBeVisible()
+  let attempts=0
+  await page.route('**/crm/customers/1',route=>{
+    attempts++
+    if(attempts===1)return route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:'internal_error'})})
+    return route.continue()
+  })
+  await section.getByRole('button',{name:'Owned 101 бонусов',exact:true}).click()
+  const card=section.getByRole('region',{name:'Карточка клиента'})
+  await expect(card.getByRole('alert')).toBeVisible()
+  await expect(card).not.toContainText('Баланс: 101 бонусов')
+  await card.getByRole('button',{name:'Повторить проверку карточки',exact:true}).click()
+  await expect(card).toContainText('Баланс: 101 бонусов')
+  await expect(card.getByRole('alert')).toHaveCount(0)
+  expect(attempts).toBe(2)
+})
