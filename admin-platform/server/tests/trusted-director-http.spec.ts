@@ -253,8 +253,8 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     await state.db!.query("UPDATE admin_company_access SET access_kind='unexpected' WHERE admin_id=12 AND company_id=10")
     try{
       const read=await request('owner','GET',restricted)
-      expect(read.status).toBe(403)
-      expect(await read.json()).toMatchObject({code:'DIRECTOR_READ_FORBIDDEN'})
+      expect(read.status).toBe(404)
+      expect(await read.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
       const title='Unknown grant must not write'
       const write=await request('owner','POST',allowed,{title})
       expect(write.status).toBe(403)
