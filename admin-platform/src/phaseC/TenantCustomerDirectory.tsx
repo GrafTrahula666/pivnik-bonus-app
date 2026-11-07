@@ -89,6 +89,6 @@ function CustomerSnapshot({path,id,scope,onClose}:{path:string;id:string;scope:S
   },[path,id,companyId,venueId,retry])
   return <section className="tenant-crm-card" aria-label="Карточка клиента">
     <button type="button" className="btn secondary" onClick={onClose}>Закрыть карточку</button>
-    {error?<div><p role="alert">{error}</p><button type="button" className="btn secondary" onClick={()=>setRetry(value=>value+1)}>Повторить проверку карточки</button></div>:row?<><h4>{customerName(row)}</h4><p>{row.wallet?'Баланс: '+formatExact(row.wallet.balance)+' бонусов':'Бонусный кошелёк ещё не создан.'}</p></>:<p role="status">Проверяем карточку…</p>}
+    {error?<div><p role="alert">{error}</p><button type="button" className="btn secondary" onClick={()=>{setError('');setRow(null);setRetry(value=>value+1)}}>Повторить проверку карточки</button></div>:row?<><h4>{customerName(row)}</h4><p>{row.wallet?'Баланс: '+formatExact(row.wallet.balance)+' бонусов':'Бонусный кошелёк ещё не создан.'}</p></>:<p role="status">Проверяем карточку…</p>}
   </section>
 }
