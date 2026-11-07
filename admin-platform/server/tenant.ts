@@ -53,7 +53,7 @@ export async function requireVenueAccess(
 
 export function parsePositiveId(raw: string, fieldName = 'id'): string {
   const value = String(raw || '').trim()
-  if (!/^[1-9]\d*$/.test(value)) {
+  if (!/^[1-9]\d*$/.test(value) || BigInt(value) > 9223372036854775807n) {
     throw new HttpError(400, 'INVALID_ID', `Некорректный ${fieldName}.`)
   }
   return value
@@ -74,6 +74,7 @@ export function buildVenueScopeQuery(
         FROM admin_company_access aca
         WHERE aca.company_id = v.company_id
           AND aca.admin_id = $2::bigint
+          AND aca.access_kind IN ('owner', 'trusted')
       )`
   }
   return {
@@ -148,6 +149,7 @@ export async function listAuthorizedVenues(admin: AdminPrincipal): Promise<Venue
      JOIN companies c ON c.id = v.company_id
      ${accessClause}
      WHERE v.active = TRUE AND c.active = TRUE
+       ${admin.role === 'SUPER_ADMIN' ? '' : "AND aca.access_kind IN ('owner', 'trusted')"}
      ORDER BY c.name, v.name`,
     params,
   )

@@ -93,11 +93,47 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
 
   it('denies foreign venues and platform APIs',async()=>{
     expect((await request('trusted','GET','/api/admin/venues/202/app/promotions')).status).toBe(404)
+    const foreignWrite=await request('trusted','POST','/api/admin/venues/202/app/promotions',{title:'Foreign tenant injection'})
+    expect(foreignWrite.status).toBe(404)
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Foreign tenant injection'")).rows[0].count).toBe(0)
+    // A company owner must also fail closed for another company's direct venue ID.
+    expect((await request('owner','GET','/api/admin/venues/202/app/promotions')).status).toBe(404)
+    expect((await request('owner','POST','/api/admin/venues/202/app/promotions',{title:'Foreign owner injection'})).status).toBe(404)
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Foreign owner injection'")).rows[0].count).toBe(0)
+    // Direct foreign venue IDs must not permit updates to an existing promotion.
+    const seeded=await state.db!.query("INSERT INTO promotions(code,title,active) VALUES('foreign-scope-fixture','Original foreign title',TRUE) RETURNING id")
+    const promotionId=String((seeded.rows[0] as {id:string|number}).id)
+    try{
+      for(const who of ['trusted','owner']){
+        expect((await request(who,'PUT','/api/admin/venues/202/app/promotions/'+promotionId,{title:'Foreign mutation attempt'})).status).toBe(404)
+        expect((await request(who,'DELETE','/api/admin/venues/202/app/promotions/'+promotionId)).status).toBe(404)
+      }
+      expect((await state.db!.query('SELECT title FROM promotions WHERE id=$1',[promotionId])).rows[0]).toMatchObject({title:'Original foreign title'})
+    }finally{
+      await state.db!.query('DELETE FROM promotions WHERE id=$1',[promotionId])
+    }
     for(const path of ['platform','developer','audit'])expect((await request('trusted','GET','/api/admin/'+path)).status).toBe(403)
   })
 
   it('requires CSRF even on permitted marketing operations',async()=>{
     expect((await request('trusted','POST','/api/admin/venues/101/app/promotions',{title:'Fixture'},false)).status).toBe(403)
+  })
+
+  it('rejects a nonempty forged CSRF token on an otherwise permitted director write',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    const title='Forged director CSRF must not persist'
+    const session=sessions.get('trusted')!
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    const response=await fetch(origin+path,{
+      method:'POST',
+      headers:{cookie:session.cookie,origin:'https://director.fixture.invalid',
+        'content-type':'application/json','x-csrf-token':'forged-nonempty-csrf-token'},
+      body:JSON.stringify({title,active:false}),
+    })
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({code:'CSRF_REJECTED'})
+    expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+    expect((await request('trusted','GET',path)).status).toBe(200)
   })
 
   it('allows creating, publishing and hiding promotions but keeps owner deletion',async()=>{
@@ -128,11 +164,305 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     }finally{setBroadcastFetchForTests(null)}
   })
 
+  it('fails closed for an inactive venue in existing owner and director sessions',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE venues SET active=FALSE WHERE id=101')
+    try{
+      for(const who of ['trusted','owner']){
+        expect((await request(who,'GET',path)).status).toBe(404)
+        expect((await request(who,'POST',path,{title:'Inactive venue write'})).status).toBe(404)
+      }
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive venue write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE venues SET active=TRUE WHERE id=101')
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
+  it('fails closed when the owning company is deactivated during active sessions',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE companies SET active=FALSE WHERE id=10')
+    try{
+      for(const who of ['trusted','owner']){
+        expect((await request(who,'GET',path)).status).toBe(404)
+        expect((await request(who,'POST',path,{title:'Inactive company injection'})).status).toBe(404)
+      }
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive company injection'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE companies SET active=TRUE WHERE id=10')
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
+  it('revokes an existing trusted session immediately when its company grant is removed',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query('DELETE FROM admin_company_access WHERE admin_id=11 AND company_id=10')
+    try{
+      expect((await request('trusted','GET',path)).status).toBe(404)
+      expect((await request('trusted','POST',path,{title:'Must not persist'})).status).toBe(404)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Must not persist'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES(11,10,'trusted')")
+    }
+  })
+
+  it('revokes an existing owner session immediately after its company grant is removed',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('DELETE FROM admin_company_access WHERE admin_id=12 AND company_id=10')
+    try{
+      expect((await request('owner','GET',path)).status).toBe(404)
+      expect((await request('owner','POST',path,{title:'Revoked owner grant write'})).status).toBe(404)
+      expect((await request('trusted','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Revoked owner grant write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("INSERT INTO admin_company_access(admin_id,company_id,access_kind) VALUES(12,10,'owner')")
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
+  it('downgrades an existing owner session to trusted permissions without re-login',async()=>{
+    const allowed='/api/admin/venues/101/app/promotions'
+    const restricted='/api/admin/venues/101/app/design'
+    expect((await request('owner','GET',restricted)).status).toBe(200)
+    await state.db!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=12 AND company_id=10")
+    try{
+      const denied=await request('owner','GET',restricted)
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({code:'DIRECTOR_READ_FORBIDDEN'})
+      const deniedWrite=await request('owner','PUT',restricted,{})
+      expect(deniedWrite.status).toBe(403)
+      expect(await deniedWrite.json()).toMatchObject({code:'DIRECTOR_WRITE_FORBIDDEN'})
+      expect((await request('owner','GET',allowed)).status).toBe(200)
+    }finally{
+      await state.db!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=12 AND company_id=10")
+    }
+    expect((await request('owner','GET',restricted)).status).toBe(200)
+  })
+
+  it('fails closed for an unrecognized company access kind in an existing owner session',async()=>{
+    const allowed='/api/admin/venues/101/app/promotions'
+    const restricted='/api/admin/venues/101/app/design'
+    expect((await request('owner','GET',restricted)).status).toBe(200)
+    await state.db!.query("UPDATE admin_company_access SET access_kind='unexpected' WHERE admin_id=12 AND company_id=10")
+    try{
+      const read=await request('owner','GET',restricted)
+      expect(read.status).toBe(403)
+      expect(await read.json()).toMatchObject({code:'DIRECTOR_READ_FORBIDDEN'})
+      const title='Unknown grant must not write'
+      const write=await request('owner','POST',allowed,{title})
+      expect(write.status).toBe(403)
+      expect(await write.json()).toMatchObject({code:'DIRECTOR_WRITE_FORBIDDEN'})
+      expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+      expect((await request('trusted','GET',allowed)).status).toBe(200)
+      const venueList=await request('owner','GET','/api/admin/venues')
+      expect(venueList.status).toBe(200)
+      expect((await venueList.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
+    }finally{
+      await state.db!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=12 AND company_id=10")
+    }
+    expect((await request('owner','GET',restricted)).status).toBe(200)
+  })
+
+  it('rejects an existing trusted session after its account is deactivated',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE admin_accounts SET active=FALSE WHERE id=11')
+    try{
+      expect((await request('trusted','GET',path)).status).toBe(401)
+      expect((await request('trusted','POST',path,{title:'Inactive director write'})).status).toBe(401)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive director write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE admin_accounts SET active=TRUE WHERE id=11')
+    }
+  })
+
+  it('rejects an existing owner session after its account is deactivated',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE admin_accounts SET active=FALSE WHERE id=12')
+    try{
+      expect((await request('owner','GET',path)).status).toBe(401)
+      expect((await request('owner','POST',path,{title:'Inactive owner write'})).status).toBe(401)
+      expect((await request('trusted','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive owner write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE admin_accounts SET active=TRUE WHERE id=12')
+    }
+  })
+
+  it('loses platform privileges immediately after role downgrade in an existing session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('root','GET',path)).status).toBe(200)
+    await state.db!.query("UPDATE admin_accounts SET role='VENUE_ADMIN' WHERE id=1")
+    try{
+      expect((await request('root','GET',path)).status).toBe(404)
+      expect((await request('root','POST',path,{title:'Downgraded root write'})).status).toBe(404)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Downgraded root write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("UPDATE admin_accounts SET role='SUPER_ADMIN' WHERE id=1")
+    }
+    expect((await request('root','GET',path)).status).toBe(200)
+  })
+
   it('allows changing only the signed-in directors password and keeps owner credentials',async()=>{
     const before=(await state.db!.query('SELECT password_hash FROM admin_accounts WHERE id=12')).rows
     const r=await request('trusted','POST','/api/admin/auth/password',{currentPassword:password,newPassword:'New-Fixture-Password-2026!'})
     expect(r.status).toBe(200)
     expect((await state.db!.query('SELECT password_hash FROM admin_accounts WHERE id=12')).rows).toEqual(before)
     expect((await request('trusted','GET','/api/admin/auth/session')).status).toBe(200)
+  })
+
+  it('rejects an expired trusted session with its original cookie and CSRF token',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query("UPDATE admin_sessions SET expires_at=NOW()-INTERVAL '1 minute' WHERE admin_id=11")
+    try{
+      expect((await request('trusted','GET',path)).status).toBe(401)
+      expect((await request('trusted','POST',path,{title:'Expired session write'})).status).toBe(401)
+      expect((await request('owner','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Expired session write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("UPDATE admin_sessions SET expires_at=NOW()+INTERVAL '1 day' WHERE admin_id=11")
+    }
+  })
+
+  it('rejects an expired owner session without affecting a trusted director session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query("UPDATE admin_sessions SET expires_at=NOW()-INTERVAL '1 minute' WHERE admin_id=12")
+    try{
+      expect((await request('owner','GET',path)).status).toBe(401)
+      expect((await request('owner','POST',path,{title:'Expired owner session write'})).status).toBe(401)
+      expect((await request('trusted','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Expired owner session write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query("UPDATE admin_sessions SET expires_at=NOW()+INTERVAL '1 day' WHERE admin_id=12")
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
+  it('rejects a revoked trusted session even when its old cookie and CSRF token are reused',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query('DELETE FROM admin_sessions WHERE admin_id=11')
+    expect((await request('trusted','GET',path)).status).toBe(401)
+    expect((await request('trusted','POST',path,{title:'Revoked session write'})).status).toBe(401)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Revoked session write'")).rows[0].count).toBe(0)
+    // Restore an independent director login for subsequent isolation tests.
+    // The director password was rotated in an earlier test.
+    const login=await fetch(origin+'/api/admin/auth/login',{
+      method:'POST',
+      headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+      body:JSON.stringify({email:'trusted@fixture.invalid',password:'New-Fixture-Password-2026!'}),
+    })
+    expect(login.status).toBe(200)
+    const body=await login.json() as {csrfToken:string}
+    sessions.set('trusted',{cookie:login.headers.get('set-cookie')!.split(';')[0]!,csrf:body.csrfToken})
+    expect((await request('trusted','GET',path)).status).toBe(200)
+  })
+
+
+  it('rejects a revoked owner session while preserving the trusted director session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    const prior=sessions.get('owner')!
+    await state.db!.query('DELETE FROM admin_sessions WHERE admin_id=12')
+    try{
+      expect((await request('owner','GET',path)).status).toBe(401)
+      expect((await request('owner','POST',path,{title:'Revoked owner session write'})).status).toBe(401)
+      expect((await request('trusted','GET',path)).status).toBe(200)
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Revoked owner session write'")).rows[0].count).toBe(0)
+    }finally{
+      const login=await fetch(origin+'/api/admin/auth/login',{
+        method:'POST',
+        headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+        body:JSON.stringify({email:'owner@fixture.invalid',password}),
+      })
+      expect(login.status).toBe(200)
+      const body=await login.json() as {csrfToken:string}
+      sessions.set('owner',{cookie:login.headers.get('set-cookie')!.split(';')[0]!,csrf:body.csrfToken})
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+    expect(prior.cookie).not.toBe(sessions.get('owner')!.cookie)
+  })
+
+  it('revokes a second existing owner session after a password change without revoking the current session',async()=>{
+    const loginResponse=await fetch(origin+'/api/admin/auth/login',{
+      method:'POST',
+      headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+      body:JSON.stringify({email:'owner@fixture.invalid',password}),
+    })
+    expect(loginResponse.status).toBe(200)
+    const otherCookie=loginResponse.headers.get('set-cookie')!.split(';')[0]!
+    const {csrfToken:otherCsrf}=await loginResponse.json() as {csrfToken:string}
+    const path='/api/admin/venues/101/app/promotions'
+    const otherRequest=(method:string,body?:unknown)=>fetch(origin+path,{
+      method,
+      headers:{cookie:otherCookie,origin:'https://director.fixture.invalid','content-type':'application/json','x-csrf-token':otherCsrf},
+      ...(method==='GET'?{}:{body:JSON.stringify(body)}),
+    })
+    expect((await otherRequest('GET')).status).toBe(200)
+    const changed=await request('owner','POST','/api/admin/auth/password',{
+      currentPassword:password,newPassword:'Owner-Rotated-Fixture-2026!',
+    })
+    expect(changed.status).toBe(200)
+    const loginWith=(candidate:string)=>fetch(origin+'/api/admin/auth/login',{
+      method:'POST',
+      headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},
+      body:JSON.stringify({email:'owner@fixture.invalid',password:candidate}),
+    })
+    const staleLogin=await loginWith(password)
+    expect(staleLogin.status).toBe(401)
+    expect(await staleLogin.json()).toMatchObject({code:'INVALID_CREDENTIALS'})
+    expect((await loginWith('Owner-Rotated-Fixture-2026!')).status).toBe(200)
+    expect((await otherRequest('GET')).status).toBe(401)
+    expect((await otherRequest('POST',{title:'Stale owner session write'})).status).toBe(401)
+    expect((await request('owner','GET',path)).status).toBe(200)
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Stale owner session write'")).rows[0].count).toBe(0)
+  })
+
+  it('rejects out-of-range BIGINT venue IDs before SQL for existing sessions',async()=>{
+    const invalidId='9223372036854775808'
+    const title='Overflow venue must not persist'
+    for(const who of ['trusted','owner','root']){
+      const path='/api/admin/venues/'+invalidId+'/app/promotions'
+      for(const method of ['GET','POST']){
+        const response=await request(who,method,path,{title})
+        expect(response.status).toBe(400)
+        expect(await response.json()).toMatchObject({code:'INVALID_ID'})
+      }
+    }
+    expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+    expect((await request('owner','GET','/api/admin/venues/101/app/promotions')).status).toBe(200)
+  })
+
+
+  it('denies a deactivated venue in existing sessions and venue discovery',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE venues SET active=FALSE WHERE id=101')
+    try{
+      for(const who of ['trusted','owner','root']){
+        expect((await request(who,'GET',path)).status).toBe(404)
+        expect((await request(who,'POST',path,{title:'Disabled venue write'})).status).toBe(404)
+        const listing=await request(who,'GET','/api/admin/venues')
+        expect(listing.status).toBe(200)
+        expect((await listing.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
+      }
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Disabled venue write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE venues SET active=TRUE WHERE id=101')
+    }
+    expect((await request('trusted','GET',path)).status).toBe(200)
   })
 })
