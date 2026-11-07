@@ -76,18 +76,19 @@ function Directory({draftId,scope}:Props){
 }
 function CustomerSnapshot({path,id,scope,onClose}:{path:string;id:string;scope:Scope;onClose:()=>void}){
   const {companyId,venueId}=scope
-  const [row,setRow]=useState<CustomerWallet|null>(null),[error,setError]=useState('')
+  const [row,setRow]=useState<CustomerWallet|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0)
   useEffect(()=>{
     let cancelled=false
+    setRow(null);setError('')
     void apiGet<unknown>(path+'/'+encodeURIComponent(id)).then(raw=>{
       const value=verifiedEnvelope(raw,{companyId,venueId}),next=customerWallet(value)
       if(next.customer.id!==id)throw new Error('Customer mismatch')
       if(!cancelled)setRow(next)
     }).catch(error=>{if(!cancelled)setError(message(error))})
     return()=>{cancelled=true}
-  },[path,id,companyId,venueId])
+  },[path,id,companyId,venueId,retry])
   return <section className="tenant-crm-card" aria-label="Карточка клиента">
     <button type="button" className="btn secondary" onClick={onClose}>Закрыть карточку</button>
-    {error?<p role="alert">{error}</p>:row?<><h4>{customerName(row)}</h4><p>{row.wallet?'Баланс: '+formatExact(row.wallet.balance)+' бонусов':'Бонусный кошелёк ещё не создан.'}</p></>:<p role="status">Проверяем карточку…</p>}
+    {error?<div><p role="alert">{error}</p><button type="button" className="btn secondary" onClick={()=>setRetry(value=>value+1)}>Повторить проверку карточки</button></div>:row?<><h4>{customerName(row)}</h4><p>{row.wallet?'Баланс: '+formatExact(row.wallet.balance)+' бонусов':'Бонусный кошелёк ещё не создан.'}</p></>:<p role="status">Проверяем карточку…</p>}
   </section>
 }
