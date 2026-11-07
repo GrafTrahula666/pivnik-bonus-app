@@ -23,7 +23,7 @@ async function enableMazutHome() {
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/assets/home-mazut/home.css?v=4';
+  stylesheet.href = '/assets/home-mazut/home.css?v=5';
   const cssReady = new Promise((resolve, reject) => {
     stylesheet.onload = resolve;
     stylesheet.onerror = reject;
@@ -36,7 +36,6 @@ async function enableMazutHome() {
   stage.setAttribute('aria-label', 'Главная Пивника');
   stage.innerHTML = `
     <div class="mazut-fluid" aria-hidden="true"><canvas></canvas></div>
-    <div class="mazut-veil" aria-hidden="true"></div>
     <div class="mazut-gesture" aria-hidden="true"></div>
     <div class="mazut-content">
       <div class="mazut-profile">
@@ -140,7 +139,7 @@ async function enableMazutHome() {
   lab.addEventListener('close', () => fluid?.sync());
   home.prepend(stage);
   home.classList.add('mazut-home');
-  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=2');
+  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=3');
   fluid = mountMazutFluid({
     card: stage,
     layer: slot('.mazut-fluid'),

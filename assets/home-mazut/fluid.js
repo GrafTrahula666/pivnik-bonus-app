@@ -8,13 +8,15 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   const mix=(a,b,t)=>a+(b-a)*t;
   const tilt={x:0,y:0};
   const pointer={id:null,x:0,y:0,time:0};
-  const bodyTint=[.88,.92,.97],edgeTint=[.91,.96,1.04],shine=.14,gold=0;
+  const bodyTint=[.94,.96,1],edgeTint=[.94,.98,1],shine=.20,blackPoint=.026,gold=0;
   let inView=false;
   let frame=0,last=0,lastPaint=0,clock=0,carry=0,bounds;
   let labPull=null;
   let neutralTilt,previousAngle;
   const W=480,spacing=15.3,radius=36*spacing/16.4,particleRadius=35*spacing/16.4,step=1/60,flowSpeed=.75;
   const viscosity=1.10,damping=Math.pow(.986,viscosity);
+  // Keep the whole particle footprint inside the canvas.
+  const wallInset=Math.ceil(particleRadius)+2;
   let H=900,n=0,cols=0,rows=0;
   let x,y,vx,vy,oldX,oldY,density,near,packed,head,next;
   let gl=null,gfx=null,ctx=null,software=null,slowPaints=0;
@@ -23,9 +25,11 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
 
   function seed(){
     const cells=[];
-    let row=0;
+    let row=0,possibleCells=0;
     for(let yy=13;yy<H-10;yy+=spacing*.866,row++){
       for(let xx=12+(row%2)*spacing*.5;xx<W-11;xx+=spacing){
+        possibleCells++;
+        if(xx<=wallInset||xx>=W-wallInset||yy<=wallInset||yy>=H-wallInset) continue;
         const u=xx/W,v=yy/H;
         const spine=.54+.22*Math.sin(v*5.6-.72);
         const score=((u-spine)/.43)**2+((v-.55)/.55)**2+.13*Math.sin(u*9+v*5);
@@ -33,7 +37,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       }
     }
     cells.sort((a,b)=>a.score-b.score);
-    n=Math.round(cells.length*.55);
+    n=Math.min(cells.length,Math.round(possibleCells*.55));
     const make=()=>new Float32Array(n);
     x=make();y=make();vx=make();vy=make();oldX=make();oldY=make();density=make();near=make();
     packed=new Float32Array(n*24);next=new Int32Array(n);
@@ -97,8 +101,14 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       }
     }
     for(let i=0;i<n;i++){
-      x[i]=clamp(x[i],8,W-8);y[i]=clamp(y[i],8,H-8);
+      x[i]=clamp(x[i],wallInset,W-wallInset);y[i]=clamp(y[i],wallInset,H-wallInset);
     }
+  }
+  function wallAcceleration(position,span){
+    const reach=Math.min(82,span*.24);
+    const distance=Math.min(position,span-position);
+    const pressure=clamp((reach-distance)/(reach-wallInset),0,1);
+    return (position<span*.5?1:-1)*1800*pressure*pressure;
   }
   function tick(){
     clock+=step;
@@ -118,18 +128,22 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
         const pull=620/Math.max(distance,90);
         ax+=dx*pull;ay+=dy*pull;
       }
+      ax+=wallAcceleration(x[i],W);
+      ay+=wallAcceleration(y[i],H);
       vx[i]=clamp((vx[i]+ax*step)*damping,-630,630);
       vy[i]=clamp((vy[i]+ay*step)*damping,-630,630);
-      x[i]=clamp(x[i]+vx[i]*step,8,W-8);
-      y[i]=clamp(y[i]+vy[i]*step,8,H-8);
+      x[i]=clamp(x[i]+vx[i]*step,wallInset,W-wallInset);
+      y[i]=clamp(y[i]+vy[i]*step,wallInset,H-wallInset);
     }
     relax();
     relax();
     for(let i=0;i<n;i++){
       vx[i]=clamp((x[i]-oldX[i])/step,-660,660);
       vy[i]=clamp((y[i]-oldY[i])/step,-660,660);
-      if(x[i]<=8||x[i]>=W-8) vx[i]*=.35;
-      if(y[i]<=8||y[i]>=H-8) vy[i]*=.35;
+      if(x[i]<=wallInset) vx[i]=Math.abs(vx[i])*.25;
+      else if(x[i]>=W-wallInset) vx[i]=-Math.abs(vx[i])*.25;
+      if(y[i]<=wallInset) vy[i]=Math.abs(vy[i])*.25;
+      else if(y[i]>=H-wallInset) vy[i]=-Math.abs(vy[i])*.25;
     }
     // Exchange a small amount of momentum between nearby fluid parcels.
     // Equal and opposite impulses damp shear without pulling the whole mass to a stop.
@@ -183,6 +197,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     uniform vec3 bodyTint;
     uniform vec3 edgeTint;
     uniform float shine;
+    uniform float blackPoint;
     float fieldAt(vec2 p){return texture2D(field,p).r;}
     float box(float a,float lo,float hi,float soft){
       return smoothstep(lo-soft,lo+soft,a)*(1.-smoothstep(hi-soft,hi+soft,a));
@@ -220,8 +235,8 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       float threshold=.24-.10*gold;
       float tone=smoothstep(.08,.96,gold)*smoothstep(threshold,.68,metal+line)*.80;
       vec3 warm=vec3(1.15,1.02,.76);
-      vec3 reflectance=metal*mix(bodyTint,warm,tone)+line*mix(edgeTint,warm,tone);
-      gl_FragColor=vec4(reflectance*shine+vec3(.003)*(1.-shine),a);
+      vec3 reflectance=max(0.,metal-blackPoint)*mix(bodyTint,warm,tone)+line*mix(edgeTint,warm,tone);
+      gl_FragColor=vec4(reflectance*shine,a);
     }`;
   function createRenderer(){
     gl=canvas.getContext('webgl',{alpha:true,premultipliedAlpha:false,antialias:false});
@@ -251,7 +266,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       sa:gl.getAttribLocation(splat,'point'),ca:gl.getAttribLocation(splat,'corner'),pa:gl.getAttribLocation(surface,'point'),
       world:gl.getUniformLocation(splat,'world'),extent:gl.getUniformLocation(splat,'extent'),
       pixel:gl.getUniformLocation(surface,'pixel'),tilt:gl.getUniformLocation(surface,'tilt'),gold:gl.getUniformLocation(surface,'gold'),clock:gl.getUniformLocation(surface,'clock'),
-      bodyTint:gl.getUniformLocation(surface,'bodyTint'),edgeTint:gl.getUniformLocation(surface,'edgeTint'),shine:gl.getUniformLocation(surface,'shine')};
+      bodyTint:gl.getUniformLocation(surface,'bodyTint'),edgeTint:gl.getUniformLocation(surface,'edgeTint'),shine:gl.getUniformLocation(surface,'shine'),blackPoint:gl.getUniformLocation(surface,'blackPoint')};
   }
   function resizeSoftware(limit=440){
     const surface=document.createElement('canvas');
@@ -304,11 +319,10 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
         const fill=box(u,.37,.92,.19)*box(v,-.70,.22,.24)*.17;
         const raw=.010+.017*(1-Math.sqrt(z))+key+fill;
         const light=raw*mix(.63,1.04,smooth((raw-.025)/.595));
-        const warm=baseGold*smooth((light+line-threshold)/(.68-threshold)),l=light*255*shine,r=line*255*shine;
-        const floor=.765*(1-shine);
-        data[p]=floor+l*mix(bodyTint[0],1.15,warm)+r*mix(edgeTint[0],1.15,warm);
-        data[p+1]=floor+l*mix(bodyTint[1],1.02,warm)+r*mix(edgeTint[1],1.02,warm);
-        data[p+2]=floor+l*mix(bodyTint[2],.76,warm)+r*mix(edgeTint[2],.76,warm);
+        const warm=baseGold*smooth((light+line-threshold)/(.68-threshold)),l=Math.max(0,light-blackPoint)*255*shine,r=line*255*shine;
+        data[p]=l*mix(bodyTint[0],1.15,warm)+r*mix(edgeTint[0],1.15,warm);
+        data[p+1]=l*mix(bodyTint[1],1.02,warm)+r*mix(edgeTint[1],1.02,warm);
+        data[p+2]=l*mix(bodyTint[2],.76,warm)+r*mix(edgeTint[2],.76,warm);
         data[p+3]=255*smooth((d-.071)/.037);
       }
     }
@@ -363,6 +377,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     gl.uniform2f(g.tilt,tilt.x,tilt.y);gl.uniform1f(g.gold,gold);gl.uniform1f(g.clock,clock);
     gl.uniform3fv(g.bodyTint,bodyTint);gl.uniform3fv(g.edgeTint,edgeTint);
     gl.uniform1f(g.shine,shine);
+    gl.uniform1f(g.blackPoint,blackPoint);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
   function down(e){

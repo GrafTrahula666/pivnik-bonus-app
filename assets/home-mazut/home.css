@@ -14,12 +14,12 @@
   display: none !important;
 }
 
-.mazut-stage :is(.mazut-fluid, .mazut-veil, .mazut-gesture) {
+.mazut-stage :is(.mazut-fluid, .mazut-gesture) {
   position: absolute;
   inset: 0;
 }
 
-.mazut-stage :is(.mazut-fluid, .mazut-veil) {
+.mazut-stage .mazut-fluid {
   pointer-events: none;
 }
 
@@ -32,10 +32,6 @@
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.mazut-stage .mazut-veil {
-  background: linear-gradient(180deg, #dad6cef5, #dad6ce6b 15%, transparent 27% 75%, #dad6ced1 92%, #dad6ce);
 }
 
 .mazut-stage .mazut-content {
