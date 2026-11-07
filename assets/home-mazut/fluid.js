@@ -1,5 +1,8 @@
 // Renderer and simulation from the approved stone-and-mazut preview.
+import { createMazutInk } from "./ink.js";
+
 export function mountMazutFluid({card, layer, canvas, isPaused}) {
+  const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"));
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const mix=(a,b,t)=>a+(b-a)*t;
@@ -332,6 +335,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   }
   function paint(blend=1){
     if(!x) return;
+    if(gfx || software) updateInk({ width: W, height: H, radius: particleRadius, x, y, oldX, oldY, blend });
     if(!gfx){if(software) paintSoftware(blend);return;}
     const g=gfx;
     for(let i=0;i<n;i++){

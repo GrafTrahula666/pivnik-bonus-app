@@ -23,7 +23,7 @@ async function enableMazutHome() {
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/assets/home-mazut/home.css?v=3';
+  stylesheet.href = '/assets/home-mazut/home.css?v=4';
   const cssReady = new Promise((resolve, reject) => {
     stylesheet.onload = resolve;
     stylesheet.onerror = reject;
@@ -47,7 +47,7 @@ async function enableMazutHome() {
           <div class="mazut-status-progress"></div>
           <div class="mazut-status-caption"></div>
         </div>
-        <strong class="mazut-brand">ПИВНИК</strong>
+        <strong class="mazut-brand" data-mazut-ink>ПИВНИК</strong>
       </div>
       <div class="mazut-wallet">
         <button class="mazut-balance" type="button" aria-label="История бонусов"><small>бонусов</small></button>
@@ -76,6 +76,9 @@ async function enableMazutHome() {
   slot('.mazut-status-caption').append(statusText, remaining);
   slot('.mazut-balance').prepend(balance);
   slot('.mazut-beer').append(beerText, beerProgress);
+  for (const element of [name, status, statusProgress, statusText, remaining, beerProgress]) {
+    element.setAttribute('data-mazut-ink', '');
+  }
   if (beerGift) slot('.mazut-beer').append(beerGift);
   const qrImage = document.createElement('img');
   qrImage.width = 495;
@@ -137,7 +140,7 @@ async function enableMazutHome() {
   lab.addEventListener('close', () => fluid?.sync());
   home.prepend(stage);
   home.classList.add('mazut-home');
-  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=1');
+  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=2');
   fluid = mountMazutFluid({
     card: stage,
     layer: slot('.mazut-fluid'),

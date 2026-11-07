@@ -79,11 +79,19 @@
   min-width: 0;
 }
 
-.mazut-stage :is(.mazut-brand, .mazut-profile-link, .mazut-balance, #openStatuses,
-  .mazut-status-progress .progress, .mazut-status-caption, .mazut-beer > span,
-  #beerGiftReady, #beerProgressBar) {
+.mazut-stage :is(.mazut-balance, .mazut-beer > span, #beerGiftReady) {
   color: #fff;
   mix-blend-mode: difference;
+}
+
+.mazut-stage [data-mazut-ink] {
+  color: #000;
+  --mazut-ink-track: #0004;
+}
+
+.mazut-stage [data-mazut-over] {
+  color: #fff;
+  --mazut-ink-track: #fff4;
 }
 
 .mazut-stage .mazut-brand {
@@ -105,7 +113,6 @@
 .mazut-stage #clientName {
   display: block;
   overflow: hidden;
-  color: inherit;
   font-size: 15px;
   font-weight: 750;
   text-overflow: ellipsis;
@@ -118,9 +125,9 @@
   align-items: center;
   margin: 0;
   padding: 4px 8px;
-  border: 1px solid #ffffff55;
+  border: 1px solid var(--mazut-ink-track);
   border-radius: 20px;
-  background: #ffffff10;
+  background: none;
   line-height: 1.15;
 }
 
@@ -141,11 +148,11 @@
   width: min(104px, 100%);
   height: 4px;
   margin: 0;
-  background: #ffffff40;
+  background: var(--mazut-ink-track);
 }
 
 .mazut-stage #statusProgress {
-  background: #fff;
+  background: currentColor;
 }
 
 .mazut-stage .mazut-status-caption {
@@ -208,14 +215,14 @@
   overflow: hidden;
   min-width: 0;
   border-radius: 3px;
-  background: #ffffff40;
+  background: var(--mazut-ink-track);
 }
 
 .mazut-stage #beerProgressBar .beer-progress-segment span {
   display: block;
   width: var(--segment-fill, 0%);
   height: 100%;
-  background: #fff;
+  background: currentColor;
 }
 
 .mazut-stage .mazut-dock {
