@@ -71,7 +71,7 @@ jobs:
         run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'rate-limited customer list|server 500 on customer list'
       - name: Desktop Detail error recovery on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer detail|expired session on customer detail|denied customer detail|missing customer detail 404|rate-limited customer detail|customer detail server failure'
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer detail|expired session on customer detail|denied customer detail|missing customer detail 404|rate-limited customer detail|customer detail server failure|failed customer detail can retry in place'
       # These fail-closed list regressions were previously excluded by the narrow greps.
       - name: Desktop malformed and denied list on fresh fixture server
         working-directory: admin-platform
@@ -96,7 +96,7 @@ jobs:
         run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'rate-limited customer list|server 500 on customer list'
       - name: Mobile Detail error recovery on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'malformed customer detail|expired session on customer detail|denied customer detail|missing customer detail 404|rate-limited customer detail|customer detail server failure'
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'malformed customer detail|expired session on customer detail|denied customer detail|missing customer detail 404|rate-limited customer detail|customer detail server failure|failed customer detail can retry in place'
       - name: Mobile malformed and denied list on fresh fixture server
         working-directory: admin-platform
         run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'malformed customer list|malformed list response|unauthorized customer list 401|permission denied on list refresh'
