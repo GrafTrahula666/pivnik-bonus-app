@@ -131,10 +131,21 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send(null,path(),c)).status).toBe(401)
     expect((await send('owner',path(),c,{csrf:false})).status).toBe(403)
     expect((await send('owner',path(),c,{origin:'https://evil.invalid'})).status).toBe(403)
-    expect((await send('owner',path(),c,{method:'PUT'})).status).toBe(405)
-    expect((await send('owner',path(),c,{method:'PATCH'})).status).toBe(405)
-    expect((await send('owner',path(),c,{method:'DELETE'})).status).toBe(405)
+    const contactsBefore=await count(0,'spaceverse_crm_contacts')
+    const requestsBefore=await count(0,'spaceverse_crm_contact_create_requests')
+    const auditsBefore=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    for(const method of ['PUT','PATCH','DELETE']){
+      const response=await send('owner',path(),c,{method})
+      expect(response.status).toBe(405)
+    }
     expect(state.targetResolutions).toBe(0)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(contactsBefore)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(requestsBefore)
+    expect((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n).toBe(auditsBefore)
   })
   it('rejects user-supplied database scope, invalid contact and unsupported method',async()=>{
     config.enableTenantCrmContactCreate=true
