@@ -79,10 +79,16 @@
   min-width: 0;
 }
 
+.mazut-stage :is(.mazut-brand, .mazut-profile-link, .mazut-balance, #openStatuses,
+  .mazut-status-progress .progress, .mazut-status-caption, .mazut-beer > span,
+  #beerGiftReady, #beerProgressBar) {
+  color: #fff;
+  mix-blend-mode: difference;
+}
+
 .mazut-stage .mazut-brand {
   align-self: start;
   margin-left: auto;
-  color: #18212a;
   font-size: 11px;
   letter-spacing: .15em;
 }
@@ -93,9 +99,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: #fff;
   text-align: left;
-  mix-blend-mode: difference;
 }
 
 .mazut-stage #clientName {
@@ -114,16 +118,19 @@
   align-items: center;
   margin: 0;
   padding: 4px 8px;
-  border: 0;
+  border: 1px solid #ffffff55;
   border-radius: 20px;
-  background: #ebe8e0;
-  color: #27313a;
+  background: #ffffff10;
   line-height: 1.15;
 }
 
 .mazut-stage #openStatuses .status-name {
   color: inherit;
   font-size: 11px;
+}
+
+.mazut-stage #openStatuses .status-row-chevron {
+  color: inherit;
 }
 
 .mazut-stage #openStatuses .status-caption {
@@ -134,18 +141,16 @@
   width: min(104px, 100%);
   height: 4px;
   margin: 0;
-  background: #64717a65;
+  background: #ffffff40;
 }
 
 .mazut-stage #statusProgress {
-  background: linear-gradient(90deg, #6c7b88, #a6b2bd);
+  background: #fff;
 }
 
 .mazut-stage .mazut-status-caption {
-  color: #fff;
   font-size: 10px;
   line-height: 1.2;
-  mix-blend-mode: difference;
 }
 
 .mazut-stage .mazut-status-caption:has(#nextRewardText:not(:empty)) #statusProgressText {
@@ -181,11 +186,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.mazut-stage :is(.mazut-beer > span, #beerGiftReady) {
-  color: #fff;
-  mix-blend-mode: difference;
-}
-
 .mazut-stage #beerGiftReady {
   display: none;
 }
@@ -208,14 +208,14 @@
   overflow: hidden;
   min-width: 0;
   border-radius: 3px;
-  background: #61758376;
+  background: #ffffff40;
 }
 
 .mazut-stage #beerProgressBar .beer-progress-segment span {
   display: block;
   width: var(--segment-fill, 0%);
   height: 100%;
-  background: #bb9662;
+  background: #fff;
 }
 
 .mazut-stage .mazut-dock {
