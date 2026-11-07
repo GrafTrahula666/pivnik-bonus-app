@@ -130,6 +130,9 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
     ['Посещений',m.visits,'number',null],
     ['Использование бонусов',m.redemptionRate,'percent',p.redemptionRate],
   ] as const
+  const secondaryRows=secondaryKpis.map(([label,metric,kind,previous])=>({
+    label,metric,kind,change:metric?.available?delta(metric.value,previous):null,
+  }))
   return <div className="page">
     {controls}
     <PageHead eyebrow="ПОКАЗАТЕЛИ ЗАВЕДЕНИЯ" title={venue.name}
@@ -138,11 +141,20 @@ function ApplicationOperationsDashboard({venue,period,compare,onNavigate,spaceve
     <SourceNote>Операции приложения. Не являются подтверждённой кассовой выручкой и не складываются с Эвотором.</SourceNote>
     <div className="kpi-grid app-operations-primary-kpis" aria-label="Основные показатели операций">{primaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
     <p className="cash-insight-period">Изменение на карточках считается к предыдущему периоду той же длительности при известной ненулевой базе. «Новые клиенты» считаются по дате регистрации аккаунта, не по установке приложения и не по первой покупке. «Операции» — завершённые записи журнала, включая операции без покупки.</p>
-    <details className="card app-operations-extra">
-      <summary>Ещё 7 показателей</summary>
-      <div className="kpi-grid">{secondaryKpis.map(([label,mm,kind,prev])=><LiveKpi key={label} label={label} metric={mm as Metric} kind={kind} previous={prev as number|null|undefined}/>)}</div>
+    <section className="card app-operations-extra" aria-label="Дополнительные показатели операций">
+      <div className="app-operations-extra-heading"><span className="eyebrow">КЛИЕНТЫ И ЛОЯЛЬНОСТЬ</span><h3>Дополнительные показатели</h3></div>
+      <dl className="app-operations-secondary-list">
+        {secondaryRows.map(({label,metric,kind,change})=><div className="app-operations-secondary-row" key={label}>
+          <dt title={metric?.source||metric?.reason||''}>{label}</dt>
+          <dd className={cn(!metric?.available&&'kpi-unavailable')}>{format(metric as Metric,kind)}</dd>
+          <small className={cn(change!==null&&change<0&&'negative')}>
+            {change===null?(metric?.available?'Без сравнения':metric?.reason||'Данные пока не подтверждены'):
+              (change===0?'0%':(change<0?'−':'+')+pct.format(Math.abs(change))+'%')+' к предыдущему периоду'}
+          </small>
+        </div>)}
+      </dl>
       <SourceNote>Ручные персональные подарки не входят в бизнес-KPI обзора. «Клиентов всего» и «Бонусы в обращении» показывают текущее состояние, а не значение на историческую дату.</SourceNote>
-    </details>
+    </section>
     <div className="grid-main">
       <section className="card chart-card">
         <div className="card-head"><div><span className="eyebrow">ДИНАМИКА</span><h3>Операции за {periodLabel}</h3></div>
@@ -211,11 +223,16 @@ export function ProductionDashboard(props:{venue:ApiVenue;period:Period;compare:
   const [source,setSource]=useState<'all'|'app'|'operations'>('all')
   return <div className="page">
     <div className="segmented dashboard-sources" role="group" aria-label="Продажи">
-      <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи кассы</button>
-      <button className={source==='app'?'active':''} aria-pressed={source==='app'} onClick={()=>setSource('app')}>Клиенты приложения</button>
+      <button className={source!=='operations'?'active':''} aria-pressed={source!=='operations'} onClick={()=>setSource('all')}>Продажи кассы</button>
       <button className={source==='operations'?'active':''} aria-pressed={source==='operations'} onClick={()=>setSource('operations')}>Операции приложения</button>
     </div>
     {source==='operations'?<ApplicationOperationsDashboard key={props.venue.id} {...props}/>:
-      <SalesDashboard key={props.venue.id+':'+props.period} venue={props.venue} days={days(props.period)} mode={source}/>}
+      <>
+        <div className="segmented dashboard-cash-subnav" role="group" aria-label="Аналитика кассовых покупок">
+          <button className={source==='all'?'active':''} aria-pressed={source==='all'} onClick={()=>setSource('all')}>Все продажи</button>
+          <button className={source==='app'?'active':''} aria-pressed={source==='app'} onClick={()=>setSource('app')}>Покупки клиентов PIVNIK</button>
+        </div>
+        <SalesDashboard key={props.venue.id+':'+props.period} venue={props.venue} days={days(props.period)} mode={source}/>
+      </>}
   </div>
 }

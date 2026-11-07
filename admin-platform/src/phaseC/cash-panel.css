@@ -1,6 +1,8 @@
 /* Uses the Business dashboard's existing palette, cards and typography. */
 .dashboard-sources{align-self:flex-start;max-width:100%;flex-wrap:wrap}
 .dashboard-sources button{white-space:normal}
+.dashboard-cash-subnav{align-self:flex-start;max-width:100%;flex-wrap:wrap}
+.dashboard-cash-subnav button{white-space:normal}
 .cash-dashboard .kpi-value{overflow-wrap:anywhere}
 .cash-dashboard .kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .cash-dashboard table{min-width:0}
@@ -82,10 +84,16 @@
 /* CHAT 08 · 72: prioritize period-scoped KPIs, keep the full ledger detail on demand. */
 .kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
 .app-operations-extra{padding:16px 20px}
-.app-operations-extra summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
-.app-operations-extra[open] summary{margin-bottom:16px}
-.app-operations-extra .kpi-grid{margin-bottom:12px}
+.app-operations-extra-heading h3{font-size:16px;font-weight:650;margin:4px 0 0}
+.app-operations-secondary-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;margin:12px 0}
+.app-operations-secondary-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:4px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--border);min-width:0}
+.app-operations-secondary-row dt{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.app-operations-secondary-row dd{font-size:16px;font-weight:650;margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.app-operations-secondary-row dd.kpi-unavailable{font-size:12px;white-space:normal;color:var(--muted)}
+.app-operations-secondary-row small{grid-column:1/-1;font-size:10px;color:var(--muted);line-height:1.45}
+.app-operations-secondary-row small.negative{color:var(--danger)}
 @media(max-width:860px){.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.app-operations-secondary-list{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:400px){.app-operations-extra{padding:14px 12px}}
 
 /* POS receipts and linked buyers are separate from sale/return document count. */
@@ -100,3 +108,20 @@
 .cash-kpi-trend{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap;align-items:baseline;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
 .cash-kpi-trend b{color:var(--text);font-variant-numeric:tabular-nums}
 .cash-kpi-trend span{width:100%;font-size:10px}
+
+/* Owner view: share of POS sales/receipts with a verified PIVNIK client link. */
+.cash-share{min-width:0}
+.cash-share-heading{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.cash-share-heading h3{margin:5px 0 0}
+.cash-share-heading>small{font-size:11px;color:var(--muted)}
+.cash-share-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.cash-share-metric{min-width:0;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);padding:14px}
+.cash-share-metric>span{display:block;font-size:12px;color:var(--muted)}
+.cash-share-metric>strong{display:block;margin:7px 0 12px;font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2;overflow-wrap:anywhere}
+.cash-share-metric small{display:block;margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5}
+.cash-share-track{height:7px;overflow:hidden;background:var(--border);border-radius:4px}
+.cash-share-track>div{height:100%;background:var(--accent);border-radius:4px}
+.cash-share-missing{font-size:11px;color:var(--muted);min-height:7px}
+.cash-share-totals{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.cash-share-disclaimer{font-size:11px;line-height:1.55;color:var(--muted);margin:12px 0 0}
+@media(max-width:640px){.cash-share-grid{grid-template-columns:minmax(0,1fr)}.cash-share-metric>strong{font-size:24px}}
