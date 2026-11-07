@@ -23,7 +23,7 @@ async function enableMazutHome() {
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/assets/home-mazut/home.css?v=1';
+  stylesheet.href = '/assets/home-mazut/home.css?v=2';
   const cssReady = new Promise((resolve, reject) => {
     stylesheet.onload = resolve;
     stylesheet.onerror = reject;
@@ -55,14 +55,17 @@ async function enableMazutHome() {
       </div>
       <nav class="mazut-dock" aria-label="Быстрые действия">
         <button class="mazut-lab" type="button" aria-haspopup="dialog">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m12 2.6 8 4.5v9.8l-8 4.5-8-4.5V7.1l8-4.5Z M4 7.1l8 4.6 8-4.6 M12 11.7v9.7 M8 4.8l8 4.6"/></svg>
+          <img class="mazut-lab-cube" src="/assets/home-mazut/lab-cube.png" width="25" height="25" alt="">
           <span>SpaceVerse Lab</span>
         </button>
       </nav>
     </div>
     <dialog class="mazut-lab-sheet" aria-label="SpaceVerse Lab">
       <form method="dialog"><button type="submit" aria-label="Закрыть SpaceVerse Lab">×</button></form>
-      <div class="mazut-lab-items"><h2>SpaceVerse Lab</h2></div>
+      <div class="mazut-lab-items">
+        <img class="mazut-lab-cube" src="/assets/home-mazut/lab-cube.png" width="75" height="75" alt="">
+        <h2>SpaceVerse Lab</h2>
+      </div>
     </dialog>`;
 
   const slot = (selector) => stage.querySelector(selector);

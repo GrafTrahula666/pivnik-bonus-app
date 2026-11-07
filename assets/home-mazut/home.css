@@ -270,18 +270,14 @@
 
 .mazut-stage .mazut-lab {
   color: #212832;
-  background: linear-gradient(145deg, #ebe8e0, #d8d4cb);
-  box-shadow: inset 0 1px #ffffffa0, 0 5px 14px #1f2a3213;
+  background: #e3e0d8 url("./lab-base.png") center / 100% 100% no-repeat;
+  box-shadow: 0 5px 14px #1f2a3213;
 }
 
-.mazut-stage .mazut-lab svg {
+.mazut-stage .mazut-lab-cube {
   display: block;
-  width: 25px;
-  height: 25px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .mazut-stage .mazut-lab-sheet {
