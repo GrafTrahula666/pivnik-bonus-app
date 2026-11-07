@@ -53,7 +53,7 @@ export async function requireVenueAccess(
 
 export function parsePositiveId(raw: string, fieldName = 'id'): string {
   const value = String(raw || '').trim()
-  if (!/^[1-9]\d*$/.test(value)) {
+  if (!/^[1-9]\d*$/.test(value) || BigInt(value) > 9223372036854775807n) {
     throw new HttpError(400, 'INVALID_ID', `Некорректный ${fieldName}.`)
   }
   return value
