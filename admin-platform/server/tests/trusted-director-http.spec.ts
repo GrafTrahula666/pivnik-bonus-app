@@ -227,6 +227,25 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('owner','GET',path)).status).toBe(200)
   })
 
+  it('downgrades an existing owner session to trusted permissions without re-login',async()=>{
+    const allowed='/api/admin/venues/101/app/promotions'
+    const restricted='/api/admin/venues/101/app/design'
+    expect((await request('owner','GET',restricted)).status).toBe(200)
+    await state.db!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=12 AND company_id=10")
+    try{
+      const denied=await request('owner','GET',restricted)
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({code:'DIRECTOR_READ_FORBIDDEN'})
+      const deniedWrite=await request('owner','PUT',restricted,{})
+      expect(deniedWrite.status).toBe(403)
+      expect(await deniedWrite.json()).toMatchObject({code:'DIRECTOR_WRITE_FORBIDDEN'})
+      expect((await request('owner','GET',allowed)).status).toBe(200)
+    }finally{
+      await state.db!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=12 AND company_id=10")
+    }
+    expect((await request('owner','GET',restricted)).status).toBe(200)
+  })
+
   it('rejects an existing trusted session after its account is deactivated',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
