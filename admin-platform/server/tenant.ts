@@ -74,6 +74,7 @@ export function buildVenueScopeQuery(
         FROM admin_company_access aca
         WHERE aca.company_id = v.company_id
           AND aca.admin_id = $2::bigint
+          AND aca.access_kind IN ('owner', 'trusted')
       )`
   }
   return {
