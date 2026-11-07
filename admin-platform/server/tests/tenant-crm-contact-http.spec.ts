@@ -132,6 +132,8 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('owner',path(),c,{csrf:false})).status).toBe(403)
     expect((await send('owner',path(),c,{origin:'https://evil.invalid'})).status).toBe(403)
     expect((await send('owner',path(),c,{method:'PUT'})).status).toBe(405)
+    expect((await send('owner',path(),c,{method:'PATCH'})).status).toBe(405)
+    expect((await send('owner',path(),c,{method:'DELETE'})).status).toBe(405)
     expect(state.targetResolutions).toBe(0)
   })
   it('rejects user-supplied database scope, invalid contact and unsupported method',async()=>{
