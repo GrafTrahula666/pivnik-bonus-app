@@ -388,4 +388,19 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Stale owner session write'")).rows[0].count).toBe(0)
   })
 
+  it('rejects out-of-range BIGINT venue IDs before SQL for existing sessions',async()=>{
+    const invalidId='9223372036854775808'
+    const title='Overflow venue must not persist'
+    for(const who of ['trusted','owner','root']){
+      const path='/api/admin/venues/'+invalidId+'/app/promotions'
+      for(const method of ['GET','POST']){
+        const response=await request(who,method,path,{title})
+        expect(response.status).toBe(400)
+        expect(await response.json()).toMatchObject({code:'INVALID_ID'})
+      }
+    }
+    expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+    expect((await request('owner','GET','/api/admin/venues/101/app/promotions')).status).toBe(200)
+  })
+
 })
