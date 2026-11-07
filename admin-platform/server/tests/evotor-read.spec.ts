@@ -66,10 +66,10 @@ describe('Evotor cash adapter on disposable PostgreSQL/WASM',()=>{
         INSERT INTO users VALUES(1,NULL,NULL),(3,NULL,NULL);
         CREATE TABLE companies(id BIGINT PRIMARY KEY,code TEXT,name TEXT,active BOOLEAN);
         CREATE TABLE venues(id BIGINT PRIMARY KEY,company_id BIGINT,code TEXT,name TEXT,address TEXT,legacy_bar_id BIGINT,active BOOLEAN);
-        CREATE TABLE admin_company_access(company_id BIGINT,admin_id BIGINT);
+        CREATE TABLE admin_company_access(company_id BIGINT,admin_id BIGINT,access_kind TEXT);
         INSERT INTO companies VALUES(10,'a','A',TRUE),(20,'b','B',TRUE);
         INSERT INTO venues VALUES(101,10,'a','A',NULL,NULL,TRUE),(202,20,'b','B',NULL,NULL,TRUE);
-        INSERT INTO admin_company_access VALUES(10,11);`)
+        INSERT INTO admin_company_access VALUES(10,11,'owner');`)
       for(const f of ['012_evotor_sales.sql','013_evotor_pos_scope_devices.sql'])await db.exec(await readFile(new URL('../../../migrations/'+f,import.meta.url),'utf8'))
       await db.exec(`INSERT INTO pos_store_bindings VALUES('a','10','101',TRUE),('b','20','202',TRUE);
         INSERT INTO pos_sync_state(store_id,last_success_at) VALUES('a',NOW()),('b',NOW());`)
