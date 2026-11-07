@@ -257,8 +257,8 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
       expect(await read.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
       const title='Unknown grant must not write'
       const write=await request('owner','POST',allowed,{title})
-      expect(write.status).toBe(403)
-      expect(await write.json()).toMatchObject({code:'DIRECTOR_WRITE_FORBIDDEN'})
+      expect(write.status).toBe(404)
+      expect(await write.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
       expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
       expect((await request('trusted','GET',allowed)).status).toBe(200)
       const venueList=await request('owner','GET','/api/admin/venues')
