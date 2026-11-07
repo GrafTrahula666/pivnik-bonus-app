@@ -148,6 +148,7 @@ export async function listAuthorizedVenues(admin: AdminPrincipal): Promise<Venue
      JOIN companies c ON c.id = v.company_id
      ${accessClause}
      WHERE v.active = TRUE AND c.active = TRUE
+       ${admin.role === 'SUPER_ADMIN' ? '' : "AND aca.access_kind IN ('owner', 'trusted')"}
      ORDER BY c.name, v.name`,
     params,
   )
