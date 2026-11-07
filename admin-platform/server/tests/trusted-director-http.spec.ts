@@ -261,6 +261,9 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
       expect(await write.json()).toMatchObject({code:'DIRECTOR_WRITE_FORBIDDEN'})
       expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
       expect((await request('trusted','GET',allowed)).status).toBe(200)
+      const venueList=await request('owner','GET','/api/admin/venues')
+      expect(venueList.status).toBe(200)
+      expect((await venueList.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
     }finally{
       await state.db!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=12 AND company_id=10")
     }
