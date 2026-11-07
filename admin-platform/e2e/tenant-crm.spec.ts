@@ -518,6 +518,8 @@ test('failed customer detail can retry in place without showing unverified money
   await expect(card.getByRole('alert')).toBeVisible()
   await expect(card).not.toContainText('Баланс: 101 бонусов')
   await card.getByRole('button',{name:'Повторить проверку карточки',exact:true}).click()
+  // The retry action disappears while the next scoped read is pending.
+  await expect(card.getByRole('button',{name:'Повторить проверку карточки',exact:true})).toHaveCount(0)
   await expect(card).toContainText('Баланс: 101 бонусов')
   await expect(card.getByRole('alert')).toHaveCount(0)
   expect(attempts).toBe(2)
