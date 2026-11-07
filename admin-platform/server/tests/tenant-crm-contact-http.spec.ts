@@ -257,6 +257,40 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
     expect(await auditCount()).toBe(audited)
   })
+  it('does not let another authorized actor reconcile a pending audit receipt',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-actor-bound@fixture.invalid')
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+
+    state.failAuditOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    // Root has permission to create contacts, but cannot claim the owner's
+    // already-committed tenant request or complete its missing Admin audit.
+    const foreign=await send('root',path(),c)
+    expect(foreign.status).toBe(409)
+    const denial=await foreign.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denial)).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    const recovered=await send('owner',path(),c)
+    expect(recovered.status).toBe(200)
+    expect((await recovered.json()).requestKey).toBe(c.requestKey)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
+  })
   it('recovers one tenant contact after Admin audit failure by replaying the exact request key',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('recoverable@fixture.invalid')
