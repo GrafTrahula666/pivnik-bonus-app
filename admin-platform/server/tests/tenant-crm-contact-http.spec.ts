@@ -519,6 +519,45 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(await southReplay.json()).toEqual(southBody)
     expect(await auditCount()).toBe(auditsBefore+2)
   })
+  it('reconciles a pending audit only for its original venue when UUID is reused elsewhere',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-cross-venue@fixture.invalid')
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const before=await audits()
+    const northContacts=Number(await count(0,'spaceverse_crm_contacts'))
+    const southContacts=Number(await count(2,'spaceverse_crm_contacts'))
+    state.failAuditOnce=true
+    const pending=await send('owner',path(),c)
+    expect(pending.status).toBe(503)
+    expect(await audits()).toBe(before)
+    // A distinct company/venue may legitimately use the same UUID and email.
+    // Its successful audit must not mark the first venue's pending receipt done.
+    const south=await send('south',path(2),c)
+    expect(south.status).toBe(200)
+    const southReceipt=await south.json()
+    expect(await audits()).toBe(before+1)
+    const north=await send('owner',path(),c)
+    expect(north.status).toBe(200)
+    const northReceipt=await north.json()
+    expect(northReceipt.requestKey).toBe(c.requestKey)
+    expect(await audits()).toBe(before+2)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(northContacts+1)
+    expect(Number(await count(2,'spaceverse_crm_contacts'))).toBe(southContacts+1)
+    expect(await (await send('owner',path(),c)).json()).toEqual(northReceipt)
+    expect(await (await send('south',path(2),c)).json()).toEqual(southReceipt)
+    expect(await audits()).toBe(before+2)
+    const records=await fixture.metadata.query<{company_id:string;venue_id:string}>(
+      `SELECT company_id::text,venue_id::text FROM admin_audit_log
+       WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1`,
+      [c.requestKey])
+    expect(records.rows).toHaveLength(2)
+    expect(new Set(records.rows.map(row=>row.venue_id))).toEqual(new Set([
+      fixture.manifests[0]!.scope.venueId,fixture.manifests[2]!.scope.venueId,
+    ]))
+  })
+
   it('normalizes phone-only contacts and rejects a formatted duplicate within the same venue',async()=>{
     config.enableTenantCrmContactCreate=true
     const phone='+7 (999) 333-44-55'
