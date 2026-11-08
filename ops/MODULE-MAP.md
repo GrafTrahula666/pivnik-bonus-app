@@ -1,3 +1,20 @@
+## 2026-11-08: Mazut adaptive rendering (dependent Draft; not deployed)
+
+`assets/home-mazut/fluid.js` keeps the approved WebGL liquid shader on HIGH
+devices and adjusts particle spacing, physics step, display-pixel budget and paint
+frequency on balanced/low Android. Telegram's declared performance tier has
+priority; until the Android client quality bootstrap arrives, conservative
+browser hints and a balanced fallback are used. Explicit lite mode always
+selects low quality, while system reduced motion still stops animation.
+`assets/home-mazut/ink.js` preserves the existing covered-text hysteresis,
+but limits sample frequency and short-circuits fully covered samples. Media,
+index and module cache versions are updated to prevent stale client mixtures.
+`test/mazut-performance.test.js` validates real exported quality policy and
+ink semantics. No shader appearance constants, server odds, bonus, identity,
+database, release keys, kiosk or runtime patch-chain are touched. The change
+is intended only after its parent Lab PR and separate Android bootstrap PR
+have passed review. Native device FPS, heat and memory tests remain mandatory.
+
 ## PIVNIK home and SpaceVerse Lab (2026-11-08)
 
 The Mazut home uses the existing profile, balance, beer progress and QR nodes.
