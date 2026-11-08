@@ -125,6 +125,19 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(state.targetResolutions).toBe(0)
     expect(await count(0,'spaceverse_crm_contacts')).toBe('0')
   })
+  it('advertises create capability only while enabled without resolving a tenant',async()=>{
+    const before=state.targetResolutions
+    config.enableTenantCrmContactCreate=true
+    const enabled=await send('owner','/api/admin/auth/session',null,{method:'GET'})
+    expect(enabled.status).toBe(200)
+    expect((await enabled.json()).capabilities.tenantCrmContactCreate).toBe(true)
+    expect(state.targetResolutions).toBe(before)
+    config.enableTenantCrmContactCreate=false
+    const disabled=await send('owner','/api/admin/auth/session',null,{method:'GET'})
+    expect(disabled.status).toBe(200)
+    expect((await disabled.json()).capabilities.tenantCrmContactCreate).toBe(false)
+    expect(state.targetResolutions).toBe(before)
+  })
   it('revokes replay access immediately when the create feature is disabled',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('revoked-replay@fixture.invalid')
