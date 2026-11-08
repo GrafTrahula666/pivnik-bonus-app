@@ -1,3 +1,17 @@
+## 2026-11-08: Mazut home mobile layout correction (dependent Draft)
+
+The approved Mazut home relocates the original `#heroQrButton`, profile
+and live loyalty controls without replacing their handlers. When active, the
+old business, league and wheel home cards must be visually hidden while
+remaining in the DOM for legacy access/recovery. The QR action now fills its
+half of the Mazut dock instead of retaining the old home-hero icon's tiny
+width and height. The existing Lab action shares the same grid geometry.
+`scripts/pivnik-lab-browser-smoke.mjs` checks these outcomes on the
+existing Telegram/VK fixtures at 320, 390, 430 and 1280 px.
+This change does not alter the older home when Mazut is disabled, and does
+not touch any backend, auth, QR payload/handler, money, persistence,
+Android kiosk, runtime patch or production deployment.
+
 ## 2026-11-08: Android motion quality (review branch, not deployed)
 
 The existing client app bootstrap now prefers Telegram Android's LOW/AVERAGE/HIGH
