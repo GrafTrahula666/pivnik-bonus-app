@@ -185,11 +185,15 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
     expect((await request('owner','GET',path)).status).toBe(200)
+    expect((await request('root','GET',path)).status).toBe(200)
     await state.db!.query('UPDATE companies SET active=FALSE WHERE id=10')
     try{
-      for(const who of ['trusted','owner']){
+      for(const who of ['trusted','owner','root']){
         expect((await request(who,'GET',path)).status).toBe(404)
         expect((await request(who,'POST',path,{title:'Inactive company injection'})).status).toBe(404)
+        const listing=await request(who,'GET','/api/admin/venues')
+        expect(listing.status).toBe(200)
+        expect((await listing.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
       }
       expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Inactive company injection'")).rows[0].count).toBe(0)
     }finally{
