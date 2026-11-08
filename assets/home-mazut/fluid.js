@@ -2,7 +2,24 @@
 import { createMazutInk } from "./ink.js";
 
 export function mountMazutFluid({card, layer, canvas, isPaused}) {
-  const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"));
+  const root = document.documentElement;
+  const memory = Number(navigator.deviceMemory);
+  const cores = Number(navigator.hardwareConcurrency);
+  const android = /Android/i.test(navigator.userAgent || '');
+  const advertised = root.dataset.pivnikPerformance;
+  const fallbackTier = android
+    ? ((memory > 0 && memory <= 3) || (cores > 0 && cores <= 4) ? 'low' : 'balanced')
+    : 'high';
+  const quality = root.classList.contains('lite-mode')
+    ? 'low'
+    : (['low', 'balanced', 'high'].includes(advertised) ? advertised : fallbackTier);
+  const lowQuality = quality === 'low';
+  const balancedQuality = quality === 'balanced';
+  const maxPixels = lowQuality ? 360000 : balancedQuality ? 900000 : 1700000;
+  const maxDpr = lowQuality ? 1 : balancedQuality ? 1.5 : 2;
+  const renderInterval = lowQuality ? 45 : balancedQuality ? 30 : 16;
+  const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"),
+    lowQuality ? 100 : balancedQuality ? 75 : 60);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const mix=(a,b,t)=>a+(b-a)*t;
@@ -13,7 +30,10 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   let frame=0,last=0,lastPaint=0,clock=0,carry=0,bounds;
   let labPull=null;
   let neutralTilt,previousAngle;
-  const W=480,spacing=15.3,radius=36*spacing/16.4,particleRadius=35*spacing/16.4,step=1/60,flowSpeed=.75;
+  // Keep the footprint and viscosity, reduce particle resolution on slow GPUs.
+  const W=480,spacing=lowQuality?19:balancedQuality?16.8:15.3;
+  const radius=36*spacing/16.4,particleRadius=35*spacing/16.4;
+  const step=lowQuality?1/30:balancedQuality?1/45:1/60,flowSpeed=.75;
   const viscosity=1.10,damping=Math.pow(.986,viscosity);
   // Keep the whole particle footprint inside the canvas.
   const wallInset=Math.ceil(particleRadius)+2;
@@ -268,7 +288,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       pixel:gl.getUniformLocation(surface,'pixel'),tilt:gl.getUniformLocation(surface,'tilt'),gold:gl.getUniformLocation(surface,'gold'),clock:gl.getUniformLocation(surface,'clock'),
       bodyTint:gl.getUniformLocation(surface,'bodyTint'),edgeTint:gl.getUniformLocation(surface,'edgeTint'),shine:gl.getUniformLocation(surface,'shine'),blackPoint:gl.getUniformLocation(surface,'blackPoint')};
   }
-  function resizeSoftware(limit=440){
+  function resizeSoftware(limit=lowQuality?320:balancedQuality?380:440){
     const surface=document.createElement('canvas');
     const w=surface.width=Math.min(limit,canvas.width);
     const h=surface.height=Math.round(w*H/W);
@@ -330,20 +350,30 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(surface,0,0,canvas.width,canvas.height);
     slowPaints=performance.now()-started>24 ? slowPaints+1 : Math.max(0,slowPaints-1);
-    if(slowPaints>=10&&w>340){slowPaints=0;resizeSoftware(Math.max(340,Math.round(w*.84)));}
+    const softwareFloor=lowQuality?240:balancedQuality?300:340;
+    if(slowPaints>=10&&w>softwareFloor){slowPaints=0;resizeSoftware(Math.max(softwareFloor,Math.round(w*.84)));}
   }
   function resize(){
     bounds=layer.getBoundingClientRect();
     if(!bounds.width||!bounds.height) return;
     const newHeight=W*bounds.height/bounds.width;
     if(!x||Math.abs(newHeight-H)>H*.20){H=newHeight;seed();}
-    const scale=Math.min(devicePixelRatio||1,2,Math.sqrt(1700000/(bounds.width*bounds.height)));
-    canvas.width=Math.max(1,Math.round(bounds.width*scale));canvas.height=Math.max(1,Math.round(bounds.height*scale));
+    const scale=Math.min(devicePixelRatio||1,maxDpr,Math.sqrt(maxPixels/(bounds.width*bounds.height)));
+    const canvasWidth=Math.max(1,Math.round(bounds.width*scale));
+    const canvasHeight=Math.max(1,Math.round(bounds.height*scale));
+    if(canvas.width!==canvasWidth) canvas.width=canvasWidth;
+    if(canvas.height!==canvasHeight) canvas.height=canvasHeight;
     if(gfx){
-      gfx.width=Math.min(canvas.width,1000);
-      gfx.height=Math.round(gfx.width*canvas.height/canvas.width);
-      gl.bindTexture(gl.TEXTURE_2D,gfx.texture);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gfx.width,gfx.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      const aspect=canvas.height/canvas.width;
+      const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      const width=Math.max(1,Math.floor(Math.min(canvas.width,1000,maxTexture,
+        maxTexture/aspect,Math.sqrt(maxPixels/aspect))));
+      const height=Math.max(1,Math.round(width*aspect));
+      if(gfx.width!==width||gfx.height!==height){
+        gfx.width=width;gfx.height=height;
+        gl.bindTexture(gl.TEXTURE_2D,gfx.texture);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gfx.width,gfx.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      }
     }else if(ctx) resizeSoftware();
     paint();
   }
@@ -414,13 +444,15 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   function animate(now){
     frame=0;
     if(document.hidden||reduced.matches||isPaused()||!inView) return;
+    if(lastPaint && now-lastPaint<renderInterval){
+      frame=requestAnimationFrame(animate);
+      return;
+    }
     const dt=last ? clamp((now-last)/1000,0,.05) : step;
     last=now;carry=Math.min(carry+dt*flowSpeed,step*2);
     while(carry>=step){tick();carry-=step;}
-    if(gfx||!lastPaint||now-lastPaint>=30){
-      paint(carry/step);
-      lastPaint=now;
-    }
+    paint(carry/step);
+    lastPaint=now;
     frame=requestAnimationFrame(animate);
   }
   function syncAnimation(){
