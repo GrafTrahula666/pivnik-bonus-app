@@ -477,6 +477,31 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
   })
 
 
+  it('moves an existing trusted session between companies without retaining the previous tenant',async()=>{
+    const oldPath='/api/admin/venues/101/app/promotions'
+    const newPath='/api/admin/venues/202/app/promotions'
+    const title='Transferred trusted grant must not write to former tenant'
+    expect((await request('trusted','GET',oldPath)).status).toBe(200)
+    expect((await request('trusted','GET',newPath)).status).toBe(404)
+    await state.db!.query('UPDATE admin_company_access SET company_id=20 WHERE admin_id=11 AND company_id=10')
+    try{
+      const listing=await request('trusted','GET','/api/admin/venues')
+      expect(listing.status).toBe(200)
+      const venues=(await listing.json() as {venues:{id:string}[]}).venues
+      expect(venues).toContainEqual(expect.objectContaining({id:'202'}))
+      expect(venues).not.toContainEqual(expect.objectContaining({id:'101'}))
+      expect((await request('trusted','GET',oldPath)).status).toBe(404)
+      expect((await request('trusted','POST',oldPath,{title})).status).toBe(404)
+      expect((await request('trusted','GET',newPath)).status).toBe(200)
+      expect((await request('owner','GET',oldPath)).status).toBe(200)
+      expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE admin_company_access SET company_id=10 WHERE admin_id=11 AND company_id=20')
+    }
+    expect((await request('trusted','GET',oldPath)).status).toBe(200)
+    expect((await request('trusted','GET',newPath)).status).toBe(404)
+  })
+
   it('denies a deactivated company in existing sessions and venue discovery',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('owner','GET',path)).status).toBe(200)
