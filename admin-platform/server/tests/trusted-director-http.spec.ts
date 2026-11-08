@@ -502,6 +502,11 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     }
     expect((await request('trusted','GET',oldPath)).status).toBe(200)
     expect((await request('trusted','GET',newPath)).status).toBe(404)
+    // The same session must also lose write access to the transferred-away tenant.
+    const staleWrite=await request('trusted','POST',newPath,{title:'Former destination tenant write'})
+    expect(staleWrite.status).toBe(404)
+    expect(await staleWrite.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
+    expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1",['Former destination tenant write'])).rows[0].count).toBe(0)
   })
 
   it('denies a deactivated company in existing sessions and venue discovery',async()=>{
