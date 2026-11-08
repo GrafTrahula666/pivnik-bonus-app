@@ -11,6 +11,14 @@ existing Telegram/VK fixtures at 320, 390, 430 and 1280 px.
 This change does not alter the older home when Mazut is disabled, and does
 not touch any backend, auth, QR payload/handler, money, persistence,
 Android kiosk, runtime patch or production deployment.
+The V20.6 `styles.css` shell pseudo-layers intentionally restore the old
+SPACEVERSE cloud-city background, even when Mazut is mounted. While
+`.mazut-home.active` is visible only, `assets/home-mazut/home.css` sets
+the html/body/shell/topbar/main/home background to the existing stone
+`#dad6ce` and hides both legacy shell pseudo-layers. Other screens and
+the classic fallback retain their styling. The browser smoke checks actual
+computed background colors, images and pseudo-layer visibility on both
+Telegram and VK fixture viewports.
 
 ## 2026-11-08: Android motion quality (review branch, not deployed)
 
