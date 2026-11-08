@@ -400,6 +400,38 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('south',path(2),command(c.contact.email))).status).toBe(200)
     expect(await count(2,'spaceverse_crm_contacts')).toBe('1')
   })
+  it('isolates identical request UUID and contact email across independent tenant databases',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const shared=command('same-key-two-venues@fixture.invalid')
+    const beforeNorth=Number(await count(0,'spaceverse_crm_contacts'))
+    const beforeSouth=Number(await count(2,'spaceverse_crm_contacts'))
+    const northRequests=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const southRequests=Number(await count(2,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+    const north=await send('owner',path(),shared)
+    const south=await send('south',path(2),shared)
+    expect(north.status).toBe(200)
+    expect(south.status).toBe(200)
+    const northBody=await north.json()
+    const southBody=await south.json()
+    expect(northBody.requestKey).toBe(shared.requestKey)
+    expect(southBody.requestKey).toBe(shared.requestKey)
+    expect(northBody.contact.email).toBe(shared.contact.email)
+    expect(southBody.contact.email).toBe(shared.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(beforeNorth+1)
+    expect(Number(await count(2,'spaceverse_crm_contacts'))).toBe(beforeSouth+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(northRequests+1)
+    expect(Number(await count(2,'spaceverse_crm_contact_create_requests'))).toBe(southRequests+1)
+    expect(await auditCount()).toBe(auditsBefore+2)
+    const northReplay=await send('owner',path(),shared)
+    const southReplay=await send('south',path(2),shared)
+    expect(await northReplay.json()).toEqual(northBody)
+    expect(await southReplay.json()).toEqual(southBody)
+    expect(await auditCount()).toBe(auditsBefore+2)
+  })
   it('normalizes phone-only contacts and rejects a formatted duplicate within the same venue',async()=>{
     config.enableTenantCrmContactCreate=true
     const phone='+7 (999) 333-44-55'
