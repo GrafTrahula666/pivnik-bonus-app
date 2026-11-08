@@ -170,6 +170,36 @@ try {
       assert(Math.abs(homeLayout.qr.width - homeLayout.labWidth) <= 2,
         `${name}: the two Mazut dock actions are not equally wide`);
       assert(homeLayout.qr.height >= 70, `${name}: QR dock action is too short`);
+      // V20.6 intentionally reinstated the old city image on the shell pseudo
+      // layers. Neither the image nor a warm legacy tint may show around Mazut.
+      const stone = await page.evaluate(() => {
+        const shell = document.querySelector('#appShell');
+        const root = document.documentElement;
+        const bg = node => {
+          const style = getComputedStyle(node);
+          return { color: style.backgroundColor, image: style.backgroundImage };
+        };
+        return {
+          html: bg(root),
+          body: bg(document.body),
+          shell: bg(shell),
+          main: bg(shell.querySelector('main')),
+          topbar: bg(shell.querySelector('.topbar')),
+          home: bg(shell.querySelector('.mazut-home.active')),
+          stage: bg(shell.querySelector('.mazut-stage')),
+          before: getComputedStyle(shell, '::before').display,
+          after: getComputedStyle(shell, '::after').display
+        };
+      });
+      const expectedStone = 'rgb(218, 214, 206)';
+      for (const [element, background] of Object.entries(stone)) {
+        if (element === 'before' || element === 'after') {
+          assert.equal(background, 'none', `${name}: old shell ${element} layer leaks through`);
+          continue;
+        }
+        assert.equal(background.color, expectedStone, `${name}: ${element} has the wrong background color`);
+        assert.equal(background.image, 'none', `${name}: old background image on ${element}`);
+      }
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
       await page.locator('#qrModal [data-close="qrModal"]').click();
