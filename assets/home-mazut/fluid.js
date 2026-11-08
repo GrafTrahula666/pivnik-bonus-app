@@ -1,5 +1,5 @@
 // Renderer and simulation from the approved stone-and-mazut preview.
-import { createMazutInk } from "./ink.js";
+import { createMazutInk } from "./ink.js?v=2";
 
 // Pure device-quality policy; the renderer consumes it without touching the
 // approved fluid shader. The client bootstrap supplies the same tier once ready.
