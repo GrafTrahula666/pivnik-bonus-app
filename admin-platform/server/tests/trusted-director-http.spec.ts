@@ -204,6 +204,9 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     await state.db!.query('DELETE FROM admin_company_access WHERE admin_id=11 AND company_id=10')
     try{
       expect((await request('trusted','GET',path)).status).toBe(404)
+      const revokedList=await request('trusted','GET','/api/admin/venues')
+      expect(revokedList.status).toBe(200)
+      expect((await revokedList.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
       expect((await request('trusted','POST',path,{title:'Must not persist'})).status).toBe(404)
       expect((await request('owner','GET',path)).status).toBe(200)
       expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Must not persist'")).rows[0].count).toBe(0)
