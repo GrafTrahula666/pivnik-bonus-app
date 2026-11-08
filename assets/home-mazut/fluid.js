@@ -1,8 +1,39 @@
 // Renderer and simulation from the approved stone-and-mazut preview.
-import { createMazutInk } from "./ink.js";
+import { createMazutInk } from "./ink.js?v=2";
+
+// Pure device-quality policy; the renderer consumes it without touching the
+// approved fluid shader. The client bootstrap supplies the same tier once ready.
+export function getMazutRenderQuality(root, device) {
+  const userAgent = device.userAgent || '';
+  const memory = Number(device.deviceMemory);
+  const cores = Number(device.hardwareConcurrency);
+  const android = /Android/i.test(userAgent);
+  const advertised = root.dataset?.pivnikPerformance;
+  const telegramClass = /Telegram-Android\/[^()]+\([^)]*;\s*(LOW|AVERAGE|HIGH)\s*\)/i.exec(userAgent)?.[1]?.toLowerCase();
+  const fallbackTier = !android ? 'high'
+    : telegramClass ? (telegramClass === 'average' ? 'balanced' : telegramClass)
+    : (memory > 0 && memory <= 3) || (cores > 0 && cores <= 4) ? 'low'
+    : memory >= 6 && cores >= 6 ? 'high' : 'balanced';
+  const quality = root.classList.contains('lite-mode') ? 'low'
+    : ['low', 'balanced', 'high'].includes(advertised) ? advertised : fallbackTier;
+  return {
+    quality,
+    maxPixels: quality === 'low' ? 360000 : quality === 'balanced' ? 900000 : 1700000,
+    maxDpr: quality === 'low' ? 1 : quality === 'balanced' ? 1.5 : 2,
+    renderInterval: quality === 'low' ? 45 : quality === 'balanced' ? 30 : 16,
+    sampleInterval: quality === 'low' ? 100 : quality === 'balanced' ? 75 : 60,
+    spacing: quality === 'low' ? 19 : quality === 'balanced' ? 16.8 : 15.3,
+    step: quality === 'low' ? 1/30 : quality === 'balanced' ? 1/45 : 1/60
+  };
+}
 
 export function mountMazutFluid({card, layer, canvas, isPaused}) {
-  const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"));
+  const {quality, maxPixels, maxDpr, renderInterval, sampleInterval, spacing, step}
+    = getMazutRenderQuality(document.documentElement, navigator);
+  const lowQuality = quality === 'low';
+  const balancedQuality = quality === 'balanced';
+  const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"),
+    sampleInterval);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const mix=(a,b,t)=>a+(b-a)*t;
@@ -13,7 +44,9 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   let frame=0,last=0,lastPaint=0,clock=0,carry=0,bounds;
   let labPull=null;
   let neutralTilt,previousAngle;
-  const W=480,spacing=15.3,radius=36*spacing/16.4,particleRadius=35*spacing/16.4,step=1/60,flowSpeed=.75;
+  // Keep the footprint and viscosity, reduce particle resolution on slow GPUs.
+  const W=480,flowSpeed=.75;
+  const radius=36*spacing/16.4,particleRadius=35*spacing/16.4;
   const viscosity=1.10,damping=Math.pow(.986,viscosity);
   // Keep the whole particle footprint inside the canvas.
   const wallInset=Math.ceil(particleRadius)+2;
@@ -268,7 +301,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       pixel:gl.getUniformLocation(surface,'pixel'),tilt:gl.getUniformLocation(surface,'tilt'),gold:gl.getUniformLocation(surface,'gold'),clock:gl.getUniformLocation(surface,'clock'),
       bodyTint:gl.getUniformLocation(surface,'bodyTint'),edgeTint:gl.getUniformLocation(surface,'edgeTint'),shine:gl.getUniformLocation(surface,'shine'),blackPoint:gl.getUniformLocation(surface,'blackPoint')};
   }
-  function resizeSoftware(limit=440){
+  function resizeSoftware(limit=lowQuality?320:balancedQuality?380:440){
     const surface=document.createElement('canvas');
     const w=surface.width=Math.min(limit,canvas.width);
     const h=surface.height=Math.round(w*H/W);
@@ -330,20 +363,30 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(surface,0,0,canvas.width,canvas.height);
     slowPaints=performance.now()-started>24 ? slowPaints+1 : Math.max(0,slowPaints-1);
-    if(slowPaints>=10&&w>340){slowPaints=0;resizeSoftware(Math.max(340,Math.round(w*.84)));}
+    const softwareFloor=lowQuality?240:balancedQuality?300:340;
+    if(slowPaints>=10&&w>softwareFloor){slowPaints=0;resizeSoftware(Math.max(softwareFloor,Math.round(w*.84)));}
   }
   function resize(){
     bounds=layer.getBoundingClientRect();
     if(!bounds.width||!bounds.height) return;
     const newHeight=W*bounds.height/bounds.width;
     if(!x||Math.abs(newHeight-H)>H*.20){H=newHeight;seed();}
-    const scale=Math.min(devicePixelRatio||1,2,Math.sqrt(1700000/(bounds.width*bounds.height)));
-    canvas.width=Math.max(1,Math.round(bounds.width*scale));canvas.height=Math.max(1,Math.round(bounds.height*scale));
+    const scale=Math.min(devicePixelRatio||1,maxDpr,Math.sqrt(maxPixels/(bounds.width*bounds.height)));
+    const canvasWidth=Math.max(1,Math.round(bounds.width*scale));
+    const canvasHeight=Math.max(1,Math.round(bounds.height*scale));
+    if(canvas.width!==canvasWidth) canvas.width=canvasWidth;
+    if(canvas.height!==canvasHeight) canvas.height=canvasHeight;
     if(gfx){
-      gfx.width=Math.min(canvas.width,1000);
-      gfx.height=Math.round(gfx.width*canvas.height/canvas.width);
-      gl.bindTexture(gl.TEXTURE_2D,gfx.texture);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gfx.width,gfx.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      const aspect=canvas.height/canvas.width;
+      const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      const width=Math.max(1,Math.floor(Math.min(canvas.width,1000,maxTexture,
+        maxTexture/aspect,Math.sqrt(maxPixels/aspect))));
+      const height=Math.max(1,Math.round(width*aspect));
+      if(gfx.width!==width||gfx.height!==height){
+        gfx.width=width;gfx.height=height;
+        gl.bindTexture(gl.TEXTURE_2D,gfx.texture);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gfx.width,gfx.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      }
     }else if(ctx) resizeSoftware();
     paint();
   }
@@ -414,13 +457,15 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   function animate(now){
     frame=0;
     if(document.hidden||reduced.matches||isPaused()||!inView) return;
+    if(lastPaint && now-lastPaint<renderInterval){
+      frame=requestAnimationFrame(animate);
+      return;
+    }
     const dt=last ? clamp((now-last)/1000,0,.05) : step;
     last=now;carry=Math.min(carry+dt*flowSpeed,step*2);
     while(carry>=step){tick();carry-=step;}
-    if(gfx||!lastPaint||now-lastPaint>=30){
-      paint(carry/step);
-      lastPaint=now;
-    }
+    paint(carry/step);
+    lastPaint=now;
     frame=requestAnimationFrame(animate);
   }
   function syncAnimation(){

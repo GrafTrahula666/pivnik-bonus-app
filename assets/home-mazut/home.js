@@ -130,7 +130,7 @@ async function enableMazutHome() {
   });
   home.prepend(stage);
   home.classList.add('mazut-home');
-  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=3');
+  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=4');
   fluid = mountMazutFluid({
     card: stage,
     layer: slot('.mazut-fluid'),
