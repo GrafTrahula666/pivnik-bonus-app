@@ -473,6 +473,29 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
   })
 
 
+  it('denies a deactivated company in existing sessions and venue discovery',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE companies SET active=FALSE WHERE id=10')
+    try{
+      for(const who of ['trusted','owner','root']){
+        const read=await request(who,'GET',path)
+        expect(read.status).toBe(404)
+        expect(await read.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
+        const write=await request(who,'POST',path,{title:'Disabled company write'})
+        expect(write.status).toBe(404)
+        expect(await write.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
+        const listing=await request(who,'GET','/api/admin/venues')
+        expect(listing.status).toBe(200)
+        expect((await listing.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
+      }
+      expect((await state.db!.query("SELECT COUNT(*)::int AS count FROM promotions WHERE title='Disabled company write'")).rows[0].count).toBe(0)
+    }finally{
+      await state.db!.query('UPDATE companies SET active=TRUE WHERE id=10')
+    }
+    expect((await request('owner','GET',path)).status).toBe(200)
+  })
+
   it('denies a deactivated venue in existing sessions and venue discovery',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
