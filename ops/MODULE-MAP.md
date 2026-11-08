@@ -1,3 +1,16 @@
+## 2026-11-08: Android motion quality (review branch, not deployed)
+
+The existing client app bootstrap now prefers Telegram Android's LOW/AVERAGE/HIGH
+performance class, then falls back to conservative browser memory/core hints.
+Unknown Android devices use balanced effects, confirmed low-end devices and the
+explicit `?lite=1` mode retain the existing reduced-motion/blur fallback.
+Android HIGH restores CSS animations and glass effects; iOS and the user system
+`prefers-reduced-motion` setting are unchanged. This is UI-only; no loyalty,
+identity, QR, wheel, API, staff, database, kiosk or patch-chain changes.
+`test/android-motion-performance.test.js` checks the production bootstrap and
+CSS boundaries. Device/Telegram/VK visual and performance validation remains a
+separate release acceptance step.
+
 ## Temporary white-gold restoration (2026-11-05, review branch)
 
 `app.js:applyDesign` ignores the stale published Halloween skin without changing
