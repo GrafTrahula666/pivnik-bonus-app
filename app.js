@@ -5,11 +5,27 @@ const PLATFORM_NAME = IS_VK ? 'VK' : 'Telegram';
 const TELEGRAM_HEADER_COLOR = '#0b0e13';
 const isAndroid = /Android/i.test(navigator.userAgent || '');
 const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1';
+
+// Android is not one performance tier. Prefer Telegram's explicit device
+// class, then use conservative browser hints. Unknown phones stay balanced.
+function getPivnikPerformanceTier() {
+  if (!isAndroid) return 'high';
+  const uaClass = /Telegram-Android\\/[^()]+\\([^)]*;\\s*(LOW|AVERAGE|HIGH)\\s*\\)/i.exec(navigator.userAgent || '')?.[1]?.toLowerCase();
+  if (uaClass) return uaClass === 'average' ? 'balanced' : uaClass;
+  const memory = Number(navigator.deviceMemory);
+  const cores = Number(navigator.hardwareConcurrency);
+  if ((memory > 0 && memory <= 3) || (cores > 0 && cores <= 4)) return 'low';
+  if (memory >= 6 && cores >= 6) return 'high';
+  return 'balanced';
+}
+
+const pivnikPerformanceTier = getPivnikPerformanceTier();
 const telegramInitDataFromUrl = readTelegramLaunchData();
 let telegramBridgeInitialized = false;
+document.documentElement.dataset.pivnikPerformance = pivnikPerformanceTier;
 document.documentElement.classList.toggle('android-webview', isAndroid);
 document.documentElement.classList.toggle('lite-mode', isLiteRequested);
-document.documentElement.classList.toggle('reduce-effects', isAndroid || isLiteRequested);
+document.documentElement.classList.toggle('reduce-effects', isLiteRequested || (isAndroid && pivnikPerformanceTier === 'low'));
 document.documentElement.classList.toggle('platform-vk', IS_VK);
 document.documentElement.classList.toggle('platform-telegram', !IS_VK);
 
