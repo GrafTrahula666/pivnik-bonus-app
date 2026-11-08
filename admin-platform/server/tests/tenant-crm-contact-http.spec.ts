@@ -157,6 +157,47 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(replay.status).toBe(200)
     expect(await replay.json()).toEqual(receipt)
   })
+  it('keeps a pending audit receipt inaccessible while disabled, then reconciles exactly once',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-revoked-replay@fixture.invalid')
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+
+    state.failAuditOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    // The tenant write already committed, but a disabled capability must not
+    // permit audit reconciliation or disclose the pending idempotency receipt.
+    config.enableTenantCrmContactCreate=false
+    const denied=await send('owner',path(),c)
+    expect(denied.status).toBe(403)
+    const denial=await denied.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_CREATE_DISABLED'})
+    expect(JSON.stringify(denial)).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    config.enableTenantCrmContactCreate=true
+    const recovered=await send('owner',path(),c)
+    expect(recovered.status).toBe(200)
+    const receipt=await recovered.json()
+    expect(receipt.requestKey).toBe(c.requestKey)
+    const replay=await send('owner',path(),c)
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
+  })
   it('requires signed session, CSRF and exact Origin before accessing tenant',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('denied@fixture.invalid')
