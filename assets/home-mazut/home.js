@@ -1,6 +1,9 @@
 // Mount the approved home on the existing live profile and actions.
 if (new URLSearchParams(location.search).get('mazut') !== '0') {
-  enableMazutHome().catch((error) => console.warn('Pivnik home unavailable:', error));
+  enableMazutHome().catch((error) => {
+    console.warn('Pivnik home unavailable:', error);
+    document.getElementById('openSpaceverseLab')?.classList.remove('hidden');
+  });
 }
 
 async function enableMazutHome() {
@@ -19,7 +22,9 @@ async function enableMazutHome() {
   const qr = byId('heroQrButton');
   const profileNav = document.querySelector('.bottom-nav [data-target="profile"]');
   if (!home || !avatar || !name || !balance || !status || !statusProgress ||
-      !remaining || !statusText || !beerText || !beerProgress || !qr || !profileNav) return;
+      !remaining || !statusText || !beerText || !beerProgress || !qr || !profileNav) {
+    throw new Error('Pivnik home controls are missing.');
+  }
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
