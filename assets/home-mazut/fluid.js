@@ -34,6 +34,8 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   const balancedQuality = quality === 'balanced';
   const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"),
     sampleInterval);
+  // Read-only diagnostics for mobile WebView performance acceptance.
+  canvas.dataset.mazutQuality = quality;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const mix=(a,b,t)=>a+(b-a)*t;
