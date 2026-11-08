@@ -1,3 +1,28 @@
+/* The old V20.6 shell re-enables a fixed cloud-city image in ::before,
+   even above the new Mazut home. Only while this home is active, use its
+   existing stone color for the entire viewport, chrome and side gutters. */
+html:has(#appShell .mazut-home.active),
+html:has(#appShell .mazut-home.active) body,
+html body #appShell:has(.mazut-home.active),
+html body #appShell:has(.mazut-home.active) > main,
+html body #appShell:has(.mazut-home.active) > .topbar,
+html body #appShell:has(.mazut-home.active) .client-home.mazut-home.active {
+  background: #dad6ce !important;
+  background-image: none !important;
+}
+
+html body #appShell:has(.mazut-home.active)::before,
+html body #appShell:has(.mazut-home.active)::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+}
+
+html body #appShell:has(.mazut-home.active) > .topbar {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .mazut-home .mazut-stage {
   position: relative;
   isolation: isolate;
