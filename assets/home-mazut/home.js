@@ -28,7 +28,7 @@ async function enableMazutHome() {
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/assets/home-mazut/home.css?v=7';
+  stylesheet.href = '/assets/home-mazut/home.css?v=8';
   const cssReady = new Promise((resolve, reject) => {
     stylesheet.onload = resolve;
     stylesheet.onerror = reject;
