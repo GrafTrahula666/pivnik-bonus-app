@@ -155,6 +155,21 @@ try {
         }
         console.log(`PASS ${name} Android moving-fluid quality=${probe.renderer} pixels=${probe.pixels} CSS animation=${probe.cssDuration}`);
       }
+      const homeLayout = await page.evaluate(() => {
+        const qr = document.querySelector('#heroQrButton').getBoundingClientRect();
+        const lab = document.querySelector('.mazut-lab').getBoundingClientRect();
+        const hiddenLegacy = ['.spaceverse-business-card', '.home-league-card', '.home-wheel-card'];
+        const leftover = hiddenLegacy.filter(selector => {
+          const element = document.querySelector('.mazut-home > ' + selector);
+          return element && getComputedStyle(element).display !== 'none';
+        });
+        return { qr: {width:qr.width,height:qr.height}, labWidth:lab.width, leftover };
+      });
+      assert.equal(homeLayout.leftover.length, 0, `${name}: legacy cards overlay the Mazut scene`);
+      assert(homeLayout.qr.width >= 105, `${name}: QR retained old hero icon dimensions`);
+      assert(Math.abs(homeLayout.qr.width - homeLayout.labWidth) <= 2,
+        `${name}: the two Mazut dock actions are not equally wide`);
+      assert(homeLayout.qr.height >= 70, `${name}: QR dock action is too short`);
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
       await page.locator('#qrModal [data-close="qrModal"]').click();
