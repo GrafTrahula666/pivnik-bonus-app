@@ -79,7 +79,7 @@ async function inspectPlatform(platform) {
   });
 
   try {
-    const response = await page.goto(`http://127.0.0.1:${port}/index.html?parity=${platform}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`http://127.0.0.1:${port}/index.html?parity=${platform}&mazut=0`, { waitUntil: 'networkidle' });
     assert(response?.status() === 200, `${platform}: index.html returned ${response?.status()}`);
     await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}' });
     await page.evaluate((name) => {

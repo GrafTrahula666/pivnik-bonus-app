@@ -79,7 +79,7 @@ await page.route('**/*', async (route) => {
 });
 
 try {
-  const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1`, { waitUntil: 'networkidle' });
+  const response = await page.goto(`http://127.0.0.1:${port}/index.html?vk-native-smoke=1&mazut=0`, { waitUntil: 'networkidle' });
   assert(response?.status() === 200, `index.html returned ${response?.status()}`);
 
   await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}.screen.spaceverse-business-screen.active{display:grid!important}' });

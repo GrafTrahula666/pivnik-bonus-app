@@ -1,0 +1,313 @@
+/* SPACEVERSE LAB */
+.lab-entry {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid #b89c6466;
+  border-radius: 13px;
+  background: linear-gradient(118deg, #222e3c, #0c1119 72%);
+  color: #f4dfb0;
+  text-align: left;
+  letter-spacing: .095em;
+}
+.lab-entry span:last-child { margin-left: auto; }
+.app-shell.lab-mode > .topbar,
+.app-shell.lab-mode > .bottom-nav { display: none; }
+
+.lab-screen.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  margin: 0;
+  padding: 0;
+  background: #080b10;
+  overflow: hidden;
+  color-scheme: dark;
+}
+.lab-observatory {
+  position: relative;
+  width: min(100%, 56.25vh);
+  width: min(100%, 56.25dvh);
+  height: 100%;
+  margin: auto;
+  background: #0a0e14 url("lab-observatory.webp") center / cover no-repeat;
+  container-type: inline-size;
+}
+.lab-tools {
+  position: absolute;
+  inset: max(17%, env(safe-area-inset-top)) 5% auto;
+  display: flex;
+  justify-content: space-between;
+}
+.lab-tools button {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #a7b9d031;
+  border-radius: 7px;
+  background: #0c1522dc;
+  color: #ecf5ff;
+  font-size: 12px;
+}
+.lab-foreground {
+  position: absolute;
+  inset: auto 3% max(2%, env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: 1fr 1.17fr 1fr;
+  gap: 1%;
+  align-items: end;
+}
+.lab-projector {
+  --projection: #a1e3ff;
+  --emitter: 28px;
+  --art-width: 25cqw;
+  --art-height: 37cqw;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: end;
+  gap: 0;
+  min-width: 0;
+  min-height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--projection);
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+}
+.lab-projector::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 37% 10% calc(var(--emitter) / 2);
+  opacity: .72;
+  background:
+    linear-gradient(80deg, transparent 45%, #89d9ff35 49%, transparent 51%),
+    linear-gradient(100deg, transparent 47%, #89d9ff45 50%, transparent 53%),
+    linear-gradient(0deg, #73caff91, #429bfa1f 51%, transparent 93%);
+  clip-path: polygon(0 0, 100% 0, 59% 100%, 41% 100%);
+  pointer-events: none;
+}
+.lab-projector:hover,
+.lab-projector:focus-visible { color: #fff; filter: brightness(1.22); }
+.lab-projector:focus-visible,
+.lab-tools button:focus-visible,
+.lab-dialog :is(button, a):focus-visible {
+  outline: 2px solid #ffdfa0;
+  outline-offset: 4px;
+}
+.lab-hologram {
+  display: block;
+  width: min(100%, var(--art-width));
+  height: var(--art-height);
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px #78b9ff65);
+}
+.lab-projector strong {
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-width: 100%;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  border: 1px solid #a1e3ff73;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #19394de8, #102331ee);
+  font: 800 clamp(9px, 2.5cqw, 15px)/1.08 system-ui, sans-serif;
+  letter-spacing: .045em;
+  color: #ecfbff;
+  text-shadow: 0 1px 4px #000, 0 0 9px var(--projection);
+}
+.lab-emitter {
+  position: relative;
+  width: 95%;
+  height: var(--emitter);
+  background:
+    linear-gradient(0deg, #080e16 0 21%, #2c4659 22% 29%, #131c28 30% 46%, transparent 47%),
+    linear-gradient(110deg, #101822 9%, #4f687a 27%, #192b3b 35% 65%, #648295 78%, #111c27 91%);
+  clip-path: polygon(14% 0, 86% 0, 100% 47%, 98% 86%, 84% 100%, 16% 100%, 2% 86%, 0 47%);
+}
+.lab-emitter::before,
+.lab-emitter::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+.lab-emitter::before {
+  inset: 7% 11% 28%;
+  background:
+    repeating-linear-gradient(90deg, #5b7186 0 4px, #0b1017 4px 9px),
+    #162938;
+  clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+}
+.lab-emitter::after {
+  inset: 13% 29% 46%;
+  border: 1px solid #729cb5;
+  border-radius: 32%;
+  background: radial-gradient(ellipse, #f6ffff 5%, var(--projection) 24%, #367fae 42%, #07121b 72%);
+  box-shadow: 0 0 8px var(--projection);
+}
+.lab-business,
+.lab-partner { position: absolute; width: 24%; --emitter: 18px; }
+.lab-business { left: 2%; bottom: 33%; --art-width: 24cqw; --art-height: 36cqw; }
+.lab-business strong { font-size: clamp(9px, 2.7cqw, 16px); }
+.lab-partner { right: 2%; bottom: 30%; --art-width: 21.3cqw; --art-height: 32cqw; }
+.lab-business::before, .lab-partner::before { content: none; }
+.lab-pantheon { --projection: #d4c4ff; }
+.lab-playground { --art-width: 28.7cqw; --art-height: 42.6cqw; }
+.lab-shop { --art-width: 22.7cqw; --art-height: 30.6cqw; --projection: #a4f3df; }
+.lab-foreground .lab-projector { --emitter: clamp(25px, 8cqw, 50px); }
+
+.lab-projectors-reveal .lab-projector { animation: lab-projector-on .46s ease-out both; }
+.lab-projectors-reveal .lab-pantheon { animation-delay: .07s; }
+.lab-projectors-reveal .lab-shop { animation-delay: .14s; }
+.lab-projectors-reveal .lab-business { animation-delay: .21s; }
+.lab-projectors-reveal .lab-partner { animation-delay: .28s; }
+@keyframes lab-projector-on {
+  from { opacity: 0; filter: brightness(1.65); }
+  to { opacity: 1; filter: none; }
+}
+
+.lab-dialog {
+  width: min(510px, calc(100% - 24px));
+  max-height: min(760px, calc(100vh - 24px));
+  max-height: min(760px, calc(100dvh - 24px));
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #7995b2a6;
+  border-radius: 19px;
+  background: linear-gradient(152deg, #182a40, #0b111c 48%);
+  color: #eef5ff;
+  box-shadow: 0 24px 80px #000c, inset 0 0 38px #72b7ef13;
+  font: 15px/1.5 system-ui, sans-serif;
+}
+.lab-dialog::backdrop { background: #04070cba; backdrop-filter: blur(5px); }
+@media (prefers-reduced-motion: reduce) {
+  .lab-projectors-reveal .lab-projector { animation: none; }
+}
+.lab-shop-back { margin-top: 16px; }
+.lab-game[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 1040px);
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+.lab-game header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(6px, env(safe-area-inset-top)) 12px 6px;
+}
+.lab-game > p { margin: 16px; }
+.lab-game-content { flex: 1; min-height: 0; }
+.lab-game-content iframe { display: block; width: 100%; height: 100%; border: 0; }
+.lab-sheet { padding: clamp(17px, 5vw, 29px); }
+.lab-sheet h2 { margin: 0; color: #fff; font-size: clamp(22px, 5.5vw, 30px); line-height: 1.12; }
+.lab-sheet h2:focus { outline: none; }
+.lab-sheet > p:not(.lab-sheet-kicker) { margin: 9px 0 0; color: #c0d0e3; }
+.lab-sheet .lab-sheet-kicker {
+  margin: 0 0 7px;
+  color: #e7c78b;
+  font-weight: 750;
+  font-size: 11px;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+.lab-guide-list { display: grid; gap: 0; margin: 14px 0; }
+.lab-guide-list > div { padding: 7px 0; border-top: 1px solid #8ba2bb39; }
+.lab-guide-list dt { color: #addefe; font-weight: 800; font-size: 12px; letter-spacing: .04em; }
+.lab-guide-list dd { margin: 1px 0 0; color: #dee8f5; font-size: 13px; line-height: 1.35; }
+.lab-dialog :is(.lab-primary, .lab-secondary) {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1px solid #b0d4ef85;
+  border-radius: 9px;
+  background: #b3def6;
+  color: #101d2d;
+  font: 750 14px/1.2 system-ui, sans-serif;
+}
+.lab-dialog .lab-primary:disabled { opacity: .64; cursor: default; }
+.lab-dialog .lab-secondary { background: #18293c; color: #e8f3ff; }
+.lab-menu { display: grid; gap: 8px; margin: 15px 0; }
+.lab-menu > :is(button, a) {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 0 8px;
+  align-items: center;
+  min-height: 59px;
+  padding: 7px 9px;
+  border: 1px solid #96b6d345;
+  border-radius: 9px;
+  background: #192a3e;
+  color: #edf6ff;
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+}
+.lab-menu span { grid-row: span 2; text-align: center; color: #a7e0ff; font-size: 23px; }
+.lab-menu small { color: #c4d6e9; }
+
+#spaceverseBusinessDetails[hidden], #spaceversePartnerDetails[hidden], #spaceverseLeadError[hidden] { display: none; }
+#spaceverseLeadChannel {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid #9ab0c46b;
+  border-radius: 10px;
+  background: #161e29;
+  color: #ecf4fb;
+  font: inherit;
+  color-scheme: dark;
+}
+#spaceverseLeadError { color: #b42338; }
+@media (max-height: 610px) {
+  .lab-guide-list > div { padding: 5px 0; }
+}
+
+/* Past league seasons use the same cream palette and gold borders as the current league. */
+.league-seasons-link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 18px;
+  border: 1.5px solid rgba(181, 126, 35, .62);
+  border-radius: 22px;
+  color: #6b4a1c;
+  text-align: left;
+  cursor: pointer;
+}
+.league-seasons-link b { display: block; font-size: 15px; }
+.league-seasons-link small { display: block; margin-top: 6px; color: #806d59; }
+.league-seasons-link > span:last-child { font-size: 24px; }
+.league-seasons-link:focus-visible { outline: 2px solid #9b650f; outline-offset: 3px; }
+.league-seasons-list { display: grid; gap: 16px; }
+.screen[data-screen="league-seasons"] .client-page-title { padding: 16px; border-radius: 22px; background: rgba(255, 252, 247, .9); }
+.league-season { min-width: 0; padding: 16px; border: 1.5px solid rgba(181, 126, 35, .62); border-radius: 22px; }
+.league-season h2 { margin: 6px 0 16px; color: #6b4a1c; font-size: 20px; }
+.league-season .leaderboard-row { border-color: rgba(181, 126, 35, .42); }
+.league-season .leaderboard-row.is-me { border-color: rgba(166, 109, 20, .9); }
+.league-season .leaderboard-row > div { min-width: 0; }
+.league-season .leaderboard-row b { display: block; overflow-wrap: anywhere; }
+.league-season .leaderboard-row strong { max-width: 100px; white-space: normal; overflow-wrap: anywhere; text-align: right; }
+@media (max-width: 360px) {
+  .league-season .leaderboard-row { grid-template-columns: 20px 38px minmax(0, 1fr); column-gap: 14px; row-gap: 4px; }
+  .league-season .leader-rank, .league-season .leader-avatar { grid-row: 1 / 3; }
+  .league-season .leaderboard-row > div, .league-season .leaderboard-row strong { grid-column: 3; }
+  .league-season .leaderboard-row strong { justify-self: start; text-align: left; }
+}

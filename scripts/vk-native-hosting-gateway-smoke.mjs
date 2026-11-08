@@ -139,7 +139,7 @@ try {
         && message.text().includes('ERR_EMPTY_RESPONSE');
       if (message.type() === 'error' && !expectedDrop) errors.push(message.text());
     });
-    await page.goto(`${staticOrigin}/index.html?${signed}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${staticOrigin}/index.html?${signed}&mazut=0`, { waitUntil: 'domcontentloaded' });
     await page.locator('#appShell').waitFor({ state: 'visible', timeout: 12000 });
     if (!scenario.accepted) {
       await page.locator('#acceptTerms').click();

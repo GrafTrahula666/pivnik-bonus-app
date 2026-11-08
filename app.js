@@ -85,6 +85,9 @@ const state = {
   editingContent: null,
   selectedShopItem: 'frame-beer-mugs',
   leaderboard: null,
+  leagueSeasons: null,
+  leagueSeasonsLoading: false,
+  leagueSeasonsError: '',
   staffRecent: [],
   profileDraft: null,
   profileSetupStep: 1,
@@ -1255,20 +1258,34 @@ function switchScreen(target, navigation = {}) {
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
   $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
+  $('#appShell')?.classList.toggle('lab-mode', target === 'spaceverse-lab');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
   if (target === 'actions') renderPromotions();
-  if (target === 'league') renderLeaderboard();
+  if (target === 'league' && !navigation.fromHistory) void refreshLeagueScreen();
+  if (target === 'league-seasons' && !navigation.fromHistory) void loadLeagueSeasons();
+  if (labSession && !LAB_SCREENS.has(target)) finishLabSession();
   if (target === 'profile') showHistory().catch((error) => toast(error.message));
 }
 
+// Back must retain fromHistory even when the legacy overlay wraps switchScreen.
+const navigateScreen = switchScreen;
 window.__PIVNIK_GO_BACK__ = () => {
+  if (labSession) {
+    if (closeLabDialog()) return;
+    const modal = $$('.modal.open').at(-1);
+    if (modal) {
+      closeModal(modal.id);
+      return;
+    }
+  }
   state.screenHistory ||= [];
   const active = $('.screen.active')?.dataset.screen || 'client';
   let previous = state.screenHistory.pop();
   while (previous === active && state.screenHistory.length) previous = state.screenHistory.pop();
-  switchScreen(previous || (active === 'client' ? 'profile' : 'client'), { fromHistory: true });
+  navigateScreen(previous || (active === 'client' ? 'profile' : 'client'), { fromHistory: true });
+  if (active === 'wheel' && previous === 'spaceverse-lab') openLabPlayground();
 };
 
 function currentLevelIndex() {
@@ -1608,14 +1625,171 @@ async function contactOwnerAboutItem(code) {
   }
 }
 
+const LAB_SCREENS = new Set(['spaceverse-lab', 'spaceverse-business', 'wheel', 'league', 'league-seasons']);
+let labSession = false;
+let labLeaving = false;
+let spaceverseLeadMode = 'business';
+let spaceverseLeadPending = false;
+
+function pushLabHistory() {
+  history.pushState({ ...history.state, pivnikLab: true }, '');
+}
+
+function finishLabSession() {
+  labSession = false;
+  if (!IS_VK) tg?.BackButton?.hide();
+  if (history.state?.pivnikLab) {
+    labLeaving = true;
+    history.back();
+  }
+}
+
+window.addEventListener('popstate', () => {
+  labLeaving = false;
+  if (!labSession || history.state?.pivnikLab) return;
+  window.__PIVNIK_GO_BACK__();
+  if (labSession) pushLabHistory();
+});
+if (!IS_VK) tg?.BackButton?.onClick(() => {
+  if (labSession) window.__PIVNIK_GO_BACK__();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !labSession || $('dialog.lab-dialog[open]') || !$('.modal.open')) return;
+  event.preventDefault();
+  window.__PIVNIK_GO_BACK__();
+});
+
+function openSpaceverseLab() {
+  if (labSession || labLeaving) return;
+  $$('[data-lab-art]:not([href])').forEach((image) => {
+    image.setAttribute('href', image.getAttribute('data-lab-art'));
+  });
+  const screen = $('[data-screen="spaceverse-lab"]');
+  screen.classList.remove('lab-projectors-reveal');
+  pushLabHistory();
+  labSession = true;
+  if (!IS_VK) tg?.BackButton?.show();
+  switchScreen('spaceverse-lab');
+  requestAnimationFrame(() => screen.classList.add('lab-projectors-reveal'));
+}
+
+function showLabDialog(id) {
+  const dialog = $(`#${id}`);
+  if (!dialog.open) dialog.showModal();
+}
+
+function openLabPlayground() {
+  showLabDialog('labPlaygroundDialog');
+}
+
+function closeLabDialog() {
+  const dialog = $$('dialog.lab-dialog[open]').at(-1);
+  if (!dialog) return false;
+  dialog.close();
+  return true;
+}
+
+function backFromLabSection() {
+  if (state.screenHistory?.at(-1) === 'spaceverse-lab') window.__PIVNIK_GO_BACK__();
+  else switchScreen('client');
+}
+
+function mountLabGame(dialog, url, title, onLoad) {
+  const frame = document.createElement('iframe');
+  frame.title = title;
+  frame.src = url;
+  if (url.startsWith('https:')) {
+    frame.referrerPolicy = 'no-referrer';
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  }
+  if (onLoad) frame.addEventListener('load', onLoad, { once: true });
+  $('.lab-game-content', dialog).replaceChildren(frame);
+}
+
+async function openLabGame(game) {
+  const dialog = $('#labGameDialog');
+  if (dialog.open) return;
+  const chess = game === 'chess';
+  const title = chess ? 'Ruslanych AI' : 'PIVNIK RUN';
+  $('#labGameTitle').textContent = title;
+  const status = $('#labGameStatus');
+  status.hidden = !chess;
+  status.textContent = 'Подключаем Ruslanych AI…';
+  showLabDialog(dialog.id);
+  if (!chess) {
+    mountLabGame(dialog, '/run/?lab=1', title);
+    return;
+  }
+
+  const load = new AbortController();
+  const cancel = () => load.abort();
+  dialog.addEventListener('close', cancel, { once: true });
+  try {
+    const result = await api('/api/lab/chess', { retries: 0, timeoutMs: 6000 });
+    if (load.signal.aborted || !dialog.open) return;
+    const url = new URL(result.url);
+    if (url.protocol !== 'https:') throw new Error('Invalid chess URL.');
+    const timer = setTimeout(() => {
+      $('.lab-game-content', dialog).replaceChildren();
+      status.textContent = 'Не удалось загрузить шахматы. Вернитесь в PLAYGROUND и попробуйте ещё раз.';
+    }, 10000);
+    load.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+    mountLabGame(dialog, url.href, title, () => {
+      clearTimeout(timer);
+      status.hidden = true;
+    });
+  } catch (_) {
+    if (!load.signal.aborted && dialog.open) {
+      status.textContent = 'Шахматы временно недоступны. Вернитесь в PLAYGROUND и попробуйте ещё раз.';
+    }
+  }
+}
+
+window.addEventListener('message', (event) => {
+  const dialog = $('#labGameDialog');
+  const frame = $('iframe', dialog);
+  if (dialog.open && frame?.title === 'PIVNIK RUN' && event.origin === location.origin
+      && event.source === frame.contentWindow && event.data === 'pivnik-run-exit') dialog.close();
+});
+
+const spaceverseLeadChannels = {
+  phone: { label: 'Телефон', type: 'tel', placeholder: '+7 999 000-00-00', max: 24 },
+  telegram: { label: 'Логин Telegram', type: 'text', placeholder: '@username', max: 33 },
+  vk: { label: 'Логин ВКонтакте', type: 'text', placeholder: 'username или id123456', max: 65 }
+};
+
+function updateSpaceverseLeadContact(clear = false) {
+  const input = $('#spaceverseLeadPhone');
+  const channel = spaceverseLeadChannels[$('#spaceverseLeadChannel').value];
+  input.type = channel.type;
+  input.inputMode = channel.type;
+  input.placeholder = channel.placeholder;
+  input.maxLength = channel.max;
+  input.autocomplete = channel.type === 'tel' ? 'tel' : 'off';
+  if (clear) input.value = '';
+  $('#spaceverseLeadContactLabel').textContent = channel.label;
+  $('#spaceverseLeadError').hidden = true;
+}
+
 function openSpaceverseBusinessPage() {
+  openSpaceverseLeadPage('business');
+}
+
+function openSpaceverseLeadPage(mode) {
+  spaceverseLeadMode = mode;
+  const partner = spaceverseLeadMode === 'partner';
   const nameInput = $('#spaceverseLeadName');
   if (nameInput && !nameInput.value.trim()) {
     nameInput.value = [state.profile?.firstName, state.profile?.lastName].filter(Boolean).join(' ');
   }
-  $('#spaceverseLeadSuccess')?.classList.add('hidden');
-  const button = $('#spaceverseLeadSubmit');
-  if (button) {
+  $('#spaceverseBusinessDetails').hidden = partner;
+  $('#spaceversePartnerDetails').hidden = !partner;
+  $('#spaceverseLeadPageTitle').textContent = partner ? 'PARTNER' : 'Для бизнеса';
+  $('#spaceverseLeadKicker').textContent = partner ? 'Сотрудничество' : 'Подключение';
+  if (!spaceverseLeadPending) {
+    $('#spaceverseLeadSuccess')?.classList.add('hidden');
+    $('#spaceverseLeadError').hidden = true;
+    const button = $('#spaceverseLeadSubmit');
     button.disabled = false;
     button.textContent = 'Оставить заявку';
   }
@@ -1624,42 +1798,48 @@ function openSpaceverseBusinessPage() {
 
 async function submitSpaceverseBusinessLead() {
   const name = $('#spaceverseLeadName')?.value?.trim() || '';
-  const phone = $('#spaceverseLeadPhone')?.value?.trim() || '';
-  const digits = phone.replace(/\D/g, '');
-  if (name.length < 2 || name.length > 80) throw new Error('Укажите имя.');
-  if (digits.length < 7 || digits.length > 15) throw new Error('Проверьте номер телефона.');
-
+  const contact = $('#spaceverseLeadPhone')?.value?.trim() || '';
+  const channel = $('#spaceverseLeadChannel').value;
   const button = $('#spaceverseLeadSubmit');
-  if (button) {
-    button.disabled = true;
-    button.textContent = 'Отправляем…';
+  if (spaceverseLeadPending || button.disabled) return;
+  if (!Object.hasOwn(spaceverseLeadChannels, channel)) throw new Error('Выберите способ связи.');
+  if (name.length < 2 || name.length > 80 || /[\r\n]/.test(name)) throw new Error('Укажите имя.');
+  const digits = contact.replace(/\D/g, '');
+  if (channel === 'phone' && (!/^\+?[\d ().-]+$/.test(contact) || digits.length < 7 || digits.length > 15)) {
+    throw new Error('Проверьте номер телефона.');
   }
+  if (channel === 'telegram' && !/^@?[a-z0-9_]{4,32}$/i.test(contact)) throw new Error('Укажите логин Telegram, например @username.');
+  if (channel === 'vk' && !/^@?[a-z0-9_.-]{3,64}$/i.test(contact)) throw new Error('Укажите короткий адрес или ID страницы ВКонтакте.');
 
+  const partner = spaceverseLeadMode === 'partner';
+  const heading = partner ? 'Заявка на сотрудничество SPACEVERSE' : 'Заявка на подключение SPACEVERSE';
+  const contactChannel = spaceverseLeadChannels[channel];
+  spaceverseLeadPending = true;
+  button.disabled = true;
+  button.textContent = 'Отправляем…';
+  $('#spaceverseLeadError').hidden = true;
   try {
     const platform = IS_VK ? 'VK' : 'Telegram';
-    await api('/api/shop/inquiries', {
+    const result = await api('/api/shop/inquiries', {
       method: 'POST',
+      retries: 0,
       body: JSON.stringify({
         itemCode: 'spaceverse-business-lead',
-        itemTitle: 'SPACEVERSE · подключение приложения',
-        message: [
-          'Заявка на подключение SPACEVERSE',
-          `Имя: ${name}`,
-          `Телефон: ${phone}`,
-          `Платформа: ${platform}`
-        ].join('\n')
+        itemTitle: partner ? 'SPACEVERSE LAB · PARTNER' : 'SPACEVERSE · подключение приложения',
+        message: [heading, `Имя: ${name}`, `${contactChannel.label}: ${contact}`, `Платформа: ${platform}`].join('\n')
       })
     });
+    if (result?.ok !== true || !/^[1-9]\d*$/.test(String(result.inquiry?.id))) throw new Error('Сервер не подтвердил получение заявки.');
+    $('#spaceverseLeadPhone').value = '';
     $('#spaceverseLeadSuccess')?.classList.remove('hidden');
-    if (button) button.textContent = 'Заявка отправлена';
+    button.textContent = 'Заявка отправлена';
     haptic('medium');
-    toast('Заявка отправлена');
   } catch (error) {
-    if (button) {
-      button.disabled = false;
-      button.textContent = 'Оставить заявку';
-    }
+    button.disabled = false;
+    button.textContent = 'Оставить заявку';
     throw error;
+  } finally {
+    spaceverseLeadPending = false;
   }
 }
 
@@ -1779,10 +1959,79 @@ function renderLeaderboard() {
   }
 }
 
-async function loadLeaderboard() {
-  state.leaderboard = await api('/api/leaderboard/monthly');
-  renderLeaderboard();
-  return state.leaderboard;
+function renderLeagueSeasons() {
+  const list = $('#leagueSeasonsList');
+  if (!list) return;
+  list.setAttribute('aria-busy', String(state.leagueSeasonsLoading));
+  $('#retryLeagueSeasons')?.classList.toggle('hidden', !state.leagueSeasonsError);
+  if (state.leagueSeasonsLoading) {
+    list.innerHTML = '<p class="empty-state">Загружаем чемпионов прошлых сезонов…</p>';
+    return;
+  }
+  if (state.leagueSeasonsError) {
+    list.innerHTML = '<p class="empty-state">Не удалось загрузить прошлые сезоны. Попробуйте ещё раз.</p>';
+    return;
+  }
+  const seasons = state.leagueSeasons?.seasons || [];
+  list.innerHTML = seasons.length ? seasons.map((season) => `<section class="league-season vip-glass-card">
+    <span class="home-card-kicker">Завершённый сезон</span><h2>${escapeHtml(season.month)}</h2>
+    <div class="leaderboard-list">${season.leaders.map((leader) => `<div class="leaderboard-row podium ${leader.isMe ? 'is-me' : ''}">
+      <span class="leader-rank" aria-label="${leader.rank} место">${leader.rank}</span>
+      ${avatarInlineHtml(leader, 'leader-avatar', true)}
+      <div><b>${escapeHtml(leader.name)}${leader.isMe ? ' · вы' : ''}</b><small>${leader.rank} место</small></div>
+      <strong>${leader.spend === null ? 'Скрыто' : `${fmt(leader.spend)} ₽`}</strong>
+    </div>`).join('')}</div>
+  </section>`).join('') : '<p class="empty-state">Здесь появятся чемпионы после первого завершённого месяца с покупками.</p>';
+}
+
+async function loadLeagueSeasons() {
+  if (state.leagueSeasonsLoading) return;
+  state.leagueSeasonsLoading = true;
+  state.leagueSeasonsError = '';
+  renderLeagueSeasons();
+  try {
+    state.leagueSeasons = await api('/api/leaderboard/seasons');
+  } catch (error) {
+    state.leagueSeasonsError = error.message;
+  } finally {
+    state.leagueSeasonsLoading = false;
+    renderLeagueSeasons();
+  }
+}
+
+let leaderboardRequest;
+function loadLeaderboard() {
+  if (!leaderboardRequest) {
+    leaderboardRequest = api('/api/leaderboard/monthly').then((data) => {
+      if (!Array.isArray(data?.leaders)) throw new Error('Некорректный ответ рейтинга.');
+      state.leaderboard = data;
+      renderLeaderboard();
+      return data;
+    }).finally(() => { leaderboardRequest = undefined; });
+  }
+  return leaderboardRequest;
+}
+
+async function refreshLeagueScreen() {
+  const list = $('#leaderboardList');
+  const retry = $('#retryLeaderboard');
+  const preview = $('#leaderboardPreview');
+  const previous = $('#leaguePrevMonth');
+  list.className = 'leaderboard-list empty-state';
+  list.textContent = 'Загружаем рейтинг…';
+  list.setAttribute('aria-busy', 'true');
+  retry.classList.add('hidden');
+  preview.classList.add('hidden');
+  previous.classList.add('hidden');
+  try {
+    await loadLeaderboard();
+    preview.classList.remove('hidden');
+  } catch (_) {
+    list.textContent = 'Не удалось загрузить рейтинг. Попробуйте ещё раз.';
+    retry.classList.remove('hidden');
+  } finally {
+    list.setAttribute('aria-busy', 'false');
+  }
 }
 
 function updateResolvedBeer(profile = state.resolvedClient?.profile) {
@@ -2140,7 +2389,7 @@ function renderAchievementCatalog() {
         <span class="achievement-tile-icon">${achievementIconHtml(item)}</span>
         <span class="achievement-state">${item.earned ? 'Получено' : `${fmt(progress.percent)}%`}</span>
         <b>${escapeHtml(item.title)}</b>
-        <p>${escapeHtml(item.description || '')}</p>
+        <details><summary>Подробнее</summary><p>${escapeHtml(item.description || '')}</p></details>
         <div class="achievement-progress"><i style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></i></div>
         <small>${escapeHtml(progress.label || '')}${remaining ? ` · ${escapeHtml(remaining)}` : ''}</small>
         <strong>${escapeHtml(achievementRewardLabel(item))}</strong>
@@ -3719,9 +3968,47 @@ $('#openShopButton')?.addEventListener('click', () => { openModal('shopModal'); 
 $('#openWheelButton')?.addEventListener('click', openWheel);
 $('#openSpaceverseBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
 $('#spaceverseBusinessBack')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__?.());
-$('#spaceverseLeadSubmit')?.addEventListener('click', () => submitSpaceverseBusinessLead().catch((error) => toast(error.message)));
-$('#wheelBackButton')?.addEventListener('click', () => switchScreen('client'));
-$('#leagueBackButton')?.addEventListener('click', () => switchScreen('client'));
+$('#openSpaceverseLab')?.addEventListener('click', openSpaceverseLab);
+$('#labBack')?.addEventListener('click', () => {
+  state.screenHistory = [];
+  navigateScreen('client', { fromHistory: true });
+});
+$('#labGuide')?.addEventListener('click', () => showLabDialog('labWelcome'));
+$('#labBusiness')?.addEventListener('click', openSpaceverseBusinessPage);
+$('#labPartner')?.addEventListener('click', () => openSpaceverseLeadPage('partner'));
+$('#labShop')?.addEventListener('click', () => showLabDialog('labShopDialog'));
+$('#labPlayground')?.addEventListener('click', openLabPlayground);
+$('#labPantheon')?.addEventListener('click', () => showLabDialog('labPantheonDialog'));
+$('#labWheel')?.addEventListener('click', () => { closeLabDialog(); openWheel(); });
+$('#labLeague')?.addEventListener('click', () => { closeLabDialog(); switchScreen('league'); });
+$('#labAchievements')?.addEventListener('click', () => { closeLabDialog(); openAchievementHub(); });
+$('#labWelcomeContinue')?.addEventListener('click', closeLabDialog);
+$('#labRun')?.addEventListener('click', () => void openLabGame('run'));
+$('#labChessLink')?.addEventListener('click', () => void openLabGame('chess'));
+$('#labGameDialog')?.addEventListener('close', (event) => {
+  if (!event.currentTarget.open) $('.lab-game-content', event.currentTarget).replaceChildren();
+});
+$('#openLeagueSeasons')?.addEventListener('click', () => switchScreen('league-seasons'));
+$('#leagueSeasonsBackButton')?.addEventListener('click', () => window.__PIVNIK_GO_BACK__());
+$('#retryLeagueSeasons')?.addEventListener('click', () => void loadLeagueSeasons());
+$('#retryLeaderboard')?.addEventListener('click', () => void refreshLeagueScreen());
+$('#spaceverseLeadChannel')?.addEventListener('change', () => updateSpaceverseLeadContact(true));
+$('#spaceverseLeadForm')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  submitSpaceverseBusinessLead().catch((error) => {
+    const message = $('#spaceverseLeadError');
+    message.textContent = error.message;
+    message.hidden = false;
+  });
+});
+$('#wheelBackButton')?.addEventListener('click', (event) => {
+  if (state.screenHistory?.at(-1) !== 'spaceverse-lab') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  window.__PIVNIK_GO_BACK__();
+}, true);
+$('#wheelBackButton')?.addEventListener('click', backFromLabSection);
+$('#leagueBackButton')?.addEventListener('click', backFromLabSection);
 $('#actionsBackButton')?.addEventListener('click', () => switchScreen('client'));
 $('#wheelSpinButton')?.addEventListener('click', () => spinWheel().catch((error) => toast(error.message)));
 $('#openWheelRulesButton')?.addEventListener('click', () => {
