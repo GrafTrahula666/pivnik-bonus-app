@@ -238,6 +238,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     config.enableTenantCrmContactCreate=true
     const c=command('idempotent@fixture.invalid')
     const before=(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
     const users=await count(0,'users'),wallets=await count(0,'wallets')
     const auditsBefore=Number((await fixture.metadata.query<{n:string}>(
       "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
@@ -252,7 +253,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(replay.status).toBe(200)
     expect(await replay.json()).toEqual(payload)
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(Number(before)+1)
-    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe('1')
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
     expect(await count(0,'users')).toBe(users)
     expect(await count(0,'wallets')).toBe(wallets)
     const auditTotal=Number((await fixture.metadata.query<{n:string}>(
