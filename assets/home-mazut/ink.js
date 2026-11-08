@@ -1,12 +1,12 @@
 // Use the same particle footprint as the canvas, without reading GPU pixels.
-export function createMazutInk(canvas, elements) {
+export function createMazutInk(canvas, elements, sampleInterval = 60) {
   const targets = [...elements];
   const sampleColumns = [.18, .34, .5, .66, .82];
   let lastSample = -Infinity;
 
   return function updateInk({ width, height, radius, x, y, oldX, oldY, blend }) {
     const now = performance.now();
-    if (now - lastSample < 60) return;
+    if (now - lastSample < sampleInterval) return;
     lastSample = now;
     const scene = canvas.getBoundingClientRect();
     if (!scene.width || !scene.height) return;
@@ -21,7 +21,7 @@ export function createMazutInk(canvas, elements) {
         const dy = oldY[i] + (y[i] - oldY[i]) * blend - py;
         const weight = 1 - (dx * dx + dy * dy) / radiusSquared;
         if (weight <= 0) continue;
-        density += weight ** 3 * .19;
+        density += weight * weight * weight * .19;
         if (density >= .105) return true;
       }
       return false;
@@ -31,16 +31,18 @@ export function createMazutInk(canvas, elements) {
     for (const [index, element] of targets.entries()) {
       const box = boxes[index];
       const py = (box.top + box.height / 2 - scene.top) * scaleY;
+      // A small dead zone keeps a moving edge from flickering between colors.
+      const wasCovered = element.hasAttribute('data-mazut-over');
+      const threshold = wasCovered ? 2 : 3;
       let covered = 0;
       if (box.width && box.height && py >= 0 && py < height) {
         for (const fraction of sampleColumns) {
           const px = (box.left + box.width * fraction - scene.left) * scaleX;
           if (px >= 0 && px < width && hasMazut(px, py)) covered++;
+          if (covered >= threshold) break;
         }
       }
-      // A small dead zone keeps a moving edge from flickering between colors.
-      const wasCovered = element.hasAttribute('data-mazut-over');
-      element.toggleAttribute('data-mazut-over', covered >= (wasCovered ? 2 : 3));
+      element.toggleAttribute('data-mazut-over', covered >= threshold);
     }
   };
 }
