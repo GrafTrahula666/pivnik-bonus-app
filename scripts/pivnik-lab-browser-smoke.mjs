@@ -38,7 +38,27 @@ try {
   for (const platform of ['telegram', 'vk']) {
     for (const width of [320, 390, 430, 1280]) {
       const name = `${platform}-${width}`;
-      const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
+      // The normal visual smoke uses reduced motion. Add actual moving-liquid
+      // Android profiles for both runtimes, without touching real accounts.
+      const androidTier = width === 320 ? 'low' : width === 390 ? 'high' : null;
+      const androidUserAgent = androidTier === 'low'
+        ? 'Mozilla/5.0 (Linux; Android 12; Redmi 9) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36'
+        : 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36';
+      const telegramClass = androidTier === 'low' ? 'LOW' : 'HIGH';
+      const userAgent = platform === 'telegram'
+        ? `${androidUserAgent} Telegram-Android/12.0 (Android fixture; Android 15; SDK 35; ${telegramClass})`
+        : `${androidUserAgent} VKAndroidApp/9.0`;
+      const context = await browser.newContext({
+        viewport: { width, height: 844 },
+        reducedMotion: androidTier ? 'no-preference' : 'reduce',
+        ...(androidTier ? { userAgent, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {})
+      });
+      if (androidTier) {
+        await context.addInitScript((tier) => {
+          Object.defineProperty(navigator, 'deviceMemory', { configurable: true, get: () => tier === 'low' ? 2 : 8 });
+          Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => tier === 'low' ? 4 : 8 });
+        }, androidTier);
+      }
       const page = await context.newPage();
       activePage = page;
       const errors = [];
@@ -99,6 +119,42 @@ try {
       await page.goto(`${origin}/?bundle=${platform === 'vk' ? 'vk' : 'tg'}&vk_app_id=54694987&vk_user_id=4242&vk_ts=123456&vk_platform=mobile_iphone&sign=fixture`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => !document.querySelector('#appShell').classList.contains('hidden') && document.querySelector('.mazut-home'));
       await page.waitForFunction(() => document.querySelector('#clientBalance')?.textContent === '321', null, { timeout: 5000 });
+      if (androidTier) {
+        await page.waitForFunction(() => {
+          const canvas = document.querySelector('.mazut-fluid canvas');
+          return canvas?.width > 0 && canvas?.height > 0 && canvas.dataset.mazutQuality;
+        });
+        const probe = await page.evaluate(() => {
+          const canvas = document.querySelector('.mazut-fluid canvas');
+          const marker = document.createElement('div');
+          marker.style.animationDuration = '2s';
+          document.body.appendChild(marker);
+          const computedDuration = getComputedStyle(marker).animationDuration;
+          marker.remove();
+          return {
+            tier: document.documentElement.dataset.pivnikPerformance,
+            renderer: canvas.dataset.mazutQuality,
+            pixels: canvas.width * canvas.height,
+            android: document.documentElement.classList.contains('android-webview'),
+            reduced: document.documentElement.classList.contains('reduce-effects'),
+            motion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+            cssDuration: computedDuration,
+            canvasBounds: canvas.getBoundingClientRect().toJSON()
+          };
+        });
+        assert.equal(probe.android, true, `${name}: Android WebView class missing`);
+        assert.equal(probe.tier, androidTier, `${name}: bootstrap performance tier mismatch`);
+        assert.equal(probe.renderer, androidTier, `${name}: Mazut performance tier mismatch`);
+        assert.equal(probe.reduced, androidTier === 'low', `${name}: motion fallback mismatch`);
+        assert.equal(probe.motion, false, `${name}: simulated motion unexpectedly reduced`);
+        assert(probe.pixels > 0 && probe.canvasBounds.width > 0, `${name}: fluid renderer has no canvas`);
+        if (androidTier === 'high') {
+          assert(Number.parseFloat(probe.cssDuration) > 1, `${name}: high-end CSS animation is suppressed`);
+        } else {
+          assert(Number.parseFloat(probe.cssDuration) < .001, `${name}: low-end CSS fallback absent`);
+        }
+        console.log(`PASS ${name} Android moving-fluid quality=${probe.renderer} pixels=${probe.pixels} CSS animation=${probe.cssDuration}`);
+      }
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
       await page.locator('#qrModal [data-close="qrModal"]').click();
