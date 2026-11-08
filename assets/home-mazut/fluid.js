@@ -9,7 +9,7 @@ export function getMazutRenderQuality(root, device) {
   const cores = Number(device.hardwareConcurrency);
   const android = /Android/i.test(userAgent);
   const advertised = root.dataset?.pivnikPerformance;
-  const telegramClass = /Telegram-Android\\/[^()]+\\([^)]*;\\s*(LOW|AVERAGE|HIGH)\\s*\\)/i.exec(userAgent)?.[1]?.toLowerCase();
+  const telegramClass = /Telegram-Android\/[^()]+\([^)]*;\s*(LOW|AVERAGE|HIGH)\s*\)/i.exec(userAgent)?.[1]?.toLowerCase();
   const fallbackTier = !android ? 'high'
     : telegramClass ? (telegramClass === 'average' ? 'balanced' : telegramClass)
     : (memory > 0 && memory <= 3) || (cores > 0 && cores <= 4) ? 'low'
