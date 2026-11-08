@@ -139,6 +139,9 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     // A durable idempotency receipt must not bypass a subsequently disabled
     // capability, even for the same authorized actor and identical UUID.
     config.enableTenantCrmContactCreate=false
+    const disabledSession=await send('owner','/api/admin/auth/session',null,{method:'GET'})
+    expect(disabledSession.status).toBe(200)
+    expect((await disabledSession.json()).capabilities.tenantCrmContactCreate).toBe(false)
     const denied=await send('owner',path(),c)
     expect(denied.status).toBe(403)
     expect(await denied.json()).toMatchObject({code:'TENANT_CRM_CONTACT_CREATE_DISABLED'})
