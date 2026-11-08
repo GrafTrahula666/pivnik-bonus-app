@@ -125,6 +125,35 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(state.targetResolutions).toBe(0)
     expect(await count(0,'spaceverse_crm_contacts')).toBe('0')
   })
+  it('revokes replay access immediately when the create feature is disabled',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('revoked-replay@fixture.invalid')
+    const first=await send('owner',path(),c)
+    expect(first.status).toBe(200)
+    const receipt=await first.json()
+    const beforeContacts=await count(0,'spaceverse_crm_contacts')
+    const beforeRequests=await count(0,'spaceverse_crm_contact_create_requests')
+    const beforeAudits=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    // A durable idempotency receipt must not bypass a subsequently disabled
+    // capability, even for the same authorized actor and identical UUID.
+    config.enableTenantCrmContactCreate=false
+    const denied=await send('owner',path(),c)
+    expect(denied.status).toBe(403)
+    expect(await denied.json()).toMatchObject({code:'TENANT_CRM_CONTACT_CREATE_DISABLED'})
+    expect(state.targetResolutions).toBe(1)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(beforeContacts)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(beforeRequests)
+    expect((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n).toBe(beforeAudits)
+
+    config.enableTenantCrmContactCreate=true
+    const replay=await send('owner',path(),c)
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+  })
   it('requires signed session, CSRF and exact Origin before accessing tenant',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('denied@fixture.invalid')
