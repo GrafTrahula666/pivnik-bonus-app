@@ -502,7 +502,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
 
   it('uses the same UUID independently in two prepared venues of one company',async()=>{
     config.enableTenantCrmContactCreate=true
-    const c=command('same-key-two-venues@fixture.invalid')
+    const c=command('same-company-two-venues@fixture.invalid')
     const before=[0,1].map(()=>({contacts:0,requests:0}))
     for(const i of [0,1]){
       before[i]!.contacts=Number(await count(i,'spaceverse_crm_contacts'))
