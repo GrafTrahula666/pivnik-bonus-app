@@ -159,7 +159,7 @@ try {
   await page.waitForTimeout(500);
   expired = true;
 
-  await page.click('.bottom-nav [data-target="profile"]');
+  await page.locator('.mazut-profile-link').click();
   await page.waitForFunction((key) => localStorage.getItem(key) === 'foreground-renewed-session', storageKey, { timeout: 8000 });
   await page.waitForTimeout(500);
 

@@ -1,3 +1,46 @@
+## 2026-11-08: Mazut adaptive rendering (dependent Draft; not deployed)
+
+`assets/home-mazut/fluid.js` keeps the approved WebGL liquid shader on HIGH
+devices and adjusts particle spacing, physics step, display-pixel budget and paint
+frequency on balanced/low Android. Telegram's declared performance tier has
+priority; until the Android client quality bootstrap arrives, conservative
+browser hints and a balanced fallback are used. Explicit lite mode always
+selects low quality, while system reduced motion still stops animation.
+`assets/home-mazut/ink.js` preserves the existing covered-text hysteresis,
+but limits sample frequency and short-circuits fully covered samples. Media,
+index and module cache versions are updated to prevent stale client mixtures.
+`test/mazut-performance.test.js` validates real exported quality policy and
+ink semantics. No shader appearance constants, server odds, bonus, identity,
+database, release keys, kiosk or runtime patch-chain are touched. The change
+is intended only after its parent Lab PR and separate Android bootstrap PR
+have passed review. Native device FPS, heat and memory tests remain mandatory.
+
+## PIVNIK home and SpaceVerse Lab (2026-11-08)
+
+The Mazut home uses the existing profile, balance, beer progress and QR nodes.
+Its Lab button opens the five projectors in the current client. The guide is
+available from the Lab header. The reveal uses CSS; no entry video is shipped.
+Lab navigation keeps the parent client session. Browser Back and the Telegram
+BackButton close nested windows before returning home. PLAYGROUND embeds the
+existing same-origin Run and opens Ruslanych AI in a separate game frame. The
+authenticated `GET /api/lab/chess` uses the existing gateway proxy and returns
+the fixed HTTPS destination after a bounded availability check. PIVNIK
+credentials stay out of the external frame URL. Wheel rules, history and prize
+handling continue through the existing wheel UI and endpoints.
+
+PANTHEON opens the current League and achievement catalog. The earlier
+`feat/league-season-champions-20261003` archive is exposed by the same
+`getLeagueSeasons` module in both servers, with auth and accepted rules.
+Existing monthly ranking and achievement APIs are preserved. SHOP shows only
+the future assortment notice. Business and Partner use the existing
+authenticated inquiry endpoint and display confirmation after receiving a
+persisted inquiry ID. No schema, bonus rules, POS, Android or startup patch
+changes are required.
+
+`scripts/pivnik-lab-browser-smoke.mjs` exercises the materialized Telegram
+client and VK bundle with fixture APIs. `test/league-seasons.test.js`
+checks the historical query in PGlite and both HTTP bindings.
+
 ## Temporary white-gold restoration (2026-11-05, review branch)
 
 `app.js:applyDesign` ignores the stale published Halloween skin without changing

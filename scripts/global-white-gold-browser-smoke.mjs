@@ -87,7 +87,7 @@ async function openPage({ platform, android = false, viewport = { width: 390, he
   });
 
   const response = await page.goto(
-    `http://127.0.0.1:${port}/index.html?global-smoke=${platform}${android ? '-android' : ''}`,
+    `http://127.0.0.1:${port}/index.html?global-smoke=${platform}${android ? '-android' : ''}&mazut=0`,
     { waitUntil: 'networkidle' }
   );
   assert(response?.status() === 200, `${platform}: index returned ${response?.status()}`);
