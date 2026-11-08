@@ -273,6 +273,29 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('owner','GET',restricted)).status).toBe(200)
   })
 
+  it('fails closed for an unrecognized trusted grant while preserving the owner session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    expect((await request('trusted','GET',path)).status).toBe(200)
+    await state.db!.query("UPDATE admin_company_access SET access_kind='unexpected' WHERE admin_id=11 AND company_id=10")
+    try{
+      const listing=await request('trusted','GET','/api/admin/venues')
+      expect(listing.status).toBe(200)
+      expect((await listing.json() as {venues:{id:string}[]}).venues).not.toContainEqual(expect.objectContaining({id:'101'}))
+      const read=await request('trusted','GET',path)
+      expect(read.status).toBe(404)
+      expect(await read.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
+      const title='Unknown trusted grant must not write'
+      const write=await request('trusted','POST',path,{title})
+      expect(write.status).toBe(404)
+      expect(await write.json()).toMatchObject({code:'VENUE_NOT_FOUND'})
+      expect((await state.db!.query('SELECT COUNT(*)::int AS count FROM promotions WHERE title=$1',[title])).rows[0].count).toBe(0)
+      expect((await request('owner','GET',path)).status).toBe(200)
+    }finally{
+      await state.db!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=11 AND company_id=10")
+    }
+    expect((await request('trusted','GET',path)).status).toBe(200)
+  })
+
   it('rejects an existing trusted session after its account is deactivated',async()=>{
     const path='/api/admin/venues/101/app/promotions'
     expect((await request('trusted','GET',path)).status).toBe(200)
