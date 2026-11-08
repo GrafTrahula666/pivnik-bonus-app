@@ -99,6 +99,21 @@ try {
       await page.goto(`${origin}/?bundle=${platform === 'vk' ? 'vk' : 'tg'}&vk_app_id=54694987&vk_user_id=4242&vk_ts=123456&vk_platform=mobile_iphone&sign=fixture`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => !document.querySelector('#appShell').classList.contains('hidden') && document.querySelector('.mazut-home'));
       await page.waitForFunction(() => document.querySelector('#clientBalance')?.textContent === '321', null, { timeout: 5000 });
+      const homeLayout = await page.evaluate(() => {
+        const qr = document.querySelector('#heroQrButton').getBoundingClientRect();
+        const lab = document.querySelector('.mazut-lab').getBoundingClientRect();
+        const hiddenLegacy = ['.spaceverse-business-card', '.home-league-card', '.home-wheel-card'];
+        const leftover = hiddenLegacy.filter(selector => {
+          const element = document.querySelector('.mazut-home > ' + selector);
+          return element && getComputedStyle(element).display !== 'none';
+        });
+        return { qr: {width:qr.width,height:qr.height}, labWidth:lab.width, leftover };
+      });
+      assert.equal(homeLayout.leftover.length, 0, `${name}: legacy cards overlay the Mazut scene`);
+      assert(homeLayout.qr.width >= 105, `${name}: QR retained old hero icon dimensions`);
+      assert(Math.abs(homeLayout.qr.width - homeLayout.labWidth) <= 2,
+        `${name}: the two Mazut dock actions are not equally wide`);
+      assert(homeLayout.qr.height >= 70, `${name}: QR dock action is too short`);
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
       await page.locator('#qrModal [data-close="qrModal"]').click();
