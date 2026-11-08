@@ -10,7 +10,7 @@ const isLiteRequested = new URLSearchParams(location.search).get('lite') === '1'
 // class, then use conservative browser hints. Unknown phones stay balanced.
 function getPivnikPerformanceTier() {
   if (!isAndroid) return 'high';
-  const uaClass = /Telegram-Android\\/[^()]+\\([^)]*;\\s*(LOW|AVERAGE|HIGH)\\s*\\)/i.exec(navigator.userAgent || '')?.[1]?.toLowerCase();
+  const uaClass = /Telegram-Android\/[^()]+\([^)]*;\s*(LOW|AVERAGE|HIGH)\s*\)/i.exec(navigator.userAgent || '')?.[1]?.toLowerCase();
   if (uaClass) return uaClass === 'average' ? 'balanced' : uaClass;
   const memory = Number(navigator.deviceMemory);
   const cores = Number(navigator.hardwareConcurrency);
