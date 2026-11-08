@@ -49,7 +49,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   // Keep the footprint and viscosity, reduce particle resolution on slow GPUs.
   const W=480,flowSpeed=.75;
   const radius=36*spacing/16.4,particleRadius=35*spacing/16.4;
-  const viscosity=1.10,damping=Math.pow(.986,viscosity);
+  const viscosity=1.265,damping=Math.pow(.986,viscosity);
   // Keep the whole particle footprint inside the canvas.
   const wallInset=Math.ceil(particleRadius)+2;
   let H=900,n=0,cols=0,rows=0;

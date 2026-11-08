@@ -41,6 +41,8 @@ frequency on balanced/low Android. Telegram's declared performance tier has
 priority; until the Android client quality bootstrap arrives, conservative
 browser hints and a balanced fallback are used. Explicit lite mode always
 selects low quality, while system reduced motion still stops animation.
+All tiers use the viscosity coefficient `1.265` for velocity damping and
+momentum exchange between nearby particles.
 `assets/home-mazut/ink.js` preserves the existing covered-text hysteresis,
 but limits sample frequency and short-circuits fully covered samples. Media,
 index and module cache versions are updated to prevent stale client mixtures.
