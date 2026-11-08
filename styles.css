@@ -3381,7 +3381,7 @@ body {
 .android-webview .boot-scene { width: min(100%, 420px); box-shadow: none; }
 .android-webview .boot-image { filter: none; }
 .android-webview .app-shell::before, .lite-mode .app-shell::before { background-attachment: scroll !important; }
-.android-webview .modal-sheet, .android-webview .bottom-nav, .android-webview .topbar,
+.android-webview.reduce-effects .modal-sheet, .android-webview.reduce-effects .bottom-nav, .android-webview.reduce-effects .topbar,
 .lite-mode .modal-sheet, .lite-mode .bottom-nav, .lite-mode .topbar { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 .lite-mode *, .android-webview.reduce-effects * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -3392,14 +3392,14 @@ body {
 }
 
 /* V14.1 Android WebView safety overrides */
-.android-webview * {
+.android-webview.reduce-effects * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 .android-webview .boot-image, .android-webview .app-shell::before {
   mix-blend-mode: normal !important;
 }
-.android-webview .achievement-tile.locked::after {
+.android-webview.reduce-effects .achievement-tile.locked::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   background: rgba(5,7,10,.70) !important;

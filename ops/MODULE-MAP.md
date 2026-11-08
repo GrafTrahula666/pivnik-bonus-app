@@ -1,3 +1,83 @@
+## 2026-11-08: Mazut home mobile layout correction (dependent Draft)
+
+The approved Mazut home relocates the original `#heroQrButton`, profile
+and live loyalty controls without replacing their handlers. When active, the
+old business, league and wheel home cards must be visually hidden while
+remaining in the DOM for legacy access/recovery. The QR action now fills its
+half of the Mazut dock instead of retaining the old home-hero icon's tiny
+width and height. The existing Lab action shares the same grid geometry.
+`scripts/pivnik-lab-browser-smoke.mjs` checks these outcomes on the
+existing Telegram/VK fixtures at 320, 390, 430 and 1280 px.
+This change does not alter the older home when Mazut is disabled, and does
+not touch any backend, auth, QR payload/handler, money, persistence,
+Android kiosk, runtime patch or production deployment.
+The V20.6 `styles.css` shell pseudo-layers intentionally restore the old
+SPACEVERSE cloud-city background, even when Mazut is mounted. While
+`.mazut-home.active` is visible only, `assets/home-mazut/home.css` sets
+the html/body/shell/topbar/main/home background to the existing stone
+`#dad6ce` and hides both legacy shell pseudo-layers. Other screens and
+the classic fallback retain their styling. The browser smoke checks actual
+computed background colors, images and pseudo-layer visibility on both
+Telegram and VK fixture viewports.
+
+## 2026-11-08: Android motion quality (review branch, not deployed)
+
+The existing client app bootstrap now prefers Telegram Android's LOW/AVERAGE/HIGH
+performance class, then falls back to conservative browser memory/core hints.
+Unknown Android devices use balanced effects, confirmed low-end devices and the
+explicit `?lite=1` mode retain the existing reduced-motion/blur fallback.
+Android HIGH restores CSS animations and glass effects; iOS and the user system
+`prefers-reduced-motion` setting are unchanged. This is UI-only; no loyalty,
+identity, QR, wheel, API, staff, database, kiosk or patch-chain changes.
+`test/android-motion-performance.test.js` checks the production bootstrap and
+CSS boundaries. Device/Telegram/VK visual and performance validation remains a
+separate release acceptance step.
+
+## 2026-11-08: Mazut adaptive rendering (dependent Draft; not deployed)
+
+`assets/home-mazut/fluid.js` keeps the approved WebGL liquid shader on HIGH
+devices and adjusts particle spacing, physics step, display-pixel budget and paint
+frequency on balanced/low Android. Telegram's declared performance tier has
+priority; until the Android client quality bootstrap arrives, conservative
+browser hints and a balanced fallback are used. Explicit lite mode always
+selects low quality, while system reduced motion still stops animation.
+All tiers use the viscosity coefficient `1.265` for velocity damping and
+momentum exchange between nearby particles.
+`assets/home-mazut/ink.js` preserves the existing covered-text hysteresis,
+but limits sample frequency and short-circuits fully covered samples. Media,
+index and module cache versions are updated to prevent stale client mixtures.
+`test/mazut-performance.test.js` validates real exported quality policy and
+ink semantics. No shader appearance constants, server odds, bonus, identity,
+database, release keys, kiosk or runtime patch-chain are touched. The change
+is intended only after its parent Lab PR and separate Android bootstrap PR
+have passed review. Native device FPS, heat and memory tests remain mandatory.
+
+## PIVNIK home and SpaceVerse Lab (2026-11-08)
+
+The Mazut home uses the existing profile, balance, beer progress and QR nodes.
+Its Lab button opens the five projectors in the current client. The guide is
+available from the Lab header. The reveal uses CSS; no entry video is shipped.
+Lab navigation keeps the parent client session. Browser Back and the Telegram
+BackButton close nested windows before returning home. PLAYGROUND embeds the
+existing same-origin Run and opens Ruslanych AI in a separate game frame. The
+authenticated `GET /api/lab/chess` uses the existing gateway proxy and returns
+the fixed HTTPS destination after a bounded availability check. PIVNIK
+credentials stay out of the external frame URL. Wheel rules, history and prize
+handling continue through the existing wheel UI and endpoints.
+
+PANTHEON opens the current League and achievement catalog. The earlier
+`feat/league-season-champions-20261003` archive is exposed by the same
+`getLeagueSeasons` module in both servers, with auth and accepted rules.
+Existing monthly ranking and achievement APIs are preserved. SHOP shows only
+the future assortment notice. Business and Partner use the existing
+authenticated inquiry endpoint and display confirmation after receiving a
+persisted inquiry ID. No schema, bonus rules, POS, Android or startup patch
+changes are required.
+
+`scripts/pivnik-lab-browser-smoke.mjs` exercises the materialized Telegram
+client and VK bundle with fixture APIs. `test/league-seasons.test.js`
+checks the historical query in PGlite and both HTTP bindings.
+
 ## Temporary white-gold restoration (2026-11-05, review branch)
 
 `app.js:applyDesign` ignores the stale published Halloween skin without changing

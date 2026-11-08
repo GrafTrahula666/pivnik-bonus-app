@@ -1,3 +1,4 @@
+import { getLeagueSeasons } from './league-seasons.js';
 import { registerWalletRoutes } from './routes/wallet.js';
 import { createSpaceverseCustomerHttp } from './routes/spaceverse-customer.js';
 import { createSpaceversePosHttp } from './routes/spaceverse-pos.js';
@@ -37,6 +38,7 @@ import {
   syncUserAchievements
 } from './achievements.js';
 import {
+  PIVNIK_PLATFORM_FRAME_ANCESTORS,
   effectiveRoleForAuthenticatedIdentity,
   normalizeRequestKey,
   signSession as signCoreSession,
@@ -112,10 +114,15 @@ app.use((req, res, next) => {
 });
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1h' }));
 
-// Standalone minigame, served as a static page. Not linked from the app shell,
-// the wheel or bonuses — no API/auth wiring, just the page and its images.
-app.use('/run', express.static(path.join(__dirname, 'minigames', 'pivnik-run'), { maxAge: '1h' }));
-
+// Allow the Run frame in Lab and in the same Mini App hosts as its parent.
+app.use('/run', express.static(path.join(__dirname, 'minigames', 'pivnik-run'), {
+  maxAge: '1h',
+  setHeaders(res, file) {
+    if (path.basename(file) !== 'index.html' || res.req.query?.lab !== '1') return;
+    res.removeHeader('x-frame-options');
+    res.setHeader('content-security-policy', `frame-ancestors 'self' ${PIVNIK_PLATFORM_FRAME_ANCESTORS}`);
+  }
+}));
 
 const PERSONAL_QR_PREFIX = 'PIVNIK:';
 const SUSPICIOUS_THRESHOLD_CENTS = 300_000;
@@ -1969,6 +1976,15 @@ app.get('/api/me/transactions', authRequired, async (req, res, next) => {
   }
 });
 
+app.get('/api/leaderboard/seasons', authRequired, async (req, res, next) => {
+  if (!req.user.termsAccepted) return res.status(428).json({ error: 'Сначала примите правила программы.' });
+  try {
+    res.json(await getLeagueSeasons(pool, req.user.id, profileFrameFromRow));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/leaderboard/monthly', authRequired, async (req, res, next) => {
   try {
     const ranked = await pool.query(
@@ -2060,6 +2076,15 @@ app.get('/api/shop/contact', authRequired, async (_req, res, next) => {
     }
     res.json({ ownerName: 'Кирилл', ownerUsername: username || null });
   } catch (error) { next(error); }
+});
+
+app.get('/api/lab/chess', authRequired, async (_req, res) => {
+  const url = 'https://ruslanych-ai-production.up.railway.app/';
+  try {
+    const response = await fetch(url, { method: 'HEAD', redirect: 'error', signal: AbortSignal.timeout(4000) });
+    if (response.ok && response.headers.get('content-type')?.startsWith('text/html')) return res.json({ url });
+  } catch (_) {}
+  res.status(503).json({ error: 'Шахматы временно недоступны.' });
 });
 
 app.post('/api/shop/inquiries', authRequired, async (req, res, next) => {
