@@ -9,7 +9,7 @@
   user-select: none;
 }
 
-.mazut-home :is(.spaceverse-home-hero, #beerLoyaltyCard, .mazut-moved-to-lab),
+.mazut-home :is(.spaceverse-home-hero, .spaceverse-business-card, .home-league-card, .home-wheel-card, #beerLoyaltyCard, .mazut-moved-to-lab),
 #appShell:has(.mazut-home.active) .bottom-nav {
   display: none !important;
 }
@@ -290,10 +290,21 @@ html body .client-home.home-v2.mazut-home > .mazut-stage {
   grid-column: 1 / -1;
   width: 100%;
 }
-html body .client-home.home-v2.mazut-home > :is(.spaceverse-home-hero, #beerLoyaltyCard, .mazut-moved-to-lab) {
+html body .client-home.home-v2.mazut-home > :is(.spaceverse-home-hero, .spaceverse-business-card, .home-league-card, .home-wheel-card, #beerLoyaltyCard, .mazut-moved-to-lab) {
   display: none !important;
 }
-html body .mazut-stage .mazut-dock #heroQrButton {
+/* The legacy hero QR had a 27-30px width; this is a new half-width
+   dock action. Preserve its original click handler, not its old geometry. */
+html body .client-home.home-v2.mazut-home .mazut-dock #heroQrButton {
   display: grid !important;
+  width: 100% !important;
+  min-width: 0;
+  height: clamp(70px, 13svh, 106px) !important;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  justify-self: stretch;
+  border: 0;
+  border-radius: 20px;
   pointer-events: auto;
 }
