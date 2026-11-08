@@ -234,6 +234,31 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     expect((await request('owner','GET',path)).status).toBe(200)
   })
 
+  it('drops elevated owner-only deletion after trusted grant is restored in the same session',async()=>{
+    const path='/api/admin/venues/101/app/promotions'
+    const created=await request('owner','POST',path,{title:'Temporary elevation fixture',active:false})
+    expect(created.status).toBe(200)
+    const {id}=await created.json() as {id:string}
+    try{
+      expect((await request('trusted','DELETE',path+'/'+id)).status).toBe(403)
+      await state.db!.query("UPDATE admin_company_access SET access_kind='owner' WHERE admin_id=11 AND company_id=10")
+      try{
+        const listing=await request('trusted','GET','/api/admin/venues')
+        expect(listing.status).toBe(200)
+        expect((await listing.json() as {venues:{id:string;accessKind:string}[]}).venues).toContainEqual(expect.objectContaining({id:'101',accessKind:'owner'}))
+      }finally{
+        await state.db!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=11 AND company_id=10")
+      }
+      const denied=await request('trusted','DELETE',path+'/'+id)
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({code:'DIRECTOR_WRITE_FORBIDDEN'})
+      expect((await state.db!.query('SELECT id FROM promotions WHERE id=$1',[id])).rows).toHaveLength(1)
+    }finally{
+      await state.db!.query('DELETE FROM promotions WHERE id=$1',[id])
+      await state.db!.query("UPDATE admin_company_access SET access_kind='trusted' WHERE admin_id=11 AND company_id=10")
+    }
+  })
+
   it('downgrades an existing owner session to trusted permissions without re-login',async()=>{
     const allowed='/api/admin/venues/101/app/promotions'
     const restricted='/api/admin/venues/101/app/design'
