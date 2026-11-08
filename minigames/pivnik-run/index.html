@@ -344,7 +344,19 @@ function lockSwipes(on) {
 }
 try { TGW && TGW.ready && TGW.ready(); TGW && TGW.expand && TGW.expand(); } catch (e) {}
 addEventListener('pagehide', () => lockSwipes(false));
-document.getElementById('exitApp').addEventListener('click', e => { lockSwipes(false); if (history.length > 1) { e.preventDefault(); history.back(); } });
+const embeddedInLab = QS.get('lab') === '1' && parent !== window;
+const exitApp = document.getElementById('exitApp');
+if (embeddedInLab) exitApp.textContent = '‹ В PLAYGROUND';
+exitApp.addEventListener('click', e => {
+  lockSwipes(false);
+  if (embeddedInLab) {
+    e.preventDefault();
+    parent.postMessage('pivnik-run-exit', location.origin);
+  } else if (history.length > 1) {
+    e.preventDefault();
+    history.back();
+  }
+});
 document.addEventListener('touchmove', e => { if (state === 'run') e.preventDefault(); }, { passive: false });
 const PAL = () => g.mode === 'tunnel' ? TUNNELS[((g.tunN || 1) - 1) % TUNNELS.length] : LOCS[g.loc % LOCS.length];
 const fogT = d => Math.min(1, Math.pow(Math.max(d, 0) / MAXD, 1.3));

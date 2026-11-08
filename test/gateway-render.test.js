@@ -59,6 +59,11 @@ test('Gateway render: / and /vk load the correct platform scripts and shared whe
   assert.ok(platformPosition < linkingPosition);
   assert.ok(linkingPosition < appPosition);
 
+  for (const platform of ['telegram', 'vk']) {
+    const csp = documentSecurityHeaders(platform)['content-security-policy'];
+    assert.equal(csp.split('; ').find((entry) => entry.startsWith('frame-src ')),
+      "frame-src 'self' https://ruslanych-ai-production.up.railway.app");
+  }
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.com/);
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/\*\.vk\.com/);
   assert.match(vkCsp, /frame-ancestors [^;]*https:\/\/vk\.ru/);
