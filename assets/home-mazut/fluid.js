@@ -27,11 +27,27 @@ export function getMazutRenderQuality(root, device) {
   };
 }
 
+// The CPU renderer is a safety net for Android WebView, not another full-resolution
+// GPU path. On iPhone and desktops preserve every previous software budget.
+export function getMazutSoftwareBudget(device, quality, renderInterval) {
+  const low = quality === 'low';
+  const balanced = quality === 'balanced';
+  const android = /Android/i.test(device.userAgent || '');
+  return {
+    maxWidth: android ? (low ? 260 : balanced ? 300 : 340)
+      : (low ? 320 : balanced ? 380 : 440),
+    minWidth: android ? (low ? 200 : balanced ? 235 : 270)
+      : (low ? 240 : balanced ? 300 : 340),
+    frameInterval: android ? Math.max(renderInterval, 55) : renderInterval
+  };
+}
+
 export function mountMazutFluid({card, layer, canvas, isPaused}) {
   const {quality, maxPixels, maxDpr, renderInterval, sampleInterval, spacing, step}
     = getMazutRenderQuality(document.documentElement, navigator);
   const lowQuality = quality === 'low';
   const balancedQuality = quality === 'balanced';
+  const softwareBudget = getMazutSoftwareBudget(navigator, quality, renderInterval);
   const inkTargets = card.querySelectorAll("[data-mazut-ink]");
   let updateInk = createMazutInk(canvas, inkTargets, sampleInterval);
   // Read-only diagnostics for mobile WebView performance acceptance.
@@ -333,7 +349,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       useSoftwareRenderer(error, Boolean(gl));
     }
   }
-  function resizeSoftware(limit=lowQuality?320:balancedQuality?380:440){
+  function resizeSoftware(limit=softwareBudget.maxWidth){
     const surface=document.createElement('canvas');
     const w=surface.width=Math.min(limit,canvas.width);
     const h=surface.height=Math.round(w*H/W);
@@ -395,7 +411,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(surface,0,0,canvas.width,canvas.height);
     slowPaints=performance.now()-started>24 ? slowPaints+1 : Math.max(0,slowPaints-1);
-    const softwareFloor=lowQuality?240:balancedQuality?300:340;
+    const softwareFloor=softwareBudget.minWidth;
     if(slowPaints>=10&&w>softwareFloor){slowPaints=0;resizeSoftware(Math.max(softwareFloor,Math.round(w*.84)));}
   }
   function resize(){
@@ -499,7 +515,10 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   function animate(now){
     frame=0;
     if(document.hidden||reduced.matches||isPaused()||!inView) return;
-    if(lastPaint && now-lastPaint<renderInterval){
+    // Only the Android CPU fallback is throttled; WebGL keeps the original
+    // per-device target and iOS keeps its original software cadence.
+    const interval=ctx ? softwareBudget.frameInterval : renderInterval;
+    if(lastPaint && now-lastPaint<interval){
       frame=requestAnimationFrame(animate);
       return;
     }
