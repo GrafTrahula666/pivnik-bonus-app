@@ -558,6 +558,42 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     ]))
   })
 
+  it('keeps pending audit recovery venue-scoped within the same company',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-sibling-venue@fixture.invalid')
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const beforeAudits=await audits()
+    const beforeContacts=[0,1].map(()=>0)
+    for(const i of [0,1])beforeContacts[i]=Number(await count(i,'spaceverse_crm_contacts'))
+    state.failAuditOnce=true
+    expect((await send('owner',path(0),c)).status).toBe(503)
+    expect(await audits()).toBe(beforeAudits)
+    // Both venues share a company and actor, but not an audit receipt.
+    const sibling=await send('owner',path(1),c)
+    expect(sibling.status).toBe(200)
+    const siblingReceipt=await sibling.json()
+    expect(await audits()).toBe(beforeAudits+1)
+    const recovered=await send('owner',path(0),c)
+    expect(recovered.status).toBe(200)
+    const receipt=await recovered.json()
+    expect(receipt.requestKey).toBe(c.requestKey)
+    expect(await audits()).toBe(beforeAudits+2)
+    for(const i of [0,1])expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(beforeContacts[i]!+1)
+    expect(await (await send('owner',path(0),c)).json()).toEqual(receipt)
+    expect(await (await send('owner',path(1),c)).json()).toEqual(siblingReceipt)
+    expect(await audits()).toBe(beforeAudits+2)
+    const records=await fixture.metadata.query<{venue_id:string}>(
+      `SELECT venue_id::text FROM admin_audit_log
+       WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1`,
+      [c.requestKey])
+    expect(records.rows).toHaveLength(2)
+    expect(new Set(records.rows.map(row=>row.venue_id))).toEqual(new Set([
+      fixture.manifests[0]!.scope.venueId,fixture.manifests[1]!.scope.venueId,
+    ]))
+  })
+
   it('normalizes phone-only contacts and rejects a formatted duplicate within the same venue',async()=>{
     config.enableTenantCrmContactCreate=true
     const phone='+7 (999) 333-44-55'
