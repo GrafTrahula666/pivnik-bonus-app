@@ -74,6 +74,14 @@ authenticated inquiry endpoint and display confirmation after receiving a
 persisted inquiry ID. No schema, bonus rules, POS, Android or startup patch
 changes are required.
 
+The Lab session scopes a dark shell across its nested screens and Telegram
+chrome. Native Lab dialogs and the legacy Lab achievement and wheel rules
+modals use opaque backdrops. The QR modal uses the same opaque backdrop and
+keeps its live QR, copy and wallet controls. The owner-provided Mazut
+artwork is the background of the sheet. The live QR occupies the white square
+at (129, 255) on the 1092 × 1500 design grid, scaled with the sheet width.
+The controls can extend and scroll on short screens or when Wallet is enabled.
+
 `scripts/pivnik-lab-browser-smoke.mjs` exercises the materialized Telegram
 client and VK bundle with fixture APIs. `test/league-seasons.test.js`
 checks the historical query in PGlite and both HTTP bindings.

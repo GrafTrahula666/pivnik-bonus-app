@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
+import QRCode from 'qrcode';
 process.env.NODE_ENV = 'test';
 process.env.PIVNIK_TEST_IMPORT = '1';
 process.env.DATABASE_URL = 'postgres://fixture:fixture@127.0.0.1:1/fixture';
@@ -14,6 +15,7 @@ const output = path.join(root, 'artifacts/pivnik-lab-browser-smoke');
 await fs.mkdir(output, { recursive: true });
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
 const tgIndex = await renderAppIndex('telegram');
+const qrImage = await QRCode.toDataURL('PVK-QA4242', { width: 256 });
 const server = createServer(async (req, res) => {
   try {
     const u = new URL(req.url, 'http://localhost');
@@ -79,7 +81,7 @@ try {
       const profile = { id: '4242', provider: platform, firstName: 'Lab', lastName: 'QA', role: 'user', balance: 321, termsAccepted: true, onboardingComplete: true, avatarSource: 'preset_male', profileFrame: 'none', totalLiters: 12.5, beerProgressLiters: 3, beerGiftLiters: 0, status: { name: 'Путник', bonusPercent: 5 }, privacy: {} };
       const payload = { token: 'fixture-session', profile, statuses: [], design: null };
       await page.addInitScript(() => {
-        window.Telegram = { WebApp: { initData: 'fixture-init', ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {}, setBottomBarColor() {}, BackButton: { onClick(handler) { window.fixtureTelegramBack = handler; }, show() {}, hide() {} } } };
+        window.Telegram = { WebApp: { initData: 'fixture-init', ready() {}, expand() {}, setHeaderColor(color) { window.fixtureHeaderColor = color; }, setBackgroundColor(color) { window.fixtureBackgroundColor = color; }, setBottomBarColor(color) { window.fixtureBottomBarColor = color; }, BackButton: { onClick(handler) { window.fixtureTelegramBack = handler; }, show() {}, hide() {} } } };
       });
       await page.route('**/*', async route => {
         const request = route.request();
@@ -91,7 +93,8 @@ try {
           calls.push({ path: url.pathname, method: request.method(), body: request.postData(), auth: request.headers().authorization });
           let body = {};
           if (['/api/auth', '/api/bootstrap', '/api/me'].includes(url.pathname)) body = payload;
-          if (url.pathname === '/api/me/qr') body = { shortCode: 'QA4242', image: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>' };
+          if (url.pathname === '/api/me/qr') body = { shortCode: 'QA4242', image: qrImage };
+          if (url.pathname === '/api/wallet/config' && width === 320) body = { appleAvailable: true, googleAvailable: true };
           let status = 200;
           if (url.pathname === '/api/achievements') body = { achievements: [earned, locked], profileAchievements: [earned] };
           if (url.pathname === '/api/leaderboard/monthly') {
@@ -200,8 +203,79 @@ try {
         assert.equal(background.color, expectedStone, `${name}: ${element} has the wrong background color`);
         assert.equal(background.image, 'none', `${name}: old background image on ${element}`);
       }
+      const dark = 'rgb(8, 11, 16)';
+      const expectBackdrop = async (selector, pseudo = null) => {
+        const backdrop = await page.locator(selector).evaluate((element, part) => getComputedStyle(element, part).backgroundColor, pseudo);
+        assert.equal(backdrop, dark, `${name}: ${selector} must have an opaque backdrop`);
+      };
+      const expectTelegramChrome = async (expected) => {
+        if (platform === 'telegram') {
+          assert.deepEqual(await page.evaluate(() => [window.fixtureHeaderColor, window.fixtureBackgroundColor, window.fixtureBottomBarColor]), expected);
+        }
+      };
+      const expectLabShell = async () => {
+        const shell = await page.evaluate(() => {
+          const shell = document.querySelector('#appShell');
+          return {
+            surfaces: [document.documentElement, document.body, shell, shell.querySelector('main')]
+              .map(element => [getComputedStyle(element).backgroundColor, getComputedStyle(element).backgroundImage]),
+            layers: ['::before', '::after'].map(part => getComputedStyle(shell, part).display)
+          };
+        });
+        assert.deepEqual(shell.surfaces, Array(4).fill([dark, 'none']), `${name}: Lab surfaces`);
+        assert.deepEqual(shell.layers, ['none', 'none'], `${name}: legacy cloud layers`);
+        await expectTelegramChrome(Array(3).fill('#080b10'));
+      };
+      const screenshot = async (section) => page.screenshot({ path: path.join(output, `${name}-${section}.png`) });
+
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
+      await page.locator('#qrImage').evaluate(image => image.decode());
+      const sheet = page.locator('#qrModal .qr-sheet');
+      await sheet.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
+      const sheetBounds = await sheet.boundingBox();
+      const qrBounds = await page.locator('#qrImage').boundingBox();
+      assert(Math.abs(qrBounds.width - qrBounds.height) < 1, `${name}: QR image must stay square`);
+      assert(sheetBounds.y >= -1 && sheetBounds.y + sheetBounds.height <= 845, `${name}: QR sheet must fit the viewport: ${JSON.stringify(sheetBounds)}`);
+      const art = await sheet.evaluate(async (element) => {
+        const url = getComputedStyle(element).backgroundImage.match(/url\("([^"]+)"\)/)?.[1];
+        const image = new Image();
+        image.src = url || '';
+        await image.decode();
+        return new URL(image.src).pathname;
+      });
+      assert.equal(art, '/assets/home-mazut/qr-sheet-mazut.webp');
+      assert(Math.abs(qrBounds.width - sheetBounds.width * 834 / 1092) < 1, `${name}: QR slot width`);
+      assert(Math.abs(qrBounds.x - sheetBounds.x - sheetBounds.width * 129 / 1092) < 1, `${name}: QR slot x`);
+      assert(Math.abs(qrBounds.y - sheetBounds.y - sheetBounds.width * 255 / 1092) < 1, `${name}: QR slot y`);
+      await expectBackdrop('#qrModal');
+      await expectTelegramChrome(Array(3).fill('#080b10'));
+      if (width !== 320) {
+        assert.equal(await sheet.evaluate(el => el.scrollHeight <= el.clientHeight + 1), true, `${name}: default QR controls must fit without scrolling`);
+      }
+      await screenshot('qr');
+      if (width === 320) {
+        await page.locator('#addAppleWallet').waitFor({ state: 'visible' });
+        await page.locator('#addGoogleWallet').waitFor({ state: 'visible' });
+        await page.setViewportSize({ width, height: 480 });
+        await page.locator('#addGoogleWallet').scrollIntoViewIfNeeded();
+        assert.equal(await sheet.evaluate(el => el.scrollTop > 0), true, `${name}: Wallet controls must scroll on short screens`);
+        await page.setViewportSize({ width, height: 844 });
+      }
+      if (width === 390) {
+        await page.evaluate(() => {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { async writeText(value) { window.fixtureCopiedQr = value; } }
+          });
+          Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+        });
+        await page.locator('#copyQrCode').click();
+        assert.equal(await page.evaluate(() => window.fixtureCopiedQr), 'QA4242');
+        const download = page.waitForEvent('download');
+        await page.locator('#saveQrCard').click();
+        assert.equal((await download).suggestedFilename(), 'pivnik-card.png');
+      }
       await page.locator('#qrModal [data-close="qrModal"]').click();
       await page.screenshot({ path: path.join(output, `${name}-home.png`), fullPage: false });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `${name}: horizontal overflow`);
@@ -217,13 +291,18 @@ try {
       await screen('spaceverse-lab');
       assert.equal(await page.locator('.lab-projector:visible').count(), 5);
       await page.locator('#labGuide').click();
+      await expectBackdrop('dialog.lab-dialog[open]', '::backdrop');
       await page.locator('#labWelcomeContinue').click();
       await page.locator('#labPlayground').click();
+      await expectBackdrop('#labPlaygroundDialog', '::backdrop');
       await page.locator('#labWheel').click();
       await waitFor('#wheelDisk');
+      await expectLabShell();
+      await screenshot('wheel');
       await textIs('#wheelHistory', '20 бонусов');
       await page.locator('#openWheelRulesButton').click();
       await waitFor('#wheelRulesModal.open');
+      await expectBackdrop('#wheelRulesModal');
       if (platform === 'telegram') await page.evaluate(() => window.fixtureTelegramBack());
       else await page.keyboard.press('Escape');
       await page.locator('#wheelRulesModal.open').waitFor({ state: 'hidden' });
@@ -282,9 +361,13 @@ try {
         leagueMode = 'full';
         await page.locator('#labLeague').click();
       }
+      await expectLabShell();
+      await screenshot('league');
       await textIs('#leaderboardList', 'Лидер QA');
       await page.locator('#openLeagueSeasons').click();
       await textIs('#leagueSeasonsList', 'октябрь 2026 г.');
+      await expectLabShell();
+      await screenshot('seasons');
       await page.locator('#leagueSeasonsBackButton').click();
       await screen('league');
       await page.locator('#leagueBackButton').click();
@@ -293,6 +376,8 @@ try {
       await page.locator('#labPantheon').click();
       await page.locator('#labAchievements').click();
       await waitFor('#achievementCatalog .earned[data-achievement-code=first]');
+      await expectBackdrop('#achievementsModal');
+      await screenshot('achievements');
       await textIs('#achievementCatalog .locked[data-achievement-code=next]', '25%');
       await page.locator('[data-achievement-code=first] summary').click();
       await textIs('[data-achievement-code=first] details[open] p', 'Условие первой покупки');
@@ -303,15 +388,21 @@ try {
 
       await page.locator('#labShop').click();
       await textIs('#labShopDialog', 'Мы в скором времени добавим ассортимент');
+      await expectBackdrop('#labShopDialog', '::backdrop');
+      await screenshot('shop');
       await page.goBack();
       await page.locator('#labShopDialog[open]').waitFor({ state: 'hidden' });
       await screen('spaceverse-lab');
 
       await page.locator('#labBusiness').click();
+      await expectLabShell();
+      await screenshot('business');
       await waitFor('#spaceverseBusinessDetails');
       await page.locator('#spaceverseBusinessBack').click();
       await screen('spaceverse-lab');
       await page.locator('#labPartner').click();
+      await expectLabShell();
+      await screenshot('partner');
       await waitFor('#spaceversePartnerDetails');
       if (width === 390) {
         await page.locator('#spaceverseLeadSubmit').click();
@@ -336,6 +427,9 @@ try {
       if (platform === 'telegram') await page.evaluate(() => window.fixtureTelegramBack());
       else await page.goBack();
       await screen('client');
+      assert.equal(await page.locator('html.lab-session').count(), 0);
+      assert.equal(await page.locator('#appShell').evaluate(el => getComputedStyle(el).backgroundColor), expectedStone);
+      await expectTelegramChrome(['#fbf6ef', '#efe7dc', '#f8f3eb']);
       assert.equal(authCalls(), initialAuthCalls, 'Lab navigation must keep the session');
       assert.equal(context.pages().length, 1, 'Lab navigation must stay in the current page');
       assert.equal(await page.locator('video[data-src*="lab"]').count(), 0);

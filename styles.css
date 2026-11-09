@@ -956,6 +956,15 @@ button:active { transform: translateY(1px) scale(.995); }
 }
 .qr-warning { max-width: 320px; margin: 4px auto 0; line-height: 1.45; }
 
+#qrModal.open {
+  background: #080b10;
+  backdrop-filter: none;
+}
+#qrModal .qr-sheet {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
 .help-sheet { padding-bottom: calc(26px + env(safe-area-inset-bottom)); }
 #helpModal { z-index: 80; }
 .consent-modal { z-index: 70; align-items: center; }
