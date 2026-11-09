@@ -20,6 +20,7 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
   const password='Fixture-Director-Only-2026!'
 
   beforeAll(async()=>{
+    process.env.ADMIN_ENABLE_ONBOARDING_INVITATIONS='true'
     process.env.ADMIN_ENABLE_WRITES='true'
     process.env.ADMIN_PRODUCTION_WRITE_DATABASE_URL='postgres://fixture.invalid/unused'
     process.env.ADMIN_PUBLIC_ORIGIN='https://director.fixture.invalid'
@@ -33,22 +34,40 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
       CREATE TABLE companies(id BIGINT PRIMARY KEY,code TEXT,name TEXT,active BOOLEAN);
       CREATE TABLE venues(id BIGINT PRIMARY KEY,company_id BIGINT,code TEXT,name TEXT,address TEXT,legacy_bar_id BIGINT,active BOOLEAN);
       CREATE TABLE admin_company_access(admin_id BIGINT,company_id BIGINT,access_kind TEXT);
+      CREATE TABLE admin_onboarding_invites(
+        id UUID PRIMARY KEY,company_id BIGINT,venue_id BIGINT,role TEXT,
+        claimed_admin_id BIGINT,status TEXT,claimed_at TIMESTAMPTZ,revoked_at TIMESTAMPTZ);
+      CREATE TABLE admin_onboarding_access(
+        invitation_id UUID,admin_id BIGINT,company_id BIGINT,venue_id BIGINT,
+        role TEXT,revoked_at TIMESTAMPTZ);
       CREATE TABLE admin_audit_log(admin_id BIGINT,admin_role TEXT,company_id BIGINT,venue_id BIGINT,action TEXT,entity_type TEXT,entity_id TEXT,before_value JSONB,after_value JSONB,reason TEXT,metadata JSONB);
       CREATE TABLE app_settings(id INT PRIMARY KEY,draft JSONB,published JSONB,updated_at TIMESTAMPTZ);
       CREATE TABLE promotions(id BIGSERIAL PRIMARY KEY,code TEXT,title TEXT,description TEXT,badge TEXT,image_src TEXT,active BOOLEAN,sort_order INT,updated_at TIMESTAMPTZ DEFAULT NOW(),updated_by BIGINT);
-      INSERT INTO companies VALUES(10,'pivnik','ПИВНИК',TRUE),(20,'foreign','Foreign',TRUE);
-      INSERT INTO venues VALUES(101,10,'pivnik','ПИВНИК',NULL,1,TRUE),(202,20,'foreign','Foreign',NULL,2,TRUE);
+      INSERT INTO companies VALUES(10,'pivnik','ПИВНИК',TRUE),(20,'foreign','Foreign',TRUE),
+        (30,'alpha','Alpha',TRUE),(40,'beta','Beta',TRUE);
+      INSERT INTO venues VALUES(101,10,'pivnik','ПИВНИК',NULL,1,TRUE),(202,20,'foreign','Foreign',NULL,2,TRUE),
+        (301,30,'alpha-1','Alpha One',NULL,NULL,TRUE),
+        (302,30,'alpha-2','Alpha Two',NULL,NULL,TRUE),
+        (401,40,'beta-1','Beta One',NULL,NULL,TRUE);
+      INSERT INTO admin_onboarding_invites(id,company_id,venue_id,role,claimed_admin_id,status,claimed_at)
+      VALUES ('00000000-0000-4000-8000-000000000021',30,301,'owner',21,'claimed',NOW()),
+        ('00000000-0000-4000-8000-000000000022',30,301,'manager',22,'claimed',NOW()),
+        ('00000000-0000-4000-8000-000000000023',30,301,'viewer',23,'claimed',NOW()),
+        ('00000000-0000-4000-8000-000000000024',30,NULL,'owner',24,'claimed',NOW()),
+        ('00000000-0000-4000-8000-000000000025',40,401,'owner',25,'claimed',NOW());
+      INSERT INTO admin_onboarding_access(invitation_id,admin_id,company_id,venue_id,role)
+      SELECT id,claimed_admin_id,company_id,venue_id,role FROM admin_onboarding_invites;
       INSERT INTO admin_company_access VALUES(11,10,'trusted'),(12,10,'owner');
       INSERT INTO app_settings VALUES(1,'{}','{"texts":{"brand":"ПИВНИК"}}',NOW());
     `)
     const {hashPassword}=await import('../security.js')
-    for(const [id,email,role] of [[11,'trusted@fixture.invalid','VENUE_ADMIN'],[12,'owner@fixture.invalid','VENUE_ADMIN'],[1,'root@fixture.invalid','SUPER_ADMIN']] as const)
+    for(const [id,email,role] of [[11,'trusted@fixture.invalid','VENUE_ADMIN'],[12,'owner@fixture.invalid','VENUE_ADMIN'],[1,'root@fixture.invalid','SUPER_ADMIN'],[21,'invite-owner@fixture.invalid','VENUE_ADMIN'],[22,'invite-manager@fixture.invalid','VENUE_ADMIN'],[23,'invite-viewer@fixture.invalid','VENUE_ADMIN'],[24,'network-owner@fixture.invalid','VENUE_ADMIN'],[25,'foreign-owner@fixture.invalid','VENUE_ADMIN']] as const)
       await state.db.query('INSERT INTO admin_accounts(id,email,display_name,role,password_hash) VALUES($1,$2,$2,$3,$4)',[id,email,role,hashPassword(password)])
     const {handleApi,sendApiError}=await import('../router.js')
     server=http.createServer((req,res)=>{void handleApi(req,res,new URL(req.url!,origin)).catch(error=>sendApiError(res,error,req))})
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve))
     origin=`http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`
-    for(const who of ['trusted','owner','root']){
+    for(const who of ['trusted','owner','root','invite-owner','invite-manager','invite-viewer','network-owner','foreign-owner']){
       const r=await fetch(origin+'/api/admin/auth/login',{method:'POST',headers:{origin:'https://director.fixture.invalid','content-type':'application/json'},body:JSON.stringify({email:who+'@fixture.invalid',password})})
       expect(r.status).toBe(200)
       const body=await r.json() as {csrfToken:string}
@@ -65,6 +84,63 @@ describe('trusted director through actual HTTP router and disposable PostgreSQL'
     const session=sessions.get(who)!
     return fetch(origin+path,{method,headers:{cookie:session.cookie,origin:'https://director.fixture.invalid','content-type':'application/json',...(csrf?{'x-csrf-token':session.csrf}:{})},...(method==='GET'?{}:{body:JSON.stringify(body)})})
   }
+
+  it('serves only accepted exact invitation scopes, never sibling/foreign/PIVNIK venues',async()=>{
+    const expected:Record<string,{id:string;accessKind:string}[]> = {
+      'invite-owner':[{id:'301',accessKind:'owner'}],
+      'invite-manager':[{id:'301',accessKind:'manager'}],
+      'invite-viewer':[{id:'301',accessKind:'viewer'}],
+      'network-owner':[{id:'301',accessKind:'owner'},{id:'302',accessKind:'owner'}],
+      'foreign-owner':[{id:'401',accessKind:'owner'}],
+    }
+    for(const [who,rows] of Object.entries(expected)){
+      const response=await request(who,'GET','/api/admin/venues')
+      expect(response.status).toBe(200)
+      const listed=await response.json() as {venues:{id:string;accessKind:string}[]}
+      expect(listed.venues.map(({id,accessKind})=>({id,accessKind}))).toEqual(rows)
+      expect((await request(who,'GET','/api/admin/venues/'+rows[0]!.id+'/capabilities')).status).toBe(200)
+    }
+    for(const who of ['invite-owner','invite-manager','invite-viewer']){
+      for(const venue of ['302','401','101']){
+        expect((await request(who,'GET','/api/admin/venues/'+venue+'/capabilities')).status).toBe(404)
+        expect((await request(who,'POST','/api/admin/venues/'+venue+'/app/promotions',{title:'Forbidden scope'})).status).toBe(404)
+      }
+    }
+    expect((await request('network-owner','GET','/api/admin/venues/302/capabilities')).status).toBe(200)
+    expect((await request('foreign-owner','GET','/api/admin/venues/301/capabilities')).status).toBe(404)
+    expect((await request('trusted','GET','/api/admin/venues/101/app/promotions')).status).toBe(200)
+  })
+  it('keeps viewer read-only and manager on a narrow server-side allowlist',async()=>{
+    expect((await request('invite-viewer','GET','/api/admin/venues/301/capabilities')).status).toBe(200)
+    expect((await request('invite-viewer','POST','/api/admin/venues/301/app/promotions',{title:'Viewer mutation'})).status).toBe(403)
+    expect((await request('invite-manager','GET','/api/admin/venues/301/app/design')).status).toBe(403)
+    expect((await request('invite-manager','DELETE','/api/admin/venues/301/app/promotions/1')).status).toBe(403)
+    const attempt=await request('invite-manager','POST','/api/admin/venues/301/app/promotions',{title:'Scoped marketing'})
+    expect(attempt.status).toBe(409)
+    expect(await attempt.json()).toMatchObject({code:'APP_CONTENT_NOT_LINKED'})
+  })
+  it('stops invitation access in the current signed session after revocation',async()=>{
+    const path='/api/admin/venues/301/capabilities'
+    expect((await request('invite-owner','GET',path)).status).toBe(200)
+    await state.db!.query('UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE admin_id=21 AND company_id=30')
+    try{
+      const list=await request('invite-owner','GET','/api/admin/venues')
+      expect(list.status).toBe(200)
+      expect((await list.json() as {venues:unknown[]}).venues).toEqual([])
+      expect((await request('invite-owner','GET',path)).status).toBe(404)
+      expect((await request('invite-manager','GET',path)).status).toBe(200)
+    }finally{await state.db!.query('UPDATE admin_onboarding_access SET revoked_at=NULL WHERE admin_id=21 AND company_id=30')}
+    expect((await request('invite-owner','GET',path)).status).toBe(200)
+  })
+  it('requires consistent claimed invitation evidence',async()=>{
+    const path='/api/admin/venues/301/capabilities'
+    await state.db!.query("UPDATE admin_onboarding_invites SET status='pending' WHERE claimed_admin_id=22")
+    try{expect((await request('invite-manager','GET',path)).status).toBe(404)}
+    finally{await state.db!.query("UPDATE admin_onboarding_invites SET status='claimed' WHERE claimed_admin_id=22")}
+    await state.db!.query("UPDATE admin_onboarding_access SET role='owner' WHERE admin_id=23")
+    try{expect((await request('invite-viewer','GET',path)).status).toBe(404)}
+    finally{await state.db!.query("UPDATE admin_onboarding_access SET role='viewer' WHERE admin_id=23")}
+  })
 
   it('lists only the assigned company with trusted access kind',async()=>{
     const r=await request('trusted','GET','/api/admin/venues')
