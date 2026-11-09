@@ -13,9 +13,11 @@ import ru.pivnik.evotor.core.ProvisionedKey;
 final class BridgeSettings {
     private static final String PREFS = "pivnik_evotor_bridge";
     private static final String KEY_LAST_STATUS = "last_status";
-    /** Verified isolated Selectel ingress; the till key still authenticates at the main backend. */
-    static final String DEFAULT_API_BASE = "https://139.100.238.159.nip.io/evotor";
-    /** Exact previous AAD, used only to preserve an existing encrypted POS credential. */
+    /** Direct Railway POS API; the Evotor proxy allowlist already includes its exact paths. */
+    static final String DEFAULT_API_BASE = "https://pivnik-bonus-app-production-df60.up.railway.app";
+    /** Last installed Selectel base: AES-GCM AAD for existing v2 POS credentials. */
+    static final String PREVIOUS_API_BASE = "https://139.100.238.159.nip.io/evotor";
+    /** Original pre-Selectel base: AES-GCM AAD for the original credential slots. */
     static final String LEGACY_API_BASE = "https://pivnik-bonus-app-production-df60.up.railway.app";
 
     private final SharedPreferences prefs;
