@@ -106,8 +106,8 @@ export function buildVenueScopeQuery(
     accessClause = `
       AND (
         EXISTS(SELECT 1 FROM admin_company_access aca
-          WHERE aca.company_id=v.company_id AND aca.admin_id=$2::bigint
-            AND aca.access_kind IN ('owner','trusted'))
+          WHERE aca.company_id = v.company_id AND aca.admin_id = $2::bigint
+            AND aca.access_kind IN ('owner', 'trusted'))
         ${config.enableOnboardingInvitations?`OR EXISTS(${invitedRole('v','$2')})`:''}
       )`
   }
