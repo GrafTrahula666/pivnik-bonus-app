@@ -94,6 +94,7 @@ try {
           let body = {};
           if (['/api/auth', '/api/bootstrap', '/api/me'].includes(url.pathname)) body = payload;
           if (url.pathname === '/api/me/qr') body = { shortCode: 'QA4242', image: qrImage };
+          if (url.pathname === '/api/wallet/config' && width === 320) body = { appleAvailable: true, googleAvailable: true };
           let status = 200;
           if (url.pathname === '/api/achievements') body = { achievements: [earned, locked], profileAchievements: [earned] };
           if (url.pathname === '/api/leaderboard/monthly') {
@@ -230,15 +231,51 @@ try {
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
       await page.locator('#qrImage').evaluate(image => image.decode());
-      const qrBounds = await page.locator('#qrImage').boundingBox();
-      assert(Math.abs(qrBounds.width - qrBounds.height) < 1, `${name}: QR image must stay square`);
       const sheet = page.locator('#qrModal .qr-sheet');
       await sheet.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
       const sheetBounds = await sheet.boundingBox();
+      const qrBounds = await page.locator('#qrImage').boundingBox();
+      assert(Math.abs(qrBounds.width - qrBounds.height) < 1, `${name}: QR image must stay square`);
       assert(sheetBounds.y >= -1 && sheetBounds.y + sheetBounds.height <= 845, `${name}: QR sheet must fit the viewport: ${JSON.stringify(sheetBounds)}`);
+      const art = await sheet.evaluate(async (element) => {
+        const url = getComputedStyle(element).backgroundImage.match(/url\("([^"]+)"\)/)?.[1];
+        const image = new Image();
+        image.src = url || '';
+        await image.decode();
+        return new URL(image.src).pathname;
+      });
+      assert.equal(art, '/assets/home-mazut/qr-sheet-mazut.webp');
+      assert(Math.abs(qrBounds.width - sheetBounds.width * 834 / 1092) < 1, `${name}: QR slot width`);
+      assert(Math.abs(qrBounds.x - sheetBounds.x - sheetBounds.width * 129 / 1092) < 1, `${name}: QR slot x`);
+      assert(Math.abs(qrBounds.y - sheetBounds.y - sheetBounds.width * 255 / 1092) < 1, `${name}: QR slot y`);
       await expectBackdrop('#qrModal');
       await expectTelegramChrome(Array(3).fill('#080b10'));
+      if (width !== 320) {
+        assert.equal(await sheet.evaluate(el => el.scrollHeight <= el.clientHeight + 1), true, `${name}: default QR controls must fit without scrolling`);
+      }
       await screenshot('qr');
+      if (width === 320) {
+        await page.locator('#addAppleWallet').waitFor({ state: 'visible' });
+        await page.locator('#addGoogleWallet').waitFor({ state: 'visible' });
+        await page.setViewportSize({ width, height: 480 });
+        await page.locator('#addGoogleWallet').scrollIntoViewIfNeeded();
+        assert.equal(await sheet.evaluate(el => el.scrollTop > 0), true, `${name}: Wallet controls must scroll on short screens`);
+        await page.setViewportSize({ width, height: 844 });
+      }
+      if (width === 390) {
+        await page.evaluate(() => {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { async writeText(value) { window.fixtureCopiedQr = value; } }
+          });
+          Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+        });
+        await page.locator('#copyQrCode').click();
+        assert.equal(await page.evaluate(() => window.fixtureCopiedQr), 'QA4242');
+        const download = page.waitForEvent('download');
+        await page.locator('#saveQrCard').click();
+        assert.equal((await download).suggestedFilename(), 'pivnik-card.png');
+      }
       await page.locator('#qrModal [data-close="qrModal"]').click();
       await page.screenshot({ path: path.join(output, `${name}-home.png`), fullPage: false });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `${name}: horizontal overflow`);

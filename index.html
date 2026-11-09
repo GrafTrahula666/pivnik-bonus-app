@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/pos-admin.css?v=2" />
   <script defer src="/pos-admin.js?v=2"></script>
   <script defer src="/assets/home-mazut/home.js?v=10"></script>
+  <link rel="stylesheet" href="/assets/home-mazut/qr-sheet.css?v=1" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -663,18 +664,22 @@
 
   <div class="modal" id="qrModal" aria-hidden="true">
     <div class="modal-sheet qr-sheet">
-      <button class="close" data-close="qrModal">×</button>
-      <span class="muted">Личная бонусная карта</span>
-      <h2>Покажите сотруднику</h2>
-      <div class="qr-frame"><img id="qrImage" alt="QR-код клиента" /></div>
-      <div class="token" id="qrToken">PVK-0000-0000</div>
-      <button class="copy-code" id="copyQrCode" type="button">Скопировать короткий код</button>
-      <div class="wallet-actions">
-        <button class="secondary" id="saveQrCard" type="button">Сохранить QR-карту</button>
-        <button class="wallet-button hidden" id="addAppleWallet" type="button">Добавить в Apple Wallet</button>
-        <button class="wallet-button hidden" id="addGoogleWallet" type="button">Добавить в Google Wallet</button>
+      <button class="close" data-close="qrModal" type="button" aria-label="Закрыть QR">×</button>
+      <div class="qr-heading">
+        <span class="muted">Личная бонусная карта</span>
+        <h2>Покажите сотруднику</h2>
       </div>
-      <p class="qr-warning">Код постоянный. Не передавайте QR посторонним: операции по нему будут отражены в вашей истории.</p>
+      <div class="qr-frame"><img id="qrImage" alt="QR-код клиента" /></div>
+      <div class="qr-actions">
+        <div class="token" id="qrToken">PVK-0000-0000</div>
+        <button class="copy-code" id="copyQrCode" type="button">Скопировать короткий код</button>
+        <div class="wallet-actions">
+          <button class="secondary" id="saveQrCard" type="button">Сохранить QR-карту</button>
+          <button class="wallet-button hidden" id="addAppleWallet" type="button">Добавить в Apple Wallet</button>
+          <button class="wallet-button hidden" id="addGoogleWallet" type="button">Добавить в Google Wallet</button>
+        </div>
+        <p class="qr-warning">Код постоянный. Не передавайте QR посторонним: операции по нему будут отражены в вашей истории.</p>
+      </div>
     </div>
   </div>
 
