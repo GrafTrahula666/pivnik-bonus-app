@@ -83,6 +83,19 @@ jobs:
           (root/'build-provenance.json').write_text(json.dumps(info,indent=2)+'\n')
           print(json.dumps(info))
           PY
+      # Public SDK utilities only, never package the keystore, passwords or POS key.
+      - name: Collect Android SDK 35 public signing utilities
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/evotor-public-signing-tools"
+          mkdir -p "$tools"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$tools/apksigner.jar"
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" "$tools/zipalign"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evotor-android-sdk35-signing-utilities-no-secrets
+          path: ${{ runner.temp }}/evotor-public-signing-tools/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
