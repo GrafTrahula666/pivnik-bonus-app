@@ -30,6 +30,19 @@ contains painted pixels; HIGH Android must still use WebGL. Cache-versioned
 assets ensure old WebView copies do not mask a subsequent approved release.
 Full CI and **physical Android tests** are required before merge/deploy.
 
+## Mazut idle circulation and touch region (2026-11-09)
+
+The Mazut simulation applies a low-frequency circulation when the user is
+idle, using the existing physics step, viscosity, touch strength and paint
+budgets. The gesture region starts at the top of the stage and keeps the
+side gutters and lower controls available. With motion enabled, the live
+Mazut home temporarily disables Telegram's vertical minimization gesture
+inside the app on SDK 7.7+. It restores the prior enabled state on leaving
+home, opening a modal or pausing interaction. The Telegram header still
+handles its native gesture. VK uses the same touch region without calling
+Telegram APIs. The browser smoke checks canvas motion, downward touch
+capture near the top, and the Telegram gesture settings around QR and Lab.
+
 ## 2026-11-08: Mazut home mobile layout correction (dependent Draft)
 
 The approved Mazut home relocates the original `#heroQrButton`, profile

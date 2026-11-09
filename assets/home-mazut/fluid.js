@@ -70,7 +70,6 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   let x,y,vx,vy,oldX,oldY,density,near,packed,head,next;
   let gl=null,gfx=null,ctx=null,software=null,slowPaints=0;
   const corners=[-1,-1,1,-1,-1,1,-1,1,1,-1,1,1];
-  let weatherX=0,weatherY=0,targetX=0,targetY=0,turnAt=0;
 
   function seed(){
     const cells=[];
@@ -161,17 +160,14 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   }
   function tick(){
     clock+=step;
-    if(clock>=turnAt){
-      targetX=(Math.random()-.5)*94;targetY=(Math.random()-.5)*94;
-      turnAt=clock+1.7+Math.random()*3.4;
-    }
-    weatherX=mix(weatherX,targetX,.017);
-    weatherY=mix(weatherY,targetY,.017);
+    // Gentle, continuous circulation, with a much smaller impulse than a swipe.
+    const ambientX=54*Math.sin(clock*.68+.5);
+    const ambientY=68*Math.sin(clock*.52+1.2);
     for(let i=0;i<n;i++){
       oldX[i]=x[i];oldY[i]=y[i];
       const u=x[i]/W,v=y[i]/H;
-      let ax=weatherX+tilt.x*260+26*Math.sin(v*7+clock*.64)+(0.52-u)*24;
-      let ay=weatherY+tilt.y*260+29*Math.cos(u*6-clock*.71)+(0.52-v)*30;
+      let ax=ambientX+tilt.x*260+26*Math.sin(v*7+clock*.64)+(0.52-u)*24;
+      let ay=ambientY+tilt.y*260+29*Math.cos(u*6-clock*.71)+(0.52-v)*30;
       if(labPull){
         const dx=labPull.x-x[i],dy=labPull.y-y[i],distance=Math.hypot(dx,dy);
         const pull=620/Math.max(distance,90);

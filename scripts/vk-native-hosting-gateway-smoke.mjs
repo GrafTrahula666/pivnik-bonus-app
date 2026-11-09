@@ -11,8 +11,6 @@ const allowedHeaders = 'authorization,content-type,x-pivnik-version,x-pivnik-pla
 const root = process.cwd();
 const outDir = path.join(root, 'artifacts/vk-native-hosting-gateway-smoke');
 const signed = 'vk_app_id=54694987&vk_user_id=4242&vk_ts=123456&vk_platform=mobile_iphone&sign=fixture-sign';
-const bootImageUrl = '/assets/boot/vk-boot-sky-city-20261001.webp';
-const fixtureBootImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=';
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
 let scenario;
 let staticOrigin;
@@ -113,8 +111,7 @@ const staticServer = createServer(async (req, res) => {
     let bytes = await fs.readFile(path.join(root, 'vk-hosting-build', relative));
     if (relative === 'index.html') {
       bytes = bytes.toString()
-        .replace(/window\.__PIVNIK_VK_API_BASE__=[^;]+;/, `window.__PIVNIK_VK_API_BASE__=${JSON.stringify(gatewayOrigin)};`)
-        .replace(bootImageUrl, fixtureBootImage);
+        .replace(/window\.__PIVNIK_VK_API_BASE__=[^;]+;/, `window.__PIVNIK_VK_API_BASE__=${JSON.stringify(gatewayOrigin)};`);
     }
     res.writeHead(200, { 'content-type': mime[path.extname(relative)] || 'application/octet-stream', 'cache-control': 'no-store' });
     res.end(bytes);

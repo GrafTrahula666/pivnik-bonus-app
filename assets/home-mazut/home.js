@@ -9,6 +9,8 @@ if (new URLSearchParams(location.search).get('mazut') !== '0') {
 async function enableMazutHome() {
   const home = document.querySelector('.client-home[data-screen="client"]');
   const byId = (id) => document.getElementById(id);
+  const shell = byId('appShell');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const avatar = byId('profileAvatar');
   const name = byId('clientName');
   const balance = byId('clientBalance');
@@ -28,7 +30,7 @@ async function enableMazutHome() {
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/assets/home-mazut/home.css?v=9';
+  stylesheet.href = '/assets/home-mazut/home.css?v=10';
   const cssReady = new Promise((resolve, reject) => {
     stylesheet.onload = resolve;
     stylesheet.onerror = reject;
@@ -123,17 +125,18 @@ async function enableMazutHome() {
       labEntry?.click();
       fluid?.sync();
     };
-    if (!fluid || matchMedia('(prefers-reduced-motion: reduce)').matches) { show(); return; }
+    if (!fluid || reducedMotion.matches) { show(); return; }
     entering = true;
     fluid.pullTowards(labButton);
     setTimeout(show, 380);
   });
   home.prepend(stage);
   home.classList.add('mazut-home');
-  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=7');
+  const fluidLayer = slot('.mazut-fluid');
+  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=8');
   fluid = mountMazutFluid({
     card: stage,
-    layer: slot('.mazut-fluid'),
+    layer: fluidLayer,
     canvas: slot('canvas'),
     isPaused: () => !home.classList.contains('active') || Boolean(document.querySelector('.modal.open, dialog[open]'))
   });
@@ -146,7 +149,7 @@ async function enableMazutHome() {
     tiltButton.innerHTML = '<span aria-hidden="true">◇</span><div><b>Наклон телефона</b><small aria-live="polite">Включить движение мазута при наклоне</small></div><i aria-hidden="true">›</i>';
     tiltButton.addEventListener('click', async () => {
       const message = tiltButton.querySelector('small');
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (reducedMotion.matches) {
         message.textContent = 'В системе включено уменьшение движения';
         return;
       }
@@ -166,9 +169,36 @@ async function enableMazutHome() {
     menu?.append(tiltButton);
   }
 
-  const stateObserver = new MutationObserver(() => fluid.sync());
+  let swipeGuard;
+  function syncTelegramSwipes() {
+    const interactive = home.classList.contains('active') && shell && !shell.classList.contains('hidden')
+      && !document.hidden && !reducedMotion.matches && !fluidLayer.classList.contains('mazut-render-static')
+      && !document.querySelector('.modal.open, dialog[open]');
+    if (!interactive) {
+      swipeGuard?.enableVerticalSwipes();
+      swipeGuard = undefined;
+      return;
+    }
+    if (swipeGuard || window.__PIVNIK_PLATFORM__ === 'vk') return;
+    const telegram = window.Telegram?.WebApp;
+    if (telegram?.isVerticalSwipesEnabled !== true || !telegram.isVersionAtLeast?.('7.7')
+      || typeof telegram.disableVerticalSwipes !== 'function' || typeof telegram.enableVerticalSwipes !== 'function') return;
+    telegram.disableVerticalSwipes();
+    swipeGuard = telegram;
+  }
+
+  const stateObserver = new MutationObserver(() => {
+    fluid.sync();
+    syncTelegramSwipes();
+  });
   stateObserver.observe(home, { attributes: true, attributeFilter: ['class'] });
+  stateObserver.observe(fluidLayer, { attributes: true, attributeFilter: ['class'] });
+  if (shell) stateObserver.observe(shell, { attributes: true, attributeFilter: ['class'] });
   for (const modal of document.querySelectorAll('.modal, dialog')) {
     stateObserver.observe(modal, { attributes: true, attributeFilter: ['class', 'open'] });
   }
+  document.addEventListener('visibilitychange', syncTelegramSwipes);
+  if (typeof reducedMotion.addEventListener === 'function') reducedMotion.addEventListener('change', syncTelegramSwipes);
+  else reducedMotion.addListener?.(syncTelegramSwipes);
+  syncTelegramSwipes();
 }
