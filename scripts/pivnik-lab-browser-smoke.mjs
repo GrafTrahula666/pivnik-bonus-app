@@ -57,6 +57,19 @@ try {
         await context.addInitScript((tier) => {
           Object.defineProperty(navigator, 'deviceMemory', { configurable: true, get: () => tier === 'low' ? 2 : 8 });
           Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => tier === 'low' ? 4 : 8 });
+          if (tier === 'low') {
+            // Simulate a real Android failure: context exists but fragment
+            // shader compilation is rejected by its GPU/WebView driver.
+            const originalShaderStatus = WebGLRenderingContext.prototype.getShaderParameter;
+            WebGLRenderingContext.prototype.getShaderParameter = function(shader, param) {
+              if (param === this.COMPILE_STATUS && this.canvas.closest('.mazut-fluid')) return false;
+              return originalShaderStatus.call(this, shader, param);
+            };
+            // Older Android WebViews have MediaQueryList.addListener only.
+            if (typeof MediaQueryList !== 'undefined') {
+              MediaQueryList.prototype.addEventListener = undefined;
+            }
+          }
         }, androidTier);
       }
       const page = await context.newPage();
@@ -134,6 +147,16 @@ try {
           return {
             tier: document.documentElement.dataset.pivnikPerformance,
             renderer: canvas.dataset.mazutQuality,
+            engine: canvas.dataset.mazutRenderer,
+            inkVisible: (() => {
+              if (canvas.dataset.mazutRenderer !== 'software') return null;
+              const data = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
+              if (!data) return false;
+              for (let i = 3; i < data.length; i += 64 * 4) {
+                if (data[i] > 30) return true;
+              }
+              return false;
+            })(),
             pixels: canvas.width * canvas.height,
             android: document.documentElement.classList.contains('android-webview'),
             reduced: document.documentElement.classList.contains('reduce-effects'),
@@ -145,6 +168,12 @@ try {
         assert.equal(probe.android, true, `${name}: Android WebView class missing`);
         assert.equal(probe.tier, androidTier, `${name}: bootstrap performance tier mismatch`);
         assert.equal(probe.renderer, androidTier, `${name}: Mazut performance tier mismatch`);
+        if (androidTier === 'low') {
+          assert.equal(probe.engine, 'software', `${name}: failed Android WebGL shader did not switch to 2D`);
+          assert.equal(probe.inkVisible, true, `${name}: fallback engine paints no visible Mazut`);
+        } else {
+          assert.equal(probe.engine, 'webgl', `${name}: powerful Android did not retain GPU Mazut`);
+        }
         assert.equal(probe.reduced, androidTier === 'low', `${name}: motion fallback mismatch`);
         assert.equal(probe.motion, false, `${name}: simulated motion unexpectedly reduced`);
         assert(probe.pixels > 0 && probe.canvasBounds.width > 0, `${name}: fluid renderer has no canvas`);
