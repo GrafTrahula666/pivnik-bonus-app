@@ -250,6 +250,7 @@ try {
           return false;
         });
         assert.equal(recovered, true, `${name}: WebGL context loss left the liquid invisible`);
+        await page.screenshot({ path: path.join(output, `${name}-context-loss-fallback.png`), fullPage: false });
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `${name}: horizontal overflow`);
       const waitFor = (selector) => page.locator(selector).waitFor({ state: 'visible' });
