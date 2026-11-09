@@ -92,15 +92,16 @@ describe('app operations time controls use own data source, never POS',()=>{
     expect(cards[3].textContent).toContain('100%')
     expect(cards[0].textContent).toContain('146,8%')
     expect(node.textContent).toContain('не по установке приложения и не по первой покупке')
-    const extra=node.querySelector('details.app-operations-extra') as HTMLDetailsElement
-    expect(extra.open).toBe(false)
-    expect(extra.querySelectorAll('.live-kpi')).toHaveLength(7)
-    await act(async()=>extra.querySelector('summary')!.click())
-    expect(extra.open).toBe(true)
+    const extra=node.querySelector('[aria-label="Дополнительные показатели операций"]') as HTMLElement
+    expect(extra).toBeTruthy()
+    expect(extra.tagName).toBe('SECTION')
+    expect(node.querySelector('details.app-operations-extra')).toBeNull()
+    expect(extra.querySelectorAll('.app-operations-secondary-row')).toHaveLength(7)
     expect(extra.textContent).toContain('Клиентов всего')
     expect(extra.textContent).toContain('Посещений')
     expect(extra.textContent).toContain('Нет данных')
     expect(extra.textContent).toContain('Бонусы в обращении')
+    expect(extra.textContent).toContain('Без сравнения')
   })
   it('distinguishes falling, rising and flat operation metrics without falsely showing growth',async()=>{
     const modified={...dashboard,metrics:{...values,trackedRevenue:metric(250),checkCount:metric(2),activeCustomers:metric(3)}}
