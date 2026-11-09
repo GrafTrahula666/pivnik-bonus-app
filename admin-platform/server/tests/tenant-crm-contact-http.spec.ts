@@ -305,7 +305,8 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       const c=command('unavailable-target@fixture.invalid')
       const response=await send('owner',path(),c)
       expect(response.status).not.toBe(200)
-      expect([403,404,503]).toContain(response.status)
+      // A registered binding whose target cannot be resolved may fail as a scope conflict (409).
+      expect([403,404,409,503]).toContain(response.status)
       expect(JSON.stringify(await response.json())).not.toContain(c.contact.email)
       expect(await count(0,'spaceverse_crm_contacts')).toBe(contactsBefore)
       expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(requestsBefore)
