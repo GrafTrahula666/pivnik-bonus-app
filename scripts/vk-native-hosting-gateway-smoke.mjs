@@ -216,7 +216,7 @@ try {
       };
     });
     assert.equal(wheelVisual.tag, 'IMG', 'the approved image must be the rotating disk');
-    assert.equal(wheelVisual.src, '/assets/home-v2/wheel-approved-20260929.png');
+    assert.equal(wheelVisual.src, '/assets/spaceverse/lab-wheel-disc.webp');
     assert.equal(wheelVisual.loaded, true, 'the approved image must load in VK hosting');
     assert.equal(wheelVisual.backgroundImage, 'none', 'old wheel artwork must not cover the approved image');
     assert.notEqual(wheelVisual.transform, 'none', 'the approved image must be the element that rotates');

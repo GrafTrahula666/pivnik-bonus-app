@@ -758,18 +758,25 @@ function requestId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-const WHEEL_VISUAL_SECTORS = (() => {
-  // Clockwise centers measured from the approved artwork. The pictured "2 б"
-  // is not a server prize and deliberately has no landing target.
-  const pictured = [
-    'annual-beer', 'beer-glass', 'bonus-100', 'bonus-5', 'bonus-50',
-    'beer-glass', 'bonus-10', 'bonus-20', 'bonus-5', null,
-    'beer-glass', 'bonus-100', 'bonus-5', 'beer-glass', 'bonus-50',
-    'bonus-10', 'bonus-5', 'bonus-20', 'beer-glass', 'bonus-50'
-  ];
-  return pictured.map((code, index) => ({ code, center: index * 18 }))
-    .filter((sector) => sector.code);
-})();
+// Clockwise prize centers measured on the Lab artwork, from the fixed top pointer.
+const WHEEL_VISUAL_SECTORS = [
+  { code: 'annual-beer', center: 0 },
+  { code: 'bonus-100', center: 24 },
+  { code: 'beer-glass', center: 49 },
+  { code: 'bonus-10', center: 72 },
+  { code: 'bonus-20', center: 92 },
+  { code: 'beer-glass', center: 116 },
+  { code: 'bonus-5', center: 134 },
+  { code: 'bonus-50', center: 156 },
+  { code: 'beer-glass', center: 180 },
+  { code: 'bonus-100', center: 202 },
+  { code: 'bonus-10', center: 224 },
+  { code: 'beer-glass', center: 246 },
+  { code: 'bonus-20', center: 268 },
+  { code: 'bonus-5', center: 288 },
+  { code: 'beer-glass', center: 310 },
+  { code: 'bonus-50', center: 336 }
+];
 
 function renderWheelArtwork() {
   if (state.wheel.artworkReady) return;
@@ -874,13 +881,12 @@ function startWheelCountdown() {
   }, 1000);
 }
 
-// The rules show the chances and prices PIVNIK Business set; without a status the printed defaults stay.
+// Display the current prices and cooldown from PIVNIK Business when available.
 function renderWheelRules() {
   const current = state.wheel.status;
   if (!current) return;
   const freeText = $('#wheelRulesFreeText');
   const paidText = $('#wheelRulesPaidText');
-  const odds = $('#wheelOddsList');
   if (freeText && current.freeIntervalHours) {
     freeText.textContent = `Первое вращение бесплатно. Следующее бесплатное вращение становится доступно ровно через ${wheelHoursLabel(current.freeIntervalHours)} с момента предыдущего бесплатного вращения.`;
   }
@@ -890,19 +896,6 @@ function renderWheelRules() {
     paidText.textContent = first === later
       ? `После бесплатного вращения каждое дополнительное вращение до следующего бесплатного стоит ${fmt(first)} бонусов.`
       : `После бесплатного вращения первое дополнительное вращение стоит ${fmt(first)} бонусов. Все последующие дополнительные вращения до следующего бесплатного вращения стоят по ${fmt(later)} бонусов. Цена выше ${fmt(later)} бонусов не повышается.`;
-  }
-  const prizes = Array.isArray(current.prizes) ? current.prizes : [];
-  if (odds && prizes.length) {
-    odds.replaceChildren(...prizes.filter((prize) => prize.annualSupply || Number(prize.chancePercent) > 0).map((prize) => {
-      const item = document.createElement('li');
-      const title = document.createElement('b');
-      title.textContent = prize.title;
-      const chance = document.createElement('span');
-      const percent = `${Number(prize.chancePercent).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}%`;
-      chance.textContent = prize.annualSupply ? `${percent} · 1 из 1 000 000` : percent;
-      item.append(title, chance);
-      return item;
-    }));
   }
 }
 
@@ -975,7 +968,7 @@ function wheelPrizeDisplayTitle(prize) {
     'bonus-20': '20 бонусов',
     'bonus-50': '50 бонусов',
     'bonus-100': '100 бонусов',
-    'beer-glass': 'Бокал пива',
+    'beer-glass': 'Бесплатное пиво 0,5 л',
     'halloween-ticket': 'Архивный приз',
     'annual-beer': 'Годовой запас пива'
   };
