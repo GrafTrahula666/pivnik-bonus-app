@@ -1,10 +1,6 @@
 name: VK native hosting PRODUCTION deploy
 
 on:
-  workflow_run:
-    workflows: [VK native hosting main parity]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       confirm:
@@ -14,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: vk-hosting-production
@@ -21,20 +18,13 @@ concurrency:
 
 jobs:
   deploy:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASE_SHA: ${{ github.sha }}
     steps:
       - name: Check manual release confirmation
-        if: github.event_name == 'workflow_dispatch'
         env:
           RELEASE_CONFIRM: ${{ inputs.confirm }}
         shell: bash
@@ -52,6 +42,46 @@ jobs:
         with:
           node-version: 24
           cache: npm
+
+      - name: Verify the approved PIVNIK release for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const { GITHUB_API_URL, GITHUB_REPOSITORY, GH_TOKEN, RELEASE_SHA } = process.env;
+          const params = new URLSearchParams({
+            branch: 'main', event: 'workflow_dispatch', head_sha: RELEASE_SHA, per_page: '1',
+          });
+          const url = `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/release-gate.yml/runs?${params}`;
+          async function getJson(url) {
+            const response = await fetch(url, {
+              headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json' },
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (!response.ok) throw new Error(`Cannot verify PIVNIK release (HTTP ${response.status}).`);
+            return response.json();
+          }
+          const { workflow_runs: [run] } = await getJson(url);
+          if (run?.head_sha !== RELEASE_SHA || run?.head_branch !== 'main' ||
+              run?.event !== 'workflow_dispatch' || run?.status !== 'completed' ||
+              run?.conclusion !== 'success') {
+            throw new Error('VK publishing requires a successful manually approved PIVNIK release for this SHA.');
+          }
+          const jobsUrl = `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`;
+          const { jobs } = await getJson(jobsUrl);
+          const release = jobs.find(job => job.name === 'Syntax, tests and dependency audit' &&
+            job.conclusion === 'success');
+          const requiredSteps = [
+            'Deploy exact commit and verify both production services',
+            'Verify signed Telegram and VK production sessions',
+          ];
+          if (!requiredSteps.every(name => release?.steps?.some(step =>
+            step.name === name && step.conclusion === 'success'))) {
+            throw new Error('The approved run must have deployed and verified this SHA.');
+          }
+          console.log(`Verified PIVNIK release run ${run.id} for ${RELEASE_SHA}.`);
+          NODE
 
       - name: Install exact dependencies
         run: npm ci
