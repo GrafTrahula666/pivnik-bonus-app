@@ -56,6 +56,15 @@ public class DeviceCredentialStoreTest {
                 .putString("device_token_iv", encoding.encode(cipher.getIV())).putString("api_base_url", origin).commit();
     }
 
+    private void selectel(String token) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        cipher.updateAAD(BridgeSettings.PREVIOUS_API_BASE.getBytes(StandardCharsets.UTF_8));
+        prefs.edit().putString("device_token_v2_cipher",
+                encoding.encode(cipher.doFinal(token.getBytes(StandardCharsets.UTF_8))))
+                .putString("device_token_v2_iv", encoding.encode(cipher.getIV())).commit();
+    }
+
     private String decryptRecord(String cipherName, String ivName, String origin) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, encoding.decode(prefs.getString(ivName, ""))));
@@ -68,7 +77,7 @@ public class DeviceCredentialStoreTest {
         Map<String, String> original = new HashMap<>(prefs.disk);
         assertEquals(TOKEN, store.read(CURRENT));
         for (String field : original.keySet()) assertEquals(original.get(field), prefs.disk.get(field));
-        assertEquals(TOKEN, decryptRecord("device_token_v2_cipher", "device_token_v2_iv", CURRENT));
+        assertEquals(TOKEN, decryptRecord("device_token_v3_cipher", "device_token_v3_iv", CURRENT));
         assertEquals(TOKEN, decryptRecord("device_token_cipher", "device_token_iv", OLD));
         for (String value : prefs.disk.values()) assertFalse(value.contains(TOKEN));
     }
@@ -76,12 +85,12 @@ public class DeviceCredentialStoreTest {
     @Test public void migrationIsOneTimeAndWorksAfterProcessRestart() throws Exception {
         legacy(OLD, TOKEN);
         assertEquals(TOKEN, store.read(CURRENT));
-        String encrypted = prefs.getString("device_token_v2_cipher", "");
+        String encrypted = prefs.getString("device_token_v3_cipher", "");
         int writes = prefs.commits;
         assertEquals(TOKEN, create(prefs.restart()).read(CURRENT));
         assertEquals(TOKEN, store.read(CURRENT));
         assertEquals(writes, prefs.commits);
-        assertEquals(encrypted, prefs.getString("device_token_v2_cipher", ""));
+        assertEquals(encrypted, prefs.getString("device_token_v3_cipher", ""));
     }
 
     @Test public void failedPromotionKeepsThePersistedOldCredentialRecoverable() throws Exception {
@@ -92,17 +101,17 @@ public class DeviceCredentialStoreTest {
         assertEquals(original, prefs.disk);
         Prefs restarted = prefs.restart();
         assertEquals(TOKEN, create(restarted).read(CURRENT));
-        assertTrue(restarted.disk.containsKey("device_token_v2_cipher"));
+        assertTrue(restarted.disk.containsKey("device_token_v3_cipher"));
     }
 
     @Test public void onlyTheExplicitPreviousProductionBaseCanBeMigrated() throws Exception {
         legacy("https://other.invalid", TOKEN);
         assertEquals("", store.read(CURRENT));
-        assertFalse(prefs.contains("device_token_v2_cipher"));
+        assertFalse(prefs.contains("device_token_v3_cipher"));
         legacy(OLD, TOKEN);
         assertEquals("", store.read("https://other.invalid"));
         assertEquals("", store.read(CURRENT + "/"));
-        assertEquals("", store.read(OLD));
+        assertEquals("", store.read(BridgeSettings.PREVIOUS_API_BASE));
         assertEquals(0, keyCreates);
     }
 
@@ -112,30 +121,30 @@ public class DeviceCredentialStoreTest {
         store.save(CURRENT, REPLACEMENT);
         assertEquals(REPLACEMENT, store.read(CURRENT));
         assertEquals(REPLACEMENT, create(prefs.restart()).read(CURRENT));
-        assertEquals("", store.read(OLD));
+        assertEquals("", store.read(BridgeSettings.PREVIOUS_API_BASE));
     }
 
     @Test public void corruptedCurrentRecordDoesNotSilentlyReviveAnOldKey() throws Exception {
         legacy(OLD, TOKEN);
         store.save(CURRENT, REPLACEMENT);
-        prefs.edit().putString("device_token_v2_cipher", "corrupt").commit();
+        prefs.edit().putString("device_token_v3_cipher", "corrupt").commit();
         int writes = prefs.commits;
         assertEquals("", store.read(CURRENT));
         assertEquals(writes, prefs.commits);
-        assertEquals("corrupt", prefs.getString("device_token_v2_cipher", ""));
+        assertEquals("corrupt", prefs.getString("device_token_v3_cipher", ""));
     }
 
     @Test public void incompleteCurrentRecordFailsClosed() throws Exception {
         legacy(OLD, TOKEN);
-        prefs.edit().putString("device_token_v2_iv", "incomplete").commit();
+        prefs.edit().putString("device_token_v3_iv", "incomplete").commit();
         assertEquals("", store.read(CURRENT));
-        assertFalse(prefs.contains("device_token_v2_cipher"));
+        assertFalse(prefs.contains("device_token_v3_cipher"));
     }
 
     @Test public void aStaffSessionOrUnreadableLegacyCipherIsNeverPromoted() throws Exception {
         legacy(OLD, "staff_session_fixture");
         assertEquals("", store.read(CURRENT));
-        assertFalse(prefs.contains("device_token_v2_cipher"));
+        assertFalse(prefs.contains("device_token_v3_cipher"));
         prefs.edit().putString("device_token_cipher", "broken").commit();
         assertEquals("", store.read(CURRENT));
         assertEquals(0, keyCreates);
@@ -178,7 +187,76 @@ public class DeviceCredentialStoreTest {
         prefs.edit().putString("device_token_cipher", "damaged").commit();
         store.seedIfEmpty(CURRENT, REPLACEMENT);
         assertEquals("", store.read(CURRENT));
-        assertFalse(prefs.contains("device_token_v2_cipher"));
+        assertFalse(prefs.contains("device_token_v3_cipher"));
+    }
+
+    @Test public void previousSelectelCredentialMigratesToRailwayWithRollbackBytesIntact() throws Exception {
+        selectel(TOKEN);
+        Map<String, String> original = new HashMap<>(prefs.disk);
+        assertEquals(TOKEN, store.read(CURRENT));
+        for (Map.Entry<String, String> entry : original.entrySet()) {
+            assertEquals(entry.getValue(), prefs.disk.get(entry.getKey()));
+        }
+        assertEquals(TOKEN, decryptRecord("device_token_v2_cipher", "device_token_v2_iv",
+                BridgeSettings.PREVIOUS_API_BASE));
+        assertEquals(TOKEN, decryptRecord("device_token_v3_cipher", "device_token_v3_iv", CURRENT));
+        assertEquals(TOKEN, create(prefs.restart()).read(CURRENT));
+        assertEquals("", store.read(BridgeSettings.PREVIOUS_API_BASE));
+        for (String value : prefs.disk.values()) assertFalse(value.contains(TOKEN));
+    }
+
+    @Test public void selectelV2IsAuthoritativeOverStaleOriginalRailwayV1() throws Exception {
+        legacy(OLD, TOKEN);
+        selectel(REPLACEMENT);
+        assertEquals(REPLACEMENT, store.read(CURRENT));
+        assertEquals(TOKEN, decryptRecord("device_token_cipher", "device_token_iv", OLD));
+        assertEquals(REPLACEMENT, decryptRecord("device_token_v2_cipher", "device_token_v2_iv",
+                BridgeSettings.PREVIOUS_API_BASE));
+    }
+
+    @Test public void brokenSelectelV2NeverFallsBackToStaleOriginalV1() throws Exception {
+        legacy(OLD, TOKEN);
+        prefs.edit().putString("device_token_v2_cipher", "damaged")
+                .putString("device_token_v2_iv", "damaged").commit();
+        assertEquals("", store.read(CURRENT));
+        assertFalse(prefs.contains("device_token_v3_cipher"));
+    }
+
+    @Test public void incompleteSelectelV2NeverFallsBackToOriginalV1() throws Exception {
+        legacy(OLD, TOKEN);
+        prefs.edit().putString("device_token_v2_iv", "incomplete").commit();
+        assertEquals("", store.read(CURRENT));
+        assertFalse(prefs.contains("device_token_v3_cipher"));
+    }
+
+    @Test public void invalidRailwayV3DoesNotReviveOldSelectelCredential() throws Exception {
+        selectel(TOKEN);
+        store.save(CURRENT, REPLACEMENT);
+        prefs.edit().putString("device_token_v3_cipher", "broken").commit();
+        assertEquals("", store.read(CURRENT));
+        assertFalse(store.read(CURRENT).contains(TOKEN));
+    }
+
+    @Test public void failedV3CommitRetainsSelectelRecordAcrossRestart() throws Exception {
+        selectel(TOKEN);
+        Map<String, String> oldDisk = new HashMap<>(prefs.disk);
+        prefs.failCommit = true;
+        assertEquals(TOKEN, store.read(CURRENT));
+        assertEquals(oldDisk, prefs.disk);
+        Prefs afterRestart = prefs.restart();
+        assertEquals(TOKEN, create(afterRestart).read(CURRENT));
+        assertEquals(TOKEN, decryptRecord("device_token_v2_cipher", "device_token_v2_iv",
+                BridgeSettings.PREVIOUS_API_BASE));
+    }
+
+    @Test public void freshRailwayCredentialNeverOverwritesSelectelRollbackRecord() throws Exception {
+        selectel(TOKEN);
+        Map<String, String> oldDisk = new HashMap<>(prefs.disk);
+        store.save(CURRENT, REPLACEMENT);
+        assertEquals(REPLACEMENT, store.read(CURRENT));
+        for (Map.Entry<String, String> entry : oldDisk.entrySet()) {
+            assertEquals(entry.getValue(), prefs.disk.get(entry.getKey()));
+        }
     }
 
     /** Models Android's in-memory edit even when the durable commit returns false. */
