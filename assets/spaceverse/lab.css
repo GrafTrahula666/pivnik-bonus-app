@@ -13,8 +13,25 @@
   letter-spacing: .095em;
 }
 .lab-entry span:last-child { margin-left: auto; }
-.app-shell.lab-mode > .topbar,
-.app-shell.lab-mode > .bottom-nav { display: none; }
+/* Keep the legacy shell out of the Lab for the entire navigation session. */
+html.lab-session,
+html.lab-session body,
+html.lab-session body #appShell,
+html.lab-session body #appShell > main {
+  background: #080b10 !important;
+}
+html.lab-session body #appShell::before,
+html.lab-session body #appShell::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+}
+html.lab-session #appShell > :is(.topbar, .bottom-nav) { display: none; }
+
+html.lab-session .screen[data-screen="league"] .client-page-title :is(h2, p, .muted),
+html.lab-session .spaceverse-business-page-head > span:nth-child(2) strong {
+  color: #eef5ff;
+}
 
 .lab-screen.screen {
   position: fixed;
@@ -189,7 +206,11 @@
   box-shadow: 0 24px 80px #000c, inset 0 0 38px #72b7ef13;
   font: 15px/1.5 system-ui, sans-serif;
 }
-.lab-dialog::backdrop { background: #04070cba; backdrop-filter: blur(5px); }
+.lab-dialog::backdrop { background: #080b10; }
+html.lab-session :is(#achievementsModal, #wheelRulesModal).open {
+  background: #080b10;
+  backdrop-filter: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .lab-projectors-reveal .lab-projector { animation: none; }
 }

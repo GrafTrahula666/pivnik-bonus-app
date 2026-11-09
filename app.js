@@ -1250,6 +1250,7 @@ function openModal(id) {
   if (!modal) return;
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
+  if (id === 'qrModal') applyTelegramChrome();
 }
 
 function closeModal(id) {
@@ -1257,6 +1258,7 @@ function closeModal(id) {
   if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
+  if (id === 'qrModal') applyTelegramChrome();
 }
 
 function switchScreen(target, navigation = {}) {
@@ -1274,7 +1276,6 @@ function switchScreen(target, navigation = {}) {
   $('#appShell')?.classList.toggle('service-mode', target === 'staff' || target === 'admin');
   $('#appShell')?.classList.toggle('wheel-mode', target === 'wheel');
   $('#appShell')?.classList.toggle('spaceverse-business-mode', target === 'spaceverse-business');
-  $('#appShell')?.classList.toggle('lab-mode', target === 'spaceverse-lab');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (target === 'admin') loadAdmin().catch((error) => toast(error.message));
   if (target === 'staff') openStaffWorkspace().catch((error) => toast(error.message));
@@ -1341,15 +1342,14 @@ function applyDesign(design) {
   applyTelegramChrome();
 }
 
-// Telegram chrome follows the white-gold client once a profile is on screen,
-// whether or not the server published a design record.
 function applyTelegramChrome() {
-  // Halloween night skin: Telegram's own background and bottom bar go dark too, so no cream strip shows on overscroll.
-  const night = document.documentElement.classList.contains('theme-halloween');
+  const root = document.documentElement;
+  const darkSurface = root.classList.contains('lab-session') || $('#qrModal')?.classList.contains('open');
+  const night = root.classList.contains('theme-halloween');
   try {
-    tg?.setHeaderColor(night ? TELEGRAM_HEADER_COLOR : '#fbf6ef');
-    tg?.setBackgroundColor(night ? '#0b0716' : '#efe7dc');
-    tg?.setBottomBarColor(night ? '#0b0a24' : '#f8f3eb');
+    tg?.setHeaderColor(darkSurface ? '#080b10' : night ? TELEGRAM_HEADER_COLOR : '#fbf6ef');
+    tg?.setBackgroundColor(darkSurface ? '#080b10' : night ? '#0b0716' : '#efe7dc');
+    tg?.setBottomBarColor(darkSurface ? '#080b10' : night ? '#0b0a24' : '#f8f3eb');
   } catch (_) {}
 }
 
@@ -1653,6 +1653,8 @@ function pushLabHistory() {
 
 function finishLabSession() {
   labSession = false;
+  document.documentElement.classList.remove('lab-session');
+  applyTelegramChrome();
   if (!IS_VK) tg?.BackButton?.hide();
   if (history.state?.pivnikLab) {
     labLeaving = true;
@@ -1684,6 +1686,8 @@ function openSpaceverseLab() {
   screen.classList.remove('lab-projectors-reveal');
   pushLabHistory();
   labSession = true;
+  document.documentElement.classList.add('lab-session');
+  applyTelegramChrome();
   if (!IS_VK) tg?.BackButton?.show();
   switchScreen('spaceverse-lab');
   requestAnimationFrame(() => screen.classList.add('lab-projectors-reveal'));
