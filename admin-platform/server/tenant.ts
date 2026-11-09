@@ -17,21 +17,21 @@ interface VenueScopeRow extends QueryResultRow {
 
 // Exact accepted invitation scope for active, non-legacy tenant venues.
 function invitedRole(venueAlias:string,actorParam:string):string{
-  return `SELECT grant.role FROM admin_onboarding_access grant
-    JOIN admin_onboarding_invites invitation ON invitation.id=grant.invitation_id
-    WHERE grant.admin_id=${actorParam}::bigint
-      AND grant.company_id=${venueAlias}.company_id
-      AND (grant.venue_id IS NULL OR grant.venue_id=${venueAlias}.id)
+  return `SELECT assignment.role FROM admin_onboarding_access assignment
+    JOIN admin_onboarding_invites invitation ON invitation.id=assignment.invitation_id
+    WHERE assignment.admin_id=${actorParam}::bigint
+      AND assignment.company_id=${venueAlias}.company_id
+      AND (assignment.venue_id IS NULL OR assignment.venue_id=${venueAlias}.id)
       AND ${venueAlias}.legacy_bar_id IS NULL
-      AND grant.revoked_at IS NULL
-      AND grant.role IN ('owner','manager','viewer')
+      AND assignment.revoked_at IS NULL
+      AND assignment.role IN ('owner','manager','viewer')
       AND invitation.revoked_at IS NULL
       AND invitation.status='claimed' AND invitation.claimed_at IS NOT NULL
-      AND invitation.claimed_admin_id=grant.admin_id
-      AND invitation.company_id=grant.company_id
-      AND invitation.venue_id IS NOT DISTINCT FROM grant.venue_id
-      AND invitation.role=grant.role
-    ORDER BY CASE grant.role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END
+      AND invitation.claimed_admin_id=assignment.admin_id
+      AND invitation.company_id=assignment.company_id
+      AND invitation.venue_id IS NOT DISTINCT FROM assignment.venue_id
+      AND invitation.role=assignment.role
+    ORDER BY CASE assignment.role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END
     LIMIT 1`
 }
 function viewerCanRead(resource:string,child:string,grandchild:string):boolean{
