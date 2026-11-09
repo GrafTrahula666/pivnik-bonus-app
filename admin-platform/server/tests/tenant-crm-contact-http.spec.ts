@@ -723,6 +723,49 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     for(const row of audit.rows)expect(row).toMatchObject({company_id:'10',admin_id:'11'})
   })
 
+  it('same UUID with distinct payloads remains venue-local within one company',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const first=command('venue-local-first@fixture.invalid')
+    const second=command('venue-local-second@fixture.invalid',first.requestKey)
+    const before=[0,1].map(()=>({contacts:0,requests:0}))
+    for(const i of [0,1]){
+      before[i]!.contacts=Number(await count(i,'spaceverse_crm_contacts'))
+      before[i]!.requests=Number(await count(i,'spaceverse_crm_contact_create_requests'))
+    }
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1",
+      [first.requestKey])).rows[0]!.n)
+    const beforeAudits=await auditCount()
+    const a=await send('owner',path(0),first)
+    const b=await send('owner',path(1),second)
+    expect(a.status).toBe(200)
+    expect(b.status).toBe(200)
+    const receipts=[await a.json(),await b.json()]
+    expect(receipts[0].contact.email).toBe(first.contact.email)
+    expect(receipts[1].contact.email).toBe(second.contact.email)
+    for(const i of [0,1]){
+      expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(before[i]!.contacts+1)
+      expect(Number(await count(i,'spaceverse_crm_contact_create_requests'))).toBe(before[i]!.requests+1)
+    }
+    expect(await auditCount()).toBe(beforeAudits+2)
+    const cross=[await send('owner',path(0),second),await send('owner',path(1),first)]
+    for(const response of cross){
+      expect(response.status).toBe(409)
+      const denial=await response.json()
+      expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+      expect(JSON.stringify(denial)).not.toContain(first.contact.email)
+      expect(JSON.stringify(denial)).not.toContain(second.contact.email)
+    }
+    for(const i of [0,1]){
+      expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(before[i]!.contacts+1)
+      expect(Number(await count(i,'spaceverse_crm_contact_create_requests'))).toBe(before[i]!.requests+1)
+    }
+    expect(await auditCount()).toBe(beforeAudits+2)
+    expect(await (await send('owner',path(0),first)).json()).toEqual(receipts[0])
+    expect(await (await send('owner',path(1),second)).json()).toEqual(receipts[1])
+    expect(await auditCount()).toBe(beforeAudits+2)
+  })
+
   // Native PostgreSQL only: PGlite's single connection cannot model two
   // independent HTTP transactions waiting on the same Admin draft lock.
   it.skipIf(!process.env.SPACEVERSE_TEST_NATIVE_POSTGRES_URL)(
