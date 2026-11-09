@@ -48,6 +48,17 @@ html body #appShell:has(.mazut-home.active) > .topbar {
   pointer-events: none;
 }
 
+/* Last-resort visibility when a WebView exposes neither working WebGL nor 2D.
+   Normally the renderer uses the original shader or the CPU canvas fallback. */
+.mazut-stage .mazut-fluid.mazut-render-static::after {
+  content: "";
+  position: absolute;
+  inset: 19% 12% 17%;
+  border-radius: 47% 53% 52% 48% / 44% 58% 42% 56%;
+  background: #080b10;
+  box-shadow: inset 3px 5px 14px #343942, inset -9px -14px 22px #020305;
+}
+
 .mazut-stage .mazut-gesture {
   inset: 26% 18px 21%;
   touch-action: none;

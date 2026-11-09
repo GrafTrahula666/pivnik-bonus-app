@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getMazutRenderQuality } from '../assets/home-mazut/fluid.js';
+import { getMazutRenderQuality, getMazutSoftwareBudget } from '../assets/home-mazut/fluid.js';
 import { createMazutInk } from '../assets/home-mazut/ink.js';
 
 const root = (tier, lite = false) => ({
@@ -31,6 +31,26 @@ test('the lower quality presets have bounded paint and physics budgets', () => {
   assert.ok(high.spacing < balanced.spacing && balanced.spacing < low.spacing);
   assert.ok(high.step < balanced.step && balanced.step < low.step);
   assert.ok(high.sampleInterval < balanced.sampleInterval && balanced.sampleInterval < low.sampleInterval);
+});
+
+test('CPU fallback backbuffer and paint cadence shrink only on Android, not iPhone', () => {
+  const iphone = phone('iPhone', undefined, undefined);
+  const android = phone('Android 15 Pixel 8', 8, 8);
+  const original = getMazutSoftwareBudget(iphone, 'high', 16);
+  const fastGpuFallback = getMazutSoftwareBudget(android, 'high', 16);
+  const medium = getMazutSoftwareBudget(android, 'balanced', 30);
+  const weak = getMazutSoftwareBudget(android, 'low', 45);
+  assert.deepEqual(original, { maxWidth: 440, minWidth: 340, frameInterval: 16 });
+  assert.deepEqual(fastGpuFallback, { maxWidth: 340, minWidth: 270, frameInterval: 55 });
+  assert.deepEqual(medium, { maxWidth: 300, minWidth: 235, frameInterval: 55 });
+  assert.deepEqual(weak, { maxWidth: 260, minWidth: 200, frameInterval: 55 });
+  assert.ok(weak.maxWidth > weak.minWidth);
+  assert.ok(medium.maxWidth > medium.minWidth);
+  assert.ok(fastGpuFallback.maxWidth > fastGpuFallback.minWidth);
+  assert.equal(getMazutRenderQuality(root('high'), android).renderInterval, 16,
+    'GPU animation must retain the original high-performance cadence');
+  assert.equal(getMazutRenderQuality(root(), iphone).maxDpr, 2,
+    'iPhone GPU quality must remain unchanged');
 });
 
 test('without app bootstrap, Telegram class and device hints still choose safe budgets', () => {

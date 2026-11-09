@@ -57,6 +57,19 @@ try {
         await context.addInitScript((tier) => {
           Object.defineProperty(navigator, 'deviceMemory', { configurable: true, get: () => tier === 'low' ? 2 : 8 });
           Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => tier === 'low' ? 4 : 8 });
+          if (tier === 'low') {
+            // Simulate a real Android failure: context exists but fragment
+            // shader compilation is rejected by its GPU/WebView driver.
+            const originalShaderStatus = WebGLRenderingContext.prototype.getShaderParameter;
+            WebGLRenderingContext.prototype.getShaderParameter = function(shader, param) {
+              if (param === this.COMPILE_STATUS && this.canvas.closest('.mazut-fluid')) return false;
+              return originalShaderStatus.call(this, shader, param);
+            };
+            // Older Android WebViews have MediaQueryList.addListener only.
+            if (typeof MediaQueryList !== 'undefined') {
+              MediaQueryList.prototype.addEventListener = undefined;
+            }
+          }
         }, androidTier);
       }
       const page = await context.newPage();
@@ -134,6 +147,16 @@ try {
           return {
             tier: document.documentElement.dataset.pivnikPerformance,
             renderer: canvas.dataset.mazutQuality,
+            engine: canvas.dataset.mazutRenderer,
+            inkVisible: (() => {
+              if (canvas.dataset.mazutRenderer !== 'software') return null;
+              const data = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
+              if (!data) return false;
+              for (let i = 3; i < data.length; i += 64 * 4) {
+                if (data[i] > 30) return true;
+              }
+              return false;
+            })(),
             pixels: canvas.width * canvas.height,
             android: document.documentElement.classList.contains('android-webview'),
             reduced: document.documentElement.classList.contains('reduce-effects'),
@@ -145,6 +168,12 @@ try {
         assert.equal(probe.android, true, `${name}: Android WebView class missing`);
         assert.equal(probe.tier, androidTier, `${name}: bootstrap performance tier mismatch`);
         assert.equal(probe.renderer, androidTier, `${name}: Mazut performance tier mismatch`);
+        if (androidTier === 'low') {
+          assert.equal(probe.engine, 'software', `${name}: failed Android WebGL shader did not switch to 2D`);
+          assert.equal(probe.inkVisible, true, `${name}: fallback engine paints no visible Mazut`);
+        } else {
+          assert.equal(probe.engine, 'webgl', `${name}: powerful Android did not retain GPU Mazut`);
+        }
         assert.equal(probe.reduced, androidTier === 'low', `${name}: motion fallback mismatch`);
         assert.equal(probe.motion, false, `${name}: simulated motion unexpectedly reduced`);
         assert(probe.pixels > 0 && probe.canvasBounds.width > 0, `${name}: fluid renderer has no canvas`);
@@ -204,6 +233,25 @@ try {
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
       await page.locator('#qrModal [data-close="qrModal"]').click();
       await page.screenshot({ path: path.join(output, `${name}-home.png`), fullPage: false });
+      if (androidTier === 'high') {
+        // Chrome's real WEBGL_lose_context extension is not guaranteed in CI;
+        // dispatch the standard event to test recovery logic and navigation.
+        await page.locator('.mazut-fluid canvas').evaluate(canvas => {
+          canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+        });
+        await page.waitForFunction(() => {
+          const canvas = document.querySelector('.mazut-fluid canvas');
+          return canvas?.dataset.mazutRenderer === 'software' && canvas.width > 0;
+        });
+        const recovered = await page.evaluate(() => {
+          const canvas = document.querySelector('.mazut-fluid canvas');
+          const rgba = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+          for (let i = 3; i < rgba.length; i += 64 * 4) if (rgba[i] > 30) return true;
+          return false;
+        });
+        assert.equal(recovered, true, `${name}: WebGL context loss left the liquid invisible`);
+        await page.screenshot({ path: path.join(output, `${name}-context-loss-fallback.png`), fullPage: false });
+      }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `${name}: horizontal overflow`);
       const waitFor = (selector) => page.locator(selector).waitFor({ state: 'visible' });
       const open = (id) => waitFor(`#${id}[open]`);

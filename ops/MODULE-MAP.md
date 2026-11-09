@@ -1,3 +1,35 @@
+## 2026-11-09: Android Mazut renderer compatibility fallback (Draft, not deployed)
+
+The existing production Mazut on `main` can mount its stage and leave it
+transparent when Android WebGL is present but its shader compilation/link or
+framebuffer allocation fails: `createRenderer()` threw into the outer
+`enableMazutHome()` warning handler with no canvas fallback. It also relied
+on `MediaQueryList.addEventListener` and unguarded observer constructors,
+which are absent on some older WebViews. Root cause on any specific phone
+remains unconfirmed without device logs.
+
+`assets/home-mazut/fluid.js` now switches to the existing CPU/2D liquid
+renderer upon WebGL initialization or framebuffer failure, allocating a fresh
+canvas when WebGL already owns the old one. The ink overlay is rebound to
+that new canvas. A WebGL context-loss event also activates 2D instead of
+leaving the old canvas transparent. Missing MediaQueryList modern listeners,
+ResizeObserver or IntersectionObserver no longer abort initialization.
+A static dark liquid silhouette is the last fallback only when both graphics
+contexts are unavailable. Android-only CPU fallback limits offscreen width to
+260/300/340 px for LOW/balanced/HIGH, throttles software paints to at most
+roughly 18 fps, and further reduces backing resolution if sustained paints
+exceed 24 ms. **The existing iOS and desktop budgets are byte-for-byte
+preserved in the policy**, and the normal Android GPU render loop and fluid
+physics, shader, viscosity `1.265`, status, QR, bonuses, navigation and server
+routes remain unchanged. The new pure `getMazutSoftwareBudget` is covered
+by separate explicit Android/iOS policy assertions.
+
+The existing Telegram/VK Lab smoke injects a broken Android GPU shader and
+legacy MediaQueryList implementation, then asserts the actual 2D canvas
+contains painted pixels; HIGH Android must still use WebGL. Cache-versioned
+assets ensure old WebView copies do not mask a subsequent approved release.
+Full CI and **physical Android tests** are required before merge/deploy.
+
 ## 2026-11-08: Mazut home mobile layout correction (dependent Draft)
 
 The approved Mazut home relocates the original `#heroQrButton`, profile

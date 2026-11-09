@@ -28,7 +28,7 @@ async function enableMazutHome() {
 
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/assets/home-mazut/home.css?v=8';
+  stylesheet.href = '/assets/home-mazut/home.css?v=9';
   const cssReady = new Promise((resolve, reject) => {
     stylesheet.onload = resolve;
     stylesheet.onerror = reject;
@@ -130,7 +130,7 @@ async function enableMazutHome() {
   });
   home.prepend(stage);
   home.classList.add('mazut-home');
-  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=5');
+  const { mountMazutFluid } = await import('/assets/home-mazut/fluid.js?v=7');
   fluid = mountMazutFluid({
     card: stage,
     layer: slot('.mazut-fluid'),

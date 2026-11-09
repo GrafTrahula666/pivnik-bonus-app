@@ -27,13 +27,27 @@ export function getMazutRenderQuality(root, device) {
   };
 }
 
+// The CPU renderer is a safety net for Android WebView, not another full-resolution
+// GPU path. On iPhone and desktops preserve every previous software budget.
+export function getMazutSoftwareBudget(device, quality, renderInterval) {
+  const low = quality === 'low';
+  const balanced = quality === 'balanced';
+  const android = /Android/i.test(device.userAgent || '');
+  return {
+    maxWidth: android ? (low ? 260 : balanced ? 300 : 340)
+      : (low ? 320 : balanced ? 380 : 440),
+    minWidth: android ? (low ? 200 : balanced ? 235 : 270)
+      : (low ? 240 : balanced ? 300 : 340),
+    frameInterval: android ? Math.max(renderInterval, 55) : renderInterval
+  };
+}
+
 export function mountMazutFluid({card, layer, canvas, isPaused}) {
   const {quality, maxPixels, maxDpr, renderInterval, sampleInterval, spacing, step}
     = getMazutRenderQuality(document.documentElement, navigator);
-  const lowQuality = quality === 'low';
-  const balancedQuality = quality === 'balanced';
-  const updateInk = createMazutInk(canvas, card.querySelectorAll("[data-mazut-ink]"),
-    sampleInterval);
+  const softwareBudget = getMazutSoftwareBudget(navigator, quality, renderInterval);
+  const inkTargets = card.querySelectorAll("[data-mazut-ink]");
+  let updateInk = createMazutInk(canvas, inkTargets, sampleInterval);
   // Read-only diagnostics for mobile WebView performance acceptance.
   canvas.dataset.mazutQuality = quality;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
@@ -273,10 +287,35 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       vec3 reflectance=max(0.,metal-blackPoint)*mix(bodyTint,warm,tone)+line*mix(edgeTint,warm,tone);
       gl_FragColor=vec4(reflectance*shine,a);
     }`;
+  function useSoftwareRenderer(error, replaceCanvas = false) {
+    // A canvas that already owns WebGL cannot also supply a 2D context.
+    // Android WebViews may expose WebGL but fail to compile/link shaders.
+    if (replaceCanvas) {
+      const replacement = document.createElement('canvas');
+      replacement.className = canvas.className;
+      replacement.dataset.mazutQuality = quality;
+      canvas.replaceWith(replacement);
+      canvas = replacement;
+      updateInk = createMazutInk(canvas, inkTargets, sampleInterval);
+    }
+    gl = null;
+    gfx = null;
+    software = null;
+    try { ctx = canvas.getContext('2d', {alpha:true}); }
+    catch { ctx = null; }
+    canvas.dataset.mazutRenderer = ctx ? 'software' : 'static';
+    layer.classList.toggle('mazut-render-static', !ctx);
+    if (error) console.warn('PIVNIK Mazut: WebGL unavailable; using fallback rendering', String(error.message || error).slice(0, 180));
+  }
   function createRenderer(){
-    gl=canvas.getContext('webgl',{alpha:true,premultipliedAlpha:false,antialias:false});
-    if(!gl){ctx=canvas.getContext('2d');return;}
-    function program(v,f){
+    gfx = null;
+    ctx = null;
+    gl = null;
+    try {
+      gl=canvas.getContext('webgl',{alpha:true,premultipliedAlpha:false,antialias:false});
+      if(!gl){ useSoftwareRenderer(); return; }
+      if(gl.isContextLost()) throw new Error('WebGL context lost');
+      function program(v,f){
       const p=gl.createProgram();
       for(const [kind,source] of [[gl.VERTEX_SHADER,v],[gl.FRAGMENT_SHADER,f]]){
         const shader=gl.createShader(kind);gl.shaderSource(shader,source);gl.compileShader(shader);
@@ -302,8 +341,13 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
       world:gl.getUniformLocation(splat,'world'),extent:gl.getUniformLocation(splat,'extent'),
       pixel:gl.getUniformLocation(surface,'pixel'),tilt:gl.getUniformLocation(surface,'tilt'),gold:gl.getUniformLocation(surface,'gold'),clock:gl.getUniformLocation(surface,'clock'),
       bodyTint:gl.getUniformLocation(surface,'bodyTint'),edgeTint:gl.getUniformLocation(surface,'edgeTint'),shine:gl.getUniformLocation(surface,'shine'),blackPoint:gl.getUniformLocation(surface,'blackPoint')};
+      canvas.dataset.mazutRenderer = 'webgl';
+      layer.classList.remove('mazut-render-static');
+    } catch (error) {
+      useSoftwareRenderer(error, Boolean(gl));
+    }
   }
-  function resizeSoftware(limit=lowQuality?320:balancedQuality?380:440){
+  function resizeSoftware(limit=softwareBudget.maxWidth){
     const surface=document.createElement('canvas');
     const w=surface.width=Math.min(limit,canvas.width);
     const h=surface.height=Math.round(w*H/W);
@@ -365,7 +409,7 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(surface,0,0,canvas.width,canvas.height);
     slowPaints=performance.now()-started>24 ? slowPaints+1 : Math.max(0,slowPaints-1);
-    const softwareFloor=lowQuality?240:balancedQuality?300:340;
+    const softwareFloor=softwareBudget.minWidth;
     if(slowPaints>=10&&w>softwareFloor){slowPaints=0;resizeSoftware(Math.max(softwareFloor,Math.round(w*.84)));}
   }
   function resize(){
@@ -379,17 +423,27 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
     if(canvas.width!==canvasWidth) canvas.width=canvasWidth;
     if(canvas.height!==canvasHeight) canvas.height=canvasHeight;
     if(gfx){
-      const aspect=canvas.height/canvas.width;
-      const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
-      const width=Math.max(1,Math.floor(Math.min(canvas.width,1000,maxTexture,
-        maxTexture/aspect,Math.sqrt(maxPixels/aspect))));
-      const height=Math.max(1,Math.round(width*aspect));
-      if(gfx.width!==width||gfx.height!==height){
-        gfx.width=width;gfx.height=height;
-        gl.bindTexture(gl.TEXTURE_2D,gfx.texture);
-        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gfx.width,gfx.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      try {
+        const aspect=canvas.height/canvas.width;
+        const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+        if(!Number.isFinite(maxTexture)||maxTexture<64) throw new Error('WebGL texture limit unavailable');
+        const width=Math.max(1,Math.floor(Math.min(canvas.width,1000,maxTexture,
+          maxTexture/aspect,Math.sqrt(maxPixels/aspect))));
+        const height=Math.max(1,Math.round(width*aspect));
+        if(gfx.width!==width||gfx.height!==height){
+          gfx.width=width;gfx.height=height;
+          gl.bindTexture(gl.TEXTURE_2D,gfx.texture);
+          gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gfx.width,gfx.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER,gfx.fbo);
+        const status=gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+        if(status!==gl.FRAMEBUFFER_COMPLETE) throw new Error('WebGL framebuffer incomplete');
+      } catch (error) {
+        useSoftwareRenderer(error, true);
       }
-    }else if(ctx) resizeSoftware();
+    }
+    if(ctx) resizeSoftware();
     paint();
   }
   function paint(blend=1){
@@ -459,7 +513,10 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   function animate(now){
     frame=0;
     if(document.hidden||reduced.matches||isPaused()||!inView) return;
-    if(lastPaint && now-lastPaint<renderInterval){
+    // Only the Android CPU fallback is throttled; WebGL keeps the original
+    // per-device target and iOS keeps its original software cadence.
+    const interval=ctx ? softwareBudget.frameInterval : renderInterval;
+    if(lastPaint && now-lastPaint<interval){
       frame=requestAnimationFrame(animate);
       return;
     }
@@ -495,17 +552,29 @@ export function mountMazutFluid({card, layer, canvas, isPaused}) {
   for(const event of ['pointerup','pointercancel','lostpointercapture','pointerleave']){
     card.addEventListener(event,release,{passive:true});
   }
-  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();gfx=null;});
-  canvas.addEventListener('webglcontextrestored',()=>{createRenderer();resize();});
-  new ResizeObserver(resize).observe(layer);
-  new IntersectionObserver(([entry])=>{
-    inView=entry.isIntersecting;
+  canvas.addEventListener('webglcontextlost',event=>{
+    event.preventDefault();
+    // Do not leave a transparent canvas behind until the GPU recovers.
+    useSoftwareRenderer(new Error('WebGL context lost'), true);
+    resize();
     syncAnimation();
-  }).observe(card);
+  });
+  if(typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(layer);
+  else window.addEventListener('resize',resize);
+  if(typeof IntersectionObserver === 'function'){
+    new IntersectionObserver(([entry])=>{
+      inView=entry.isIntersecting;
+      syncAnimation();
+    }).observe(card);
+  } else {
+    inView=true;
+  }
   document.addEventListener('visibilitychange',syncAnimation);
-  reduced.addEventListener('change',syncAnimation);
+  if(typeof reduced.addEventListener === 'function') reduced.addEventListener('change',syncAnimation);
+  else reduced.addListener?.(syncAnimation);
   createRenderer();
   resize();
+  if(inView) syncAnimation();
   return {
     sync:syncAnimation,
     enableTilt(){window.addEventListener('deviceorientation',onTilt,{passive:true});},
