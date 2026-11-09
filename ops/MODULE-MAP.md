@@ -1850,6 +1850,13 @@ isolation.
   `scripts/check-evotor-redemption-concurrency.mjs` is restricted to a fresh local
   `evotor_redemption_test` DB; the integration workflow runs it against PostgreSQL17.
 
+- Direct Railway APK candidate (2026-11-09, 1.0.19/code23, unmerged/unshipped):
+  `BridgeSettings` points to the existing Railway POS hostname;
+  `DeviceCredentialStore` promotes exact Selectel-AAD v2 ciphertext into
+  separate Railway-AAD v3 slots without deleting old data or changing Keystore
+  alias. Damaged/newer slots fail closed. No server/proxy/cashier changes.
+  `ops/EVOTOR-RAILWAY-DIRECT-20261109.md` records mandatory physical proxy
+  acceptance, signing certificate and version-safe rollback.
 - Selectel ingress draft (2026-10-16,1.0.12/code16): `BridgeSettings` uses the
   verified separate `/evotor` ingress on the existing Selectel hostname.
   `DeviceCredentialStore` explicitly migrates only the old production AAD into
