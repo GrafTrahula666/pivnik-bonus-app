@@ -291,6 +291,31 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect([403,404]).toContain((await send('owner',path(2),c)).status)
     expect(state.targetResolutions).toBe(0)
   })
+  it('fails closed when the registered tenant database disappears without writing or auditing',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const manifest=fixture.manifests[0]!
+    const target=state.targets.get(manifest.runtimeKey)!
+    const contactsBefore=await count(0,'spaceverse_crm_contacts')
+    const requestsBefore=await count(0,'spaceverse_crm_contact_create_requests')
+    const auditsBefore=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    state.targets.delete(manifest.runtimeKey)
+    try{
+      const c=command('unavailable-target@fixture.invalid')
+      const response=await send('owner',path(),c)
+      expect(response.status).not.toBe(200)
+      expect([403,404,503]).toContain(response.status)
+      expect(JSON.stringify(await response.json())).not.toContain(c.contact.email)
+      expect(await count(0,'spaceverse_crm_contacts')).toBe(contactsBefore)
+      expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(requestsBefore)
+      expect((await fixture.metadata.query<{n:string}>(
+        "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+      )).rows[0]!.n).toBe(auditsBefore)
+    }finally{
+      state.targets.set(manifest.runtimeKey,target)
+    }
+  })
   it('creates one unlinked contact and audits scope; same key replays exactly once',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('idempotent@fixture.invalid')
