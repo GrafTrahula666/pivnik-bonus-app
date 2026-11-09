@@ -45,8 +45,7 @@ import {
   drawWheelPrize,
   freeSpinState,
   paidSpinCost,
-  wheelFreeIntervalHours,
-  wheelPrizeChances
+  wheelFreeIntervalHours
 } from './wheel.js';
 import {
   adminUserCrmStatus,
@@ -1898,8 +1897,7 @@ async function getTelegramWheelStatus(userId, db = pool, nowValue = null) {
     unlimitedBonus,
     firstPaidCost: paidSpinCost(0),
     laterPaidCost: paidSpinCost(1),
-    freeIntervalHours: wheelFreeIntervalHours(),
-    prizes: wheelPrizeChances()
+    freeIntervalHours: wheelFreeIntervalHours()
   };
 }
 

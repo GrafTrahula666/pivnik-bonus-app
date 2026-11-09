@@ -1,0 +1,89 @@
+.wheel-screen.active {
+  min-height: 100dvh;
+  padding: 16px 12px 28px;
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, #080b10 12%, #0c17234d 32%, #080f18 76%),
+    #080f18 url("lab-observatory.webp") center 32% / cover no-repeat;
+  color: #e9f5ff;
+}
+
+.wheel-lab-brand {
+  margin: 0;
+  color: #ead8b7;
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-align: center;
+}
+
+.wheel-screen .wheel-page-head { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.wheel-screen .wheel-head-spacer { width: auto; }
+.wheel-screen .wheel-page-head h2 {
+  color: #f0ddbb;
+  font-size: clamp(16px, 5vw, 24px);
+  white-space: normal;
+}
+html body .wheel-screen #wheelBackButton {
+  width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  border-color: #8ba3bd82 !important;
+  background: #13283b !important;
+  box-shadow: none !important;
+  color: #d8eeff !important;
+  font-size: 0 !important;
+}
+.wheel-screen #wheelBackButton::before {
+  content: "←";
+  font-size: 23px;
+}
+
+.wheel-screen .wheel-stage { min-height: 0; padding-top: 20px; }
+.wheel-screen .wheel-rim {
+  width: min(100%, 390px);
+  border: clamp(4px, 1.4vw, 8px) solid #8e7654;
+  background: #101e2a;
+  box-shadow: 0 0 0 2px #c9e8ff72, 0 0 0 5px #102236, 0 10px 36px #000b;
+}
+
+.wheel-screen .wheel-pointer {
+  top: 8px;
+  width: 30px;
+  height: 33px;
+  border: 0;
+  background: linear-gradient(180deg, #d0b181 10%, #89e2ff 35%, #275370 80%);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.wheel-lab-prize {
+  justify-self: center;
+  margin: 8px 0 0;
+  padding: 8px 18px;
+  border: 1px solid #8499ad80;
+  border-radius: 14px;
+  background: #152333;
+  color: #f0ddbb;
+  font-size: 13px;
+  text-align: center;
+}
+
+.wheel-screen .wheel-spin-button {
+  border-color: #81d4ff;
+  background: linear-gradient(180deg, #2a6186, #142d43 60%, #1e4e70);
+  box-shadow: inset 0 0 12px #86ddff55, 0 0 20px #36adf944;
+  color: #e9f8ff;
+}
+
+.wheel-screen .wheel-history {
+  border-color: #7c9ab64d;
+  background: #111f30;
+}
+
+.wheel-screen :is(.wheel-availability-line, .wheel-control-card p, .wheel-control-card small,
+  .wheel-history h3, .wheel-history-list, .wheel-history-row small,
+  .wheel-result span, .wheel-rules-link) {
+  color: #c0d6e9;
+}
+
+.wheel-screen :is(.wheel-result strong, .wheel-history-row strong) { color: #f0ddbb; }
+.wheel-screen .wheel-availability-line > i { background: #8cdfff; }

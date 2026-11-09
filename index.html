@@ -9,12 +9,13 @@
   <script defer src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <link rel="stylesheet" href="styles.css?v=20.9-service-entry-canonical-profile-placement-20260925-league-portrait-20260925-v2-home-cards-20260926-wheel-approved-history-20260929-white-gold-creator-above-v2-20261105-android-motion-20261108" />
   <link rel="stylesheet" href="/service-white-gold.css?v=20.8-service-white-gold" />
-  <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926-wheel-approved-history-20260929-white-gold-creator-above-v2-20261105-android-motion-20261108-lab-20261108"></script>
+  <script defer src="app.js?v=20.9-service-entry-canonical-profile-placement-20260925-wheel-reference-20260926-wheel-approved-history-20260929-white-gold-creator-above-v2-20261105-android-motion-20261108-lab-20261109"></script>
   <script defer src="/red-cosmos-v2.js?v=2.0.0"></script>
   <link rel="stylesheet" href="/assets/spaceverse/lab.css?v=4" />
   <link rel="stylesheet" href="/pos-admin.css?v=2" />
   <script defer src="/pos-admin.js?v=2"></script>
   <script defer src="/assets/home-mazut/home.js?v=10"></script>
+  <link rel="stylesheet" href="/assets/spaceverse/wheel.css?v=1" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" aria-live="polite">
@@ -296,6 +297,7 @@
       </section>
       <!-- telegram-wheel:start -->
       <section class="screen client-screen wheel-screen" data-screen="wheel">
+        <p class="wheel-lab-brand" aria-hidden="true">ПИВНИК · SPACEVERSE LAB</p>
         <div class="wheel-page-head">
           <button class="icon-btn wheel-back" id="wheelBackButton" type="button" aria-label="Назад">‹</button>
           <h2>Колесо Пивника</h2>
@@ -307,7 +309,7 @@
         <div class="wheel-stage">
           <div class="wheel-pointer" aria-hidden="true"></div>
           <div class="wheel-rim" id="wheelRim">
-            <img class="wheel-disk" id="wheelDisk" src="/assets/home-v2/wheel-approved-20260929.png" alt="Колесо с призами" decoding="async" />
+            <img class="wheel-disk" id="wheelDisk" src="/assets/spaceverse/lab-wheel-disc.webp" alt="Колесо с призами" decoding="async" />
           </div>
           <div class="wheel-result" id="wheelResult" aria-live="polite" aria-hidden="true">
             <span id="wheelResultKicker">Ваше вращение готово</span>
@@ -315,6 +317,7 @@
           </div>
         </div>
 
+        <p class="wheel-lab-prize">Бесплатное пиво 0,5 л</p>
         <div class="wheel-control-card">
           <button class="primary full wheel-spin-button" id="wheelSpinButton" type="button">Крутить бесплатно</button>
           <p id="wheelNextFreeHint">Следующее бесплатное вращение — через 24 часа после этого.</p>
@@ -616,26 +619,16 @@
         </details>
 
         <details class="help-section">
-          <summary><span>2</span><b>Вероятности призов</b></summary>
+          <summary><span>2</span><b>Призы</b></summary>
           <div class="help-text">
-            <p>Результат определяет сервер с помощью криптографически стойкого генератора. Сначала выбирается один из 500 000 базовых билетов. Единственный билет годового приза дополнительно проходит независимую проверку 50/50, поэтому итоговый шанс главного приза составляет ровно 1 из 1 000 000.</p>
-            <ul class="wheel-odds-list" id="wheelOddsList">
-              <li><b>5 бонусов</b><span>40%</span></li>
-              <li><b>10 бонусов</b><span>20%</span></li>
-              <li><b>20 бонусов</b><span>20%</span></li>
-              <li><b>50 бонусов</b><span>10%</span></li>
-              <li><b>100 бонусов</b><span>5%</span></li>
-              <li><b>Бокал пива</b><span>4,9999%</span></li>
-              <li><b>Годовой запас пива</b><span>0,0001% · 1 из 1 000 000</span></li>
-            </ul>
-            <p>Размер и количество нарисованных секторов не задают вероятность. Крупный переливающийся сектор годового запаса является визуальным акцентом; серверный шанс остаётся 1 из 1 000 000.</p>
+            <p>Призы акции — 5, 10, 20, 50 и 100 бонусов, 0,5 л бесплатного пива и годовой запас пива. Результат определяет сервер. Размер и количество секторов служат оформлением колеса.</p>
           </div>
         </details>
 
         <details class="help-section">
           <summary><span>3</span><b>Получение призов</b></summary>
           <div class="help-text">
-            <p>Бонусные призы зачисляются на бонусный счёт сразу после серверной фиксации результата. «Бокал пива» означает 0,5 л подарочного разливного пива и отражается в подарочном балансе.</p>
+            <p>Бонусные призы зачисляются на бонусный счёт сразу после серверной фиксации результата. Бесплатное пиво 0,5 л зачисляется на подарочный баланс.</p>
             <p>«Годовой запас пива» означает право получать один бокал объёмом 0,5 л в день в течение 365 последовательных дней. Приз не обменивается на деньги, выдаётся совершеннолетнему победителю лично в баре после подтверждения возраста и результата в журнале системы.</p>
             <p>Для годового приза система создаёт отдельную именную запись с датами начала и окончания. Порядок ежедневной выдачи согласуется с победителем по контактам его Telegram-профиля.</p>
           </div>

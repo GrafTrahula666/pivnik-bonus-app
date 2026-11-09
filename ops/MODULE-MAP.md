@@ -78,6 +78,12 @@ changes are required.
 client and VK bundle with fixture APIs. `test/league-seasons.test.js`
 checks the historical query in PGlite and both HTTP bindings.
 
+The 2026-11-09 wheel skin uses the approved Lab disk and its 16 pictured
+sector centers. The fixed pointer still aligns with the server-selected prize.
+Guest rules and gateway wheel status omit odds. The internal Business overview
+retains its configured chances. Spin prices, cooldown, prize values and server
+draw logic are preserved.
+
 ## Temporary white-gold restoration (2026-11-05, review branch)
 
 `app.js:applyDesign` ignores the stale published Halloween skin without changing

@@ -29,14 +29,19 @@ test('Approved image is the spinning disk and reward stops match its pictured la
     readFile(new URL('app.js', root), 'utf8'),
     readFile(new URL('styles.css', root), 'utf8'),
     readFile(new URL('index.html', root), 'utf8'),
-    readFile(new URL('assets/home-v2/wheel-approved-20260929.png', root))
+    readFile(new URL('assets/spaceverse/lab-wheel-disc.webp', root))
   ]);
-  assert.equal(image.subarray(1, 4).toString(), 'PNG');
-  assert.match(index, /<img class="wheel-disk" id="wheelDisk" src="\/assets\/home-v2\/wheel-approved-20260929\.png"/);
+  assert.equal(image.subarray(8, 12).toString(), 'WEBP');
+  assert.match(index, /<img class="wheel-disk" id="wheelDisk" src="\/assets\/spaceverse\/lab-wheel-disc\.webp"/);
   assert.match(styles, /\.wheel-screen \.wheel-disk\s*\{[\s\S]*?background: none;/);
-  assert.match(app, /'annual-beer', 'beer-glass', 'bonus-100', 'bonus-5'/);
-  assert.match(app, /'bonus-5', null,/);
-  assert.match(app, /\.filter\(\(sector\) => sector\.code\)/);
+  const sectors = [...app.matchAll(/\{ code: '([a-z0-9-]+)', center: (\d+) \}/g)]
+    .map(([, code, center]) => [code, Number(center)]);
+  assert.deepEqual(sectors, [
+    ['annual-beer', 0], ['bonus-100', 24], ['beer-glass', 49], ['bonus-10', 72],
+    ['bonus-20', 92], ['beer-glass', 116], ['bonus-5', 134], ['bonus-50', 156],
+    ['beer-glass', 180], ['bonus-100', 202], ['bonus-10', 224], ['beer-glass', 246],
+    ['bonus-20', 268], ['bonus-5', 288], ['beer-glass', 310], ['bonus-50', 336]
+  ]);
   assert.match(app, /visualSectorForPrize\(data\.spin\?\.prize\?\.code\)/);
 });
 
@@ -57,4 +62,17 @@ test('Wheel screen keeps functional controls and a personal history', async () =
   assert.match(styles, /\.wheel-screen \.wheel-emblem \{ display: none !important; \}/);
   assert.match(gateway, /WHERE user_id = \$1::bigint\s+ORDER BY created_at DESC, id DESC\s+LIMIT 20/);
   assert.match(gateway, /url\.pathname === '\/api\/wheel\/history'[\s\S]*?requireGatewayUser\(req\)[\s\S]*?getWheelHistory\(user\.id\)/);
+});
+
+test('Guest wheel rules and status do not publish internal prize chances', async () => {
+  const [index, gateway, business] = await Promise.all([
+    readFile(new URL('index.html', root), 'utf8'),
+    readFile(new URL('universal-server.js', root), 'utf8'),
+    readFile(new URL('server.js', root), 'utf8')
+  ]);
+  const rules = index.slice(index.indexOf('id="wheelRulesModal"'), index.indexOf('id="qrModal"'));
+  assert.match(rules, /0,5 л бесплатного пива/);
+  assert.doesNotMatch(rules, /wheelOddsList|\d%|1 из 1 000 000/);
+  assert.doesNotMatch(gateway, /wheelPrizeChances|chancePercent/);
+  assert.match(business, /prizes: wheelPrizeChances\(\)/);
 });

@@ -222,6 +222,12 @@ try {
       await page.locator('#labWheel').click();
       await waitFor('#wheelDisk');
       await textIs('#wheelHistory', '20 бонусов');
+      const disk = page.locator('#wheelDisk');
+      await disk.evaluate(image => image.decode());
+      assert.equal(await disk.getAttribute('src'), '/assets/spaceverse/lab-wheel-disc.webp');
+      assert.equal(await disk.evaluate(image => image.naturalWidth === image.naturalHeight), true);
+      assert.equal(await page.locator('.wheel-lab-prize').innerText(), 'Бесплатное пиво 0,5 л');
+      assert.equal(await page.locator('.wheel-page-head h2').evaluate(title => title.scrollWidth <= title.clientWidth), true);
       await page.locator('#openWheelRulesButton').click();
       await waitFor('#wheelRulesModal.open');
       if (platform === 'telegram') await page.evaluate(() => window.fixtureTelegramBack());
@@ -230,6 +236,8 @@ try {
       if (width === 390) {
         await page.locator('#wheelSpinButton').click();
         await textIs('#wheelResultTitle', '20 бонусов');
+        const rotation = await disk.evaluate(image => Number(image.style.transform.match(/rotate\((\d+)deg\)/)?.[1]));
+        assert([92, 268].includes((360 - rotation % 360) % 360), 'The pointer must stop on a 20-bonus sector');
         assert.equal(await page.locator('#wheelSpinButton').isDisabled(), true);
         const spins = calls.filter(c => c.path === '/api/wheel/spin');
         assert.equal(spins.length, 1);
