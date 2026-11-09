@@ -92,7 +92,16 @@ try {
       const profile = { id: '4242', provider: platform, firstName: 'Lab', lastName: 'QA', role: 'user', balance: 321, termsAccepted: true, onboardingComplete: true, avatarSource: 'preset_male', profileFrame: 'none', totalLiters: 12.5, beerProgressLiters: 3, beerGiftLiters: 0, status: { name: 'Путник', bonusPercent: 5 }, privacy: {} };
       const payload = { token: 'fixture-session', profile, statuses: [], design: null };
       await page.addInitScript(() => {
-        window.Telegram = { WebApp: { initData: 'fixture-init', ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {}, setBottomBarColor() {}, BackButton: { onClick(handler) { window.fixtureTelegramBack = handler; }, show() {}, hide() {} } } };
+        window.fixtureTelegramSwipesEnabled = true;
+        window.Telegram = { WebApp: {
+          initData: 'fixture-init',
+          ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {}, setBottomBarColor() {},
+          isVersionAtLeast() { return true; },
+          get isVerticalSwipesEnabled() { return window.fixtureTelegramSwipesEnabled; },
+          disableVerticalSwipes() { window.fixtureTelegramSwipesEnabled = false; },
+          enableVerticalSwipes() { window.fixtureTelegramSwipesEnabled = true; },
+          BackButton: { onClick(handler) { window.fixtureTelegramBack = handler; }, show() {}, hide() {} }
+        } };
       });
       await page.route('**/*', async route => {
         const request = route.request();
@@ -229,9 +238,16 @@ try {
         assert.equal(background.color, expectedStone, `${name}: ${element} has the wrong background color`);
         assert.equal(background.image, 'none', `${name}: old background image on ${element}`);
       }
+      const guardExpected = platform === 'telegram' && Boolean(androidTier);
+      const waitForTelegramSwipes = (enabled) => page.waitForFunction(
+        expected => window.fixtureTelegramSwipesEnabled === expected, enabled
+      );
+      await waitForTelegramSwipes(!guardExpected);
       await page.locator('#heroQrButton').click();
       await page.waitForFunction(() => document.querySelector('#qrModal').classList.contains('open') && document.querySelector('#qrToken').textContent === 'QA4242');
+      await waitForTelegramSwipes(true);
       await page.locator('#qrModal [data-close="qrModal"]').click();
+      await waitForTelegramSwipes(!guardExpected);
       await page.screenshot({ path: path.join(output, `${name}-home.png`), fullPage: false });
       if (androidTier === 'high') {
         // Chrome's real WEBGL_lose_context extension is not guaranteed in CI;
@@ -261,8 +277,51 @@ try {
       const authCalls = () => calls.filter(c => c.path === '/api/auth' || c.path === '/api/bootstrap').length;
       const initialAuthCalls = authCalls();
 
+      if (androidTier === 'low') {
+        // Observe the actual software canvas move without any pointer input.
+        const baseline = await page.locator('.mazut-fluid canvas').evaluate(canvas => {
+          const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+          const alpha = [];
+          for (let i = 3; i < data.length; i += 256) alpha.push(data[i]);
+          return alpha;
+        });
+        await page.waitForFunction(alpha => {
+          const canvas = document.querySelector('.mazut-fluid canvas');
+          const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+          return alpha.filter((value, i) => Math.abs(value - data[3 + i * 256]) > 35).length > 12;
+        }, baseline, { polling: 250, timeout: 5000 });
+      }
+
+      if (androidTier === 'high') {
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+        const start = await page.locator('.mazut-gesture').evaluate(gesture => {
+          const rect = gesture.getBoundingClientRect();
+          const start = { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + 8) };
+          const probe = window.fixtureMazutTouch = { moved: false, cancelled: false };
+          const stage = gesture.closest('.mazut-stage');
+          stage.addEventListener('pointerdown', event => {
+            probe.startedOnGesture = event.target === gesture;
+          }, { once: true });
+          stage.addEventListener('pointermove', event => {
+            if (event.pointerType === 'touch' && stage.hasPointerCapture(event.pointerId)) probe.moved = true;
+          });
+          stage.addEventListener('pointercancel', () => { probe.cancelled = true; }, { once: true });
+          return start;
+        });
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+        for (const offset of [24, 62, 110]) {
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...start, y: start.y + offset }] });
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await cdp.detach();
+        assert.deepEqual(await page.evaluate(() => window.fixtureMazutTouch),
+          { startedOnGesture: true, moved: true, cancelled: false }, `${name}: vertical touch must reach Mazut from its top`);
+      }
+
       await page.locator('.mazut-lab').click();
       await screen('spaceverse-lab');
+      await waitForTelegramSwipes(true);
       assert.equal(await page.locator('.lab-projector:visible').count(), 5);
       await page.locator('#labGuide').click();
       await page.locator('#labWelcomeContinue').click();
@@ -378,6 +437,7 @@ try {
       await page.screenshot({ path: path.join(output, `${name}-lab.png`) });
       await page.locator('#labBack').click();
       await screen('client');
+      await waitForTelegramSwipes(!guardExpected);
       await page.waitForFunction(() => !history.state?.pivnikLab);
       await page.locator('.mazut-lab').click();
       await screen('spaceverse-lab');
