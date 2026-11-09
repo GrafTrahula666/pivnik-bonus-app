@@ -723,6 +723,34 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     for(const row of audit.rows)expect(row).toMatchObject({company_id:'10',admin_id:'11'})
   })
 
+  it('rejects a changed phone on a successful UUID replay without mutating the contact or audit',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const original=command('phone-replay-guard@fixture.invalid')
+    const changed={...original,contact:{...original.contact,phone:'+79995550001'}}
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1",
+      [original.requestKey])).rows[0]!.n)
+    const auditsBefore=await audits()
+    const created=await send('owner',path(),original)
+    expect(created.status).toBe(200)
+    const receipt=await created.json()
+    const conflict=await send('owner',path(),changed)
+    expect(conflict.status).toBe(409)
+    const denial=await conflict.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denial)).not.toContain(original.contact.email)
+    expect(JSON.stringify(denial)).not.toContain(changed.contact.phone)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await audits()).toBe(auditsBefore+1)
+    const replay=await send('owner',path(),original)
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+    expect(await audits()).toBe(auditsBefore+1)
+  })
+
   it('same UUID with distinct payloads remains venue-local within one company',async()=>{
     config.enableTenantCrmContactCreate=true
     const first=command('venue-local-first@fixture.invalid')
