@@ -45,8 +45,6 @@ export function getMazutSoftwareBudget(device, quality, renderInterval) {
 export function mountMazutFluid({card, layer, canvas, isPaused}) {
   const {quality, maxPixels, maxDpr, renderInterval, sampleInterval, spacing, step}
     = getMazutRenderQuality(document.documentElement, navigator);
-  const lowQuality = quality === 'low';
-  const balancedQuality = quality === 'balanced';
   const softwareBudget = getMazutSoftwareBudget(navigator, quality, renderInterval);
   const inkTargets = card.querySelectorAll("[data-mazut-ink]");
   let updateInk = createMazutInk(canvas, inkTargets, sampleInterval);
