@@ -19,6 +19,8 @@ final class DeviceCredentialStore {
     private static final String IV = "device_token_iv";
     private static final String CURRENT_CIPHER = "device_token_v2_cipher";
     private static final String CURRENT_IV = "device_token_v2_iv";
+    private static final String DIRECT_CIPHER = "device_token_v3_cipher";
+    private static final String DIRECT_IV = "device_token_v3_iv";
     private final SharedPreferences prefs;
     private final Keys keys;
     private final Encoding encoding;
@@ -58,20 +60,25 @@ final class DeviceCredentialStore {
 
     synchronized String read(String origin) {
         try {
-            // A present but invalid current record fails closed. Never silently revive
-            // an older identity after the owner replaced the credential.
-            if (prefs.contains(CURRENT_CIPHER) || prefs.contains(CURRENT_IV)) {
-                return decrypt(origin, CURRENT_CIPHER, CURRENT_IV);
-            }
             if (!BridgeSettings.DEFAULT_API_BASE.equals(origin)) return "";
-            String legacy = decrypt(BridgeSettings.LEGACY_API_BASE, CIPHER, IV);
-            if (!PosConfiguration.validToken(legacy)) return "";
-            // New slots preserve the exact old encrypted record even if commit fails.
-            // It remains available on restart and for an APK rollback, with the same
-            // non-exportable Android key. No plaintext preference or log is written.
-            try { save(origin, legacy); }
-            catch (IllegalStateException error) { /* Retry promotion after restart; old encrypted record is intact. */ }
-            return legacy;
+            // An invalid or incomplete direct Railway record never revives an old identity.
+            if (prefs.contains(DIRECT_CIPHER) || prefs.contains(DIRECT_IV)) {
+                return decrypt(origin, DIRECT_CIPHER, DIRECT_IV);
+            }
+            // v2 was sealed using the exact installed Selectel base (AAD).
+            // A damaged v2 record must NOT silently fall back to v1.
+            final String previous;
+            if (prefs.contains(CURRENT_CIPHER) || prefs.contains(CURRENT_IV)) {
+                previous = decrypt(BridgeSettings.PREVIOUS_API_BASE, CURRENT_CIPHER, CURRENT_IV);
+            } else {
+                previous = decrypt(BridgeSettings.LEGACY_API_BASE, CIPHER, IV);
+            }
+            if (!PosConfiguration.validToken(previous)) return "";
+            // Preserve v1 and v2 byte-for-byte, including after a failed v3 commit.
+            // The same non-exportable Android Keystore alias is reused for rollback.
+            try { save(origin, previous); }
+            catch (IllegalStateException error) { /* Retry after restart with old slots intact. */ }
+            return previous;
         } catch (Exception error) { return ""; }
     }
 
@@ -87,7 +94,8 @@ final class DeviceCredentialStore {
     }
 
     synchronized boolean hasStoredCredential() {
-        return prefs.contains(CURRENT_CIPHER) || prefs.contains(CURRENT_IV)
+        return prefs.contains(DIRECT_CIPHER) || prefs.contains(DIRECT_IV)
+                || prefs.contains(CURRENT_CIPHER) || prefs.contains(CURRENT_IV)
                 || prefs.contains(CIPHER) || prefs.contains(IV);
     }
 
@@ -105,8 +113,8 @@ final class DeviceCredentialStore {
             cipher.init(Cipher.ENCRYPT_MODE, keys.get(true));
             cipher.updateAAD(origin.getBytes(StandardCharsets.UTF_8));
             byte[] encrypted = cipher.doFinal(token.getBytes(StandardCharsets.UTF_8));
-            if (!prefs.edit().putString(CURRENT_CIPHER, encoding.encode(encrypted))
-                    .putString(CURRENT_IV, encoding.encode(cipher.getIV()))
+            if (!prefs.edit().putString(DIRECT_CIPHER, encoding.encode(encrypted))
+                    .putString(DIRECT_IV, encoding.encode(cipher.getIV()))
                     .remove("staff_session_token").commit()) throw new IllegalStateException();
         } catch (Exception error) { throw new IllegalStateException("Could not save device credential"); }
     }
