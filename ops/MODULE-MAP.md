@@ -972,6 +972,10 @@ and production denial. Any production activation requires separately
 verified store ownership, runtime source and provider licensing, with a
 new release gate and real staging acceptance (#436, #487). Do not deploy
 Draft #447 or #486 to production.
+Pilot customer list/detail routes reject extra scope query values, unrecognized
+nested paths and high-frequency enumeration with a per-actor rate limit.
+A disabled feature reports a distinct status to owners; no empty dataset or
+false active state is fabricated. This does not activate any store or license.
 
 ## Business onboarding drafts (2026-10-12, opt-in)
 

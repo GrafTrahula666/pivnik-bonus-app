@@ -8,9 +8,9 @@ interface ActiveProps {actorId:string;scope:Scope}
 function message(error:unknown){
   if(error instanceof ApiError){
     if(error.status===401)return 'Сессия истекла. Войдите снова.'
-    if(error.status===403)return 'Проверка недоступна или у вас нет доступа к клиентам этого заведения.'
     if(error.code==='TENANT_CRM_SOURCE_NOT_CONFIGURED')return 'Источник клиентских данных ещё не подключён.'
     if(error.code==='TENANT_CRM_PILOT_READ_DISABLED')return 'Пилотный просмотр ещё не разрешён. Клиентская база не активирована.'
+    if(error.status===403)return 'Проверка недоступна или у вас нет доступа к клиентам этого заведения.'
     if(error.status===429)return 'Слишком частые проверки. Повторите через минуту.'
   }
   return 'Не удалось подтвердить данные этого заведения. Повторите проверку.'

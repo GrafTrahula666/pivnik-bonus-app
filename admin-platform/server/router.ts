@@ -599,10 +599,15 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     }
     if(resource==='dashboard'&&child==='operations'){json(res,200,await getVenueDashboard(scope,parseOperationsPeriod(url),{hourly:true}));return true}
     if(resource==='dashboard'&&!child){json(res,200,await getVenueDashboard(scope,parsePeriod(url)));return true}
-    if(resource==='clients'&&scope.companyCode!=='pivnik'&&!grandchild){
+    if(resource==='clients'&&scope.companyCode!=='pivnik'){
+      if(grandchild||parts.length>6)throw new HttpError(404,'TENANT_CRM_ROUTE_NOT_FOUND',
+        'Запрошенный раздел клиентской базы не существует.')
       if(child==='segments')throw new HttpError(409,'TENANT_CRM_SEGMENTS_NOT_CONFIGURED',
         'Сегменты пока недоступны для клиентской базы этой точки.')
+      enforceRateLimit(`tenant-crm-active-pilot:${session.admin.id}`,60,60_000)
       if(child){
+        if(url.search)throw new HttpError(400,'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN',
+          'Область клиента определяется сервером. Дополнительные параметры не принимаются.')
         json(res,200,await activeTenantCrmPilotReader.readCustomer(session.admin,scope,child));return true
       }
       json(res,200,await activeTenantCrmPilotReader.listCustomers(session.admin,scope,validatePilotCrmQuery(url)));return true
