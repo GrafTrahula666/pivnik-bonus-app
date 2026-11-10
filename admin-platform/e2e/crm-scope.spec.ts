@@ -47,7 +47,7 @@ async function app(page: Page, options: { slowList?: string; listGate?: ReturnTy
       if (!child) {
         if (venueId === options.slowList) await options.listGate?.promise
         if (venueId === '201') return route.fulfill({ status: 409, json: {
-          error: 'Клиентский источник этой компании ещё не подключён', code: 'LEGACY_ADAPTER_NOT_TENANT_SAFE',
+          error: 'Источник клиентских данных ещё не подключён.', code: 'TENANT_CRM_SOURCE_NOT_CONFIGURED',
         } })
         return route.fulfill({ json: { total: 1, rows: [customer(venueId!)] } })
       }
@@ -75,12 +75,12 @@ for (const [target, label] of [['102', 'another venue in the same company'], ['2
       await page.locator('.tenant-select').selectOption(target)
       await expect(page.getByText('Клиент точки 101', { exact: true })).toHaveCount(0)
       await expect(page.locator('.drawer')).toHaveCount(0)
-      await expect(page.getByText('Загрузка реальных данных…', { exact: true })).toBeVisible()
+      await expect(page.getByText(target==='201'?'Проверяем клиентскую базу…':'Загрузка реальных данных…', { exact: true })).toBeVisible()
     } finally {
       nextList.release()
     }
     if (target === '201') {
-      await expect(page.getByText('Клиентский источник этой компании ещё не подключён', { exact: true })).toBeVisible()
+      await expect(page.getByText('Источник клиентских данных ещё не подключён.', { exact: true })).toBeVisible()
       await expect(page.getByText('Клиент точки 101', { exact: true })).toHaveCount(0)
     } else await expect(page.getByText(`Клиент точки ${target}`, { exact: true })).toBeVisible()
     await page.screenshot({ path: info.outputPath(`crm-scope-${target}.png`), fullPage: true })
