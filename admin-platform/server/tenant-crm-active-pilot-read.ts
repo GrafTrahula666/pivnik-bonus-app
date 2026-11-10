@@ -49,13 +49,13 @@ export function createActiveTenantCrmPilotReader(options:{
   resolveTargetDatabase:(runtimeKey:string)=>Promise<Connectable|null>
   authorize?:(admin:AdminPrincipal,scope:VenueScope)=>Promise<void>
 }){
-  const authorize=options.authorize??async(admin:AdminPrincipal,scope:VenueScope)=>{
+  const authorize=options.authorize??(async(admin:AdminPrincipal,scope:VenueScope)=>{
     const fresh=await resolveVenueScope(admin,scope.id)
     if(fresh.id!==scope.id||fresh.companyId!==scope.companyId||
       fresh.companyCode==='pivnik'||fresh.legacyBarId!==null)
       throw new HttpError(404,'VENUE_NOT_FOUND','Заведение не найдено или недоступно.')
     await requireVenueAccess(admin,fresh,'GET','clients','','')
-  }
+  })
   async function frozenSource(admin:AdminPrincipal,scope:VenueScope){
     await authorize(admin,scope)
     const client=await options.metadata.connect()
