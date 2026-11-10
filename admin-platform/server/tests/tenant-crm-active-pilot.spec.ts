@@ -161,6 +161,49 @@ describe('CHAT03 active tenant CRM pilot: signed HTTP / separate sources',()=>{
       expect(await response.json()).toMatchObject({code:'TENANT_CRM_SOURCE_NOT_CONFIGURED'})
     }finally{state.targets.set(manifest.runtimeKey,fixture.targets[0]!)}
   })
+  it('limits a claimed viewer invitation to one active point and revokes its open session',async()=>{
+    const invitationId='00000000-0000-4000-8000-000000000031'
+    const customer=fixture.manifests[0]!
+    const password=(await fixture.metadata.query<{password_hash:string}>(
+      'SELECT password_hash FROM admin_accounts WHERE id=11')).rows[0]!.password_hash
+    await fixture.metadata.query(`INSERT INTO admin_accounts(id,email,display_name,role,password_hash)
+      VALUES(31,'invited-viewer@fixture.invalid','Invited viewer','VENUE_ADMIN',$1)`,[password])
+    await fixture.metadata.query(`INSERT INTO admin_onboarding_invites(
+      id,draft_id,company_id,venue_id,role,created_by_admin_id,token_hash,
+      expires_at,status,claimed_at,claimed_admin_id)
+      VALUES($1::uuid,$2::uuid,$3::bigint,$4::bigint,'viewer',11,$5,
+        NOW()+INTERVAL '1 day','claimed',NOW(),31)`,
+      [invitationId,customer.source.draftId,customer.scope.companyId,customer.scope.venueId,'c'.repeat(64)])
+    await fixture.metadata.query(`INSERT INTO admin_onboarding_access(
+      invitation_id,admin_id,company_id,venue_id,draft_id,role)
+      VALUES($1::uuid,31,$2::bigint,$3::bigint,$4::uuid,'viewer')`,
+      [invitationId,customer.scope.companyId,customer.scope.venueId,customer.source.draftId])
+    config.enableTenantCrmPilotReads=true
+    config.enableOnboardingInvitations=true
+    try{
+      const signed=await fetch(origin+'/api/admin/auth/login',{method:'POST',headers:{
+        origin:config.publicOrigin,'content-type':'application/json',
+      },body:JSON.stringify({email:'invited-viewer@fixture.invalid',password:fixturePassword})})
+      expect(signed.status).toBe(200)
+      sessions.set('invited-viewer',signed.headers.get('set-cookie')!.split(';')[0]!)
+      const own=await request('invited-viewer',path(0)+'/1')
+      expect(own.status).toBe(200)
+      expect(await own.json()).toMatchObject({
+        scope:customer.scope,customer:{id:'1'},wallet:{balance:'101'},
+      })
+      expect((await request('invited-viewer',path(1))).status).toBe(404)
+      expect((await request('invited-viewer',path(2)+'/1')).status).toBe(404)
+      expect((await request('invited-viewer',
+        '/api/admin/venues/'+customer.scope.venueId+'/loyalty/manage')).status).toBe(403)
+      await fixture.metadata.query('UPDATE admin_onboarding_access SET revoked_at=NOW() WHERE invitation_id=$1::uuid',[invitationId])
+      expect((await request('invited-viewer',path(0)+'/1')).status).toBe(404)
+      // Grant recovery is still insufficient when the original invitation was revoked.
+      await fixture.metadata.query('UPDATE admin_onboarding_access SET revoked_at=NULL WHERE invitation_id=$1::uuid',[invitationId])
+      await fixture.metadata.query('UPDATE admin_onboarding_invites SET revoked_at=NOW() WHERE id=$1::uuid',[invitationId])
+      expect((await request('invited-viewer',path(0)+'/1')).status).toBe(404)
+      expect((await request('south',path(2)+'/1')).status).toBe(200)
+    }finally{config.enableOnboardingInvitations=false}
+  })
   it('never enables pilot data exposure in production',async()=>{
     config.enableTenantCrmPilotReads=true
     config.nodeEnv='production'
