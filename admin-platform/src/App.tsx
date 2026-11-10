@@ -6,6 +6,7 @@ import { Login } from './Login'
 import { PhaseCSidebar,PhaseCTopbar,TenantDangerContext,type AppMode,type Period } from './phaseC/Layout'
 import { ProductionDashboard } from './phaseC/ProductionDashboard'
 import { ProductionCRM } from './phaseC/ProductionCRM'
+import {ActiveTenantCustomerDirectory} from './phaseC/TenantCustomerDirectory'
 import {
   CompanyVenuesOverview,ProductionAnalytics,ProductionAudit,ProductionOperations,ProductionPlatform,
 } from './phaseC/ProductionReadPages'
@@ -121,7 +122,9 @@ export default function App(){
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}
 
           {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} spaceverse={spaceversePanel}/>}
-          {selected&&page==='clients'&&<ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
+          {selected&&page==='clients'&&(selected.companyCode==='pivnik'?
+            <ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>:
+            <ActiveTenantCustomerDirectory actorId={session.admin.id} scope={{companyId:selected.companyId,venueId:selected.id}}/>)}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
           {selected&&!isTrusted&&page==='loyalty'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppLoyaltyManager venue={selected} session={session}/>:<LoyaltyManager venue={selected} session={session}/>)}
