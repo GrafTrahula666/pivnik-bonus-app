@@ -79,7 +79,7 @@ async function inspectPlatform(platform) {
   });
 
   try {
-    const response = await page.goto(`http://127.0.0.1:${port}/index.html?parity=${platform}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`http://127.0.0.1:${port}/index.html?parity=${platform}&mazut=0`, { waitUntil: 'networkidle' });
     assert(response?.status() === 200, `${platform}: index.html returned ${response?.status()}`);
     await page.addStyleTag({ content: '.boot-screen{display:none!important}.app-shell{display:block!important}.screen{display:none!important}.screen.client-home.active{display:grid!important}' });
     await page.evaluate((name) => {
@@ -160,15 +160,17 @@ async function inspectPlatform(platform) {
     assert(geometry?.display === 'grid', `${platform}: Home V2 must render as grid, got ${geometry?.display}`);
     assert(geometry?.viewport?.width === 390 && geometry?.viewport?.height === 844,
       `${platform}: unexpected viewport ${JSON.stringify(geometry?.viewport)}`);
-    const minimumHeights = { hero: 126, business: 124, wheel: 156, run: 156, liters: 84, league: 132 };
+    const minimumHeights = { hero: 126, business: 124, liters: 84, league: 132 };
     for (const [key, minimum] of Object.entries(minimumHeights)) {
       const card = geometry?.cards?.[key];
       assert(card, `${platform}: missing ${key} geometry`);
       assert(card.height >= minimum - 0.5,
         `${platform}: ${key} compressed to ${card.height}px; expected >= ${minimum}px`);
-      assert(card.width >= (key === 'wheel' || key === 'run' ? 170 : 350),
+      assert(card.width >= 350,
         `${platform}: ${key} unexpectedly narrow at ${card.width}px`);
     }
+    assert(geometry.cards.run?.height === 96 && geometry.cards.wheel?.height === 96,
+      `${platform}: Run/wheel tiles must each be 96px high`);
     assert(Math.abs(geometry.cards.run.top - geometry.cards.wheel.top) < 1, `${platform}: Run/wheel row split`);
     assert(Math.abs(geometry.cards.run.width - geometry.cards.wheel.width) < 1, `${platform}: Run/wheel row must be equal width`);
     assert(geometry.bottomGap !== null && geometry.bottomGap >= -1 && geometry.bottomGap <= 32,

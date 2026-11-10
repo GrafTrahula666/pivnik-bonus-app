@@ -1,3 +1,4 @@
+import { getLeagueSeasons } from './league-seasons.js';
 import { createPosHttp } from './pos/http.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -22,6 +23,7 @@ import {
 import { onRuntimeConfig, startRuntimeConfigRefresh } from './business-runtime-config.js';
 import { configureLoyalty, statusForSpend, statusLevels, topStatus, welcomeBonusAmount } from './loyalty-config.js';
 import {
+  PIVNIK_PLATFORM_FRAME_ANCESTORS,
   chooseCanonicalUser,
   effectiveRoleForAuthenticatedIdentity,
   hashLinkCode,
@@ -3018,10 +3020,11 @@ export function documentSecurityHeaders(platform) {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "connect-src 'self'",
+      "frame-src 'self' https://ruslanych-ai-production.up.railway.app",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      'frame-ancestors https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru https://web.telegram.org https://*.telegram.org'
+      `frame-ancestors ${PIVNIK_PLATFORM_FRAME_ANCESTORS}`
     ].join('; ')
   };
 }
@@ -3479,6 +3482,14 @@ export const server = http.createServer(async (req, res) => {
         200,
         await deletePlatformAccount(user.id, platform, user.payload.pid, body.confirmation)
       );
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/leaderboard/seasons') {
+      const user = await requireGatewayUser(req);
+      if (!user.termsAccepted) {
+        return sendJson(res, 428, { error: 'Сначала примите правила программы.' });
+      }
+      return sendJson(res, 200, await getLeagueSeasons(pool, user.id, profileFrameFromRow));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/leaderboard/monthly') {
