@@ -1,4 +1,4 @@
-/* Geometry-only loading-screen fix. The existing 600 × 1066 artwork is reused. */
+/* Keep the startup artwork contained in the mobile loader scene. */
 html,
 body {
   width: 100%;
@@ -114,9 +114,4 @@ body {
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* Shared Telegram/VK Halloween artwork, also bundled by VK Hosting. */
-body.platform-vk .boot-image {
-  content: url('/assets/boot/pivnik-halloween-20261006.webp') !important;
 }

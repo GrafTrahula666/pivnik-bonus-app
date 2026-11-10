@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
 
+// Platform hosts allowed to frame the Mini App and its embedded Run document.
+export const PIVNIK_PLATFORM_FRAME_ANCESTORS = 'https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru https://web.telegram.org https://*.telegram.org';
+
 export const DEFAULT_AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 export const DEFAULT_AUTH_CLOCK_SKEW_SECONDS = 5 * 60;
 export const LINK_CODE_PATTERN = /^PIV-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;

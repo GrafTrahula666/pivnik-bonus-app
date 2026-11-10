@@ -1,0 +1,356 @@
+/* The old V20.6 shell re-enables a fixed cloud-city image in ::before,
+   even above the new Mazut home. Only while this home is active, use its
+   existing stone color for the entire viewport, chrome and side gutters. */
+html:has(#appShell .mazut-home.active),
+html:has(#appShell .mazut-home.active) body,
+html body #appShell:has(.mazut-home.active),
+html body #appShell:has(.mazut-home.active) > main,
+html body #appShell:has(.mazut-home.active) > .topbar,
+html body #appShell:has(.mazut-home.active) .client-home.mazut-home.active {
+  background: #dad6ce !important;
+  background-image: none !important;
+}
+
+html body #appShell:has(.mazut-home.active)::before,
+html body #appShell:has(.mazut-home.active)::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+}
+
+html body #appShell:has(.mazut-home.active) > .topbar {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.mazut-home .mazut-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: clamp(470px, calc(100svh - 72px), 790px);
+  overflow: hidden;
+  color: #18212a;
+  background: #dad6ce;
+  user-select: none;
+}
+
+.mazut-home :is(.spaceverse-home-hero, .spaceverse-business-card, .home-league-card, .home-wheel-card, #beerLoyaltyCard, .mazut-moved-to-lab),
+#appShell:has(.mazut-home.active) .bottom-nav {
+  display: none !important;
+}
+
+.mazut-stage :is(.mazut-fluid, .mazut-gesture) {
+  position: absolute;
+  inset: 0;
+}
+
+.mazut-stage .mazut-fluid {
+  pointer-events: none;
+}
+
+/* Last-resort visibility when a WebView exposes neither working WebGL nor 2D.
+   Normally the renderer uses the original shader or the CPU canvas fallback. */
+.mazut-stage .mazut-fluid.mazut-render-static::after {
+  content: "";
+  position: absolute;
+  inset: 19% 12% 17%;
+  border-radius: 47% 53% 52% 48% / 44% 58% 42% 56%;
+  background: #080b10;
+  box-shadow: inset 3px 5px 14px #343942, inset -9px -14px 22px #020305;
+}
+
+.mazut-stage .mazut-gesture {
+  inset: 0 18px 21%;
+  touch-action: none;
+}
+
+.mazut-stage .mazut-render-static + .mazut-gesture {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mazut-stage .mazut-gesture {
+    pointer-events: none;
+  }
+}
+
+.mazut-fluid canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mazut-stage .mazut-content {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-items: start;
+  width: min(100%, 530px);
+  margin-inline: auto;
+  padding: 22px max(18px, env(safe-area-inset-right)) max(15px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+
+.mazut-stage :is(button, [role="button"]) {
+  pointer-events: auto;
+}
+
+.mazut-stage .mazut-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mazut-stage .mazut-avatar {
+  flex: 0 0 auto;
+}
+
+.mazut-stage #profileAvatar {
+  position: relative;
+  inset: auto;
+  transform: none;
+  width: clamp(56px, 18vw, 90px);
+  height: clamp(56px, 18vw, 90px);
+  margin: 0;
+  cursor: pointer;
+}
+
+.mazut-stage .mazut-profile-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mazut-stage :is(.mazut-balance, .mazut-beer > span, #beerGiftReady) {
+  color: #fff;
+  mix-blend-mode: difference;
+}
+
+.mazut-stage [data-mazut-ink] {
+  color: #000;
+  --mazut-ink-track: #0004;
+}
+
+.mazut-stage [data-mazut-over] {
+  color: #fff;
+  --mazut-ink-track: #fff4;
+}
+
+.mazut-stage .mazut-brand {
+  align-self: start;
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: .15em;
+}
+
+.mazut-stage :is(.mazut-profile-link, .mazut-balance) {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.mazut-stage #clientName {
+  display: block;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mazut-stage #openStatuses {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--mazut-ink-track);
+  border-radius: 20px;
+  background: none;
+  line-height: 1.15;
+}
+
+.mazut-stage #openStatuses .status-name {
+  color: inherit;
+  font-size: 11px;
+}
+
+.mazut-stage #openStatuses .status-row-chevron {
+  color: inherit;
+}
+
+.mazut-stage #openStatuses .status-caption {
+  display: none;
+}
+
+.mazut-stage .mazut-status-progress .progress {
+  width: min(104px, 100%);
+  height: 4px;
+  margin: 0;
+  background: var(--mazut-ink-track);
+}
+
+.mazut-stage #statusProgress {
+  background: currentColor;
+}
+
+.mazut-stage .mazut-status-caption {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.mazut-stage .mazut-status-caption:has(#nextRewardText:not(:empty)) #statusProgressText {
+  display: none;
+}
+
+.mazut-stage .mazut-wallet {
+  padding-top: clamp(20px, 4svh, 36px);
+}
+
+.mazut-stage #clientBalance {
+  display: block;
+  color: inherit;
+  font: 400 clamp(50px, 16vw, 100px)/.93 Georgia, "Times New Roman", serif;
+  letter-spacing: -.075em;
+  white-space: nowrap;
+}
+
+.mazut-stage .mazut-balance small {
+  display: block;
+  margin-top: 5px;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.mazut-stage .mazut-beer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  margin-top: 13px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mazut-stage #beerGiftReady {
+  display: none;
+}
+
+.mazut-home:has(#beerLoyaltyCard.gift-ready) .mazut-stage #beerGiftReady {
+  display: inline;
+}
+
+.mazut-stage #beerProgressBar {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 1px;
+  width: clamp(55px, 24vw, 108px);
+  height: 4px;
+  margin: 0;
+}
+
+.mazut-stage #beerProgressBar .beer-progress-segment {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  border-radius: 3px;
+  background: var(--mazut-ink-track);
+}
+
+.mazut-stage #beerProgressBar .beer-progress-segment span {
+  display: block;
+  width: var(--segment-fill, 0%);
+  height: 100%;
+  background: currentColor;
+}
+
+.mazut-stage .mazut-dock {
+  display: grid;
+  grid-row: 4;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mazut-stage .mazut-dock button {
+  position: relative;
+  inset: auto;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  height: clamp(70px, 13svh, 106px);
+  margin: 0;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 20px;
+  transform: none;
+  font-size: clamp(12px, 3.8vw, 15px);
+  font-weight: 700;
+}
+
+.mazut-stage .mazut-dock button:active {
+  transform: scale(.98);
+}
+
+.mazut-stage .mazut-dock #heroQrButton {
+  overflow: hidden;
+  color: #f6f7f8;
+  background: #171f28;
+  box-shadow: 0 5px 18px #14212d35;
+}
+
+.mazut-stage .mazut-qr:not(.mazut-qr-ready)::after {
+  content: "Показать QR";
+}
+
+.mazut-stage .mazut-qr img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.mazut-stage .mazut-lab {
+  color: #212832;
+  background: #e3e0d8 url("./lab-base.png") center / 100% 100% no-repeat;
+  box-shadow: 0 5px 14px #1f2a3213;
+}
+
+.mazut-stage .mazut-lab-cube {
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+
+/* Keep the existing home grid from collapsing the new full-width scene. */
+html body .client-home.home-v2.mazut-home > .mazut-stage {
+  display: grid !important;
+  grid-column: 1 / -1;
+  width: 100%;
+}
+html body .client-home.home-v2.mazut-home > :is(.spaceverse-home-hero, .spaceverse-business-card, .home-league-card, .home-wheel-card, #beerLoyaltyCard, .mazut-moved-to-lab) {
+  display: none !important;
+}
+/* The legacy hero QR had a 27-30px width; this is a new half-width
+   dock action. Preserve its original click handler, not its old geometry. */
+html body .client-home.home-v2.mazut-home .mazut-dock #heroQrButton {
+  display: grid !important;
+  width: 100% !important;
+  min-width: 0;
+  height: clamp(70px, 13svh, 106px) !important;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  justify-self: stretch;
+  border: 0;
+  border-radius: 20px;
+  pointer-events: auto;
+}

@@ -57,8 +57,6 @@ async function copyIfExists(relativePath) {
   }
 }
 
-const VK_BOOT_IMAGE = 'assets/boot/pivnik-halloween-20261006.webp';
-
 function renderVkIndex(source) {
   let html = source
     .replace(/<script defer src="https:\/\/telegram\.org\/js\/telegram-web-app\.js[^>]*><\/script>\s*/i, '')
@@ -69,7 +67,7 @@ function renderVkIndex(source) {
   const mainStylePattern = /<link rel="stylesheet" href="\/?styles\.css[^"]*"\s*\/>/i;
   if (!mainStylePattern.test(html)) throw new Error('index.html main stylesheet not found.');
   html = html.replace(mainStylePattern,
-    '$&\n  <link rel="stylesheet" href="/loader-fix.css?v=2.2.0" />');
+    '$&\n  <link rel="stylesheet" href="/loader-fix.css?v=2.3.0" />');
 
   if (!html.includes('account-link.js')) {
     html = html.replace(
@@ -82,11 +80,6 @@ function renderVkIndex(source) {
     /<script defer src="\/account-link\.js([^\"]*)"><\/script>/i,
     '<script defer src="/vendor/vk-bridge.js?v=2.15.11"></script>\n  <script defer src="/vk-platform.js?v=3.2.2-main-parity"></script>\n  <script defer src="/account-link.js$1"></script>'
   );
-
-  // Bundle the shared Telegram/VK Halloween artwork locally, without an external CDN.
-  const bootImagePattern = /(<img class="boot-image" src=")[^"]*(")/i;
-  if (!bootImagePattern.test(html)) throw new Error('index.html boot image not found.');
-  html = html.replace(bootImagePattern, `$1${VK_BOOT_IMAGE}$2`);
 
   const runtimeConfig = `<script>window.__PIVNIK_VK_API_BASE__=${JSON.stringify(apiBase)};</script>`;
   if (!html.includes('</head>')) throw new Error('index.html has no </head>.');
@@ -183,10 +176,20 @@ await fs.rm(outDir, { recursive: true, force: true });
 await fs.mkdir(outDir, { recursive: true });
 
 const sourceHtml = await fs.readFile(path.join(root, 'index.html'), 'utf8');
+const bootImage = sourceHtml.match(/<img class="boot-image" src="\/(assets\/boot\/[\w.-]+\.webp)"/i)?.[1];
+if (!bootImage) throw new Error('index.html must reference a local boot image.');
 const renderedHtml = renderVkIndex(sourceHtml);
 await fs.writeFile(path.join(outDir, 'index.html'), renderedHtml);
 
 for (const directory of ['assets', 'vendor']) await copyIfExists(directory);
+
+// Keep the existing Run navigation usable in the static VK bundle as well.
+// The standalone game already supports anonymous play; no session/leaderboard policy changes.
+await fs.cp(path.join(root, 'minigames/pivnik-run'), path.join(outDir, 'run'), { recursive: true });
+const runIndex = path.join(outDir, 'run/index.html');
+await fs.writeFile(runIndex, (await fs.readFile(runIndex, 'utf8'))
+  .replace(/<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js"><\/script>/i, ''));
+
 
 const references = new Set();
 for (const match of renderedHtml.matchAll(/(?:src|href)="([^\"]+)"/g)) {
@@ -227,7 +230,8 @@ const requiredFiles = [
   'account-link.js',
   'vendor/vk-bridge.js',
   'styles.css',
-  'loader-fix.css'
+  'loader-fix.css',
+  bootImage
 ];
 for (const relativePath of requiredFiles) {
   await fs.access(path.join(outDir, relativePath));

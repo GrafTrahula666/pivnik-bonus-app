@@ -77,21 +77,24 @@ describe('app operations time controls use own data source, never POS',()=>{
     expect(apiGet).toHaveBeenLastCalledWith('/api/admin/venues/test-1/dashboard/operations?days=7')
     expect(node.querySelector('[role="alert"]')).toBeNull()
   })
-  it('prioritizes four period KPIs with real comparison and keeps eight secondary metrics accessible',async()=>{
+  it('keeps six owner-critical period KPIs visible and seven secondary metrics accessible',async()=>{
     await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'7 дней',compare:false,onNavigate:()=>{}})))
     await click('Операции приложения')
     const primary=node.querySelector('[aria-label="Основные показатели операций"]')
     expect(primary).toBeTruthy()
     const cards=[...primary!.querySelectorAll('.live-kpi')]
-    expect(cards).toHaveLength(4)
+    expect(cards).toHaveLength(6)
     expect(cards.map(card=>card.querySelector('.kpi-top span')?.textContent)).toEqual([
-      'Сумма операций приложения','Записей о покупках','Совершали операции','Средняя сумма записи',
+      'Сумма операций приложения','Записей о покупках','Операций в журнале',
+      'Клиентов с операциями','Новых клиентов (регистрация)','Средняя сумма записи',
     ])
-    expect(cards[2].textContent).toContain('100%')
+    expect(cards[2].textContent).toContain('150%')
+    expect(cards[3].textContent).toContain('100%')
     expect(cards[0].textContent).toContain('146,8%')
+    expect(node.textContent).toContain('не по установке приложения и не по первой покупке')
     const extra=node.querySelector('details.app-operations-extra') as HTMLDetailsElement
     expect(extra.open).toBe(false)
-    expect(extra.querySelectorAll('.live-kpi')).toHaveLength(8)
+    expect(extra.querySelectorAll('.live-kpi')).toHaveLength(7)
     await act(async()=>extra.querySelector('summary')!.click())
     expect(extra.open).toBe(true)
     expect(extra.textContent).toContain('Клиентов всего')
@@ -105,7 +108,7 @@ describe('app operations time controls use own data source, never POS',()=>{
     await act(async()=>root.render(createElement(ProductionDashboard,{venue,period:'7 дней',compare:false,onNavigate:()=>{}})))
     await click('Операции приложения')
     const cards=[...node.querySelectorAll('[aria-label="Основные показатели операций"] .live-kpi')]
-    expect(cards).toHaveLength(4)
+    expect(cards).toHaveLength(6)
     const down=cards[0].querySelector('.delta')!
     expect(down.textContent).toContain('−50%')
     expect(down.classList.contains('negative')).toBe(true)
@@ -114,7 +117,7 @@ describe('app operations time controls use own data source, never POS',()=>{
     expect(flat.textContent).toContain('0%')
     expect(flat.querySelector('svg')).toBeNull()
     expect(flat.classList.contains('negative')).toBe(false)
-    const up=cards[2].querySelector('.delta')!
+    const up=cards[3].querySelector('.delta')!
     expect(up.textContent).toContain('+50%')
     expect(up.querySelector('svg')).toBeTruthy()
     expect(up.classList.contains('negative')).toBe(false)

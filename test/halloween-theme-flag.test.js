@@ -18,9 +18,10 @@ function selectorParts(selector) {
   return parts;
 }
 
-test('Halloween skin is behind design.theme and every rule is scoped to html.theme-halloween', async () => {
+test('retired Halloween skin cannot be reactivated by a stale published design; dormant CSS stays scoped', async () => {
   const [app, css] = await Promise.all([read('app.js'), read('styles.css')]);
-  assert.match(app, /classList\.toggle\('theme-halloween', design\.theme === 'halloween'\)/);
+  assert.match(app, /classList\.remove\('theme-halloween'\)/);
+  assert.doesNotMatch(app, /classList\.toggle\('theme-halloween'/);
 
   // Decorative Halloween colors remain, but the ticket/draw UI has been retired.
   assert.doesNotMatch(app, /\/api\/halloween\//);
