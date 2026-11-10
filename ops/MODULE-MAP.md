@@ -1,3 +1,139 @@
+## 2026-11-09: Android Mazut renderer compatibility fallback (Draft, not deployed)
+
+The existing production Mazut on `main` can mount its stage and leave it
+transparent when Android WebGL is present but its shader compilation/link or
+framebuffer allocation fails: `createRenderer()` threw into the outer
+`enableMazutHome()` warning handler with no canvas fallback. It also relied
+on `MediaQueryList.addEventListener` and unguarded observer constructors,
+which are absent on some older WebViews. Root cause on any specific phone
+remains unconfirmed without device logs.
+
+`assets/home-mazut/fluid.js` now switches to the existing CPU/2D liquid
+renderer upon WebGL initialization or framebuffer failure, allocating a fresh
+canvas when WebGL already owns the old one. The ink overlay is rebound to
+that new canvas. A WebGL context-loss event also activates 2D instead of
+leaving the old canvas transparent. Missing MediaQueryList modern listeners,
+ResizeObserver or IntersectionObserver no longer abort initialization.
+A static dark liquid silhouette is the last fallback only when both graphics
+contexts are unavailable. Android-only CPU fallback limits offscreen width to
+260/300/340 px for LOW/balanced/HIGH, throttles software paints to at most
+roughly 18 fps, and further reduces backing resolution if sustained paints
+exceed 24 ms. **The existing iOS and desktop budgets are byte-for-byte
+preserved in the policy**, and the normal Android GPU render loop and fluid
+physics, shader, viscosity `1.265`, status, QR, bonuses, navigation and server
+routes remain unchanged. The new pure `getMazutSoftwareBudget` is covered
+by separate explicit Android/iOS policy assertions.
+
+The existing Telegram/VK Lab smoke injects a broken Android GPU shader and
+legacy MediaQueryList implementation, then asserts the actual 2D canvas
+contains painted pixels; HIGH Android must still use WebGL. Cache-versioned
+assets ensure old WebView copies do not mask a subsequent approved release.
+Full CI and **physical Android tests** are required before merge/deploy.
+
+## Mazut idle circulation and touch region (2026-11-09)
+
+The Mazut simulation applies a low-frequency circulation when the user is
+idle, using the existing physics step, viscosity, touch strength and paint
+budgets. The gesture region starts at the top of the stage and keeps the
+side gutters and lower controls available. With motion enabled, the live
+Mazut home temporarily disables Telegram's vertical minimization gesture
+inside the app on SDK 7.7+. It restores the prior enabled state on leaving
+home, opening a modal or pausing interaction. The Telegram header still
+handles its native gesture. VK uses the same touch region without calling
+Telegram APIs. The browser smoke checks canvas motion, downward touch
+capture near the top, and the Telegram gesture settings around QR and Lab.
+
+## 2026-11-08: Mazut home mobile layout correction (dependent Draft)
+
+The approved Mazut home relocates the original `#heroQrButton`, profile
+and live loyalty controls without replacing their handlers. When active, the
+old business, league and wheel home cards must be visually hidden while
+remaining in the DOM for legacy access/recovery. The QR action now fills its
+half of the Mazut dock instead of retaining the old home-hero icon's tiny
+width and height. The existing Lab action shares the same grid geometry.
+`scripts/pivnik-lab-browser-smoke.mjs` checks these outcomes on the
+existing Telegram/VK fixtures at 320, 390, 430 and 1280 px.
+This change does not alter the older home when Mazut is disabled, and does
+not touch any backend, auth, QR payload/handler, money, persistence,
+Android kiosk, runtime patch or production deployment.
+The V20.6 `styles.css` shell pseudo-layers intentionally restore the old
+SPACEVERSE cloud-city background, even when Mazut is mounted. While
+`.mazut-home.active` is visible only, `assets/home-mazut/home.css` sets
+the html/body/shell/topbar/main/home background to the existing stone
+`#dad6ce` and hides both legacy shell pseudo-layers. Other screens and
+the classic fallback retain their styling. The browser smoke checks actual
+computed background colors, images and pseudo-layer visibility on both
+Telegram and VK fixture viewports.
+
+## 2026-11-08: Android motion quality (review branch, not deployed)
+
+The existing client app bootstrap now prefers Telegram Android's LOW/AVERAGE/HIGH
+performance class, then falls back to conservative browser memory/core hints.
+Unknown Android devices use balanced effects, confirmed low-end devices and the
+explicit `?lite=1` mode retain the existing reduced-motion/blur fallback.
+Android HIGH restores CSS animations and glass effects; iOS and the user system
+`prefers-reduced-motion` setting are unchanged. This is UI-only; no loyalty,
+identity, QR, wheel, API, staff, database, kiosk or patch-chain changes.
+`test/android-motion-performance.test.js` checks the production bootstrap and
+CSS boundaries. Device/Telegram/VK visual and performance validation remains a
+separate release acceptance step.
+
+## 2026-11-08: Mazut adaptive rendering (dependent Draft; not deployed)
+
+`assets/home-mazut/fluid.js` keeps the approved WebGL liquid shader on HIGH
+devices and adjusts particle spacing, physics step, display-pixel budget and paint
+frequency on balanced/low Android. Telegram's declared performance tier has
+priority; until the Android client quality bootstrap arrives, conservative
+browser hints and a balanced fallback are used. Explicit lite mode always
+selects low quality, while system reduced motion still stops animation.
+All tiers use the viscosity coefficient `1.265` for velocity damping and
+momentum exchange between nearby particles.
+`assets/home-mazut/ink.js` preserves the existing covered-text hysteresis,
+but limits sample frequency and short-circuits fully covered samples. Media,
+index and module cache versions are updated to prevent stale client mixtures.
+`test/mazut-performance.test.js` validates real exported quality policy and
+ink semantics. No shader appearance constants, server odds, bonus, identity,
+database, release keys, kiosk or runtime patch-chain are touched. The change
+is intended only after its parent Lab PR and separate Android bootstrap PR
+have passed review. Native device FPS, heat and memory tests remain mandatory.
+
+## PIVNIK home and SpaceVerse Lab (2026-11-08)
+
+The Mazut home uses the existing profile, balance, beer progress and QR nodes.
+Its Lab button opens the five projectors in the current client. The guide is
+available from the Lab header. The reveal uses CSS; no entry video is shipped.
+Lab navigation keeps the parent client session. Browser Back and the Telegram
+BackButton close nested windows before returning home. PLAYGROUND embeds the
+existing same-origin Run and opens Ruslanych AI in a separate game frame. The
+authenticated `GET /api/lab/chess` uses the existing gateway proxy and returns
+the fixed HTTPS destination after a bounded availability check. PIVNIK
+credentials stay out of the external frame URL. Wheel rules, history and prize
+handling continue through the existing wheel UI and endpoints.
+
+PANTHEON opens the current League and achievement catalog. The earlier
+`feat/league-season-champions-20261003` archive is exposed by the same
+`getLeagueSeasons` module in both servers, with auth and accepted rules.
+Existing monthly ranking and achievement APIs are preserved. SHOP shows only
+the future assortment notice. Business and Partner use the existing
+authenticated inquiry endpoint and display confirmation after receiving a
+persisted inquiry ID. No schema, bonus rules, POS, Android or startup patch
+changes are required.
+
+`scripts/pivnik-lab-browser-smoke.mjs` exercises the materialized Telegram
+client and VK bundle with fixture APIs. `test/league-seasons.test.js`
+checks the historical query in PGlite and both HTTP bindings.
+
+## Temporary white-gold restoration (2026-11-05, review branch)
+
+`app.js:applyDesign` ignores the stale published Halloween skin without changing
+stored settings, copy or visibility. Existing cloud-city and white-gold CSS are
+canonical again. The Run/wheel two-column row is season-independent on both
+platforms; existing IDs and handlers remain. Shared index, loader override and
+VK builder use the existing sky-city boot image. No data, access, money, wheel
+probability or startup-patch changes. The existing Run link still targets `/run/`; the VK builder copies the existing
+standalone game there and strips its Telegram SDK include. Anonymous play is
+unchanged; the existing Telegram-only game leaderboard policy is not expanded.
+
 ## 2026-11-03: Tenant-scoped loyalty managed settings (integrated Draft)
 
 `admin-platform/server/writes.ts` returns `source:not_configured`, `null` for missing
@@ -83,6 +219,15 @@ configured `OWNER_TELEGRAM_ID` or database-verified `OWNER_VK_ID`, not an arbitr
 `OWNER_FRAME_REPAIR_SQL` preserves these selections during startup/auth repair.
 `app.js` renders fixed art plus independent light/particle layers; only the
 separate half-circle diamond dragon orbits the stationary CREATOR plaque.
+As of the 2026-11-05 review branch, `creatorDragonPoint` bends a shared polar
+triangle mesh of the original PNG. Negative 18s orbit keeps head ahead of neck;
+2.8s travelling radial waves run head-to-tail. One 576px buffer (384px texture plus transparent rotation guards) is shared by
+visible portraits/previews at 30fps; disconnected/hidden portraits are skipped,
+page visibility suspends RAF and reduced-motion retains the static PNG.
+Canvas failure keeps the same static artwork. The dragon layer sits above the
+glass (z-index 6) and its plane is expanded by six percentage points beyond
+the previous orbit, including picker previews, so it flies just outside the rim.
+No frame entitlement/grant changes.
 `styles.css` respects reduced motion; `assets/frames` is included by the existing
 VK bundle asset copy. No startup patch, schema or automatic gift distribution.
 Regression: `test/reward-profile-frames.test.js`, `test/personal-profile-frames.test.js`.
