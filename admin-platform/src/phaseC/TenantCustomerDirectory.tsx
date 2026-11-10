@@ -55,10 +55,10 @@ function Directory({draftId,scope}:Props){
         <button className="btn secondary" type="button" disabled={loading} onClick={()=>change(q,offset)}>Обновить</button>
       </form>
       {loading&&<p role="status">Проверяем клиентскую базу…</p>}
-      {error&&<p role="alert">{error}</p>}
+      {error&&<div><p role="alert">{error}</p><button type="button" className="btn secondary" disabled={loading} onClick={()=>change(q,offset)}>Повторить проверку</button></div>}
       {page&&<>
         <p role="status">Доступ к клиентской базе проверен. Найдено клиентов: {formatExact(page.total)}.</p>
-        {page.items.length===0?<p>{q?'Клиенты не найдены. Измените поисковый запрос.':'Клиентов пока нет.'}</p>:
+        {page.items.length===0?<p>{page.total!=='0'&&offset>0?'На этой странице клиентов нет. Вернитесь на предыдущую страницу.':q?'По запросу клиентов не найдено. Измените поиск или фильтр кошелька.':wallet==='present'?'Клиентов с бонусным кошельком не найдено.':wallet==='missing'?'Клиентов без бонусного кошелька не найдено.':'Клиентов пока нет.'}</p>:
           <ul className="tenant-crm-list">{page.items.map(row=><li key={row.customer.id}>
             <button type="button" className="tenant-crm-row" onClick={()=>setSelected({id:row.customer.id,revision:++selection.current})}>
               <span>{customerName(row)}</span><span>{row.wallet?formatExact(row.wallet.balance)+' бонусов':'Кошелёк не создан'}</span>
@@ -76,18 +76,19 @@ function Directory({draftId,scope}:Props){
 }
 function CustomerSnapshot({path,id,scope,onClose}:{path:string;id:string;scope:Scope;onClose:()=>void}){
   const {companyId,venueId}=scope
-  const [row,setRow]=useState<CustomerWallet|null>(null),[error,setError]=useState('')
+  const [row,setRow]=useState<CustomerWallet|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0)
   useEffect(()=>{
     let cancelled=false
+    setRow(null);setError('')
     void apiGet<unknown>(path+'/'+encodeURIComponent(id)).then(raw=>{
       const value=verifiedEnvelope(raw,{companyId,venueId}),next=customerWallet(value)
       if(next.customer.id!==id)throw new Error('Customer mismatch')
       if(!cancelled)setRow(next)
     }).catch(error=>{if(!cancelled)setError(message(error))})
     return()=>{cancelled=true}
-  },[path,id,companyId,venueId])
+  },[path,id,companyId,venueId,retry])
   return <section className="tenant-crm-card" aria-label="Карточка клиента">
     <button type="button" className="btn secondary" onClick={onClose}>Закрыть карточку</button>
-    {error?<p role="alert">{error}</p>:row?<><h4>{customerName(row)}</h4><p>{row.wallet?'Баланс: '+formatExact(row.wallet.balance)+' бонусов':'Бонусный кошелёк ещё не создан.'}</p></>:<p role="status">Проверяем карточку…</p>}
+    {error?<div><p role="alert">{error}</p><button type="button" className="btn secondary" onClick={()=>{setError('');setRow(null);setRetry(value=>value+1)}}>Повторить проверку карточки</button></div>:row?<><h4>{customerName(row)}</h4><p>Идентификатор клиента: {row.customer.id}</p><p>{row.wallet?'Баланс: '+formatExact(row.wallet.balance)+' бонусов':'Бонусный кошелёк ещё не создан.'}</p></>:<p role="status">Проверяем карточку…</p>}
   </section>
 }

@@ -61,14 +61,63 @@ jobs:
       - name: Install Chromium browser
         working-directory: admin-platform
         run: npx playwright install --with-deps chromium
-      # Split projects into separate server processes: the production-style
-      # 30-read/min actor limiter must stay intact within every browser suite.
-      - name: Desktop tenant CRM with all 355 customers
+      # Every invocation starts a fresh disposable fixture server and actor budget.
+      # The real 30/min guard stays enabled; HTTP 429 is never suppressed.
+      - name: Desktop Directory and filters on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop
-      - name: Mobile tenant CRM with all 355 customers
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'built panel reads and searches'
+      - name: Desktop List error recovery on fresh fixture server
         working-directory: admin-platform
-        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'rate-limited customer list|server 500 on customer list'
+      - name: Desktop Detail error recovery on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer detail|expired session on customer detail|denied customer detail|missing customer detail 404|rate-limited customer detail|customer detail server failure'
+      - name: Desktop Detail retry on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'failed customer detail can retry in place'
+      # These fail-closed list regressions were previously excluded by the narrow greps.
+      - name: Desktop malformed and denied list on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'malformed customer list|malformed list response|unauthorized customer list 401|permission denied on list refresh'
+      - name: Desktop Pagination on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'all 355 customers remain'
+      - name: Desktop Cross-owner isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'changing venue clears customers'
+      - name: Desktop Late-list isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'late real customer response'
+      - name: Desktop Late-list venue switch on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=desktop --grep 'late customer list from a closed venue'
+      - name: Mobile Directory and filters on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'built panel reads and searches'
+      - name: Mobile List error recovery on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'rate-limited customer list|server 500 on customer list'
+      - name: Mobile Detail error recovery on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'malformed customer detail|expired session on customer detail|denied customer detail|missing customer detail 404|rate-limited customer detail|customer detail server failure'
+      - name: Mobile Detail retry on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'failed customer detail can retry in place'
+      - name: Mobile malformed and denied list on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'malformed customer list|malformed list response|unauthorized customer list 401|permission denied on list refresh'
+      - name: Mobile Pagination on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'all 355 customers remain'
+      - name: Mobile Cross-owner isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'changing venue clears customers'
+      - name: Mobile Late-list isolation on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'late real customer response'
+      - name: Mobile Late-list venue switch on fresh fixture server
+        working-directory: admin-platform
+        run: npx playwright test -c playwright.tenant-crm.config.ts --project=mobile --grep 'late customer list from a closed venue'
       - name: Upload synthetic browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4

@@ -11,6 +11,7 @@ describe('tenant scope query construction',()=>{
     expect(statement.params).toEqual(['101','11'])
     expect(statement.text).toContain('aca.company_id = v.company_id')
     expect(statement.text).toContain('aca.admin_id = $2::bigint')
+    expect(statement.text).toContain("aca.access_kind IN ('owner', 'trusted')")
   })
   it('does not accept caller company_id/body/query into authorization',()=>{
     const statement=buildVenueScopeQuery(venueAdmin,'101')
