@@ -24,7 +24,7 @@ export function ActiveTenantCustomerDirectory(props:ActiveProps){
 }
 function Directory({draftId,scope,activePilot=false}:Props & {activePilot?:boolean}){
   const {companyId,venueId}=scope
-  const [started,setStarted]=useState(false),[query,setQuery]=useState(''),[q,setQ]=useState(''),[offset,setOffset]=useState(0)
+  const [started,setStarted]=useState(activePilot),[query,setQuery]=useState(''),[q,setQ]=useState(''),[offset,setOffset]=useState(0)
   const [sort,setSort]=useState<'id'|'name'|'username'>('id')
   const [direction,setDirection]=useState<'asc'|'desc'>('asc')
   const [wallet,setWallet]=useState<'all'|'present'|'missing'>('all')
