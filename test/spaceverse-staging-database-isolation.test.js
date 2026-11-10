@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {assertStagingDatabaseIsolation,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
+import {assertStagingDatabaseIsolation,approvedStagingIntegrationDatabaseUrl,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
 
 const good=()=>({
   RAILWAY_PROJECT_ID:STAGING_PROJECT_ID,
@@ -45,6 +45,31 @@ for (const [label,change] of [
     assert.throws(()=>assertStagingDatabaseIsolation(env),error=>{
       assert.match(error.message,/Staging preflight refused:/)
       assert.doesNotMatch(error.message,/synthetic-only|secret|different-synthetic|prod\.example/)
+      return true
+    })
+  })
+}
+
+
+test('integration target is derived only after full staging preflight, without connecting',()=>{
+  const url = new URL(approvedStagingIntegrationDatabaseUrl(good()))
+  assert.equal(url.hostname,'admin-postgres.railway.internal')
+  assert.equal(url.pathname,'/codex_admin_test_staging')
+  assert.equal(url.search,'')
+  assert.equal(url.hash,'')
+})
+for(const [label,override] of [
+  ['another internal database',{ADMIN_DATABASE_URL:'postgresql://fixture:secret@different.railway.internal:5432/railway'}],
+  ['mismatched writer',{ADMIN_PRODUCTION_WRITE_DATABASE_URL:'postgresql://x:secret@other.railway.internal/railway'}],
+  ['different Railway service',{RAILWAY_SERVICE_ID:'unapproved-service'}],
+  ['unapproved test seeding',{ADMIN_ALLOW_TEST_SEED:'false'}],
+  ['external writing enabled',{ADMIN_ENABLE_PRODUCTION_BONUS_WRITES:'true'}],
+  ['Postgres host override',{ADMIN_DATABASE_URL:good().ADMIN_DATABASE_URL+'?host=another.railway.internal'}],
+]){
+  test('integration target refuses '+label+' before spawning tests',()=>{
+    assert.throws(()=>approvedStagingIntegrationDatabaseUrl({...good(),...override}),error=>{
+      assert.match(error.message,/Staging preflight refused:/)
+      assert.doesNotMatch(error.message,/secret|synthetic-only|different-synthetic/)
       return true
     })
   })

@@ -48,3 +48,14 @@ export function assertStagingDatabaseIsolation(env=process.env) {
   }
   return raw
 }
+
+// All integration tests must reuse the same exact project/service, DB hostname,
+// read/write-target and dangerous-write-flag gate as staging preflight.
+// Returning the connection string is intentional: callers pass it to a child
+// environment, never to logs or a GitHub artifact.
+export function approvedStagingIntegrationDatabaseUrl(env=process.env) {
+  const approved = assertStagingDatabaseIsolation(env)
+  const url = new URL(approved)
+  url.pathname = '/codex_admin_test_staging'
+  return url.toString()
+}
