@@ -125,6 +125,11 @@ describe('CHAT03 active tenant CRM pilot: signed HTTP / separate sources',()=>{
       expect(response.status).toBe(400)
     }
     expect(state.resolutions).toBe(0)
+    const detailScope=await request('owner',path(0)+'/1?companyId=20')
+    expect(detailScope.status).toBe(400)
+    expect(await detailScope.json()).toMatchObject({code:'TENANT_CRM_REQUEST_SCOPE_FORBIDDEN'})
+    expect((await request('owner',path(0)+'/1/extra')).status).toBe(404)
+    expect(state.resolutions).toBe(0)
     expect((await request('owner',path(0),'POST')).status).toBe(403) // CSRF required even for owners
   })
   it('removes access in the same session after revoking an owner grant',async()=>{

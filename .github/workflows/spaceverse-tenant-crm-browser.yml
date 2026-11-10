@@ -6,12 +6,16 @@ on:
       - 'customer-directory-repository.js'
       - 'customer-directory-repository.d.ts'
       - 'admin-platform/server/tenant-crm-read.ts'
+      - 'admin-platform/server/tenant-crm-active-pilot-read.ts'
+      - 'admin-platform/server/tests/tenant-crm-active-pilot.spec.ts'
+      - 'admin-platform/server/config.ts'
       - 'admin-platform/server/router.ts'
       - 'admin-platform/server/tests/tenant-crm-http.spec.ts'
       - 'admin-platform/server/tests/tenant-crm-fixture.ts'
       - 'admin-platform/e2e/tenant-crm.spec.ts'
       - 'admin-platform/e2e/fixtures/tenant-crm-*.ts'
       - 'admin-platform/src/phaseC/TenantCustomerDirectory.tsx'
+      - 'admin-platform/src/App.tsx'
       - 'admin-platform/src/phaseC/tenant-crm-contract.ts'
       - 'admin-platform/playwright.tenant-crm.config.ts'
       - '.github/workflows/spaceverse-tenant-crm-browser.yml'
@@ -58,6 +62,8 @@ jobs:
           node -e "const pg=require('./admin-platform/node_modules/pg');const p=new pg.Pool({connectionString:'postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_crm'});p.query(\"CREATE ROLE crm_fixture LOGIN PASSWORD 'crm_fixture_ci_only' CREATEDB\").then(()=>p.end()).catch(e=>{console.error(e.message);process.exitCode=1;p.end()})"
       - name: Tenant-scoped signed HTTP and native SQL checks
         run: npm test --prefix admin-platform -- server/tests/tenant-crm-http.spec.ts
+      - name: Active-venue pilot signed HTTP and fail-closed source checks
+        run: npm test --prefix admin-platform -- server/tests/tenant-crm-active-pilot.spec.ts
       - name: Install Chromium browser
         working-directory: admin-platform
         run: npx playwright install --with-deps chromium
