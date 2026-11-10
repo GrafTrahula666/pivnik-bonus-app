@@ -4,11 +4,13 @@ import {customerName,customerWallet,directoryPage,formatExact,verifiedEnvelope,t
 import './tenant-crm-directory.css'
 
 interface Props {actorId:string;draftId:string;scope:Scope}
+interface ActiveProps {actorId:string;scope:Scope}
 function message(error:unknown){
   if(error instanceof ApiError){
     if(error.status===401)return 'Сессия истекла. Войдите снова.'
     if(error.status===403)return 'Проверка недоступна или у вас нет доступа к клиентам этого заведения.'
     if(error.code==='TENANT_CRM_SOURCE_NOT_CONFIGURED')return 'Источник клиентских данных ещё не подключён.'
+    if(error.code==='TENANT_CRM_PILOT_READ_DISABLED')return 'Пилотный просмотр ещё не разрешён. Клиентская база не активирована.'
     if(error.status===429)return 'Слишком частые проверки. Повторите через минуту.'
   }
   return 'Не удалось подтвердить данные этого заведения. Повторите проверку.'
@@ -16,7 +18,11 @@ function message(error:unknown){
 export function TenantCustomerDirectory(props:Props){
   return <Directory key={`${props.actorId}:${props.draftId}:${props.scope.companyId}:${props.scope.venueId}`} {...props}/>
 }
-function Directory({draftId,scope}:Props){
+export function ActiveTenantCustomerDirectory(props:ActiveProps){
+  return <Directory key={`pilot:${props.actorId}:${props.scope.companyId}:${props.scope.venueId}`}
+    actorId={props.actorId} draftId="" scope={props.scope} activePilot/>
+}
+function Directory({draftId,scope,activePilot=false}:Props & {activePilot?:boolean}){
   const {companyId,venueId}=scope
   const [started,setStarted]=useState(false),[query,setQuery]=useState(''),[q,setQ]=useState(''),[offset,setOffset]=useState(0)
   const [sort,setSort]=useState<'id'|'name'|'username'>('id')
@@ -25,7 +31,8 @@ function Directory({draftId,scope}:Props){
   const [page,setPage]=useState<DirectoryPage|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[revision,setRevision]=useState(0)
   const [selected,setSelected]=useState<{id:string;revision:number}|null>(null)
   const sequence=useRef(0),selection=useRef(0),limit=25
-  const path=`/api/admin/onboarding/drafts/${encodeURIComponent(draftId)}/crm/customers`
+  const path=activePilot?`/api/admin/venues/${encodeURIComponent(venueId)}/clients`:
+    `/api/admin/onboarding/drafts/${encodeURIComponent(draftId)}/crm/customers`
   useEffect(()=>{
     if(!started)return
     let cancelled=false;const current=++sequence.current
@@ -41,10 +48,10 @@ function Directory({draftId,scope}:Props){
     sequence.current++;setPage(null);setSelected(null);setError('');setLoading(true)
     setQ(nextQ);setOffset(nextOffset);setSort(nextSort);setDirection(nextDirection);setWallet(nextWallet);setRevision(value=>value+1);setStarted(true)
   }
-  return <section className="tenant-crm" aria-label="Проверка клиентской базы">
+  return <section className="tenant-crm" aria-label={activePilot?"Клиентская база заведения":"Проверка клиентской базы"}>
     <h3>Клиентская база</h3>
-    <p>Проверьте доступ к клиентам этого заведения. Связь с кассой проверяется отдельно.</p>
-    {!started&&<button type="button" className="btn" onClick={()=>change('',0)}>Проверить клиентскую базу</button>}
+    <p>{activePilot?'Клиентская база из отдельного источника. Пилотный просмотр не означает коммерческую активацию.':'Проверьте доступ к клиентам этого заведения. Связь с кассой проверяется отдельно.'}</p>
+    {!started&&<button type="button" className="btn" onClick={()=>change('',0)}>{activePilot?'Загрузить клиентов':'Проверить клиентскую базу'}</button>}
     {started&&<>
       <form className="tenant-crm-search" onSubmit={event=>{event.preventDefault();change(query.trim(),0)}}>
         <label className="field"><span>Найти клиента</span><input maxLength={100} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Имя или идентификатор"/></label>

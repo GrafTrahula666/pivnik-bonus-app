@@ -33,6 +33,7 @@ export const config = {
   enableOnboardingWorkflow: bool('ADMIN_ENABLE_ONBOARDING_WORKFLOW', false),
   enableOnboardingPosProxy: bool('ADMIN_ENABLE_ONBOARDING_POS_PROXY', false),
   enableTenantCrmReads: bool('ADMIN_ENABLE_TENANT_CRM_READS', false),
+  enableTenantCrmPilotReads: bool('ADMIN_ENABLE_TENANT_CRM_PILOT_READS', false),
   enableTenantCrmContactCreate: bool('ADMIN_ENABLE_TENANT_CRM_CONTACT_CREATE', false),
   enableTenantCrmActivationChecks: bool('ADMIN_ENABLE_TENANT_CRM_ACTIVATION_CHECKS', false),
   enableCrmOnboarding: bool('ADMIN_ENABLE_CRM_ONBOARDING', false),

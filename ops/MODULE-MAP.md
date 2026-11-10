@@ -942,6 +942,37 @@ that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
 same-company venues, cross-company denial and access revocation through actual
 HTTP and disposable PGlite. No schema or write-path change is required.
 
+## CHAT03 isolated active-venue CRM pilot reader (2026-11-10, default off)
+
+`admin-platform/server/tenant-crm-active-pilot-read.ts` provides strictly
+nonproduction, default-off **read-only pilot** customer directory/card access
+through the existing owner-panel `/api/admin/venues/:id/clients` route on
+active canonical **non-PIVNIK** venues. Two gates are necessary:
+`ADMIN_ENABLE_TENANT_CRM_READS` and
+`ADMIN_ENABLE_TENANT_CRM_PILOT_READS`; a production runtime always denies
+regardless of flags. Without verified source the route reports
+`TENANT_CRM_SOURCE_NOT_CONFIGURED`, never a fabricated zero. This is
+**not** company activation or license entitlement.
+
+The source is resolved only from matching canonical
+`admin_onboarding_scopes`/frozen app config, active company/venue and a
+dedicated registry runtime key; client arguments cannot choose the database.
+Existing `resolveSpaceverseRuntime` validates target physical binding
+and scope. A bounded repeatable-read read-only transaction, server-side
+limits and live venue grant/source recheck precede every PII return.
+Owner role grants and the `legacy_bar_id` boundary cannot be bypassed;
+PIVNIK uses its original legacy route. The UI reuses the validated
+client directory with stale-response isolation but labels the new panel
+as pilot, not commercial activation.
+
+Synthetic signed HTTP fixtures with three independent tenant databases
+check zero vs missing wallet, precision, foreign/sibling scope, revoked
+grant in the same session, broken binding, absent registry, bad parameters
+and production denial. Any production activation requires separately
+verified store ownership, runtime source and provider licensing, with a
+new release gate and real staging acceptance (#436, #487). Do not deploy
+Draft #447 or #486 to production.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
