@@ -51,7 +51,7 @@
 @media(max-width:780px){.cash-period-controls{padding:12px;gap:10px}.cash-period-presets{width:100%}.cash-period-presets button{flex:1}.cash-date-label{width:100%;justify-content:space-between}.cash-hour-chart{padding:12px 8px}}
 
 .cash-calculation-details{padding:12px 18px;font-size:11px;color:var(--muted)}
-.cash-calculation-details summary{cursor:pointer;color:var(--text);font-weight:600}
+.cash-calculation-details h3{font-size:12px;color:var(--text);font-weight:650;margin:0}
 .cash-calculation-details dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
 .cash-calculation-details dt{margin-bottom:5px}.cash-calculation-details dd{margin:0;color:var(--text);overflow-wrap:anywhere}
 .cash-calculation-details p{margin:8px 0 0;line-height:1.5}
@@ -79,22 +79,24 @@
 .app-operation-comparison .cash-comparison-bar.previous{top:14px}
 .app-operation-comparison .cash-comparison-row{min-width:0}
 
-/* CHAT 08 · 72: prioritize period-scoped KPIs, keep the full ledger detail on demand. */
+/* Owner Dashboard: no hidden business metrics, compact instead of seven more large cards. */
 .kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
-.app-operations-extra{padding:16px 20px}
-.app-operations-extra summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
-.app-operations-extra[open] summary{margin-bottom:16px}
-.app-operations-extra .kpi-grid{margin-bottom:12px}
-@media(max-width:860px){.kpi-grid.app-operations-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:400px){.app-operations-extra{padding:14px 12px}}
-
+.app-operations-extra,.cash-secondary-metrics{padding:16px 20px}
+.app-operations-extra-heading{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.app-operations-extra-heading h3,.cash-secondary-metrics h3{font-size:14px;font-weight:650;margin:0}
+.app-operations-extra-heading small{font-size:11px;color:var(--muted)}
+.app-operations-secondary-list,.cash-secondary-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px;margin:12px 0 0}
+.app-operations-secondary-row,.cash-secondary-overview>div{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:4px;min-width:0;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--border)}
+.app-operations-secondary-row dt,.cash-secondary-overview dt{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.app-operations-secondary-row dd,.cash-secondary-overview dd{font-size:16px;font-weight:650;margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.app-operations-secondary-row dd.kpi-unavailable{font-size:12px;white-space:normal;color:var(--muted)}
+.app-operations-secondary-row small,.cash-secondary-overview small{grid-column:1/-1;font-size:10px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.app-operations-secondary-row small.negative{color:var(--danger)}
 /* POS receipts and linked buyers are separate from sale/return document count. */
 .cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
-.cash-secondary-metrics{padding:16px 20px}
-.cash-secondary-metrics summary{cursor:pointer;font-size:13px;font-weight:650;color:var(--text)}
-.cash-secondary-metrics[open] summary{margin-bottom:16px}
-@media(max-width:860px){.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:400px){.cash-secondary-metrics{padding:14px 12px}}
+@media(max-width:860px){.kpi-grid.app-operations-primary-kpis,.cash-dashboard .kpi-grid.cash-primary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.app-operations-secondary-list,.cash-secondary-overview{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:400px){.app-operations-extra,.cash-secondary-metrics{padding:14px 12px}}
 
 /* Task 72: comparisons stay alongside the primary POS figures on narrow screens. */
 .cash-kpi-trend{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap;align-items:baseline;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
