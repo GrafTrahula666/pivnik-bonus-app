@@ -125,7 +125,7 @@ describe('CHAT03 active tenant CRM pilot: signed HTTP / separate sources',()=>{
       expect(response.status).toBe(400)
     }
     expect(state.resolutions).toBe(0)
-    expect((await request('owner',path(0),'POST')).status).toBe(405)
+    expect((await request('owner',path(0),'POST')).status).toBe(403) // CSRF required even for owners
   })
   it('removes access in the same session after revoking an owner grant',async()=>{
     config.enableTenantCrmPilotReads=true
