@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { verifyRailwaySourceIsolation, snapshotFromRailwayReadbacks } from '../scripts/railway-source-isolation.mjs';
 import { RAILWAY_PRODUCTION } from '../scripts/railway-production-config.mjs';
 
@@ -260,4 +265,45 @@ test('pinned GitHub source with a conflicting image is rejected', () => {
   const other = fixture();
   other.services[1].config.source.image = 'registry.example.invalid/untrusted:latest';
   reject(other, /vk: unexpected repository source or conflicting image/);
+});
+
+test('CLI --connector-readbacks exercises the offline guard end to end', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'railway-source-isolation-'));
+  const file = join(directory, 'sanitized-readbacks.json');
+  const cli = fileURLToPath(new URL('../scripts/railway-source-isolation.mjs', import.meta.url));
+  const run = data => {
+    writeFileSync(file, JSON.stringify(data), { mode: 0o600 });
+    return spawnSync(process.execPath, [cli, '--connector-readbacks', file, SHA], {
+      cwd: directory,
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+  };
+  try {
+    const approved = connectorFixture();
+    const good = run(approved);
+    assert.equal(good.error, undefined);
+    assert.equal(good.status, 0, good.stderr);
+    assert.match(good.stdout, /Offline Railway source policy passed/);
+    assert.match(good.stdout, /not independently authenticated/);
+
+    const branchTracking = connectorFixture();
+    for (const service of branchTracking.serviceConfigs) {
+      delete service.config.source.commitSha;
+    }
+    const unsafe = run(branchTracking);
+    assert.equal(unsafe.error, undefined);
+    assert.equal(unsafe.status, 1);
+    assert.match(unsafe.stderr, /GitHub source follows branch/);
+    assert.doesNotMatch(unsafe.stdout, /policy passed/);
+
+    const missingPatchEvidence = connectorFixture();
+    delete missingPatchEvidence.serviceConfigs[0].stagedChanges;
+    const incomplete = run(missingPatchEvidence);
+    assert.equal(incomplete.error, undefined);
+    assert.equal(incomplete.status, 1);
+    assert.match(incomplete.stderr, /different or staged environment/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
