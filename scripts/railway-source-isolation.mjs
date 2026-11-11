@@ -57,8 +57,11 @@ export function verifyRailwaySourceIsolation(snapshot, approvedSha) {
 /**
  * Reconcile actual read-only Railway connector shapes rather than manually
  * copying service/source fields into an operator-authored manifest.
- * The connector responses still need independent trusted acquisition and
- * may change between calls; this does not attest the Source UI toggle.
+ * Supply describe_environment plus two describe_service readbacks (NOT
+ * get_service_config, which omits stagedChanges). The environment inventory
+ * never independently attests commitSha in its advertised schema.
+ * Responses need trusted acquisition and can change between calls; this
+ * does not attest the Source UI toggle.
  */
 export function snapshotFromRailwayReadbacks(environmentReadback, serviceReadbacks) {
   requireEvidence(environmentReadback && typeof environmentReadback === 'object' &&
@@ -83,16 +86,22 @@ export function snapshotFromRailwayReadbacks(environmentReadback, serviceReadbac
     const matches = environmentReadback.services.filter(service => service.id === id);
     requireEvidence(matches.length === 1, 'service not uniquely present in environment inventory');
     const discovered = matches[0];
-    requireEvidence(discovered.state === 'live' && discovered.stagedChangeCount === 0,
-      'environment service is not live or has staged changes');
+    requireEvidence(discovered.state === 'live' && discovered.stagedChangeCount === 0 &&
+      readback.service?.state === 'live',
+      'environment/service is not live or has staged changes');
     const environmentSource = discovered.source;
     const configSource = readback.config?.source;
+    // describe_environment's declared source only exposes image, repo and
+    // branch. It does NOT expose commitSha. The exact SHA can therefore be
+    // checked only in describe_service.config.source, when Railway returns it.
+    // When an expanded environment response supplies commitSha, reject any
+    // conflict; never manufacture a second independent SHA attestation.
+    const environmentReportsSha = environmentSource != null &&
+      Object.hasOwn(environmentSource, 'commitSha');
     requireEvidence(environmentSource?.repo === configSource?.repo &&
       environmentSource?.branch === configSource?.branch &&
       environmentSource?.image === (configSource?.image ?? null) &&
-      // A commit pin can be surfaced by either Railway read endpoint. Never
-      // accept conflicting pins, or a pin present in only one readback.
-      (environmentSource?.commitSha ?? null) === (configSource?.commitSha ?? null),
+      (!environmentReportsSha || environmentSource.commitSha === (configSource?.commitSha ?? null)),
       'Railway source mismatch between environment and service readbacks');
     return { id, state: discovered.state, staged: readback.staged, config: readback.config };
   });
