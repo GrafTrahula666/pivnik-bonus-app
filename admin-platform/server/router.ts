@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { changePassword, login, loadSession, logout, requireCsrf } from './auth.js'
+import { requestOwnerSignup } from './owner-signup.js'
 import { pool, readPool } from './db.js'
 import { config } from './config.js'
 import {
