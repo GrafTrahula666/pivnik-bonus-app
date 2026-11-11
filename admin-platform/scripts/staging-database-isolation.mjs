@@ -59,3 +59,23 @@ export function approvedStagingIntegrationDatabaseUrl(env=process.env) {
   url.pathname = '/codex_admin_test_staging'
   return url.toString()
 }
+
+// A standalone db:migrate on the known staging project is just as dangerous
+// as a direct seed. Production projects retain their own migration policy.
+export function assertStagingMigrationIsolation(env=process.env) {
+  const project=String(env.RAILWAY_PROJECT_ID||'')
+  const service=String(env.RAILWAY_SERVICE_ID||'')
+  if(project===STAGING_PROJECT_ID || service===STAGING_SERVICE_ID){
+    assertStagingDatabaseIsolation(env)
+    return
+  }
+  // A local command pointed at the staging internal hostname must not skip
+  // the project/service gate simply because Railway metadata is absent.
+  if(!project){
+    let host
+    try{host=new URL(String(env.ADMIN_DATABASE_URL||'')).hostname}catch{}
+    if(host===EXPECTED_DB_HOST){
+      throw new Error('Staging preflight refused: missing Railway project identity for staging migration.')
+    }
+  }
+}

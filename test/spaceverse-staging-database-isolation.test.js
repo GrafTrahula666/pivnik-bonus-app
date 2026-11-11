@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {assertStagingDatabaseIsolation,approvedStagingIntegrationDatabaseUrl,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
+import {assertStagingDatabaseIsolation,assertStagingMigrationIsolation,approvedStagingIntegrationDatabaseUrl,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
 
 const good=()=>({
   RAILWAY_PROJECT_ID:STAGING_PROJECT_ID,
@@ -82,4 +82,39 @@ test('staging fixture seed invokes the full isolation guard before database acce
   const gate=source.indexOf('assertStagingDatabaseIsolation()')
   const connect=source.indexOf('await pool.connect()')
   assert.ok(gate>0 && connect>gate,'Strict staging guard must run before opening a connection')
+})
+
+test('direct staging migration requires the same strict database guard',()=>{
+  assert.doesNotThrow(()=>assertStagingMigrationIsolation(good()))
+  for(const override of [
+    {RAILWAY_SERVICE_ID:'other-service'},
+    {ADMIN_DATABASE_URL:'postgresql://fixture:secret@other-postgres.railway.internal:5432/railway'},
+    {ADMIN_READ_DATABASE_URL:'postgresql://x:secret@other.railway.internal/railway'},
+    {ADMIN_ALLOW_TEST_SEED:'false'},
+    {ADMIN_ENABLE_PRODUCTION_ENTITLEMENT_WRITES:'true'},
+  ]){
+    assert.throws(()=>assertStagingMigrationIsolation({...good(),...override}),error=>{
+      assert.match(error.message,/Staging preflight refused:/)
+      assert.doesNotMatch(error.message,/secret|synthetic-only|different-synthetic/)
+      return true
+    })
+  }
+})
+
+test('direct migration cannot target staging host locally without project identity',()=>{
+  const {RAILWAY_PROJECT_ID,RAILWAY_SERVICE_ID,...unidentified}=good()
+  assert.throws(()=>assertStagingMigrationIsolation(unidentified),/Staging preflight refused:/)
+  assert.doesNotThrow(()=>assertStagingMigrationIsolation({
+    RAILWAY_PROJECT_ID:'another-approved-production-project',
+    RAILWAY_SERVICE_ID:'another-service',
+    ADMIN_DATABASE_URL:'postgresql://fixture:synthetic-only@production-postgres.railway.internal:5432/app',
+  }))
+})
+
+test('migration entrypoint checks staging DB before its first SQL query',()=>{
+  const source=readFileSync(new URL('../admin-platform/server/migrate.ts',import.meta.url),'utf8')
+  assert.match(source,/import \{ assertStagingMigrationIsolation \} from '\.\.\/scripts\/staging-database-isolation\.mjs'/)
+  const guard=source.indexOf('assertStagingMigrationIsolation()')
+  const firstSql=source.indexOf('await pool.query')
+  assert.ok(guard>0 && firstSql>guard,'Staging migration guard must run before any SQL')
 })

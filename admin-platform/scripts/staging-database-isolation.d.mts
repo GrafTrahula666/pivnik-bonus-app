@@ -4,3 +4,4 @@ export declare const STAGING_PROJECT_ID: string
 export declare const STAGING_SERVICE_ID: string
 export declare function assertStagingDatabaseIsolation(env?: NodeJS.ProcessEnv): string
 export declare function approvedStagingIntegrationDatabaseUrl(env?: NodeJS.ProcessEnv): string
+export declare function assertStagingMigrationIsolation(env?: NodeJS.ProcessEnv): void

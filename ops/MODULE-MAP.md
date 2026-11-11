@@ -992,6 +992,17 @@ nested paths and high-frequency enumeration with a per-actor rate limit.
 A disabled feature reports a distinct status to owners; no empty dataset or
 false active state is fabricated. This does not activate any store or license.
 
+## Staging direct migration isolation (2026-11-11, Draft #486)
+
+The standalone `db:migrate` command must check the **same full staging
+database isolation gate** before any SQL when executed in the existing
+staging Railway project/service. A local invocation aimed at the known
+staging internal host without Railway project identity also fails closed.
+Production migrations in other projects retain the existing separate
+`ADMIN_ALLOW_MIGRATIONS` policy. This is a guard, not proof that
+live staging database references, backups or data persistence are safe.
+Never run migrations on live stores to test this protection.
+
 ## Staging synthetic seed direct-invocation guard (2026-11-11, Draft #486)
 
 The `seed:test-tenant` command invokes the same fail-closed
