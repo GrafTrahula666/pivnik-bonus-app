@@ -1,15 +1,12 @@
 import { validateRuntimeConfig } from './config.js'
 import { closePool, pool } from './db.js'
 import { hashPassword, validatePasswordPolicy } from './security.js'
-
-const STAGING_PROJECT_ID='472996fe-c85d-4bda-bb72-2c96f7e5030f'
-const STAGING_SERVICE_ID='c9441ae5-7fe9-4030-9b61-3cd8238f94f3'
+import { assertStagingDatabaseIsolation } from '../scripts/staging-database-isolation.mjs'
 
 function requireStagingSeed(){
-  if(process.env.ADMIN_ALLOW_TEST_SEED!=='true')throw new Error('Set ADMIN_ALLOW_TEST_SEED=true on an isolated staging database.')
-  if(process.env.RAILWAY_PROJECT_ID!==STAGING_PROJECT_ID||process.env.RAILWAY_SERVICE_ID!==STAGING_SERVICE_ID){
-    throw new Error('Synthetic seed refused outside the isolated Admin staging service.')
-  }
+  // A direct seed invocation must pass the same strict project, service,
+  // DB target and external-write checks as the staging:deploy chain.
+  assertStagingDatabaseIsolation()
   const passwords={
     super:String(process.env.ADMIN_STAGING_SUPER_PASSWORD||''),
     pivnik:String(process.env.ADMIN_STAGING_PIVNIK_PASSWORD||''),

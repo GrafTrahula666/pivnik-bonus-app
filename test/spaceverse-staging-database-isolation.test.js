@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {assertStagingDatabaseIsolation,approvedStagingIntegrationDatabaseUrl,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
@@ -74,3 +75,11 @@ for(const [label,override] of [
     })
   })
 }
+
+test('staging fixture seed invokes the full isolation guard before database access',()=>{
+  const source=readFileSync(new URL('../admin-platform/server/seed-test-tenant.ts',import.meta.url),'utf8')
+  assert.match(source,/import \{ assertStagingDatabaseIsolation \} from '\.\.\/scripts\/staging-database-isolation\.mjs'/)
+  const gate=source.indexOf('assertStagingDatabaseIsolation()')
+  const connect=source.indexOf('await pool.connect()')
+  assert.ok(gate>0 && connect>gate,'Strict staging guard must run before opening a connection')
+})

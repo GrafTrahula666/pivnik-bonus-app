@@ -992,6 +992,16 @@ nested paths and high-frequency enumeration with a per-actor rate limit.
 A disabled feature reports a distinct status to owners; no empty dataset or
 false active state is fabricated. This does not activate any store or license.
 
+## Staging synthetic seed direct-invocation guard (2026-11-11, Draft #486)
+
+The `seed:test-tenant` command invokes the same fail-closed
+`assertStagingDatabaseIsolation` as staging preflight and integration tests
+**before** opening a database connection. It checks exact Railway project and
+service, approved internal database and matching reader/writer targets, explicit
+test-seed permission and disabled external production-write flags. A direct
+CLI invocation must not bypass these checks. This does not attest the actual
+redacted Railway environment, prove DB persistence or authorize staging deploy.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
