@@ -97,6 +97,7 @@ function connectorFixture() {
     service: { id: item.id },
     environment: { id: RAILWAY_PRODUCTION.environmentId },
     staged: null,
+    stagedChanges: [],
     config: structuredClone(item.config),
   }));
   return { environment, serviceConfigs };
@@ -174,6 +175,16 @@ test('Railway connector readbacks reject staged, missing or non-live service evi
   assert.throws(() => snapshotFromRailwayReadbacks(stagedService.environment, stagedService.serviceConfigs),
     /service config readback belongs to a different or staged environment/);
 
+  const servicePatch = connectorFixture();
+  servicePatch.serviceConfigs[0].stagedChanges = [{ path: 'services.source.branch', type: 'updated' }];
+  assert.throws(() => snapshotFromRailwayReadbacks(servicePatch.environment, servicePatch.serviceConfigs),
+    /different or staged environment/);
+
+  const noServicePatchEvidence = connectorFixture();
+  delete noServicePatchEvidence.serviceConfigs[0].stagedChanges;
+  assert.throws(() => snapshotFromRailwayReadbacks(noServicePatchEvidence.environment, noServicePatchEvidence.serviceConfigs),
+    /different or staged environment/);
+
   const stagedChange = connectorFixture();
   stagedChange.environment.services[0].stagedChangeCount = 1;
   assert.throws(() => snapshotFromRailwayReadbacks(stagedChange.environment, stagedChange.serviceConfigs),
@@ -209,6 +220,7 @@ test('2026-11-11 live Railway production readbacks reject both branch-tracking s
     service: { id: service.id },
     environment: { id: environment.environment.id, name: 'production' },
     staged: null,
+    stagedChanges: [],
     config: { source: { repo: service.source.repo, branch: 'main', checkSuites: false },
       build: { watchPatterns: ['/ops/spaceverse-production-release-approval-20261103.flag', '/index.html'] } },
   }));
