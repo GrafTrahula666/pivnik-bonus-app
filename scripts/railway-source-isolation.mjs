@@ -53,11 +53,65 @@ export function verifyRailwaySourceIsolation(snapshot, approvedSha) {
   return { isolated: true, source: 'pinned-commit', sha: approvedSha.toLowerCase(), services: 2 };
 }
 
+/**
+ * Reconcile actual read-only Railway connector shapes rather than manually
+ * copying service/source fields into an operator-authored manifest.
+ * The connector responses still need independent trusted acquisition and
+ * may change between calls; this does not attest the Source UI toggle.
+ */
+export function snapshotFromRailwayReadbacks(environmentReadback, serviceReadbacks) {
+  requireEvidence(environmentReadback && typeof environmentReadback === 'object' &&
+    environmentReadback.project?.id === RAILWAY_PRODUCTION.projectId &&
+    environmentReadback.environment?.id === RAILWAY_PRODUCTION.environmentId &&
+    environmentReadback.environment?.name === 'production',
+    'invalid Railway environment readback');
+  requireEvidence(environmentReadback.staged === null, 'environment readback contains staged changes');
+  requireEvidence(Array.isArray(environmentReadback.services), 'environment service inventory is missing');
+  requireEvidence(Array.isArray(serviceReadbacks) && serviceReadbacks.length === 2,
+    'exactly two service config readbacks are required');
+
+  const expectedIds = new Set([RAILWAY_PRODUCTION.services.telegram, RAILWAY_PRODUCTION.services.vk]);
+  const seen = new Set();
+  const services = serviceReadbacks.map(readback => {
+    const id = readback?.service?.id;
+    requireEvidence(expectedIds.has(id) && !seen.has(id), 'unknown or duplicate service config readback');
+    seen.add(id);
+    requireEvidence(readback.environment?.id === RAILWAY_PRODUCTION.environmentId &&
+      readback.staged === null, 'service config readback belongs to a different or staged environment');
+    const matches = environmentReadback.services.filter(service => service.id === id);
+    requireEvidence(matches.length === 1, 'service not uniquely present in environment inventory');
+    const discovered = matches[0];
+    requireEvidence(discovered.state === 'live' && discovered.stagedChangeCount === 0,
+      'environment service is not live or has staged changes');
+    const environmentSource = discovered.source;
+    const configSource = readback.config?.source;
+    requireEvidence(environmentSource?.repo === configSource?.repo &&
+      environmentSource?.branch === configSource?.branch &&
+      environmentSource?.image === (configSource?.image ?? null),
+      'Railway source mismatch between environment and service readbacks');
+    return { id, state: discovered.state, staged: readback.staged, config: readback.config };
+  });
+
+  return {
+    projectId: environmentReadback.project.id,
+    environmentId: environmentReadback.environment.id,
+    environmentName: environmentReadback.environment.name,
+    staged: environmentReadback.staged,
+    services,
+  };
+}
+
 async function main() {
-  requireEvidence(process.argv.length === 4,
-    'usage: node scripts/railway-source-isolation.mjs <sanitized-snapshot.json> <approved-main-sha>');
-  const data = JSON.parse(await readFile(process.argv[2], 'utf8'));
-  const verified = verifyRailwaySourceIsolation(data, process.argv[3]);
+  const isReadback = process.argv[2] === '--connector-readbacks';
+  requireEvidence(isReadback ? process.argv.length === 5 : process.argv.length === 4,
+    'usage: node scripts/railway-source-isolation.mjs [--connector-readbacks] <sanitized-json> <approved-main-sha>');
+  const file = isReadback ? process.argv[3] : process.argv[2];
+  const approvedSha = isReadback ? process.argv[4] : process.argv[3];
+  const data = JSON.parse(await readFile(file, 'utf8'));
+  const snapshot = isReadback
+    ? snapshotFromRailwayReadbacks(data.environment, data.serviceConfigs)
+    : data;
+  const verified = verifyRailwaySourceIsolation(snapshot, approvedSha);
   console.log(`Offline Railway source policy passed: two sources pinned to ${verified.sha}.`);
   console.log('WARNING: the supplied snapshot is not independently authenticated; live Railway readback and release gate are still required.');
 }
