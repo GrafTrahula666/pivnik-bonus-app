@@ -148,6 +148,12 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     json(res,200,{...result,capabilities:await capabilitiesFor(result.admin)});return true
   }
 
+  // CHAT 04: explicitly fail-closed self-service registration boundary.
+  // There is no account creation until verified email delivery and storage exist.
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/signup'){
+    requestOwnerSignup(req,await readJsonBody(req,2048))
+  }
+
   // Public (unauthenticated) one-time invite redemption — no session exists yet to load.
   const onboardingInvitePreview=/^\/api\/admin\/onboarding\/invite\/([^/]+)$/.exec(url.pathname)
   if(isMethod(req,'GET')&&onboardingInvitePreview){
