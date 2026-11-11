@@ -78,7 +78,8 @@ export function snapshotFromRailwayReadbacks(environmentReadback, serviceReadbac
     requireEvidence(expectedIds.has(id) && !seen.has(id), 'unknown or duplicate service config readback');
     seen.add(id);
     requireEvidence(readback.environment?.id === RAILWAY_PRODUCTION.environmentId &&
-      readback.staged === null, 'service config readback belongs to a different or staged environment');
+      readback.staged === null && Array.isArray(readback.stagedChanges) && readback.stagedChanges.length === 0,
+      'service config readback belongs to a different or staged environment');
     const matches = environmentReadback.services.filter(service => service.id === id);
     requireEvidence(matches.length === 1, 'service not uniquely present in environment inventory');
     const discovered = matches[0];
