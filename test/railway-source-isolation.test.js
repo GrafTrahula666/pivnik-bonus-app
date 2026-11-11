@@ -221,3 +221,12 @@ test('2026-11-11 live Railway production readbacks reject both branch-tracking s
   assert.throws(() => verifyRailwaySourceIsolation(snapshot, SHA),
     /telegram: GitHub source follows branch or is pinned to a different SHA/);
 });
+
+test('pinned GitHub source with a conflicting image is rejected', () => {
+  const snap = fixture();
+  snap.services[0].config.source.image = 'registry.example.invalid/untrusted:latest';
+  reject(snap, /telegram: unexpected repository source or conflicting image/);
+  const other = fixture();
+  other.services[1].config.source.image = 'registry.example.invalid/untrusted:latest';
+  reject(other, /vk: unexpected repository source or conflicting image/);
+});
