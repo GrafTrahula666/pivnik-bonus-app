@@ -25,6 +25,8 @@ export const config = {
   allowMigrations: bool('ADMIN_ALLOW_MIGRATIONS', false),
   enableWrites: bool('ADMIN_ENABLE_WRITES', false),
   enableOnboardingDrafts: bool('ADMIN_ENABLE_ONBOARDING_DRAFTS', false),
+  // Always fail closed until a verified email sender and durable signup flow land.
+  enableOwnerSignup: bool('ADMIN_ENABLE_OWNER_SIGNUP', false),
   enableOnboardingIntegrations: bool('ADMIN_ENABLE_ONBOARDING_INTEGRATIONS', false),
   enableOnboardingInvitations: bool('ADMIN_ENABLE_ONBOARDING_INVITATIONS', false),
   enableOnboardingProvisioning: bool('ADMIN_ENABLE_ONBOARDING_PROVISIONING', false),
