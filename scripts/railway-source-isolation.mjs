@@ -43,8 +43,9 @@ export function verifyRailwaySourceIsolation(snapshot, approvedSha) {
     const service = services.get(id);
     requireEvidence(service && service.state === 'live' && service.staged === null,
       `${name}: service missing, not live or has staged changes`);
-    requireEvidence(service.config?.source?.repo === repo,
-      `${name}: unexpected repository source`);
+    requireEvidence(service.config?.source?.repo === repo &&
+      (service.config.source.image === null || service.config.source.image === undefined),
+      `${name}: unexpected repository source or conflicting image`);
     const pinnedSha = service.config.source.commitSha;
     requireEvidence(typeof pinnedSha === 'string' && SHA.test(pinnedSha) &&
       pinnedSha.toLowerCase() === approvedSha.toLowerCase(),
