@@ -110,6 +110,8 @@ test('actual Railway connector-shaped readbacks map consistently to exact-SHA pi
   );
   // Current live Railway source follows main with no exact SHA; offline
   // connector reconciliation must not silently invent a pin.
+  // Both independent Railway endpoints must agree that no SHA is pinned.
+  for (const service of environment.services) delete service.source.commitSha;
   delete serviceConfigs[0].config.source.commitSha;
   delete serviceConfigs[1].config.source.commitSha;
   assert.throws(
