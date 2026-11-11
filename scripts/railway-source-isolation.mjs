@@ -87,7 +87,10 @@ export function snapshotFromRailwayReadbacks(environmentReadback, serviceReadbac
     const configSource = readback.config?.source;
     requireEvidence(environmentSource?.repo === configSource?.repo &&
       environmentSource?.branch === configSource?.branch &&
-      environmentSource?.image === (configSource?.image ?? null),
+      environmentSource?.image === (configSource?.image ?? null) &&
+      // A commit pin can be surfaced by either Railway read endpoint. Never
+      // accept conflicting pins, or a pin present in only one readback.
+      (environmentSource?.commitSha ?? null) === (configSource?.commitSha ?? null),
       'Railway source mismatch between environment and service readbacks');
     return { id, state: discovered.state, staged: readback.staged, config: readback.config };
   });
