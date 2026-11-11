@@ -942,6 +942,27 @@ that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
 same-company venues, cross-company denial and access revocation through actual
 HTTP and disposable PGlite. No schema or write-path change is required.
 
+## CHAT 04 owner self-signup intake boundary (2026-11-11, Draft only)
+
+`admin-platform/server/owner-signup.ts` provides strict email, display name
+and password validation for a *new owner* registration request. It rejects
+client-supplied role, company, venue and admin identity fields and applies
+independent per-IP/per-email throttles. `POST /api/admin/auth/signup` is
+mounted only in the Admin Platform router, behind the default-off
+`ADMIN_ENABLE_OWNER_SIGNUP`, `ADMIN_ENABLE_WRITES` and
+`ADMIN_ENABLE_ONBOARDING_DRAFTS` gates. The shared Origin policy and 2 KiB
+JSON-body cap also apply.
+
+**This is not a functioning registration flow.** Even if all flags are
+enabled, the endpoint returns 503 `OWNER_SIGNUP_VERIFICATION_UNAVAILABLE`
+and does not write an account, session, company, venue, invitation or grant.
+Email delivery, durable one-time verification, account creation and tenant
+ownership must be developed and independently reviewed before removing this
+fail-closed outcome. Existing invitation issuance, login and legacy PIVNIK
+routes are unchanged. New tests cover forged scope fields, malformed input,
+flag combinations and normalized-account throttling. No production flag is
+enabled by this Draft.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
