@@ -165,3 +165,35 @@ test('Railway connector readbacks reject staged, missing or non-live service evi
   assert.throws(() => snapshotFromRailwayReadbacks(noSource.environment, noSource.serviceConfigs),
     /source mismatch between environment and service readbacks/);
 });
+
+test('2026-11-11 live Railway production readbacks reject both branch-tracking services', () => {
+  // Sanitized from read-only Railway describe_environment + get_service_config,
+  // project content-nature, production; no secrets or variable values.
+  // This is a historical regression fixture, NOT an authenticated live check.
+  const environment = {
+    project: { id: '20a942f9-3164-484a-a6f1-565439e38705' },
+    environment: { id: 'cdd9d26c-2aab-45d9-95ed-ef487fafaa8f', name: 'production' },
+    staged: null,
+    services: [
+      { id: 'd8d26f64-9ac1-4a03-9036-1a60f43c0be6', state: 'live',
+        stagedChangeCount: 0, source: { image: null, repo: 'GrafTrahula666/pivnik-bonus-app', branch: 'main' } },
+      { id: '0573c420-0f9c-43bd-8e87-e1788ce3eefd', state: 'live',
+        stagedChangeCount: 0, source: { image: null, repo: 'GrafTrahula666/pivnik-bonus-app', branch: 'main' } },
+    ],
+  };
+  const serviceConfigs = environment.services.map(service => ({
+    service: { id: service.id },
+    environment: { id: environment.environment.id, name: 'production' },
+    staged: null,
+    config: { source: { repo: service.source.repo, branch: 'main', checkSuites: false },
+      build: { watchPatterns: ['/ops/spaceverse-production-release-approval-20261103.flag', '/index.html'] } },
+  }));
+  const snapshot = snapshotFromRailwayReadbacks(environment, serviceConfigs);
+  assert.equal(snapshot.services.length, 2);
+  for (const service of snapshot.services) {
+    assert.equal(service.config.source.commitSha, undefined);
+    assert.equal(service.config.source.checkSuites, false);
+  }
+  assert.throws(() => verifyRailwaySourceIsolation(snapshot, SHA),
+    /telegram: GitHub source follows branch or is pinned to a different SHA/);
+});
