@@ -11,7 +11,7 @@ const original = {
   enableOwnerSignup: config.enableOwnerSignup,
 }
 const valid = { email: '  New.Owner@Example.com ', displayName: '  Владелец  ', password: 'Long-Safe-Password-2026' }
-const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as IncomingMessage
+const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as unknown as IncomingMessage
 
 afterEach(() => {
   Object.assign(config, original)
