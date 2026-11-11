@@ -89,12 +89,12 @@ function connectorFixture() {
     staged: null,
     services: expected.services.map(item => ({
       id: item.id, state: item.state, stagedChangeCount: 0,
-      source: { repo: item.config.source.repo, branch: item.config.source.branch, image: null,
-        commitSha: item.config.source.commitSha },
+      // Actual describe_environment contract has no commitSha field.
+      source: { repo: item.config.source.repo, branch: item.config.source.branch, image: null },
     })),
   };
   const serviceConfigs = expected.services.map(item => ({
-    service: { id: item.id },
+    service: { id: item.id, state: 'live' },
     environment: { id: RAILWAY_PRODUCTION.environmentId },
     staged: null,
     stagedChanges: [],
@@ -109,9 +109,8 @@ test('actual Railway connector-shaped readbacks map consistently to exact-SHA pi
     verifyRailwaySourceIsolation(snapshotFromRailwayReadbacks(environment, serviceConfigs), SHA),
     { isolated: true, source: 'pinned-commit', sha: SHA, services: 2 },
   );
-  // Current live Railway source follows main with no exact SHA; offline
-  // connector reconciliation must not silently invent a pin.
-  // Both independent Railway endpoints must agree that no SHA is pinned.
+  // The environment inventory does not advertise commitSha, so the service
+  // source must be the only SHA evidence. An absent service pin fails closed.
   for (const service of environment.services) delete service.source.commitSha;
   delete serviceConfigs[0].config.source.commitSha;
   delete serviceConfigs[1].config.source.commitSha;
@@ -143,25 +142,40 @@ test('Railway connector readbacks fail closed on cross-service and cross-environ
     /unknown or duplicate service config readback/);
 });
 
-test('Railway connector rejects inconsistent exact-SHA pins across independent readbacks', () => {
-  const mismatched = connectorFixture();
-  mismatched.environment.services[0].source.commitSha = OTHER;
-  assert.throws(
-    () => snapshotFromRailwayReadbacks(mismatched.environment, mismatched.serviceConfigs),
-    /source mismatch between environment and service readbacks/,
+test('Railway environment inventory does not attest commitSha, but service exact-SHA still does', () => {
+  const realShape = connectorFixture();
+  assert.deepEqual(
+    verifyRailwaySourceIsolation(snapshotFromRailwayReadbacks(realShape.environment, realShape.serviceConfigs), SHA),
+    { isolated: true, source: 'pinned-commit', sha: SHA, services: 2 },
   );
-  const onlyService = connectorFixture();
-  delete onlyService.environment.services[0].source.commitSha;
-  assert.throws(
-    () => snapshotFromRailwayReadbacks(onlyService.environment, onlyService.serviceConfigs),
-    /source mismatch between environment and service readbacks/,
-  );
+  const wrongServicePin = connectorFixture();
+  wrongServicePin.serviceConfigs[0].config.source.commitSha = OTHER;
+  assert.throws(() => verifyRailwaySourceIsolation(
+    snapshotFromRailwayReadbacks(wrongServicePin.environment, wrongServicePin.serviceConfigs), SHA),
+  /telegram: GitHub source follows branch or is pinned to a different SHA/);
+  const absentServicePin = connectorFixture();
+  delete absentServicePin.serviceConfigs[0].config.source.commitSha;
+  assert.throws(() => verifyRailwaySourceIsolation(
+    snapshotFromRailwayReadbacks(absentServicePin.environment, absentServicePin.serviceConfigs), SHA),
+  /telegram: GitHub source follows branch/);
+});
+
+test('expanded Railway environment response cannot contradict source pin', () => {
+  const different = connectorFixture();
+  different.environment.services[0].source.commitSha = OTHER;
+  assert.throws(() => snapshotFromRailwayReadbacks(different.environment, different.serviceConfigs),
+    /source mismatch between environment and service readbacks/);
+
   const onlyEnvironment = connectorFixture();
+  onlyEnvironment.environment.services[0].source.commitSha = SHA;
   delete onlyEnvironment.serviceConfigs[0].config.source.commitSha;
-  assert.throws(
-    () => snapshotFromRailwayReadbacks(onlyEnvironment.environment, onlyEnvironment.serviceConfigs),
-    /source mismatch between environment and service readbacks/,
-  );
+  assert.throws(() => snapshotFromRailwayReadbacks(onlyEnvironment.environment, onlyEnvironment.serviceConfigs),
+    /source mismatch between environment and service readbacks/);
+
+  const explicitNoPin = connectorFixture();
+  explicitNoPin.environment.services[0].source.commitSha = null;
+  assert.throws(() => snapshotFromRailwayReadbacks(explicitNoPin.environment, explicitNoPin.serviceConfigs),
+    /source mismatch between environment and service readbacks/);
 });
 
 test('Railway connector readbacks reject staged, missing or non-live service evidence', () => {
@@ -179,6 +193,11 @@ test('Railway connector readbacks reject staged, missing or non-live service evi
   servicePatch.serviceConfigs[0].stagedChanges = [{ path: 'services.source.branch', type: 'updated' }];
   assert.throws(() => snapshotFromRailwayReadbacks(servicePatch.environment, servicePatch.serviceConfigs),
     /different or staged environment/);
+
+  const notLive = connectorFixture();
+  notLive.serviceConfigs[0].service.state = 'staged-create';
+  assert.throws(() => snapshotFromRailwayReadbacks(notLive.environment, notLive.serviceConfigs),
+    /environment\/service is not live/);
 
   const noServicePatchEvidence = connectorFixture();
   delete noServicePatchEvidence.serviceConfigs[0].stagedChanges;
@@ -217,7 +236,7 @@ test('2026-11-11 live Railway production readbacks reject both branch-tracking s
     ],
   };
   const serviceConfigs = environment.services.map(service => ({
-    service: { id: service.id },
+    service: { id: service.id, state: 'live' },
     environment: { id: environment.environment.id, name: 'production' },
     staged: null,
     stagedChanges: [],
