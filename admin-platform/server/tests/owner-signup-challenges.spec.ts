@@ -3,13 +3,20 @@ import fs from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ db: null as PGlite | null, failAudit: false }))
+const state = vi.hoisted(() => ({ db: null as PGlite | null, failAudit: false, expireAfterLock: false }))
 vi.mock('../db.js', () => {
   const query = async (sql: string, params?: unknown[]) => {
     if (state.failAudit && sql.startsWith('INSERT INTO admin_audit_log')) {
       throw new Error('Synthetic audit failure; should never appear in the HTTP response')
     }
     const res = await state.db!.query(sql, params)
+    if (state.expireAfterLock && sql.includes('FOR UPDATE') && res.rows.length) {
+      state.expireAfterLock = false
+      await state.db!.query(
+        "UPDATE admin_owner_signup_challenges SET created_at=NOW()-INTERVAL '2 hours', expires_at=NOW()-INTERVAL '1 hour' WHERE id=$1::uuid",
+        [(res.rows[0] as { id: string }).id],
+      )
+    }
     return { ...res, rowCount: res.rows.length || res.affectedRows || 0 }
   }
   const adapter = { query, connect: async () => ({ query, release() {} }) }
@@ -106,6 +113,17 @@ describe('CHAT 04 #492: durable, internal-only owner signup confirmation ledger'
     await expect(confirm(tokens.get(email)!)).rejects.toMatchObject({statusCode:410})
     await expect(confirm('not-a-token')).rejects.toMatchObject({statusCode:410})
     expect((await state.db!.query('SELECT 1 FROM admin_accounts WHERE email=$1',[email])).rows).toEqual([])
+  })
+
+  it('rejects a challenge that expires after the row is selected for locking', async () => {
+    const email = 'lock-expired@fixture.invalid'
+    await prepare(signup(email), delivered)
+    const token = tokens.get(email)!
+    state.expireAfterLock = true
+    try {
+      await expect(confirm(token)).rejects.toMatchObject({ statusCode: 410, code: 'OWNER_SIGNUP_TOKEN_UNAVAILABLE' })
+    } finally { state.expireAfterLock = false }
+    expect((await state.db!.query('SELECT 1 FROM admin_accounts WHERE email=$1', [email])).rows).toEqual([])
   })
 
   it('audit failure rolls back account and token consumption atomically', async () => {
