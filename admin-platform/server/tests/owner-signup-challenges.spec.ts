@@ -102,7 +102,7 @@ describe('CHAT 04 #492: durable, internal-only owner signup confirmation ledger'
   it('expired and malformed tokens cannot create accounts', async () => {
     const email = 'expired@fixture.invalid'
     await prepare(signup(email), delivered)
-    await state.db!.query("UPDATE admin_owner_signup_challenges SET expires_at=NOW()-INTERVAL '1 minute' WHERE email=$1",[email])
+    await state.db!.query("UPDATE admin_owner_signup_challenges SET created_at=NOW()-INTERVAL '2 hours', expires_at=NOW()-INTERVAL '1 hour' WHERE email=$1",[email])
     await expect(confirm(tokens.get(email)!)).rejects.toMatchObject({statusCode:410})
     await expect(confirm('not-a-token')).rejects.toMatchObject({statusCode:410})
     expect((await state.db!.query('SELECT 1 FROM admin_accounts WHERE email=$1',[email])).rows).toEqual([])
