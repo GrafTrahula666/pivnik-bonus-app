@@ -14,6 +14,7 @@ export interface OwnerSignupInput {
 
 const invalid = () => new HttpError(400, 'OWNER_SIGNUP_INVALID', 'Проверьте email, имя и пароль.')
 const allowed = new Set(['email', 'displayName', 'password'])
+const unsafeIdentityChars = /[\u0000-\u001f\u007f-\u009f\u061c\u200e-\u200f\u202a-\u202e\u2066-\u2069]/
 
 export function parseOwnerSignupInput(raw: unknown): OwnerSignupInput {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalid()
@@ -25,8 +26,8 @@ export function parseOwnerSignupInput(raw: unknown): OwnerSignupInput {
   const email = normalizeEmail(fields.email)
   const displayName = fields.displayName.trim()
   if (email.length > 254 || !/^[^\s@<>]{1,64}@[^\s@<>]+\.[^\s@<>]+$/.test(email) ||
-      !displayName || displayName.length > 80 ||
-      Array.from(displayName).some(ch => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127)) {
+      unsafeIdentityChars.test(email) || !displayName || displayName.length > 80 ||
+      unsafeIdentityChars.test(displayName)) {
     throw invalid()
   }
   validatePasswordPolicy(fields.password)
