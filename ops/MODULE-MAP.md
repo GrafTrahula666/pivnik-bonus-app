@@ -963,6 +963,29 @@ routes are unchanged. New tests cover forged scope fields, malformed input,
 flag combinations and normalized-account throttling. No production flag is
 enabled by this Draft.
 
+### Internal durable email challenge slice (2026-11-12, Draft only)
+
+Manual additive Admin migration `027_owner_signup_challenges.sql` defines an
+independent, one-pending-challenge-per-email ledger with an opaque random token
+stored only as its SHA-256 hash, a password **hash** and a 30-minute expiry.
+The internal `server/owner-signup-challenges.ts` has injectable synthetic
+delivery **for isolated tests only**; no email provider, public verification
+route or production delivery is wired. A replacement challenge invalidates its
+predecessor; successful verification locks the challenge and atomically creates
+only a `VENUE_ADMIN` account and audit, **without company/venue membership
+or session**. Account collision, expired/replayed token, audit failure and
+disabled flags fail closed. A delivery failure is reported, not falsely called
+sent. The separate `owner-signup-challenges.spec.ts` checks SQL and replay,
+account and grant absence before verification, expiry, rotation, collisions and
+transactional audit rollback on disposable PGlite. Native PostgreSQL contention,
+an approved real mail service and independent review remain pending.
+
+**This does not make signup available:** the public
+`POST /api/admin/auth/signup` still always rejects with 503 when the flag is
+on; there is no confirm endpoint. The migration must not be applied to the
+working PIVNIK DB as a side effect of this Draft. No new production feature
+flag or sender credentials were configured.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
