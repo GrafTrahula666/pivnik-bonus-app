@@ -41,6 +41,19 @@ describe('CHAT 04 owner self-signup boundary (#492)', () => {
     for (const item of invalid) expect(() => parseOwnerSignupInput(item)).toThrow()
   })
 
+  it('rejects invisible controls and bidi overrides in owner identity fields', () => {
+    for (const fields of [
+      { email: 'owner\u0000name@example.com' },
+      { email: 'owner\u007fname@example.com' },
+      { email: 'owner\u0085name@example.com' },
+      { email: 'owner\u202ename@example.com' },
+      { displayName: 'Owner\u0085Admin' },
+      { displayName: 'Owner\u2066Admin' },
+    ]) {
+      expect(() => parseOwnerSignupInput({ ...valid, ...fields })).toThrowError('Проверьте email, имя и пароль.')
+    }
+  })
+
   it('is disabled without ALL three independent rollout gates', () => {
     for (const [writes, drafts, signup] of [
       [false, false, false], [true, false, true],
