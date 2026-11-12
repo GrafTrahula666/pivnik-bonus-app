@@ -111,6 +111,13 @@ export async function confirmOwnerSignupChallenge(token: unknown): Promise<{ adm
        FOR UPDATE`, [sha256(token)],
     )).rows[0]
     if (!row) throw invalidToken()
+    // NOW() is fixed at transaction start. A token can expire while FOR UPDATE waits.
+    // Recheck against wall-clock time only after the challenge row lock is acquired.
+    const stillLive = (await client.query<{ live: boolean }>(
+      'SELECT expires_at > clock_timestamp() AS live FROM admin_owner_signup_challenges WHERE id=$1::uuid',
+      [row.id],
+    )).rows[0]?.live
+    if (!stillLive) throw invalidToken()
     const collision = await client.query('SELECT 1 FROM admin_accounts WHERE LOWER(email)=$1 LIMIT 1', [row.email])
     if (collision.rows.length) throw invalidToken()
     const created = (await client.query<{ id: string }>(
