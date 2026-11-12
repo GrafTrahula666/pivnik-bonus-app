@@ -61,6 +61,22 @@ describe('CHAT 04 #492: durable, internal-only owner signup confirmation ledger'
     expect((await state.db!.query("SELECT 1 FROM admin_owner_signup_challenges WHERE email='no-delivery@fixture.invalid'")).rows).toEqual([])
   })
 
+  it('failed synthetic delivery never creates an account and retry rotates the token', async () => {
+    const email = 'delivery-failed@fixture.invalid'
+    let undeliveredToken = ''
+    await expect(prepare(signup(email), async (_address, token) => {
+      undeliveredToken = token
+      throw new Error('Synthetic provider outage with private diagnostics')
+    })).rejects.toMatchObject({ statusCode: 503, code: 'OWNER_SIGNUP_DELIVERY_UNAVAILABLE' })
+    expect(undeliveredToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect((await state.db!.query('SELECT 1 FROM admin_accounts WHERE email=$1', [email])).rows).toEqual([])
+    await expect(prepare(signup(email), delivered)).resolves.toEqual({ accepted: true })
+    const retryToken = tokens.get(email)!
+    expect(retryToken).not.toBe(undeliveredToken)
+    await expect(confirm(undeliveredToken)).rejects.toMatchObject({ statusCode: 410 })
+    await expect(confirm(retryToken)).resolves.toMatchObject({ admin: { email, role: 'VENUE_ADMIN' } })
+  })
+
   it('stores only a token hash, then creates a no-tenant VENUE_ADMIN after verification', async () => {
     const email = 'verified-first@fixture.invalid'
     await expect(prepare(signup(email), delivered)).resolves.toEqual({ accepted: true })
