@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {assertStagingDatabaseIsolation,assertStagingMigrationIsolation,approvedStagingIntegrationDatabaseUrl,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
+import {assertStagingDatabaseIsolation,assertStagingMigrationIsolation,approvedStagingIntegrationDatabaseUrl,summarizeStagingDatabaseIsolation,STAGING_PROJECT_ID,STAGING_SERVICE_ID} from '../admin-platform/scripts/staging-database-isolation.mjs'
 
 const good=()=>({
   RAILWAY_PROJECT_ID:STAGING_PROJECT_ID,
@@ -117,4 +117,51 @@ test('migration entrypoint checks staging DB before its first SQL query',()=>{
   const guard=source.indexOf('assertStagingMigrationIsolation()')
   const firstSql=source.indexOf('await pool.query')
   assert.ok(guard>0 && firstSql>guard,'Staging migration guard must run before any SQL')
+})
+
+
+test('staging operator attestation contains only non-secret fixed fields',()=>{
+  const env={...good(),
+    ADMIN_DATABASE_URL:'postgresql://username:VERY_PRIVATE_PASSWORD@admin-postgres.railway.internal:5432/railway',
+    ADMIN_READ_DATABASE_URL:'postgresql://reader:ANOTHER_PRIVATE_PASSWORD@admin-postgres.railway.internal:5432/railway',
+    ADMIN_ALLOW_MIGRATIONS:'true',
+  }
+  const report=summarizeStagingDatabaseIsolation(env)
+  assert.equal(report.schemaVersion,1)
+  assert.equal(report.isolationGatePassed,true)
+  assert.equal(report.database.reader.matchesPrimary,true)
+  assert.equal(report.database.writer.matchesPrimary,true)
+  assert.equal(report.flags.migrationsEnabled,true)
+  assert.equal(report.persistentVolumeAndRestoreVerified,false)
+  assert.equal(report.realTwoTenantAcceptanceVerified,false)
+  assert.equal(report.deployApproved,false)
+  const printed=JSON.stringify(report)
+  for(const secret of ['VERY_PRIVATE_PASSWORD','ANOTHER_PRIVATE_PASSWORD','username','fixture','railway.internal','postgresql://'])
+    assert.ok(!printed.includes(secret),'Must not serialize credentials, hostnames or connection URL')
+})
+test('attestation fails closed when a writer points to another DB without exposing it',()=>{
+  const report=summarizeStagingDatabaseIsolation({...good(),
+    ADMIN_PRODUCTION_WRITE_DATABASE_URL:'postgresql://evil:SECRET@other.railway.internal/external'})
+  assert.equal(report.isolationGatePassed,false)
+  assert.equal(report.database.writer.matchesPrimary,false)
+  assert.equal(report.deployApproved,false)
+  assert.ok(!JSON.stringify(report).includes('SECRET'))
+  const absent=summarizeStagingDatabaseIsolation({...good(),ADMIN_READ_DATABASE_URL:''})
+  assert.equal(absent.database.reader.configured,false)
+  assert.equal(absent.database.reader.matchesPrimary,null)
+  assert.equal(absent.isolationGatePassed,true)
+})
+test('attestation stays read-only even for missing project identity',()=>{
+  const report=summarizeStagingDatabaseIsolation({
+    ADMIN_DATABASE_URL:'postgresql://secret@other.railway.internal/railway',
+    ADMIN_ALLOW_TEST_SEED:'true',
+    ADMIN_ENABLE_PRODUCTION_BONUS_WRITES:'true',
+  })
+  assert.equal(report.projectAndServiceMatch,false)
+  assert.equal(report.database.primary.approvedTarget,false)
+  assert.equal(report.flags.externalProductionWritesDisabled,false)
+  assert.equal(report.isolationGatePassed,false)
+  assert.equal(report.deployApproved,false)
+  const cli=readFileSync(new URL('../admin-platform/scripts/staging-db-attest.mjs',import.meta.url),'utf8')
+  assert.doesNotMatch(cli,/\.connect\(|pool\.query|spawnSync|writeFileSync|process\.env\.[A-Z_]+/)
 })

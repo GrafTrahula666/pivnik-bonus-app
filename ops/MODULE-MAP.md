@@ -992,6 +992,20 @@ nested paths and high-frequency enumeration with a per-actor rate limit.
 A disabled feature reports a distinct status to owners; no empty dataset or
 false active state is fabricated. This does not activate any store or license.
 
+## Read-only Railway staging DB attestation (2026-11-12, Draft #486)
+
+The operator-only \`npm run staging:attest\` command emits a **fixed JSON
+whitelist** of booleans/nulls for exact staging project/service identity,
+approved primary DB target, optional reader/writer matching, migration/seed
+flags, and separate external-write flag state. It uses the same strict
+isolation gate with no DB connection and never prints URLs, usernames, passwords,
+tokens or hashes. A passing code-level gate never means deploy approval:
+\`persistentVolumeAndRestoreVerified\`, \`realTwoTenantAcceptanceVerified\`,
+and \`deployApproved\` are explicitly false until an independent operator
+acceptance. CI tests use synthetic environments only; the old live staging
+deployment does not yet contain this tool. Do not deploy a draft merely to
+run this diagnostic.
+
 ## Staging direct migration isolation (2026-11-11, Draft #486)
 
 The standalone `db:migrate` command must check the **same full staging

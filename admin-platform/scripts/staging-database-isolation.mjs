@@ -79,3 +79,49 @@ export function assertStagingMigrationIsolation(env=process.env) {
     }
   }
 }
+
+
+// Read-only, non-secret operator attestation. This evaluates the *current*
+// Railway process environment and never opens a database connection.
+// It cannot prove volume persistence, restore capability, or live tenancy.
+export function summarizeStagingDatabaseIsolation(env=process.env) {
+  const present = key => Boolean(String(env[key]||'').trim())
+  const target = key => {
+    if(!present(key))return null
+    try{return parseDatabaseTarget(String(env[key]).trim(),key)}catch{return false}
+  }
+  const primary=target('ADMIN_DATABASE_URL')
+  const reader=target('ADMIN_READ_DATABASE_URL')
+  const writer=target('ADMIN_PRODUCTION_WRITE_DATABASE_URL')
+  const sameTarget = other => {
+    if(other===null)return null
+    if(!primary||!other)return false
+    return primary.host===other.host&&primary.port===other.port&&primary.database===other.database
+  }
+  const enabled = value => ['true','1','on','yes'].includes(String(value||'').trim().toLowerCase())
+  let isolationGatePassed=false
+  try{assertStagingDatabaseIsolation(env);isolationGatePassed=true}catch{
+    // Intentionally do not serialize the error, input URLs or credentials.
+  }
+  return {
+    schemaVersion:1,
+    environment:'pivnik-admin-staging',
+    projectAndServiceMatch:env.RAILWAY_PROJECT_ID===STAGING_PROJECT_ID&&env.RAILWAY_SERVICE_ID===STAGING_SERVICE_ID,
+    database:{
+      primary:{configured:present('ADMIN_DATABASE_URL'),approvedTarget:Boolean(primary)},
+      reader:{configured:present('ADMIN_READ_DATABASE_URL'),matchesPrimary:sameTarget(reader)},
+      writer:{configured:present('ADMIN_PRODUCTION_WRITE_DATABASE_URL'),matchesPrimary:sameTarget(writer)},
+    },
+    flags:{
+      testSeedEnabled:env.ADMIN_ALLOW_TEST_SEED==='true',
+      migrationsEnabled:env.ADMIN_ALLOW_MIGRATIONS==='true',
+      adminWritesEnabled:enabled(env.ADMIN_ENABLE_WRITES),
+      externalProductionWritesDisabled:EXTERNAL_WRITE_FLAGS.every(flag=>!enabled(env[flag])),
+    },
+    isolationGatePassed,
+    credentialsPrinted:false,
+    persistentVolumeAndRestoreVerified:false,
+    realTwoTenantAcceptanceVerified:false,
+    deployApproved:false,
+  }
+}
