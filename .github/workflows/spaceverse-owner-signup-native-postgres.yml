@@ -5,6 +5,7 @@ on:
     paths:
       - 'admin-platform/server/owner-signup-challenges.ts'
       - 'admin-platform/server/owner-signup.ts'
+      - 'admin-platform/server/router.ts'
       - 'admin-platform/server/tests/owner-signup-native-postgres.spec.ts'
       - 'admin-platform/admin-migrations/027_owner_signup_challenges.sql'
       - '.github/workflows/spaceverse-owner-signup-native-postgres.yml'
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   signup-locking:
-    name: Disposable PostgreSQL 16, challenge expiry and replay
+    name: Disposable PostgreSQL 16, HTTP signup, session, expiry and replay
     runs-on: ubuntu-latest
     timeout-minutes: 12
     services:
@@ -49,5 +50,5 @@ jobs:
           cache-dependency-path: admin-platform/package-lock.json
       - name: Install pinned Admin dependencies
         run: npm ci --prefix admin-platform
-      - name: Verify native two-connection challenge locking in dedicated empty DB
+      - name: Verify HTTP signup and confirmation, login/session, plus native challenge locking
         run: npm test --prefix admin-platform -- server/tests/owner-signup-native-postgres.spec.ts --maxWorkers=1
