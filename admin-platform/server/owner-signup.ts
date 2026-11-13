@@ -3,9 +3,9 @@ import { config } from './config.js'
 import { enforceRateLimit, normalizeEmail, requestIp, validatePasswordPolicy } from './security.js'
 import { HttpError } from './types.js'
 
-// CHAT 04 / #492: the initial boundary is deliberately incapable of issuing accounts.
-// The next slice must supply verified, single-use email delivery and durable token
-// persistence before any registration or owner grant can become available.
+// CHAT 04 / #492: validate and throttle self-service signup before the durable
+// challenge service. Account creation remains impossible until a single-use token
+// is redeemed; delivery is supplied separately and defaults to unavailable.
 export interface OwnerSignupInput {
   email: string
   displayName: string
@@ -45,13 +45,24 @@ export function parseOwnerSignupInput(raw: unknown): OwnerSignupInput {
  * A later slice can replace the final 503 only after a durable verification flow,
  * independent security review and native-PostgreSQL tenant isolation checks.
  */
-export function requestOwnerSignup(req: IncomingMessage, raw: unknown): never {
+export function requestOwnerSignup(req: IncomingMessage, raw: unknown): OwnerSignupInput {
   if (!config.enableWrites || !config.enableOnboardingDrafts || !config.enableOwnerSignup) {
     throw new HttpError(403, 'OWNER_SIGNUP_DISABLED', 'Самостоятельная регистрация пока недоступна.')
   }
-  // Process-local rate limits supplement, never replace, the shared ingress limiter.
+  // Process-local limits supplement, never replace, the shared ingress limiter.
   enforceRateLimit(`owner-signup-ip:${requestIp(req)}`, 6, 15 * 60_000)
   const input = parseOwnerSignupInput(raw)
   enforceRateLimit(`owner-signup-email:${input.email}`, 4, 15 * 60_000)
-  throw new HttpError(503, 'OWNER_SIGNUP_VERIFICATION_UNAVAILABLE', 'Подтверждение email ещё не настроено. Учётная запись не создана.')
+  return input
+}
+
+export function parseOwnerSignupConfirmationInput(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new HttpError(400, 'OWNER_SIGNUP_CONFIRM_INVALID', 'Проверьте ссылку подтверждения.')
+  }
+  const fields = raw as Record<string, unknown>
+  if (Object.keys(fields).some(key => key !== 'token')) {
+    throw new HttpError(400, 'OWNER_SIGNUP_CONFIRM_INVALID', 'Проверьте ссылку подтверждения.')
+  }
+  return fields.token
 }
