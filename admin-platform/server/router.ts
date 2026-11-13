@@ -1,5 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { changePassword, login, loadSession, logout, requireCsrf } from './auth.js'
+import { parseOwnerSignupConfirmationInput, requestOwnerSignup } from './owner-signup.js'
+import {
+  confirmOwnerSignupChallenge, ownerSignupDeliveryForRuntime, prepareOwnerSignupChallenge,
+} from './owner-signup-challenges.js'
 import { pool, readPool } from './db.js'
 import { config } from './config.js'
 import {
@@ -145,6 +149,20 @@ export async function handleApi(req:IncomingMessage,res:ServerResponse,url:URL):
     const result=await login(req,res,body.email,body.password)
     await recordAudit({admin:result.admin,action:'auth.login',entityType:'admin_session',metadata:{ipHashOnly:true}}).catch(()=>undefined)
     json(res,200,{...result,capabilities:await capabilitiesFor(result.admin)});return true
+  }
+
+  // CHAT 04: no runtime sender is configured. The delivery resolver returns a
+  // synthetic callback only when a test explicitly injects one under NODE_ENV=test.
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/signup'){
+    const input=requestOwnerSignup(req,await readJsonBody(req,2048))
+    await prepareOwnerSignupChallenge(input,ownerSignupDeliveryForRuntime())
+    json(res,202,{ok:true,verification:'pending'});return true
+  }
+  if(isMethod(req,'POST')&&url.pathname==='/api/admin/auth/signup/confirm'){
+    enforceRateLimit(`owner-signup-confirm-ip:${requestIp(req)}`,12,15*60_000)
+    const token=parseOwnerSignupConfirmationInput(await readJsonBody(req,1024))
+    await confirmOwnerSignupChallenge(token)
+    json(res,200,{ok:true,verified:true});return true
   }
 
   // Public (unauthenticated) one-time invite redemption — no session exists yet to load.

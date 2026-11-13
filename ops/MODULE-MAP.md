@@ -942,6 +942,35 @@ that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
 same-company venues, cross-company denial and access revocation through actual
 HTTP and disposable PGlite. No schema or write-path change is required.
 
+## CHAT 04 owner self-signup and verified account intake (2026-11-13, Draft only)
+
+`admin-platform/server/owner-signup.ts` validates the strict email/name/password
+allowlist and applies independent per-IP/per-normalized-email throttles.
+`POST /api/admin/auth/signup` persists a durable challenge only when an
+explicit delivery callback exists. The callback resolver is process-local and
+returns a synthetic sender **only under NODE_ENV=test after explicit injection**.
+No real mail provider is configured; outside tests the callback is null, so
+even with all three flags enabled signup returns 503 before challenge storage.
+The shared Origin policy and 2 KiB JSON cap apply.
+
+The test-only HTTP flow now mounts `POST /api/admin/auth/signup/confirm`.
+It accepts only a token field, applies an IP throttle and the shared Origin
+check, then consumes the SHA-256 token hash once. Confirmation creates an
+active `VENUE_ADMIN` and audit atomically, but deliberately creates **no
+session, company, venue, company grant or onboarding grant**. The user must use
+the existing login route after verification; login/session issuance is covered
+against the same disposable native PostgreSQL database. The synthetic token is
+captured only by the in-process test callback and never returned in HTTP JSON.
+
+Manual additive migration `027_owner_signup_challenges.sql` remains
+unapplied to production. PGlite covers ledger semantics; the dedicated
+PostgreSQL 16 workflow additionally exercises actual HTTP signup, confirmation,
+replay rejection, existing login/session, no tenant grants, row-lock expiry and
+concurrent single-winner confirmation. This is still **not a complete owner
+onboarding flow**: there is no approved sender, company/venue provisioning,
+owner membership, CRM workspace or two-tenant E2E. Keep all three gates off.
+Existing invitation issuance and legacy PIVNIK routes remain unchanged.
+No production data, flags, credentials or real emails are touched.
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
