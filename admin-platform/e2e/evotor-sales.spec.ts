@@ -50,6 +50,13 @@ test('calendar cash report: yesterday, arbitrary day, 14 days, signed chart and 
   const day=url.searchParams.get('date')||'2026-10-11'
   const until=Date.parse(day+'T00:00:00+03:00')+86400000
   const days=Number(url.searchParams.get('days')||1)
+  if(day==='2021-08-17'){
+   const empty={...all,salesCents:'0',returnsCents:'0',netCents:'0',receiptCount:0,averageCents:null,
+    saleDocuments:0,returnDocuments:0,days:[],payments:[],hours:[],products:[]}
+   return route.fulfill({json:{...report,
+    period:{from:new Date(until-86400000).toISOString(),until:new Date(until).toISOString(),timeZone:'Europe/Moscow'},
+    all:empty,app:null,unlinked:null,linkedRevenueSharePercent:null}})
+  }
   return route.fulfill({json:{...report,
    period:{from:new Date(until-days*86400000).toISOString(),until:new Date(until).toISOString(),timeZone:'Europe/Moscow'},
    all:{...all,hours:[{label:'09',amountCents:'29000050'},{label:'10',amountCents:'-50'}]}}})
@@ -77,6 +84,13 @@ test('calendar cash report: yesterday, arbitrary day, 14 days, signed chart and 
  await page.getByRole('button',{name:'14 дней',exact:true}).click()
  await expect(page.getByText('28.09.2026 — 11.10.2026 · сумма за одинаковые часы всех дней периода')).toBeVisible()
  expect(requests.at(-1)).toBe('?days=14')
+ // A single old day is not blocked by the 365-day preset nor confused with a 366-day range cap.
+ await page.getByLabel('Дата кассового отчёта').fill('2021-08-17')
+ expect(requests.at(-1)).toBe('?date=2021-08-17')
+ await expect(page.getByLabel('Дата кассового отчёта')).toHaveValue('2021-08-17')
+ await expect(page.getByText('За 17.08.2021 · один календарный день')).toBeVisible()
+ await expect(page.locator('.kpi-value').first()).toHaveText('₽ 0,00')
+ await expect(page.getByText('За период нет данных')).toHaveCount(2)
  fail=true;await page.getByLabel('Дата кассового отчёта').fill('2026-10-01')
  await expect(page.getByText('Selected date unavailable')).toBeVisible()
  await expect(page.locator('.kpi-value')).toHaveCount(0)
