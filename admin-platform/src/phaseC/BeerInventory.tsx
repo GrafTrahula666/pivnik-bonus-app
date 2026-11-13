@@ -9,10 +9,15 @@ import { SortTh, sortTableRows, type SortDirection, type SortValue } from './Tab
 type Report={source:'crm_calculated';asOf:string;storeId:string;writeEnabled:boolean;products:BeerProduct[];quality:{lastSuccessfulHistorySyncAt:string|null;coveredUntil:string|null;historyComplete:boolean;historyCursorPending:boolean;errorCode:string|null;unknownPositions:number;stale:boolean;recentSync:{state:string;lastSuccessAt?:string|null;from?:string|null;until?:string|null;pages?:number;cursorPending?:boolean;errorCode?:string|null}}}
 type Command={operationId:string;productId:string;kind:string;quantityMillis:string;baselineId:string|null;note:string;invoice:string;reason:string;returnDocumentId:string|null;notInReceipts:boolean}
 const statusText={current:'Актуально на указанное время',pending:'Ожидается синхронизация',incomplete:'Данные неполные',uninitialized:'Нет начального остатка'}
-const kindText:Record<string,string>={initial:'Начальный остаток',delivery:'Привоз',writeoff:'Списание',physical_return:'Физический возврат',count:'Инвентаризация',sale:'Продажа'}
+const kindText:Record<string,string>={initial:'Начальный остаток',delivery:'Привоз',writeoff:'Списание',physical_return:'Физический возврат',count:'Изменение остатка',sale:'Продажа'}
 const text=(e:unknown)=>e instanceof Error?e.message:'Не удалось обновить расчёт.'
 const liters=(v:string|null)=>v===null?'Не задан':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:3}).format(Number(v)/1000)+' л'
 const date=(v:string|null)=>v?new Date(v).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})+' МСК':'не подтверждено'
+function beerAmountForInput(millis:string|null):string{
+ if(millis===null||BigInt(millis)<0n)return ''
+ const value=BigInt(millis),fraction=String(value%1000n).padStart(3,'0').replace(/0+$/,'')
+ return String(value/1000n)+(fraction?','+fraction:'')
+}
 function beerQuantity(raw:string):string|null{
  if(!/^\d{1,7}(?:[.,]\d{1,3})?$/.test(raw.trim()))return null
  const [whole,part='']=raw.trim().replace(',','.').split('.')
@@ -67,9 +72,9 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
  const changeSort=(column:string,next:SortDirection)=>{setSort(column);setDirection(next)}
  function changeView(next:'tracked'|'all'){setView(next);setSelected(null);setHistoryOffset(0);setSort('balance');setDirection('asc');if(next==='tracked')setPeriod('1')}
  function addProduct(){changeView('all');setQuery('');setLow(false)}
- function open(p:BeerProduct,nextKind:string){setSelected(p.productId);setHistoryOffset(0);setKind(nextKind);setAmount('');setNote('');setInvoice('');setRefund('');setNotInReceipts(false);setError('');setNotice('')}
+ function open(p:BeerProduct,nextKind:string){setSelected(p.productId);setHistoryOffset(0);setKind(nextKind);setAmount(nextKind==='count'?beerAmountForInput(p.balanceMillis):'');setNote(nextKind==='count'?'Ручная корректировка владельцем':'');setInvoice('');setRefund('');setNotInReceipts(false);setError('');setNotice('')}
  function actions(p:BeerProduct){return <div className="beer-inventory-actions">
-  {!p.baseline?<button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'initial')}>Начать учёт</button>:<><button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'delivery')}>Привоз</button><button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'writeoff')}>Списание</button><button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'count')}>Инвентаризация</button></>}
+  {!p.baseline?<button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'initial')}>Начать учёт</button>:<><button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'delivery')}>Привоз</button><button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'writeoff')}>Списание</button><button disabled={!p.supported||saving||Boolean(pending)||!canWrite} onClick={()=>open(p,'count')}>Изменить остаток</button></>}
   <button disabled={saving} onClick={()=>open(p,'history')}>История</button>
  </div>}
  async function submit(command?:Command){
@@ -126,6 +131,7 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
   {loading&&<p role="status">Считаю остатки по чекам…</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {pending&&<div className="card"><p>Есть операция без подтверждённого ответа. Повторная проверка использует тот же ID и не создаст второе движение.</p><button className="btn" disabled={saving||loading||!report} onClick={()=>void submit(pending)}>Проверить сохранение</button></div>}
   {report&&<>
+   {!report.writeEnabled&&<p role="status">Ручное изменение остатков отключено настройками сервера. Просмотр данных доступен, но сохранить корректировку сейчас нельзя.</p>}
    {historical&&<p>Просмотр остатка на прошлую дату. Для новой операции выберите «Сегодня».</p>}
    <p>Расчётный остаток на {date(report.asOf)}. Последняя загрузка недавних чеков: {date(report.quality.recentSync.lastSuccessAt??null)}.</p>
    <details className="card beer-inventory-quality" aria-label="Достоверность расчёта"><summary>Загрузка чеков и достоверность расчёта</summary><p>Расчётный остаток на {date(report.asOf)}. Продажи за период показаны отдельно.</p>
@@ -158,14 +164,15 @@ export function BeerInventory({venue,actorId}:{venue:ApiVenue;actorId:string}){
     <p>Расчётный остаток: {liters(product.balanceMillis)}. Начальная точка: {date(product.baseline?.effectiveAt??null)}.</p>
     <p>С начала текущей точки: привозы {liters(product.deliveredMillis)}, продажи {liters(product.soldMillis)}, списания {liters(product.writtenOffMillis)}, физические возвраты {liters(product.returnedMillis)}.</p>
     {kind!=='history'&&<form onSubmit={e=>{e.preventDefault();void submit()}}>
-     <label>{['initial','count'].includes(kind)?'Фактически, л':'Количество, л'}<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} disabled={saving||Boolean(pending)}/></label>
+     <label>{kind==='count'?'Новый остаток, л':kind==='initial'?'Фактически, л':'Количество, л'}<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder={kind==='count'?'Например, 25 или 0':undefined} disabled={saving||Boolean(pending)}/></label>
      {kind==='delivery'&&<label>Накладная (необязательно)<input value={invoice} maxLength={100} onChange={e=>setInvoice(e.target.value)}/></label>}
      <label>Комментарий<input value={note} maxLength={500} onChange={e=>setNote(e.target.value)}/></label>
-     {kind==='count'&&quantity!==null&&product.balanceMillis!==null&&<p>Расхождение: {liters(String(BigInt(quantity)-BigInt(product.balanceMillis)))}. Будет создана новая начальная точка; история сохранится.</p>}
+     {kind==='count'&&<p>Укажи нужный остаток от 0 л и выше, даже если сейчас отображается отрицательное значение. После сохранения он станет новой точкой отсчёта. Продажи после этой корректировки продолжат вычитаться автоматически; прежняя история сохранится. Кассу это не изменяет.</p>}
+     {kind==='count'&&quantity!==null&&product.balanceMillis!==null&&<p><strong>Сейчас: {liters(product.balanceMillis)} → станет: {liters(quantity)}.</strong> Разница: {liters(String(BigInt(quantity)-BigInt(product.balanceMillis)))}.</p>}
      {kind==='initial'&&<p>Количество фиксируется на время сохранения. Чеки, закрытые до этого момента включительно, уже входят в фактический остаток и повторно не вычитаются.</p>}
      {kind==='writeoff'&&<><label>Причина<select value={reason} onChange={e=>setReason(e.target.value)}><option value="spill">Пролив</option><option value="staff">Бесплатное пиво сотруднику</option><option value="spoilage">Порча</option><option value="tasting">Дегустация</option><option value="other">Другое</option></select></label><label><input type="checkbox" checked={notInReceipts} onChange={e=>setNotInReceipts(e.target.checked)}/>Этот расход ещё не отражён в кассовых чеках</label><p>Расход из закрытого чека уже вычитается автоматически. Повторное списание уменьшит остаток дважды.</p></>}
      {kind==='physical_return'&&<label>Чек возврата<select value={refund} onChange={e=>setRefund(e.target.value)}><option value="">Выберите чек</option>{product.refunds.filter(r=>!r.restored).map(r=><option key={r.documentId} value={r.documentId}>{r.documentId} · {liters(r.quantityMillis)} · {date(r.closedAt)}</option>)}</select></label>}
-     <button className="btn" disabled={saving||Boolean(pending)||!canWrite||quantity===null||(!['initial','count'].includes(kind)&&quantity==='0')||(kind==='writeoff'&&!notInReceipts)||(['count','writeoff','physical_return'].includes(kind)&&!note.trim())||(kind==='physical_return'&&!refund)}>{saving?'Сохраняю…':kind==='delivery'?'Добавить привоз':kind==='count'?'Подтвердить сверку':'Сохранить'}</button>
+     <button className="btn" disabled={saving||Boolean(pending)||!canWrite||quantity===null||(!['initial','count'].includes(kind)&&quantity==='0')||(kind==='writeoff'&&!notInReceipts)||(['count','writeoff','physical_return'].includes(kind)&&!note.trim())||(kind==='physical_return'&&!refund)}>{saving?'Сохраняю…':kind==='delivery'?'Добавить привоз':kind==='count'?'Сохранить новый остаток':'Сохранить'}</button>
     </form>}
     {product.baseline&&<button disabled={saving||Boolean(pending)||!canWrite||!product.supported} onClick={()=>open(product,'physical_return')}>Подтвердить физический возврат</button>}
     <p>Денежный возврат сам по себе не добавляет пиво. Каждый чек физического возврата подтверждается один раз.</p>
