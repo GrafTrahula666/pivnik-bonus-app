@@ -171,4 +171,37 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
     )
     expect(audits.rows).toHaveLength(1)
   }, 20_000)
+  it('keeps independent verified owners separate and rejects cross-token replay', async () => {
+    const emails = ['native-owner-a@fixture.invalid', 'native-owner-b@fixture.invalid']
+    const [tokenA, tokenB] = await Promise.all(emails.map(challenge))
+    expect(tokenA).not.toBe(tokenB)
+
+    const [resultA, resultB] = await Promise.all([confirm(tokenA), confirm(tokenB)])
+    expect(resultA.admin.id).not.toBe(resultB.admin.id)
+    expect(resultA.admin.email).toBe(emails[0])
+    expect(resultB.admin.email).toBe(emails[1])
+    expect(resultA.admin.role).toBe('VENUE_ADMIN')
+    expect(resultB.admin.role).toBe('VENUE_ADMIN')
+
+    const accounts = await state.pool!.query(
+      'SELECT id::text,email,role FROM admin_accounts WHERE email=ANY($1::text[]) ORDER BY email',
+      [emails],
+    )
+    expect(accounts.rows).toHaveLength(2)
+    expect(accounts.rows.map(row => row.email)).toEqual(emails)
+    expect(accounts.rows.every(row => row.role === 'VENUE_ADMIN')).toBe(true)
+    const audits = await state.pool!.query(
+      "SELECT admin_id::text FROM admin_audit_log WHERE action='auth.owner_signup_verified' AND admin_id::text=ANY($1::text[])",
+      [accounts.rows.map(row => row.id)],
+    )
+    expect(audits.rows).toHaveLength(2)
+
+    await expect(confirm(tokenA)).rejects.toMatchObject({ code: 'OWNER_SIGNUP_TOKEN_UNAVAILABLE' })
+    await expect(confirm(tokenB)).rejects.toMatchObject({ code: 'OWNER_SIGNUP_TOKEN_UNAVAILABLE' })
+    const unchanged = await state.pool!.query(
+      'SELECT count(*)::int AS n FROM admin_accounts WHERE email=ANY($1::text[])', [emails],
+    )
+    expect(unchanged.rows[0].n).toBe(2)
+  }, 20_000)
+
 })
