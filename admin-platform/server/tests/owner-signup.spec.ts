@@ -2,7 +2,7 @@
 import type { IncomingMessage } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
 import { config } from '../config.js'
-import { parseOwnerSignupInput, requestOwnerSignup } from '../owner-signup.js'
+import { parseOwnerSignupConfirmationInput, parseOwnerSignupInput, requestOwnerSignup } from '../owner-signup.js'
 import { __resetRateLimitBucketsForTests } from '../security.js'
 
 const original = {
@@ -66,21 +66,28 @@ describe('CHAT 04 owner self-signup boundary (#492)', () => {
     }
   })
 
-  it('never creates an unverified account even when every flag is enabled', () => {
+  it('returns normalized input only after all three gates pass', () => {
     config.enableWrites = true
     config.enableOnboardingDrafts = true
     config.enableOwnerSignup = true
-    expect(() => requestOwnerSignup(req, valid)).toThrowError('Подтверждение email ещё не настроено. Учётная запись не создана.')
+    expect(requestOwnerSignup(req, valid)).toEqual(parseOwnerSignupInput(valid))
   })
 
-  it('limits repeated requests per normalized email before any delivery attempt', () => {
+  it('limits repeated requests per normalized email before challenge delivery', () => {
     config.enableWrites = true
     config.enableOnboardingDrafts = true
     config.enableOwnerSignup = true
     for (let i = 0; i < 4; i++) {
-      expect(() => requestOwnerSignup(req, valid)).toThrowError('Подтверждение email ещё не настроено.')
+      expect(requestOwnerSignup(req, valid)).toEqual(parseOwnerSignupInput(valid))
     }
     expect(() => requestOwnerSignup(req, { ...valid, email: 'NEW.OWNER@example.COM' }))
       .toThrowError('Слишком много попыток.')
+  })
+
+  it('accepts only a token field in the confirmation request', () => {
+    expect(parseOwnerSignupConfirmationInput({ token: 'opaque-token' })).toBe('opaque-token')
+    for (const value of [null, [], {}, { token: 'x', role: 'SUPER_ADMIN' }, { token: 'x', companyId: '1' }]) {
+      expect(() => parseOwnerSignupConfirmationInput(value)).toThrow()
+    }
   })
 })
