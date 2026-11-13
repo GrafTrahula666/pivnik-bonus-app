@@ -125,7 +125,19 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
         if (locks.rows[0].n > 0) { waiting = true; break }
         await new Promise(resolve => setTimeout(resolve, 50))
       }
-      expect(waiting).toBe(true)
+      if (!waiting) {
+        const activity = await blocker.query(
+          "SELECT pid,state,wait_event_type,wait_event,left(query,100) AS query FROM pg_stat_activity WHERE datname=current_database() ORDER BY pid",
+        )
+        const outcome = await Promise.race([
+          attempt,
+          new Promise(resolve => setTimeout(() => resolve({ pending: true }), 40)),
+        ])
+        throw new Error('Native lock observation missing: ' + JSON.stringify({
+          activity: activity.rows,
+          outcome,
+        }))
+      }
       const delay = await state.pool!.query(
         "SELECT GREATEST(0, EXTRACT(EPOCH FROM (SELECT expires_at FROM admin_owner_signup_challenges WHERE email=$1)-clock_timestamp())) AS remaining",
         [email],
