@@ -1,0 +1,19 @@
+/* CHAT 14 / 134: self-contained synthetic demo. No production analytics styles changed. */
+.synthetic-ai-preview{margin-top:22px;padding:22px;border:1px solid rgba(170,182,212,.18);background:linear-gradient(145deg,rgba(25,28,42,.9),rgba(11,13,22,.92));color:#f4f5fa;border-radius:18px}
+.synthetic-ai-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px}
+.synthetic-ai-eyebrow{font-size:11px;letter-spacing:.16em;font-weight:700;color:#9da8c1}
+.synthetic-ai-head h2{font-size:22px;line-height:1.25;margin:6px 0 8px;color:#f7f8ff}
+.synthetic-ai-head p{color:#b7bfce;font-size:13px;line-height:1.6;max-width:650px;margin:0}
+.synthetic-ai-badge{font-size:10px;letter-spacing:.1em;font-weight:800;padding:8px 10px;border-radius:999px;border:1px solid rgba(238,190,112,.32);color:#e9c48b;background:rgba(137,96,29,.13);white-space:nowrap}
+.synthetic-ai-source{font-size:12px;color:#b9c2d2;margin:12px 0 16px}
+.synthetic-ai-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.synthetic-ai-example{padding:18px;border-radius:13px;border:1px solid rgba(160,176,210,.17);background:rgba(255,255,255,.035);min-width:0}
+.synthetic-ai-status{color:#b9c4d9;font-size:11px;letter-spacing:.035em}
+.synthetic-ai-example h3{font-size:16px;line-height:1.3;margin:8px 0 10px;color:#fff}
+.synthetic-ai-observation{font-size:14px;line-height:1.5;color:#f4f4f9;margin:0 0 17px;min-height:44px}
+.synthetic-ai-example dl{display:grid;gap:12px;margin:0}
+.synthetic-ai-example dt{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#8d9bb2;font-weight:700;margin:0 0 5px}
+.synthetic-ai-example dd{font-size:12px;line-height:1.55;color:#bbc4d3;margin:0}
+.synthetic-ai-foot{font-size:12px;line-height:1.6;color:#a7b0c2;border-top:1px solid rgba(164,177,211,.14);padding-top:14px;margin:16px 0 0}
+@media(max-width:950px){.synthetic-ai-grid{grid-template-columns:1fr}.synthetic-ai-observation{min-height:0}}
+@media(max-width:520px){.synthetic-ai-preview{padding:16px;border-radius:14px}.synthetic-ai-badge{white-space:normal}.synthetic-ai-head h2{font-size:19px}}
