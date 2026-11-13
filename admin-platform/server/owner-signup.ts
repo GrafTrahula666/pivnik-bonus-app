@@ -59,7 +59,9 @@ export function parseOwnerSignupConfirmationInput(raw: unknown): unknown {
     throw new HttpError(400, 'OWNER_SIGNUP_CONFIRM_INVALID', 'Проверьте ссылку подтверждения.')
   }
   const fields = raw as Record<string, unknown>
-  if (Object.keys(fields).some(key => key !== 'token')) {
+  if (!Object.prototype.hasOwnProperty.call(fields, 'token') ||
+      typeof fields.token !== 'string' ||
+      Object.keys(fields).some(key => key !== 'token')) {
     throw new HttpError(400, 'OWNER_SIGNUP_CONFIRM_INVALID', 'Проверьте ссылку подтверждения.')
   }
   return fields.token
