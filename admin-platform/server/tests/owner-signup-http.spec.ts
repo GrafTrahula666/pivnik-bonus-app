@@ -61,6 +61,14 @@ describe('CHAT 04 #492: actual unauthenticated signup HTTP gate', () => {
     })
   }
 
+  async function confirm(value: unknown = { token: 'A'.repeat(43) }, origin = validOrigin) {
+    return fetch(endpoint + '/api/admin/auth/signup/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify(value),
+    })
+  }
+
   it('rejects unauthenticated signup by default and touches no admin DB tables', async () => {
     const response = await signup()
     expect(response.status).toBe(403)
@@ -75,6 +83,21 @@ describe('CHAT 04 #492: actual unauthenticated signup HTTP gate', () => {
     const payload = await response.json()
     expect(payload).toMatchObject({ code: 'OWNER_SIGNUP_VERIFICATION_UNAVAILABLE' })
     expect(JSON.stringify(payload)).not.toContain(body.password)
+    expect(state.queries).toBe(0)
+  })
+
+  it('keeps HTTP confirmation closed while the signup gates are disabled', async () => {
+    const response = await confirm()
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ code: 'OWNER_SIGNUP_DISABLED' })
+    expect(state.queries).toBe(0)
+  })
+
+  it('rejects confirmation from an untrusted Origin before any database access', async () => {
+    config.enableWrites = config.enableOnboardingDrafts = config.enableOwnerSignup = true
+    const response = await confirm({ token: 'A'.repeat(43) }, 'https://outside.fixture.invalid')
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ code: 'ORIGIN_REJECTED' })
     expect(state.queries).toBe(0)
   })
 
