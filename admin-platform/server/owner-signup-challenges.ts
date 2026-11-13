@@ -8,12 +8,19 @@ import { HttpError, type AdminPrincipal } from './types.js'
 import { parseOwnerSignupInput } from './owner-signup.js'
 
 /**
- * CHAT 04 #492. Internal-only durable verification primitive.
- * NOT mounted on any HTTP route: the public /auth/signup endpoint still returns 503.
- * Do not call until a real verified-delivery provider has been reviewed.
- * Tests can inject a synthetic delivery callback without contacting an external party.
+ * CHAT 04 #492. Durable single-use verification primitive.
+ * The only delivery injection is process-local and available strictly in NODE_ENV=test.
+ * No real sender is configured: outside tests, HTTP signup remains unavailable (503).
  */
 export type OwnerSignupDelivery = (email: string, verificationToken: string) => Promise<void>
+let testDelivery: OwnerSignupDelivery | null = null
+export function setOwnerSignupTestDelivery(delivery: OwnerSignupDelivery | null): void {
+  if (config.nodeEnv !== 'test') throw new Error('Synthetic owner signup delivery is test-only')
+  testDelivery = delivery
+}
+export function ownerSignupDeliveryForRuntime(): OwnerSignupDelivery | null {
+  return config.nodeEnv === 'test' ? testDelivery : null
+}
 type SignupState = { id: string; email: string; display_name: string; password_hash: string }
 
 function gate(): void {
@@ -37,7 +44,7 @@ async function rollback(client: PoolClient): Promise<void> {
 
 /**
  * Prepare a 30-minute single-use email challenge; never return the raw token
- * to the caller. The response is the same for a registered and an unregistered
+ * to the HTTP caller. The response is the same for a registered and an unregistered
  * email, and no new account or company exists yet. Delivery runs after COMMIT.
  */
 export async function prepareOwnerSignupChallenge(
