@@ -40,10 +40,8 @@ export function parseOwnerSignupInput(raw: unknown): OwnerSignupInput {
 }
 
 /**
- * This entrypoint is fail-closed even when the rollout flag is enabled.
- * An unverified email MUST NOT result in an admin account, company or role.
- * A later slice can replace the final 503 only after a durable verification flow,
- * independent security review and native-PostgreSQL tenant isolation checks.
+ * Validate and throttle the request only. This function never persists credentials
+ * or grants access; the durable challenge service owns verification and redemption.
  */
 export function requestOwnerSignup(req: IncomingMessage, raw: unknown): OwnerSignupInput {
   if (!config.enableWrites || !config.enableOnboardingDrafts || !config.enableOwnerSignup) {
