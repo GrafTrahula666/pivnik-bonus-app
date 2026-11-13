@@ -942,50 +942,35 @@ that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
 same-company venues, cross-company denial and access revocation through actual
 HTTP and disposable PGlite. No schema or write-path change is required.
 
-## CHAT 04 owner self-signup intake boundary (2026-11-11, Draft only)
+## CHAT 04 owner self-signup and verified account intake (2026-11-13, Draft only)
 
-`admin-platform/server/owner-signup.ts` provides strict email, display name
-and password validation for a *new owner* registration request. It rejects
-client-supplied role, company, venue and admin identity fields and applies
-independent per-IP/per-email throttles. `POST /api/admin/auth/signup` is
-mounted only in the Admin Platform router, behind the default-off
-`ADMIN_ENABLE_OWNER_SIGNUP`, `ADMIN_ENABLE_WRITES` and
-`ADMIN_ENABLE_ONBOARDING_DRAFTS` gates. The shared Origin policy and 2 KiB
-JSON-body cap also apply.
+`admin-platform/server/owner-signup.ts` validates the strict email/name/password
+allowlist and applies independent per-IP/per-normalized-email throttles.
+`POST /api/admin/auth/signup` persists a durable challenge only when an
+explicit delivery callback exists. The callback resolver is process-local and
+returns a synthetic sender **only under NODE_ENV=test after explicit injection**.
+No real mail provider is configured; outside tests the callback is null, so
+even with all three flags enabled signup returns 503 before challenge storage.
+The shared Origin policy and 2 KiB JSON cap apply.
 
-**This is not a functioning registration flow.** Even if all flags are
-enabled, the endpoint returns 503 `OWNER_SIGNUP_VERIFICATION_UNAVAILABLE`
-and does not write an account, session, company, venue, invitation or grant.
-Email delivery, durable one-time verification, account creation and tenant
-ownership must be developed and independently reviewed before removing this
-fail-closed outcome. Existing invitation issuance, login and legacy PIVNIK
-routes are unchanged. New tests cover forged scope fields, malformed input,
-flag combinations and normalized-account throttling. No production flag is
-enabled by this Draft.
+The test-only HTTP flow now mounts `POST /api/admin/auth/signup/confirm`.
+It accepts only a token field, applies an IP throttle and the shared Origin
+check, then consumes the SHA-256 token hash once. Confirmation creates an
+active `VENUE_ADMIN` and audit atomically, but deliberately creates **no
+session, company, venue, company grant or onboarding grant**. The user must use
+the existing login route after verification; login/session issuance is covered
+against the same disposable native PostgreSQL database. The synthetic token is
+captured only by the in-process test callback and never returned in HTTP JSON.
 
-### Internal durable email challenge slice (2026-11-12, Draft only)
-
-Manual additive Admin migration `027_owner_signup_challenges.sql` defines an
-independent, one-pending-challenge-per-email ledger with an opaque random token
-stored only as its SHA-256 hash, a password **hash** and a 30-minute expiry.
-The internal `server/owner-signup-challenges.ts` has injectable synthetic
-delivery **for isolated tests only**; no email provider, public verification
-route or production delivery is wired. A replacement challenge invalidates its
-predecessor; successful verification locks the challenge and atomically creates
-only a `VENUE_ADMIN` account and audit, **without company/venue membership
-or session**. Account collision, expired/replayed token, audit failure and
-disabled flags fail closed. A delivery failure is reported, not falsely called
-sent. The separate `owner-signup-challenges.spec.ts` checks SQL and replay,
-account and grant absence before verification, expiry, rotation, collisions and
-transactional audit rollback on disposable PGlite. Native PostgreSQL contention,
-an approved real mail service and independent review remain pending.
-
-**This does not make signup available:** the public
-`POST /api/admin/auth/signup` still always rejects with 503 when the flag is
-on; there is no confirm endpoint. The migration must not be applied to the
-working PIVNIK DB as a side effect of this Draft. No new production feature
-flag or sender credentials were configured.
-
+Manual additive migration `027_owner_signup_challenges.sql` remains
+unapplied to production. PGlite covers ledger semantics; the dedicated
+PostgreSQL 16 workflow additionally exercises actual HTTP signup, confirmation,
+replay rejection, existing login/session, no tenant grants, row-lock expiry and
+concurrent single-winner confirmation. This is still **not a complete owner
+onboarding flow**: there is no approved sender, company/venue provisioning,
+owner membership, CRM workspace or two-tenant E2E. Keep all three gates off.
+Existing invitation issuance and legacy PIVNIK routes remain unchanged.
+No production data, flags, credentials or real emails are touched.
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
