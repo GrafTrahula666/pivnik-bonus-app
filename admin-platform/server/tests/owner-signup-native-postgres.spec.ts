@@ -2,6 +2,7 @@
 // CHAT 04 #492: native PostgreSQL lock/wait and single-use verification.
 // Only run against the disposable, EMPTY codex_admin_test_signup database.
 import fs from 'node:fs/promises'
+import http from 'node:http'
 import pg, { type Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -13,6 +14,8 @@ vi.mock('../db.js', () => ({
   },
   readPool: null,
   writePool: null,
+  tableExists: async () => false,
+  productionTableExists: async () => false,
 }))
 
 const databaseUrl = String(process.env.CHAT04_NATIVE_TEST_DATABASE_URL || '')
@@ -25,11 +28,15 @@ try {
 } catch { /* fail closed */ }
 const suite = databaseUrl && permitted ? describe : describe.skip
 
-suite('CHAT 04 native PostgreSQL confirmation locking', () => {
+suite('CHAT 04 native PostgreSQL signup HTTP, sessions and confirmation locking', () => {
   let config: typeof import('../config.js').config
-  let restore: { enableWrites: boolean; enableOnboardingDrafts: boolean; enableOwnerSignup: boolean }
+  let restore: { enableWrites: boolean; enableOnboardingDrafts: boolean; enableOwnerSignup: boolean; publicOrigin: string }
   let prepare: typeof import('../owner-signup-challenges.js').prepareOwnerSignupChallenge
   let confirm: typeof import('../owner-signup-challenges.js').confirmOwnerSignupChallenge
+  let setTestDelivery: typeof import('../owner-signup-challenges.js').setOwnerSignupTestDelivery
+  let server: http.Server | null = null
+  let endpoint = ''
+  const validOrigin = 'https://owner-signup.native.fixture.invalid'
   const tokens = new Map<string, string>()
   const password = 'Native-Owner-Verified-2026!'
 
@@ -48,9 +55,35 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
         email TEXT NOT NULL,
         display_name TEXT NOT NULL,
         role TEXT NOT NULL CHECK(role IN ('SUPER_ADMIN','VENUE_ADMIN')),
-        password_hash TEXT NOT NULL
+        password_hash TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        last_login_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE UNIQUE INDEX signup_test_account_email ON admin_accounts(LOWER(email));
+      CREATE TABLE admin_sessions (
+        token_hash TEXT PRIMARY KEY,
+        admin_id BIGINT NOT NULL REFERENCES admin_accounts(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        user_agent TEXT,
+        ip_hash TEXT,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE admin_company_access (
+        admin_id BIGINT NOT NULL,
+        company_id BIGINT NOT NULL,
+        access_kind TEXT NOT NULL,
+        PRIMARY KEY(admin_id, company_id)
+      );
+      CREATE TABLE admin_onboarding_access (
+        invitation_id UUID,
+        admin_id BIGINT NOT NULL,
+        company_id BIGINT NOT NULL,
+        venue_id BIGINT,
+        draft_id UUID,
+        role TEXT NOT NULL,
+        revoked_at TIMESTAMPTZ
+      );
       CREATE TABLE admin_audit_log (
         id BIGSERIAL PRIMARY KEY,
         admin_id BIGINT REFERENCES admin_accounts(id),
@@ -71,14 +104,30 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
       enableWrites: config.enableWrites,
       enableOnboardingDrafts: config.enableOnboardingDrafts,
       enableOwnerSignup: config.enableOwnerSignup,
+      publicOrigin: config.publicOrigin,
     }
     config.enableWrites = config.enableOnboardingDrafts = config.enableOwnerSignup = true
+    config.publicOrigin = validOrigin
     const service = await import('../owner-signup-challenges.js')
     prepare = service.prepareOwnerSignupChallenge
     confirm = service.confirmOwnerSignupChallenge
+    setTestDelivery = service.setOwnerSignupTestDelivery
+    const { handleApi, sendApiError } = await import('../router.js')
+    server = http.createServer((req, res) => {
+      void handleApi(req, res, new URL(req.url || '/', endpoint))
+        .catch(error => sendApiError(res, error, req))
+    })
+    await new Promise<void>((resolve, reject) => {
+      server!.once('error', reject)
+      server!.listen(0, '127.0.0.1', resolve)
+    })
+    endpoint = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`
   }, 30_000)
 
   afterAll(async () => {
+    if (server) await new Promise<void>((resolve, reject) =>
+      server!.close(error => error ? reject(error) : resolve()))
+    if (setTestDelivery) setTestDelivery(null)
     if (config && restore) Object.assign(config, restore)
     await state.pool?.end()
     state.pool = null
@@ -91,6 +140,81 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
     if (!token) throw new Error('Synthetic test sender did not capture token')
     return token
   }
+
+  async function post(path: string, body: unknown, origin = validOrigin): Promise<Response> {
+    return fetch(endpoint + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('runs synthetic HTTP signup, confirmation, existing login and session without tenant grants', async () => {
+    const email = 'native-http-owner@fixture.invalid'
+    const httpPassword = 'Native-HTTP-Owner-2026!'
+    tokens.delete(email)
+    setTestDelivery(async (recipient, token) => {
+      expect(recipient).toBe(email)
+      tokens.set(recipient, token)
+    })
+    try {
+      const started = await post('/api/admin/auth/signup', {
+        email, displayName: 'Native HTTP owner', password: httpPassword,
+      })
+      expect(started.status).toBe(202)
+      const startPayload = await started.json()
+      expect(startPayload).toEqual({ ok: true, verification: 'pending' })
+      const token = tokens.get(email)
+      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(JSON.stringify(startPayload)).not.toContain(token)
+      const stored = await state.pool!.query(
+        'SELECT token_hash FROM admin_owner_signup_challenges WHERE email=$1', [email],
+      )
+      const { sha256 } = await import('../security.js')
+      expect(stored.rows[0].token_hash).toBe(sha256(token!))
+      expect((await state.pool!.query('SELECT 1 FROM admin_accounts WHERE email=$1', [email])).rows).toEqual([])
+
+      const wrongOrigin = await post('/api/admin/auth/signup/confirm', { token }, 'https://outside.native.fixture.invalid')
+      expect(wrongOrigin.status).toBe(403)
+      expect(await wrongOrigin.json()).toMatchObject({ code: 'ORIGIN_REJECTED' })
+
+      const confirmed = await post('/api/admin/auth/signup/confirm', { token })
+      expect(confirmed.status).toBe(200)
+      expect(await confirmed.json()).toEqual({ ok: true, verified: true })
+      expect((await state.pool!.query('SELECT count(*)::int AS n FROM admin_accounts WHERE email=$1', [email])).rows[0].n).toBe(1)
+      expect((await state.pool!.query('SELECT count(*)::int AS n FROM admin_sessions s JOIN admin_accounts a ON a.id=s.admin_id WHERE a.email=$1', [email])).rows[0].n).toBe(0)
+
+      const replay = await post('/api/admin/auth/signup/confirm', { token })
+      expect(replay.status).toBe(410)
+      expect(await replay.json()).toMatchObject({ code: 'OWNER_SIGNUP_TOKEN_UNAVAILABLE' })
+
+      const loggedIn = await post('/api/admin/auth/login', { email, password: httpPassword })
+      expect(loggedIn.status).toBe(200)
+      const loginPayload = await loggedIn.json()
+      expect(loginPayload.admin).toMatchObject({ email, role: 'VENUE_ADMIN' })
+      expect(typeof loginPayload.csrfToken).toBe('string')
+      const setCookie = loggedIn.headers.get('set-cookie') || ''
+      const cookie = setCookie.split(';', 1)[0]!
+      expect(cookie.startsWith(`${config.sessionCookie}=`)).toBe(true)
+
+      const session = await fetch(endpoint + '/api/admin/auth/session', { headers: { cookie } })
+      expect(session.status).toBe(200)
+      const sessionPayload = await session.json()
+      expect(sessionPayload.admin).toMatchObject({ email, role: 'VENUE_ADMIN' })
+      const adminId = sessionPayload.admin.id
+      expect((await state.pool!.query('SELECT 1 FROM admin_company_access WHERE admin_id=$1::bigint', [adminId])).rows).toEqual([])
+      expect((await state.pool!.query('SELECT 1 FROM admin_onboarding_access WHERE admin_id=$1::bigint', [adminId])).rows).toEqual([])
+      const audit = await state.pool!.query(
+        "SELECT action,metadata FROM admin_audit_log WHERE admin_id=$1::bigint ORDER BY id", [adminId],
+      )
+      expect(audit.rows.map(row => row.action)).toContain('auth.owner_signup_verified')
+      expect(audit.rows.map(row => row.action)).toContain('auth.login')
+      expect(JSON.stringify(audit.rows)).not.toContain(token)
+      expect(JSON.stringify(audit.rows)).not.toContain(httpPassword)
+    } finally {
+      setTestDelivery(null)
+    }
+  }, 30_000)
 
   it('rejects expiry while waiting on a real FOR UPDATE lock without creating an account', async () => {
     const email = 'native-expiry@fixture.invalid'
