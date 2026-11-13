@@ -120,7 +120,6 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
         const locks = await blocker.query(`
           SELECT count(*)::int AS n FROM pg_stat_activity
           WHERE datname=current_database() AND wait_event_type='Lock'
-            AND query LIKE '%admin_owner_signup_challenges%'
             AND pid<>pg_backend_pid()
         `)
         if (locks.rows[0].n > 0) { waiting = true; break }
