@@ -103,6 +103,9 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
       WHERE email=$1
     `, [email])
     const blocker = await state.pool!.connect()
+    // pg_stat_activity snapshots are cached inside a transaction. Observe
+    // contention from a separate autocommit connection, never from blocker.
+    const monitor = await state.pool!.connect()
     let locked = false
     try {
       await blocker.query('BEGIN')
@@ -117,7 +120,7 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
       // Observe actual PG blocking rather than assuming a timer means contention.
       let waiting = false
       for (let i = 0; i < 40; i++) {
-        const locks = await blocker.query(`
+        const locks = await monitor.query(`
           SELECT count(*)::int AS n FROM pg_stat_activity
           WHERE datname=current_database() AND wait_event_type='Lock'
             AND pid<>pg_backend_pid()
@@ -125,19 +128,7 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
         if (locks.rows[0].n > 0) { waiting = true; break }
         await new Promise(resolve => setTimeout(resolve, 50))
       }
-      if (!waiting) {
-        const activity = await blocker.query(
-          "SELECT pid,state,wait_event_type,wait_event,left(query,100) AS query FROM pg_stat_activity WHERE datname=current_database() ORDER BY pid",
-        )
-        const outcome = await Promise.race([
-          attempt,
-          new Promise(resolve => setTimeout(() => resolve({ pending: true }), 40)),
-        ])
-        throw new Error('Native lock observation missing: ' + JSON.stringify({
-          activity: activity.rows,
-          outcome,
-        }))
-      }
+      expect(waiting).toBe(true)
       const delay = await state.pool!.query(
         "SELECT GREATEST(0, EXTRACT(EPOCH FROM (SELECT expires_at FROM admin_owner_signup_challenges WHERE email=$1)-clock_timestamp())) AS remaining",
         [email],
@@ -154,6 +145,7 @@ suite('CHAT 04 native PostgreSQL confirmation locking', () => {
     } finally {
       if (locked) await blocker.query('ROLLBACK').catch(() => undefined)
       blocker.release()
+      monitor.release()
     }
   }, 20_000)
 
