@@ -481,6 +481,8 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       merged_at: '2026-11-09T14:02:00Z',
       user: { login: 'author' }, state: 'closed', merged: true,
     }) };
+    if (url.endsWith('/collaborators/independent-release-reviewer/permission'))
+      return { ok: true, json: async () => ({ permission: 'write', user: { login: 'independent-release-reviewer' } }) };
     if (url.endsWith('/pulls/123/reviews?per_page=100')) return { ok: true, json: async () => [
       { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
         id: 456, html_url: REVIEW_URL,
@@ -520,7 +522,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token', fetchImpl: unrelatedVkFetch,
   }), /GitHub VK parity workflow identity mismatch/);
-  assert.equal(calls.length, 14); // two full passes include authenticated ZIP download and content verification
+  assert.equal(calls.length, 16); // two full passes include reviewer permission and authenticated ZIP verification
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
   const archiveCall = calls.find(call => call.url.endsWith('/actions/artifacts/9001/zip'));
@@ -636,6 +638,42 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     );
   }
 
+  // A non-binding review by an outsider must not authorize production release.
+  for (const [permission, allowed] of [
+    ['read', false], ['triage', false], ['none', false],
+    ['write', true], ['maintain', true], ['admin', true],
+  ]) {
+    const permissionFetch = async (url, opts) => {
+      const result = responseFor(url, opts);
+      if (!url.endsWith('/collaborators/independent-release-reviewer/permission')) return result;
+      return { ...result, json: async () => ({ permission, user: { login: 'independent-release-reviewer' } }) };
+    };
+    if (allowed) assert.deepEqual(await verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: permissionFetch,
+    }), { verifiedRunIds: [12345, 12346] });
+    else await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: permissionFetch,
+    }), /GitHub independent reviewer lacks verified write permission/);
+  }
+  for (const failedPermission of [
+    { ok: false, status: 403 },
+    { ok: false, status: 404 },
+  ]) {
+    const failPermissionFetch = async (url, opts) =>
+      url.endsWith('/collaborators/independent-release-reviewer/permission')
+        ? failedPermission : responseFor(url, opts);
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: failPermissionFetch,
+    }), /GitHub independent reviewer permission lookup failed/);
+  }
+  const mismatchedReviewer = async (url, opts) =>
+    url.endsWith('/collaborators/independent-release-reviewer/permission')
+      ? { ok: true, json: async () => ({ permission: 'admin', user: { login: 'outsider' } }) }
+      : responseFor(url, opts);
+  await assert.rejects(verifyGithubRuns(valid(), {
+    token: 'test-token', fetchImpl: mismatchedReviewer,
+  }), /GitHub independent reviewer lacks verified write permission/);
+
   // A PR merged after dispatch cannot authorize that earlier production run.
   const lateMergeFetch = async (url, opts) => {
     const result = responseFor(url, opts);
@@ -737,6 +775,8 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
       merged_at: '2026-11-09T14:02:00Z',
       user: { login: 'author' }, state: 'closed', merged: true,
     }) };
+    if (url.endsWith('/collaborators/independent-release-reviewer/permission'))
+      return { ok: true, json: async () => ({ permission: 'write', user: { login: 'independent-release-reviewer' } }) };
     if (url.endsWith('/pulls/123/reviews?per_page=100')) return { ok: true, json: async () => [
       { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
         id: 456, html_url: REVIEW_URL,
