@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config, validateRuntimeConfig } from './config.js'
 import { closePool, pool } from './db.js'
+import { assertStagingMigrationIsolation } from '../scripts/staging-database-isolation.mjs'
 
 const __filename=fileURLToPath(import.meta.url)
 const migrationDir=path.resolve(path.dirname(__filename),'..','admin-migrations')
@@ -11,6 +12,9 @@ const migrationDir=path.resolve(path.dirname(__filename),'..','admin-migrations'
 async function main(){
   validateRuntimeConfig()
   if(!config.allowMigrations)throw new Error('Admin migrations disabled. Set ADMIN_ALLOW_MIGRATIONS=true only after review.')
+  // The existing production migration path is unchanged. Direct invocations
+  // targeting the isolated staging project must pass its full DB safety gate.
+  assertStagingMigrationIsolation()
   const preflight=await pool.query<{bars:boolean}>(`SELECT to_regclass('public.bars') IS NOT NULL AS bars`)
   if(!preflight.rows[0]?.bars)throw new Error('Preflight failed: public.bars missing. Refusing to guess production schema.')
   await pool.query(`CREATE TABLE IF NOT EXISTS admin_schema_migrations(code TEXT PRIMARY KEY,checksum TEXT NOT NULL,applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`)
