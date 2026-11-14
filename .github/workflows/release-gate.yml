@@ -42,6 +42,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Immutable per-attempt dispatch inputs for later authenticated artifact
+      # verification. This is evidence, NOT release authorization by itself.
+      - name: Record manual dispatch inputs for release evidence
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          ATTEST_RUN_ID: ${{ github.run_id }}
+          ATTEST_RUN_ATTEMPT: ${{ github.run_attempt }}
+          ATTEST_SHA: ${{ github.sha }}
+          ATTEST_REF: ${{ github.ref }}
+          ATTEST_RELEASE_SHA: ${{ inputs.release_sha }}
+          ATTEST_RELEASE_CONFIRM: ${{ inputs.release_confirm }}
+        run: |
+          node --input-type=module -e '
+            import { mkdirSync, writeFileSync } from "node:fs";
+            const env = process.env;
+            if (!/^[0-9a-f]{40}$/i.test(env.ATTEST_SHA)) process.exit(1);
+            if (!/^[0-9a-f]{40}$/i.test(env.ATTEST_RELEASE_SHA)) process.exit(1);
+            if (!/^[1-9][0-9]*$/.test(env.ATTEST_RUN_ID) ||
+                !/^[1-9][0-9]*$/.test(env.ATTEST_RUN_ATTEMPT)) process.exit(1);
+            if (!["CANCEL", "DEPLOY_PIVNIK_PRODUCTION"].includes(env.ATTEST_RELEASE_CONFIRM)) process.exit(1);
+            mkdirSync("artifacts/release-dispatch", { recursive: true });
+            writeFileSync("artifacts/release-dispatch/dispatch.json", JSON.stringify({
+              schemaVersion: 1,
+              repository: "GrafTrahula666/pivnik-bonus-app",
+              event: "workflow_dispatch",
+              runId: Number(env.ATTEST_RUN_ID),
+              runAttempt: Number(env.ATTEST_RUN_ATTEMPT),
+              sha: env.ATTEST_SHA.toLowerCase(),
+              ref: env.ATTEST_REF,
+              releaseSha: env.ATTEST_RELEASE_SHA.toLowerCase(),
+              releaseConfirm: env.ATTEST_RELEASE_CONFIRM,
+            }) + String.fromCharCode(10));
+          '
+
+      - name: Upload manual dispatch evidence
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dispatch-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.release_confirm }}-${{ inputs.release_sha }}
+          path: artifacts/release-dispatch/dispatch.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
