@@ -1,5 +1,17 @@
 # PIVNIK Evotor bridge — integration draft
 
+## Direct Railway 1.0.19/code23 candidate (NOT installed)
+
+A small separate PR changes only the fixed POS origin from Selectel to
+`https://pivnik-bonus-app-production-df60.up.railway.app`. Existing Selectel
+v2 Android Keystore-encrypted credentials are promoted to Railway v3 slots
+using the exact respective URL as AES-GCM AAD; old v1/v2 ciphertext and IVs
+remain intact. This does not replace `pvpos_`, change any receipt or money
+protocol, or prove physical Evotor proxy access. Existing provider allowlist
+entries were visually confirmed by the owner, but terminal acceptance is
+pending. See `ops/EVOTOR-RAILWAY-DIRECT-20261109.md` for versionCode,
+rollback, signed build, and **do-not-install-draft** gates.
+
 ## Unified bonus window (1.0.16/code20, agreed 2026-10-18)
 
 The bonus window opens with the soft keyboard hidden and focus on the window.
