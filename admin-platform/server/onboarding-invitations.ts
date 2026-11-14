@@ -131,6 +131,17 @@ export async function listOnboardingInvitations(admin:AdminPrincipal){
   try{
     const result=await pool.query<InviteRow>(`SELECT ${columns} FROM admin_onboarding_invites
       WHERE created_by_admin_id=$1::bigint AND request_key IS NOT NULL ORDER BY created_at DESC,id LIMIT 100`,[admin.id])
+    const names=new Map<string,string>()
+    if(result.rows.length){
+      const targets=await pool.query<{kind:'company'|'venue';id:string;name:string}>(`SELECT 'company' AS kind,company.id::text,company.name
+        FROM companies company WHERE company.id IN (SELECT invite.company_id FROM admin_onboarding_invites invite
+          WHERE invite.created_by_admin_id=$1::bigint AND invite.request_key IS NOT NULL)
+        UNION ALL
+        SELECT 'venue',venue.id::text,venue.name FROM venues venue
+        WHERE venue.id IN (SELECT invite.venue_id FROM admin_onboarding_invites invite
+          WHERE invite.created_by_admin_id=$1::bigint AND invite.request_key IS NOT NULL AND invite.venue_id IS NOT NULL)`,[admin.id])
+      for(const row of targets.rows)names.set(row.kind+':'+row.id,row.name)
+    }
     let companies:{id:string;name:string}[]=[],venues:{id:string;companyId:string;name:string;draftId:string}[]=[]
     if(await canManageOnboardingInvitations(admin)){
       companies=(await pool.query<{id:string;name:string}>(`SELECT company.id::text,company.name FROM companies company
@@ -149,7 +160,8 @@ export async function listOnboardingInvitations(admin:AdminPrincipal){
             AND (venue_id IS NULL OR venue_id=venue.id) AND role='owner' AND revoked_at IS NULL)
         ORDER BY venue.name,venue.id`,[admin.id])).rows
     }
-    return {invitations:result.rows.map(response),companies,venues}
+    return {invitations:result.rows.map(row=>({...response(row),companyName:names.get('company:'+row.company_id)??null,
+      venueName:row.venue_id?names.get('venue:'+row.venue_id)??null:null})),companies,venues}
   }catch(error){unavailable(error)}
 }
 export async function revokeOnboardingInvitation(admin:AdminPrincipal,inviteId:string){

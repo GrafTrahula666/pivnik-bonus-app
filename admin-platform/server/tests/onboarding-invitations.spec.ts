@@ -85,7 +85,8 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
     expect((await request('owner','POST',base,command(),true,'https://foreign.invalid')).status).toBe(403)
     expect((await request('owner','POST',base,command({tenantId:'20'}))).status).toBe(400)
     expect((await request(null,'POST','/api/admin/onboarding/invite/claim',{token:first.token,email:'legacy@fixture.invalid',displayName:'Legacy',password})).status).toBe(410)
-    const listed=await request('owner','GET',base);const list=await listed.json()
+    const listed=await request('owner','GET',base);const list=await listed.json() as {invitations:Array<{id:string;companyName?:string|null;venueName?:string|null}>}
+    expect(list.invitations.find(row=>row.id===first.invitation.id)).toMatchObject({companyName:'Север',venueName:null})
     expect(JSON.stringify(list)).not.toContain(first.token);expect(JSON.stringify(list)).not.toContain('token_hash')
     const logs=await state.db!.query<{metadata:unknown}>('SELECT metadata FROM admin_audit_log')
     expect(JSON.stringify(logs.rows)).not.toContain(first.token)
@@ -224,6 +225,8 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
     }
     const a=await prepared('Точка A'),b=await prepared('Точка B')
     const created=await invite({venueId:a.scope.venue.id,role:'viewer'})
+    const listed=await request('owner','GET',base);const list=await listed.json() as {invitations:Array<{id:string;companyName?:string|null;venueName?:string|null}>}
+    expect(list.invitations.find(row=>row.id===created.invitation.id)).toMatchObject({companyName:'Север',venueName:'Точка A'})
     expect((await request('trusted','POST',base+'/accept',{token:created.token})).status).toBe(200)
     expect((await request('trusted','GET','/api/admin/onboarding/drafts/'+a.draft.id)).status).toBe(200)
     expect((await request('trusted','GET','/api/admin/onboarding/drafts/'+b.draft.id)).status).toBe(404)
