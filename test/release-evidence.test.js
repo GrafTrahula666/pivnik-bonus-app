@@ -732,6 +732,27 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token', fetchImpl: blockingReviewFetch,
   }), /GitHub outstanding change request/);
+  // Malformed submitted objections must never disappear from the release gate.
+  for (const malformed of [
+    { user: { login: 'security-reviewer' }, state: 'CHANGES_REQUESTED',
+      submitted_at: null },
+    { user: { login: 'security-reviewer' }, state: 'CHANGES_REQUESTED',
+      submitted_at: 'not-a-date' },
+    { state: 'CHANGES_REQUESTED', submitted_at: '2026-11-09T14:02:00Z' },
+  ]) {
+    const malformedReviewFetch = async (url, opts) => {
+      const result = responseFor(url, opts);
+      if (!url.endsWith('/pulls/123/reviews?per_page=100')) return result;
+      return { ...result, json: async () => [
+        { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+          id: 456, html_url: REVIEW_URL, commit_id: REVIEWED_HEAD_SHA,
+          submitted_at: '2026-11-09T14:00:00Z' }, malformed,
+      ] };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: malformedReviewFetch,
+    }), /GitHub submitted review identity or timestamp invalid/);
+  }
   // A COMMENTED review is not a dismissal of a previous change request.
   const commentedAfterBlock = async (url, opts) => {
     const result = await blockingReviewFetch(url, opts);
