@@ -395,6 +395,17 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
     latest.html_url === 'https://github.com/GrafTrahula666/pivnik-bonus-app/pull/' +
       data.approval.prNumber + '#pullrequestreview-' + latest.id,
     'GitHub independent exact-SHA approval missing, stale or dismissed');
+  // GitHub records non-binding reviews from users without repository write access.
+  // Require a live, authenticated collaborator permission for the approving actor.
+  // A failed/ambiguous lookup must never silently become release authorization.
+  const reviewerPermissionResponse = await fetchImpl(api + '/collaborators/' +
+    encodeURIComponent(data.approval.actor) + '/permission', { headers, redirect: 'error' });
+  demand(reviewerPermissionResponse?.ok,
+    'GitHub independent reviewer permission lookup failed');
+  const reviewerPermission = await reviewerPermissionResponse.json();
+  demand(['write', 'maintain', 'admin'].includes(reviewerPermission?.permission) &&
+    reviewerPermission?.user?.login === data.approval.actor,
+    'GitHub independent reviewer lacks verified write permission');
   // An independent approval cannot override an outstanding change request
   // from another reviewer. Use each reviewer's latest submitted state.
   // COMMENTED does not clear an earlier CHANGES_REQUESTED review. Only a
