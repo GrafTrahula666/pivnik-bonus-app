@@ -32,6 +32,12 @@ jobs:
       - name: Venue onboarding on desktop and mobile (fixtures only, synthetic Evotor response)
         run: npm run test:e2e:onboarding
         working-directory: admin-platform
+      - name: Owner invitation signed HTTP and isolation (disposable test DB)
+        run: npx vitest run server/tests/onboarding-invitations.spec.ts --maxWorkers=1 --testTimeout=30000 --hookTimeout=60000
+        working-directory: admin-platform
+      - name: Owner invitation acceptance and revoke on desktop/mobile (fixtures only)
+        run: npm run test:e2e:invitations
+        working-directory: admin-platform
       - name: CRM pagination and column sorting on desktop and mobile (fixtures only)
         if: hashFiles('admin-platform/crm-pagination.config.ts') != ''
         run: npx playwright test --config crm-pagination.config.ts
