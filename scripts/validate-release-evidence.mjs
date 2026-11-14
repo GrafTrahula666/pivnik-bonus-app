@@ -410,6 +410,11 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   // from another reviewer. Use each reviewer's latest submitted state.
   // COMMENTED does not clear an earlier CHANGES_REQUESTED review. Only a
   // subsequent APPROVED or DISMISSED review resolves that reviewer's block.
+  // Never silently discard malformed submitted reviews: doing so could hide
+  // an outstanding CHANGES_REQUESTED from the release decision.
+  demand(reviews.every(r => !['CHANGES_REQUESTED', 'APPROVED', 'DISMISSED'].includes(r.state) ||
+    (r.user?.login && date(r.submitted_at))),
+  'GitHub submitted review identity or timestamp invalid');
   const outstandingChangeRequests = new Set();
   for (const review of [...reviews].filter(r => r.user?.login && date(r.submitted_at))
     .sort((a, b) => Date.parse(a.submitted_at) - Date.parse(b.submitted_at))) {
