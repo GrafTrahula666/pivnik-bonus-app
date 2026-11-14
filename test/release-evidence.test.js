@@ -868,6 +868,10 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
     if (url.endsWith('/pulls/123/reviews?per_page=100')) {
       return failReviews ? { ok: false } : { ok: true, json: async () => reviews };
     }
+    if (url.endsWith('/collaborators/independent-release-reviewer/permission')) {
+      return { ok: true, json: async () => ({ permission: 'write',
+        user: { login: 'independent-release-reviewer' } }) };
+    }
     if (url.endsWith('/12345/artifacts?per_page=100')) {
       return { ok: true, json: async () => ({ total_count: 1, artifacts: [dispatchArtifact()] }) };
     }
