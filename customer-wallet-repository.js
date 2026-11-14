@@ -137,7 +137,8 @@ export function createSpaceverseCustomerWalletRepository({ query, runtime } = {}
       || String(row.ownership_user_id) !== userId
       || row.ownership_runtime_key !== binding.runtimeKey
       || row.ownership_company_id !== verifiedRuntime.context.tenantId
-      || row.ownership_venue_id !== verifiedRuntime.context.locationId) {
+      || row.ownership_venue_id !== verifiedRuntime.context.locationId
+      || row.role !== 'client') {
       throw runtimeReadFailure(
         'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH',
         'SPACEVERSE customer wallet read returned an unexpected scope.'

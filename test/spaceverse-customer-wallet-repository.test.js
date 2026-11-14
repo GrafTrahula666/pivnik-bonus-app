@@ -233,6 +233,122 @@ test('two tenants and two venues in one company cannot cross-read customer walle
   }
 });
 
+test('directory cross-tenant database substitution fails closed before returning customer data', async () => {
+  const first = await tenantDatabase({ seed: 'a', companyId: '940', venueId: '941', ownedBalance: 111 });
+  const sibling = await tenantDatabase({ seed: 'b', companyId: '940', venueId: '942', ownedBalance: 222 });
+  const foreign = await tenantDatabase({ seed: 'c', companyId: '950', venueId: '951', ownedBalance: 333 });
+  try {
+    const own = createSpaceverseCustomerDirectoryRepository({
+      runtime: first.runtime,
+      query: first.db.query.bind(first.db)
+    });
+    assert.equal((await own()).items[0].wallet.balance, '111');
+    for (const target of [sibling, foreign]) {
+      const substituted = createSpaceverseCustomerDirectoryRepository({
+        runtime: first.runtime,
+        query: target.db.query.bind(target.db)
+      });
+      await assert.rejects(substituted(), {
+        code: 'SPACEVERSE_DIRECTORY_BINDING_REJECTED'
+      });
+    }
+  } finally {
+    await first.db.close();
+    await sibling.db.close();
+    await foreign.db.close();
+  }
+});
+
+test('wallet read fails closed after a verified runtime binding manifest changes', async () => {
+  const fixture = await tenantDatabase({ seed: 'a', companyId: '810', venueId: '811', ownedBalance: 606 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '606');
+
+    await fixture.db.query("UPDATE spaceverse_runtime_binding SET manifest_sha256=$1 WHERE singleton=TRUE", ['0'.repeat(64)]);
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED'
+    });
+
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '606');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('wallet read rejects a changed binding revision after initial authorization', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '816', venueId: '817', ownedBalance: 909 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '909');
+
+    await fixture.db.query(
+      'UPDATE spaceverse_runtime_binding SET manifest_revision=manifest_revision+1 WHERE singleton=TRUE'
+    );
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_REJECTED'
+    });
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '909');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('wallet ownership revocation denies subsequent direct-ID reads without altering balance', async () => {
+  const fixture = await tenantDatabase({ seed: 'b', companyId: '812', venueId: '813', ownedBalance: 707 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '707');
+
+    await fixture.db.query('DELETE FROM spaceverse_customer_ownership WHERE user_id=$1', [11]);
+    assert.equal(await load({ userId: '11' }), null);
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=$1', [11]);
+    assert.equal(balance.rows[0].balance, '707');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('ownership reassignment immediately revokes old direct-ID access without moving wallet balances', async () => {
+  const fixture = await tenantDatabase({ seed: 'c', companyId: '814', venueId: '815', ownedBalance: 808 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '808');
+    assert.equal(await load({ userId: '12' }), null);
+
+    await fixture.db.query(
+      'UPDATE spaceverse_customer_ownership SET user_id=$1 WHERE user_id=$2',
+      [12, 11]
+    );
+
+    assert.equal(await load({ userId: '11' }), null);
+    assert.equal((await load({ userId: '12' })).wallet.balance, '999999');
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS user_id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(({ user_id, balance }) => [user_id, balance]), [
+      ['11', '808'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('request scope, malformed ids and forged runtimes are rejected before customer SQL', async () => {
   const fixture = await tenantDatabase({ seed: 'e', companyId: '910', venueId: '911', ownedBalance: 404 });
   let queries = 0;
@@ -318,6 +434,60 @@ test('directory uses explicit ownership, literal search and exact wallet values 
   } finally {await fixture.db.close();}
 });
 
+test('directory immediately hides revoked ownership without changing stored wallet balances', async () => {
+  const fixture = await tenantDatabase({ seed: 'a', companyId: '932', venueId: '933', ownedBalance: 314 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    const before = await list({ q: 'Owned' });
+    assert.equal(before.total, '1');
+    assert.equal(before.items[0].wallet.balance, '314');
+
+    await fixture.db.query('DELETE FROM spaceverse_customer_ownership WHERE user_id=$1', [11]);
+
+    const after = await list({ q: 'Owned' });
+    assert.equal(after.total, '0');
+    assert.deepEqual(after.items, []);
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=$1', [11]);
+    assert.equal(stored.rows[0].balance, '314');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('directory ownership reassignment removes old customer and exposes only newly owned customer', async () => {
+  const fixture = await tenantDatabase({ seed: 'b', companyId: '934', venueId: '935', ownedBalance: 515 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.deepEqual((await list()).items.map(item => item.customer.id), ['11']);
+
+    await fixture.db.query(
+      'UPDATE spaceverse_customer_ownership SET user_id=$1 WHERE user_id=$2',
+      [12, 11]
+    );
+
+    const after = await list();
+    assert.equal(after.total, '1');
+    assert.deepEqual(after.items.map(item => item.customer.id), ['12']);
+    assert.equal(after.items[0].wallet.balance, '999999');
+    assert.equal((await list({ q: 'Owned' })).total, '0');
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(row => [row.id, row.balance]), [
+      ['11', '515'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('directory rejects request scope and unverified runtime objects before querying customer data', async () => {
   const fixture=await tenantDatabase({seed:'e',companyId:'920',venueId:'921',ownedBalance:0});
   try {
@@ -333,6 +503,49 @@ test('directory rejects request scope and unverified runtime objects before quer
   } finally {await fixture.db.close();}
 });
 
+test('directory refuses a changed binding revision after initial authorization', async () => {
+  const fixture = await tenantDatabase({ seed: 'c', companyId: '936', venueId: '937', ownedBalance: 616 });
+  try {
+    const list = createSpaceverseCustomerDirectoryRepository({
+      runtime: fixture.runtime,
+      query: fixture.db.query.bind(fixture.db)
+    });
+    assert.equal((await list()).items[0].wallet.balance, '616');
+
+    await fixture.db.query(
+      'UPDATE spaceverse_runtime_binding SET manifest_revision=manifest_revision+1 WHERE singleton=TRUE'
+    );
+    await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_BINDING_REJECTED' });
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '616');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('wallet and directory fail closed when database reads become unavailable after authorization', async () => {
+  const fixture = await tenantDatabase({ seed: 'e', companyId: '938', venueId: '939', ownedBalance: 717 });
+  let unavailable = false;
+  const query = async (sql, params) => {
+    if (unavailable) throw new Error('database unavailable');
+    return fixture.db.query(sql, params);
+  };
+  try {
+    const load = createSpaceverseCustomerWalletRepository({ runtime: fixture.runtime, query });
+    const list = createSpaceverseCustomerDirectoryRepository({ runtime: fixture.runtime, query });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '717');
+    assert.equal((await list()).total, '1');
+
+    unavailable = true;
+    await assert.rejects(load({ userId: '11' }), { code: 'SPACEVERSE_CUSTOMER_WALLET_READ_UNAVAILABLE' });
+    await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_READ_UNAVAILABLE' });
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '717');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
 test('directory refuses a changed binding even when the runtime was previously verified', async () => {
   const fixture=await tenantDatabase({seed:'f',companyId:'930',venueId:'931',ownedBalance:42});
   try {
@@ -341,4 +554,179 @@ test('directory refuses a changed binding even when the runtime was previously v
     await fixture.db.query('UPDATE spaceverse_runtime_binding SET manifest_sha256=$1',['0'.repeat(64)]);
     await assert.rejects(list(),{code:'SPACEVERSE_DIRECTORY_BINDING_REJECTED'});
   } finally {await fixture.db.close();}
+});
+
+test('directory rejects a forged ownership scope in query results without exposing a customer', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '952', venueId: '953', ownedBalance: 424 });
+  try {
+    for (const forgedScope of [
+      { ownership_venue_id: '954' },
+      { ownership_company_id: '999' },
+      { ownership_runtime_key: 'forged-runtime-key' },
+      { role: 'admin' }
+    ]) {
+      const list = createSpaceverseCustomerDirectoryRepository({
+        runtime: fixture.runtime,
+        query: async (sql, params) => {
+          const result = await fixture.db.query(sql, params);
+          return {
+            ...result,
+            rows: result.rows.map(row => row.user_id === '11'
+              ? { ...row, ...forgedScope }
+              : row)
+          };
+        }
+      });
+      await assert.rejects(list(), { code: 'SPACEVERSE_DIRECTORY_SCOPE_MISMATCH' });
+    }
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '424');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+
+test('wallet direct-ID read rejects a forged admin role in returned customer row', async () => {
+  const fixture = await tenantDatabase({ seed: 'f', companyId: '960', venueId: '961', ownedBalance: 818 });
+  try {
+    const load = createSpaceverseCustomerWalletRepository({
+      runtime: fixture.runtime,
+      query: async (sql, params) => {
+        const result = await fixture.db.query(sql, params);
+        return { ...result, rows: result.rows.map(row => row.user_id === '11'
+          ? { ...row, role: 'admin' }
+          : row) };
+      }
+    });
+    await assert.rejects(load({ userId: '11' }), {
+      code: 'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH'
+    });
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '818');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('existing wallet and directory readers deny a customer promoted to admin without moving funds', async () => {
+  const fixture = await tenantDatabase({ seed: 'a', companyId: '962', venueId: '963', ownedBalance: 919 });
+  try {
+    const query = fixture.db.query.bind(fixture.db);
+    const load = createSpaceverseCustomerWalletRepository({ runtime: fixture.runtime, query });
+    const list = createSpaceverseCustomerDirectoryRepository({ runtime: fixture.runtime, query });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '919');
+    assert.equal((await list()).total, '1');
+
+    await fixture.db.query("UPDATE users SET role='admin' WHERE id=11");
+
+    const walletResult = await load({ userId: '11' }).then(
+      value => ({ value }),
+      error => ({ error })
+    );
+    assert.equal(walletResult.value?.customer?.role, undefined);
+    assert.ok(walletResult.error || walletResult.value === null);
+    const directoryResult = await list().then(
+      value => ({ value }),
+      error => ({ error })
+    );
+    assert.ok(!directoryResult.value?.items.some(item => item.customer.id === '11'));
+    assert.ok(directoryResult.error || directoryResult.value?.total === '0');
+    const balance = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(balance.rows[0].balance, '919');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('wallet rejects forged ownership company, venue and runtime fields in a returned row', async () => {
+  const fixture = await tenantDatabase({ seed: 'b', companyId: '970', venueId: '971', ownedBalance: 515 });
+  try {
+    for (const forgedScope of [
+      { ownership_company_id: '999' },
+      { ownership_venue_id: '972' },
+      { ownership_runtime_key: 'forged-runtime-key' }
+    ]) {
+      const load = createSpaceverseCustomerWalletRepository({
+        runtime: fixture.runtime,
+        query: async (sql, params) => {
+          const result = await fixture.db.query(sql, params);
+          return {
+            ...result,
+            rows: result.rows.map(row => row.user_id === '11'
+              ? { ...row, ...forgedScope }
+              : row)
+          };
+        }
+      });
+      await assert.rejects(load({ userId: '11' }), {
+        code: 'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH'
+      });
+    }
+    const stored = await fixture.db.query('SELECT balance::text AS balance FROM wallets WHERE user_id=11');
+    assert.equal(stored.rows[0].balance, '515');
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('existing wallet and directory readers hide a soft-deleted or merged customer without moving funds', async () => {
+  const fixture = await tenantDatabase({ seed: 'c', companyId: '974', venueId: '975', ownedBalance: 626 });
+  try {
+    const query = fixture.db.query.bind(fixture.db);
+    const load = createSpaceverseCustomerWalletRepository({ runtime: fixture.runtime, query });
+    const list = createSpaceverseCustomerDirectoryRepository({ runtime: fixture.runtime, query });
+    assert.equal((await load({ userId: '11' })).wallet.balance, '626');
+    assert.equal((await list()).total, '1');
+
+    await fixture.db.query('UPDATE users SET deleted_at=NOW() WHERE id=11');
+    assert.equal(await load({ userId: '11' }), null);
+    assert.equal((await list()).total, '0');
+
+    await fixture.db.query('UPDATE users SET deleted_at=NULL, merged_into_user_id=12 WHERE id=11');
+    assert.equal(await load({ userId: '11' }), null);
+    assert.equal((await list()).total, '0');
+    assert.equal(await load({ userId: '12' }), null);
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(row => [row.id, row.balance]), [
+      ['11', '626'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
+});
+
+test('wallet direct-ID read rejects substituted customer and ownership IDs', async () => {
+  const fixture = await tenantDatabase({ seed: 'd', companyId: '976', venueId: '977', ownedBalance: 737 });
+  try {
+    for (const forgedId of [{ user_id: '12' }, { ownership_user_id: '12' }]) {
+      const load = createSpaceverseCustomerWalletRepository({
+        runtime: fixture.runtime,
+        query: async (sql, params) => {
+          const result = await fixture.db.query(sql, params);
+          return {
+            ...result,
+            rows: result.rows.map(row => row.user_id === '11'
+              ? { ...row, ...forgedId }
+              : row)
+          };
+        }
+      });
+      await assert.rejects(load({ userId: '11' }), {
+        code: 'SPACEVERSE_CUSTOMER_WALLET_READ_SCOPE_MISMATCH'
+      });
+    }
+    const balances = await fixture.db.query(
+      'SELECT user_id::text AS id, balance::text AS balance FROM wallets ORDER BY user_id'
+    );
+    assert.deepEqual(balances.rows.map(row => [row.id, row.balance]), [
+      ['11', '737'],
+      ['12', '999999']
+    ]);
+  } finally {
+    await fixture.db.close();
+  }
 });
