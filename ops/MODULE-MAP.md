@@ -944,6 +944,21 @@ that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
 same-company venues, cross-company denial and access revocation through actual
 HTTP and disposable PGlite. No schema or write-path change is required.
 
+## CHAT 02 active invitation authorization (2026-11-09, Draft #455)
+
+The `admin_onboarding_access` ledger can authorize **only active non-legacy
+venues** when the existing invitation feature flag is enabled. The active
+venue list, direct venue ID and method-specific RBAC checks require matching,
+claimed, unrevoked canonical invitation and grant records. Legacy owner/trusted
+company-wide access and PIVNIK mapped-bar readers stay unchanged. Invitation
+owner is scoped to assigned venue(s), manager to the trusted marketing
+allowlist and viewer to read-only dashboard/POS/operations/customers/capabilities.
+Revocation is checked on every request in the current session. The owner-facing
+navigation limits manager and viewer; no new fiscal source, CRM activation,
+provider license, database migration or production write is implied. Signed
+HTTP/PGlite negative tests use synthetic A/B companies and a sibling venue.
+Exact-HEAD CI, native PostgreSQL and real staging E2E remain release gates.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own
