@@ -778,6 +778,8 @@ save the UI opens the tracked list. Refresh stays at 120 seconds; sync quality
 and warnings remain visible, with detailed watermarks in a disclosure. This is a
 UI-only view: no second counter, migration, provider write or importer change.
 
+The owner action **«Изменить остаток»** uses the existing audited `count` baseline to replace a negative or stale calculated value with the owner's chosen nonnegative actual liters (including zero). The previous receipts and journal remain unchanged, and future sales still deduct from the new baseline. The count form prefills a nonnegative current balance, leaves negative balances blank for explicit correction, and provides a default human-readable audit note. It never sends product quantity to Evotor. The existing server write flag, owner authorization, and confirmation gates remain unchanged. Browser regression: `admin-platform/e2e/beer-inventory.spec.ts`.
+
 ### Evotor stock intake safety (2026-10-25)
 
 PR #309 introduced the intake screen; #310 changed it to the existing cloud

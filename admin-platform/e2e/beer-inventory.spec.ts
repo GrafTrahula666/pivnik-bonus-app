@@ -103,3 +103,29 @@ test('On hand keeps zero and unsupported tracked stock visible with a warning',a
  await expect(row.getByRole('button',{name:'Привоз',exact:true})).toBeDisabled()
  await expect(page.getByRole('tab',{name:/На учёте/})).toHaveText('На учёте2')
 })
+
+test('Owner sets a chosen balance after negative calculated stock, without fiscal writes',async({page})=>{
+ await page.clock.install({time:new Date('2026-10-26T12:00:00Z')})
+ const oldBaseline={operationId:'base-negative',kind:'initial',quantityMillis:'0',effectiveAt:'2026-10-26T10:00:00Z'}
+ let item={...product,productId:'beer-negative',name:'Сорт с ошибочным остатком',baseline:oldBaseline,balanceMillis:'-90000',status:'incomplete',warnings:['Отрицательный расчётный остаток']} as Record<string,unknown>
+ const writes:Record<string,unknown>[]=[]
+ const report=()=>({source:'crm_calculated',storeId:'store-a',asOf:'2026-10-26T12:00:00Z',writeEnabled:true,products:[item],quality:{lastSuccessfulHistorySyncAt:null,coveredUntil:null,historyComplete:false,historyCursorPending:true,errorCode:null,unknownPositions:0,stale:true,recentSync:{state:'not_recorded'}}})
+ await page.route('**/api/admin/venues/*/beer-inventory**',async route=>{
+  if(route.request().method()==='GET')return route.fulfill({json:report()})
+  const body=route.request().postDataJSON() as Record<string,unknown>;writes.push(body)
+  item={...item,baseline:{operationId:body.operationId,kind:'count',quantityMillis:body.quantityMillis,effectiveAt:'2026-10-26T12:00:00Z'},balanceMillis:body.quantityMillis,status:'pending',warnings:[]}
+  return route.fulfill({json:{ok:true,source:'crm_calculated',operationId:body.operationId,alreadyApplied:false}})
+ })
+ await page.goto('/e2e/fixtures/beer-inventory.html')
+ const row=page.getByRole('table',{name:'Пиво на учёте'}).getByRole('row').filter({hasText:'Сорт с ошибочным остатком'})
+ await expect(row.locator('[data-label="Осталось"] strong')).toHaveText('-90 л')
+ await row.getByRole('button',{name:'Изменить остаток'}).click()
+ await expect(page.getByLabel('Новый остаток, л')).toHaveValue('')
+ await page.getByLabel('Новый остаток, л').fill('25,5')
+ await expect(page.getByText(/станет: 25,5 л/)).toBeVisible()
+ await page.getByRole('button',{name:'Сохранить новый остаток'}).click()
+ expect(writes).toHaveLength(1)
+ expect(writes[0]).toMatchObject({kind:'count',quantityMillis:'25500',baselineId:'base-negative',note:'Ручная корректировка владельцем'})
+ expect(writes[0]).not.toHaveProperty('storeId')
+ await expect(row.locator('[data-label="Осталось"] strong')).toHaveText('25,5 л')
+})
