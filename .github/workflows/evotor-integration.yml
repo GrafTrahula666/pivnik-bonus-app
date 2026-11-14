@@ -79,10 +79,23 @@ jobs:
           info={'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),
                 'unsignedSha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
-                'version':'1.0.18','versionCode':22,'hardwareVerified':False}
+                'version':'1.0.20-rollback','versionCode':24,'hardwareVerified':False}
           (root/'build-provenance.json').write_text(json.dumps(info,indent=2)+'\n')
           print(json.dumps(info))
           PY
+      # Public SDK utilities only, never package the keystore, passwords or POS key.
+      - name: Collect Android SDK 35 public signing utilities
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/evotor-public-signing-tools"
+          mkdir -p "$tools"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$tools/apksigner.jar"
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" "$tools/zipalign"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evotor-android-sdk35-signing-utilities-no-secrets
+          path: ${{ runner.temp }}/evotor-public-signing-tools/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -91,7 +104,7 @@ jobs:
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: pivnik-evotor-1.0.18-pr-unsigned-not-for-installation
+          name: pivnik-evotor-1.0.20-rollback-pr-unsigned-not-for-installation
           path: |
             evotor-bridge/app/build/outputs/apk/release/app-release-unsigned.apk
             evotor-bridge/app/build/outputs/apk/release/build-provenance.json
