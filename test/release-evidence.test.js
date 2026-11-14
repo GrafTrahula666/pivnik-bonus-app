@@ -666,6 +666,28 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       token: 'test-token', fetchImpl: failPermissionFetch,
     }), /GitHub independent reviewer permission lookup failed/);
   }
+  // A reviewer who lost write access after approval must fail closed at verification time.
+  // Malformed permission responses and authentication failures cannot restore that approval.
+  for (const [label, permissionResult, expectedError] of [
+    ['revoked to read', { ok: true, json: async () => ({
+      permission: 'read', user: { login: 'independent-release-reviewer' },
+    }) }, /GitHub independent reviewer lacks verified write permission/],
+    ['missing permission', { ok: true, json: async () => ({
+      user: { login: 'independent-release-reviewer' },
+    }) }, /GitHub independent reviewer lacks verified write permission/],
+    ['missing actor identity', { ok: true, json: async () => ({
+      permission: 'write',
+    }) }, /GitHub independent reviewer lacks verified write permission/],
+    ['unauthorized permission lookup', { ok: false, status: 401 },
+      /GitHub independent reviewer permission lookup failed/],
+  ]) {
+    const revokedFetch = async (url, opts) =>
+      url.endsWith('/collaborators/independent-release-reviewer/permission')
+        ? permissionResult : responseFor(url, opts);
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: revokedFetch,
+    }), expectedError, label);
+  }
   const mismatchedReviewer = async (url, opts) =>
     url.endsWith('/collaborators/independent-release-reviewer/permission')
       ? { ok: true, json: async () => ({ permission: 'admin', user: { login: 'outsider' } }) }
