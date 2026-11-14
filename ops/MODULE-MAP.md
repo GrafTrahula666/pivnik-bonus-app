@@ -1,3 +1,12 @@
+## 2026-11-10: dormant Halloween cosmetics removal (draft only)
+
+The old HTML toggle and the separate admin editor's Halloween theme picker are removed.
+The retired `html.theme-halloween` CSS and its unused seasonal raster assets are removed.
+The main client still forcibly clears `theme-halloween` for compatibility with an old stored design.
+Do **not** delete award/profile frame assets or reward code; preserve archived wheel prizes,
+existing ticket/draw/referral rows, migrations 011 and 015, database backups, and all
+cash/bonus/POS accounting. No live database modification, merge, or deployment in this PR.
+
 ## 2026-11-09: Android Mazut renderer compatibility fallback (Draft, not deployed)
 
 The existing production Mazut on `main` can mount its stage and leave it

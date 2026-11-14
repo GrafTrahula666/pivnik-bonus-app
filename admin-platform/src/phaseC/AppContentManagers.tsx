@@ -117,7 +117,6 @@ export function AppDesignManager({venue,session}:{venue:ApiVenue;session:AdminSe
     try{const saved=await apiPut<{design:AppDesign}>(path,draft);setData({design:saved.design,draftPending:false,updatedAt:new Date().toISOString()});setSave({busy:false,error:'',ok:'Опубликовано: гости увидят изменения при следующем открытии приложения.'})}
     catch(e){setSave({busy:false,error:failed(e),ok:''})}
   }
-  const night=draft.theme==='halloween'
   return <div className="page">
     <PageHead eyebrow="ПРИЛОЖЕНИЕ ПИВНИК" title="Оформление" sub={`${venue.companyName} → ${venue.name}`}
       actions={<><WriteGatePill enabled={canWrite}/><button className="btn" disabled={!canWrite||!changed||save.busy} onClick={()=>setConfirm(true)}><Save/>Опубликовать</button></>}/>
@@ -129,12 +128,11 @@ export function AppDesignManager({venue,session}:{venue:ApiVenue;session:AdminSe
       {SECTIONS.map(([key,label,hint])=><div className="setting-row" key={key}><div><b>{label}</b><span>{hint}</span></div><Toggle value={draft.sections[key]} onChange={v=>setDraft({...draft,sections:{...draft.sections,[key]:v}})}/></div>)}
       <CardTitle title="Вид"/>
       <label className="field"><span>Скругление карточек: {draft.radius} px</span><input type="range" min={8} max={36} value={draft.radius} onChange={e=>setDraft({...draft,radius:Number(e.target.value)})}/></label>
-      <label className="field"><span>Тема</span><select value={draft.theme} onChange={e=>setDraft({...draft,theme:e.target.value==='halloween'?'halloween':'default'})}><option value="default">Обычная (светлая)</option><option value="halloween">Хэллоуин (ночная)</option></select></label>
       <SaveMessage state={save}/>
       <SourceNote>Последняя публикация: {dt(data.updatedAt)}.{data.draftPending?' В админке приложения есть неопубликованный черновик: его остальные правки сохранятся.':''}</SourceNote>
     </section>
     <section className="card phone-preview-wrap"><span className="eyebrow">ПРЕДПРОСМОТР</span>
-      <div className={cn('phone-preview app-preview',night&&'app-preview-night')} style={{'--preview-radius':`${draft.radius}px`} as CSSProperties}>
+      <div className={'phone-preview app-preview'} style={{'--preview-radius':`${draft.radius}px`} as CSSProperties}>
         <div className="phone-status"><span>21:41</span><span>ПРИМЕР</span></div>
         <div className="app-preview-head"><b>{draft.texts.brand||'Пивник'}</b></div>
         <div className="balance-card"><span>{draft.texts.balanceLabel||'Ваш баланс'}</span><b>2 840 <small>бонусов</small></b><div><span className="app-preview-qr">{draft.texts.qrButton||'Показать QR'}</span></div></div>
