@@ -1,6 +1,7 @@
 import { expect,test } from '@playwright/test'
 
 test('owner invitation opens the real resumable onboarding and revoke closes access',async({page,browser})=>{
+  await page.context().grantPermissions(['clipboard-read','clipboard-write'])
   await page.goto('/')
   await page.getByLabel('Email',{exact:true}).fill('owner@fixture.invalid')
   await page.getByLabel('Пароль',{exact:true}).fill('Synthetic-Onboarding-Only-2026!')
@@ -13,6 +14,22 @@ test('owner invitation opens the real resumable onboarding and revoke closes acc
   const link=invitations.getByLabel('Ссылка приглашения')
   await expect(link).toHaveValue(/#invite=SVI-/)
   const url=await link.inputValue()
+  // The message must describe the issued invitation, not the mutable form values.
+  await invitations.getByLabel('Роль приглашённого').selectOption('viewer')
+  await invitations.getByRole('button',{name:'Скопировать текст'}).click()
+  let copied=await page.evaluate(()=>navigator.clipboard.readText())
+  expect(copied).toContain('владельца')
+  expect(copied).toContain('Север')
+  expect(copied).not.toContain('сотрудника')
+  expect(copied).not.toContain('Север 1')
+  await invitations.getByRole('button',{name:'Открыть ссылку',exact:true}).first().click()
+  await expect(link).toHaveValue(url)
+  await invitations.getByRole('button',{name:'Скопировать текст'}).click()
+  copied=await page.evaluate(()=>navigator.clipboard.readText())
+  expect(copied).toContain('владельца')
+  expect(copied).toContain('Север')
+  expect(copied).not.toContain('сотрудника')
+  expect(copied).not.toContain('Север 1')
   // Open the retained link again after reload; no token/password in browser storage.
   await page.reload()
   await invitations.getByRole('button',{name:'Открыть ссылку',exact:true}).first().click()

@@ -44,6 +44,12 @@ function response(row:InviteRow){
     expiresAt:row.expires_at,singleUse:true,status:state(row),createdAt:row.created_at,acceptedAt:row.accepted_at,
     companyName:row.company_name,venueName:row.venue_name}
 }
+async function targetNames(client:Pick<PoolClient,'query'>,companyId:string,venueId:string|null){
+  const row=(await client.query<{company_name:string;venue_name:string|null}>(`SELECT company.name AS company_name,
+    venue.name AS venue_name FROM companies company LEFT JOIN venues venue
+    ON venue.id=$2::bigint AND venue.company_id=company.id WHERE company.id=$1::bigint`,[companyId,venueId])).rows[0]
+  return {companyName:row?.company_name??null,venueName:row?.venue_name??null}
+}
 function unavailable(error:unknown):never{
   if(error instanceof HttpError)throw error
   throw new HttpError(503,'INVITATION_STORAGE_UNAVAILABLE','Не удалось подтвердить приглашение. Повторите тот же запрос.')
@@ -120,10 +126,11 @@ export async function createOnboardingInvitation(admin:AdminPrincipal,raw:unknow
       if(!row||row.fingerprint!==fingerprint)throw new HttpError(409,'INVITATION_REQUEST_CONFLICT','Этот запрос использован для другого приглашения.')
     }else await recordAudit({admin,action:'onboarding.invitation_create',entityType:'onboarding_invitation',entityId:row.id,
       after:{role,companyId,venueId,singleUse:true},metadata:{expiresInHours:body.expiresInHours}},client)
+    const names=await targetNames(client,companyId,venueId)
     await client.query('COMMIT')
     const inviteToken=code(row)
     if(sha256(inviteToken)!==row.token_hash)throw new HttpError(409,'INVITATION_KEY_CHANGED','Ключ выдачи изменился. Отзовите приглашение и создайте новое.')
-    return {invitation:response(row),token:inviteToken,linkPath:'/#invite='+inviteToken}
+    return {invitation:{...response(row),...names},token:inviteToken,linkPath:'/#invite='+inviteToken}
   }catch(error){await client.query('ROLLBACK').catch(()=>undefined);unavailable(error)}finally{client.release()}
 }
 export async function listOnboardingInvitations(admin:AdminPrincipal){
@@ -196,8 +203,9 @@ export async function reopenOnboardingInvitation(admin:AdminPrincipal,inviteId:s
     if(state(row)!=='active')throw new HttpError(410,'INVITATION_UNAVAILABLE','Приглашение уже недоступно. Создайте новое.')
     const inviteToken=code(row)
     if(sha256(inviteToken)!==row.token_hash)throw new HttpError(409,'INVITATION_KEY_CHANGED','Ключ выдачи изменился. Отзовите приглашение и создайте новое.')
+    const names=await targetNames(client,row.company_id,row.venue_id)
     await recordAudit({admin,action:'onboarding.invitation_link_read',entityType:'onboarding_invitation',entityId:row.id},client)
-    await client.query('COMMIT');return {invitation:response(row),linkPath:'/#invite='+inviteToken}
+    await client.query('COMMIT');return {invitation:{...response(row),...names},linkPath:'/#invite='+inviteToken}
   }catch(error){await client.query('ROLLBACK').catch(()=>undefined);unavailable(error)}finally{client.release()}
 }
 export async function previewOnboardingInvitation(raw:unknown){

@@ -4,17 +4,19 @@ import { ApiError,apiGet,apiPost,type AdminSession } from '../api'
 import './venue-onboarding.css'
 
 interface Invitation{id:string;companyId:string;venueId:string|null;role:string;status:string;expiresAt:string;singleUse:true;companyName?:string|null;venueName?:string|null}
+interface LinkContext{companyId:string;venueId:string|null;role:string;companyName?:string|null;venueName?:string|null}
 interface Targets{invitations:Invitation[];companies:{id:string;name:string}[];venues:{id:string;companyId:string;name:string}[]}
 const base='/api/admin/onboarding/invitations'
 const roleLabel:Record<string,string>={owner:'Владелец',manager:'Управляющий',viewer:'Только просмотр'}
 const statusLabel:Record<string,string>={active:'Ожидает принятия',consumed:'Принято',expired:'Срок истёк',revoked:'Отозвано'}
 const date=(value:string)=>new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',dateStyle:'short',timeStyle:'short'}).format(new Date(value))
-const target=(invitation:Invitation)=>invitation.companyName?(invitation.venueName?invitation.companyName+' · '+invitation.venueName:invitation.companyName):invitation.venueId?'Выбранная точка':'Вся организация'
+const target=(invitation:Pick<Invitation,'companyName'|'venueName'|'venueId'>)=>invitation.companyName?(invitation.venueName?invitation.companyName+' · '+invitation.venueName:invitation.companyName):invitation.venueId?'Выбранная точка':'Вся организация'
 export function OnboardingInvitations({session}:{session:AdminSession}){
   const allowed=session.capabilities.onboardingInvitations&&session.capabilities.onboardingInvitationOwner
   const [index,setIndex]=useState<Targets>({invitations:[],companies:[],venues:[]})
   const [companyId,setCompanyId]=useState(''),[venueId,setVenueId]=useState(''),[role,setRole]=useState('owner'),[hours,setHours]=useState(24)
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[link,setLink]=useState('')
+  const [linkContext,setLinkContext]=useState<LinkContext|null>(null)
   const command=useRef<Record<string,unknown>|null>(null),inFlight=useRef(false)
   const load=useCallback(async()=>{
     try{const result=await apiGet<Targets>(base);setIndex(result);setCompanyId(value=>value||result.companies[0]?.id||result.venues[0]?.companyId||'')}
@@ -29,30 +31,27 @@ export function OnboardingInvitations({session}:{session:AdminSession}){
     try{
       const result=await apiPost<{invitation:Invitation;linkPath:string}>(base,command.current)
       if(result.invitation.status!=='active'){command.current=null;throw new Error('Приглашение уже недоступно. Создайте новое.')}
-      setLink(new URL(result.linkPath,window.location.origin).toString());command.current=null
-      setNotice(role==='owner'?'Приглашение владельца создано. Отправьте ссылку; письмо автоматически не отправляется.':'Приглашение создано. Отправьте ссылку приглашённому; письмо автоматически не отправляется.');await load()
+      setLink(new URL(result.linkPath,window.location.origin).toString());setLinkContext({...result.invitation});command.current=null
+      setNotice(result.invitation.role==='owner'?'Приглашение владельца создано. Отправьте ссылку; письмо автоматически не отправляется.':'Приглашение создано. Отправьте ссылку приглашённому; письмо автоматически не отправляется.');await load()
     }catch(error){if(error instanceof ApiError&&error.status>=400&&error.status<500&&error.status!==408)command.current=null;setError(error instanceof Error?error.message:'Результат выдачи не подтверждён. Повторите тот же запрос.')}
     finally{setBusy(false);inFlight.current=false}
   }
   async function reopen(id:string){
     if(inFlight.current)return
     inFlight.current=true;setBusy(true);setError('')
-    try{const result=await apiPost<{linkPath:string}>(base+'/'+id+'/link',{});setLink(new URL(result.linkPath,window.location.origin).toString());command.current=null;setNotice('Сохранённое приглашение открыто. Новое приглашение не создавалось.')}
+    try{const result=await apiPost<{invitation:Invitation;linkPath:string}>(base+'/'+id+'/link',{});setLink(new URL(result.linkPath,window.location.origin).toString());setLinkContext({...result.invitation});command.current=null;setNotice('Сохранённое приглашение открыто. Новое приглашение не создавалось.')}
     catch(error){setError(error instanceof Error?error.message:'Не удалось открыть приглашение.')}
     finally{setBusy(false);inFlight.current=false}
   }
   async function revoke(id:string){
     if(inFlight.current)return
     inFlight.current=true;setBusy(true);setError('')
-    try{await apiPost(base+'/'+id+'/revoke',{});setNotice('Приглашение и выданный им доступ отозваны.');setLink('');await load()}
+    try{await apiPost(base+'/'+id+'/revoke',{});setNotice('Приглашение и выданный им доступ отозваны.');setLink('');setLinkContext(null);await load()}
     catch(error){setError(error instanceof Error?error.message:'Не удалось подтвердить отзыв.')}
     finally{setBusy(false);inFlight.current=false}
   }
   if(!allowed)return null
-  const organizationName=index.companies.find(company=>company.id===companyId)?.name
-    ??index.venues.find(venue=>venue.companyId===companyId)?.name??'выбранная организация'
-  const selectedTarget=venueId?index.venues.find(venue=>venue.id===venueId)?.name??'выбранная точка':organizationName
-  const inviteMessage=link?`Здравствуйте! Это одноразовая ссылка SPACEVERSE для доступа ${role==='owner'?'владельца':'сотрудника'} к ${selectedTarget}. Перейдите по ссылке и задайте пароль: ${link}`:''
+  const inviteMessage=link&&linkContext?`Здравствуйте! Это одноразовая ссылка SPACEVERSE для доступа ${linkContext.role==='owner'?'владельца':'сотрудника'} к ${target(linkContext)}. Перейдите по ссылке и задайте пароль: ${link}`:''
   return <section className="card onboarding" aria-label="Приглашения">
     <div className="onboarding-head"><div><span className="eyebrow">ВЛАДЕЛЬЦЫ И КОМАНДА</span><h2>Пригласить владельца заведения</h2><p>Одноразовая ссылка на выбранную компанию и точку. Владелец задаст пароль и получит доступ только к своей области.</p></div><Link/></div>
     <form onSubmit={event=>{event.preventDefault();void create()}}>

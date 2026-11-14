@@ -33,7 +33,7 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
   async function invite(extra:Record<string,unknown>={}){
     const response=await request('owner','POST',base,command(extra))
     expect(response.status).toBe(200)
-    return await response.json() as {invitation:{id:string};token:string;linkPath:string}
+    return await response.json() as {invitation:{id:string;role:string;companyName?:string|null;venueName?:string|null};token:string;linkPath:string}
   }
   beforeAll(async()=>{
     process.env.ADMIN_ENABLE_WRITES='true';process.env.ADMIN_ENABLE_ONBOARDING_DRAFTS='true'
@@ -74,8 +74,9 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
   it('owner gets a stable replayable link; server rejects changed payload, foreign scope and missing CSRF',async()=>{
     const body=command()
     const created=await request('owner','POST',base,body)
-    const first=await created.json() as {token:string;invitation:{id:string};linkPath:string}
+    const first=await created.json() as {token:string;invitation:{id:string;role:string;companyName?:string|null;venueName?:string|null};linkPath:string}
     expect(created.status).toBe(200);expect(first.token).toMatch(/^SVI-/);expect(first.linkPath).toContain('#invite=')
+    expect(first.invitation).toMatchObject({role:'manager',companyName:'Север',venueName:null})
     const repeat=await request('owner','POST',base,body)
     expect(repeat.status).toBe(200);expect(await repeat.json()).toEqual(first)
     expect((await request('owner','POST',base,{...body,role:'owner'})).status).toBe(409)
@@ -87,6 +88,8 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
     expect((await request(null,'POST','/api/admin/onboarding/invite/claim',{token:first.token,email:'legacy@fixture.invalid',displayName:'Legacy',password})).status).toBe(410)
     const listed=await request('owner','GET',base);const list=await listed.json() as {invitations:Array<{id:string;companyName?:string|null;venueName?:string|null}>}
     expect(list.invitations.find(row=>row.id===first.invitation.id)).toMatchObject({companyName:'Север',venueName:null})
+    const reopened=await request('owner','POST',base+'/'+first.invitation.id+'/link',{})
+    expect((await reopened.json()).invitation).toMatchObject({role:'manager',companyName:'Север',venueName:null})
     expect(JSON.stringify(list)).not.toContain(first.token);expect(JSON.stringify(list)).not.toContain('token_hash')
     const logs=await state.db!.query<{metadata:unknown}>('SELECT metadata FROM admin_audit_log')
     expect(JSON.stringify(logs.rows)).not.toContain(first.token)
@@ -225,8 +228,11 @@ describe('invitations: signed Admin sessions, actual HTTP router and canonical S
     }
     const a=await prepared('Точка A'),b=await prepared('Точка B')
     const created=await invite({venueId:a.scope.venue.id,role:'viewer'})
+    expect(created.invitation).toMatchObject({role:'viewer',companyName:'Север',venueName:'Точка A'})
     const listed=await request('owner','GET',base);const list=await listed.json() as {invitations:Array<{id:string;companyName?:string|null;venueName?:string|null}>}
     expect(list.invitations.find(row=>row.id===created.invitation.id)).toMatchObject({companyName:'Север',venueName:'Точка A'})
+    const reopened=await request('owner','POST',base+'/'+created.invitation.id+'/link',{})
+    expect((await reopened.json()).invitation).toMatchObject({role:'viewer',companyName:'Север',venueName:'Точка A'})
     expect((await request('trusted','POST',base+'/accept',{token:created.token})).status).toBe(200)
     expect((await request('trusted','GET','/api/admin/onboarding/drafts/'+a.draft.id)).status).toBe(200)
     expect((await request('trusted','GET','/api/admin/onboarding/drafts/'+b.draft.id)).status).toBe(404)
