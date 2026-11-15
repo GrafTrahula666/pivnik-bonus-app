@@ -22,7 +22,8 @@ concurrency:
 jobs:
   owner-form:
     name: Built Admin owner contact form, desktop/mobile (synthetic loopback)
-    runs-on: ubuntu-latest
+    # Playwright 1.55.1 cannot install Chromium on ubuntu26.04; pin supported LTS.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
