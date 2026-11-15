@@ -2,6 +2,7 @@
 // Acceptance for a STRICTLY default-off, nonproduction active-venue CRM pilot.
 // Physically separate synthetic tenant databases, no production data or activation.
 import http from 'node:http'
+import crypto from 'node:crypto'
 import {afterAll,afterEach,beforeAll,describe,expect,it,vi} from 'vitest'
 import {config} from '../config.js'
 import {fixturePassword} from './onboarding-fixture.js'
@@ -203,6 +204,64 @@ describe('CHAT03 active tenant CRM pilot: signed HTTP / separate sources',()=>{
       expect((await request('invited-viewer',path(0)+'/1')).status).toBe(404)
       expect((await request('south',path(2)+'/1')).status).toBe(200)
     }finally{config.enableOnboardingInvitations=false}
+  })
+  it('grants scoped CRM access only after a real owner invitation is accepted and closes it on revoke',async()=>{
+    const previous={writes:config.enableWrites,drafts:config.enableOnboardingDrafts,
+      invitations:config.enableOnboardingInvitations}
+    config.enableWrites=true
+    config.enableOnboardingDrafts=true
+    config.enableOnboardingInvitations=true
+    config.enableTenantCrmPilotReads=true
+    const target=fixture.manifests[0]!
+    try{
+      // Use the real signed HTTP invitation endpoints, not a manually inserted
+      // onboarding_access row. Every database here is disposable and isolated.
+      const signed=await fetch(origin+'/api/admin/auth/login',{method:'POST',headers:{
+        origin:config.publicOrigin,'content-type':'application/json',
+      },body:JSON.stringify({email:'owner@fixture.invalid',password:fixturePassword})})
+      expect(signed.status).toBe(200)
+      const issuer=await signed.json() as {csrfToken:string}
+      const cookie=signed.headers.get('set-cookie')!.split(';')[0]!
+      const issued=await fetch(origin+'/api/admin/onboarding/invitations',{method:'POST',headers:{
+        origin:config.publicOrigin,'content-type':'application/json',
+        cookie,'x-csrf-token':issuer.csrfToken,
+      },body:JSON.stringify({requestKey:crypto.randomUUID(),companyId:target.scope.companyId,
+        venueId:target.scope.venueId,role:'owner',expiresInHours:24})})
+      expect(issued.status).toBe(200)
+      const invitation=await issued.json() as {token:string;invitation:{id:string;role:string;venueId:string}}
+      expect(invitation.invitation).toMatchObject({
+        role:'owner',venueId:target.scope.venueId,
+      })
+      const accepted=await fetch(origin+'/api/admin/onboarding/invitations/accept',{method:'POST',headers:{
+        origin:config.publicOrigin,'content-type':'application/json',
+      },body:JSON.stringify({token:invitation.token,email:'invited-crm-owner@fixture.invalid',
+        displayName:'Приглашённый владелец',password:fixturePassword})})
+      expect(accepted.status).toBe(200)
+      const granted=await accepted.json() as {admin:{role:string};companyId:string;venueId:string}
+      expect(granted).toMatchObject({companyId:target.scope.companyId,
+        venueId:target.scope.venueId,admin:{role:'VENUE_ADMIN'}})
+      sessions.set('claimed-owner',accepted.headers.get('set-cookie')!.split(';')[0]!)
+      const mine=await request('claimed-owner',path(0)+'/1')
+      expect(mine.status).toBe(200)
+      expect(await mine.json()).toMatchObject({scope:target.scope,
+        customer:{id:'1'},wallet:{balance:'101'}})
+      expect((await request('claimed-owner',path(1)+'/1')).status).toBe(404)
+      expect((await request('claimed-owner',path(2)+'/1')).status).toBe(404)
+      const revoked=await fetch(origin+'/api/admin/onboarding/invitations/'+invitation.invitation.id+'/revoke',{
+        method:'POST',headers:{origin:config.publicOrigin,'content-type':'application/json',
+          cookie,'x-csrf-token':issuer.csrfToken},body:'{}',
+      })
+      expect(revoked.status).toBe(200)
+      const lookupCount=state.resolutions
+      const denied=await request('claimed-owner',path(0)+'/1')
+      expect(denied.status).toBe(404)
+      expect(state.resolutions).toBe(lookupCount)
+      expect((await request('owner',path(0)+'/1')).status).toBe(200)
+    }finally{
+      config.enableWrites=previous.writes
+      config.enableOnboardingDrafts=previous.drafts
+      config.enableOnboardingInvitations=previous.invitations
+    }
   })
   it('never enables pilot data exposure in production',async()=>{
     config.enableTenantCrmPilotReads=true
