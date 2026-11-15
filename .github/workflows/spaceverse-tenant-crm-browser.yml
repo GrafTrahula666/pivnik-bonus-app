@@ -30,7 +30,9 @@ concurrency:
 jobs:
   scoped-crm:
     name: Signed HTTP and desktop/mobile on disposable PostgreSQL 16
-    runs-on: ubuntu-latest
+    # Playwright 1.55.x cannot install Chromium on ubuntu26.04 (runner latest changed).
+    # Keep the fixture browser on a supported LTS until upgrading the locked Playwright version.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
