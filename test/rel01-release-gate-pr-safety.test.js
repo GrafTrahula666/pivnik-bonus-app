@@ -58,8 +58,8 @@ function releaseStepCondition(name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = workflow.match(new RegExp('^      - name: ' + escaped + '\\n        if: >-\\n((?:          [^\\n]*\\n)+)', 'm'));
   assert.ok(match, 'missing multiline condition for ' + name);
-  const expression = match[1].trim().replace(/\\n\\s*/g, ' ');
-  assert.doesNotMatch(expression, /\\$\\{\\{/);
+  const expression = match[1].trim().replace(/\n\s*/g, ' ');
+  assert.doesNotMatch(expression, /\$\{\{/);
   return expression;
 }
 
