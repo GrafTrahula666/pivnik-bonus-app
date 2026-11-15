@@ -34,3 +34,17 @@ test('REL-01: production deploy and smoke remain restricted to explicit main wor
     assert.match(section, /inputs\.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'/);
   }
 });
+
+
+test('REL-01: production secret verification never runs on pull_request', () => {
+  const name = 'Verify existing production secrets without changing them';
+  const start = workflow.indexOf(`      - name: ${name}\n`);
+  assert.notEqual(start, -1, 'missing production secret verification');
+  const tail = workflow.slice(start + 1);
+  const end = tail.search(/\n      - name: /);
+  const section = end === -1 ? tail : tail.slice(0, end);
+  assert.match(section, /github\.event_name == 'push'/);
+  assert.match(section, /github\.event_name == 'workflow_dispatch'/);
+  assert.doesNotMatch(section, /github\.event_name == 'pull_request'/);
+  assert.match(section, /inputs\.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'/);
+});
