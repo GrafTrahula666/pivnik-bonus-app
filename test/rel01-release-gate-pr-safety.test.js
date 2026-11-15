@@ -5,11 +5,11 @@ import { readFileSync } from 'node:fs';
 const workflow = readFileSync(new URL('../.github/workflows/release-gate.yml', import.meta.url), 'utf8');
 
 test('REL-01: pull_request release gate does not invoke legacy production mutation scripts', () => {
-  // These legacy jobs previously ran on PRs selected by branch name.
+  // Match the exact production-mutating commands removed from the historical workflow diff.
   // Keep this regression independent of the runtime scripts themselves.
   for (const script of [
-    'scripts/merge-vk-databases',
-    'scripts/restore-anna-consents',
+    'scripts/railway-unify-production-databases.mjs',
+    'scripts/railway-repair-anna-frame-and-consent.mjs',
   ]) {
     assert.equal(workflow.includes(script), false, `legacy production mutation in PR gate: ${script}`);
   }
