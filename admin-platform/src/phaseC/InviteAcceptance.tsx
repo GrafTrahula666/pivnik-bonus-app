@@ -28,12 +28,13 @@ export function InviteAcceptance({initialToken,session,onAccepted,onClose}:{init
     finally{setBusy(false)}
   }
   if(loginMode&&!activeSession)return <><Login onAuthenticated={value=>{setActiveSession(value);setLoginMode(false);void accept(value)}}/><button className="btn secondary invitation-back" onClick={()=>setLoginMode(false)}>Назад к приглашению</button></>
+  const owner=preview?.role==='owner'
   return <main className="login-shell"><section className="login-card card">
     <div className="login-icon"><Link/></div><span className="eyebrow">SPACEVERSE</span><h1>Подключение по приглашению</h1>
     <form onSubmit={event=>{event.preventDefault();void accept()}}>
       <label className="field"><span>Код приглашения</span><input required autoComplete="off" value={token} onChange={event=>setToken(event.target.value.trim())} readOnly={Boolean(initialToken)} maxLength={47}/></label>
       {preview&&<div className="onboarding-feedback"><b>{preview.companyName}{preview.venueName?' · '+preview.venueName:''}</b><p>Доступ: {preview.role==='viewer'?'только просмотр':preview.role==='owner'?'владелец выбранной области':'управляющий'}.</p>
-        {preview.status==='active'?<p>Создайте учётную запись или войдите в существующую. Затем продолжите настройку заведения.</p>:<p>{preview.status==='consumed'?'Приглашение принято. Войдите в принявшую его учётную запись.':preview.status==='expired'?'Срок приглашения истёк. Попросите владельца создать новое.':'Приглашение отозвано. Попросите владельца создать новое.'}</p>}
+        {preview.status==='active'?<p>{owner?'Вы получите доступ владельца только к этой компании и точке. CRM откроется после подтверждения подключения точки сервером.':'Создайте учётную запись или войдите в существующую. Затем продолжите настройку заведения.'}</p>:<p>{preview.status==='consumed'?'Приглашение принято. Войдите в принявшую его учётную запись.':preview.status==='expired'?'Срок приглашения истёк. Попросите владельца создать новое.':'Приглашение отозвано. Попросите владельца создать новое.'}</p>}
       </div>}
       {activeSession?<p>Вы вошли как <b>{activeSession.admin.email}</b>.</p>:<>
         <label className="field"><span>Ваше имя</span><input required maxLength={80} autoComplete="name" value={name} onChange={event=>setName(event.target.value)}/></label>
@@ -41,11 +42,11 @@ export function InviteAcceptance({initialToken,session,onAccepted,onClose}:{init
         <label className="field"><span>Новый пароль</span><input required type="password" minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)}/></label>
       </>}
       {error&&<div className="login-error" role="alert">{error}</div>}
-      <button className="btn login-submit" disabled={busy||!preview||['expired','revoked'].includes(preview.status)}>{busy?'Проверяем…':activeSession?'Принять и открыть мастер':'Создать учётную запись и открыть мастер'}</button>
+      <button className="btn login-submit" disabled={busy||!preview||['expired','revoked'].includes(preview.status)}>{busy?'Проверяем…':activeSession?(owner?'Принять приглашение владельца':'Принять и открыть мастер'):(owner?'Создать учётную запись и получить доступ':'Создать учётную запись и открыть мастер')}</button>
     </form>
     {!activeSession&&<button className="btn secondary login-demo" onClick={()=>setLoginMode(true)}>У меня уже есть учётная запись</button>}
     {activeSession&&<button className="btn secondary login-demo" onClick={()=>void logout().then(()=>{setActiveSession(null);setLoginMode(true)})}>Войти другой учётной записью</button>}
     <button className="btn secondary login-demo" onClick={onClose}>Вернуться к панели</button>
-    <div className="login-safety"><ShieldCheck/><span>Приглашение не включает заведение автоматически. Статус подключения подтвердит сервер.</span></div>
+    <div className="login-safety"><ShieldCheck/><span>Ссылка одноразовая. Доступ ограничен компанией и точкой приглашения; после принятия его можно отозвать.</span></div>
   </section></main>
 }

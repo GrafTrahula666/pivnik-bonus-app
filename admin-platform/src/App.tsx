@@ -6,6 +6,7 @@ import { Login } from './Login'
 import { PhaseCSidebar,PhaseCTopbar,TenantDangerContext,type AppMode,type Period } from './phaseC/Layout'
 import { ProductionDashboard } from './phaseC/ProductionDashboard'
 import { ProductionCRM } from './phaseC/ProductionCRM'
+import {ActiveTenantCustomerDirectory} from './phaseC/TenantCustomerDirectory'
 import {
   CompanyVenuesOverview,ProductionAnalytics,ProductionAudit,ProductionOperations,ProductionPlatform,
 } from './phaseC/ProductionReadPages'
@@ -76,8 +77,9 @@ export default function App(){
   const isSuper=session?.admin.role==='SUPER_ADMIN'
   const spaceversePanel=session?.capabilities.onboardingWorkflow===true
   const setupOnly=Boolean(!isSuper&&!venues.length&&(session?.capabilities.onboardingAccess||session?.capabilities.onboardingInvitations)&&mode==='production')
-  const isTrusted=Boolean(selected?.accessKind==='trusted'&&!isSuper)
-  const trustedPages=['overview','clients','operations','analytics','promotions','broadcast','audit','settings']
+  const isViewer=Boolean(selected?.accessKind==='viewer'&&!isSuper)
+  const isTrusted=Boolean(selected&&['trusted','manager','viewer'].includes(selected.accessKind||'')&&!isSuper)
+  const trustedPages=isViewer?['overview','clients','operations','analytics','settings']:['overview','clients','operations','analytics','promotions','broadcast','audit','settings']
   const platformPage=['platform','companies','venues','developer'].includes(page)
 
   function startDemo(){setDemoGuest(true);setSession(DEMO_SESSION);setMode('demo');setPage('overview');setAuthState('authenticated')}
@@ -102,11 +104,11 @@ export default function App(){
   if(authState==='guest'||!session)return <Login onDemo={demoAvailable?startDemo:undefined} onInvite={invitationAvailable?()=>setInviteToken(''):undefined} onAuthenticated={s=>{setSession(s);setAuthState('authenticated');setPage(s.admin.role==='SUPER_ADMIN'?'platform':'overview')}}/>
 
   return <div className="app-shell">
-    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} intakeEnabled={session.capabilities.beerIntake===true} inventoryEnabled={session.capabilities.beerInventory===true} open={mobileNav} onClose={()=>setMobileNav(false)}
+    <PhaseCSidebar page={page} role={session.admin.role} mode={mode} restricted={isTrusted} viewerOnly={isViewer} setupOnly={setupOnly} spaceverse={session.capabilities.onboardingWorkflow===true} intakeEnabled={session.capabilities.beerIntake===true} inventoryEnabled={session.capabilities.beerInventory===true} open={mobileNav} onClose={()=>setMobileNav(false)}
       onPage={p=>{setPage(p);setBroadcastSegment('');setMobileNav(false)}}/>
     <main className="main">
       <PhaseCTopbar role={session.admin.role} adminName={session.admin.displayName} mode={mode} venues={venues} venueId={mode==='demo'?'demo-pivnik':allVenues?'__all__':selected?.id||''}
-        period={period} compare={compare} restricted={isTrusted} roleLabel={setupOnly?'Доступ к панели':undefined} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'}/>
+        period={period} compare={compare} restricted={isTrusted} roleLabel={setupOnly?'Доступ к панели':isViewer?'Просмотр':selected?.accessKind==='manager'?'Управляющий':undefined} onMenu={()=>setMobileNav(true)} onVenue={setVenueId} onPeriod={setPeriod} onCompare={setCompare} onMode={switchMode} onLogout={()=>void signOut()} demoOnly={demoGuest} hidePeriodControls={mode==='production'&&page==='overview'}/>
       <TenantDangerContext role={session.admin.role} mode={mode} venue={mode==='production'?selected:null} onBack={()=>setPage('platform')}/>
       <div className="content">
         {mode==='demo'?<DemoMode page={page} period={period} compare={compare} onPage={setPage}/>:
@@ -120,22 +122,24 @@ export default function App(){
           {allVenues&&session.admin.role==='VENUE_ADMIN'&&page==='overview'&&<CompanyVenuesOverview venues={venues} onOpenVenue={openVenue}/>}
 
           {selected&&page==='overview'&&<ProductionDashboard venue={selected} period={period} compare={compare} onNavigate={setPage} spaceverse={spaceversePanel}/>}
-          {selected&&page==='clients'&&<ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>}
+          {selected&&page==='clients'&&(selected.companyCode==='pivnik'?
+            <ProductionCRM key={`crm:${session.admin.id}:${selected.companyId}:${selected.id}`} venue={selected} session={session} onBroadcast={spaceversePanel?undefined:segment=>{setBroadcastSegment(segment);setPage('broadcast')}}/>:
+            <ActiveTenantCustomerDirectory actorId={session.admin.id} scope={{companyId:selected.companyId,venueId:selected.id}}/>)}
           {selected&&page==='operations'&&<ProductionOperations venue={selected}/>}
           {selected&&page==='analytics'&&<ProductionAnalytics venue={selected} period={period}/>}
           {selected&&!isTrusted&&page==='loyalty'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppLoyaltyManager venue={selected} session={session}/>:<LoyaltyManager venue={selected} session={session}/>)}
           {selected&&!isTrusted&&!spaceversePanel&&page==='wheel'&&(isPivnikAppVenue(selected)?<AppWheelManager venue={selected} session={session}/>:<PivnikLegacyWheelManager venue={selected}/>)}
           {selected&&!isTrusted&&!spaceversePanel&&page==='achievements'&&(isPivnikAppVenue(selected)?<AppAchievementsManager venue={selected} session={session}/>:<PivnikLegacyAchievementManager venue={selected}/>)}
           {selected&&!isTrusted&&page==='shop'&&<ShopManager venue={selected} session={session}/>}
-          {selected&&page==='promotions'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
+          {selected&&!isViewer&&page==='promotions'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppPromotionsManager venue={selected} session={session}/>:<PromotionManager venue={selected} session={session}/>)}
           {selected&&session.capabilities.beerIntake&&!isTrusted&&page==='intake'&&<BeerIntake key={'intake:'+session.admin.id+':'+selected.id} venue={selected}/>}
           {selected&&session.capabilities.beerInventory&&!isTrusted&&page==='inventory'&&<BeerInventory key={'inventory:'+session.admin.id+':'+selected.companyId+':'+selected.id} venue={selected} actorId={session.admin.id}/>}
-          {selected&&!spaceversePanel&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
+          {selected&&!isViewer&&!spaceversePanel&&page==='broadcast'&&<BroadcastPage key={broadcastSegment} venue={selected} session={session} segment={broadcastSegment}/>}
           {selected&&!isTrusted&&page==='brand'&&(isPivnikAppVenue(selected)&&!spaceversePanel?<AppDesignManager venue={selected} session={session}/>:<BrandingManager venue={selected} session={session}/>)}
           {selected&&page==='settings'&&(isTrusted?<AccountSecurityPanel session={session}/>:<SettingsPage venue={selected} session={session}/>)}
-          {selected&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}
+          {selected&&!isViewer&&page==='audit'&&<ProductionAudit venue={selected} superAdmin={Boolean(isSuper)}/>}
 
-          {selected&&isTrusted&&!trustedPages.includes(page)&&!platformPage&&<div className="error-state card"><ShieldCheck/><h3>Доступ ограничен</h3><p>Директор может просматривать показатели, клиентов и операции, управлять акциями и рассылками. Системные изменения доступны владельцу.</p></div>}
+          {selected&&isTrusted&&!trustedPages.includes(page)&&!platformPage&&<div className="error-state card"><ShieldCheck/><h3>Доступ ограничен</h3><p>{isViewer?'Доступ только для просмотра показателей, клиентов и операций.':'Управление ограничено разрешёнными разделами. Системные изменения доступны владельцу.'}</p></div>}
 
           {isSuper&&page==='platform'&&<ProductionPlatform mode="platform" venues={venues} onOpenVenue={openVenue}/>}
           {isSuper&&page==='companies'&&<ProductionPlatform mode="companies" venues={venues} onOpenVenue={openVenue}/>}

@@ -18,7 +18,7 @@ export interface VenueScope {
   name: string
   address: string | null
   legacyBarId: string | null
-  accessKind?: 'owner' | 'trusted'
+  accessKind?: 'owner' | 'trusted' | 'manager' | 'viewer'
 }
 export interface PeriodRange { from: Date; to: Date; days: number }
 

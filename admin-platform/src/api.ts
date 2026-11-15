@@ -6,7 +6,7 @@ export interface AdminSession {
 }
 interface GuestSession {authenticated:false;demo?:boolean;invitations?:boolean}
 export interface ApiVenue {
-  id:string;companyId:string;companyCode:string;companyName:string;code:string;name:string;address:string|null;legacyBarId:string|null;accessKind?:'owner'|'trusted'
+  id:string;companyId:string;companyCode:string;companyName:string;code:string;name:string;address:string|null;legacyBarId:string|null;accessKind?:'owner'|'trusted'|'manager'|'viewer'
 }
 export class ApiError extends Error {
   status:number;code:string;details?:unknown

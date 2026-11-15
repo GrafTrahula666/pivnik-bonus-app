@@ -48,3 +48,80 @@ export function assertStagingDatabaseIsolation(env=process.env) {
   }
   return raw
 }
+
+// All integration tests must reuse the same exact project/service, DB hostname,
+// read/write-target and dangerous-write-flag gate as staging preflight.
+// Returning the connection string is intentional: callers pass it to a child
+// environment, never to logs or a GitHub artifact.
+export function approvedStagingIntegrationDatabaseUrl(env=process.env) {
+  const approved = assertStagingDatabaseIsolation(env)
+  const url = new URL(approved)
+  url.pathname = '/codex_admin_test_staging'
+  return url.toString()
+}
+
+// A standalone db:migrate on the known staging project is just as dangerous
+// as a direct seed. Production projects retain their own migration policy.
+export function assertStagingMigrationIsolation(env=process.env) {
+  const project=String(env.RAILWAY_PROJECT_ID||'')
+  const service=String(env.RAILWAY_SERVICE_ID||'')
+  if(project===STAGING_PROJECT_ID || service===STAGING_SERVICE_ID){
+    assertStagingDatabaseIsolation(env)
+    return
+  }
+  // A local command pointed at the staging internal hostname must not skip
+  // the project/service gate simply because Railway metadata is absent.
+  if(!project){
+    let host
+    try{host=new URL(String(env.ADMIN_DATABASE_URL||'')).hostname}catch{}
+    if(host===EXPECTED_DB_HOST){
+      throw new Error('Staging preflight refused: missing Railway project identity for staging migration.')
+    }
+  }
+}
+
+
+// Read-only, non-secret operator attestation. This evaluates the *current*
+// Railway process environment and never opens a database connection.
+// It cannot prove volume persistence, restore capability, or live tenancy.
+export function summarizeStagingDatabaseIsolation(env=process.env) {
+  const present = key => Boolean(String(env[key]||'').trim())
+  const target = key => {
+    if(!present(key))return null
+    try{return parseDatabaseTarget(String(env[key]).trim(),key)}catch{return false}
+  }
+  const primary=target('ADMIN_DATABASE_URL')
+  const reader=target('ADMIN_READ_DATABASE_URL')
+  const writer=target('ADMIN_PRODUCTION_WRITE_DATABASE_URL')
+  const sameTarget = other => {
+    if(other===null)return null
+    if(!primary||!other)return false
+    return primary.host===other.host&&primary.port===other.port&&primary.database===other.database
+  }
+  const enabled = value => ['true','1','on','yes'].includes(String(value||'').trim().toLowerCase())
+  let isolationGatePassed=false
+  try{assertStagingDatabaseIsolation(env);isolationGatePassed=true}catch{
+    // Intentionally do not serialize the error, input URLs or credentials.
+  }
+  return {
+    schemaVersion:1,
+    environment:'pivnik-admin-staging',
+    projectAndServiceMatch:env.RAILWAY_PROJECT_ID===STAGING_PROJECT_ID&&env.RAILWAY_SERVICE_ID===STAGING_SERVICE_ID,
+    database:{
+      primary:{configured:present('ADMIN_DATABASE_URL'),approvedTarget:Boolean(primary)},
+      reader:{configured:present('ADMIN_READ_DATABASE_URL'),matchesPrimary:sameTarget(reader)},
+      writer:{configured:present('ADMIN_PRODUCTION_WRITE_DATABASE_URL'),matchesPrimary:sameTarget(writer)},
+    },
+    flags:{
+      testSeedEnabled:env.ADMIN_ALLOW_TEST_SEED==='true',
+      migrationsEnabled:env.ADMIN_ALLOW_MIGRATIONS==='true',
+      adminWritesEnabled:enabled(env.ADMIN_ENABLE_WRITES),
+      externalProductionWritesDisabled:EXTERNAL_WRITE_FLAGS.every(flag=>!enabled(env[flag])),
+    },
+    isolationGatePassed,
+    credentialsPrinted:false,
+    persistentVolumeAndRestoreVerified:false,
+    realTwoTenantAcceptanceVerified:false,
+    deployApproved:false,
+  }
+}

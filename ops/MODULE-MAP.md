@@ -944,6 +944,91 @@ that scope. `/api/admin/audit` retains global entries for SUPER_ADMIN only.
 same-company venues, cross-company denial and access revocation through actual
 HTTP and disposable PGlite. No schema or write-path change is required.
 
+## CHAT 02 active invitation authorization (2026-11-09, Draft #455)
+
+The `admin_onboarding_access` ledger can authorize **only active non-legacy
+venues** when the existing invitation feature flag is enabled. The active
+venue list, direct venue ID and method-specific RBAC checks require matching,
+claimed, unrevoked canonical invitation and grant records. Legacy owner/trusted
+company-wide access and PIVNIK mapped-bar readers stay unchanged. Invitation
+owner is scoped to assigned venue(s), manager to the trusted marketing
+allowlist and viewer to read-only dashboard/POS/operations/customers/capabilities.
+Revocation is checked on every request in the current session. The owner-facing
+navigation limits manager and viewer; no new fiscal source, CRM activation,
+provider license, database migration or production write is implied. Signed
+HTTP/PGlite negative tests use synthetic A/B companies and a sibling venue.
+Exact-HEAD CI, native PostgreSQL and real staging E2E remain release gates.
+
+## CHAT03 isolated active-venue CRM pilot reader (2026-11-10, default off)
+
+`admin-platform/server/tenant-crm-active-pilot-read.ts` provides strictly
+nonproduction, default-off **read-only pilot** customer directory/card access
+through the existing owner-panel `/api/admin/venues/:id/clients` route on
+active canonical **non-PIVNIK** venues. Two gates are necessary:
+`ADMIN_ENABLE_TENANT_CRM_READS` and
+`ADMIN_ENABLE_TENANT_CRM_PILOT_READS`; a production runtime always denies
+regardless of flags. Without verified source the route reports
+`TENANT_CRM_SOURCE_NOT_CONFIGURED`, never a fabricated zero. This is
+**not** company activation or license entitlement.
+
+The source is resolved only from matching canonical
+`admin_onboarding_scopes`/frozen app config, active company/venue and a
+dedicated registry runtime key; client arguments cannot choose the database.
+Existing `resolveSpaceverseRuntime` validates target physical binding
+and scope. A bounded repeatable-read read-only transaction, server-side
+limits and live venue grant/source recheck precede every PII return.
+Owner role grants and the `legacy_bar_id` boundary cannot be bypassed;
+PIVNIK uses its original legacy route. The UI reuses the validated
+client directory with stale-response isolation but labels the new panel
+as pilot, not commercial activation.
+
+Synthetic signed HTTP fixtures with three independent tenant databases
+check zero vs missing wallet, precision, foreign/sibling scope, revoked
+grant in the same session, broken binding, absent registry, bad parameters
+and production denial. Any production activation requires separately
+verified store ownership, runtime source and provider licensing, with a
+new release gate and real staging acceptance (#436, #487). Do not deploy
+Draft #447 or #486 to production.
+Pilot customer list/detail routes reject extra scope query values, unrecognized
+nested paths and high-frequency enumeration with a per-actor rate limit.
+A disabled feature reports a distinct status to owners; no empty dataset or
+false active state is fabricated. This does not activate any store or license.
+
+## Read-only Railway staging DB attestation (2026-11-12, Draft #486)
+
+The operator-only \`npm run staging:attest\` command emits a **fixed JSON
+whitelist** of booleans/nulls for exact staging project/service identity,
+approved primary DB target, optional reader/writer matching, migration/seed
+flags, and separate external-write flag state. It uses the same strict
+isolation gate with no DB connection and never prints URLs, usernames, passwords,
+tokens or hashes. A passing code-level gate never means deploy approval:
+\`persistentVolumeAndRestoreVerified\`, \`realTwoTenantAcceptanceVerified\`,
+and \`deployApproved\` are explicitly false until an independent operator
+acceptance. CI tests use synthetic environments only; the old live staging
+deployment does not yet contain this tool. Do not deploy a draft merely to
+run this diagnostic.
+
+## Staging direct migration isolation (2026-11-11, Draft #486)
+
+The standalone `db:migrate` command must check the **same full staging
+database isolation gate** before any SQL when executed in the existing
+staging Railway project/service. A local invocation aimed at the known
+staging internal host without Railway project identity also fails closed.
+Production migrations in other projects retain the existing separate
+`ADMIN_ALLOW_MIGRATIONS` policy. This is a guard, not proof that
+live staging database references, backups or data persistence are safe.
+Never run migrations on live stores to test this protection.
+
+## Staging synthetic seed direct-invocation guard (2026-11-11, Draft #486)
+
+The `seed:test-tenant` command invokes the same fail-closed
+`assertStagingDatabaseIsolation` as staging preflight and integration tests
+**before** opening a database connection. It checks exact Railway project and
+service, approved internal database and matching reader/writer targets, explicit
+test-seed permission and disabled external production-write flags. A direct
+CLI invocation must not bypass these checks. This does not attest the actual
+redacted Railway environment, prove DB persistence or authorize staging deploy.
+
 ## Business onboarding drafts (2026-10-12, opt-in)
 
 `admin-platform/server/venue-onboarding.ts` and the existing Business router own

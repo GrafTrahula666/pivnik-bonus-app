@@ -18,6 +18,7 @@
     "seed:test-tenant": "tsx server/seed-test-tenant.ts",
     "staging:deploy": "node scripts/run-staging-deploy.mjs",
     "staging:preflight": "node scripts/staging-preflight.mjs",
+    "staging:attest": "node scripts/staging-db-attest.mjs",
     "staging:verify": "node scripts/staging-verify.mjs",
     "staging:integration": "node scripts/run-staging-integration.mjs",
     "test": "vitest run",

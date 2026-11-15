@@ -125,14 +125,113 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(state.targetResolutions).toBe(0)
     expect(await count(0,'spaceverse_crm_contacts')).toBe('0')
   })
+  it('advertises create capability only while enabled without resolving a tenant',async()=>{
+    const before=state.targetResolutions
+    config.enableTenantCrmContactCreate=true
+    const enabled=await send('owner','/api/admin/auth/session',null,{method:'GET'})
+    expect(enabled.status).toBe(200)
+    expect((await enabled.json()).capabilities.tenantCrmContactCreate).toBe(true)
+    expect(state.targetResolutions).toBe(before)
+    config.enableTenantCrmContactCreate=false
+    const disabled=await send('owner','/api/admin/auth/session',null,{method:'GET'})
+    expect(disabled.status).toBe(200)
+    expect((await disabled.json()).capabilities.tenantCrmContactCreate).toBe(false)
+    expect(state.targetResolutions).toBe(before)
+  })
+  it('revokes replay access immediately when the create feature is disabled',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('revoked-replay@fixture.invalid')
+    const first=await send('owner',path(),c)
+    expect(first.status).toBe(200)
+    const receipt=await first.json()
+    const beforeContacts=await count(0,'spaceverse_crm_contacts')
+    const beforeRequests=await count(0,'spaceverse_crm_contact_create_requests')
+    const beforeAudits=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    // A durable idempotency receipt must not bypass a subsequently disabled
+    // capability, even for the same authorized actor and identical UUID.
+    config.enableTenantCrmContactCreate=false
+    const disabledSession=await send('owner','/api/admin/auth/session',null,{method:'GET'})
+    expect(disabledSession.status).toBe(200)
+    expect((await disabledSession.json()).capabilities.tenantCrmContactCreate).toBe(false)
+    const denied=await send('owner',path(),c)
+    expect(denied.status).toBe(403)
+    expect(await denied.json()).toMatchObject({code:'TENANT_CRM_CONTACT_CREATE_DISABLED'})
+    expect(state.targetResolutions).toBe(1)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(beforeContacts)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(beforeRequests)
+    expect((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n).toBe(beforeAudits)
+
+    config.enableTenantCrmContactCreate=true
+    const replay=await send('owner',path(),c)
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+  })
+  it('keeps a pending audit receipt inaccessible while disabled, then reconciles exactly once',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-revoked-replay@fixture.invalid')
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+
+    state.failAuditOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    // The tenant write already committed, but a disabled capability must not
+    // permit audit reconciliation or disclose the pending idempotency receipt.
+    config.enableTenantCrmContactCreate=false
+    const denied=await send('owner',path(),c)
+    expect(denied.status).toBe(403)
+    const denial=await denied.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_CREATE_DISABLED'})
+    expect(JSON.stringify(denial)).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    config.enableTenantCrmContactCreate=true
+    const recovered=await send('owner',path(),c)
+    expect(recovered.status).toBe(200)
+    const receipt=await recovered.json()
+    expect(receipt.requestKey).toBe(c.requestKey)
+    const replay=await send('owner',path(),c)
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
+  })
   it('requires signed session, CSRF and exact Origin before accessing tenant',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('denied@fixture.invalid')
     expect((await send(null,path(),c)).status).toBe(401)
     expect((await send('owner',path(),c,{csrf:false})).status).toBe(403)
     expect((await send('owner',path(),c,{origin:'https://evil.invalid'})).status).toBe(403)
-    expect((await send('owner',path(),c,{method:'PUT'})).status).toBe(405)
+    const contactsBefore=await count(0,'spaceverse_crm_contacts')
+    const requestsBefore=await count(0,'spaceverse_crm_contact_create_requests')
+    const auditsBefore=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    for(const method of ['PUT','PATCH','DELETE']){
+      const response=await send('owner',path(),c,{method})
+      expect(response.status).toBe(405)
+    }
     expect(state.targetResolutions).toBe(0)
+    expect(await count(0,'spaceverse_crm_contacts')).toBe(contactsBefore)
+    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(requestsBefore)
+    expect((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n).toBe(auditsBefore)
   })
   it('rejects user-supplied database scope, invalid contact and unsupported method',async()=>{
     config.enableTenantCrmContactCreate=true
@@ -192,10 +291,37 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect([403,404]).toContain((await send('owner',path(2),c)).status)
     expect(state.targetResolutions).toBe(0)
   })
+  it('fails closed when the registered tenant database disappears without writing or auditing',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const manifest=fixture.manifests[0]!
+    const target=state.targets.get(manifest.runtimeKey)!
+    const contactsBefore=await count(0,'spaceverse_crm_contacts')
+    const requestsBefore=await count(0,'spaceverse_crm_contact_create_requests')
+    const auditsBefore=(await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n
+    state.targets.delete(manifest.runtimeKey)
+    try{
+      const c=command('unavailable-target@fixture.invalid')
+      const response=await send('owner',path(),c)
+      expect(response.status).not.toBe(200)
+      // A registered binding whose target cannot be resolved may fail as a scope conflict (409).
+      expect([403,404,409,503]).toContain(response.status)
+      expect(JSON.stringify(await response.json())).not.toContain(c.contact.email)
+      expect(await count(0,'spaceverse_crm_contacts')).toBe(contactsBefore)
+      expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe(requestsBefore)
+      expect((await fixture.metadata.query<{n:string}>(
+        "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+      )).rows[0]!.n).toBe(auditsBefore)
+    }finally{
+      state.targets.set(manifest.runtimeKey,target)
+    }
+  })
   it('creates one unlinked contact and audits scope; same key replays exactly once',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('idempotent@fixture.invalid')
     const before=(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
     const users=await count(0,'users'),wallets=await count(0,'wallets')
     const auditsBefore=Number((await fixture.metadata.query<{n:string}>(
       "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
@@ -210,7 +336,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(replay.status).toBe(200)
     expect(await replay.json()).toEqual(payload)
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(Number(before)+1)
-    expect(await count(0,'spaceverse_crm_contact_create_requests')).toBe('1')
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
     expect(await count(0,'users')).toBe(users)
     expect(await count(0,'wallets')).toBe(wallets)
     const auditTotal=Number((await fixture.metadata.query<{n:string}>(
@@ -243,6 +369,40 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
     expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
     expect(await auditCount()).toBe(audited)
+  })
+  it('does not let another authorized actor reconcile a pending audit receipt',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-actor-bound@fixture.invalid')
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+
+    state.failAuditOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    // Root has permission to create contacts, but cannot claim the owner's
+    // already-committed tenant request or complete its missing Admin audit.
+    const foreign=await send('root',path(),c)
+    expect(foreign.status).toBe(409)
+    const denial=await foreign.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denial)).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore)
+
+    const recovered=await send('owner',path(),c)
+    expect(recovered.status).toBe(200)
+    expect((await recovered.json()).requestKey).toBe(c.requestKey)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
   })
   it('recovers one tenant contact after Admin audit failure by replaying the exact request key',async()=>{
     config.enableTenantCrmContactCreate=true
@@ -334,6 +494,33 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(before+1)
     expect(await auditCount()).toBe(auditsBefore+1)
   })
+  it('does not let a different Admin actor claim an audit whose COMMIT acknowledgement was lost',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('lost-ack-actor-bound@fixture.invalid')
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+    state.loseAuditCommitAckOnce=true
+    const uncertain=await send('owner',path(),c)
+    expect(uncertain.status).toBe(503)
+    expect(await auditCount()).toBe(auditsBefore+1)
+    const denied=await send('root',path(),c)
+    expect(denied.status).toBe(409)
+    const denial=await denied.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denial)).not.toContain(c.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await auditCount()).toBe(auditsBefore+1)
+    const recovered=await send('owner',path(),c)
+    expect(recovered.status).toBe(200)
+    expect((await recovered.json()).requestKey).toBe(c.requestKey)
+    expect(await auditCount()).toBe(auditsBefore+1)
+  })
+
   it('rejects a duplicate channel from a different request and does not expose PII across venues',async()=>{
     config.enableTenantCrmContactCreate=true
     const c=command('duplicate@fixture.invalid')
@@ -353,6 +540,113 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
     expect((await send('south',path(2),command(c.contact.email))).status).toBe(200)
     expect(await count(2,'spaceverse_crm_contacts')).toBe('1')
   })
+  it('isolates identical request UUID and contact email across independent tenant databases',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const shared=command('same-key-two-venues@fixture.invalid')
+    const beforeNorth=Number(await count(0,'spaceverse_crm_contacts'))
+    const beforeSouth=Number(await count(2,'spaceverse_crm_contacts'))
+    const northRequests=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const southRequests=Number(await count(2,'spaceverse_crm_contact_create_requests'))
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const auditsBefore=await auditCount()
+    const north=await send('owner',path(),shared)
+    const south=await send('south',path(2),shared)
+    expect(north.status).toBe(200)
+    expect(south.status).toBe(200)
+    const northBody=await north.json()
+    const southBody=await south.json()
+    expect(northBody.requestKey).toBe(shared.requestKey)
+    expect(southBody.requestKey).toBe(shared.requestKey)
+    expect(northBody.contact.email).toBe(shared.contact.email)
+    expect(southBody.contact.email).toBe(shared.contact.email)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(beforeNorth+1)
+    expect(Number(await count(2,'spaceverse_crm_contacts'))).toBe(beforeSouth+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(northRequests+1)
+    expect(Number(await count(2,'spaceverse_crm_contact_create_requests'))).toBe(southRequests+1)
+    expect(await auditCount()).toBe(auditsBefore+2)
+    const northReplay=await send('owner',path(),shared)
+    const southReplay=await send('south',path(2),shared)
+    expect(await northReplay.json()).toEqual(northBody)
+    expect(await southReplay.json()).toEqual(southBody)
+    expect(await auditCount()).toBe(auditsBefore+2)
+  })
+  it('reconciles a pending audit only for its original venue when UUID is reused elsewhere',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-cross-venue@fixture.invalid')
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const before=await audits()
+    const northContacts=Number(await count(0,'spaceverse_crm_contacts'))
+    const southContacts=Number(await count(2,'spaceverse_crm_contacts'))
+    state.failAuditOnce=true
+    const pending=await send('owner',path(),c)
+    expect(pending.status).toBe(503)
+    expect(await audits()).toBe(before)
+    // A distinct company/venue may legitimately use the same UUID and email.
+    // Its successful audit must not mark the first venue's pending receipt done.
+    const south=await send('south',path(2),c)
+    expect(south.status).toBe(200)
+    const southReceipt=await south.json()
+    expect(await audits()).toBe(before+1)
+    const north=await send('owner',path(),c)
+    expect(north.status).toBe(200)
+    const northReceipt=await north.json()
+    expect(northReceipt.requestKey).toBe(c.requestKey)
+    expect(await audits()).toBe(before+2)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(northContacts+1)
+    expect(Number(await count(2,'spaceverse_crm_contacts'))).toBe(southContacts+1)
+    expect(await (await send('owner',path(),c)).json()).toEqual(northReceipt)
+    expect(await (await send('south',path(2),c)).json()).toEqual(southReceipt)
+    expect(await audits()).toBe(before+2)
+    const records=await fixture.metadata.query<{company_id:string;venue_id:string}>(
+      `SELECT company_id::text,venue_id::text FROM admin_audit_log
+       WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1`,
+      [c.requestKey])
+    expect(records.rows).toHaveLength(2)
+    expect(new Set(records.rows.map(row=>row.venue_id))).toEqual(new Set([
+      fixture.manifests[0]!.scope.venueId,fixture.manifests[2]!.scope.venueId,
+    ]))
+  })
+
+  it('keeps pending audit recovery venue-scoped within the same company',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const c=command('pending-sibling-venue@fixture.invalid')
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request'"
+    )).rows[0]!.n)
+    const beforeAudits=await audits()
+    const beforeContacts=[0,1].map(()=>0)
+    for(const i of [0,1])beforeContacts[i]=Number(await count(i,'spaceverse_crm_contacts'))
+    state.failAuditOnce=true
+    expect((await send('owner',path(0),c)).status).toBe(503)
+    expect(await audits()).toBe(beforeAudits)
+    // Both venues share a company and actor, but not an audit receipt.
+    const sibling=await send('owner',path(1),c)
+    expect(sibling.status).toBe(200)
+    const siblingReceipt=await sibling.json()
+    expect(await audits()).toBe(beforeAudits+1)
+    const recovered=await send('owner',path(0),c)
+    expect(recovered.status).toBe(200)
+    const receipt=await recovered.json()
+    expect(receipt.requestKey).toBe(c.requestKey)
+    expect(await audits()).toBe(beforeAudits+2)
+    for(const i of [0,1])expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(beforeContacts[i]!+1)
+    expect(await (await send('owner',path(0),c)).json()).toEqual(receipt)
+    expect(await (await send('owner',path(1),c)).json()).toEqual(siblingReceipt)
+    expect(await audits()).toBe(beforeAudits+2)
+    const records=await fixture.metadata.query<{venue_id:string}>(
+      `SELECT venue_id::text FROM admin_audit_log
+       WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1`,
+      [c.requestKey])
+    expect(records.rows).toHaveLength(2)
+    expect(new Set(records.rows.map(row=>row.venue_id))).toEqual(new Set([
+      fixture.manifests[0]!.scope.venueId,fixture.manifests[1]!.scope.venueId,
+    ]))
+  })
+
   it('normalizes phone-only contacts and rejects a formatted duplicate within the same venue',async()=>{
     config.enableTenantCrmContactCreate=true
     const phone='+7 (999) 333-44-55'
@@ -423,7 +717,7 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
 
   it('uses the same UUID independently in two prepared venues of one company',async()=>{
     config.enableTenantCrmContactCreate=true
-    const c=command('same-key-two-venues@fixture.invalid')
+    const c=command('same-company-two-venues@fixture.invalid')
     const before=[0,1].map(()=>({contacts:0,requests:0}))
     for(const i of [0,1]){
       before[i]!.contacts=Number(await count(i,'spaceverse_crm_contacts'))
@@ -453,6 +747,77 @@ describe('CHAT03 #24 signed Admin manual CRM contact POST (feature default-off)'
       fixture.manifests[0]!.scope.venueId,fixture.manifests[1]!.scope.venueId,
     ]))
     for(const row of audit.rows)expect(row).toMatchObject({company_id:'10',admin_id:'11'})
+  })
+
+  it('rejects a changed phone on a successful UUID replay without mutating the contact or audit',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const original=command('phone-replay-guard@fixture.invalid')
+    const changed={...original,contact:{...original.contact,phone:'+79995550001'}}
+    const contactsBefore=Number(await count(0,'spaceverse_crm_contacts'))
+    const requestsBefore=Number(await count(0,'spaceverse_crm_contact_create_requests'))
+    const audits=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1",
+      [original.requestKey])).rows[0]!.n)
+    const auditsBefore=await audits()
+    const created=await send('owner',path(),original)
+    expect(created.status).toBe(200)
+    const receipt=await created.json()
+    const conflict=await send('owner',path(),changed)
+    expect(conflict.status).toBe(409)
+    const denial=await conflict.json()
+    expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+    expect(JSON.stringify(denial)).not.toContain(original.contact.email)
+    expect(JSON.stringify(denial)).not.toContain(changed.contact.phone)
+    expect(Number(await count(0,'spaceverse_crm_contacts'))).toBe(contactsBefore+1)
+    expect(Number(await count(0,'spaceverse_crm_contact_create_requests'))).toBe(requestsBefore+1)
+    expect(await audits()).toBe(auditsBefore+1)
+    const replay=await send('owner',path(),original)
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+    expect(await audits()).toBe(auditsBefore+1)
+  })
+
+  it('same UUID with distinct payloads remains venue-local within one company',async()=>{
+    config.enableTenantCrmContactCreate=true
+    const first=command('venue-local-first@fixture.invalid')
+    const second=command('venue-local-second@fixture.invalid',first.requestKey)
+    const before=[0,1].map(()=>({contacts:0,requests:0}))
+    for(const i of [0,1]){
+      before[i]!.contacts=Number(await count(i,'spaceverse_crm_contacts'))
+      before[i]!.requests=Number(await count(i,'spaceverse_crm_contact_create_requests'))
+    }
+    const auditCount=async()=>Number((await fixture.metadata.query<{n:string}>(
+      "SELECT COUNT(*)::text AS n FROM admin_audit_log WHERE action='crm.manual_contact_create_request' AND metadata->>'requestKey'=$1",
+      [first.requestKey])).rows[0]!.n)
+    const beforeAudits=await auditCount()
+    const a=await send('owner',path(0),first)
+    const b=await send('owner',path(1),second)
+    expect(a.status).toBe(200)
+    expect(b.status).toBe(200)
+    const receipts=[await a.json(),await b.json()]
+    expect(receipts[0].contact.email).toBe(first.contact.email)
+    expect(receipts[1].contact.email).toBe(second.contact.email)
+    for(const i of [0,1]){
+      expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(before[i]!.contacts+1)
+      expect(Number(await count(i,'spaceverse_crm_contact_create_requests'))).toBe(before[i]!.requests+1)
+    }
+    expect(await auditCount()).toBe(beforeAudits+2)
+    const cross=[await send('owner',path(0),second),await send('owner',path(1),first)]
+    for(const response of cross){
+      expect(response.status).toBe(409)
+      const denial=await response.json()
+      expect(denial).toMatchObject({code:'TENANT_CRM_CONTACT_REPLAY_CONFLICT'})
+      expect(JSON.stringify(denial)).not.toContain(first.contact.email)
+      expect(JSON.stringify(denial)).not.toContain(second.contact.email)
+    }
+    for(const i of [0,1]){
+      expect(Number(await count(i,'spaceverse_crm_contacts'))).toBe(before[i]!.contacts+1)
+      expect(Number(await count(i,'spaceverse_crm_contact_create_requests'))).toBe(before[i]!.requests+1)
+    }
+    expect(await auditCount()).toBe(beforeAudits+2)
+    expect(await (await send('owner',path(0),first)).json()).toEqual(receipts[0])
+    expect(await (await send('owner',path(1),second)).json()).toEqual(receipts[1])
+    expect(await auditCount()).toBe(beforeAudits+2)
   })
 
   // Native PostgreSQL only: PGlite's single connection cannot model two
