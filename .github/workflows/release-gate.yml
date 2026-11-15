@@ -136,9 +136,6 @@ jobs:
         if: >-
           (github.event_name == 'push' &&
            (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804') ||
           (github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' &&
           inputs.release_sha == github.sha &&
