@@ -112,6 +112,7 @@ test('REL-01: materialize idempotence snapshot includes untracked release files'
   const end = tail.indexOf('\n      - name: ', 1);
   const step = end < 0 ? tail : tail.slice(0, end);
   assert.match(step, /git diff --binary/);
+  assert.match(step, /git diff --cached --binary/);
   assert.match(step, /git ls-files --others --exclude-standard -z/);
   assert.match(step, /xargs -0 -r sha256sum/);
   assert.match(step, /before=.*release_snapshot/);
@@ -149,6 +150,15 @@ test('REL-01: actual snapshot rejects a changed untracked file on second materia
       'printf "new generated source\\n" > added-release-source.txt',
       'added="$(release_snapshot)"',
       'test "$deleted" != "$added"',
+      'git config user.email test@example.invalid',
+      'git config user.name SnapshotTest',
+      'git add added-release-source.txt',
+      'git commit -qm baseline',
+      'baseline="$(release_snapshot)"',
+      'printf "staged tracked mutation\\n" > added-release-source.txt',
+      'git add added-release-source.txt',
+      'staged="$(release_snapshot)"',
+      'test "$baseline" != "$staged"',
     ].join('\n');
     const run = spawnSync('bash', ['-e', '-c', script], { cwd: dir, encoding: 'utf8' });
     assert.equal(run.status, 0, 'snapshot failed to detect untracked mutation: ' + run.stderr);
