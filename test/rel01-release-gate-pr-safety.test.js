@@ -146,6 +146,9 @@ test('REL-01: actual snapshot rejects a changed untracked file on second materia
       'rm new-release-source.txt',
       'deleted="$(release_snapshot)"',
       'test "$after" != "$deleted"',
+      'printf "new generated source\\n" > added-release-source.txt',
+      'added="$(release_snapshot)"',
+      'test "$deleted" != "$added"',
     ].join('\n');
     const run = spawnSync('bash', ['-e', '-c', script], { cwd: dir, encoding: 'utf8' });
     assert.equal(run.status, 0, 'snapshot failed to detect untracked mutation: ' + run.stderr);
