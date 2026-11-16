@@ -106,14 +106,14 @@ test('REL-01: execute production step guards against negative GitHub event conte
 });
 
 test('REL-01: materialize idempotence snapshot includes untracked release files', () => {
-  const start = workflow.indexOf('      - name: Verify release materialization is idempotent\\n');
+  const start = workflow.indexOf('      - name: Verify release materialization is idempotent\n');
   assert.notEqual(start, -1);
   const tail = workflow.slice(start);
-  const end = tail.indexOf('\\n      - name: ', 1);
+  const end = tail.indexOf('\n      - name: ', 1);
   const step = end < 0 ? tail : tail.slice(0, end);
   assert.match(step, /git diff --binary/);
   assert.match(step, /git ls-files --others --exclude-standard -z/);
   assert.match(step, /xargs -0 -r sha256sum/);
-  assert.match(step, /before="\\$\\(release_snapshot\\)"/);
-  assert.match(step, /after="\\$\\(release_snapshot\\)"/);
+  assert.match(step, /before=.*release_snapshot/);
+  assert.match(step, /after=.*release_snapshot/);
 });
