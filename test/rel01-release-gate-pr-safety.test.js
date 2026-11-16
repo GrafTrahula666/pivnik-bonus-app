@@ -117,3 +117,37 @@ test('REL-01: materialize idempotence snapshot includes untracked release files'
   assert.match(step, /before=.*release_snapshot/);
   assert.match(step, /after=.*release_snapshot/);
 });
+
+test('REL-01: actual snapshot rejects a changed untracked file on second materialization', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+
+  // Extract the function from the real workflow, not a rewritten implementation.
+  const stepStart = workflow.indexOf('      - name: Verify release materialization is idempotent\\n');
+  assert.notEqual(stepStart, -1);
+  const stepTail = workflow.slice(stepStart);
+  const stepEnd = stepTail.indexOf('\\n      - name: ', 1);
+  const step = stepEnd < 0 ? stepTail : stepTail.slice(0, stepEnd);
+  const match = step.match(/          release_snapshot\\(\\) \\{\\n([\\s\\S]*?)\\n          \\}/);
+  assert.ok(match, 'missing actual release_snapshot shell function');
+  const functionBody = 'release_snapshot() {\\n' + match[1].split('\\n').map(line => line.slice(10)).join('\\n') + '\\n}\\n';
+
+  const dir = mkdtempSync(join(tmpdir(), 'pivnik-rel01-snapshot-'));
+  try {
+    const init = spawnSync('git', ['init', '-q'], { cwd: dir, encoding: 'utf8' });
+    assert.equal(init.status, 0, init.stderr);
+    writeFileSync(join(dir, 'new-release-source.txt'), 'first version\\n');
+    const script = functionBody + [
+      'before="$(release_snapshot)"',
+      'printf "second version\\\\n" > new-release-source.txt',
+      'after="$(release_snapshot)"',
+      'test "$before" != "$after"',
+    ].join('\\n');
+    const run = spawnSync('bash', ['-e', '-c', script], { cwd: dir, encoding: 'utf8' });
+    assert.equal(run.status, 0, 'snapshot failed to detect untracked mutation: ' + run.stderr);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
