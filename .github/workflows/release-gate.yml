@@ -121,6 +121,7 @@ jobs:
           release_snapshot() {
             {
               git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
+              git diff --cached --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
               git ls-files --others --exclude-standard -z -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' |
                 xargs -0 -r sha256sum
             } | sha256sum | cut -d' ' -f1
