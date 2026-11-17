@@ -166,3 +166,32 @@ test('REL-01: actual snapshot rejects a changed untracked file on second materia
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('REL-01: snapshot fails closed when Git fails inside checksum pipeline', async () => {
+  const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const start = workflow.indexOf('      - name: Verify release materialization is idempotent\n');
+  assert.notEqual(start, -1);
+  const tail = workflow.slice(start);
+  const end = tail.indexOf('\n      - name: ', 1);
+  const step = end < 0 ? tail : tail.slice(0, end);
+  assert.match(step, /set -euo pipefail/, 'snapshot step must propagate pipeline failures');
+  const match = step.match(/          release_snapshot\(\) \{\n([\s\S]*?)\n          \}/);
+  assert.ok(match);
+  const functionBody = 'release_snapshot() {\n' +
+    match[1].split('\n').map(line => line.slice(10)).join('\n') + '\n}\n';
+  const dir = mkdtempSync(join(tmpdir(), 'pivnik-rel01-git-failure-'));
+  try {
+    const git = join(dir, 'git');
+    writeFileSync(git, '#!/bin/sh\nexit 42\n');
+    chmodSync(git, 0o755);
+    const run = spawnSync('bash', ['-c', 'set -euo pipefail\n' + functionBody + 'release_snapshot >/dev/null'], {
+      cwd: dir, env: { ...process.env, PATH: dir + ':' + process.env.PATH }, encoding: 'utf8',
+    });
+    assert.notEqual(run.status, 0, 'Git failure must not be hidden by sha256sum or cut');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
