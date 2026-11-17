@@ -74,6 +74,8 @@ jobs:
             job.conclusion === 'success');
           const requiredSteps = [
             'Deploy exact commit and verify both production services',
+            'Probe production documents and public endpoints',
+            'Verify separate Telegram and VK production accounts',
             'Verify signed Telegram and VK production sessions',
           ];
           if (!requiredSteps.every(name => release?.steps?.some(step =>
