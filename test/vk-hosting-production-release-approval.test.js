@@ -30,6 +30,8 @@ function approvedJobs(overrides = {}) {
     name: 'Syntax, tests and dependency audit', conclusion: 'success',
     steps: [
       { name: 'Deploy exact commit and verify both production services', conclusion: 'success' },
+      { name: 'Probe production documents and public endpoints', conclusion: 'success' },
+      { name: 'Verify separate Telegram and VK production accounts', conclusion: 'success' },
       { name: 'Verify signed Telegram and VK production sessions', conclusion: 'success' },
     ],
     ...overrides,
@@ -115,6 +117,22 @@ test('successful common workflow with skipped or missing deploy/signed-session s
     const result = await evaluate({ jobs });
     assert.ok(result.error instanceof Error, 'missing release evidence must deny');
     assert.equal(result.calls.length, 2);
+  }
+});
+
+test('all four common production checks are mandatory even if the workflow reports success', async () => {
+  const valid = approvedJobs()[0].steps;
+  assert.equal(valid.length, 4);
+  for (const step of valid) {
+    for (const steps of [
+      valid.filter(item => item.name !== step.name),
+      valid.map(item => item.name === step.name ? { ...item, conclusion: 'skipped' } : item),
+      valid.map(item => item.name === step.name ? { ...item, conclusion: 'failure' } : item),
+    ]) {
+      const result = await evaluate({ jobs: approvedJobs({ steps }) });
+      assert.ok(result.error instanceof Error, `must reject missing or unsuccessful: ${step.name}`);
+      assert.equal(result.calls.length, 2);
+    }
   }
 });
 
