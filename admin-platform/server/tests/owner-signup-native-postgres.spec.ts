@@ -334,6 +334,37 @@ suite('CHAT 04 native PostgreSQL signup HTTP, sessions and confirmation locking'
     )
     expect(audits.rows).toHaveLength(2)
 
+    // Exercise two independent native-PG HTTP sessions, not just two direct
+    // confirmation calls. Neither owner receives a company grant by signup.
+    const sessions = await Promise.all(emails.map(async email => {
+      const response = await post('/api/admin/auth/login', { email, password })
+      expect(response.status).toBe(200)
+      const payload = await response.json()
+      expect(payload.admin).toMatchObject({ email, role: 'VENUE_ADMIN' })
+      const cookie = (response.headers.get('set-cookie') || '').split(';', 1)[0]!
+      expect(cookie.startsWith(`${config.sessionCookie}=`)).toBe(true)
+      return { email, cookie, adminId: payload.admin.id }
+    }))
+    expect(sessions[0].cookie).not.toBe(sessions[1].cookie)
+    expect(sessions[0].adminId).not.toBe(sessions[1].adminId)
+    for (const session of sessions) {
+      const identity = await fetch(endpoint + '/api/admin/auth/session', {
+        headers: { cookie: session.cookie },
+      })
+      expect(identity.status).toBe(200)
+      expect((await identity.json()).admin).toMatchObject({
+        id: session.adminId, email: session.email,
+      })
+      const denied = await fetch(endpoint + '/api/admin/onboarding/drafts', {
+        headers: { cookie: session.cookie },
+      })
+      expect(denied.status).toBe(403)
+      expect((await state.pool!.query(
+        'SELECT 1 FROM admin_company_access WHERE admin_id=$1::bigint',
+        [session.adminId],
+      )).rows).toEqual([])
+    }
+
     await expect(confirm(tokenA)).rejects.toMatchObject({ code: 'OWNER_SIGNUP_TOKEN_UNAVAILABLE' })
     await expect(confirm(tokenB)).rejects.toMatchObject({ code: 'OWNER_SIGNUP_TOKEN_UNAVAILABLE' })
     const unchanged = await state.pool!.query(
