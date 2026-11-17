@@ -432,6 +432,10 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
     });
     demand(response?.ok, 'GitHub run API lookup failed for runId ' + check.runId);
     const run = await response.json();
+    // A manifest must not cite a workflow run that finished after the manifest was created.
+    // The GitHub API timestamp is trusted here; a caller-authored completedAt is not.
+    demand(date(run.updated_at) && Date.parse(run.updated_at) <= Date.parse(data.createdAt),
+      'GitHub required workflow run completed after release manifest creation');
     demand(run.id === check.runId && run.head_sha?.toLowerCase() === data.releaseSha.toLowerCase() &&
       run.status === 'completed' && run.conclusion === 'success' &&
       run.event === check.event &&
