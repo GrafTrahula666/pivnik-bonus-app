@@ -42,6 +42,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Immutable per-attempt dispatch inputs for later authenticated artifact
+      # verification. This is evidence, NOT release authorization by itself.
+      - name: Record manual dispatch inputs for release evidence
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          ATTEST_RUN_ID: ${{ github.run_id }}
+          ATTEST_RUN_ATTEMPT: ${{ github.run_attempt }}
+          ATTEST_SHA: ${{ github.sha }}
+          ATTEST_REF: ${{ github.ref }}
+          ATTEST_RELEASE_SHA: ${{ inputs.release_sha }}
+          ATTEST_RELEASE_CONFIRM: ${{ inputs.release_confirm }}
+        run: |
+          node --input-type=module -e '
+            import { mkdirSync, writeFileSync } from "node:fs";
+            const env = process.env;
+            if (!/^[0-9a-f]{40}$/i.test(env.ATTEST_SHA)) process.exit(1);
+            if (!/^[0-9a-f]{40}$/i.test(env.ATTEST_RELEASE_SHA)) process.exit(1);
+            if (!/^[1-9][0-9]*$/.test(env.ATTEST_RUN_ID) ||
+                !/^[1-9][0-9]*$/.test(env.ATTEST_RUN_ATTEMPT)) process.exit(1);
+            if (!["CANCEL", "DEPLOY_PIVNIK_PRODUCTION"].includes(env.ATTEST_RELEASE_CONFIRM)) process.exit(1);
+            mkdirSync("artifacts/release-dispatch", { recursive: true });
+            writeFileSync("artifacts/release-dispatch/dispatch.json", JSON.stringify({
+              schemaVersion: 1,
+              repository: "GrafTrahula666/pivnik-bonus-app",
+              event: "workflow_dispatch",
+              runId: Number(env.ATTEST_RUN_ID),
+              runAttempt: Number(env.ATTEST_RUN_ATTEMPT),
+              sha: env.ATTEST_SHA.toLowerCase(),
+              ref: env.ATTEST_REF,
+              releaseSha: env.ATTEST_RELEASE_SHA.toLowerCase(),
+              releaseConfirm: env.ATTEST_RELEASE_CONFIRM,
+            }) + String.fromCharCode(10));
+          '
+
+      - name: Upload manual dispatch evidence
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dispatch-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.release_confirm }}-${{ inputs.release_sha }}
+          path: artifacts/release-dispatch/dispatch.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -72,9 +116,20 @@ jobs:
       - name: Verify release materialization is idempotent
         shell: bash
         run: |
-          before="$(git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' | sha256sum | cut -d' ' -f1)"
+          set -euo pipefail
+          # Include untracked, non-ignored release sources as well as tracked diffs.
+          # NUL-delimited paths avoid whitespace/newline ambiguity during traversal.
+          release_snapshot() {
+            {
+              git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' || return 1
+              git diff --cached --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' || return 1
+              git ls-files --others --exclude-standard -z -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' |
+                xargs -0 -r sha256sum || return 1
+            } | sha256sum | cut -d' ' -f1
+          }
+          before="$(release_snapshot)"
           npm run materialize
-          after="$(git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' | sha256sum | cut -d' ' -f1)"
+          after="$(release_snapshot)"
           if [ "$before" != "$after" ]; then
             echo "::error title=Non-idempotent release materialization::A second materialization changed the prepared release sources."
             git diff --stat -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
@@ -136,9 +191,6 @@ jobs:
         if: >-
           (github.event_name == 'push' &&
            (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804') ||
           (github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' &&
           inputs.release_sha == github.sha &&
@@ -149,30 +201,6 @@ jobs:
         run: |
           node --check scripts/railway-ensure-production-secrets.mjs
           node scripts/railway-ensure-production-secrets.mjs --check
-
-      - name: Unify VK legacy database into canonical production
-        if: >-
-          (github.event_name == 'push' &&
-           github.ref == 'refs/heads/audit/final-release-gate-20260804') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_UNIFY_CONFIRM: UNIFY_PIVNIK_20260804
-        run: |
-          node --check scripts/railway-unify-production-databases.mjs
-          node scripts/railway-unify-production-databases.mjs
-
-      - name: Restore Anna frame and reconcile existing linked consent
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.head_ref == 'hotfix/anna-frame-consent-persistence-20260806'
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_ANNA_CONSENT_REPAIR_CONFIRM: REPAIR_ANNA_FRAME_AND_CONSENT_20260806
-        run: node scripts/railway-repair-anna-frame-and-consent.mjs
 
       - name: Deploy exact commit and verify both production services
         if: >-

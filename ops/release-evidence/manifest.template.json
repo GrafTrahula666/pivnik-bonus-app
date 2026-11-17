@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "releaseSha": "<40-character-approved-main-commit-sha>",
+  "createdAt": "<2026-11-09T15:00:00Z>",
+  "approval": {
+    "actor": "<independent-approver>",
+    "prNumber": 0,
+    "sha": "<same-40-character-sha>",
+    "at": "<UTC approval timestamp>",
+    "evidenceUrl": "<https://review-or-approval-record>"
+  },
+  "checks": [
+    {
+      "name": "Pivnik release gate",
+      "sha": "<same-40-character-sha>",
+      "runId": 0,
+      "required": true,
+      "conclusion": "success",
+      "event": "workflow_dispatch",
+      "releaseConfirm": "DEPLOY_PIVNIK_PRODUCTION",
+      "runAttempt": 0,
+      "productionSteps": {
+        "Deploy exact commit and verify both production services": "success",
+        "Probe production documents and public endpoints": "success",
+        "Verify separate Telegram and VK production accounts": "success",
+        "Verify signed Telegram and VK production sessions": "success"
+      },
+      "evidenceUrl": "<https://github.com/.../actions/runs/...>"
+    },
+    {
+      "name": "VK native hosting main parity",
+      "sha": "<same-40-character-sha>",
+      "runId": 0,
+      "required": true,
+      "conclusion": "success",
+      "event": "push",
+      "evidenceUrl": "<https://github.com/.../actions/runs/...>"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "<actual-built-artifact-name>",
+      "sha": "<same-40-character-sha>",
+      "sha256": "<64-character-checksum-of-the-exact-artifact>",
+      "evidenceUrl": "<https://artifact-evidence>"
+    }
+  ],
+  "deployments": [
+    {
+      "target": "pivnik-bonus-app",
+      "sha": "<same-40-character-sha>",
+      "environment": "production",
+      "deploymentId": "<railway-deployment-id>",
+      "deployedAt": "<UTC deployment timestamp>",
+      "status": "success",
+      "evidenceUrl": "<https://deployment-evidence>"
+    },
+    {
+      "target": "vk-native-hosting",
+      "sha": "<same-40-character-sha>",
+      "environment": "production",
+      "deploymentId": "<vk-hosting-deployment-id>",
+      "deployedAt": "<UTC deployment timestamp>",
+      "status": "success",
+      "evidenceUrl": "<https://deployment-evidence>"
+    }
+  ],
+  "smoke": [
+    {
+      "target": "pivnik-bonus-app",
+      "sha": "<same-40-character-sha>",
+      "at": "<UTC timestamp after deployment>",
+      "result": "passed",
+      "evidenceUrl": "<https://smoke-evidence>"
+    },
+    {
+      "target": "vk-native-hosting",
+      "sha": "<same-40-character-sha>",
+      "at": "<UTC timestamp after deployment>",
+      "result": "passed",
+      "evidenceUrl": "<https://smoke-evidence>"
+    }
+  ],
+  "rollback": {
+    "sha": "<different-verified-known-good-sha>",
+    "deploymentId": "<previous-deployment-id>",
+    "verifiedAt": "<UTC timestamp of rollback verification>",
+    "evidenceUrl": "<https://rollback-rehearsal>"
+  }
+}
