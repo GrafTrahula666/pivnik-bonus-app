@@ -202,6 +202,20 @@ suite('CHAT 04 native PostgreSQL signup HTTP, sessions and confirmation locking'
       const sessionPayload = await session.json()
       expect(sessionPayload.admin).toMatchObject({ email, role: 'VENUE_ADMIN' })
       const adminId = sessionPayload.admin.id
+      // A verified account without tenant membership must not be able to
+      // enumerate or create onboarding drafts through the real HTTP router.
+      // This is a fail-closed guard, not a successful owner provisioning E2E.
+      const draftsRead = await fetch(endpoint + '/api/admin/onboarding/drafts', {
+        headers: { cookie },
+      })
+      expect(draftsRead.status).toBe(403)
+      const draftsWrite = await fetch(endpoint + '/api/admin/onboarding/drafts', {
+        method: 'POST',
+        headers: { cookie, origin: validOrigin, 'content-type': 'application/json',
+          'x-csrf-token': loginPayload.csrfToken },
+        body: JSON.stringify({ name: 'Unauthorized trial venue' }),
+      })
+      expect(draftsWrite.status).toBe(403)
       expect((await state.pool!.query('SELECT 1 FROM admin_company_access WHERE admin_id=$1::bigint', [adminId])).rows).toEqual([])
       expect((await state.pool!.query('SELECT 1 FROM admin_onboarding_access WHERE admin_id=$1::bigint', [adminId])).rows).toEqual([])
       const audit = await state.pool!.query(
