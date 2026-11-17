@@ -1,0 +1,54 @@
+name: SPACEVERSE owner signup native PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/server/owner-signup-challenges.ts'
+      - 'admin-platform/server/owner-signup.ts'
+      - 'admin-platform/server/router.ts'
+      - 'admin-platform/server/tests/owner-signup-native-postgres.spec.ts'
+      - 'admin-platform/admin-migrations/027_owner_signup_challenges.sql'
+      - '.github/workflows/spaceverse-owner-signup-native-postgres.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chat04-native-signup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signup-locking:
+    name: Disposable PostgreSQL 16, HTTP signup, session, expiry and replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: codex_admin_test_signup
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d codex_admin_test_signup"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CHAT04_NATIVE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/codex_admin_test_signup
+      ADMIN_ENABLE_WRITES: 'false'
+      ADMIN_ENABLE_ONBOARDING_DRAFTS: 'false'
+      ADMIN_ENABLE_OWNER_SIGNUP: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install pinned Admin dependencies
+        run: npm ci --prefix admin-platform
+      - name: Verify HTTP signup and confirmation, login/session, plus native challenge locking
+        run: npm test --prefix admin-platform -- server/tests/owner-signup-native-postgres.spec.ts --maxWorkers=1
