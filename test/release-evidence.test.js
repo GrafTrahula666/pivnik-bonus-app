@@ -787,6 +787,8 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     { created_at: '2026-11-09T13:59:59Z' },
     { created_at: '2026-11-09T14:51:00Z' },
     { updated_at: '2026-11-09T15:01:00Z' },
+    // After declared gate completion but before manifest creation must also fail.
+    { updated_at: '2026-11-09T14:55:00Z' },
     { updated_at: null },
     { created_at: null },
     { path: '.github/workflows/unrelated.yml' },
@@ -800,7 +802,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       return { ...result, json: async () => ({ ...await original(), ...patch }) };
     };
     await assert.rejects(verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: badFetch }),
-      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|required workflow run completed after release manifest creation)/);
+      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|required workflow run completed after release manifest creation|release gate API completion postdates declared production gate completion)/);
   }
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token',
