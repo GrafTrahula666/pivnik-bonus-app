@@ -436,6 +436,10 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
     // The GitHub API timestamp is trusted here; a caller-authored completedAt is not.
     demand(date(run.updated_at) && Date.parse(run.updated_at) <= Date.parse(data.createdAt),
       'GitHub required workflow run completed after release manifest creation');
+    if (check.name === 'Pivnik release gate') {
+      demand(Date.parse(run.updated_at) <= Date.parse(check.completedAt),
+        'GitHub release gate API completion postdates declared production gate completion');
+    }
     demand(run.id === check.runId && run.head_sha?.toLowerCase() === data.releaseSha.toLowerCase() &&
       run.status === 'completed' && run.conclusion === 'success' &&
       run.event === check.event &&
