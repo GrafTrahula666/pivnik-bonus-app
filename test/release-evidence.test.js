@@ -786,6 +786,8 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     { run_attempt: 2 },
     { created_at: '2026-11-09T13:59:59Z' },
     { created_at: '2026-11-09T14:51:00Z' },
+    { updated_at: '2026-11-09T15:01:00Z' },
+    { updated_at: null },
     { created_at: null },
     { path: '.github/workflows/unrelated.yml' },
     { repository: { full_name: 'someone/else' } },
