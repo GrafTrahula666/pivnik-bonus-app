@@ -804,6 +804,20 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     await assert.rejects(verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: badFetch }),
       /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|required workflow run completed after release manifest creation|release gate API completion postdates declared production gate completion)/);
   }
+  // VK parity is a separate required run: it must also have finished before
+  // the manifest existed, not merely report a green status at the right SHA.
+  for (const updatedAt of ['2026-11-09T15:00:01Z', null]) {
+    const lateParityFetch = async (url, opts) => {
+      const result = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12346')) return result;
+      const original = result.json;
+      return { ...result, json: async () => ({ ...await original(), updated_at: updatedAt }) };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: lateParityFetch,
+    }), /GitHub required workflow run completed after release manifest creation/,
+    'VK parity with missing or post-manifest completion must fail closed');
+  }
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token',
     fetchImpl: async (url, opts) => url.includes('/actions/runs/')
