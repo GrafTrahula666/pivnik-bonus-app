@@ -116,14 +116,15 @@ jobs:
       - name: Verify release materialization is idempotent
         shell: bash
         run: |
+          set -euo pipefail
           # Include untracked, non-ignored release sources as well as tracked diffs.
           # NUL-delimited paths avoid whitespace/newline ambiguity during traversal.
           release_snapshot() {
             {
-              git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
-              git diff --cached --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
+              git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' || return 1
+              git diff --cached --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' || return 1
               git ls-files --others --exclude-standard -z -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' |
-                xargs -0 -r sha256sum
+                xargs -0 -r sha256sum || return 1
             } | sha256sum | cut -d' ' -f1
           }
           before="$(release_snapshot)"
