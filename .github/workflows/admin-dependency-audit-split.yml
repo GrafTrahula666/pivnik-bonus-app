@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -57,7 +59,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: admin-audit-${{ github.sha }}-${{ github.run_attempt }}
+          name: admin-audit-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/admin-audit/*.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
