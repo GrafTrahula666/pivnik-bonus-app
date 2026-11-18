@@ -60,3 +60,27 @@ test('rejects malformed production report even when full report is valid', () =>
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /production: malformed/);
 });
+
+
+test('rejects severity totals that disagree with individual audit entries', () => {
+  const counts = { ...zero, moderate: 1, total: 1 };
+  const result = execute(report(counts, { picomatch: { severity: 'high' } }));
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /full: vulnerability severity count mismatch/);
+});
+
+test('rejects missing or unknown individual vulnerability severity', () => {
+  const counts = { ...zero, high: 1, total: 1 };
+  for (const severity of [undefined, 'unknown', null]) {
+    const result = execute(report(counts, { picomatch: { severity } }));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /full: invalid vulnerability severity/);
+  }
+});
+
+test('rejects inconsistent production severity even when full report is valid', () => {
+  const counts = { ...zero, high: 1, total: 1 };
+  const result = execute(report(zero), report(counts, { vite: { severity: 'low' } }));
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /production: vulnerability severity count mismatch/);
+});
