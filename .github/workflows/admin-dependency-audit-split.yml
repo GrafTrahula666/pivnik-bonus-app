@@ -1,0 +1,93 @@
+name: Admin dependency audit split (diagnostic)
+
+on:
+  pull_request:
+    paths:
+      - 'admin-platform/package.json'
+      - 'admin-platform/package-lock.json'
+      - 'test/admin-dependency-audit-evidence.test.js'
+      - '.github/workflows/admin-dependency-audit-split.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-platform/package-lock.json
+      - name: Install locked Admin dependencies
+        run: npm ci --prefix admin-platform
+      - name: Run audit evidence validator regression tests
+        run: node --test test/admin-dependency-audit-evidence.test.js
+      - name: Audit full and production dependency graphs separately
+        shell: bash
+        run: |
+          set -uo pipefail
+          # GitHub bash starts with -e: temporarily disable it so both audits run.
+          set +e
+          mkdir -p "$RUNNER_TEMP/admin-audit"
+          npm audit --prefix admin-platform --json --audit-level=high > "$RUNNER_TEMP/admin-audit/full.json"
+          full_status=$?
+          npm audit --prefix admin-platform --omit=dev --json --audit-level=high > "$RUNNER_TEMP/admin-audit/production.json"
+          production_status=$?
+          set -e
+          echo "full_exit=$full_status" >> "$GITHUB_STEP_SUMMARY"
+          echo "production_exit=$production_status" >> "$GITHUB_STEP_SUMMARY"
+          node --input-type=module - "$RUNNER_TEMP/admin-audit" <<'NODE'
+          import fs from 'node:fs';
+          const dir = process.argv[2];
+          for (const mode of ['full', 'production']) {
+            const report = JSON.parse(fs.readFileSync(`${dir}/${mode}.json`, 'utf8'));
+            const counts = report.metadata?.vulnerabilities;
+            if (!counts || typeof counts !== 'object' || !report.vulnerabilities || typeof report.vulnerabilities !== 'object') {
+              throw new Error(`${mode}: malformed npm audit report; refusing incomplete evidence`);
+            }
+            for (const severity of ['info', 'low', 'moderate', 'high', 'critical', 'total']) {
+              if (!Number.isInteger(counts[severity]) || counts[severity] < 0) {
+                throw new Error(`${mode}: invalid vulnerability count for ${severity}`);
+              }
+            }
+            const sum = ['info', 'low', 'moderate', 'high', 'critical'].reduce((n, severity) => n + counts[severity], 0);
+            if (counts.total !== sum) {
+              throw new Error(`${mode}: vulnerability total does not match severity counts`);
+            }
+            const observed = { info: 0, low: 0, moderate: 0, high: 0, critical: 0 };
+            for (const [name, vulnerability] of Object.entries(report.vulnerabilities)) {
+              const severity = vulnerability?.severity;
+              if (!Object.hasOwn(observed, severity)) {
+                throw new Error(`${mode}: invalid vulnerability severity for ${name}`);
+              }
+              observed[severity]++;
+            }
+            for (const severity of Object.keys(observed)) {
+              if (observed[severity] !== counts[severity]) {
+                throw new Error(`${mode}: vulnerability severity count mismatch for ${severity}`);
+              }
+            }
+            console.log(`${mode}: ${JSON.stringify(counts)}`);
+          }
+          NODE
+          if [ "$full_status" -ne 0 ] || [ "$production_status" -ne 0 ]; then
+            echo "::error::Admin dependency audit is not clean; see separate JSON artifacts"
+            exit 1
+          fi
+      - name: Upload both audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-audit-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/admin-audit/*.json
+          if-no-files-found: error
+          retention-days: 14
