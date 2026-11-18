@@ -5,6 +5,7 @@ on:
     paths:
       - 'admin-platform/package.json'
       - 'admin-platform/package-lock.json'
+      - 'test/admin-dependency-audit-evidence.test.js'
       - '.github/workflows/admin-dependency-audit-split.yml'
   workflow_dispatch:
 
