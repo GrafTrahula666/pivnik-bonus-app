@@ -63,8 +63,18 @@ jobs:
             if (counts.total !== sum) {
               throw new Error(`${mode}: vulnerability total does not match severity counts`);
             }
-            if (Object.keys(report.vulnerabilities).length !== counts.total) {
-              throw new Error(`${mode}: vulnerability entries do not match reported total`);
+            const observed = { info: 0, low: 0, moderate: 0, high: 0, critical: 0 };
+            for (const [name, vulnerability] of Object.entries(report.vulnerabilities)) {
+              const severity = vulnerability?.severity;
+              if (!Object.hasOwn(observed, severity)) {
+                throw new Error(`${mode}: invalid vulnerability severity for ${name}`);
+              }
+              observed[severity]++;
+            }
+            for (const severity of Object.keys(observed)) {
+              if (observed[severity] !== counts[severity]) {
+                throw new Error(`${mode}: vulnerability severity count mismatch for ${severity}`);
+              }
             }
             console.log(`${mode}: ${JSON.stringify(counts)}`);
           }
