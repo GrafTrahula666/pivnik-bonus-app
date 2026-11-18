@@ -56,6 +56,13 @@ jobs:
                 throw new Error(`${mode}: invalid vulnerability count for ${severity}`);
               }
             }
+            const sum = ['info', 'low', 'moderate', 'high', 'critical'].reduce((n, severity) => n + counts[severity], 0);
+            if (counts.total !== sum) {
+              throw new Error(`${mode}: vulnerability total does not match severity counts`);
+            }
+            if (Object.keys(report.vulnerabilities).length !== counts.total) {
+              throw new Error(`${mode}: vulnerability entries do not match reported total`);
+            }
             console.log(`${mode}: ${JSON.stringify(counts)}`);
           }
           NODE
