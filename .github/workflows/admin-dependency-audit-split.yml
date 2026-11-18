@@ -29,6 +29,8 @@ jobs:
           cache-dependency-path: admin-platform/package-lock.json
       - name: Install locked Admin dependencies
         run: npm ci --prefix admin-platform
+      - name: Run audit evidence validator regression tests
+        run: node --test test/admin-dependency-audit-evidence.test.js
       - name: Audit full and production dependency graphs separately
         shell: bash
         run: |
