@@ -30,11 +30,14 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          # GitHub bash starts with -e: temporarily disable it so both audits run.
+          set +e
           mkdir -p "$RUNNER_TEMP/admin-audit"
           npm audit --prefix admin-platform --json --audit-level=high > "$RUNNER_TEMP/admin-audit/full.json"
           full_status=$?
           npm audit --prefix admin-platform --omit=dev --json --audit-level=high > "$RUNNER_TEMP/admin-audit/production.json"
           production_status=$?
+          set -e
           echo "full_exit=$full_status" >> "$GITHUB_STEP_SUMMARY"
           echo "production_exit=$production_status" >> "$GITHUB_STEP_SUMMARY"
           node --input-type=module - "$RUNNER_TEMP/admin-audit" <<'NODE'
