@@ -11,7 +11,7 @@ import { RAILWAY_PRODUCTION } from '../scripts/railway-production-config.mjs';
 const SHA = 'a'.repeat(40);
 const OTHER = 'b'.repeat(40);
 function fixture() {
-  const source = () => ({ repo: 'GrafTrahula666/pivnik-bonus-app', branch: 'main', commitSha: SHA, checkSuites: false });
+  const source = () => ({ repo: 'GrafTrahula666/pivnik-bonus-app', branch: null, commitSha: SHA, checkSuites: false });
   return {
     projectId: RAILWAY_PRODUCTION.projectId,
     environmentId: RAILWAY_PRODUCTION.environmentId,
@@ -30,6 +30,20 @@ const reject = (snapshot, reason) => assert.throws(() => verifyRailwaySourceIsol
 test('both services explicitly pinned to the approved SHA pass offline policy', () => {
   assert.deepEqual(verifyRailwaySourceIsolation(fixture(), SHA),
     { isolated: true, source: 'pinned-commit', sha: SHA, services: 2 });
+});
+
+test('branch plus exact commit SHA is rejected for both services', () => {
+  for (const index of [0, 1]) {
+    const snap = fixture();
+    snap.services[index].config.source.branch = 'main';
+    reject(snap, /branch selector remains configured alongside commit SHA/);
+  }
+  const readbacks = connectorFixture();
+  readbacks.environment.services[0].source.branch = 'main';
+  readbacks.serviceConfigs[0].config.source.branch = 'main';
+  assert.throws(() => verifyRailwaySourceIsolation(
+    snapshotFromRailwayReadbacks(readbacks.environment, readbacks.serviceConfigs), SHA),
+  /branch selector remains configured alongside commit SHA/);
 });
 
 test('current branch-tracking production shape is rejected even with CI and watch path guards', () => {
