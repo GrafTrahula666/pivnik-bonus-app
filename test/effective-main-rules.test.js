@@ -5,6 +5,7 @@ import { evaluateEffectiveRules, fetchEffectiveRules } from '../scripts/check-ef
 const protectedMain = [
   { type: 'pull_request', parameters: { required_approving_review_count: 1 } },
   { type: 'required_status_checks', parameters: {
+    strict_required_status_checks_policy: true,
     required_status_checks: [{ context: 'Syntax, tests and dependency audit' }],
   } },
   { type: 'deletion' },
@@ -30,6 +31,26 @@ test('effective rules: unrelated successful status is not a required release gat
   const rules = protectedMain.map((r) => r.type === 'required_status_checks'
     ? { ...r, parameters: { required_status_checks: [{ context: 'Other CI' }] } } : r);
   assert.match(evaluateEffectiveRules(rules).reasons.join(' '), /Release gate/);
+});
+
+test('effective rules: a green release check on a stale branch is insufficient', () => {
+  const rules = protectedMain.map((rule) => rule.type === 'required_status_checks'
+    ? { ...rule, parameters: { ...rule.parameters, strict_required_status_checks_policy: false } }
+    : rule);
+  const result = evaluateEffectiveRules(rules);
+  assert.equal(result.ok, false);
+  assert.match(result.reasons.join(' '), /strict up-to-date/);
+});
+
+test('effective rules: strict policy on an unrelated check does not protect release gate', () => {
+  const rules = protectedMain.map((rule) => rule.type === 'required_status_checks'
+    ? { ...rule, parameters: { ...rule.parameters, strict_required_status_checks_policy: false } }
+    : rule);
+  rules.push({ type: 'required_status_checks', parameters: {
+    strict_required_status_checks_policy: true,
+    required_status_checks: [{ context: 'Other CI' }],
+  } });
+  assert.equal(evaluateEffectiveRules(rules).ok, false);
 });
 
 test('effective rules: missing deletion protection fails closed', () => {
