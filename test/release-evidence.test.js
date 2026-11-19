@@ -604,6 +604,13 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   const forgedArtifacts = [
     ['prefixed ZIP data', paddedZip(true), /dispatch artifact ZIP local header is invalid/],
     ['unaccounted ZIP payload gap', paddedZip(false), /dispatch artifact ZIP payload bounds are invalid/],
+    ['forged ZIP descriptor flag with no descriptor', (() => {
+      const bytes = Buffer.from(dispatchArtifact().archiveBytes);
+      bytes.writeUInt16LE(bytes.readUInt16LE(6) | 0x0008, 6);
+      const central = bytes.readUInt32LE(bytes.length - 22 + 16);
+      bytes.writeUInt16LE(bytes.readUInt16LE(central + 8) | 0x0008, central + 8);
+      return dispatchArtifact({ archiveBytes: bytes });
+    })(), /dispatch artifact ZIP data descriptor bounds are invalid/],
     ['local CRC disagrees with central directory', mismatchedLocalHeader(14, 0),
       /dispatch artifact ZIP local and central headers disagree/],
     ['local compressed size disagrees with central directory', mismatchedLocalHeader(18, 0),
