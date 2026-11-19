@@ -23,6 +23,12 @@ export function evaluateEffectiveRules(rules) {
   if (!contexts.includes(REQUIRED_CHECK)) {
     reasons.push('Release gate job is not an effective required status check');
   }
+  // Without strict checks, GitHub may accept a green check from an outdated branch tip.
+  // An exact-SHA release gate must be revalidated against current main before merge.
+  if (!checks.some((rule) => rule?.parameters?.strict_required_status_checks_policy === true &&
+    rule.parameters.required_status_checks?.some((check) => check?.context === REQUIRED_CHECK))) {
+    reasons.push('Release gate is not protected by strict up-to-date status checks');
+  }
   if (!rules.some((rule) => rule?.type === 'deletion')) {
     reasons.push('No effective branch deletion protection');
   }
