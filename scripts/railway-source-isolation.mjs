@@ -46,6 +46,10 @@ export function verifyRailwaySourceIsolation(snapshot, approvedSha) {
     requireEvidence(service.config?.source?.repo === repo &&
       (service.config.source.image === null || service.config.source.image === undefined),
       `${name}: unexpected repository source or conflicting image`);
+    // A branch selector remains an auto-deploy ambiguity even when commitSha
+    // is also present. Require an unambiguous commit-only source readback.
+    requireEvidence(service.config.source.branch === null,
+      `${name}: branch selector remains configured alongside commit SHA`);
     const pinnedSha = service.config.source.commitSha;
     requireEvidence(typeof pinnedSha === 'string' && SHA.test(pinnedSha) &&
       pinnedSha.toLowerCase() === approvedSha.toLowerCase(),
