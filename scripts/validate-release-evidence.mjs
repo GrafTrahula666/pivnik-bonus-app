@@ -120,9 +120,25 @@ function readDispatchZip(input) {
     'GitHub dispatch artifact ZIP local and central headers disagree');
   const dataStart = localOffset + 30 + localNameLength + localExtraLength;
   const dataEnd = dataStart + compressedSize;
-  demand(dataStart <= dataEnd && dataEnd <= centralOffset &&
-    ((flags & 0x0008) !== 0 || dataEnd === centralOffset),
+  demand(dataStart <= dataEnd && dataEnd <= centralOffset,
     'GitHub dispatch artifact ZIP payload bounds are invalid');
+  if ((flags & 0x0008) !== 0) {
+    // Bit 3 permits a data descriptor, not arbitrary hidden bytes after the
+    // compressed payload. Require exactly one 12- or 16-byte descriptor.
+    const descriptorSize = centralOffset - dataEnd;
+    const signed = descriptorSize === 16;
+    demand(descriptorSize === 12 || signed,
+      'GitHub dispatch artifact ZIP data descriptor bounds are invalid');
+    const descriptorOffset = dataEnd + (signed ? 4 : 0);
+    demand((!signed || zip.readUInt32LE(dataEnd) === 0x08074b50) &&
+      zip.readUInt32LE(descriptorOffset) === expectedCrc &&
+      zip.readUInt32LE(descriptorOffset + 4) === compressedSize &&
+      zip.readUInt32LE(descriptorOffset + 8) === uncompressedSize,
+      'GitHub dispatch artifact ZIP data descriptor disagrees with central directory');
+  } else {
+    demand(dataEnd === centralOffset,
+      'GitHub dispatch artifact ZIP payload bounds are invalid');
+  }
   const compressed = zip.subarray(dataStart, dataEnd);
   let content;
   try {
