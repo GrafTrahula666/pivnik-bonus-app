@@ -20,7 +20,7 @@ function fixture() {
     services: [
       { id: RAILWAY_PRODUCTION.services.telegram, state: 'live', staged: null, stagedChanges: [],
         config: { source: source(), build: { watchPatterns: ['/index.html', '/app.js'] } } },
-      { id: RAILWAY_PRODUCTION.services.vk, state: 'live', staged: null,
+      { id: RAILWAY_PRODUCTION.services.vk, state: 'live', staged: null, stagedChanges: [],
         config: { source: source(), build: { watchPatterns: ['/index.html', '/app.js'] } } },
     ],
   };
