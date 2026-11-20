@@ -168,3 +168,11 @@ test('production job evidence must belong to the exact release run, attempt and 
     assert.equal(result.calls.length, 2);
   }
 });
+
+test('release evidence without a positive integer workflow run ID must deny publishing', async () => {
+  for (const id of [undefined, null, 0, -1, 1.5, '42001']) {
+    const result = await evaluate({ run: approvedRun({ id }) });
+    assert.ok(result.error instanceof Error, 'invalid run ID must deny');
+    assert.equal(result.calls.length, 1, 'must reject before requesting jobs');
+  }
+});
