@@ -198,5 +198,7 @@ test('common production release gate cannot execute deploy or smoke without exac
     assert.match(condition[1], /github\.ref == 'refs\/heads\/main'/);
     assert.match(condition[1], /inputs\.release_sha == github\.sha/);
     assert.match(condition[1], /inputs\.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'/);
+    assert.doesNotMatch(step, /\n\s*continue-on-error:\s*true\b/, 'Production evidence must not be allowed to fail: ' + name);
+    assert.doesNotMatch(condition[1], /\|\|/, 'Production gate must require all approval conditions: ' + name);
   }
 });
