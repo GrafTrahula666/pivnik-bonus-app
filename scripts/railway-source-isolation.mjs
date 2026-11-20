@@ -111,7 +111,8 @@ export function snapshotFromRailwayReadbacks(environmentReadback, serviceReadbac
       environmentSource?.image === (configSource?.image ?? null) &&
       (!environmentReportsSha || environmentSource.commitSha === (configSource?.commitSha ?? null)),
       'Railway source mismatch between environment and service readbacks');
-    return { id, state: discovered.state, staged: readback.staged, config: readback.config };
+    return { id, state: discovered.state, staged: readback.staged,
+      stagedChanges: readback.stagedChanges, config: readback.config };
   });
 
   return {
