@@ -43,6 +43,10 @@ export function verifyRailwaySourceIsolation(snapshot, approvedSha) {
     const service = services.get(id);
     requireEvidence(service && service.state === 'live' && service.staged === null,
       `${name}: service missing, not live or has staged changes`);
+    // Direct sanitized snapshots must meet the same staged-change contract as
+    // connector readbacks; otherwise the alternate CLI path can bypass it.
+    requireEvidence(Array.isArray(service.stagedChanges) && service.stagedChanges.length === 0,
+      `${name}: missing or pending per-service staged-change evidence`);
     requireEvidence(service.config?.source?.repo === repo &&
       (service.config.source.image === null || service.config.source.image === undefined),
       `${name}: unexpected repository source or conflicting image`);
