@@ -28,6 +28,7 @@ function approvedRun(overrides = {}) {
 function approvedJobs(overrides = {}) {
   return [{
     name: 'Syntax, tests and dependency audit', conclusion: 'success',
+    head_sha: SHA, run_id: 42001, run_attempt: 3,
     steps: [
       { name: 'Deploy exact commit and verify both production services', conclusion: 'success' },
       { name: 'Probe production documents and public endpoints', conclusion: 'success' },
@@ -144,5 +145,26 @@ test('GitHub API denial and invalid response fail closed at either lookup stage'
     const result = await evaluate(arg);
     assert.ok(result.error instanceof Error);
     assert.equal(result.logs.length, 0);
+  }
+});
+
+
+test('release run must expose a valid positive attempt number', async () => {
+  for (const attempt of [undefined, null, 0, -1, 1.5, '3']) {
+    const result = await evaluate({ run: approvedRun({ run_attempt: attempt }) });
+    assert.ok(result.error instanceof Error, 'invalid attempt must deny');
+    assert.equal(result.calls.length, 1);
+  }
+});
+
+test('production job evidence must belong to the exact release run, attempt and SHA', async () => {
+  for (const override of [
+    { head_sha: 'b'.repeat(40) }, { head_sha: undefined },
+    { run_id: 42002 }, { run_id: undefined },
+    { run_attempt: 2 }, { run_attempt: undefined },
+  ]) {
+    const result = await evaluate({ jobs: approvedJobs(override) });
+    assert.ok(result.error instanceof Error, 'foreign job evidence must deny');
+    assert.equal(result.calls.length, 2);
   }
 });
