@@ -65,13 +65,15 @@ jobs:
           const { workflow_runs: [run] } = await getJson(url);
           if (run?.head_sha !== RELEASE_SHA || run?.head_branch !== 'main' ||
               run?.event !== 'workflow_dispatch' || run?.status !== 'completed' ||
-              run?.conclusion !== 'success') {
+              run?.conclusion !== 'success' || !Number.isSafeInteger(run?.run_attempt) ||
+              run.run_attempt < 1) {
             throw new Error('VK publishing requires a successful manually approved PIVNIK release for this SHA.');
           }
           const jobsUrl = `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`;
           const { jobs } = await getJson(jobsUrl);
           const release = jobs.find(job => job.name === 'Syntax, tests and dependency audit' &&
-            job.conclusion === 'success');
+            job.conclusion === 'success' && job.head_sha === RELEASE_SHA &&
+            job.run_id === run.id && job.run_attempt === run.run_attempt);
           const requiredSteps = [
             'Deploy exact commit and verify both production services',
             'Probe production documents and public endpoints',
