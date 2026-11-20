@@ -18,7 +18,7 @@ function fixture() {
     environmentName: 'production',
     staged: null,
     services: [
-      { id: RAILWAY_PRODUCTION.services.telegram, state: 'live', staged: null,
+      { id: RAILWAY_PRODUCTION.services.telegram, state: 'live', staged: null, stagedChanges: [],
         config: { source: source(), build: { watchPatterns: ['/index.html', '/app.js'] } } },
       { id: RAILWAY_PRODUCTION.services.vk, state: 'live', staged: null,
         config: { source: source(), build: { watchPatterns: ['/index.html', '/app.js'] } } },
@@ -77,6 +77,17 @@ test('unknown and duplicate production services fail closed', () => {
   reject(duplicate, /IDs must be present and unique/);
   const missing = fixture(); missing.services = [missing.services[0]];
   reject(missing, /exactly two production services/);
+});
+
+test('direct snapshots reject absent and pending per-service staged changes', () => {
+  for (const index of [0, 1]) {
+    const missing = fixture();
+    delete missing.services[index].stagedChanges;
+    reject(missing, /missing or pending per-service staged-change evidence/);
+    const pending = fixture();
+    pending.services[index].stagedChanges = [{ path: 'services.source.branch', type: 'updated' }];
+    reject(pending, /missing or pending per-service staged-change evidence/);
+  }
 });
 
 test('staged changes cannot masquerade as live source policy', () => {
