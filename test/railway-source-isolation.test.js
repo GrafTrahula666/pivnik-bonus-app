@@ -321,3 +321,22 @@ test('CLI --connector-readbacks exercises the offline guard end to end', () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('get_service_config response cannot impersonate describe_service evidence', () => {
+  // Railway get_service_config exposes service.id, environment.id, config and
+  // staged, but neither service.state nor stagedChanges[]. Even an apparently
+  // safe commit-only source must not be promoted into a verified snapshot.
+  const { environment, serviceConfigs } = connectorFixture();
+  const unsupported = serviceConfigs.map(({ service, environment: env, config, staged }) => ({
+    service: { id: service.id, name: 'service' },
+    environment: env,
+    config,
+    staged,
+    variableNames: [],
+  }));
+  assert.throws(() => snapshotFromRailwayReadbacks(environment, unsupported),
+    /service config readback belongs to a different or staged environment/);
+  assert.throws(() => verifyRailwaySourceIsolation(
+    snapshotFromRailwayReadbacks(environment, unsupported), SHA),
+  /service config readback belongs to a different or staged environment/);
+});
