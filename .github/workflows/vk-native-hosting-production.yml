@@ -66,7 +66,7 @@ jobs:
           if (run?.head_sha !== RELEASE_SHA || run?.head_branch !== 'main' ||
               run?.event !== 'workflow_dispatch' || run?.status !== 'completed' ||
               run?.conclusion !== 'success' || !Number.isSafeInteger(run?.run_attempt) ||
-              run.run_attempt < 1) {
+              run.run_attempt < 1 || !Number.isSafeInteger(run?.id) || run.id < 1) {
             throw new Error('VK publishing requires a successful manually approved PIVNIK release for this SHA.');
           }
           const jobsUrl = `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`;
