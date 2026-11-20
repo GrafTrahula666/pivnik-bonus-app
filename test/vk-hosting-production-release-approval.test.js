@@ -27,7 +27,7 @@ function approvedRun(overrides = {}) {
 
 function approvedJobs(overrides = {}) {
   return [{
-    name: 'Syntax, tests and dependency audit', conclusion: 'success',
+    name: 'Syntax, tests and dependency audit', status: 'completed', conclusion: 'success',
     head_sha: SHA, run_id: 42001, run_attempt: 3,
     steps: [
       { name: 'Deploy exact commit and verify both production services', conclusion: 'success' },
@@ -117,6 +117,14 @@ test('successful common workflow with skipped or missing deploy/signed-session s
   ]) {
     const result = await evaluate({ jobs });
     assert.ok(result.error instanceof Error, 'missing release evidence must deny');
+    assert.equal(result.calls.length, 2);
+  }
+});
+
+test('a release job still running cannot authorize VK even with a reported success conclusion', async () => {
+  for (const status of [undefined, null, 'queued', 'in_progress']) {
+    const result = await evaluate({ jobs: approvedJobs({ status }) });
+    assert.ok(result.error instanceof Error, 'unfinished or unknown job status must deny');
     assert.equal(result.calls.length, 2);
   }
 });
