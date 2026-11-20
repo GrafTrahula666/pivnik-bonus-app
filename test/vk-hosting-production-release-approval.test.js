@@ -176,3 +176,27 @@ test('release evidence without a positive integer workflow run ID must deny publ
     assert.equal(result.calls.length, 1, 'must reject before requesting jobs');
   }
 });
+
+
+test('common production release gate cannot execute deploy or smoke without exact manual confirmation', async () => {
+  const gate = await readFile(new URL('../.github/workflows/release-gate.yml', import.meta.url), 'utf8');
+  assert.match(gate, /workflow_dispatch:\s*\n\s*inputs:/);
+  assert.match(gate, /release_confirm:\s*\n[\s\S]*?default: CANCEL/);
+  for (const name of [
+    'Deploy exact commit and verify both production services',
+    'Probe production documents and public endpoints',
+    'Verify separate Telegram and VK production accounts',
+    'Verify signed Telegram and VK production sessions',
+  ]) {
+    const start = gate.indexOf('      - name: ' + name + '\n');
+    assert.notEqual(start, -1, 'Missing production gate step: ' + name);
+    const next = gate.indexOf('\n      - name: ', start + 1);
+    const step = gate.slice(start, next < 0 ? undefined : next);
+    const condition = step.match(/\n        if: >-\n([\s\S]*?)\n        (?:env:|run:|shell:)/);
+    assert.ok(condition, 'Missing explicit conditional for ' + name);
+    assert.match(condition[1], /github\.event_name == 'workflow_dispatch'/);
+    assert.match(condition[1], /github\.ref == 'refs\/heads\/main'/);
+    assert.match(condition[1], /inputs\.release_sha == github\.sha/);
+    assert.match(condition[1], /inputs\.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'/);
+  }
+});
