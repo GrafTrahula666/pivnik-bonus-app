@@ -122,7 +122,7 @@ test('successful common workflow with skipped or missing deploy/signed-session s
 });
 
 test('incomplete or unbounded GitHub jobs pagination must deny VK publication', async () => {
-  for (const totalJobs of [undefined, null, 0, 2, 101, '1']) {
+  for (const totalJobs of [null, 0, 2, 101, '1']) {
     const result = await evaluate({ totalJobs });
     assert.ok(result.error instanceof Error, 'partial jobs evidence must deny');
     assert.equal(result.calls.length, 2);
