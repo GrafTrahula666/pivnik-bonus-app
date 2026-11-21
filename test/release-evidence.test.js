@@ -954,6 +954,18 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
 
   assert.deepEqual(await verify({}), { verifiedRunIds: [12345, 12346] });
 
+  // A late approval must not retroactively authorize a workflow already running.
+  const earlyDispatchFetch = async (url, options) => {
+    const response = await makeFetch({})(url, options);
+    if (!url.endsWith('/actions/runs/12345')) return response;
+    return { ...response, json: async () => ({
+      ...await response.json(), created_at: '2026-11-09T13:59:59Z',
+    }) };
+  };
+  await assert.rejects(verifyGithubRuns(valid(), {
+    fetchImpl: earlyDispatchFetch, token: 'test-token',
+  }), /GitHub release dispatch predates independent approval/);
+
   const substitutedEvidence = valid();
   substitutedEvidence.approval.evidenceUrl = REF;
   await assert.rejects(verify({}, substitutedEvidence),
