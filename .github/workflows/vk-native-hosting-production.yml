@@ -62,7 +62,11 @@ jobs:
             if (!response.ok) throw new Error(`Cannot verify PIVNIK release (HTTP ${response.status}).`);
             return response.json();
           }
-          const { workflow_runs: [run] } = await getJson(url);
+          const { workflow_runs: runs } = await getJson(url);
+          if (!Array.isArray(runs) || runs.length !== 1) {
+            throw new Error('Missing or ambiguous PIVNIK release run evidence.');
+          }
+          const [run] = runs;
           if (run?.head_sha !== RELEASE_SHA || run?.head_branch !== 'main' ||
               run?.event !== 'workflow_dispatch' || run?.status !== 'completed' ||
               run?.conclusion !== 'success' || !Number.isSafeInteger(run?.run_attempt) ||
