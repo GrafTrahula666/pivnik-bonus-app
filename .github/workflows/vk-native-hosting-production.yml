@@ -71,7 +71,11 @@ jobs:
           }
           const jobsUrl = `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`;
           const { jobs } = await getJson(jobsUrl);
-          const release = jobs.find(job => job.name === 'Syntax, tests and dependency audit' &&
+          const matchingJobs = jobs.filter(job => job.name === 'Syntax, tests and dependency audit');
+          if (matchingJobs.length !== 1) {
+            throw new Error('Expected exactly one canonical PIVNIK release job.');
+          }
+          const release = matchingJobs.find(job =>
             job.status === 'completed' && job.conclusion === 'success' && job.head_sha === RELEASE_SHA &&
             job.run_id === run.id && job.run_attempt === run.run_attempt);
           const requiredSteps = [
