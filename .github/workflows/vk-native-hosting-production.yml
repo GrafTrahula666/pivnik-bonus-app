@@ -81,7 +81,7 @@ jobs:
             'Verify signed Telegram and VK production sessions',
           ];
           if (!requiredSteps.every(name => release?.steps?.some(step =>
-            step.name === name && step.conclusion === 'success'))) {
+            step.name === name && step.status === 'completed' && step.conclusion === 'success'))) {
             throw new Error('The approved run must have deployed and verified this SHA.');
           }
           console.log(`Verified PIVNIK release run ${run.id} for ${RELEASE_SHA}.`);
