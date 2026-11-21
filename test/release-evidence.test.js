@@ -805,7 +805,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       return { ...result, json: async () => ({ ...await original(), ...patch }) };
     };
     await assert.rejects(verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: badFetch }),
-      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched)/);
+      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|release dispatch predates independent approval)/);
   }
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token',
