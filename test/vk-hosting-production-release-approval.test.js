@@ -84,7 +84,7 @@ test('approved common release succeeds and verifies the exact run attempt', asyn
   assert.equal(lookup.searchParams.get('event'), 'workflow_dispatch');
   assert.equal(lookup.searchParams.get('branch'), 'main');
   assert.equal(lookup.searchParams.get('per_page'), '1');
-  assert.match(result.calls[1].url, /\/actions\/runs\/42001\/attempts\/3\/jobs$/);
+  assert.match(result.calls[1].url, /\/actions\/runs\/42001\/attempts\/3\/jobs\?per_page=100$/);
   assert.match(result.logs.join('\n'), /Verified PIVNIK release run 42001/);
 });
 
