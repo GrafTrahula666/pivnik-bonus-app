@@ -463,6 +463,10 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         'GitHub VK parity workflow identity mismatch');
     }
     if (check.name === 'Pivnik release gate') {
+      // A workflow started before the independent approval cannot inherit that
+      // approval retroactively, even if its final result is green.
+      demand(date(run.created_at) && Date.parse(run.created_at) >= Date.parse(data.approval.at),
+        'GitHub release dispatch predates independent approval');
       demand(run.run_attempt === check.runAttempt &&
         run.path === '.github/workflows/release-gate.yml',
         'GitHub release gate workflow identity or attempt mismatch');
