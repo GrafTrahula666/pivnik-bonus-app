@@ -121,6 +121,18 @@ test('successful common workflow with skipped or missing deploy/signed-session s
   }
 });
 
+test('duplicate canonical release jobs deny VK even if one reports success', async () => {
+  const valid = approvedJobs()[0];
+  for (const jobs of [
+    [valid, { ...valid, conclusion: 'failure' }],
+    [valid, { ...valid, run_attempt: 2 }],
+  ]) {
+    const result = await evaluate({ jobs });
+    assert.ok(result.error instanceof Error, 'ambiguous release evidence must deny');
+    assert.equal(result.calls.length, 2);
+  }
+});
+
 test('a release job still running cannot authorize VK even with a reported success conclusion', async () => {
   for (const status of [undefined, null, 'queued', 'in_progress']) {
     const result = await evaluate({ jobs: approvedJobs({ status }) });
