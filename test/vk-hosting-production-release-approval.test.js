@@ -39,7 +39,7 @@ function approvedJobs(overrides = {}) {
   }];
 }
 
-async function evaluate({ run = approvedRun(), jobs = approvedJobs(), rejectCall = 0, httpStatus = 403, invalidJsonCall = 0 } = {}) {
+async function evaluate({ run = approvedRun(), jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0 } = {}) {
   const { execute } = await readGuard();
   const calls = [];
   const logs = [];
@@ -48,7 +48,7 @@ async function evaluate({ run = approvedRun(), jobs = approvedJobs(), rejectCall
     if (calls.length === rejectCall) return { ok: false, status: httpStatus, json: async () => ({}) };
     if (calls.length === invalidJsonCall) throw Error('Invalid JSON');
     if (calls.length === 1) return { ok: true, json: async () => ({ workflow_runs: run ? [run] : [] }) };
-    if (calls.length === 2) return { ok: true, json: async () => ({ jobs }) };
+    if (calls.length === 2) return { ok: true, json: async () => ({ jobs, total_count: totalJobs }) };
     throw Error('Unexpected third API call');
   };
   let error;
@@ -119,6 +119,17 @@ test('successful common workflow with skipped or missing deploy/signed-session s
     assert.ok(result.error instanceof Error, 'missing release evidence must deny');
     assert.equal(result.calls.length, 2);
   }
+});
+
+test('incomplete or unbounded GitHub jobs pagination must deny VK publication', async () => {
+  for (const totalJobs of [undefined, null, 0, 2, 101, '1']) {
+    const result = await evaluate({ totalJobs });
+    assert.ok(result.error instanceof Error, 'partial jobs evidence must deny');
+    assert.equal(result.calls.length, 2);
+  }
+  const result = await evaluate();
+  assert.equal(result.error, undefined);
+  assert.match(result.calls[1].url, /\/attempts\/3\/jobs\?per_page=100$/);
 });
 
 test('duplicate canonical release jobs deny VK even if one reports success', async () => {
