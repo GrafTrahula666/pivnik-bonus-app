@@ -48,6 +48,7 @@ export async function verifyRailwayDeployments(manifest, { lookupDeployment } = 
       'exact commit SHA');
     requireEvidence(typeof live.createdAt === 'string' &&
       Number.isFinite(Date.parse(live.createdAt)) &&
+      Date.parse(live.createdAt) >= Date.parse(manifest.approval.at) &&
       Date.parse(live.createdAt) <= Date.parse(entry.deployedAt),
       'deployment timestamp');
     verified.push({ target: entry.target, deploymentId: live.id, sha: live.meta.commitHash.toLowerCase() });
