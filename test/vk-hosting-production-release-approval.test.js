@@ -30,10 +30,10 @@ function approvedJobs(overrides = {}) {
     name: 'Syntax, tests and dependency audit', status: 'completed', conclusion: 'success',
     head_sha: SHA, run_id: 42001, run_attempt: 3,
     steps: [
-      { name: 'Deploy exact commit and verify both production services', conclusion: 'success' },
-      { name: 'Probe production documents and public endpoints', conclusion: 'success' },
-      { name: 'Verify separate Telegram and VK production accounts', conclusion: 'success' },
-      { name: 'Verify signed Telegram and VK production sessions', conclusion: 'success' },
+      { name: 'Deploy exact commit and verify both production services', status: 'completed', conclusion: 'success' },
+      { name: 'Probe production documents and public endpoints', status: 'completed', conclusion: 'success' },
+      { name: 'Verify separate Telegram and VK production accounts', status: 'completed', conclusion: 'success' },
+      { name: 'Verify signed Telegram and VK production sessions', status: 'completed', conclusion: 'success' },
     ],
     ...overrides,
   }];
@@ -140,6 +140,18 @@ test('all four common production checks are mandatory even if the workflow repor
     ]) {
       const result = await evaluate({ jobs: approvedJobs({ steps }) });
       assert.ok(result.error instanceof Error, `must reject missing or unsuccessful: ${step.name}`);
+      assert.equal(result.calls.length, 2);
+    }
+  }
+});
+
+test('unfinished mandatory production steps deny VK publication despite a success conclusion', async () => {
+  const valid = approvedJobs()[0].steps;
+  for (const step of valid) {
+    for (const status of [undefined, null, 'queued', 'in_progress']) {
+      const steps = valid.map(item => item.name === step.name ? { ...item, status } : item);
+      const result = await evaluate({ jobs: approvedJobs({ steps }) });
+      assert.ok(result.error instanceof Error, `unfinished mandatory step must deny: ${step.name} (${status})`);
       assert.equal(result.calls.length, 2);
     }
   }
