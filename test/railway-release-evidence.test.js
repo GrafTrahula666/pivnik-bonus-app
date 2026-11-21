@@ -65,6 +65,7 @@ test('swapped service, wrong environment, unknown ID, wrong SHA and non-success 
     (record) => { record.meta.commitHash = 'b'.repeat(40); },
     (record) => { record.status = 'SKIPPED'; },
     (record) => { record.status = 'REMOVED'; },
+    (record) => { record.createdAt = '2026-11-09T13:59:59Z'; }, // before approval
     (record) => { record.createdAt = '2026-11-09T14:30:00Z'; },
   ];
   for (const mutate of mutations) {
