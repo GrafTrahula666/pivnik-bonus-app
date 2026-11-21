@@ -39,7 +39,7 @@ function approvedJobs(overrides = {}) {
   }];
 }
 
-async function evaluate({ run = approvedRun(), jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0 } = {}) {
+async function evaluate({ run = approvedRun(), runs = run ? [run] : [], jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0 } = {}) {
   const { execute } = await readGuard();
   const calls = [];
   const logs = [];
@@ -47,7 +47,7 @@ async function evaluate({ run = approvedRun(), jobs = approvedJobs(), totalJobs 
     calls.push({ url: String(url), headers: options?.headers });
     if (calls.length === rejectCall) return { ok: false, status: httpStatus, json: async () => ({}) };
     if (calls.length === invalidJsonCall) throw Error('Invalid JSON');
-    if (calls.length === 1) return { ok: true, json: async () => ({ workflow_runs: run ? [run] : [] }) };
+    if (calls.length === 1) return { ok: true, json: async () => ({ workflow_runs: runs }) };
     if (calls.length === 2) return { ok: true, json: async () => ({ jobs, total_count: totalJobs }) };
     throw Error('Unexpected third API call');
   };
@@ -95,6 +95,14 @@ test('no approved release and a failed or cancelled common release must deny pub
   ]) {
     const result = await evaluate({ run });
     assert.ok(result.error instanceof Error, 'invalid release must be denied');
+    assert.equal(result.calls.length, 1);
+  }
+});
+
+test('missing or ambiguous workflow run evidence denies VK before requesting jobs', async () => {
+  for (const runs of [null, {}, [], [approvedRun(), approvedRun({ id: 42002 })]]) {
+    const result = await evaluate({ runs });
+    assert.ok(result.error instanceof Error, 'ambiguous or malformed release runs must deny');
     assert.equal(result.calls.length, 1);
   }
 });
