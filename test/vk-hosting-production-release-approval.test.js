@@ -157,6 +157,17 @@ test('all four common production checks are mandatory even if the workflow repor
   }
 });
 
+test('duplicate mandatory production steps deny VK even when one succeeds', async () => {
+  const valid = approvedJobs()[0].steps;
+  for (const step of valid) {
+    for (const duplicate of [{ ...step }, { ...step, conclusion: 'failure' }]) {
+      const result = await evaluate({ jobs: approvedJobs({ steps: [...valid, duplicate] }) });
+      assert.ok(result.error instanceof Error, `duplicate step must deny: ${step.name}`);
+      assert.equal(result.calls.length, 2);
+    }
+  }
+});
+
 test('unfinished mandatory production steps deny VK publication despite a success conclusion', async () => {
   const valid = approvedJobs()[0].steps;
   for (const step of valid) {
