@@ -70,7 +70,11 @@ jobs:
             throw new Error('VK publishing requires a successful manually approved PIVNIK release for this SHA.');
           }
           const jobsUrl = `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`;
-          const { jobs } = await getJson(jobsUrl);
+          const { total_count: totalJobs, jobs } = await getJson(`${jobsUrl}?per_page=100`);
+          if (!Number.isSafeInteger(totalJobs) || totalJobs < 1 || totalJobs > 100 ||
+              !Array.isArray(jobs) || jobs.length !== totalJobs) {
+            throw new Error('Incomplete PIVNIK release job evidence.');
+          }
           const matchingJobs = jobs.filter(job => job.name === 'Syntax, tests and dependency audit');
           if (matchingJobs.length !== 1) {
             throw new Error('Expected exactly one canonical PIVNIK release job.');
