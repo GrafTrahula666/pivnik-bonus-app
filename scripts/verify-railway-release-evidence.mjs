@@ -73,7 +73,7 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
       Object.values(RAILWAY_RELEASE_TARGETS).includes(serviceId),
     'untrusted Railway lookup scope');
     requireEvidence(typeof deploymentId === 'string' &&
-      /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(deploymentId),
+      /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(deploymentId),
     'invalid Railway deployment ID');
     const response = await fetchImpl('https://backboard.railway.com/graphql/v2', {
       method: 'POST',
