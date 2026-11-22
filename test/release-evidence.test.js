@@ -458,6 +458,17 @@ test('CLI fails closed for invalid JSON and invalid evidence, and accepts format
     assert.notEqual(authenticated.status, 0);
     assert.match(authenticated.stderr, /authenticated GitHub API access is required/);
 
+    // A typo must not silently skip authenticated GitHub approval/run checks.
+    for (const typoValue of ['true', '0', 'yes']) {
+      const typo = spawnSync(process.execPath, [script, file], {
+        env: { ...process.env, PIVNIK_VERIFY_GITHUB: typoValue, PIVNIK_VERIFY_RAILWAY: '', GITHUB_TOKEN: '' },
+        encoding: 'utf8',
+      });
+      assert.equal(typo.status, 1, 'invalid GitHub verification flag: ' + typoValue);
+      assert.match(typo.stderr, /PIVNIK_VERIFY_GITHUB must equal 1 when set/);
+      assert.doesNotMatch(typo.stdout, /Release evidence format valid/);
+    }
+
     const wrong = valid(); wrong.deployments[0].sha = ROLLBACK_SHA;
     await writeFile(file, JSON.stringify(wrong));
     assert.notEqual(spawnSync(process.execPath, [script, file]).status, 0);
