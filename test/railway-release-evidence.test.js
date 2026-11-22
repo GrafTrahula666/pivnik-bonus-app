@@ -275,7 +275,7 @@ test('active Railway attestation matches BOTH current production deployment IDs'
           meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z',
         } } }) };
       }
-      assert.match(request.query, /deployments\\(input: \\$input, first: 1\\)/);
+      assert.match(request.query, /deployments\(input: \$input, first: 1\)/);
       assert.equal(request.variables.input.projectId, RAILWAY_RELEASE_PROJECT);
       assert.equal(request.variables.input.environmentId, RAILWAY_RELEASE_ENVIRONMENT);
       assert.deepEqual(request.variables.input.status, { successfulOnly: true });
