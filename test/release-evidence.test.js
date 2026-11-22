@@ -547,7 +547,9 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       token: 'test-token', fetchImpl: lateOrInvalidParity,
     }), /GitHub VK parity must complete before first production deployment/);
   }
-  assert.equal(calls.length, 16); // two full passes include reviewer permission and authenticated ZIP verification
+  // The initial pass and all four rejection cases must each attest the real VK parity run.
+  // Do not pin the total HTTP request count: each new negative scenario adds a full read.
+  assert.equal(calls.filter(({ url }) => url.endsWith('/actions/runs/12346')).length, 5);
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
   const archiveCall = calls.find(call => call.url.endsWith('/actions/artifacts/9001/zip'));
