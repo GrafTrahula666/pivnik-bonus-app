@@ -156,3 +156,37 @@ test('Railway API adapter fails closed on network rejection, invalid JSON and ma
     await assert.rejects(lookupDeployment(railwayScope));
   }
 });
+
+test('Railway GraphQL adapter and release validator reject a successful HTTP response with wrong deployment SHA', async () => {
+  const release = manifest();
+  release.deployments = release.deployments.map((entry, index) => ({
+    ...entry,
+    deploymentId: index === 0
+      ? 'd17d40dc-28d0-4f90-b3c6-86d923530fc4'
+      : 'b51f9fed-6be7-416b-b231-58ebf8dd03a1',
+  }));
+  const requested = [];
+  const lookupDeployment = createRailwayDeploymentLookup({
+    token: 'test-token',
+    fetchImpl: async (_endpoint, options) => {
+      const { variables } = JSON.parse(options.body);
+      requested.push(variables.id);
+      return {
+        ok: true,
+        json: async () => ({ data: { deployment: {
+          id: variables.id,
+          serviceId: RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
+          environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+          status: 'SUCCESS',
+          createdAt: '2026-11-09T14:10:00Z',
+          meta: { commitHash: 'b'.repeat(40) },
+        } } }),
+      };
+    },
+  });
+  await assert.rejects(
+    verifyRailwayDeployments(release, { lookupDeployment }),
+    /exact commit SHA/,
+  );
+  assert.deepEqual(requested, ['d17d40dc-28d0-4f90-b3c6-86d923530fc4']);
+});
