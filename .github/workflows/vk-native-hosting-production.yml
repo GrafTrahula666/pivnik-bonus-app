@@ -43,6 +43,45 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run focused VK regressions
+        run: |
+          node --test test/vk-native-hosting-main-parity.test.js
+          node --test test/vk-native-hosting-gateway.test.js
+          node --check vk-api-gateway/server.mjs
+
+      - name: Materialize current product sources
+        run: npm run materialize
+
+      - name: Verify Selectel before production deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in healthz readyz; do
+            curl --fail --silent --show-error --location               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 20               "https://139.100.238.159.nip.io/$path" >/dev/null
+          done
+
+      - name: Build VK production bundle
+        env:
+          PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
+        run: node scripts/build-vk-hosting.mjs
+
+      - name: Verify bundle boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vk-hosting-build/index.html
+          test -f vk-hosting-build/app.js
+          test -f vk-hosting-build/vk-platform.js
+          test -f vk-hosting-build/vendor/vk-bridge.js
+          grep -q 'https://139.100.238.159.nip.io' vk-hosting-build/index.html
+          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
+          ! grep -q 'up.railway.app' vk-hosting-build/index.html
+          ! grep -q 'vercel.app' vk-hosting-build/index.html
+          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
+
       - name: Verify the approved PIVNIK release for this SHA
         env:
           GH_TOKEN: ${{ github.token }}
@@ -102,45 +141,6 @@ jobs:
           }
           console.log(`Verified PIVNIK release run ${run.id} for ${RELEASE_SHA}.`);
           NODE
-
-      - name: Install exact dependencies
-        run: npm ci
-
-      - name: Run focused VK regressions
-        run: |
-          node --test test/vk-native-hosting-main-parity.test.js
-          node --test test/vk-native-hosting-gateway.test.js
-          node --check vk-api-gateway/server.mjs
-
-      - name: Materialize current product sources
-        run: npm run materialize
-
-      - name: Verify Selectel before production deploy
-        shell: bash
-        run: |
-          set -euo pipefail
-          for path in healthz readyz; do
-            curl --fail --silent --show-error --location               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 20               "https://139.100.238.159.nip.io/$path" >/dev/null
-          done
-
-      - name: Build VK production bundle
-        env:
-          PIVNIK_VK_API_BASE: https://139.100.238.159.nip.io
-        run: node scripts/build-vk-hosting.mjs
-
-      - name: Verify bundle boundaries
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f vk-hosting-build/index.html
-          test -f vk-hosting-build/app.js
-          test -f vk-hosting-build/vk-platform.js
-          test -f vk-hosting-build/vendor/vk-bridge.js
-          grep -q 'https://139.100.238.159.nip.io' vk-hosting-build/index.html
-          grep -q 'resolveGatewayInput' vk-hosting-build/vk-platform.js
-          ! grep -q 'up.railway.app' vk-hosting-build/index.html
-          ! grep -q 'vercel.app' vk-hosting-build/index.html
-          ! grep -q 'telegram.org/js/telegram-web-app.js' vk-hosting-build/index.html
 
       - name: Deploy to VK Mini Apps production Hosting
         id: deploy
