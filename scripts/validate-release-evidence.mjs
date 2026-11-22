@@ -521,7 +521,7 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         try { blobUrl = new URL(location); } catch {}
         demand(blobUrl?.protocol === 'https:' &&
           !blobUrl.username && !blobUrl.password && !blobUrl.hash &&
-          /^[a-z0-9-]+\\.blob\\.core\\.windows\\.net$/i.test(blobUrl.hostname) &&
+          /^[a-z0-9-]+\.blob\.core\.windows\.net$/i.test(blobUrl.hostname) &&
           !blobUrl.port,
           'GitHub dispatch artifact redirect target is not trusted Azure Blob HTTPS');
         // The signed URL authorizes the second request; no GitHub token or
