@@ -96,6 +96,8 @@ jobs:
           async function getJson(url) {
             const response = await fetch(url, {
               headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json' },
+              // GitHub evidence must never be silently taken from a redirected host.
+              redirect: 'error',
               signal: AbortSignal.timeout(15_000),
             });
             if (!response.ok) throw new Error(`Cannot verify PIVNIK release (HTTP ${response.status}).`);
