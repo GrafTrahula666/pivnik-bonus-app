@@ -312,14 +312,14 @@ test('historical SUCCESS cannot pass current active deployment attestation', asy
   };
   await assert.rejects(verifyCurrentRailwayDeployments(release, {
     lookupDeployment: historical, lookupActiveDeployment: replacement,
-  }), /current active Railway deployment ID/);
+  }), /current active Railway deployment identity/);
   assert.equal(activeCalls, 1);
 
   for (const invalid of [null, { id: 'deployment-1', status: 'REMOVED' },
     { id: 'deployment-1', status: 'FAILED' }, []]) {
     await assert.rejects(verifyCurrentRailwayDeployments(release, {
       lookupDeployment: historical, lookupActiveDeployment: async () => invalid,
-    }), /current active Railway deployment ID/);
+    }), /current active Railway deployment identity/);
   }
 });
 
@@ -456,7 +456,7 @@ test('current active VK deployment replacement is rejected after PIVNIK succeeds
   await assert.rejects(verifyCurrentRailwayDeployments(release, {
     lookupDeployment: lookup,
     lookupActiveDeployment: activeLookup,
-  }), /current active Railway deployment ID does not match release manifest/);
+  }), /current active Railway deployment identity does not match release manifest/);
   assert.deepEqual(observedServices, [
     RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
     RAILWAY_RELEASE_TARGETS['vk-native-hosting'],
@@ -486,7 +486,7 @@ test('two-pass active readback rejects Railway deployment drift between service 
     };
     await assert.rejects(verifyCurrentRailwayDeployments(manifest(), {
       lookupDeployment: lookup, lookupActiveDeployment: activeLookup,
-    }), /current active Railway deployment ID does not match release manifest/);
+    }), /current active Railway deployment identity does not match release manifest/);
     assert.deepEqual(observed, expected.slice(0, changedService === expected[2] ? 3 : 4));
   }
 });
