@@ -133,3 +133,17 @@ test('Railway API adapter fails closed on HTTP, GraphQL and missing record error
       /Railway release evidence mismatch/);
   }
 });
+
+test('Railway API adapter fails closed on network rejection, invalid JSON and malformed GraphQL envelope', async () => {
+  const cases = [
+    async () => { throw new Error('network unavailable'); },
+    async () => ({ ok: true, json: async () => { throw new SyntaxError('invalid JSON'); } }),
+    async () => ({ ok: true, json: async () => null }),
+    async () => ({ ok: true, json: async () => ({ data: null }) }),
+    async () => ({ ok: true, json: async () => ({ data: { deployment: 'not-an-object' } }) }),
+  ];
+  for (const fetchImpl of cases) {
+    const lookupDeployment = createRailwayDeploymentLookup({ token: 'test-token', fetchImpl });
+    await assert.rejects(lookupDeployment(railwayScope));
+  }
+});
