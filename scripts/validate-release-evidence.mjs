@@ -600,13 +600,16 @@ async function main() {
     process.env.PIVNIK_VERIFY_RAILWAY === '1',
     'PIVNIK_VERIFY_RAILWAY must equal 1 when set');
   if (process.env.PIVNIK_VERIFY_RAILWAY === '1') {
-    const { createRailwayDeploymentLookup, verifyRailwayDeployments } =
+    const { createRailwayDeploymentLookup, verifyCurrentRailwayDeployments } =
       await import('./verify-railway-release-evidence.mjs');
     const lookupDeployment = createRailwayDeploymentLookup({
       token: process.env.RAILWAY_TOKEN,
     });
-    const verified = await verifyRailwayDeployments(data, { lookupDeployment });
-    console.log('Authenticated Railway deployment records verified: ' + verified.length);
+    const verified = await verifyCurrentRailwayDeployments(data, {
+      lookupDeployment,
+      lookupActiveDeployment: lookupDeployment.lookupActiveDeployment,
+    });
+    console.log('Authenticated Railway current active deployment IDs verified: ' + verified.length);
   }
   console.log('Release evidence format valid for ' + summary.releaseSha +
     ': ' + summary.checks + ' checks, ' + summary.artifacts +
