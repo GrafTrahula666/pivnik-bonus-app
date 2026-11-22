@@ -74,6 +74,13 @@ test('VK production publishing is manual only and requires an exact SHA approval
   assert.match(workflow, /^    if: github\.ref == 'refs\/heads\/main'$/m);
   assert.match(workflow, /test "\$RELEASE_CONFIRM" = "DEPLOY_VK_PRODUCTION"/);
   assert.match(workflow, /git ls-remote --heads origin main/);
+  const build = workflow.indexOf('      - name: Verify bundle boundaries');
+  const approval = workflow.indexOf('      - name: Verify the approved PIVNIK release for this SHA');
+  const publish = workflow.indexOf('      - name: Deploy to VK Mini Apps production Hosting');
+  assert.ok(build >= 0 && build < approval && approval < publish,
+    'production approval check must run after bundle build and immediately before VK publication');
+  assert.equal(workflow.slice(approval, publish).match(/^      - name:/gm)?.length, 1,
+    'no intervening workflow step may separate approval from publication');
 });
 
 test('approved common release succeeds and verifies the exact run attempt', async () => {
