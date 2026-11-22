@@ -461,6 +461,15 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
       demand(run.path === '.github/workflows/vk-native-hosting-main-parity.yml' &&
         run.event === 'push',
         'GitHub VK parity workflow identity mismatch');
+      // Parity that succeeds only AFTER a production deployment cannot
+      // retroactively authorize that earlier deploy. The API's updated_at
+      // is a conservative completion bound; ambiguity must fail closed.
+      const earliestDeploymentAt = Math.min(...data.deployments.map(
+        deployment => Date.parse(deployment.deployedAt)));
+      demand(date(run.created_at) && date(run.updated_at) &&
+        Date.parse(run.updated_at) >= Date.parse(run.created_at) &&
+        Date.parse(run.updated_at) <= earliestDeploymentAt,
+        'GitHub VK parity must complete before first production deployment');
     }
     if (check.name === 'Pivnik release gate') {
       // A workflow started before the independent approval cannot inherit that
