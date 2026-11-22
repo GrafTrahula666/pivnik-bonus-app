@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { verifyRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
   RAILWAY_RELEASE_ENVIRONMENT, RAILWAY_RELEASE_PROJECT } from '../scripts/verify-railway-release-evidence.mjs';
 
@@ -189,4 +194,40 @@ test('Railway GraphQL adapter and release validator reject a successful HTTP res
     /exact commit SHA/,
   );
   assert.deepEqual(requested, ['d17d40dc-28d0-4f90-b3c6-86d923530fc4']);
+});
+
+test('CLI Railway live-lookup opt-in defaults offline and fails closed on missing token or typo', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pivnik-railway-release-test-'));
+  try {
+    const file = join(directory, 'manifest.json');
+    writeFileSync(file, JSON.stringify(manifest()));
+    const command = fileURLToPath(new URL('../scripts/validate-release-evidence.mjs', import.meta.url));
+    const run = railwayFlag => spawnSync(process.execPath, [command, file], {
+      encoding: 'utf8',
+      timeout: 10000,
+      env: {
+        ...process.env,
+        GITHUB_TOKEN: '',
+        RAILWAY_TOKEN: '',
+        PIVNIK_VERIFY_GITHUB: '',
+        PIVNIK_VERIFY_RAILWAY: railwayFlag,
+      },
+    });
+
+    const offline = run('');
+    assert.equal(offline.status, 0, offline.stderr);
+    assert.match(offline.stdout, /Release evidence format valid/);
+    assert.doesNotMatch(offline.stdout, /Authenticated Railway/);
+
+    const missingToken = run('1');
+    assert.equal(missingToken.status, 1);
+    assert.match(missingToken.stderr, /Railway API token is required/);
+    assert.doesNotMatch(missingToken.stdout, /Authenticated Railway/);
+
+    const typo = run('true');
+    assert.equal(typo.status, 1);
+    assert.match(typo.stderr, /PIVNIK_VERIFY_RAILWAY must equal 1/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
