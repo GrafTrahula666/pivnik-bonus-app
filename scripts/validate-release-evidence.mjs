@@ -509,9 +509,25 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
       demand(dispatchArtifact.archive_download_url === archiveUrl &&
         /^sha256:[0-9a-f]{64}$/i.test(dispatchArtifact.digest || ''),
         'GitHub dispatch artifact archive URL or SHA-256 digest is missing or mismatched');
-      const archiveResponse = await fetchImpl(archiveUrl, {
-        headers, redirect: 'follow',
+      // GitHub returns a 302 to a short-lived Azure Blob URL. Never follow
+      // it with the GitHub Bearer token or send that token to blob storage.
+      const initialArchiveResponse = await fetchImpl(archiveUrl, {
+        headers, redirect: 'manual',
       });
+      let archiveResponse = initialArchiveResponse;
+      if (initialArchiveResponse?.status === 302) {
+        const location = initialArchiveResponse.headers?.get?.('location');
+        let blobUrl;
+        try { blobUrl = new URL(location); } catch {}
+        demand(blobUrl?.protocol === 'https:' &&
+          !blobUrl.username && !blobUrl.password && !blobUrl.hash &&
+          /^[a-z0-9-]+\\.blob\\.core\\.windows\\.net$/i.test(blobUrl.hostname) &&
+          !blobUrl.port,
+          'GitHub dispatch artifact redirect target is not trusted Azure Blob HTTPS');
+        // The signed URL authorizes the second request; no GitHub token or
+        // automatic further redirects are allowed at the storage endpoint.
+        archiveResponse = await fetchImpl(blobUrl.href, { redirect: 'error' });
+      }
       demand(archiveResponse?.ok, 'GitHub dispatch artifact download failed for artifactId ' + dispatchArtifact.id);
       const archive = await readBoundedBody(archiveResponse, MAX_DISPATCH_ARCHIVE_BYTES);
       const archiveSha = createHash('sha256').update(archive).digest('hex');
