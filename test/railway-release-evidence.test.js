@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { verifyRailwayDeployments, RAILWAY_RELEASE_TARGETS,
+import { verifyRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
   RAILWAY_RELEASE_ENVIRONMENT, RAILWAY_RELEASE_PROJECT } from '../scripts/verify-railway-release-evidence.mjs';
 
 const sha = 'a'.repeat(40);
@@ -80,4 +80,56 @@ test('swapped service, wrong environment, unknown ID, wrong SHA and non-success 
   await assert.rejects(verifyRailwayDeployments(manifest(), {
     lookupDeployment: async () => null,
   }), /deployment not found/);
+});
+
+const railwayId = 'd17d40dc-28d0-4f90-b3c6-86d923530fc4';
+const railwayScope = { projectId: RAILWAY_RELEASE_PROJECT,
+  environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+  serviceId: RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'], deploymentId: railwayId };
+
+test('Railway API adapter issues only scoped read-only GraphQL deployment lookup', async () => {
+  let calls = 0;
+  const lookupDeployment = createRailwayDeploymentLookup({
+    token: 'test-token',
+    fetchImpl: async (endpoint, options) => {
+      calls++;
+      assert.equal(endpoint, 'https://backboard.railway.com/graphql/v2');
+      assert.equal(options.method, 'POST');
+      assert.equal(options.headers.Authorization, 'Bearer test-token');
+      const request = JSON.parse(options.body);
+      assert.match(request.query, /deployment\(id: \$id\)/);
+      assert.equal(request.variables.id, railwayId);
+      return { ok: true, json: async () => ({ data: { deployment: {
+        id: railwayId, serviceId: railwayScope.serviceId,
+        environmentId: railwayScope.environmentId, status: 'SUCCESS',
+        meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z',
+      } } }) };
+    },
+  });
+  assert.equal((await lookupDeployment(railwayScope)).id, railwayId);
+  assert.equal(calls, 1);
+});
+
+test('Railway API adapter rejects missing token, wrong scope and malformed IDs', async () => {
+  assert.throws(() => createRailwayDeploymentLookup(), /token is required/);
+  const lookupDeployment = createRailwayDeploymentLookup({ token: 'test-token',
+    fetchImpl: async () => { throw new Error('unexpected network call'); } });
+  await assert.rejects(lookupDeployment({ ...railwayScope, environmentId: 'staging' }),
+    /untrusted Railway lookup scope/);
+  await assert.rejects(lookupDeployment({ ...railwayScope, deploymentId: 'not-a-uuid' }),
+    /invalid Railway deployment ID/);
+});
+
+test('Railway API adapter fails closed on HTTP, GraphQL and missing record errors', async () => {
+  for (const response of [
+    { ok: false, status: 401 },
+    { ok: true, json: async () => ({ errors: [{ message: 'unauthorized' }] }) },
+    { ok: true, json: async () => ({ data: { deployment: null } }) },
+  ]) {
+    const lookupDeployment = createRailwayDeploymentLookup({
+      token: 'test-token', fetchImpl: async () => response,
+    });
+    await assert.rejects(lookupDeployment(railwayScope),
+      /Railway release evidence mismatch/);
+  }
 });
