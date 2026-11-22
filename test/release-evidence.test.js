@@ -537,7 +537,47 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
   const archiveCall = calls.find(call => call.url.endsWith('/actions/artifacts/9001/zip'));
-  assert.equal(archiveCall.options.redirect, 'follow');
+  assert.equal(archiveCall.options.redirect, 'manual');
+  // The GitHub artifact endpoint returns a signed Azure Blob redirect.
+  // The Bearer token is sent only to api.github.com, never to Blob storage.
+  const blobLocation = 'https://releaseartifacts.blob.core.windows.net/archive.zip?sig=example';
+  let blobRequests = 0;
+  const redirectedArtifactFetch = async (url, options) => {
+    if (url.endsWith('/actions/artifacts/9001/zip')) {
+      assert.equal(options.redirect, 'manual');
+      assert.equal(options.headers.Authorization, 'Bearer test-token');
+      return { status: 302, ok: false, headers: { get: name =>
+        name === 'location' ? blobLocation : null } };
+    }
+    if (url === blobLocation) {
+      blobRequests++;
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.headers, undefined);
+      return { ok: true, arrayBuffer: async () => artifact.archiveBytes };
+    }
+    return responseFor(url, options);
+  };
+  assert.deepEqual(await verifyGithubRuns(valid(), {
+    token: 'test-token', fetchImpl: redirectedArtifactFetch,
+  }), { verifiedRunIds: [12345, 12346] });
+  assert.equal(blobRequests, 1);
+  // A malformed or off-provider redirect fails before requesting its URL.
+  for (const location of [
+    'http://releaseartifacts.blob.core.windows.net/archive.zip',
+    'https://attacker.example/archive.zip',
+    'https://user:password@releaseartifacts.blob.core.windows.net/archive.zip',
+    'https://releaseartifacts.blob.core.windows.net.evil.example/archive.zip',
+    '/relative.zip',
+    '',
+  ]) {
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token',
+      fetchImpl: async (url, options) =>
+        url.endsWith('/actions/artifacts/9001/zip')
+          ? { status: 302, ok: false, headers: { get: () => location } }
+          : responseFor(url, options),
+    }), /GitHub dispatch artifact redirect target is not trusted Azure Blob HTTPS/);
+  }
 
   // The run endpoint may omit inputs. The exact run-scoped artifact is the
   // trusted workflow's durable record of confirmation, SHA and attempt.
