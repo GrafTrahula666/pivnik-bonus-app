@@ -43,6 +43,9 @@ The verifier checks authenticated GitHub artifact metadata, requests the canonic
 
 This binds the recorded dispatch values to the trusted workflow run, but it is **not independent human approval** and does not authorize a release. The separate approved-PR review, successful production steps, Railway/VK deployment readback, live smoke, known-good rollback and REL-01 protections remain mandatory. Do not wire this validator alone into a deploy-unlock condition.
 
+
+VK parity must also have finished **before the first production deployment**, not just succeeded eventually on the same SHA. Authenticated GitHub readback compares the parity run's UTC `updated_at` with the earliest declared production `deployedAt`. A late, missing, invalid or pre-start completion timestamp fails closed; `updated_at` is used conservatively because a later metadata update must never legitimize an earlier deploy retroactively. This is an additional chronology requirement, not independent permission to release.
+
 ## Operational dependency
 
 As of November 9, 2026, production is blocked by [REL-01 / issue #483](https://github.com/GrafTrahula666/pivnik-bonus-app/issues/483): Railway app and VK Railway services still track `main` without a proven deploy gate, and the real common release gate has had production token-scope failures. The [VK guard Draft PR #482](https://github.com/GrafTrahula666/pivnik-bonus-app/pull/482) has passed PR CI; it is not a substitute for Railway configuration or successful real release. Do not publish based on template validation.
