@@ -27,7 +27,9 @@ For both independent GitHub and Railway checks, additionally set `PIVNIK_VERIFY_
 
 The live Railway GraphQL response is read as a bounded stream (128 KiB maximum per deployment); oversized responses fail closed rather than being parsed without a size limit.
 
-This queries the two pinned production service IDs **without changing Railway**. Successful historical deployment records still do not prove that live traffic serves the commit, that auto-deploy is disabled, that approval is valid, or that rollback and smoke have been practiced. Do not use either check as a deploy unlock.
+This queries the two pinned production service IDs **without changing Railway**. In authenticated CLI mode, the verifier now independently queries Railway's **latest active successful deployment** for each pinned service using the documented `deployments(input: {projectId, environmentId, serviceId, status: {successfulOnly: true}}, first: 1)` GraphQL read. It rejects a historical `SUCCESS` if its deployment ID differs from the active ID; missing, malformed or ambiguous active responses also fail closed. This is an observation **at query time**, not an atomic two-service snapshot or a guarantee about routed live traffic. Source: [Railway Public API deployment examples](https://docs.railway.com/integrations/api/manage-deployments).
+
+Successful provider readback still does not prove that live traffic serves the commit, that auto-deploy is disabled, that approval is valid, or that rollback and smoke have been practiced. Do not use either check as a deploy unlock.
 
 The working Android kiosk, its signing key and APK are excluded from this UI/release track, as required by the master plan. Do not include secrets, client PII or token values in release manifests. Never manufacture evidence to make the sample pass.
 
