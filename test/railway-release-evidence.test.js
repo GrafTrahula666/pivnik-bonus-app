@@ -204,22 +204,29 @@ test('CLI Railway live-lookup opt-in defaults offline and fails closed on missin
     const file = join(directory, 'manifest.json');
     writeFileSync(file, JSON.stringify(manifest()));
     const command = fileURLToPath(new URL('../scripts/validate-release-evidence.mjs', import.meta.url));
-    const run = railwayFlag => spawnSync(process.execPath, [command, file], {
-      encoding: 'utf8',
-      timeout: 10000,
-      env: {
-        ...process.env,
-        GITHUB_TOKEN: '',
-        RAILWAY_TOKEN: '',
-        PIVNIK_VERIFY_GITHUB: '',
-        PIVNIK_VERIFY_RAILWAY: railwayFlag,
-      },
-    });
+    const run = (railwayFlag, githubFlag) => {
+      const env = { ...process.env, GITHUB_TOKEN: '', RAILWAY_TOKEN: '' };
+      delete env.PIVNIK_VERIFY_GITHUB;
+      delete env.PIVNIK_VERIFY_RAILWAY;
+      if (railwayFlag !== undefined) env.PIVNIK_VERIFY_RAILWAY = railwayFlag;
+      if (githubFlag !== undefined) env.PIVNIK_VERIFY_GITHUB = githubFlag;
+      return spawnSync(process.execPath, [command, file], {
+        encoding: 'utf8', timeout: 10000, env,
+      });
+    };
 
-    const offline = run('');
+    const offline = run();
     assert.equal(offline.status, 0, offline.stderr);
     assert.match(offline.stdout, /Release evidence format valid/);
     assert.doesNotMatch(offline.stdout, /Authenticated Railway/);
+
+    // An explicitly present but empty flag must never silently become offline.
+    const emptyRailwayFlag = run('');
+    assert.equal(emptyRailwayFlag.status, 1);
+    assert.match(emptyRailwayFlag.stderr, /PIVNIK_VERIFY_RAILWAY must equal 1/);
+    const emptyGithubFlag = run(undefined, '');
+    assert.equal(emptyGithubFlag.status, 1);
+    assert.match(emptyGithubFlag.stderr, /PIVNIK_VERIFY_GITHUB must equal 1/);
 
     const missingToken = run('1');
     assert.equal(missingToken.status, 1);
