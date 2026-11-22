@@ -570,6 +570,9 @@ async function main() {
   const summary = validateReleaseEvidence(data);
   // A valid JSON manifest alone never proves GitHub Actions ran. Explicit
   // authenticated mode fails closed on missing token, API errors or mismatches.
+  // A misspelled GitHub attestation flag must not silently downgrade to offline validation.
+  demand(!process.env.PIVNIK_VERIFY_GITHUB || process.env.PIVNIK_VERIFY_GITHUB === '1',
+    'PIVNIK_VERIFY_GITHUB must equal 1 when set');
   if (process.env.PIVNIK_VERIFY_GITHUB === '1') {
     await verifyGithubRuns(data, { fetchImpl: fetch, token: process.env.GITHUB_TOKEN });
     console.log('Authenticated GitHub workflow runs verified for exact release SHA.');
