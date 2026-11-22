@@ -67,6 +67,10 @@ test('swapped service, wrong environment, unknown ID, wrong SHA and non-success 
     (record) => { record.status = 'REMOVED'; },
     (record) => { record.createdAt = '2026-11-09T13:59:59Z'; }, // before approval
     (record) => { record.createdAt = '2026-11-09T14:30:00Z'; },
+    (record) => { record.createdAt = '2026-11-09T14:10:00+00:00'; }, // not canonical UTC
+    (record) => { record.createdAt = '2026-11-09T14:10:00'; }, // timezone missing
+    (record) => { record.createdAt = '2026-11-09T14:10:00.000+00:00'; },
+    (record) => { record.createdAt = '2026-11-09T14:10:00Zgarbage'; },
   ];
   for (const mutate of mutations) {
     await assert.rejects(verifyRailwayDeployments(manifest(), {
