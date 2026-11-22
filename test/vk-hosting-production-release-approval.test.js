@@ -20,6 +20,8 @@ async function readGuard() {
 function approvedRun(overrides = {}) {
   return {
     id: 42001, head_sha: SHA, head_branch: 'main',
+    repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
+    path: '.github/workflows/release-gate.yml',
     event: 'workflow_dispatch', status: 'completed', conclusion: 'success',
     run_attempt: 3, ...overrides,
   };
@@ -112,6 +114,20 @@ test('releases from a different branch or SHA cannot authorize VK production', a
     const result = await evaluate({ run });
     assert.ok(result.error instanceof Error);
     assert.equal(result.calls.length, 1);
+  }
+});
+
+test('a successful run from a foreign repository or unrelated workflow cannot authorize VK', async () => {
+  for (const run of [
+    approvedRun({ repository: { full_name: 'elsewhere/pivnik-bonus-app' } }),
+    approvedRun({ repository: undefined }),
+    approvedRun({ path: '.github/workflows/unrelated-success.yml' }),
+    approvedRun({ path: undefined }),
+  ]) {
+    const result = await evaluate({ run });
+    assert.ok(result.error instanceof Error, 'wrong workflow provenance must deny');
+    assert.match(result.error.message, /requires a successful manually approved PIVNIK release/);
+    assert.equal(result.calls.length, 1, 'must reject before requesting production jobs');
   }
 });
 
