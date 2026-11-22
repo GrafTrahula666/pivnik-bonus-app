@@ -69,15 +69,21 @@ export async function verifyCurrentRailwayDeployments(manifest,
   requireEvidence(typeof lookupActiveDeployment === 'function',
     'authenticated active Railway deployment lookup is required');
   const historical = await verifyRailwayDeployments(manifest, { lookupDeployment });
-  for (const record of historical) {
-    const active = await lookupActiveDeployment({
-      projectId: RAILWAY_RELEASE_PROJECT,
-      environmentId: RAILWAY_RELEASE_ENVIRONMENT,
-      serviceId: RAILWAY_RELEASE_TARGETS[record.target],
-    });
-    requireEvidence(active && typeof active === 'object' && !Array.isArray(active) &&
-      active.id === record.deploymentId && active.status === 'SUCCESS',
-    'current active Railway deployment ID does not match release manifest');
+  // The two services cannot be read atomically. Read PIVNIK and VK twice:
+  // if either rolls forward while the other is being queried, the second
+  // sweep catches that mid-attestation drift. This is NOT an atomic snapshot
+  // or a substitute for a deploy freeze and post-release smoke.
+  for (let sweep = 0; sweep < 2; sweep++) {
+    for (const record of historical) {
+      const active = await lookupActiveDeployment({
+        projectId: RAILWAY_RELEASE_PROJECT,
+        environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+        serviceId: RAILWAY_RELEASE_TARGETS[record.target],
+      });
+      requireEvidence(active && typeof active === 'object' && !Array.isArray(active) &&
+        active.id === record.deploymentId && active.status === 'SUCCESS',
+      'current active Railway deployment ID does not match release manifest');
+    }
   }
   return historical;
 }
