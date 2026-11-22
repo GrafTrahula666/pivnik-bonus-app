@@ -586,8 +586,9 @@ async function main() {
   const summary = validateReleaseEvidence(data);
   // A valid JSON manifest alone never proves GitHub Actions ran. Explicit
   // authenticated mode fails closed on missing token, API errors or mismatches.
-  // A misspelled GitHub attestation flag must not silently downgrade to offline validation.
-  demand(!process.env.PIVNIK_VERIFY_GITHUB || process.env.PIVNIK_VERIFY_GITHUB === '1',
+  // A misspelled OR explicitly empty GitHub flag must not silently downgrade to offline validation.
+  demand(!Object.hasOwn(process.env, 'PIVNIK_VERIFY_GITHUB') ||
+    process.env.PIVNIK_VERIFY_GITHUB === '1',
     'PIVNIK_VERIFY_GITHUB must equal 1 when set');
   if (process.env.PIVNIK_VERIFY_GITHUB === '1') {
     await verifyGithubRuns(data, { fetchImpl: fetch, token: process.env.GITHUB_TOKEN });
@@ -595,7 +596,7 @@ async function main() {
   }
   // Opt-in, read-only provider check. A syntactically valid manifest alone is
   // never Railway deployment evidence. Unknown flag values fail closed.
-  demand(!process.env.PIVNIK_VERIFY_RAILWAY ||
+  demand(!Object.hasOwn(process.env, 'PIVNIK_VERIFY_RAILWAY') ||
     process.env.PIVNIK_VERIFY_RAILWAY === '1',
     'PIVNIK_VERIFY_RAILWAY must equal 1 when set');
   if (process.env.PIVNIK_VERIFY_RAILWAY === '1') {
