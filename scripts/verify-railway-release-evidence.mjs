@@ -77,6 +77,8 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
     'invalid Railway deployment ID');
     const response = await fetchImpl('https://backboard.railway.com/graphql/v2', {
       method: 'POST',
+      // Never forward a scoped Railway token to a redirected endpoint.
+      redirect: 'error',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: 'query ReleaseDeployment($id: String!) { deployment(id: $id) { id serviceId environmentId status createdAt meta } }',
