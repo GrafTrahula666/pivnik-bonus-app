@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
+import { verifyRailwayDeployments, verifyCurrentRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
   RAILWAY_RELEASE_ENVIRONMENT, RAILWAY_RELEASE_PROJECT } from '../scripts/verify-railway-release-evidence.mjs';
 
 const sha = 'a'.repeat(40);
@@ -250,6 +250,96 @@ test('Railway GraphQL streaming response is accepted only within a 128 KiB byte 
   });
   await assert.rejects(oversizedLookup(railwayScope),
     /Railway GraphQL response exceeds byte limit/);
+});
+
+test('active Railway attestation matches BOTH current production deployment IDs', async () => {
+  const release = manifest();
+  const ids = ['d17d40dc-28d0-4f90-b3c6-86d923530fc4',
+    'b51f9fed-6be7-416b-b231-58ebf8dd03a1'];
+  release.deployments.forEach((item, index) => { item.deploymentId = ids[index]; });
+  const calls = [];
+  const lookupDeployment = createRailwayDeploymentLookup({
+    token: 'test-token',
+    fetchImpl: async (endpoint, options) => {
+      assert.equal(endpoint, 'https://backboard.railway.com/graphql/v2');
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.headers.Authorization, 'Bearer test-token');
+      const request = JSON.parse(options.body);
+      calls.push(request);
+      if (request.variables.id) {
+        const index = ids.indexOf(request.variables.id);
+        assert.notEqual(index, -1);
+        return { ok: true, json: async () => ({ data: { deployment: {
+          id: ids[index], serviceId: Object.values(RAILWAY_RELEASE_TARGETS)[index],
+          environmentId: RAILWAY_RELEASE_ENVIRONMENT, status: 'SUCCESS',
+          meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z',
+        } } }) };
+      }
+      assert.match(request.query, /deployments\\(input: \\$input, first: 1\\)/);
+      assert.equal(request.variables.input.projectId, RAILWAY_RELEASE_PROJECT);
+      assert.equal(request.variables.input.environmentId, RAILWAY_RELEASE_ENVIRONMENT);
+      assert.deepEqual(request.variables.input.status, { successfulOnly: true });
+      const index = Object.values(RAILWAY_RELEASE_TARGETS)
+        .indexOf(request.variables.input.serviceId);
+      assert.notEqual(index, -1);
+      return { ok: true, json: async () => ({ data: { deployments: {
+        edges: [{ node: { id: ids[index], status: 'SUCCESS' } }],
+      } } }) };
+    },
+  });
+  const result = await verifyCurrentRailwayDeployments(release, {
+    lookupDeployment, lookupActiveDeployment: lookupDeployment.lookupActiveDeployment,
+  });
+  assert.equal(result.length, 2);
+  assert.equal(calls.length, 4);
+  assert.equal(calls.filter(c => c.variables.input).length, 2);
+});
+
+test('historical SUCCESS cannot pass current active deployment attestation', async () => {
+  const release = manifest();
+  await assert.rejects(verifyCurrentRailwayDeployments(release,
+    { lookupDeployment: lookup }), /active Railway deployment lookup is required/);
+  let activeCalls = 0;
+  const historical = async args => lookup(args);
+  const replacement = async () => {
+    activeCalls++;
+    return { id: 'replacement-deployment', status: 'SUCCESS' };
+  };
+  await assert.rejects(verifyCurrentRailwayDeployments(release, {
+    lookupDeployment: historical, lookupActiveDeployment: replacement,
+  }), /current active Railway deployment ID/);
+  assert.equal(activeCalls, 1);
+
+  for (const invalid of [null, { id: 'deployment-1', status: 'REMOVED' },
+    { id: 'deployment-1', status: 'FAILED' }, []]) {
+    await assert.rejects(verifyCurrentRailwayDeployments(release, {
+      lookupDeployment: historical, lookupActiveDeployment: async () => invalid,
+    }), /current active Railway deployment ID/);
+  }
+});
+
+test('active deployment GraphQL lookup rejects empty, malformed and ambiguous results', async () => {
+  const shapes = [
+    { deployments: { edges: [] } },
+    { deployments: { edges: [{ node: { id: railwayId, status: 'SUCCESS' } },
+      { node: { id: railwayId, status: 'SUCCESS' } }] } },
+    { deployments: { edges: [{ node: null }] } },
+    { deployments: { edges: [{ node: { id: railwayId, status: 'REMOVED' } }] } },
+    { deployments: null },
+  ];
+  for (const data of shapes) {
+    const lookupDeployment = createRailwayDeploymentLookup({
+      token: 'test-token',
+      fetchImpl: async () => ({ ok: true, json: async () => ({ data }) }),
+    });
+    await assert.rejects(lookupDeployment.lookupActiveDeployment(railwayScope),
+      /Railway release evidence mismatch/);
+  }
+  const lookupDeployment = createRailwayDeploymentLookup({ token: 'test-token',
+    fetchImpl: async () => { throw new Error('unexpected network request'); } });
+  await assert.rejects(lookupDeployment.lookupActiveDeployment(
+    { ...railwayScope, serviceId: 'untrusted-service' }),
+  /untrusted Railway lookup scope/);
 });
 
 test('CLI Railway live-lookup opt-in defaults offline and fails closed on missing token or typo', () => {
