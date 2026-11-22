@@ -514,7 +514,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     return { ok: true, json: async () => ({
       id, head_sha: SHA, head_branch: 'main', status: 'completed', conclusion: 'success',
       event: id === 12345 ? 'workflow_dispatch' : 'push',
-      created_at: '2026-11-09T14:05:00Z', updated_at: '2026-11-09T14:50:00Z',
+      created_at: '2026-11-09T14:05:00Z', updated_at: id === 12345 ? '2026-11-09T14:50:00Z' : '2026-11-09T14:12:00Z',
       run_attempt: 1, path: id === 12345 ? '.github/workflows/release-gate.yml' : '.github/workflows/vk-native-hosting-main-parity.yml',
       html_url: 'https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/' + id,
       repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
@@ -533,6 +533,20 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token', fetchImpl: unrelatedVkFetch,
   }), /GitHub VK parity workflow identity mismatch/);
+  // A green VK parity run recorded after production was already deployed
+  // must never retroactively validate the release, even for the same SHA.
+  for (const updatedAt of ['2026-11-09T14:17:00Z', 'bad-timestamp', '2026-11-09T14:04:00Z']) {
+    const lateOrInvalidParity = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12346')) return response;
+      return { ...response, json: async () => ({
+        ...await response.json(), updated_at: updatedAt,
+      }) };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: lateOrInvalidParity,
+    }), /GitHub VK parity must complete before first production deployment/);
+  }
   assert.equal(calls.length, 16); // two full passes include reviewer permission and authenticated ZIP verification
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
@@ -905,7 +919,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     return { ok: true, json: async () => ({
       id, head_sha: SHA, head_branch: 'main', status: 'completed', conclusion: 'success',
       event: id === 12345 ? 'workflow_dispatch' : 'push',
-      created_at: '2026-11-09T14:05:00Z', updated_at: '2026-11-09T14:50:00Z',
+      created_at: '2026-11-09T14:05:00Z', updated_at: id === 12345 ? '2026-11-09T14:50:00Z' : '2026-11-09T14:12:00Z',
       run_attempt: 1, path: id === 12345 ? '.github/workflows/release-gate.yml' : '.github/workflows/vk-native-hosting-main-parity.yml',
       html_url: 'https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/' + id,
       repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
@@ -994,7 +1008,7 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
     return { ok: true, json: async () => ({
       id, head_sha: SHA, head_branch: 'main', status: 'completed',
       conclusion: 'success', event: id === 12345 ? 'workflow_dispatch' : 'push',
-      created_at: '2026-11-09T14:05:00Z', updated_at: '2026-11-09T14:50:00Z', run_attempt: 1,
+      created_at: '2026-11-09T14:05:00Z', updated_at: id === 12345 ? '2026-11-09T14:50:00Z' : '2026-11-09T14:12:00Z', run_attempt: 1,
       path: id === 12345 ? '.github/workflows/release-gate.yml' : '.github/workflows/vk-native-hosting-main-parity.yml',
       html_url: 'https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/' + id,
       repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
