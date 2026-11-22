@@ -53,7 +53,8 @@ export async function verifyRailwayDeployments(manifest, { lookupDeployment } = 
       Date.parse(live.createdAt) >= Date.parse(manifest.approval.at) &&
       Date.parse(live.createdAt) <= Date.parse(entry.deployedAt),
       'deployment timestamp');
-    verified.push({ target: entry.target, deploymentId: live.id, sha: live.meta.commitHash.toLowerCase() });
+    verified.push({ target: entry.target, deploymentId: live.id,
+      sha: live.meta.commitHash.toLowerCase(), createdAt: live.createdAt });
   }
   return verified;
 }
@@ -81,8 +82,13 @@ export async function verifyCurrentRailwayDeployments(manifest,
         serviceId: RAILWAY_RELEASE_TARGETS[record.target],
       });
       requireEvidence(active && typeof active === 'object' && !Array.isArray(active) &&
-        active.id === record.deploymentId && active.status === 'SUCCESS',
-      'current active Railway deployment ID does not match release manifest');
+        active.id === record.deploymentId && active.status === 'SUCCESS' &&
+        active.serviceId === RAILWAY_RELEASE_TARGETS[record.target] &&
+        active.environmentId === RAILWAY_RELEASE_ENVIRONMENT &&
+        typeof active.meta?.commitHash === 'string' &&
+        active.meta.commitHash.toLowerCase() === record.sha &&
+        active.createdAt === record.createdAt,
+      'current active Railway deployment identity does not match release manifest');
     }
   }
   return historical;
@@ -186,7 +192,7 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
   lookupDeployment.lookupActiveDeployment = async ({ projectId, environmentId, serviceId }) => {
     checkScope({ projectId, environmentId, serviceId });
     const data = await queryRailwayReadOnly(fetchImpl, token,
-      'query LatestActiveReleaseDeployment($input: DeploymentListInput!) { deployments(input: $input, first: 1) { edges { node { id status createdAt } } } }',
+      'query LatestActiveReleaseDeployment($input: DeploymentListInput!) { deployments(input: $input, first: 1) { edges { node { id serviceId environmentId status createdAt meta } } } }',
       { input: { projectId, environmentId, serviceId, status: { successfulOnly: true } } });
     requireEvidence(data.deployments && typeof data.deployments === 'object' &&
       !Array.isArray(data.deployments) && Array.isArray(data.deployments.edges) &&
@@ -196,7 +202,13 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
     requireEvidence(active && typeof active === 'object' && !Array.isArray(active) &&
       typeof active.id === 'string' &&
       /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(active.id) &&
-      active.status === 'SUCCESS',
+      active.status === 'SUCCESS' &&
+      active.serviceId === serviceId && active.environmentId === environmentId &&
+      typeof active.meta?.commitHash === 'string' &&
+      /^[0-9a-f]{40}$/i.test(active.meta.commitHash) &&
+      typeof active.createdAt === 'string' &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(active.createdAt) &&
+      Number.isFinite(Date.parse(active.createdAt)),
     'current active Railway deployment response invalid');
     return active;
   };
