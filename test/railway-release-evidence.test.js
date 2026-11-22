@@ -118,6 +118,15 @@ test('Railway API adapter rejects missing token, wrong scope and malformed IDs',
     /untrusted Railway lookup scope/);
   await assert.rejects(lookupDeployment({ ...railwayScope, deploymentId: 'not-a-uuid' }),
     /invalid Railway deployment ID/);
+  for (const deploymentId of [
+    'd17d40dc-28d0-4f90-b3c6-86d923530fc4-extra',
+    'd17d40dc28d04f90b3c686d923530fc4',
+    'd17d40dc-28d0-4f90-b3c6-86d923530fc-',
+    'd17d40dc-28d0-4f90-b3c6-86d923530fc4-',
+  ]) {
+    await assert.rejects(lookupDeployment({ ...railwayScope, deploymentId }),
+      /invalid Railway deployment ID/);
+  }
 });
 
 test('Railway API adapter fails closed on HTTP, GraphQL and missing record errors', async () => {
