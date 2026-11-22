@@ -164,6 +164,30 @@ test('Railway API adapter fails closed on network rejection, invalid JSON and ma
   }
 });
 
+test('Railway API rejects malformed GraphQL errors and array-shaped records even with HTTP 200', async () => {
+  const record = {
+    id: railwayId, serviceId: railwayScope.serviceId,
+    environmentId: railwayScope.environmentId, status: 'SUCCESS',
+    meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z',
+  };
+  const malformed = [
+    { errors: { message: 'access denied' }, data: { deployment: record } },
+    { errors: 'access denied', data: { deployment: record } },
+    { errors: null, data: { deployment: record } },
+    { errors: [{ message: 'access denied' }], data: { deployment: record } },
+    { data: { deployment: [] } },
+    { data: [] },
+  ];
+  for (const envelope of malformed) {
+    const lookupDeployment = createRailwayDeploymentLookup({
+      token: 'test-token',
+      fetchImpl: async () => ({ ok: true, json: async () => envelope }),
+    });
+    await assert.rejects(lookupDeployment(railwayScope),
+      /Railway release evidence mismatch/);
+  }
+});
+
 test('Railway GraphQL adapter and release validator reject a successful HTTP response with wrong deployment SHA', async () => {
   const release = manifest();
   release.deployments = release.deployments.map((entry, index) => ({
