@@ -23,7 +23,7 @@ The existing `scripts/verify-railway-release-evidence.mjs` authenticated GraphQL
 PIVNIK_VERIFY_RAILWAY=1 node scripts/validate-release-evidence.mjs /path/to/completed-release-manifest.json
 ```
 
-For both independent GitHub and Railway checks, additionally set `PIVNIK_VERIFY_GITHUB=1` with an authorized `GITHUB_TOKEN`. Do not paste tokens into arguments, manifest files or logs. `PIVNIK_VERIFY_RAILWAY=1` requires the token and fails closed on Railway HTTP/GraphQL errors, missing deployments, wrong environment/service/SHA, or invalid chronology. A misspelled nonempty flag is rejected instead of silently skipping attestation. Without the flag, validation remains explicitly **offline**, not independently verified.
+For both independent GitHub and Railway checks, additionally set `PIVNIK_VERIFY_GITHUB=1` with an authorized `GITHUB_TOKEN`. Do not paste tokens into arguments, manifest files or logs. `PIVNIK_VERIFY_RAILWAY=1` requires the token and fails closed on Railway HTTP/GraphQL errors, missing deployments, wrong environment/service/SHA, or invalid chronology. An explicitly set flag must be exactly `1`; even an empty string is rejected instead of silently skipping authenticated attestation. Without the flag, validation remains explicitly **offline**, not independently verified.
 
 This queries the two pinned production service IDs **without changing Railway**. Successful historical deployment records still do not prove that live traffic serves the commit, that auto-deploy is disabled, that approval is valid, or that rollback and smoke have been practiced. Do not use either check as a deploy unlock.
 
