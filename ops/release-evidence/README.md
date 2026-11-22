@@ -15,6 +15,18 @@ The validator fails closed when checks, artifacts, deployments or smoke results 
 
 **Passing this validator does NOT authorize a production release.** The default offline mode only checks self-reported JSON. With `PIVNIK_VERIFY_GITHUB=1` and an authorized `GITHUB_TOKEN` (including Actions artifact read access), the CLI additionally checks GitHub PR merge/review state, exact-SHA workflow runs/jobs and the run-scoped dispatch artifact's downloaded ZIP digest and exact JSON payload, but it still does not validate Railway/VK deployment records, installed commits, branch protection or a practiced rollback. These facts require **independent, trusted external verification** on the exact release SHA, including successful approved GitHub Actions run steps, deployment IDs, health and signed-session smoke and a practiced rollback. Do not wire this validator alone into a deploy-unlock condition.
 
+### Optional Railway API attestation (read-only)
+
+The existing `scripts/verify-railway-release-evidence.mjs` authenticated GraphQL lookup is now callable from the evidence CLI. With a **previously provisioned, appropriately scoped** `RAILWAY_TOKEN` in the execution environment, run:
+
+```sh
+PIVNIK_VERIFY_RAILWAY=1 node scripts/validate-release-evidence.mjs /path/to/completed-release-manifest.json
+```
+
+For both independent GitHub and Railway checks, additionally set `PIVNIK_VERIFY_GITHUB=1` with an authorized `GITHUB_TOKEN`. Do not paste tokens into arguments, manifest files or logs. `PIVNIK_VERIFY_RAILWAY=1` requires the token and fails closed on Railway HTTP/GraphQL errors, missing deployments, wrong environment/service/SHA, or invalid chronology. A misspelled nonempty flag is rejected instead of silently skipping attestation. Without the flag, validation remains explicitly **offline**, not independently verified.
+
+This queries the two pinned production service IDs **without changing Railway**. Successful historical deployment records still do not prove that live traffic serves the commit, that auto-deploy is disabled, that approval is valid, or that rollback and smoke have been practiced. Do not use either check as a deploy unlock.
+
 The working Android kiosk, its signing key and APK are excluded from this UI/release track, as required by the master plan. Do not include secrets, client PII or token values in release manifests. Never manufacture evidence to make the sample pass.
 
 ## Dispatch confirmation attestation
