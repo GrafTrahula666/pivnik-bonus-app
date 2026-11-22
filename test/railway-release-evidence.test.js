@@ -100,6 +100,8 @@ test('Railway API adapter issues only scoped read-only GraphQL deployment lookup
       calls++;
       assert.equal(endpoint, 'https://backboard.railway.com/graphql/v2');
       assert.equal(options.method, 'POST');
+      // The Railway API token must not follow provider/proxy redirects.
+      assert.equal(options.redirect, 'error');
       assert.equal(options.headers.Authorization, 'Bearer test-token');
       const request = JSON.parse(options.body);
       assert.match(request.query, /deployment\(id: \$id\)/);
