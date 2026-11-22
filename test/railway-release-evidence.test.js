@@ -384,3 +384,28 @@ test('CLI Railway live-lookup opt-in defaults offline and fails closed on missin
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('current active VK deployment replacement is rejected after PIVNIK succeeds', async () => {
+  const observedServices = [];
+  const release = manifest();
+  const activeLookup = async ({ projectId, environmentId, serviceId }) => {
+    assert.equal(projectId, RAILWAY_RELEASE_PROJECT);
+    assert.equal(environmentId, RAILWAY_RELEASE_ENVIRONMENT);
+    observedServices.push(serviceId);
+    if (serviceId === RAILWAY_RELEASE_TARGETS['pivnik-bonus-app']) {
+      return { id: 'deployment-1', status: 'SUCCESS' };
+    }
+    assert.equal(serviceId, RAILWAY_RELEASE_TARGETS['vk-native-hosting']);
+    // The first service is still correct, but a subsequent VK release is live.
+    // A PIVNIK-only active check must not accidentally accept the manifest.
+    return { id: 'replacement-vk-deployment', status: 'SUCCESS' };
+  };
+  await assert.rejects(verifyCurrentRailwayDeployments(release, {
+    lookupDeployment: lookup,
+    lookupActiveDeployment: activeLookup,
+  }), /current active Railway deployment ID does not match release manifest/);
+  assert.deepEqual(observedServices, [
+    RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
+    RAILWAY_RELEASE_TARGETS['vk-native-hosting'],
+  ]);
+});
