@@ -57,3 +57,38 @@ export async function verifyRailwayDeployments(manifest, { lookupDeployment } = 
   }
   return verified;
 }
+
+/**
+ * Read-only Railway GraphQL lookup. The token must be supplied by the caller
+ * from a scoped secret, never from a manifest or browser bundle.
+ * A successful lookup is evidence only; this function never triggers deploys.
+ */
+export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fetch } = {}) {
+  requireEvidence(typeof token === 'string' && token.trim().length > 0,
+    'Railway API token is required');
+  requireEvidence(typeof fetchImpl === 'function', 'HTTP fetch is required');
+  return async ({ projectId, environmentId, serviceId, deploymentId }) => {
+    requireEvidence(projectId === RAILWAY_RELEASE_PROJECT &&
+      environmentId === RAILWAY_RELEASE_ENVIRONMENT &&
+      Object.values(RAILWAY_RELEASE_TARGETS).includes(serviceId),
+    'untrusted Railway lookup scope');
+    requireEvidence(typeof deploymentId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(deploymentId),
+    'invalid Railway deployment ID');
+    const response = await fetchImpl('https://backboard.railway.com/graphql/v2', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: 'query ReleaseDeployment($id: String!) { deployment(id: $id) { id serviceId environmentId status createdAt meta } }',
+        variables: { id: deploymentId },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    requireEvidence(response?.ok === true, 'Railway API request failed');
+    const body = await response.json();
+    requireEvidence(!body?.errors?.length, 'Railway GraphQL errors');
+    requireEvidence(body?.data?.deployment && typeof body.data.deployment === 'object',
+      'deployment not found');
+    return body.data.deployment;
+  };
+}
