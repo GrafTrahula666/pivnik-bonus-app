@@ -291,8 +291,8 @@ test('active Railway attestation matches BOTH current production deployment IDs'
     lookupDeployment, lookupActiveDeployment: lookupDeployment.lookupActiveDeployment,
   });
   assert.equal(result.length, 2);
-  assert.equal(calls.length, 4);
-  assert.equal(calls.filter(c => c.variables.input).length, 2);
+  assert.equal(calls.length, 6);
+  assert.equal(calls.filter(c => c.variables.input).length, 4);
 });
 
 test('historical SUCCESS cannot pass current active deployment attestation', async () => {
@@ -408,4 +408,30 @@ test('current active VK deployment replacement is rejected after PIVNIK succeeds
     RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
     RAILWAY_RELEASE_TARGETS['vk-native-hosting'],
   ]);
+});
+
+test('two-pass active readback rejects Railway deployment drift between service queries', async () => {
+  const expected = [
+    RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
+    RAILWAY_RELEASE_TARGETS['vk-native-hosting'],
+    RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
+    RAILWAY_RELEASE_TARGETS['vk-native-hosting'],
+  ];
+  for (const changedService of Object.values(RAILWAY_RELEASE_TARGETS)) {
+    const observed = [];
+    const activeLookup = async ({ projectId, environmentId, serviceId }) => {
+      assert.equal(projectId, RAILWAY_RELEASE_PROJECT);
+      assert.equal(environmentId, RAILWAY_RELEASE_ENVIRONMENT);
+      observed.push(serviceId);
+      const matchId = serviceId === RAILWAY_RELEASE_TARGETS['pivnik-bonus-app']
+        ? 'deployment-1' : 'deployment-2';
+      const secondSweep = observed.filter(id => id === serviceId).length === 2;
+      return { id: secondSweep && serviceId === changedService
+        ? 'replacement-during-attestation' : matchId, status: 'SUCCESS' };
+    };
+    await assert.rejects(verifyCurrentRailwayDeployments(manifest(), {
+      lookupDeployment: lookup, lookupActiveDeployment: activeLookup,
+    }), /current active Railway deployment ID does not match release manifest/);
+    assert.deepEqual(observed, expected.slice(0, changedService === expected[2] ? 3 : 4));
+  }
 });
