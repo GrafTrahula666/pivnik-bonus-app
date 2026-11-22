@@ -25,6 +25,8 @@ PIVNIK_VERIFY_RAILWAY=1 node scripts/validate-release-evidence.mjs /path/to/comp
 
 For both independent GitHub and Railway checks, additionally set `PIVNIK_VERIFY_GITHUB=1` with an authorized `GITHUB_TOKEN`. Do not paste tokens into arguments, manifest files or logs. `PIVNIK_VERIFY_RAILWAY=1` requires the token and fails closed on Railway HTTP/GraphQL errors, missing deployments, wrong environment/service/SHA, or invalid chronology. An explicitly set flag must be exactly `1`; even an empty string is rejected instead of silently skipping authenticated attestation. Without the flag, validation remains explicitly **offline**, not independently verified.
 
+The live Railway GraphQL response is read as a bounded stream (128 KiB maximum per deployment); oversized responses fail closed rather than being parsed without a size limit.
+
 This queries the two pinned production service IDs **without changing Railway**. Successful historical deployment records still do not prove that live traffic serves the commit, that auto-deploy is disabled, that approval is valid, or that rollback and smoke have been practiced. Do not use either check as a deploy unlock.
 
 The working Android kiosk, its signing key and APK are excluded from this UI/release track, as required by the master plan. Do not include secrets, client PII or token values in release manifests. Never manufacture evidence to make the sample pass.

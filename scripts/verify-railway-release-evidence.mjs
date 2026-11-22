@@ -58,6 +58,50 @@ export async function verifyRailwayDeployments(manifest, { lookupDeployment } = 
   return verified;
 }
 
+// Railway's GraphQL response is small for a single deployment. Never call
+// Response.json() on an unbounded network body while carrying a scoped token.
+const MAX_RAILWAY_GRAPHQL_BYTES = 128 * 1024;
+
+async function readRailwayGraphqlJson(response) {
+  if (response?.body?.getReader) {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        requireEvidence(value instanceof Uint8Array,
+          'Railway GraphQL response contains invalid bytes');
+        total += value.byteLength;
+        requireEvidence(total <= MAX_RAILWAY_GRAPHQL_BYTES,
+          'Railway GraphQL response exceeds byte limit');
+        chunks.push(Buffer.from(value));
+      }
+    } catch (error) {
+      try { await reader.cancel(); } catch {}
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    try {
+      return JSON.parse(Buffer.concat(chunks, total).toString('utf8'));
+    } catch {
+      requireEvidence(false, 'Railway GraphQL response is not valid JSON');
+    }
+  }
+  // Support explicitly injected mock transports in the isolated Node tests.
+  // The production Node fetch response always exposes a readable stream.
+  requireEvidence(typeof response?.json === 'function',
+    'Railway GraphQL response body is unreadable');
+  const parsed = await response.json();
+  const encoded = JSON.stringify(parsed);
+  requireEvidence(typeof encoded === 'string' &&
+    Buffer.byteLength(encoded, 'utf8') <= MAX_RAILWAY_GRAPHQL_BYTES,
+    'Railway GraphQL response exceeds byte limit');
+  return parsed;
+}
+
 /**
  * Read-only Railway GraphQL lookup. The token must be supplied by the caller
  * from a scoped secret, never from a manifest or browser bundle.
@@ -87,7 +131,7 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
       signal: AbortSignal.timeout(10000),
     });
     requireEvidence(response?.ok === true, 'Railway API request failed');
-    const body = await response.json();
+    const body = await readRailwayGraphqlJson(response);
     requireEvidence(body && typeof body === 'object' && !Array.isArray(body),
       'Railway GraphQL response is invalid');
     // GraphQL errors must be an array; an object/string is malformed, not

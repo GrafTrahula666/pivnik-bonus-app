@@ -222,6 +222,36 @@ test('Railway GraphQL adapter and release validator reject a successful HTTP res
   assert.deepEqual(requested, ['d17d40dc-28d0-4f90-b3c6-86d923530fc4']);
 });
 
+test('Railway GraphQL streaming response is accepted only within a 128 KiB byte budget', async () => {
+  const record = {
+    id: railwayId, serviceId: railwayScope.serviceId,
+    environmentId: railwayScope.environmentId, status: 'SUCCESS',
+    meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z',
+  };
+  const validBody = JSON.stringify({ data: { deployment: record } });
+  const validLookup = createRailwayDeploymentLookup({
+    token: 'test-token',
+    fetchImpl: async () => new Response(validBody, {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }),
+  });
+  assert.equal((await validLookup(railwayScope)).id, railwayId);
+
+  // Without a streaming cap this would be valid JSON containing the right
+  // deployment and would silently pass, despite an excessive API payload.
+  const oversizedBody = JSON.stringify({
+    data: { deployment: record }, padding: 'x'.repeat(160 * 1024),
+  });
+  const oversizedLookup = createRailwayDeploymentLookup({
+    token: 'test-token',
+    fetchImpl: async () => new Response(oversizedBody, {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }),
+  });
+  await assert.rejects(oversizedLookup(railwayScope),
+    /Railway GraphQL response exceeds byte limit/);
+});
+
 test('CLI Railway live-lookup opt-in defaults offline and fails closed on missing token or typo', () => {
   const directory = mkdtempSync(join(tmpdir(), 'pivnik-railway-release-test-'));
   try {
