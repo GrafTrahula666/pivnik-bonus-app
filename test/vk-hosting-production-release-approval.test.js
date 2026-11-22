@@ -41,12 +41,16 @@ function approvedJobs(overrides = {}) {
   }];
 }
 
-async function evaluate({ run = approvedRun(), runs = run ? [run] : [], jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0 } = {}) {
+async function evaluate({ run = approvedRun(), runs = run ? [run] : [], jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0, redirectCall = 0 } = {}) {
   const { execute } = await readGuard();
   const calls = [];
   const logs = [];
   const fetch = async (url, options) => {
-    calls.push({ url: String(url), headers: options?.headers });
+    calls.push({ url: String(url), headers: options?.headers, redirect: options?.redirect });
+    // Model fetch redirect:error: redirected evidence must fail before JSON parsing.
+    if (calls.length === redirectCall && options?.redirect === 'error') {
+      throw Error('Redirected GitHub release evidence was refused');
+    }
     if (calls.length === rejectCall) return { ok: false, status: httpStatus, json: async () => ({}) };
     if (calls.length === invalidJsonCall) throw Error('Invalid JSON');
     if (calls.length === 1) return { ok: true, json: async () => ({ workflow_runs: runs }) };
@@ -233,6 +237,20 @@ test('GitHub API denial and invalid response fail closed at either lookup stage'
   }
 });
 
+
+test('redirected GitHub API evidence fails closed at either approval lookup', async () => {
+  for (const redirectCall of [1, 2]) {
+    const result = await evaluate({ redirectCall });
+    assert.ok(result.error instanceof Error, 'redirect must deny VK publication');
+    assert.match(result.error.message, /Redirected GitHub release evidence was refused/);
+    assert.equal(result.calls.length, redirectCall);
+    assert.equal(result.logs.length, 0);
+    assert.ok(result.calls.every(call => call.redirect === 'error'));
+  }
+  const valid = await evaluate();
+  assert.equal(valid.error, undefined);
+  assert.deepEqual(valid.calls.map(call => call.redirect), ['error', 'error']);
+});
 
 test('release run must expose a valid positive attempt number', async () => {
   for (const attempt of [undefined, null, 0, -1, 1.5, '3']) {
