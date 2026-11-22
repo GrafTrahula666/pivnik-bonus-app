@@ -88,8 +88,16 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
     });
     requireEvidence(response?.ok === true, 'Railway API request failed');
     const body = await response.json();
-    requireEvidence(!body?.errors?.length, 'Railway GraphQL errors');
-    requireEvidence(body?.data?.deployment && typeof body.data.deployment === 'object',
+    requireEvidence(body && typeof body === 'object' && !Array.isArray(body),
+      'Railway GraphQL response is invalid');
+    // GraphQL errors must be an array; an object/string is malformed, not
+    // evidence of success. Never accept data alongside an error envelope.
+    requireEvidence(!Object.hasOwn(body, 'errors') ||
+      (Array.isArray(body.errors) && body.errors.length === 0),
+      'Railway GraphQL errors');
+    requireEvidence(body.data && typeof body.data === 'object' && !Array.isArray(body.data) &&
+      body.data.deployment && typeof body.data.deployment === 'object' &&
+      !Array.isArray(body.data.deployment),
       'deployment not found');
     return body.data.deployment;
   };
