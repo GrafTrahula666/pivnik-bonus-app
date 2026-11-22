@@ -574,6 +574,20 @@ async function main() {
     await verifyGithubRuns(data, { fetchImpl: fetch, token: process.env.GITHUB_TOKEN });
     console.log('Authenticated GitHub workflow runs verified for exact release SHA.');
   }
+  // Opt-in, read-only provider check. A syntactically valid manifest alone is
+  // never Railway deployment evidence. Unknown flag values fail closed.
+  demand(!process.env.PIVNIK_VERIFY_RAILWAY ||
+    process.env.PIVNIK_VERIFY_RAILWAY === '1',
+    'PIVNIK_VERIFY_RAILWAY must equal 1 when set');
+  if (process.env.PIVNIK_VERIFY_RAILWAY === '1') {
+    const { createRailwayDeploymentLookup, verifyRailwayDeployments } =
+      await import('./verify-railway-release-evidence.mjs');
+    const lookupDeployment = createRailwayDeploymentLookup({
+      token: process.env.RAILWAY_TOKEN,
+    });
+    const verified = await verifyRailwayDeployments(data, { lookupDeployment });
+    console.log('Authenticated Railway deployment records verified: ' + verified.length);
+  }
   console.log('Release evidence format valid for ' + summary.releaseSha +
     ': ' + summary.checks + ' checks, ' + summary.artifacts +
     ' artifacts, ' + summary.targets + ' deployment targets.');
