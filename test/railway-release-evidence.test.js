@@ -283,7 +283,10 @@ test('active Railway attestation matches BOTH current production deployment IDs'
         .indexOf(request.variables.input.serviceId);
       assert.notEqual(index, -1);
       return { ok: true, json: async () => ({ data: { deployments: {
-        edges: [{ node: { id: ids[index], status: 'SUCCESS' } }],
+        edges: [{ node: { id: ids[index], status: 'SUCCESS',
+          serviceId: Object.values(RAILWAY_RELEASE_TARGETS)[index],
+          environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+          meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z' } }],
       } } }) };
     },
   });
@@ -293,6 +296,8 @@ test('active Railway attestation matches BOTH current production deployment IDs'
   assert.equal(result.length, 2);
   assert.equal(calls.length, 6);
   assert.equal(calls.filter(c => c.variables.input).length, 4);
+  assert.ok(calls.filter(c => c.variables.input).every(c =>
+    /node \{ id serviceId environmentId status createdAt meta \}/.test(c.query)));
 });
 
 test('historical SUCCESS cannot pass current active deployment attestation', async () => {
@@ -340,6 +345,52 @@ test('active deployment GraphQL lookup rejects empty, malformed and ambiguous re
   await assert.rejects(lookupDeployment.lookupActiveDeployment(
     { ...railwayScope, serviceId: 'untrusted-service' }),
   /untrusted Railway lookup scope/);
+});
+
+test('current deployment attestation rejects mismatched service, environment, SHA and creation time', async () => {
+  const valid = { id: 'deployment-1', status: 'SUCCESS',
+    serviceId: RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
+    environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+    meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z' };
+  const faults = [
+    { serviceId: RAILWAY_RELEASE_TARGETS['vk-native-hosting'] },
+    { environmentId: 'staging' },
+    { meta: { commitHash: 'b'.repeat(40) } },
+    { createdAt: '2026-11-09T14:11:00Z' },
+    { meta: null },
+  ];
+  for (const fault of faults) {
+    let calls = 0;
+    await assert.rejects(verifyCurrentRailwayDeployments(manifest(), {
+      lookupDeployment: lookup,
+      lookupActiveDeployment: async ({ serviceId }) => {
+        calls++;
+        return { ...valid, serviceId, ...fault };
+      },
+    }), /current active Railway deployment identity/);
+    assert.equal(calls, 1);
+  }
+});
+
+test('active Railway GraphQL read rejects a matching ID with foreign or malformed identity fields', async () => {
+  const base = { id: railwayId, status: 'SUCCESS',
+    serviceId: railwayScope.serviceId,
+    environmentId: railwayScope.environmentId,
+    meta: { commitHash: sha }, createdAt: '2026-11-09T14:10:00Z' };
+  for (const override of [
+    { serviceId: 'foreign-service' }, { environmentId: 'foreign-env' },
+    { meta: { commitHash: 'not-a-sha' } }, { meta: null },
+    { createdAt: 'not-a-date' },
+  ]) {
+    const lookupDeployment = createRailwayDeploymentLookup({
+      token: 'test-token',
+      fetchImpl: async () => ({ ok: true, json: async () => ({
+        data: { deployments: { edges: [{ node: { ...base, ...override } }] } },
+      }) }),
+    });
+    await assert.rejects(lookupDeployment.lookupActiveDeployment(railwayScope),
+      /current active Railway deployment response invalid/);
+  }
 });
 
 test('CLI Railway live-lookup opt-in defaults offline and fails closed on missing token or typo', () => {
@@ -393,7 +444,9 @@ test('current active VK deployment replacement is rejected after PIVNIK succeeds
     assert.equal(environmentId, RAILWAY_RELEASE_ENVIRONMENT);
     observedServices.push(serviceId);
     if (serviceId === RAILWAY_RELEASE_TARGETS['pivnik-bonus-app']) {
-      return { id: 'deployment-1', status: 'SUCCESS' };
+      return { id: 'deployment-1', status: 'SUCCESS',
+        serviceId, environmentId, meta: { commitHash: sha },
+        createdAt: '2026-11-09T14:10:00Z' };
     }
     assert.equal(serviceId, RAILWAY_RELEASE_TARGETS['vk-native-hosting']);
     // The first service is still correct, but a subsequent VK release is live.
@@ -427,7 +480,9 @@ test('two-pass active readback rejects Railway deployment drift between service 
         ? 'deployment-1' : 'deployment-2';
       const secondSweep = observed.filter(id => id === serviceId).length === 2;
       return { id: secondSweep && serviceId === changedService
-        ? 'replacement-during-attestation' : matchId, status: 'SUCCESS' };
+        ? 'replacement-during-attestation' : matchId, status: 'SUCCESS',
+        serviceId, environmentId, meta: { commitHash: sha },
+        createdAt: '2026-11-09T14:10:00Z' };
     };
     await assert.rejects(verifyCurrentRailwayDeployments(manifest(), {
       lookupDeployment: lookup, lookupActiveDeployment: activeLookup,
