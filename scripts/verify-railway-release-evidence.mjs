@@ -58,6 +58,30 @@ export async function verifyRailwayDeployments(manifest, { lookupDeployment } = 
   return verified;
 }
 
+/**
+ * Stronger read-only attestation for the CURRENT active Railway deployment.
+ * Historical SUCCESS alone is insufficient: Railway can replace that release.
+ * This proves the provider's active ID at query time, NOT end-user traffic,
+ * atomicity across services, approval, auto-deploy isolation or rollback.
+ */
+export async function verifyCurrentRailwayDeployments(manifest,
+  { lookupDeployment, lookupActiveDeployment } = {}) {
+  requireEvidence(typeof lookupActiveDeployment === 'function',
+    'authenticated active Railway deployment lookup is required');
+  const historical = await verifyRailwayDeployments(manifest, { lookupDeployment });
+  for (const record of historical) {
+    const active = await lookupActiveDeployment({
+      projectId: RAILWAY_RELEASE_PROJECT,
+      environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+      serviceId: RAILWAY_RELEASE_TARGETS[record.target],
+    });
+    requireEvidence(active && typeof active === 'object' && !Array.isArray(active) &&
+      active.id === record.deploymentId && active.status === 'SUCCESS',
+    'current active Railway deployment ID does not match release manifest');
+  }
+  return historical;
+}
+
 // Railway's GraphQL response is small for a single deployment. Never call
 // Response.json() on an unbounded network body while carrying a scoped token.
 const MAX_RAILWAY_GRAPHQL_BYTES = 128 * 1024;
@@ -107,42 +131,68 @@ async function readRailwayGraphqlJson(response) {
  * from a scoped secret, never from a manifest or browser bundle.
  * A successful lookup is evidence only; this function never triggers deploys.
  */
+async function queryRailwayReadOnly(fetchImpl, token, query, variables) {
+  const response = await fetchImpl('https://backboard.railway.com/graphql/v2', {
+    method: 'POST',
+    redirect: 'error',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(10000),
+  });
+  requireEvidence(response?.ok === true, 'Railway API request failed');
+  const body = await readRailwayGraphqlJson(response);
+  requireEvidence(body && typeof body === 'object' && !Array.isArray(body),
+    'Railway GraphQL response is invalid');
+  requireEvidence(!Object.hasOwn(body, 'errors') ||
+    (Array.isArray(body.errors) && body.errors.length === 0),
+    'Railway GraphQL errors');
+  requireEvidence(body.data && typeof body.data === 'object' && !Array.isArray(body.data),
+    'Railway GraphQL response data is invalid');
+  return body.data;
+}
+
 export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fetch } = {}) {
   requireEvidence(typeof token === 'string' && token.trim().length > 0,
     'Railway API token is required');
   requireEvidence(typeof fetchImpl === 'function', 'HTTP fetch is required');
-  return async ({ projectId, environmentId, serviceId, deploymentId }) => {
+  const checkScope = ({ projectId, environmentId, serviceId }) =>
     requireEvidence(projectId === RAILWAY_RELEASE_PROJECT &&
       environmentId === RAILWAY_RELEASE_ENVIRONMENT &&
       Object.values(RAILWAY_RELEASE_TARGETS).includes(serviceId),
     'untrusted Railway lookup scope');
+
+  const lookupDeployment = async ({ projectId, environmentId, serviceId, deploymentId }) => {
+    checkScope({ projectId, environmentId, serviceId });
     requireEvidence(typeof deploymentId === 'string' &&
       /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(deploymentId),
     'invalid Railway deployment ID');
-    const response = await fetchImpl('https://backboard.railway.com/graphql/v2', {
-      method: 'POST',
-      // Never forward a scoped Railway token to a redirected endpoint.
-      redirect: 'error',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: 'query ReleaseDeployment($id: String!) { deployment(id: $id) { id serviceId environmentId status createdAt meta } }',
-        variables: { id: deploymentId },
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-    requireEvidence(response?.ok === true, 'Railway API request failed');
-    const body = await readRailwayGraphqlJson(response);
-    requireEvidence(body && typeof body === 'object' && !Array.isArray(body),
-      'Railway GraphQL response is invalid');
-    // GraphQL errors must be an array; an object/string is malformed, not
-    // evidence of success. Never accept data alongside an error envelope.
-    requireEvidence(!Object.hasOwn(body, 'errors') ||
-      (Array.isArray(body.errors) && body.errors.length === 0),
-      'Railway GraphQL errors');
-    requireEvidence(body.data && typeof body.data === 'object' && !Array.isArray(body.data) &&
-      body.data.deployment && typeof body.data.deployment === 'object' &&
-      !Array.isArray(body.data.deployment),
-      'deployment not found');
-    return body.data.deployment;
+    const data = await queryRailwayReadOnly(fetchImpl, token,
+      'query ReleaseDeployment($id: String!) { deployment(id: $id) { id serviceId environmentId status createdAt meta } }',
+      { id: deploymentId });
+    requireEvidence(data.deployment && typeof data.deployment === 'object' &&
+      !Array.isArray(data.deployment), 'deployment not found');
+    return data.deployment;
   };
+
+  // Official Railway Public API: "Get latest active deployment".
+  // successfulOnly prevents a historical success from being mistaken for the
+  // newest active release after another deployment supersedes it.
+  lookupDeployment.lookupActiveDeployment = async ({ projectId, environmentId, serviceId }) => {
+    checkScope({ projectId, environmentId, serviceId });
+    const data = await queryRailwayReadOnly(fetchImpl, token,
+      'query LatestActiveReleaseDeployment($input: DeploymentListInput!) { deployments(input: $input, first: 1) { edges { node { id status createdAt } } } }',
+      { input: { projectId, environmentId, serviceId, status: { successfulOnly: true } } });
+    requireEvidence(data.deployments && typeof data.deployments === 'object' &&
+      !Array.isArray(data.deployments) && Array.isArray(data.deployments.edges) &&
+      data.deployments.edges.length === 1,
+    'current active Railway deployment not found');
+    const active = data.deployments.edges[0]?.node;
+    requireEvidence(active && typeof active === 'object' && !Array.isArray(active) &&
+      typeof active.id === 'string' &&
+      /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(active.id) &&
+      active.status === 'SUCCESS',
+    'current active Railway deployment response invalid');
+    return active;
+  };
+  return lookupDeployment;
 }
