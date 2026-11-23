@@ -433,6 +433,18 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   demand(reviews.every(r => !['CHANGES_REQUESTED', 'APPROVED', 'DISMISSED'].includes(r.state) ||
     (r.user?.login && date(r.submitted_at))),
   'GitHub submitted review identity or timestamp invalid');
+  // GitHub review timestamps are commonly only second-precision. If one actor
+  // submits conflicting states at the same instant, array order is not proof
+  // that an APPROVED superseded CHANGES_REQUESTED or DISMISSED. Fail closed.
+  const reviewStatesAtInstant = new Map();
+  for (const review of reviews) {
+    if (!review.user?.login || !date(review.submitted_at)) continue;
+    const key = JSON.stringify([review.user.login, Date.parse(review.submitted_at)]);
+    const prior = reviewStatesAtInstant.get(key);
+    demand(prior === undefined || prior === review.state,
+      'GitHub conflicting same-timestamp reviews have ambiguous approval order');
+    reviewStatesAtInstant.set(key, review.state);
+  }
   const outstandingChangeRequests = new Set();
   for (const review of [...reviews].filter(r => r.user?.login && date(r.submitted_at))
     .sort((a, b) => Date.parse(a.submitted_at) - Date.parse(b.submitted_at))) {
