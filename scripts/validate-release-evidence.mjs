@@ -650,8 +650,16 @@ async function main() {
   demand(!Object.hasOwn(process.env, 'PIVNIK_VERIFY_RAILWAY') ||
     process.env.PIVNIK_VERIFY_RAILWAY === '1',
     'PIVNIK_VERIFY_RAILWAY must equal 1 when set');
+  // A rollback lookup must never silently run in offline mode, nor accept an
+  // arbitrary service ID supplied through the environment.
+  const rollbackTarget = process.env.PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET;
+  demand(rollbackTarget === undefined ||
+    (process.env.PIVNIK_VERIFY_RAILWAY === '1' &&
+     (rollbackTarget === 'pivnik-bonus-app' || rollbackTarget === 'vk-native-hosting')),
+    'PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET requires PIVNIK_VERIFY_RAILWAY=1 and an explicit known service');
   if (process.env.PIVNIK_VERIFY_RAILWAY === '1') {
-    const { createRailwayDeploymentLookup, verifyCurrentRailwayDeployments } =
+    const { createRailwayDeploymentLookup, verifyCurrentRailwayDeployments,
+      verifyRailwayRollbackDeployment } =
       await import('./verify-railway-release-evidence.mjs');
     const lookupDeployment = createRailwayDeploymentLookup({
       token: process.env.RAILWAY_TOKEN,
@@ -661,6 +669,13 @@ async function main() {
       lookupActiveDeployment: lookupDeployment.lookupActiveDeployment,
     });
     console.log('Authenticated Railway current active deployment IDs verified: ' + verified.length);
+    if (rollbackTarget !== undefined) {
+      const rollback = await verifyRailwayRollbackDeployment(data, {
+        lookupDeployment, target: rollbackTarget,
+      });
+      console.log('Authenticated Railway historical rollback record verified for ' +
+        rollback.target + ' (rollback rehearsal and artifact retention NOT verified).');
+    }
   }
   console.log('Release evidence format valid for ' + summary.releaseSha +
     ': ' + summary.checks + ' checks, ' + summary.artifacts +
