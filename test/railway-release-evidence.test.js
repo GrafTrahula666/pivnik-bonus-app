@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyRailwayDeployments, verifyCurrentRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
+import { verifyRailwayDeployments, verifyRailwayRollbackDeployment, verifyCurrentRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
   RAILWAY_RELEASE_ENVIRONMENT, RAILWAY_RELEASE_PROJECT } from '../scripts/verify-railway-release-evidence.mjs';
 
 const sha = 'a'.repeat(40);
@@ -56,6 +56,68 @@ test('read-only authenticated lookup binds both deployments to exact service, en
   assert.equal(result.length, 2);
   assert.equal(result[0].sha, sha);
   assert.equal(result[1].target, 'vk-native-hosting');
+});
+
+test('historical rollback evidence requires an authenticated exact-SHA Railway record for one explicit service', async () => {
+  const release = manifest();
+  const observed = [];
+  const rollbackLookup = async args => {
+    observed.push(args);
+    return { id: release.rollback.deploymentId, serviceId: args.serviceId,
+      environmentId: args.environmentId, status: 'SUCCESS',
+      meta: { commitHash: release.rollback.sha },
+      createdAt: '2026-11-09T13:30:00Z' };
+  };
+  const result = await verifyRailwayRollbackDeployment(release, {
+    lookupDeployment: rollbackLookup, target: 'pivnik-bonus-app',
+  });
+  assert.equal(result.sha, release.rollback.sha);
+  assert.equal(result.target, 'pivnik-bonus-app');
+  assert.deepEqual(observed, [{
+    projectId: RAILWAY_RELEASE_PROJECT,
+    environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+    serviceId: RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'],
+    deploymentId: 'known-good',
+  }]);
+});
+
+test('rollback attestation fails closed on absent scope, foreign service, wrong SHA, failed or late deployment', async () => {
+  const release = manifest();
+  const good = async args => ({
+    id: release.rollback.deploymentId, serviceId: args.serviceId,
+    environmentId: args.environmentId, status: 'SUCCESS',
+    meta: { commitHash: release.rollback.sha },
+    createdAt: '2026-11-09T13:30:00Z',
+  });
+  await assert.rejects(verifyRailwayRollbackDeployment(release, {
+    target: 'pivnik-bonus-app',
+  }), /authenticated rollback deployment lookup/);
+  for (const target of [undefined, '', 'another-service', '__proto__']) {
+    await assert.rejects(verifyRailwayRollbackDeployment(release, {
+      lookupDeployment: good, target,
+    }), /explicit Railway rollback service target/);
+  }
+  const faults = [
+    { id: 'wrong-id' },
+    { serviceId: RAILWAY_RELEASE_TARGETS['vk-native-hosting'] },
+    { environmentId: 'staging' },
+    { status: 'FAILED' },
+    { status: 'REMOVED' },
+    { meta: { commitHash: sha } },
+    { createdAt: '2026-11-09T13:55:00Z' },
+    { createdAt: '2026-11-09T14:01:00Z' },
+    { createdAt: '2026-11-09T13:30:00+00:00' },
+    { createdAt: '2026-02-30T13:30:00Z' },
+  ];
+  for (const fault of faults) {
+    await assert.rejects(verifyRailwayRollbackDeployment(release, {
+      target: 'pivnik-bonus-app',
+      lookupDeployment: async args => ({ ...(await good(args)), ...fault }),
+    }), /Railway release evidence mismatch/);
+  }
+  await assert.rejects(verifyRailwayRollbackDeployment(release, {
+    target: 'pivnik-bonus-app', lookupDeployment: async () => null,
+  }), /known-good rollback deployment/);
 });
 
 test('missing authenticated lookup fails closed', async () => {
