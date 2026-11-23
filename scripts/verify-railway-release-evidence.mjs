@@ -92,7 +92,7 @@ export async function verifyRailwayRollbackDeployment(manifest,
     previous.meta.commitHash.toLowerCase() === manifest.rollback.sha.toLowerCase(),
     'known-good rollback deployment identity or SHA mismatch');
   requireEvidence(typeof previous.createdAt === 'string' &&
-    /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$/.test(previous.createdAt) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(previous.createdAt) &&
     Number.isFinite(Date.parse(previous.createdAt)) &&
     new Date(previous.createdAt).toISOString().startsWith(previous.createdAt.slice(0, 19)) &&
     Date.parse(previous.createdAt) <= Date.parse(manifest.rollback.verifiedAt) &&
