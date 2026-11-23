@@ -505,7 +505,8 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     if (url.endsWith('/12345/jobs?per_page=100')) {
       return { ok: true, json: async () => ({
         total_count: 1,
-        jobs: [{ run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
+        jobs: [{ name: 'Syntax, tests and dependency audit', head_sha: SHA,
+          run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
           completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map(name =>
             ({ name, status: 'completed', conclusion: 'success' })) }],
       }) };
@@ -885,6 +886,8 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
   const makeFetch = ({ stepConclusion = 'success', jobConclusion = 'success',
     totalCount = 1, omitStep = false, failJobs = false, duplicateStep = false, jobAttempt = 1,
     jobStatus = 'completed', stepStatus = 'completed', jobRunId = 12345,
+    jobName = 'Syntax, tests and dependency audit', jobHeadSha = SHA,
+    duplicateCanonicalJob = false,
     jobCompletedAt = '2026-11-09T14:45:00Z', artifacts = [dispatchArtifact()],
     artifactTotalCount = artifacts.length, failArtifacts = false } = {}) => async url => {
     if (url.endsWith('/pulls/123')) return { ok: true, json: async () => ({
@@ -910,11 +913,17 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
       if (failJobs) return { ok: false };
       const names = Object.keys(valid().checks[0].productionSteps);
       return { ok: true, json: async () => ({
-        total_count: totalCount,
-        jobs: [{ run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
+        total_count: duplicateCanonicalJob ? 2 : totalCount,
+        jobs: [{ name: jobName, head_sha: jobHeadSha,
+          run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
           conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [...names.slice(omitStep ? 1 : 0).map((name, i) => ({
             name, status: stepStatus, conclusion: i === 0 ? stepConclusion : 'success',
-          })), ...(duplicateStep ? [{ name: names[0], status: 'completed', conclusion: 'success' }] : [])] }],
+          })), ...(duplicateStep ? [{ name: names[0], status: 'completed', conclusion: 'success' }] : [])] },
+          ...(duplicateCanonicalJob ? [{
+            name: 'Syntax, tests and dependency audit', head_sha: SHA,
+            run_id: jobRunId, run_attempt: jobAttempt, status: 'completed',
+            conclusion: 'success', completed_at: jobCompletedAt, steps: [],
+          }] : [])],
       }) };
     }
     const id = Number(url.split('/').at(-1));
@@ -936,12 +945,15 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     { stepStatus: 'in_progress' }, { omitStep: true }, { totalCount: 2 },
     { jobAttempt: null }, { jobAttempt: 2 }, { jobRunId: 12346 },
     { duplicateStep: true },
+    { jobName: 'Unrelated smoke job' },
+    { jobHeadSha: ROLLBACK_SHA },
+    { duplicateCanonicalJob: true },
     { jobCompletedAt: null },
     { jobCompletedAt: '2026-11-09T14:55:00Z' },
     { jobCompletedAt: '2026-11-09T14:04:00Z' },
   ]) {
     await assert.rejects(verifyGithubRuns(valid(), opts(makeFetch(changed))),
-      /GitHub (mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch)/);
+      /GitHub (mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch|canonical release job missing or ambiguous|canonical release job identity mismatch)/);
   }
   // Both the manifest and workflow run attest attempt 2, but the Jobs API
   // returns successful steps from attempt 1. A rerun must not inherit them.
@@ -960,7 +972,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     return { ...result, json: async () => ({ ...await original(), run_attempt: 2 }) };
   };
   await assert.rejects(verifyGithubRuns(rerunManifest, opts(rerunFetch)),
-    /GitHub mandatory production step not verified/);
+    /GitHub canonical release job identity mismatch/);
 
   await assert.rejects(verifyGithubRuns(valid(), opts(makeFetch({ failJobs: true }))),
     /GitHub jobs API lookup failed/);
@@ -1000,6 +1012,7 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
       return { ok: true, json: async () => ({
         total_count: 1,
         jobs: [{
+          name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
           completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map(name =>
             ({ name, status: 'completed', conclusion: 'success' })),
