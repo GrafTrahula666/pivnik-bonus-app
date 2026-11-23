@@ -123,6 +123,17 @@ export async function verifyBothRailwayRollbackDeployments(manifest,
     !Array.isArray(records) && Object.keys(records).length === targets.length &&
     Object.keys(records).every(name => targets.includes(name)),
     'separate rollback records for both Railway services are required');
+  // Schema v1 also has a legacy single rollback record. In "both" mode it
+  // must identify one of the two independently authenticated service records.
+  // Otherwise a manifest can advertise an unrelated third "known-good" target
+  // while successfully verifying two different provider deployments.
+  const legacy = manifest.rollback;
+  requireEvidence(targets.some(target => {
+    const record = records[target];
+    return record && typeof record === 'object' && !Array.isArray(record) &&
+      ['sha', 'deploymentId', 'verifiedAt', 'evidenceUrl']
+        .every(field => record[field] === legacy[field]);
+  }), 'legacy rollback record is not bound to either verified Railway service target');
   const ids = new Set(manifest.deployments.map(entry => entry.deploymentId));
   const verified = [];
   for (const target of targets) {
