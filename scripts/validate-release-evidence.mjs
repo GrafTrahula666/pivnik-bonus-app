@@ -479,6 +479,15 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
       demand(run.run_attempt === check.runAttempt &&
         run.path === '.github/workflows/release-gate.yml',
         'GitHub release gate workflow identity or attempt mismatch');
+      // The manifest's completedAt is caller-controlled. Never let it extend
+      // the release window beyond GitHub's actual run update: otherwise a
+      // later deployment of the same SHA could masquerade as gate-owned.
+      // updated_at is a conservative provider upper bound, not an exact
+      // claim about the last step's completion time.
+      demand(date(run.updated_at) &&
+        Date.parse(run.updated_at) >= Date.parse(run.created_at) &&
+        Date.parse(check.completedAt) <= Date.parse(run.updated_at),
+        'GitHub release gate completion exceeds authenticated run timestamp');
       // The workflow-run REST response may omit inputs. Instead require the
       // immutable artifact uploaded by this exact trusted workflow run. Its
       // name binds the actual dispatch confirmation, release SHA and attempt.
