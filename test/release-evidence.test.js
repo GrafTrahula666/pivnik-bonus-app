@@ -553,6 +553,26 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   assert.equal(calls.filter(({ url }) => url.endsWith('/actions/runs/12346')).length, 5);
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
+  // The manifest is not a trusted clock. A green run completed at 14:50
+  // cannot authorize a deployment claimed to belong to the gate at 14:55.
+  const falselyExtendedGate = valid();
+  falselyExtendedGate.checks[0].completedAt = '2026-11-09T14:55:00Z';
+  assert.equal(validateReleaseEvidence(falselyExtendedGate).checks, 2);
+  await assert.rejects(verifyGithubRuns(falselyExtendedGate, options),
+    /GitHub release gate completion exceeds authenticated run timestamp/);
+  // A stale, malformed or contradictory provider timestamp also fails closed.
+  for (const updatedAt of ['2026-11-09T14:49:59Z', 'invalid-timestamp', '2026-11-09T14:04:00Z']) {
+    const staleRunFetch = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12345')) return response;
+      return { ...response, json: async () => ({
+        ...await response.json(), updated_at: updatedAt,
+      }) };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: staleRunFetch,
+    }), /GitHub release gate completion exceeds authenticated run timestamp/);
+  }
   const archiveCall = calls.find(call => call.url.endsWith('/actions/artifacts/9001/zip'));
   assert.equal(archiveCall.options.redirect, 'manual');
   // The GitHub artifact endpoint returns a signed Azure Blob redirect.
