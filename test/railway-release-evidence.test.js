@@ -127,6 +127,9 @@ test('rollback attestation fails closed on absent scope, foreign service, wrong 
 
 test('two-service rollback records attest distinct historical Railway identities', async () => {
   const release = manifest();
+  // The legacy single-target field must name a genuine member of the
+  // separate two-service rollback map, not an unrelated third deployment.
+  release.rollback.deploymentId = 'rollback-pivnik';
   release.rollback.railwayTargets = {
     'pivnik-bonus-app': { sha: 'b'.repeat(40), deploymentId: 'rollback-pivnik',
       verifiedAt: '2026-11-09T13:50:00Z', evidenceUrl: url },
@@ -160,6 +163,11 @@ test('two-service rollback records attest distinct historical Railway identities
     data => { data.rollback.railwayTargets['vk-native-hosting'].deploymentId = 'deployment-2'; },
     data => { data.rollback.railwayTargets['vk-native-hosting'].sha = sha; },
     data => { data.rollback.railwayTargets['vk-native-hosting'].verifiedAt = '2026-11-09T14:02:00Z'; },
+    data => { data.rollback.deploymentId = 'unverified-third-rollback'; },
+    data => { data.rollback.sha = 'd'.repeat(40); },
+    data => { data.rollback.verifiedAt = '2026-11-09T13:45:00Z'; },
+    data => { data.rollback.evidenceUrl = 'https://example.com/unrelated-rollback'; },
+    data => { data.rollback.railwayTargets['pivnik-bonus-app'].deploymentId = 'another-pivnik-rollback'; },
   ]) {
     const bad = structuredClone(release);
     mutate(bad);
