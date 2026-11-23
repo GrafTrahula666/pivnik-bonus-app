@@ -91,6 +91,10 @@ export async function verifyRailwayRollbackDeployment(manifest,
     typeof previous.meta?.commitHash === 'string' &&
     previous.meta.commitHash.toLowerCase() === manifest.rollback.sha.toLowerCase(),
     'known-good rollback deployment identity or SHA mismatch');
+  // A historical SUCCESS record alone does not prove that Railway still
+  // permits rollback to that image under the current retention policy.
+  requireEvidence(previous.canRollback === true,
+    'rollback deployment is not currently eligible for rollback');
   requireEvidence(typeof previous.createdAt === 'string' &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(previous.createdAt) &&
     Number.isFinite(Date.parse(previous.createdAt)) &&
@@ -99,7 +103,8 @@ export async function verifyRailwayRollbackDeployment(manifest,
     Date.parse(previous.createdAt) <= Date.parse(manifest.approval.at),
     'rollback deployment must predate its verification and approval');
   return { target, serviceId, deploymentId: previous.id,
-    sha: previous.meta.commitHash.toLowerCase(), createdAt: previous.createdAt };
+    sha: previous.meta.commitHash.toLowerCase(), createdAt: previous.createdAt,
+    canRollback: true };
 }
 
 /**
@@ -253,7 +258,7 @@ export function createRailwayDeploymentLookup({ token, fetchImpl = globalThis.fe
       /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(deploymentId),
     'invalid Railway deployment ID');
     const data = await queryRailwayReadOnly(fetchImpl, token,
-      'query ReleaseDeployment($id: String!) { deployment(id: $id) { id serviceId environmentId status createdAt meta } }',
+      'query ReleaseDeployment($id: String!) { deployment(id: $id) { id serviceId environmentId status canRollback createdAt meta } }',
       { id: deploymentId });
     requireEvidence(data.deployment && typeof data.deployment === 'object' &&
       !Array.isArray(data.deployment), 'deployment not found');
