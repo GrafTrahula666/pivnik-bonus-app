@@ -135,11 +135,16 @@ jobs:
             'Verify separate Telegram and VK production accounts',
             'Verify signed Telegram and VK production sessions',
           ];
-          if (!requiredSteps.every(name =>
-            release?.steps?.filter(step => step.name === name).length === 1 &&
-            release.steps.some(step =>
-              step.name === name && step.status === 'completed' && step.conclusion === 'success'))) {
-            throw new Error('The approved run must have deployed and verified this SHA.');
+          const orderedSteps = requiredSteps.map(name => {
+            const found = release?.steps?.filter(step => step.name === name);
+            return found?.length === 1 ? found[0] : null;
+          });
+          if (orderedSteps.some((step, index) =>
+            !step || step.status !== 'completed' || step.conclusion !== 'success' ||
+            !Number.isSafeInteger(step.number) || step.number < 1 ||
+            (index > 0 && (!orderedSteps[index - 1] ||
+              step.number <= orderedSteps[index - 1].number)))) {
+            throw new Error('The approved run must have deployed and verified this SHA in order.');
           }
           console.log(`Verified PIVNIK release run ${run.id} for ${RELEASE_SHA}.`);
           NODE
