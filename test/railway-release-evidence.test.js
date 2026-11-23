@@ -64,7 +64,7 @@ test('historical rollback evidence requires an authenticated exact-SHA Railway r
   const rollbackLookup = async args => {
     observed.push(args);
     return { id: release.rollback.deploymentId, serviceId: args.serviceId,
-      environmentId: args.environmentId, status: 'SUCCESS',
+      environmentId: args.environmentId, status: 'SUCCESS', canRollback: true,
       meta: { commitHash: release.rollback.sha },
       createdAt: '2026-11-09T13:30:00Z' };
   };
@@ -72,6 +72,7 @@ test('historical rollback evidence requires an authenticated exact-SHA Railway r
     lookupDeployment: rollbackLookup, target: 'pivnik-bonus-app',
   });
   assert.equal(result.sha, release.rollback.sha);
+  assert.equal(result.canRollback, true);
   assert.equal(result.target, 'pivnik-bonus-app');
   assert.deepEqual(observed, [{
     projectId: RAILWAY_RELEASE_PROJECT,
@@ -85,7 +86,7 @@ test('rollback attestation fails closed on absent scope, foreign service, wrong 
   const release = manifest();
   const good = async args => ({
     id: release.rollback.deploymentId, serviceId: args.serviceId,
-    environmentId: args.environmentId, status: 'SUCCESS',
+    environmentId: args.environmentId, status: 'SUCCESS', canRollback: true,
     meta: { commitHash: release.rollback.sha },
     createdAt: '2026-11-09T13:30:00Z',
   });
@@ -103,6 +104,10 @@ test('rollback attestation fails closed on absent scope, foreign service, wrong 
     { environmentId: 'staging' },
     { status: 'FAILED' },
     { status: 'REMOVED' },
+    { canRollback: false },
+    { canRollback: null },
+    { canRollback: undefined },
+    { canRollback: 'true' },
     { meta: { commitHash: sha } },
     { createdAt: '2026-11-09T13:55:00Z' },
     { createdAt: '2026-11-09T14:01:00Z' },
@@ -134,7 +139,7 @@ test('two-service rollback records attest distinct historical Railway identities
     const name = Object.keys(RAILWAY_RELEASE_TARGETS)
       .find(key => RAILWAY_RELEASE_TARGETS[key] === args.serviceId);
     return { id: args.deploymentId, serviceId: args.serviceId,
-      environmentId: args.environmentId, status: 'SUCCESS',
+      environmentId: args.environmentId, status: 'SUCCESS', canRollback: true,
       meta: { commitHash: release.rollback.railwayTargets[name].sha },
       createdAt: '2026-11-09T13:30:00Z' };
   };
@@ -166,6 +171,8 @@ test('two-service rollback records attest distinct historical Railway identities
     { serviceId: RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'] },
     { environmentId: 'staging' },
     { status: 'FAILED' },
+    { canRollback: false },
+    { canRollback: undefined },
     { meta: { commitHash: sha } },
     { createdAt: '2026-11-09T14:05:00Z' },
   ]) {
@@ -226,6 +233,7 @@ test('Railway API adapter issues only scoped read-only GraphQL deployment lookup
       assert.equal(options.headers.Authorization, 'Bearer test-token');
       const request = JSON.parse(options.body);
       assert.match(request.query, /deployment\(id: \$id\)/);
+      assert.match(request.query, /canRollback/);
       assert.equal(request.variables.id, railwayId);
       return { ok: true, json: async () => ({ data: { deployment: {
         id: railwayId, serviceId: railwayScope.serviceId,
