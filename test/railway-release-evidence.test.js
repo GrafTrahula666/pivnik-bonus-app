@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyRailwayDeployments, verifyRailwayRollbackDeployment, verifyCurrentRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
+import { verifyRailwayDeployments, verifyRailwayRollbackDeployment, verifyBothRailwayRollbackDeployments, verifyCurrentRailwayDeployments, createRailwayDeploymentLookup, RAILWAY_RELEASE_TARGETS,
   RAILWAY_RELEASE_ENVIRONMENT, RAILWAY_RELEASE_PROJECT } from '../scripts/verify-railway-release-evidence.mjs';
 
 const sha = 'a'.repeat(40);
@@ -118,6 +118,65 @@ test('rollback attestation fails closed on absent scope, foreign service, wrong 
   await assert.rejects(verifyRailwayRollbackDeployment(release, {
     target: 'pivnik-bonus-app', lookupDeployment: async () => null,
   }), /known-good rollback deployment/);
+});
+
+test('two-service rollback records attest distinct historical Railway identities', async () => {
+  const release = manifest();
+  release.rollback.railwayTargets = {
+    'pivnik-bonus-app': { sha: 'b'.repeat(40), deploymentId: 'rollback-pivnik',
+      verifiedAt: '2026-11-09T13:50:00Z', evidenceUrl: url },
+    'vk-native-hosting': { sha: 'c'.repeat(40), deploymentId: 'rollback-vk',
+      verifiedAt: '2026-11-09T13:51:00Z', evidenceUrl: url },
+  };
+  const observed = [];
+  const good = async args => {
+    observed.push(args);
+    const name = Object.keys(RAILWAY_RELEASE_TARGETS)
+      .find(key => RAILWAY_RELEASE_TARGETS[key] === args.serviceId);
+    return { id: args.deploymentId, serviceId: args.serviceId,
+      environmentId: args.environmentId, status: 'SUCCESS',
+      meta: { commitHash: release.rollback.railwayTargets[name].sha },
+      createdAt: '2026-11-09T13:30:00Z' };
+  };
+  const verified = await verifyBothRailwayRollbackDeployments(release, { lookupDeployment: good });
+  assert.deepEqual(verified.map(x => x.target), ['pivnik-bonus-app', 'vk-native-hosting']);
+  assert.deepEqual(observed.map(x => x.serviceId), Object.values(RAILWAY_RELEASE_TARGETS));
+  assert.deepEqual(observed.map(x => x.deploymentId), ['rollback-pivnik', 'rollback-vk']);
+  await assert.rejects(verifyBothRailwayRollbackDeployments(manifest(), {
+    lookupDeployment: good,
+  }), /separate rollback records/);
+  await assert.rejects(verifyBothRailwayRollbackDeployments(release),
+    /authenticated rollback deployment lookup/);
+  for (const mutate of [
+    data => { delete data.rollback.railwayTargets['vk-native-hosting']; },
+    data => { data.rollback.railwayTargets['extra-service'] =
+      data.rollback.railwayTargets['vk-native-hosting']; },
+    data => { data.rollback.railwayTargets['vk-native-hosting'].deploymentId = 'rollback-pivnik'; },
+    data => { data.rollback.railwayTargets['vk-native-hosting'].deploymentId = 'deployment-2'; },
+    data => { data.rollback.railwayTargets['vk-native-hosting'].sha = sha; },
+    data => { data.rollback.railwayTargets['vk-native-hosting'].verifiedAt = '2026-11-09T14:02:00Z'; },
+  ]) {
+    const bad = structuredClone(release);
+    mutate(bad);
+    await assert.rejects(verifyBothRailwayRollbackDeployments(bad, {
+      lookupDeployment: good,
+    }), /Railway release evidence mismatch|Invalid release evidence/);
+  }
+  for (const defect of [
+    { serviceId: RAILWAY_RELEASE_TARGETS['pivnik-bonus-app'] },
+    { environmentId: 'staging' },
+    { status: 'FAILED' },
+    { meta: { commitHash: sha } },
+    { createdAt: '2026-11-09T14:05:00Z' },
+  ]) {
+    await assert.rejects(verifyBothRailwayRollbackDeployments(release, {
+      lookupDeployment: async args => {
+        const record = await good(args);
+        return args.serviceId === RAILWAY_RELEASE_TARGETS['vk-native-hosting']
+          ? { ...record, ...defect } : record;
+      },
+    }), /Railway release evidence mismatch/);
+  }
 });
 
 test('missing authenticated lookup fails closed', async () => {
@@ -510,7 +569,7 @@ test('CLI Railway live-lookup opt-in defaults offline and fails closed on missin
         /PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET requires PIVNIK_VERIFY_RAILWAY=1/);
       assert.doesNotMatch(invalid.stdout, /Authenticated Railway historical rollback/);
     }
-    for (const target of ['pivnik-bonus-app', 'vk-native-hosting']) {
+    for (const target of ['pivnik-bonus-app', 'vk-native-hosting', 'both']) {
       const noToken = run('1', undefined, target);
       assert.equal(noToken.status, 1, noToken.stderr);
       assert.match(noToken.stderr, /Railway API token is required/);
