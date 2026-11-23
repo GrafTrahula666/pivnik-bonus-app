@@ -1078,8 +1078,12 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
         jobs: [{
           name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
-          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map((name, i) =>
-            ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })),
+          completed_at: '2026-11-09T14:45:00Z', steps: [
+            { name: 'Verify existing production secrets without changing them',
+              number: 22, status: 'completed', conclusion: 'success' },
+            ...Object.keys(valid().checks[0].productionSteps).map((name, i) =>
+              ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })),
+          ],
         }],
       }) };
     }
