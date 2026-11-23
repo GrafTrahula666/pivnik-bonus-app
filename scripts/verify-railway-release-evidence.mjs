@@ -103,6 +103,37 @@ export async function verifyRailwayRollbackDeployment(manifest,
 }
 
 /**
+ * Attest TWO different historical rollback deployments with read-only Railway
+ * provider lookups. A single rollback ID cannot stand for both services.
+ * No deploy, rollback, retention or staging operation is performed here.
+ */
+export async function verifyBothRailwayRollbackDeployments(manifest,
+  { lookupDeployment } = {}) {
+  validateReleaseEvidence(manifest);
+  requireEvidence(typeof lookupDeployment === 'function',
+    'authenticated rollback deployment lookup is required');
+  const records = manifest.rollback?.railwayTargets;
+  const targets = Object.keys(RAILWAY_RELEASE_TARGETS);
+  requireEvidence(records && typeof records === 'object' &&
+    !Array.isArray(records) && Object.keys(records).length === targets.length &&
+    Object.keys(records).every(name => targets.includes(name)),
+    'separate rollback records for both Railway services are required');
+  const ids = new Set(manifest.deployments.map(entry => entry.deploymentId));
+  const verified = [];
+  for (const target of targets) {
+    const record = records[target];
+    requireEvidence(record && typeof record === 'object' &&
+      !Array.isArray(record) && typeof record.deploymentId === 'string' &&
+      !ids.has(record.deploymentId),
+      'both rollback deployment IDs must be distinct from each other and current deployments');
+    ids.add(record.deploymentId);
+    verified.push(await verifyRailwayRollbackDeployment(
+      { ...manifest, rollback: record }, { lookupDeployment, target }));
+  }
+  return verified;
+}
+
+/**
  * Stronger read-only attestation for the CURRENT active Railway deployment.
  * Historical SUCCESS alone is insufficient: Railway can replace that release.
  * This proves the provider's active ID at query time, NOT end-user traffic,
