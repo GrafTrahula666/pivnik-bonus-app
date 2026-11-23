@@ -571,17 +571,25 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
           Date.parse(job.completed_at) <= Date.parse(check.completedAt),
           'GitHub production job completion chronology mismatch');
       }
+      // A green unrelated job must not impersonate the release gate.
+      const canonicalJobs = jobsData.jobs.filter(job =>
+        job.name === 'Syntax, tests and dependency audit');
+      demand(canonicalJobs.length === 1,
+        'GitHub canonical release job missing or ambiguous');
+      const releaseJob = canonicalJobs[0];
+      demand(releaseJob.status === 'completed' &&
+        releaseJob.conclusion === 'success' &&
+        releaseJob.run_id === check.runId &&
+        releaseJob.run_attempt === check.runAttempt &&
+        typeof releaseJob.head_sha === 'string' &&
+        releaseJob.head_sha.toLowerCase() === data.releaseSha.toLowerCase() &&
+        Array.isArray(releaseJob.steps),
+        'GitHub canonical release job identity mismatch');
       for (const stepName of Object.keys(check.productionSteps)) {
-        const matching = jobsData.jobs.flatMap(job =>
-          (job.steps || []).filter(step => step.name === stepName)
-            .map(step => ({ job, step })));
+        const matching = releaseJob.steps.filter(step => step.name === stepName);
         demand(matching.length === 1 &&
-          matching[0].job.conclusion === 'success' &&
-          matching[0].job.status === 'completed' &&
-          matching[0].job.run_id === check.runId &&
-          matching[0].job.run_attempt === check.runAttempt &&
-          matching[0].step.status === 'completed' &&
-          matching[0].step.conclusion === 'success',
+          matching[0].status === 'completed' &&
+          matching[0].conclusion === 'success',
           'GitHub mandatory production step not verified: ' + stepName);
       }
     }
