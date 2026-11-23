@@ -885,7 +885,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
 test('GitHub Jobs API must prove all mandatory production steps completed successfully', async () => {
   const makeFetch = ({ stepConclusion = 'success', jobConclusion = 'success',
     totalCount = 1, omitStep = false, failJobs = false, duplicateStep = false, jobAttempt = 1,
-    stepNumbers = [25, 26, 27, 28],
+    stepNumbers = [25, 26, 27, 28], stepNames = Object.keys(valid().checks[0].productionSteps),
     jobStatus = 'completed', stepStatus = 'completed', jobRunId = 12345,
     jobName = 'Syntax, tests and dependency audit', jobHeadSha = SHA,
     duplicateCanonicalJob = false,
@@ -912,7 +912,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     };
     if (url.includes('/jobs?')) {
       if (failJobs) return { ok: false };
-      const names = Object.keys(valid().checks[0].productionSteps);
+      const names = stepNames;
       return { ok: true, json: async () => ({
         total_count: duplicateCanonicalJob ? 2 : totalCount,
         jobs: [{ name: jobName, head_sha: jobHeadSha,
@@ -941,6 +941,16 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
   const opts = fetchImpl => ({ fetchImpl, token: 'test-token' });
   assert.deepEqual(await verifyGithubRuns(valid(), opts(makeFetch())),
     { verifiedRunIds: [12345, 12346] });
+  // JSON key order is caller-controlled, not the workflow's canonical order.
+  // Reversing both the manifest keys and mocked successful GitHub job steps
+  // must NOT make pre-deploy smoke look like post-deploy smoke.
+  const reorderedManifest = valid();
+  reorderedManifest.checks[0].productionSteps = Object.fromEntries(
+    Object.entries(reorderedManifest.checks[0].productionSteps).reverse());
+  assert.deepEqual(validateReleaseEvidence(reorderedManifest), validateReleaseEvidence(valid()));
+  await assert.rejects(verifyGithubRuns(reorderedManifest, opts(makeFetch({
+    stepNames: Object.keys(reorderedManifest.checks[0].productionSteps),
+  }))), /GitHub mandatory production step not verified/);
   for (const changed of [
     { stepConclusion: 'skipped' }, { stepConclusion: 'failure' },
     { jobConclusion: 'failure' }, { jobStatus: 'in_progress' },
