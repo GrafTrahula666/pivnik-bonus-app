@@ -9,6 +9,12 @@ const HASH = /^[0-9a-f]{64}$/i;
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 const MAX_DISPATCH_ARCHIVE_BYTES = 64 * 1024;
 const MAX_DISPATCH_JSON_BYTES = 4 * 1024;
+const REQUIRED_PRODUCTION_STEPS = Object.freeze([
+  'Deploy exact commit and verify both production services',
+  'Probe production documents and public endpoints',
+  'Verify separate Telegram and VK production accounts',
+  'Verify signed Telegram and VK production sessions',
+]);
 
 function demand(condition, reason) {
   if (!condition) throw new Error('Invalid release evidence: ' + reason);
@@ -120,9 +126,25 @@ function readDispatchZip(input) {
     'GitHub dispatch artifact ZIP local and central headers disagree');
   const dataStart = localOffset + 30 + localNameLength + localExtraLength;
   const dataEnd = dataStart + compressedSize;
-  demand(dataStart <= dataEnd && dataEnd <= centralOffset &&
-    ((flags & 0x0008) !== 0 || dataEnd === centralOffset),
+  demand(dataStart <= dataEnd && dataEnd <= centralOffset,
     'GitHub dispatch artifact ZIP payload bounds are invalid');
+  if ((flags & 0x0008) !== 0) {
+    // Bit 3 permits a data descriptor, not arbitrary hidden bytes after the
+    // compressed payload. Require exactly one 12- or 16-byte descriptor.
+    const descriptorSize = centralOffset - dataEnd;
+    const signed = descriptorSize === 16;
+    demand(descriptorSize === 12 || signed,
+      'GitHub dispatch artifact ZIP data descriptor bounds are invalid');
+    const descriptorOffset = dataEnd + (signed ? 4 : 0);
+    demand((!signed || zip.readUInt32LE(dataEnd) === 0x08074b50) &&
+      zip.readUInt32LE(descriptorOffset) === expectedCrc &&
+      zip.readUInt32LE(descriptorOffset + 4) === compressedSize &&
+      zip.readUInt32LE(descriptorOffset + 8) === uncompressedSize,
+      'GitHub dispatch artifact ZIP data descriptor disagrees with central directory');
+  } else {
+    demand(dataEnd === centralOffset,
+      'GitHub dispatch artifact ZIP payload bounds are invalid');
+  }
   const compressed = zip.subarray(dataStart, dataEnd);
   let content;
   try {
@@ -251,17 +273,11 @@ export function validateReleaseEvidence(data) {
         'common release gate must be an approved successful manual production dispatch with run attempt');
       // A green workflow_dispatch with release_confirm=CANCEL skips production
       // steps. A successful workflow conclusion alone MUST NOT approve release.
-      const requiredProductionSteps = [
-        'Deploy exact commit and verify both production services',
-        'Probe production documents and public endpoints',
-        'Verify separate Telegram and VK production accounts',
-        'Verify signed Telegram and VK production sessions',
-      ];
       demand(object(check.productionSteps), 'production step results are required');
-      demand(Object.keys(check.productionSteps).length === requiredProductionSteps.length &&
-        Object.keys(check.productionSteps).every(name => requiredProductionSteps.includes(name)),
+      demand(Object.keys(check.productionSteps).length === REQUIRED_PRODUCTION_STEPS.length &&
+        Object.keys(check.productionSteps).every(name => REQUIRED_PRODUCTION_STEPS.includes(name)),
         'productionSteps must contain exactly the mandatory release workflow steps');
-      for (const stepName of requiredProductionSteps) {
+      for (const stepName of REQUIRED_PRODUCTION_STEPS) {
         demand(check.productionSteps[stepName] === 'success',
           'mandatory production step not successful: ' + stepName);
       }
@@ -385,6 +401,8 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   const latest = byActor.at(-1);
   demand(data.approval.actor !== pr.user.login &&
     latest?.state === 'APPROVED' &&
+    // GitHub App and automation bot approvals are not human release consent.
+    latest.user?.type === 'User' &&
     // GitHub review.commit_id is the reviewed PR HEAD, not the new merge SHA.
     latest.commit_id?.toLowerCase() === pr.head.sha.toLowerCase() &&
     date(latest.submitted_at) &&
@@ -415,6 +433,18 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   demand(reviews.every(r => !['CHANGES_REQUESTED', 'APPROVED', 'DISMISSED'].includes(r.state) ||
     (r.user?.login && date(r.submitted_at))),
   'GitHub submitted review identity or timestamp invalid');
+  // GitHub review timestamps are commonly only second-precision. If one actor
+  // submits conflicting states at the same instant, array order is not proof
+  // that an APPROVED superseded CHANGES_REQUESTED or DISMISSED. Fail closed.
+  const reviewStatesAtInstant = new Map();
+  for (const review of reviews) {
+    if (!review.user?.login || !date(review.submitted_at)) continue;
+    const key = JSON.stringify([review.user.login, Date.parse(review.submitted_at)]);
+    const prior = reviewStatesAtInstant.get(key);
+    demand(prior === undefined || prior === review.state,
+      'GitHub conflicting same-timestamp reviews have ambiguous approval order');
+    reviewStatesAtInstant.set(key, review.state);
+  }
   const outstandingChangeRequests = new Set();
   for (const review of [...reviews].filter(r => r.user?.login && date(r.submitted_at))
     .sort((a, b) => Date.parse(a.submitted_at) - Date.parse(b.submitted_at))) {
@@ -432,14 +462,6 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
     });
     demand(response?.ok, 'GitHub run API lookup failed for runId ' + check.runId);
     const run = await response.json();
-    // A manifest must not cite a workflow run that finished after the manifest was created.
-    // The GitHub API timestamp is trusted here; a caller-authored completedAt is not.
-    demand(date(run.updated_at) && Date.parse(run.updated_at) <= Date.parse(data.createdAt),
-      'GitHub required workflow run completed after release manifest creation');
-    if (check.name === 'Pivnik release gate') {
-      demand(Date.parse(run.updated_at) <= Date.parse(check.completedAt),
-        'GitHub release gate API completion postdates declared production gate completion');
-    }
     demand(run.id === check.runId && run.head_sha?.toLowerCase() === data.releaseSha.toLowerCase() &&
       run.status === 'completed' && run.conclusion === 'success' &&
       run.event === check.event &&
@@ -453,11 +475,37 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
       demand(run.path === '.github/workflows/vk-native-hosting-main-parity.yml' &&
         run.event === 'push',
         'GitHub VK parity workflow identity mismatch');
+      // Parity that succeeds only AFTER a production deployment cannot
+      // retroactively authorize that earlier deploy. The API's updated_at
+      // is a conservative completion bound; ambiguity must fail closed.
+      const earliestDeploymentAt = Math.min(...data.deployments.map(
+        deployment => Date.parse(deployment.deployedAt)));
+      demand(date(run.created_at) && date(run.updated_at) &&
+        Date.parse(run.updated_at) >= Date.parse(run.created_at) &&
+        Date.parse(run.updated_at) <= earliestDeploymentAt,
+        'GitHub VK parity must complete before first production deployment');
     }
     if (check.name === 'Pivnik release gate') {
+      // A workflow started before the independent approval cannot inherit that
+      // approval retroactively, even if its final result is green.
+      demand(date(run.created_at) && Date.parse(run.created_at) >= Date.parse(data.approval.at),
+        'GitHub release dispatch predates independent approval');
       demand(run.run_attempt === check.runAttempt &&
         run.path === '.github/workflows/release-gate.yml',
         'GitHub release gate workflow identity or attempt mismatch');
+      // The manifest's completedAt is caller-controlled. Never let it extend
+      // the release window beyond GitHub's actual run update: otherwise a
+      // later deployment of the same SHA could masquerade as gate-owned.
+      // updated_at is a conservative provider upper bound, not an exact
+      // claim about the last step's completion time.
+      demand(date(run.updated_at) &&
+        Date.parse(run.updated_at) >= Date.parse(run.created_at) &&
+        Date.parse(check.completedAt) <= Date.parse(run.updated_at),
+        'GitHub release gate completion exceeds authenticated run timestamp');
+      // A run updated after the manifest existed cannot attest that historical manifest.
+      // Keep this separate from the job-completion bound: updated_at can lag the job.
+      demand(Date.parse(run.updated_at) <= Date.parse(data.createdAt),
+        'GitHub release gate run timestamp postdates release manifest creation');
       // The workflow-run REST response may omit inputs. Instead require the
       // immutable artifact uploaded by this exact trusted workflow run. Its
       // name binds the actual dispatch confirmation, release SHA and attempt.
@@ -497,9 +545,25 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
       demand(dispatchArtifact.archive_download_url === archiveUrl &&
         /^sha256:[0-9a-f]{64}$/i.test(dispatchArtifact.digest || ''),
         'GitHub dispatch artifact archive URL or SHA-256 digest is missing or mismatched');
-      const archiveResponse = await fetchImpl(archiveUrl, {
-        headers, redirect: 'follow',
+      // GitHub returns a 302 to a short-lived Azure Blob URL. Never follow
+      // it with the GitHub Bearer token or send that token to blob storage.
+      const initialArchiveResponse = await fetchImpl(archiveUrl, {
+        headers, redirect: 'manual',
       });
+      let archiveResponse = initialArchiveResponse;
+      if (initialArchiveResponse?.status === 302) {
+        const location = initialArchiveResponse.headers?.get?.('location');
+        let blobUrl;
+        try { blobUrl = new URL(location); } catch {}
+        demand(blobUrl?.protocol === 'https:' &&
+          !blobUrl.username && !blobUrl.password && !blobUrl.hash &&
+          /^[a-z0-9-]+\.blob\.core\.windows\.net$/i.test(blobUrl.hostname) &&
+          !blobUrl.port,
+          'GitHub dispatch artifact redirect target is not trusted Azure Blob HTTPS');
+        // The signed URL authorizes the second request; no GitHub token or
+        // automatic further redirects are allowed at the storage endpoint.
+        archiveResponse = await fetchImpl(blobUrl.href, { redirect: 'error' });
+      }
       demand(archiveResponse?.ok, 'GitHub dispatch artifact download failed for artifactId ' + dispatchArtifact.id);
       const archive = await readBoundedBody(archiveResponse, MAX_DISPATCH_ARCHIVE_BYTES);
       const archiveSha = createHash('sha256').update(archive).digest('hex');
@@ -534,18 +598,49 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
           Date.parse(job.completed_at) <= Date.parse(check.completedAt),
           'GitHub production job completion chronology mismatch');
       }
-      for (const stepName of Object.keys(check.productionSteps)) {
-        const matching = jobsData.jobs.flatMap(job =>
-          (job.steps || []).filter(step => step.name === stepName)
-            .map(step => ({ job, step })));
+      // A green unrelated job must not impersonate the release gate.
+      const canonicalJobs = jobsData.jobs.filter(job =>
+        job.name === 'Syntax, tests and dependency audit');
+      demand(canonicalJobs.length === 1,
+        'GitHub canonical release job missing or ambiguous');
+      const releaseJob = canonicalJobs[0];
+      demand(releaseJob.status === 'completed' &&
+        releaseJob.conclusion === 'success' &&
+        releaseJob.run_id === check.runId &&
+        releaseJob.run_attempt === check.runAttempt &&
+        typeof releaseJob.head_sha === 'string' &&
+        releaseJob.head_sha.toLowerCase() === data.releaseSha.toLowerCase() &&
+        Array.isArray(releaseJob.steps),
+        'GitHub canonical release job identity mismatch');
+      // A deploy must not be allowed to inherit a green workflow in which
+      // the required read-only Railway production secret/scope preflight was
+      // skipped or failed. This is the exact gate stage that has blocked real
+      // releases; successful deploy/smoke steps alone are insufficient.
+      const preflightSteps = releaseJob.steps.filter(step =>
+        step.name === 'Verify existing production secrets without changing them');
+      const preflight = preflightSteps[0];
+      demand(preflightSteps.length === 1 &&
+        preflight.status === 'completed' &&
+        preflight.conclusion === 'success' &&
+        Number.isSafeInteger(preflight.number) &&
+        preflight.number > 0,
+        'GitHub production secret preflight not verified');
+      // The mandatory order is owned by this validator, not by the JSON object's
+      // caller-controlled key insertion order. Reordering the manifest must not
+      // conceal smoke steps executed before deployment.
+      // GitHub step numbers encode execution order. A green step from before
+      // deployment must never stand in for a post-deploy smoke check.
+      let lastProductionStepNumber = preflight.number;
+      for (const stepName of REQUIRED_PRODUCTION_STEPS) {
+        const matching = releaseJob.steps.filter(step => step.name === stepName);
+        const step = matching[0];
         demand(matching.length === 1 &&
-          matching[0].job.conclusion === 'success' &&
-          matching[0].job.status === 'completed' &&
-          matching[0].job.run_id === check.runId &&
-          matching[0].job.run_attempt === check.runAttempt &&
-          matching[0].step.status === 'completed' &&
-          matching[0].step.conclusion === 'success',
+          step.status === 'completed' &&
+          step.conclusion === 'success' &&
+          Number.isSafeInteger(step.number) &&
+          step.number > lastProductionStepNumber,
           'GitHub mandatory production step not verified: ' + stepName);
+        lastProductionStepNumber = step.number;
       }
     }
   }
@@ -558,9 +653,49 @@ async function main() {
   const summary = validateReleaseEvidence(data);
   // A valid JSON manifest alone never proves GitHub Actions ran. Explicit
   // authenticated mode fails closed on missing token, API errors or mismatches.
+  // A misspelled OR explicitly empty GitHub flag must not silently downgrade to offline validation.
+  demand(!Object.hasOwn(process.env, 'PIVNIK_VERIFY_GITHUB') ||
+    process.env.PIVNIK_VERIFY_GITHUB === '1',
+    'PIVNIK_VERIFY_GITHUB must equal 1 when set');
   if (process.env.PIVNIK_VERIFY_GITHUB === '1') {
     await verifyGithubRuns(data, { fetchImpl: fetch, token: process.env.GITHUB_TOKEN });
     console.log('Authenticated GitHub workflow runs verified for exact release SHA.');
+  }
+  // Opt-in, read-only provider check. A syntactically valid manifest alone is
+  // never Railway deployment evidence. Unknown flag values fail closed.
+  demand(!Object.hasOwn(process.env, 'PIVNIK_VERIFY_RAILWAY') ||
+    process.env.PIVNIK_VERIFY_RAILWAY === '1',
+    'PIVNIK_VERIFY_RAILWAY must equal 1 when set');
+  // A rollback lookup must never silently run in offline mode, nor accept an
+  // arbitrary service ID supplied through the environment.
+  const rollbackTarget = process.env.PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET;
+  demand(rollbackTarget === undefined ||
+    (process.env.PIVNIK_VERIFY_RAILWAY === '1' &&
+     (rollbackTarget === 'pivnik-bonus-app' || rollbackTarget === 'vk-native-hosting' || rollbackTarget === 'both')),
+    'PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET requires PIVNIK_VERIFY_RAILWAY=1 and an explicit known service');
+  if (process.env.PIVNIK_VERIFY_RAILWAY === '1') {
+    const { createRailwayDeploymentLookup, verifyCurrentRailwayDeployments,
+      verifyRailwayRollbackDeployment, verifyBothRailwayRollbackDeployments } =
+      await import('./verify-railway-release-evidence.mjs');
+    const lookupDeployment = createRailwayDeploymentLookup({
+      token: process.env.RAILWAY_TOKEN,
+    });
+    const verified = await verifyCurrentRailwayDeployments(data, {
+      lookupDeployment,
+      lookupActiveDeployment: lookupDeployment.lookupActiveDeployment,
+    });
+    console.log('Authenticated Railway current active deployment IDs verified: ' + verified.length);
+    if (rollbackTarget === 'both') {
+      const records = await verifyBothRailwayRollbackDeployments(data, { lookupDeployment });
+      console.log('Authenticated Railway historical rollback records verified for both services: ' +
+        records.length + ' (rollback rehearsal and artifact retention NOT verified).');
+    } else if (rollbackTarget !== undefined) {
+      const rollback = await verifyRailwayRollbackDeployment(data, {
+        lookupDeployment, target: rollbackTarget,
+      });
+      console.log('Authenticated Railway historical rollback record verified for ' +
+        rollback.target + ' (rollback rehearsal and artifact retention NOT verified).');
+    }
   }
   console.log('Release evidence format valid for ' + summary.releaseSha +
     ': ' + summary.checks + ' checks, ' + summary.artifacts +

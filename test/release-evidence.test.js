@@ -458,6 +458,17 @@ test('CLI fails closed for invalid JSON and invalid evidence, and accepts format
     assert.notEqual(authenticated.status, 0);
     assert.match(authenticated.stderr, /authenticated GitHub API access is required/);
 
+    // A typo must not silently skip authenticated GitHub approval/run checks.
+    for (const typoValue of ['true', '0', 'yes']) {
+      const typo = spawnSync(process.execPath, [script, file], {
+        env: { ...process.env, PIVNIK_VERIFY_GITHUB: typoValue, PIVNIK_VERIFY_RAILWAY: '', GITHUB_TOKEN: '' },
+        encoding: 'utf8',
+      });
+      assert.equal(typo.status, 1, 'invalid GitHub verification flag: ' + typoValue);
+      assert.match(typo.stderr, /PIVNIK_VERIFY_GITHUB must equal 1 when set/);
+      assert.doesNotMatch(typo.stdout, /Release evidence format valid/);
+    }
+
     const wrong = valid(); wrong.deployments[0].sha = ROLLBACK_SHA;
     await writeFile(file, JSON.stringify(wrong));
     assert.notEqual(spawnSync(process.execPath, [script, file]).status, 0);
@@ -484,7 +495,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     if (url.endsWith('/collaborators/independent-release-reviewer/permission'))
       return { ok: true, json: async () => ({ permission: 'write', user: { login: 'independent-release-reviewer' } }) };
     if (url.endsWith('/pulls/123/reviews?per_page=100')) return { ok: true, json: async () => [
-      { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+      { user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
         id: 456, html_url: REVIEW_URL,
         commit_id: REVIEWED_HEAD_SHA, submitted_at: '2026-11-09T14:00:00Z' },
     ] };
@@ -494,16 +505,21 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     if (url.endsWith('/12345/jobs?per_page=100')) {
       return { ok: true, json: async () => ({
         total_count: 1,
-        jobs: [{ run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
-          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map(name =>
-            ({ name, status: 'completed', conclusion: 'success' })) }],
+        jobs: [{ name: 'Syntax, tests and dependency audit', head_sha: SHA,
+          run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
+          completed_at: '2026-11-09T14:45:00Z', steps: [
+            { name: 'Verify existing production secrets without changing them',
+              number: 22, status: 'completed', conclusion: 'success' },
+            ...Object.keys(valid().checks[0].productionSteps).map((name, i) =>
+              ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })),
+          ] }],
       }) };
     }
     const id = Number(url.split('/').at(-1));
     return { ok: true, json: async () => ({
       id, head_sha: SHA, head_branch: 'main', status: 'completed', conclusion: 'success',
       event: id === 12345 ? 'workflow_dispatch' : 'push',
-      created_at: '2026-11-09T14:05:00Z', updated_at: '2026-11-09T14:50:00Z',
+      created_at: '2026-11-09T14:05:00Z', updated_at: id === 12345 ? '2026-11-09T14:50:00Z' : '2026-11-09T14:12:00Z',
       run_attempt: 1, path: id === 12345 ? '.github/workflows/release-gate.yml' : '.github/workflows/vk-native-hosting-main-parity.yml',
       html_url: 'https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/' + id,
       repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
@@ -522,11 +538,105 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token', fetchImpl: unrelatedVkFetch,
   }), /GitHub VK parity workflow identity mismatch/);
-  assert.equal(calls.length, 16); // two full passes include reviewer permission and authenticated ZIP verification
+  // A green VK parity run recorded after production was already deployed
+  // must never retroactively validate the release, even for the same SHA.
+  for (const updatedAt of ['2026-11-09T14:17:00Z', 'bad-timestamp', '2026-11-09T14:04:00Z', '2026-11-09T15:00:01Z', null]) {
+    const lateOrInvalidParity = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12346')) return response;
+      return { ...response, json: async () => ({
+        ...await response.json(), updated_at: updatedAt,
+      }) };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: lateOrInvalidParity,
+    }), /GitHub VK parity must complete before first production deployment/);
+  }
+  // The initial pass and all six rejection cases must each attest the real VK parity run.
+  // Do not pin the total HTTP request count: each new negative scenario adds a full read.
+  assert.equal(calls.filter(({ url }) => url.endsWith('/actions/runs/12346')).length, 7);
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
+  // The manifest is not a trusted clock. A green run completed at 14:50
+  // cannot authorize a deployment claimed to belong to the gate at 14:55.
+  const falselyExtendedGate = valid();
+  falselyExtendedGate.checks[0].completedAt = '2026-11-09T14:55:00Z';
+  assert.equal(validateReleaseEvidence(falselyExtendedGate).checks, 2);
+  await assert.rejects(verifyGithubRuns(falselyExtendedGate, options),
+    /GitHub release gate completion exceeds authenticated run timestamp/);
+  // A stale, malformed or contradictory provider timestamp also fails closed.
+  for (const updatedAt of ['2026-11-09T14:49:59Z', 'invalid-timestamp', '2026-11-09T14:04:00Z', null]) {
+    const staleRunFetch = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12345')) return response;
+      return { ...response, json: async () => ({
+        ...await response.json(), updated_at: updatedAt,
+      }) };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: staleRunFetch,
+    }), /GitHub release gate completion exceeds authenticated run timestamp/);
+  }
+  // Preserve the integration branch's manifest-time upper bound without
+  // equating the provider's update timestamp to the last completed job.
+  for (const [updatedAt, accepted] of [
+    ['2026-11-09T14:51:00Z', true],
+    ['2026-11-09T15:00:00Z', true],
+    ['2026-11-09T15:00:01Z', false],
+  ]) {
+    const updatedGateFetch = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12345')) return response;
+      return { ...response, json: async () => ({
+        ...await response.json(), updated_at: updatedAt,
+      }) };
+    };
+    const verified = verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: updatedGateFetch });
+    if (accepted) assert.deepEqual(await verified, { verifiedRunIds: [12345, 12346] });
+    else await assert.rejects(verified, /GitHub release gate run timestamp postdates release manifest creation/);
+  }
   const archiveCall = calls.find(call => call.url.endsWith('/actions/artifacts/9001/zip'));
-  assert.equal(archiveCall.options.redirect, 'follow');
+  assert.equal(archiveCall.options.redirect, 'manual');
+  // The GitHub artifact endpoint returns a signed Azure Blob redirect.
+  // The Bearer token is sent only to api.github.com, never to Blob storage.
+  const blobLocation = 'https://releaseartifacts.blob.core.windows.net/archive.zip?sig=example';
+  let blobRequests = 0;
+  const redirectedArtifactFetch = async (url, options) => {
+    if (url.endsWith('/actions/artifacts/9001/zip')) {
+      assert.equal(options.redirect, 'manual');
+      assert.equal(options.headers.Authorization, 'Bearer test-token');
+      return { status: 302, ok: false, headers: { get: name =>
+        name === 'location' ? blobLocation : null } };
+    }
+    if (url === blobLocation) {
+      blobRequests++;
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.headers, undefined);
+      return { ok: true, arrayBuffer: async () => artifact.archiveBytes };
+    }
+    return responseFor(url, options);
+  };
+  assert.deepEqual(await verifyGithubRuns(valid(), {
+    token: 'test-token', fetchImpl: redirectedArtifactFetch,
+  }), { verifiedRunIds: [12345, 12346] });
+  assert.equal(blobRequests, 1);
+  // A malformed or off-provider redirect fails before requesting its URL.
+  for (const location of [
+    'http://releaseartifacts.blob.core.windows.net/archive.zip',
+    'https://attacker.example/archive.zip',
+    'https://user:password@releaseartifacts.blob.core.windows.net/archive.zip',
+    'https://releaseartifacts.blob.core.windows.net.evil.example/archive.zip',
+    '/relative.zip',
+    '',
+  ]) {
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token',
+      fetchImpl: async (url, options) =>
+        url.endsWith('/actions/artifacts/9001/zip')
+          ? { status: 302, ok: false, headers: { get: () => location } }
+          : responseFor(url, options),
+    }), /GitHub dispatch artifact redirect target is not trusted Azure Blob HTTPS/);
+  }
 
   // The run endpoint may omit inputs. The exact run-scoped artifact is the
   // trusted workflow's durable record of confirmation, SHA and attempt.
@@ -604,6 +714,13 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
   const forgedArtifacts = [
     ['prefixed ZIP data', paddedZip(true), /dispatch artifact ZIP local header is invalid/],
     ['unaccounted ZIP payload gap', paddedZip(false), /dispatch artifact ZIP payload bounds are invalid/],
+    ['forged ZIP descriptor flag with no descriptor', (() => {
+      const bytes = Buffer.from(dispatchArtifact().archiveBytes);
+      bytes.writeUInt16LE(bytes.readUInt16LE(6) | 0x0008, 6);
+      const central = bytes.readUInt32LE(bytes.length - 22 + 16);
+      bytes.writeUInt16LE(bytes.readUInt16LE(central + 8) | 0x0008, central + 8);
+      return dispatchArtifact({ archiveBytes: bytes });
+    })(), /dispatch artifact ZIP data descriptor bounds are invalid/],
     ['local CRC disagrees with central directory', mismatchedLocalHeader(14, 0),
       /dispatch artifact ZIP local and central headers disagree/],
     ['local compressed size disagrees with central directory', mismatchedLocalHeader(18, 0),
@@ -744,7 +861,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       const result = responseFor(url, opts);
       if (!url.endsWith('/pulls/123/reviews?per_page=100')) return result;
       return { ...result, json: async () => [
-        { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+        { user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
           id: 456, html_url: REVIEW_URL, commit_id: REVIEWED_HEAD_SHA,
           submitted_at: '2026-11-09T14:00:00Z' }, malformed,
       ] };
@@ -786,10 +903,6 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     { run_attempt: 2 },
     { created_at: '2026-11-09T13:59:59Z' },
     { created_at: '2026-11-09T14:51:00Z' },
-    { updated_at: '2026-11-09T15:01:00Z' },
-    // After declared gate completion but before manifest creation must also fail.
-    { updated_at: '2026-11-09T14:55:00Z' },
-    { updated_at: null },
     { created_at: null },
     { path: '.github/workflows/unrelated.yml' },
     { repository: { full_name: 'someone/else' } },
@@ -801,22 +914,10 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       const original = result.json;
       return { ...result, json: async () => ({ ...await original(), ...patch }) };
     };
+    // A future created_at may contradict the authenticated run completion
+    // before a later identity check; that is also a mandatory fail-closed result.
     await assert.rejects(verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: badFetch }),
-      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|required workflow run completed after release manifest creation|release gate API completion postdates declared production gate completion)/);
-  }
-  // VK parity is a separate required run: it must also have finished before
-  // the manifest existed, not merely report a green status at the right SHA.
-  for (const updatedAt of ['2026-11-09T15:00:01Z', null]) {
-    const lateParityFetch = async (url, opts) => {
-      const result = responseFor(url, opts);
-      if (!url.endsWith('/actions/runs/12346')) return result;
-      const original = result.json;
-      return { ...result, json: async () => ({ ...await original(), updated_at: updatedAt }) };
-    };
-    await assert.rejects(verifyGithubRuns(valid(), {
-      token: 'test-token', fetchImpl: lateParityFetch,
-    }), /GitHub required workflow run completed after release manifest creation/,
-    'VK parity with missing or post-manifest completion must fail closed');
+      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|release dispatch predates independent approval|release gate completion exceeds authenticated run timestamp)/);
   }
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token',
@@ -828,7 +929,12 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
 test('GitHub Jobs API must prove all mandatory production steps completed successfully', async () => {
   const makeFetch = ({ stepConclusion = 'success', jobConclusion = 'success',
     totalCount = 1, omitStep = false, failJobs = false, duplicateStep = false, jobAttempt = 1,
+    stepNumbers = [25, 26, 27, 28], stepNames = Object.keys(valid().checks[0].productionSteps),
     jobStatus = 'completed', stepStatus = 'completed', jobRunId = 12345,
+    preflightConclusion = 'success', preflightStatus = 'completed',
+    preflightNumber = 22, omitPreflight = false, duplicatePreflight = false,
+    jobName = 'Syntax, tests and dependency audit', jobHeadSha = SHA,
+    duplicateCanonicalJob = false,
     jobCompletedAt = '2026-11-09T14:45:00Z', artifacts = [dispatchArtifact()],
     artifactTotalCount = artifacts.length, failArtifacts = false } = {}) => async url => {
     if (url.endsWith('/pulls/123')) return { ok: true, json: async () => ({
@@ -839,7 +945,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     if (url.endsWith('/collaborators/independent-release-reviewer/permission'))
       return { ok: true, json: async () => ({ permission: 'write', user: { login: 'independent-release-reviewer' } }) };
     if (url.endsWith('/pulls/123/reviews?per_page=100')) return { ok: true, json: async () => [
-      { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+      { user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
         id: 456, html_url: REVIEW_URL,
         commit_id: REVIEWED_HEAD_SHA, submitted_at: '2026-11-09T14:00:00Z' },
     ] };
@@ -852,20 +958,36 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     };
     if (url.includes('/jobs?')) {
       if (failJobs) return { ok: false };
-      const names = Object.keys(valid().checks[0].productionSteps);
+      const names = stepNames;
       return { ok: true, json: async () => ({
-        total_count: totalCount,
-        jobs: [{ run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
-          conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [...names.slice(omitStep ? 1 : 0).map((name, i) => ({
-            name, status: stepStatus, conclusion: i === 0 ? stepConclusion : 'success',
-          })), ...(duplicateStep ? [{ name: names[0], status: 'completed', conclusion: 'success' }] : [])] }],
+        total_count: duplicateCanonicalJob ? 2 : totalCount,
+        jobs: [{ name: jobName, head_sha: jobHeadSha,
+          run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
+          conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [
+          ...(!omitPreflight ? [{
+            name: 'Verify existing production secrets without changing them',
+            number: preflightNumber, status: preflightStatus, conclusion: preflightConclusion,
+          }] : []),
+          ...(duplicatePreflight ? [{
+            name: 'Verify existing production secrets without changing them',
+            number: preflightNumber, status: 'completed', conclusion: 'success',
+          }] : []),
+          ...names.slice(omitStep ? 1 : 0).map((name, i) => ({
+            name, number: stepNumbers[i], status: stepStatus,
+            conclusion: i === 0 ? stepConclusion : 'success',
+          })), ...(duplicateStep ? [{ name: names[0], status: 'completed', conclusion: 'success' }] : [])] },
+          ...(duplicateCanonicalJob ? [{
+            name: 'Syntax, tests and dependency audit', head_sha: SHA,
+            run_id: jobRunId, run_attempt: jobAttempt, status: 'completed',
+            conclusion: 'success', completed_at: jobCompletedAt, steps: [],
+          }] : [])],
       }) };
     }
     const id = Number(url.split('/').at(-1));
     return { ok: true, json: async () => ({
       id, head_sha: SHA, head_branch: 'main', status: 'completed', conclusion: 'success',
       event: id === 12345 ? 'workflow_dispatch' : 'push',
-      created_at: '2026-11-09T14:05:00Z', updated_at: '2026-11-09T14:50:00Z',
+      created_at: '2026-11-09T14:05:00Z', updated_at: id === 12345 ? '2026-11-09T14:50:00Z' : '2026-11-09T14:12:00Z',
       run_attempt: 1, path: id === 12345 ? '.github/workflows/release-gate.yml' : '.github/workflows/vk-native-hosting-main-parity.yml',
       html_url: 'https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/' + id,
       repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
@@ -874,18 +996,46 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
   const opts = fetchImpl => ({ fetchImpl, token: 'test-token' });
   assert.deepEqual(await verifyGithubRuns(valid(), opts(makeFetch())),
     { verifiedRunIds: [12345, 12346] });
+  // JSON key order is caller-controlled, not the workflow's canonical order.
+  // Reversing both the manifest keys and mocked successful GitHub job steps
+  // must NOT make pre-deploy smoke look like post-deploy smoke.
+  const reorderedManifest = valid();
+  reorderedManifest.checks[0].productionSteps = Object.fromEntries(
+    Object.entries(reorderedManifest.checks[0].productionSteps).reverse());
+  assert.deepEqual(validateReleaseEvidence(reorderedManifest), validateReleaseEvidence(valid()));
+  await assert.rejects(verifyGithubRuns(reorderedManifest, opts(makeFetch({
+    stepNames: Object.keys(reorderedManifest.checks[0].productionSteps),
+  }))), /GitHub mandatory production step not verified/);
   for (const changed of [
     { stepConclusion: 'skipped' }, { stepConclusion: 'failure' },
     { jobConclusion: 'failure' }, { jobStatus: 'in_progress' },
     { stepStatus: 'in_progress' }, { omitStep: true }, { totalCount: 2 },
     { jobAttempt: null }, { jobAttempt: 2 }, { jobRunId: 12346 },
     { duplicateStep: true },
+    // The read-only Railway production scope preflight must actually finish
+    // before any deployment. Four green deploy/smoke steps cannot replace it.
+    { omitPreflight: true },
+    { duplicatePreflight: true },
+    { preflightConclusion: 'skipped' },
+    { preflightConclusion: 'failure' },
+    { preflightStatus: 'in_progress' },
+    { preflightNumber: null },
+    { preflightNumber: 25 },
+    { preflightNumber: 26 },
+    // Passing statuses alone do not prove that smoke ran after deployment.
+    { stepNumbers: [26, 25, 27, 28] },
+    { stepNumbers: [25, 26, 26, 28] },
+    { stepNumbers: [25, null, 27, 28] },
+    { stepNumbers: [25, 26, '27', 28] },
+    { jobName: 'Unrelated smoke job' },
+    { jobHeadSha: ROLLBACK_SHA },
+    { duplicateCanonicalJob: true },
     { jobCompletedAt: null },
     { jobCompletedAt: '2026-11-09T14:55:00Z' },
     { jobCompletedAt: '2026-11-09T14:04:00Z' },
   ]) {
     await assert.rejects(verifyGithubRuns(valid(), opts(makeFetch(changed))),
-      /GitHub (mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch)/);
+      /GitHub (production secret preflight not verified|mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch|canonical release job missing or ambiguous|canonical release job identity mismatch)/);
   }
   // Both the manifest and workflow run attest attempt 2, but the Jobs API
   // returns successful steps from attempt 1. A rerun must not inherit them.
@@ -904,7 +1054,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     return { ...result, json: async () => ({ ...await original(), run_attempt: 2 }) };
   };
   await assert.rejects(verifyGithubRuns(rerunManifest, opts(rerunFetch)),
-    /GitHub mandatory production step not verified/);
+    /GitHub canonical release job identity mismatch/);
 
   await assert.rejects(verifyGithubRuns(valid(), opts(makeFetch({ failJobs: true }))),
     /GitHub jobs API lookup failed/);
@@ -912,7 +1062,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
 
 test('live GitHub approval is independent, current, exact-SHA and fail-closed', async () => {
   const approvedReview = {
-    user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+    user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
     id: 456, html_url: REVIEW_URL,
         commit_id: REVIEWED_HEAD_SHA, submitted_at: '2026-11-09T14:00:00Z',
   };
@@ -944,9 +1094,14 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
       return { ok: true, json: async () => ({
         total_count: 1,
         jobs: [{
+          name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
-          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map(name =>
-            ({ name, status: 'completed', conclusion: 'success' })),
+          completed_at: '2026-11-09T14:45:00Z', steps: [
+            { name: 'Verify existing production secrets without changing them',
+              number: 22, status: 'completed', conclusion: 'success' },
+            ...Object.keys(valid().checks[0].productionSteps).map((name, i) =>
+              ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })),
+          ],
         }],
       }) };
     }
@@ -954,7 +1109,7 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
     return { ok: true, json: async () => ({
       id, head_sha: SHA, head_branch: 'main', status: 'completed',
       conclusion: 'success', event: id === 12345 ? 'workflow_dispatch' : 'push',
-      created_at: '2026-11-09T14:05:00Z', updated_at: '2026-11-09T14:50:00Z', run_attempt: 1,
+      created_at: '2026-11-09T14:05:00Z', updated_at: id === 12345 ? '2026-11-09T14:50:00Z' : '2026-11-09T14:12:00Z', run_attempt: 1,
       path: id === 12345 ? '.github/workflows/release-gate.yml' : '.github/workflows/vk-native-hosting-main-parity.yml',
       html_url: 'https://github.com/GrafTrahula666/pivnik-bonus-app/actions/runs/' + id,
       repository: { full_name: 'GrafTrahula666/pivnik-bonus-app' },
@@ -964,6 +1119,53 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
     verifyGithubRuns(manifest, { fetchImpl: makeFetch(changes), token: 'test-token' });
 
   assert.deepEqual(await verify({}), { verifiedRunIds: [12345, 12346] });
+
+  // A second human may resolve an earlier change request, but only when
+  // GitHub's submitted timestamps establish an unambiguous ordering.
+  const secondReviewerRequest = {
+    user: { login: 'second-release-reviewer', type: 'User' },
+    state: 'CHANGES_REQUESTED', id: 900, commit_id: REVIEWED_HEAD_SHA,
+    submitted_at: '2026-11-09T14:01:00Z',
+  };
+  const secondReviewerApproval = {
+    ...secondReviewerRequest, state: 'APPROVED', id: 901,
+    submitted_at: '2026-11-09T14:01:01Z',
+  };
+  assert.deepEqual(await verify({ reviews: [
+    approvedReview, secondReviewerRequest, secondReviewerApproval,
+  ] }), { verifiedRunIds: [12345, 12346] });
+  await assert.rejects(verify({ reviews: [
+    approvedReview, secondReviewerRequest,
+    { ...secondReviewerApproval, submitted_at: '2026-11-09T14:01:00.000Z' },
+  ] }), /conflicting same-timestamp reviews/,
+  'same-instant CHANGES_REQUESTED and APPROVED cannot be ordered from array position');
+  await assert.rejects(verify({ reviews: [
+    { ...approvedReview, state: 'DISMISSED', id: 457 },
+    approvedReview,
+  ] }), /conflicting same-timestamp reviews/,
+  'same-instant dismissal must not become an approval by reordering API results');
+
+  // A bot may have write access and submit APPROVED, but this cannot stand
+  // in for the independently accountable human release decision.
+  for (const type of ['Bot', undefined]) {
+    await assert.rejects(
+      verify({ reviews: [{ ...approvedReview, user: { ...approvedReview.user, type } }] }),
+      /GitHub independent exact-SHA approval missing/,
+      'non-human or unverified reviewer type ' + String(type),
+    );
+  }
+
+  // A late approval must not retroactively authorize a workflow already running.
+  const earlyDispatchFetch = async (url, options) => {
+    const response = await makeFetch({})(url, options);
+    if (!url.endsWith('/actions/runs/12345')) return response;
+    return { ...response, json: async () => ({
+      ...await response.json(), created_at: '2026-11-09T13:59:59Z',
+    }) };
+  };
+  await assert.rejects(verifyGithubRuns(valid(), {
+    fetchImpl: earlyDispatchFetch, token: 'test-token',
+  }), /GitHub release dispatch predates independent approval/);
 
   const substitutedEvidence = valid();
   substitutedEvidence.approval.evidenceUrl = REF;
@@ -1065,4 +1267,62 @@ test('workflow dispatch attestation records exact inputs and rejects forged or m
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+
+test('production release steps stay manual, main-only, exact-SHA gated and sequential', async () => {
+  const workflow = await import('node:fs/promises').then(fs =>
+    fs.readFile(fileURLToPath(new URL('../.github/workflows/release-gate.yml', import.meta.url)), 'utf8'));
+  const stepNames = [
+    'Deploy exact commit and verify both production services',
+    'Probe production documents and public endpoints',
+    'Verify separate Telegram and VK production accounts',
+    'Verify signed Telegram and VK production sessions',
+  ];
+  // Verify the actual workflow, not a hand-maintained copy of its conditions.
+  const verifyContract = yaml => {
+    const blocks = yaml.split(/(?=^      - name: )/m);
+    const gate = [
+      "github.event_name == 'workflow_dispatch'",
+      "github.ref == 'refs/heads/main'",
+      'inputs.release_sha == github.sha',
+      "inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'",
+    ].join(' && ');
+    const indexes = [];
+    for (const name of stepNames) {
+      const matches = blocks.map((block, index) => ({ block, index }))
+        .filter(({ block }) => block.startsWith('      - name: ' + name + '\n'));
+      assert.equal(matches.length, 1, 'missing/duplicate production step: ' + name);
+      const { block, index } = matches[0];
+      indexes.push(index);
+      const condition = block.match(/^        if: >-\n((?:          [^\n]*\n)+)/m);
+      assert.ok(condition, 'production step has no explicit release condition: ' + name);
+      assert.equal(condition[1].trim().replace(/\s+/g, ' '), gate,
+        'production step must require main + manual confirmation + exact SHA: ' + name);
+    }
+    assert.ok(indexes.every((index, i) => i === 0 || index > indexes[i - 1]),
+      'deploy must precede endpoints, account and signed-session smoke');
+    const deploy = blocks[indexes[0]];
+    assert.match(deploy, /git ls-remote --heads origin main/,
+      'deploy must recheck live origin/main before publication');
+    assert.match(deploy, /current_main.*RELEASE_COMMIT_SHA/,
+      'deploy must reject drift from the approved SHA');
+  };
+  verifyContract(workflow);
+  // Mutations prove the contract can actually detect a weakened guard.
+  const dropConfirm = workflow.replaceAll(
+    "inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'",
+    "inputs.release_confirm != 'CANCEL'");
+  assert.throws(() => verifyContract(dropConfirm), /main \+ manual confirmation \+ exact SHA/);
+  const dropSha = workflow.replaceAll(
+    'inputs.release_sha == github.sha', 'inputs.release_sha != github.sha');
+  assert.throws(() => verifyContract(dropSha), /main \+ manual confirmation \+ exact SHA/);
+  const removeGuard = workflow.replace(
+    /      - name: Probe production documents and public endpoints\n        if: >-\n(?:          [^\n]*\n)+/,
+    '      - name: Probe production documents and public endpoints\n');
+  assert.throws(() => verifyContract(removeGuard), /no explicit release condition/);
+  const renameStep = workflow.replace(
+    '      - name: Probe production documents and public endpoints',
+    '      - name: TEMPORARY_PROBE');
+  assert.throws(() => verifyContract(renameStep), /missing\/duplicate production step/);
 });
