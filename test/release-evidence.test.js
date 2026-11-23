@@ -495,7 +495,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
     if (url.endsWith('/collaborators/independent-release-reviewer/permission'))
       return { ok: true, json: async () => ({ permission: 'write', user: { login: 'independent-release-reviewer' } }) };
     if (url.endsWith('/pulls/123/reviews?per_page=100')) return { ok: true, json: async () => [
-      { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+      { user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
         id: 456, html_url: REVIEW_URL,
         commit_id: REVIEWED_HEAD_SHA, submitted_at: '2026-11-09T14:00:00Z' },
     ] };
@@ -839,7 +839,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       const result = responseFor(url, opts);
       if (!url.endsWith('/pulls/123/reviews?per_page=100')) return result;
       return { ...result, json: async () => [
-        { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+        { user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
           id: 456, html_url: REVIEW_URL, commit_id: REVIEWED_HEAD_SHA,
           submitted_at: '2026-11-09T14:00:00Z' }, malformed,
       ] };
@@ -921,7 +921,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     if (url.endsWith('/collaborators/independent-release-reviewer/permission'))
       return { ok: true, json: async () => ({ permission: 'write', user: { login: 'independent-release-reviewer' } }) };
     if (url.endsWith('/pulls/123/reviews?per_page=100')) return { ok: true, json: async () => [
-      { user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+      { user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
         id: 456, html_url: REVIEW_URL,
         commit_id: REVIEWED_HEAD_SHA, submitted_at: '2026-11-09T14:00:00Z' },
     ] };
@@ -1019,7 +1019,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
 
 test('live GitHub approval is independent, current, exact-SHA and fail-closed', async () => {
   const approvedReview = {
-    user: { login: 'independent-release-reviewer' }, state: 'APPROVED',
+    user: { login: 'independent-release-reviewer', type: 'User' }, state: 'APPROVED',
     id: 456, html_url: REVIEW_URL,
         commit_id: REVIEWED_HEAD_SHA, submitted_at: '2026-11-09T14:00:00Z',
   };
@@ -1072,6 +1072,16 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
     verifyGithubRuns(manifest, { fetchImpl: makeFetch(changes), token: 'test-token' });
 
   assert.deepEqual(await verify({}), { verifiedRunIds: [12345, 12346] });
+
+  // A bot may have write access and submit APPROVED, but this cannot stand
+  // in for the independently accountable human release decision.
+  for (const type of ['Bot', undefined]) {
+    await assert.rejects(
+      verify({ reviews: [{ ...approvedReview, user: { ...approvedReview.user, type } }] }),
+      /GitHub independent exact-SHA approval missing/,
+      'non-human or unverified reviewer type ' + String(type),
+    );
+  }
 
   // A late approval must not retroactively authorize a workflow already running.
   const earlyDispatchFetch = async (url, options) => {
