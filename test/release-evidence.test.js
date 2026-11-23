@@ -507,8 +507,8 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
         total_count: 1,
         jobs: [{ name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
-          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map(name =>
-            ({ name, status: 'completed', conclusion: 'success' })) }],
+          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map((name, i) =>
+            ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })) }],
       }) };
     }
     const id = Number(url.split('/').at(-1));
@@ -885,6 +885,7 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
 test('GitHub Jobs API must prove all mandatory production steps completed successfully', async () => {
   const makeFetch = ({ stepConclusion = 'success', jobConclusion = 'success',
     totalCount = 1, omitStep = false, failJobs = false, duplicateStep = false, jobAttempt = 1,
+    stepNumbers = [25, 26, 27, 28],
     jobStatus = 'completed', stepStatus = 'completed', jobRunId = 12345,
     jobName = 'Syntax, tests and dependency audit', jobHeadSha = SHA,
     duplicateCanonicalJob = false,
@@ -917,7 +918,8 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
         jobs: [{ name: jobName, head_sha: jobHeadSha,
           run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
           conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [...names.slice(omitStep ? 1 : 0).map((name, i) => ({
-            name, status: stepStatus, conclusion: i === 0 ? stepConclusion : 'success',
+            name, number: stepNumbers[i], status: stepStatus,
+            conclusion: i === 0 ? stepConclusion : 'success',
           })), ...(duplicateStep ? [{ name: names[0], status: 'completed', conclusion: 'success' }] : [])] },
           ...(duplicateCanonicalJob ? [{
             name: 'Syntax, tests and dependency audit', head_sha: SHA,
@@ -945,6 +947,11 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     { stepStatus: 'in_progress' }, { omitStep: true }, { totalCount: 2 },
     { jobAttempt: null }, { jobAttempt: 2 }, { jobRunId: 12346 },
     { duplicateStep: true },
+    // Passing statuses alone do not prove that smoke ran after deployment.
+    { stepNumbers: [26, 25, 27, 28] },
+    { stepNumbers: [25, 26, 26, 28] },
+    { stepNumbers: [25, null, 27, 28] },
+    { stepNumbers: [25, 26, '27', 28] },
     { jobName: 'Unrelated smoke job' },
     { jobHeadSha: ROLLBACK_SHA },
     { duplicateCanonicalJob: true },
@@ -1014,8 +1021,8 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
         jobs: [{
           name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
-          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map(name =>
-            ({ name, status: 'completed', conclusion: 'success' })),
+          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map((name, i) =>
+            ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })),
         }],
       }) };
     }
