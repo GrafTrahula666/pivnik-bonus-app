@@ -32,10 +32,10 @@ function approvedJobs(overrides = {}) {
     name: 'Syntax, tests and dependency audit', status: 'completed', conclusion: 'success',
     head_sha: SHA, run_id: 42001, run_attempt: 3,
     steps: [
-      { name: 'Deploy exact commit and verify both production services', status: 'completed', conclusion: 'success' },
-      { name: 'Probe production documents and public endpoints', status: 'completed', conclusion: 'success' },
-      { name: 'Verify separate Telegram and VK production accounts', status: 'completed', conclusion: 'success' },
-      { name: 'Verify signed Telegram and VK production sessions', status: 'completed', conclusion: 'success' },
+      { number: 23, name: 'Deploy exact commit and verify both production services', status: 'completed', conclusion: 'success' },
+      { number: 24, name: 'Probe production documents and public endpoints', status: 'completed', conclusion: 'success' },
+      { number: 25, name: 'Verify separate Telegram and VK production accounts', status: 'completed', conclusion: 'success' },
+      { number: 26, name: 'Verify signed Telegram and VK production sessions', status: 'completed', conclusion: 'success' },
     ],
     ...overrides,
   }];
@@ -212,6 +212,28 @@ test('duplicate mandatory production steps deny VK even when one succeeds', asyn
       assert.equal(result.calls.length, 2);
     }
   }
+});
+
+test('production approval denies smoke evidence recorded before deploy or with invalid step order', async () => {
+  const valid = approvedJobs()[0].steps;
+  const cases = [
+    valid.map((step, i) => ({ ...step, number: i === 0 ? 24 : i === 1 ? 23 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 1 ? 23 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 2 ? 24 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 3 ? 24 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 0 ? undefined : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 1 ? '24' : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 2 ? 0 : step.number })),
+  ];
+  for (const steps of cases) {
+    const result = await evaluate({ jobs: approvedJobs({ steps }) });
+    assert.ok(result.error instanceof Error, 'out-of-order, duplicate or missing step number must deny VK');
+    assert.match(result.error.message, /deployed and verified this SHA in order/);
+    assert.equal(result.calls.length, 2);
+    assert.equal(result.logs.length, 0);
+  }
+  const approved = await evaluate();
+  assert.equal(approved.error, undefined, 'correctly ordered release evidence must still pass');
 });
 
 test('unfinished mandatory production steps deny VK publication despite a success conclusion', async () => {
