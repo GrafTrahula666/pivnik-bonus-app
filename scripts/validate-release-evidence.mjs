@@ -401,6 +401,8 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   const latest = byActor.at(-1);
   demand(data.approval.actor !== pr.user.login &&
     latest?.state === 'APPROVED' &&
+    // GitHub App and automation bot approvals are not human release consent.
+    latest.user?.type === 'User' &&
     // GitHub review.commit_id is the reviewed PR HEAD, not the new merge SHA.
     latest.commit_id?.toLowerCase() === pr.head.sha.toLowerCase() &&
     date(latest.submitted_at) &&
