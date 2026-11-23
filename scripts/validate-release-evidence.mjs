@@ -596,12 +596,25 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         releaseJob.head_sha.toLowerCase() === data.releaseSha.toLowerCase() &&
         Array.isArray(releaseJob.steps),
         'GitHub canonical release job identity mismatch');
+      // A deploy must not be allowed to inherit a green workflow in which
+      // the required read-only Railway production secret/scope preflight was
+      // skipped or failed. This is the exact gate stage that has blocked real
+      // releases; successful deploy/smoke steps alone are insufficient.
+      const preflightSteps = releaseJob.steps.filter(step =>
+        step.name === 'Verify existing production secrets without changing them');
+      const preflight = preflightSteps[0];
+      demand(preflightSteps.length === 1 &&
+        preflight.status === 'completed' &&
+        preflight.conclusion === 'success' &&
+        Number.isSafeInteger(preflight.number) &&
+        preflight.number > 0,
+        'GitHub production secret preflight not verified');
       // The mandatory order is owned by this validator, not by the JSON object's
       // caller-controlled key insertion order. Reordering the manifest must not
       // conceal smoke steps executed before deployment.
       // GitHub step numbers encode execution order. A green step from before
       // deployment must never stand in for a post-deploy smoke check.
-      let lastProductionStepNumber = 0;
+      let lastProductionStepNumber = preflight.number;
       for (const stepName of REQUIRED_PRODUCTION_STEPS) {
         const matching = releaseJob.steps.filter(step => step.name === stepName);
         const step = matching[0];
