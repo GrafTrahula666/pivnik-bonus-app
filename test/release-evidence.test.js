@@ -1186,3 +1186,61 @@ test('workflow dispatch attestation records exact inputs and rejects forged or m
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test('production release steps stay manual, main-only, exact-SHA gated and sequential', async () => {
+  const workflow = await import('node:fs/promises').then(fs =>
+    fs.readFile(fileURLToPath(new URL('../.github/workflows/release-gate.yml', import.meta.url)), 'utf8'));
+  const stepNames = [
+    'Deploy exact commit and verify both production services',
+    'Probe production documents and public endpoints',
+    'Verify separate Telegram and VK production accounts',
+    'Verify signed Telegram and VK production sessions',
+  ];
+  // Verify the actual workflow, not a hand-maintained copy of its conditions.
+  const verifyContract = yaml => {
+    const blocks = yaml.split(/(?=^      - name: )/m);
+    const gate = [
+      "github.event_name == 'workflow_dispatch'",
+      "github.ref == 'refs/heads/main'",
+      'inputs.release_sha == github.sha',
+      "inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'",
+    ].join(' && ');
+    const indexes = [];
+    for (const name of stepNames) {
+      const matches = blocks.map((block, index) => ({ block, index }))
+        .filter(({ block }) => block.startsWith('      - name: ' + name + '\n'));
+      assert.equal(matches.length, 1, 'missing/duplicate production step: ' + name);
+      const { block, index } = matches[0];
+      indexes.push(index);
+      const condition = block.match(/^        if: >-\n((?:          [^\n]*\n)+)/m);
+      assert.ok(condition, 'production step has no explicit release condition: ' + name);
+      assert.equal(condition[1].trim().replace(/\s+/g, ' '), gate,
+        'production step must require main + manual confirmation + exact SHA: ' + name);
+    }
+    assert.ok(indexes.every((index, i) => i === 0 || index > indexes[i - 1]),
+      'deploy must precede endpoints, account and signed-session smoke');
+    const deploy = blocks[indexes[0]];
+    assert.match(deploy, /git ls-remote --heads origin main/,
+      'deploy must recheck live origin/main before publication');
+    assert.match(deploy, /current_main.*RELEASE_COMMIT_SHA/,
+      'deploy must reject drift from the approved SHA');
+  };
+  verifyContract(workflow);
+  // Mutations prove the contract can actually detect a weakened guard.
+  const dropConfirm = workflow.replaceAll(
+    "inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'",
+    "inputs.release_confirm != 'CANCEL'");
+  assert.throws(() => verifyContract(dropConfirm), /main \+ manual confirmation \+ exact SHA/);
+  const dropSha = workflow.replaceAll(
+    'inputs.release_sha == github.sha', 'inputs.release_sha != github.sha');
+  assert.throws(() => verifyContract(dropSha), /main \+ manual confirmation \+ exact SHA/);
+  const removeGuard = workflow.replace(
+    /      - name: Probe production documents and public endpoints\n        if: >-\n(?:          [^\n]*\n)+/,
+    '      - name: Probe production documents and public endpoints\n');
+  assert.throws(() => verifyContract(removeGuard), /no explicit release condition/);
+  const renameStep = workflow.replace(
+    '      - name: Probe production documents and public endpoints',
+    '      - name: TEMPORARY_PROBE');
+  assert.throws(() => verifyContract(renameStep), /missing\/duplicate production step/);
+});
