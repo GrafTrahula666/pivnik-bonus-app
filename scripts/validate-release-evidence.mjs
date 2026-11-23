@@ -502,6 +502,10 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         Date.parse(run.updated_at) >= Date.parse(run.created_at) &&
         Date.parse(check.completedAt) <= Date.parse(run.updated_at),
         'GitHub release gate completion exceeds authenticated run timestamp');
+      // A run updated after the manifest existed cannot attest that historical manifest.
+      // Keep this separate from the job-completion bound: updated_at can lag the job.
+      demand(Date.parse(run.updated_at) <= Date.parse(data.createdAt),
+        'GitHub release gate run timestamp postdates release manifest creation');
       // The workflow-run REST response may omit inputs. Instead require the
       // immutable artifact uploaded by this exact trusted workflow run. Its
       // name binds the actual dispatch confirmation, release SHA and attempt.

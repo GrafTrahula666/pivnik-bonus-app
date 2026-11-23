@@ -577,6 +577,24 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       token: 'test-token', fetchImpl: staleRunFetch,
     }), /GitHub release gate completion exceeds authenticated run timestamp/);
   }
+  // Preserve the integration branch's manifest-time upper bound without
+  // equating the provider's update timestamp to the last completed job.
+  for (const [updatedAt, accepted] of [
+    ['2026-11-09T14:51:00Z', true],
+    ['2026-11-09T15:00:00Z', true],
+    ['2026-11-09T15:00:01Z', false],
+  ]) {
+    const updatedGateFetch = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith('/actions/runs/12345')) return response;
+      return { ...response, json: async () => ({
+        ...await response.json(), updated_at: updatedAt,
+      }) };
+    };
+    const verified = verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: updatedGateFetch });
+    if (accepted) assert.deepEqual(await verified, { verifiedRunIds: [12345, 12346] });
+    else await assert.rejects(verified, /GitHub release gate run timestamp postdates release manifest creation/);
+  }
   const archiveCall = calls.find(call => call.url.endsWith('/actions/artifacts/9001/zip'));
   assert.equal(archiveCall.options.redirect, 'manual');
   // The GitHub artifact endpoint returns a signed Azure Blob redirect.
