@@ -585,7 +585,10 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         releaseJob.head_sha.toLowerCase() === data.releaseSha.toLowerCase() &&
         Array.isArray(releaseJob.steps),
         'GitHub canonical release job identity mismatch');
-      // The mandatory order is owned by this validator, not by the JSON object's\n      // caller-controlled key insertion order. Reordering the manifest must not\n      // conceal smoke steps executed before deployment.\n      // GitHub step numbers encode execution order. A green step from before
+      // The mandatory order is owned by this validator, not by the JSON object's
+      // caller-controlled key insertion order. Reordering the manifest must not
+      // conceal smoke steps executed before deployment.
+      // GitHub step numbers encode execution order. A green step from before
       // deployment must never stand in for a post-deploy smoke check.
       let lastProductionStepNumber = 0;
       for (const stepName of REQUIRED_PRODUCTION_STEPS) {
