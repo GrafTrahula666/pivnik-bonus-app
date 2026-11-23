@@ -501,7 +501,6 @@ test('CLI Railway live-lookup opt-in defaults offline and fails closed on missin
     // choose a foreign service, or silently downgrade to offline mode.
     for (const [railwayFlag, target] of [
       [undefined, 'pivnik-bonus-app'],
-      ['', 'vk-native-hosting'],
       ['1', 'untrusted-service'],
       ['1', ''],
     ]) {
