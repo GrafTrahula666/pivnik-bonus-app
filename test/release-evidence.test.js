@@ -892,8 +892,10 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       const original = result.json;
       return { ...result, json: async () => ({ ...await original(), ...patch }) };
     };
+    // A future created_at may contradict the authenticated run completion
+    // before a later identity check; that is also a mandatory fail-closed result.
     await assert.rejects(verifyGithubRuns(valid(), { token: 'test-token', fetchImpl: badFetch }),
-      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|release dispatch predates independent approval)/);
+      /GitHub (.* mismatch|original production dispatch confirmation unavailable or mismatched|release dispatch predates independent approval|release gate completion exceeds authenticated run timestamp)/);
   }
   await assert.rejects(verifyGithubRuns(valid(), {
     token: 'test-token',
