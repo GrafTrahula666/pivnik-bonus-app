@@ -461,12 +461,15 @@ test('CLI Railway live-lookup opt-in defaults offline and fails closed on missin
     const file = join(directory, 'manifest.json');
     writeFileSync(file, JSON.stringify(manifest()));
     const command = fileURLToPath(new URL('../scripts/validate-release-evidence.mjs', import.meta.url));
-    const run = (railwayFlag, githubFlag) => {
+    const run = (railwayFlag, githubFlag, rollbackTarget) => {
       const env = { ...process.env, GITHUB_TOKEN: '', RAILWAY_TOKEN: '' };
       delete env.PIVNIK_VERIFY_GITHUB;
       delete env.PIVNIK_VERIFY_RAILWAY;
+      delete env.PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET;
       if (railwayFlag !== undefined) env.PIVNIK_VERIFY_RAILWAY = railwayFlag;
       if (githubFlag !== undefined) env.PIVNIK_VERIFY_GITHUB = githubFlag;
+      if (rollbackTarget !== undefined)
+        env.PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET = rollbackTarget;
       return spawnSync(process.execPath, [command, file], {
         encoding: 'utf8', timeout: 10000, env,
       });
@@ -493,6 +496,27 @@ test('CLI Railway live-lookup opt-in defaults offline and fails closed on missin
     const typo = run('true');
     assert.equal(typo.status, 1);
     assert.match(typo.stderr, /PIVNIK_VERIFY_RAILWAY must equal 1/);
+
+    // An optional rollback target must not bypass provider attestation,
+    // choose a foreign service, or silently downgrade to offline mode.
+    for (const [railwayFlag, target] of [
+      [undefined, 'pivnik-bonus-app'],
+      ['', 'vk-native-hosting'],
+      ['1', 'untrusted-service'],
+      ['1', ''],
+    ]) {
+      const invalid = run(railwayFlag, undefined, target);
+      assert.equal(invalid.status, 1, invalid.stderr);
+      assert.match(invalid.stderr,
+        /PIVNIK_VERIFY_RAILWAY_ROLLBACK_TARGET requires PIVNIK_VERIFY_RAILWAY=1/);
+      assert.doesNotMatch(invalid.stdout, /Authenticated Railway historical rollback/);
+    }
+    for (const target of ['pivnik-bonus-app', 'vk-native-hosting']) {
+      const noToken = run('1', undefined, target);
+      assert.equal(noToken.status, 1, noToken.stderr);
+      assert.match(noToken.stderr, /Railway API token is required/);
+      assert.doesNotMatch(noToken.stdout, /Authenticated Railway historical rollback/);
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
