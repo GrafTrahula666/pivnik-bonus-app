@@ -1102,6 +1102,31 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
 
   assert.deepEqual(await verify({}), { verifiedRunIds: [12345, 12346] });
 
+  // A second human may resolve an earlier change request, but only when
+  // GitHub's submitted timestamps establish an unambiguous ordering.
+  const secondReviewerRequest = {
+    user: { login: 'second-release-reviewer', type: 'User' },
+    state: 'CHANGES_REQUESTED', id: 900, commit_id: REVIEWED_HEAD_SHA,
+    submitted_at: '2026-11-09T14:01:00Z',
+  };
+  const secondReviewerApproval = {
+    ...secondReviewerRequest, state: 'APPROVED', id: 901,
+    submitted_at: '2026-11-09T14:01:01Z',
+  };
+  assert.deepEqual(await verify({ reviews: [
+    approvedReview, secondReviewerRequest, secondReviewerApproval,
+  ] }), { verifiedRunIds: [12345, 12346] });
+  await assert.rejects(verify({ reviews: [
+    approvedReview, secondReviewerRequest,
+    { ...secondReviewerApproval, submitted_at: '2026-11-09T14:01:00.000Z' },
+  ] }), /conflicting same-timestamp reviews/,
+  'same-instant CHANGES_REQUESTED and APPROVED cannot be ordered from array position');
+  await assert.rejects(verify({ reviews: [
+    { ...approvedReview, state: 'DISMISSED', id: 457 },
+    approvedReview,
+  ] }), /conflicting same-timestamp reviews/,
+  'same-instant dismissal must not become an approval by reordering API results');
+
   // A bot may have write access and submit APPROVED, but this cannot stand
   // in for the independently accountable human release decision.
   for (const type of ['Bot', undefined]) {
