@@ -507,8 +507,12 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
         total_count: 1,
         jobs: [{ name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
-          completed_at: '2026-11-09T14:45:00Z', steps: Object.keys(valid().checks[0].productionSteps).map((name, i) =>
-            ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })) }],
+          completed_at: '2026-11-09T14:45:00Z', steps: [
+            { name: 'Verify existing production secrets without changing them',
+              number: 22, status: 'completed', conclusion: 'success' },
+            ...Object.keys(valid().checks[0].productionSteps).map((name, i) =>
+              ({ name, number: 25 + i, status: 'completed', conclusion: 'success' })),
+          ] }],
       }) };
     }
     const id = Number(url.split('/').at(-1));
@@ -909,6 +913,8 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     totalCount = 1, omitStep = false, failJobs = false, duplicateStep = false, jobAttempt = 1,
     stepNumbers = [25, 26, 27, 28], stepNames = Object.keys(valid().checks[0].productionSteps),
     jobStatus = 'completed', stepStatus = 'completed', jobRunId = 12345,
+    preflightConclusion = 'success', preflightStatus = 'completed',
+    preflightNumber = 22, omitPreflight = false, duplicatePreflight = false,
     jobName = 'Syntax, tests and dependency audit', jobHeadSha = SHA,
     duplicateCanonicalJob = false,
     jobCompletedAt = '2026-11-09T14:45:00Z', artifacts = [dispatchArtifact()],
@@ -939,7 +945,16 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
         total_count: duplicateCanonicalJob ? 2 : totalCount,
         jobs: [{ name: jobName, head_sha: jobHeadSha,
           run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
-          conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [...names.slice(omitStep ? 1 : 0).map((name, i) => ({
+          conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [
+          ...(!omitPreflight ? [{
+            name: 'Verify existing production secrets without changing them',
+            number: preflightNumber, status: preflightStatus, conclusion: preflightConclusion,
+          }] : []),
+          ...(duplicatePreflight ? [{
+            name: 'Verify existing production secrets without changing them',
+            number: preflightNumber, status: 'completed', conclusion: 'success',
+          }] : []),
+          ...names.slice(omitStep ? 1 : 0).map((name, i) => ({
             name, number: stepNumbers[i], status: stepStatus,
             conclusion: i === 0 ? stepConclusion : 'success',
           })), ...(duplicateStep ? [{ name: names[0], status: 'completed', conclusion: 'success' }] : [])] },
@@ -979,6 +994,16 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     { stepStatus: 'in_progress' }, { omitStep: true }, { totalCount: 2 },
     { jobAttempt: null }, { jobAttempt: 2 }, { jobRunId: 12346 },
     { duplicateStep: true },
+    // The read-only Railway production scope preflight must actually finish
+    // before any deployment. Four green deploy/smoke steps cannot replace it.
+    { omitPreflight: true },
+    { duplicatePreflight: true },
+    { preflightConclusion: 'skipped' },
+    { preflightConclusion: 'failure' },
+    { preflightStatus: 'in_progress' },
+    { preflightNumber: null },
+    { preflightNumber: 25 },
+    { preflightNumber: 26 },
     // Passing statuses alone do not prove that smoke ran after deployment.
     { stepNumbers: [26, 25, 27, 28] },
     { stepNumbers: [25, 26, 26, 28] },
@@ -992,7 +1017,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     { jobCompletedAt: '2026-11-09T14:04:00Z' },
   ]) {
     await assert.rejects(verifyGithubRuns(valid(), opts(makeFetch(changed))),
-      /GitHub (mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch|canonical release job missing or ambiguous|canonical release job identity mismatch)/);
+      /GitHub (production secret preflight not verified|mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch|canonical release job missing or ambiguous|canonical release job identity mismatch)/);
   }
   // Both the manifest and workflow run attest attempt 2, but the Jobs API
   // returns successful steps from attempt 1. A rerun must not inherit them.
