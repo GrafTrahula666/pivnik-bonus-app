@@ -60,6 +60,49 @@ export async function verifyRailwayDeployments(manifest, { lookupDeployment } = 
 }
 
 /**
+ * Read-only attestation of ONE explicitly selected rollback target.
+ * An offline manifest's rollback SHA/ID is self-attested until an
+ * independent Railway lookup confirms the historical provider record.
+ *
+ * Passing this check does NOT prove the other service can be rolled back,
+ * that rollback was rehearsed, or that a historical image still exists.
+ */
+export async function verifyRailwayRollbackDeployment(manifest,
+  { lookupDeployment, target } = {}) {
+  validateReleaseEvidence(manifest);
+  requireEvidence(typeof lookupDeployment === 'function',
+    'authenticated rollback deployment lookup is required');
+  requireEvidence(typeof target === 'string' &&
+    Object.hasOwn(RAILWAY_RELEASE_TARGETS, target),
+    'explicit Railway rollback service target is required');
+  const serviceId = RAILWAY_RELEASE_TARGETS[target];
+  const previous = await lookupDeployment({
+    projectId: RAILWAY_RELEASE_PROJECT,
+    environmentId: RAILWAY_RELEASE_ENVIRONMENT,
+    serviceId,
+    deploymentId: manifest.rollback.deploymentId,
+  });
+  requireEvidence(previous && typeof previous === 'object' &&
+    !Array.isArray(previous) &&
+    previous.id === manifest.rollback.deploymentId &&
+    previous.serviceId === serviceId &&
+    previous.environmentId === RAILWAY_RELEASE_ENVIRONMENT &&
+    previous.status === 'SUCCESS' &&
+    typeof previous.meta?.commitHash === 'string' &&
+    previous.meta.commitHash.toLowerCase() === manifest.rollback.sha.toLowerCase(),
+    'known-good rollback deployment identity or SHA mismatch');
+  requireEvidence(typeof previous.createdAt === 'string' &&
+    /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$/.test(previous.createdAt) &&
+    Number.isFinite(Date.parse(previous.createdAt)) &&
+    new Date(previous.createdAt).toISOString().startsWith(previous.createdAt.slice(0, 19)) &&
+    Date.parse(previous.createdAt) <= Date.parse(manifest.rollback.verifiedAt) &&
+    Date.parse(previous.createdAt) <= Date.parse(manifest.approval.at),
+    'rollback deployment must predate its verification and approval');
+  return { target, serviceId, deploymentId: previous.id,
+    sha: previous.meta.commitHash.toLowerCase(), createdAt: previous.createdAt };
+}
+
+/**
  * Stronger read-only attestation for the CURRENT active Railway deployment.
  * Historical SUCCESS alone is insufficient: Railway can replace that release.
  * This proves the provider's active ID at query time, NOT end-user traffic,
