@@ -585,12 +585,19 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         releaseJob.head_sha.toLowerCase() === data.releaseSha.toLowerCase() &&
         Array.isArray(releaseJob.steps),
         'GitHub canonical release job identity mismatch');
+      // GitHub step numbers encode execution order. A green step from before
+      // deployment must never stand in for a post-deploy smoke check.
+      let lastProductionStepNumber = 0;
       for (const stepName of Object.keys(check.productionSteps)) {
         const matching = releaseJob.steps.filter(step => step.name === stepName);
+        const step = matching[0];
         demand(matching.length === 1 &&
-          matching[0].status === 'completed' &&
-          matching[0].conclusion === 'success',
+          step.status === 'completed' &&
+          step.conclusion === 'success' &&
+          Number.isSafeInteger(step.number) &&
+          step.number > lastProductionStepNumber,
           'GitHub mandatory production step not verified: ' + stepName);
+        lastProductionStepNumber = step.number;
       }
     }
   }
