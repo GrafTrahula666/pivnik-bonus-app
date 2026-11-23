@@ -9,6 +9,12 @@ const HASH = /^[0-9a-f]{64}$/i;
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 const MAX_DISPATCH_ARCHIVE_BYTES = 64 * 1024;
 const MAX_DISPATCH_JSON_BYTES = 4 * 1024;
+const REQUIRED_PRODUCTION_STEPS = Object.freeze([
+  'Deploy exact commit and verify both production services',
+  'Probe production documents and public endpoints',
+  'Verify separate Telegram and VK production accounts',
+  'Verify signed Telegram and VK production sessions',
+]);
 
 function demand(condition, reason) {
   if (!condition) throw new Error('Invalid release evidence: ' + reason);
@@ -267,17 +273,11 @@ export function validateReleaseEvidence(data) {
         'common release gate must be an approved successful manual production dispatch with run attempt');
       // A green workflow_dispatch with release_confirm=CANCEL skips production
       // steps. A successful workflow conclusion alone MUST NOT approve release.
-      const requiredProductionSteps = [
-        'Deploy exact commit and verify both production services',
-        'Probe production documents and public endpoints',
-        'Verify separate Telegram and VK production accounts',
-        'Verify signed Telegram and VK production sessions',
-      ];
       demand(object(check.productionSteps), 'production step results are required');
-      demand(Object.keys(check.productionSteps).length === requiredProductionSteps.length &&
-        Object.keys(check.productionSteps).every(name => requiredProductionSteps.includes(name)),
+      demand(Object.keys(check.productionSteps).length === REQUIRED_PRODUCTION_STEPS.length &&
+        Object.keys(check.productionSteps).every(name => REQUIRED_PRODUCTION_STEPS.includes(name)),
         'productionSteps must contain exactly the mandatory release workflow steps');
-      for (const stepName of requiredProductionSteps) {
+      for (const stepName of REQUIRED_PRODUCTION_STEPS) {
         demand(check.productionSteps[stepName] === 'success',
           'mandatory production step not successful: ' + stepName);
       }
@@ -585,10 +585,10 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         releaseJob.head_sha.toLowerCase() === data.releaseSha.toLowerCase() &&
         Array.isArray(releaseJob.steps),
         'GitHub canonical release job identity mismatch');
-      // GitHub step numbers encode execution order. A green step from before
+      // The mandatory order is owned by this validator, not by the JSON object's\n      // caller-controlled key insertion order. Reordering the manifest must not\n      // conceal smoke steps executed before deployment.\n      // GitHub step numbers encode execution order. A green step from before
       // deployment must never stand in for a post-deploy smoke check.
       let lastProductionStepNumber = 0;
-      for (const stepName of Object.keys(check.productionSteps)) {
+      for (const stepName of REQUIRED_PRODUCTION_STEPS) {
         const matching = releaseJob.steps.filter(step => step.name === stepName);
         const step = matching[0];
         demand(matching.length === 1 &&
