@@ -18,7 +18,12 @@ test('effective rules: accepts actual review, release job and deletion protectio
 test('effective rules: empty ruleset includes cannot masquerade as branch protection', () => {
   const result = evaluateEffectiveRules([]);
   assert.equal(result.ok, false);
-  assert.equal(result.reasons.length, 3);
+  assert.deepEqual(result.reasons, [
+    'No effective rule requiring an approving review',
+    'Release gate job is not an effective required status check',
+    'Release gate is not protected by strict up-to-date status checks',
+    'No effective branch deletion protection',
+  ]);
 });
 
 test('effective rules: COMMENT review does not meet required approval count', () => {
