@@ -12,6 +12,7 @@ const protectedMain = [
     required_status_checks: [{ context: 'Syntax, tests and dependency audit', integration_id: 15368 }],
   } },
   { type: 'deletion' },
+  { type: 'non_fast_forward' },
 ];
 
 test('effective rules: accepts actual review, release job and deletion protections', () => {
@@ -28,6 +29,7 @@ test('effective rules: empty ruleset includes cannot masquerade as branch protec
     'Release gate required check is not bound to GitHub Actions integration 15368',
     'Release gate is not protected by strict up-to-date status checks',
     'No effective branch deletion protection',
+    'No effective non-fast-forward (force-push) protection',
   ]);
 });
 
@@ -108,7 +110,9 @@ test('effective rules: strict policy on an unrelated check does not protect rele
 });
 
 test('effective rules: missing deletion protection fails closed', () => {
-  assert.equal(evaluateEffectiveRules(protectedMain.slice(0, 2)).ok, false);
+  const result = evaluateEffectiveRules(protectedMain.filter((rule) => rule.type !== 'deletion'));
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.reasons, ['No effective branch deletion protection']);
 });
 
 test('effective rules: malformed API response fails closed', () => {
@@ -178,5 +182,21 @@ test('effective rules: strict policy must belong to the trusted release check', 
 test('effective rules: malformed strict check list fails closed without throwing', () => {
   for (const checks of [null, {}, 'Syntax, tests and dependency audit']) {
     assert.equal(evaluateEffectiveRules(withStatusChecks(checks)).ok, false);
+  }
+});
+
+test('effective rules: missing force-push protection fails closed independently of deletion', () => {
+  const result = evaluateEffectiveRules(protectedMain.filter((rule) => rule.type !== 'non_fast_forward'));
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.reasons, ['No effective non-fast-forward (force-push) protection']);
+});
+
+test('effective rules: unrelated or malformed rules cannot substitute for force-push protection', () => {
+  const rules = protectedMain.filter((rule) => rule.type !== 'non_fast_forward');
+  for (const replacement of [null, {}, { type: 'non_fast_forward_disabled' },
+    { type: 'deletion', parameters: { type: 'non_fast_forward' } }, { type: 'NON_FAST_FORWARD' }]) {
+    const result = evaluateEffectiveRules([...rules, replacement]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.reasons, ['No effective non-fast-forward (force-push) protection']);
   }
 });

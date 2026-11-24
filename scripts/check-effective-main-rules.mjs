@@ -49,6 +49,9 @@ export function evaluateEffectiveRules(rules) {
   if (!rules.some((rule) => rule?.type === 'deletion')) {
     reasons.push('No effective branch deletion protection');
   }
+  if (!rules.some((rule) => rule?.type === 'non_fast_forward')) {
+    reasons.push('No effective non-fast-forward (force-push) protection');
+  }
   return { ok: reasons.length === 0, reasons, reviewCount, contexts };
 }
 
