@@ -195,7 +195,8 @@ jobs:
         run: |
           set -euo pipefail
           # The builder replaces its output directory. Refuse pre-existing output.
-          test ! -e vk-hosting-build && test ! -L vk-hosting-build
+          test ! -e vk-hosting-build
+          test ! -L vk-hosting-build
           trap 'rm -rf -- vk-hosting-build' EXIT
           node scripts/build-vk-hosting.mjs
           node --input-type=module <<'NODE'
