@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateEffectiveRules, fetchEffectiveRules } from '../scripts/check-effective-main-rules.mjs';
+import { evaluateEffectiveRules, fetchEffectiveRules, verifyRulesetBypasses } from '../scripts/check-effective-main-rules.mjs';
 
 const protectedMain = [
   { type: 'pull_request', parameters: {
@@ -134,7 +134,7 @@ test('live request: uses branch effective rules endpoint', async () => {
     assert.equal(options.headers.Authorization, 'Bearer private-token');
     return { ok: true, json: async () => protectedMain };
   });
-  assert.match(requestedUrl, /\/rules\/branches\/main$/);
+  assert.match(requestedUrl, /\/rules\/branches\/main\?per_page=100&page=1$/);
   assert.equal(evaluateEffectiveRules(rules).ok, true);
 });
 
@@ -199,4 +199,79 @@ test('effective rules: unrelated or malformed rules cannot substitute for force-
     assert.equal(result.ok, false);
     assert.deepEqual(result.reasons, ['No effective non-fast-forward (force-push) protection']);
   }
+});
+
+const provenance = (id, source = 'GrafTrahula666/pivnik-bonus-app', type = 'Repository') =>
+  ({ ruleset_id: id, ruleset_source: source, ruleset_source_type: type });
+const detailFor = (rule, bypass_actors = []) => ({
+  id: rule.ruleset_id, source: rule.ruleset_source, source_type: rule.ruleset_source_type,
+  target: 'branch', enforcement: 'active', bypass_actors,
+});
+const response = (body) => ({ ok: true, json: async () => body });
+
+test('live bypass: verifies every distinct contributing ruleset including inherited ones', async () => {
+  const a = provenance(42);
+  const b = provenance(73, 'example-org', 'Organization');
+  const calls = [];
+  const ids = await verifyRulesetBypasses([a, a, b], 'fixture-token', async (url, options) => {
+    calls.push(url);
+    assert.equal(options.redirect, 'error');
+    return response(detailFor(url.includes('/42?') ? a : b));
+  });
+  assert.deepEqual(ids, [42, 73]);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(url => url.endsWith('?includes_parents=true')));
+});
+
+test('live bypass: every bypass mode, even on a second ruleset, fails closed', async () => {
+  const a = provenance(42);
+  const b = provenance(73, 'example-org', 'Organization');
+  for (const bypass_mode of ['always', 'pull_request', 'exempt']) {
+    await assert.rejects(verifyRulesetBypasses([a, b], 'fixture-token', async url =>
+      response(url.includes('/42?') ? detailFor(a) :
+        detailFor(b, [{ actor_id: 7, actor_type: 'Team', bypass_mode }]))), /Ruleset 73.*bypass/);
+  }
+});
+
+test('live bypass: omitted, null or malformed bypass list never means empty', async () => {
+  const a = provenance(42);
+  for (const invalid of [undefined, null, {}, '', false]) {
+    await assert.rejects(verifyRulesetBypasses([a], 'fixture-token', async () =>
+      response({ ...detailFor(a), bypass_actors: invalid })), /absence is not verifiable/);
+  }
+});
+
+test('live bypass: missing, foreign or conflicting provenance rejects before network', async () => {
+  const a = provenance(42);
+  for (const rules of [[], [{}], [provenance('42')], [provenance(0)],
+    [provenance(42, 'other/repo')], [a, provenance(42, 'org', 'Organization')]]) {
+    await assert.rejects(verifyRulesetBypasses(rules, 'fixture-token',
+      () => { throw Error('unexpected network'); }), /provenance/);
+  }
+});
+
+test('live bypass: wrong identity, source, target, inactive policy or HTTP denial blocks', async () => {
+  const a = provenance(42);
+  for (const override of [{ id: 43 }, { source: 'other/repo' }, { source_type: 'Organization' },
+    { target: 'tag' }, { enforcement: 'evaluate' }, { enforcement: 'disabled' }]) {
+    await assert.rejects(verifyRulesetBypasses([a], 'fixture-token', async () =>
+      response({ ...detailFor(a), ...override })), /identity or active/);
+  }
+  await assert.rejects(verifyRulesetBypasses([a], 'fixture-token', async () =>
+    ({ ok: false, status: 403 })), /HTTP 403/);
+});
+
+test('live rules: pagination includes rulesets beyond the first 100 rules', async () => {
+  const a = { type: 'deletion', ...provenance(42) };
+  const b = { type: 'non_fast_forward', ...provenance(73) };
+  const rules = await fetchEffectiveRules('fixture-token', async url =>
+    response(url.endsWith('page=1') ? Array(100).fill(a) : [b]));
+  assert.equal(rules.length, 101);
+  assert.deepEqual(rules.at(-1), b);
+});
+
+test('live rules: malformed or endless pagination fails closed', async () => {
+  await assert.rejects(fetchEffectiveRules('fixture-token', async () => response({})), /Malformed/);
+  await assert.rejects(fetchEffectiveRules('fixture-token', async () =>
+    response(Array(100).fill(provenance(42)))), /pagination exceeded/);
 });

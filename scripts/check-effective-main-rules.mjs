@@ -55,18 +55,67 @@ export function evaluateEffectiveRules(rules) {
   return { ok: reasons.length === 0, reasons, reviewCount, contexts };
 }
 
-export async function fetchEffectiveRules(token, fetchImpl = fetch) {
+async function githubRulesGet(token, url, fetchImpl) {
   if (!token) throw new Error('GITHUB_TOKEN required; refusing anonymous/inconclusive check');
-  const url = `https://api.github.com/repos/${REPO}/rules/branches/${BRANCH}`;
   const response = await fetchImpl(url, {
+    redirect: 'error',
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${token}`,
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });
-  if (!response.ok) throw new Error(`GitHub effective rules request failed: HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`GitHub rules request failed: HTTP ${response.status}`);
   return response.json();
+}
+
+export async function fetchEffectiveRules(token, fetchImpl = fetch) {
+  const url = `https://api.github.com/repos/${REPO}/rules/branches/${BRANCH}`;
+  const rules = [];
+  // A truncated first page is not complete evidence of all applicable rulesets.
+  for (let page = 1; page <= 20; page++) {
+    const batch = await githubRulesGet(token, `${url}?per_page=100&page=${page}`, fetchImpl);
+    if (!Array.isArray(batch) || batch.length > 100) throw new Error('Malformed effective rules page');
+    rules.push(...batch);
+    if (batch.length < 100) return rules;
+  }
+  throw new Error('Effective rules pagination exceeded safety limit');
+}
+
+export async function verifyRulesetBypasses(rules, token, fetchImpl = fetch) {
+  if (!Array.isArray(rules) || !rules.length) throw new Error('No effective ruleset provenance');
+  const sources = new Map();
+  for (const rule of rules) {
+    const id = rule?.ruleset_id;
+    const type = rule?.ruleset_source_type;
+    const source = rule?.ruleset_source;
+    if (!Number.isSafeInteger(id) || id <= 0 ||
+        !['Repository', 'Organization', 'Enterprise'].includes(type) ||
+        typeof source !== 'string' || !source.trim() ||
+        (type === 'Repository' && source.toLowerCase() !== REPO.toLowerCase())) {
+      throw new Error('Missing or invalid effective ruleset provenance');
+    }
+    const previous = sources.get(id);
+    if (previous && (previous.type !== type || previous.source !== source)) {
+      throw new Error('Conflicting effective ruleset provenance');
+    }
+    sources.set(id, { type, source });
+  }
+  for (const [id, expected] of sources) {
+    const detail = await githubRulesGet(token,
+      `https://api.github.com/repos/${REPO}/rulesets/${id}?includes_parents=true`, fetchImpl);
+    if (detail?.id !== id || detail.source_type !== expected.type ||
+        detail.source !== expected.source || detail.target !== 'branch' ||
+        detail.enforcement !== 'active') {
+      throw new Error(`Ruleset ${id} identity or active branch enforcement not confirmed`);
+    }
+    // GitHub omits bypass_actors without write access to the ruleset.
+    // Never interpret an omitted field as an empty list or escalate CI privileges.
+    if (!Array.isArray(detail.bypass_actors) || detail.bypass_actors.length !== 0) {
+      throw new Error(`Ruleset ${id} has bypass actors or their absence is not verifiable`);
+    }
+  }
+  return [...sources.keys()];
 }
 
 async function main() {
@@ -75,6 +124,13 @@ async function main() {
     ? JSON.parse(await readFile(file, 'utf8'))
     : await fetchEffectiveRules(process.env.GITHUB_TOKEN);
   const result = evaluateEffectiveRules(rules);
+  const live = !file || file === '--live';
+  // A fixture only checks rule structure; it cannot prove live bypass policy.
+  result.bypassEvidence = 'not-verified';
+  if (live && result.ok) {
+    result.verifiedRulesetIds = await verifyRulesetBypasses(rules, process.env.GITHUB_TOKEN);
+    result.bypassEvidence = 'verified-empty';
+  }
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   if (!result.ok) process.exitCode = 1;
 }
