@@ -293,6 +293,51 @@ jobs:
           console.log('VK fixture evidence: ' + manifest.fileCount + ' files; manifest SHA-256 ' + manifest.bundleManifestSha256);
           NODE
 
+          # Archive only manifest-listed fixture bytes, rechecking every digest before upload.
+          python3 - <<'PY'
+          import hashlib, io, json, os, tarfile
+          from pathlib import Path, PurePosixPath
+
+          output = Path(os.environ['RUNNER_TEMP']) / (
+              'pivnik-vk-evidence-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          manifest_path = output / 'manifest.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          if (manifest['productionArtifact'] is not False or
+              manifest['fixtureApiBase'] != 'https://vk-gateway.example.invalid' or
+              not manifest['files'] or manifest['fileCount'] != len(manifest['files'])):
+              raise ValueError('Not a complete fixture manifest')
+          root = Path('vk-hosting-build')
+          if root.is_symlink() or not root.is_dir():
+              raise ValueError('Invalid bundle root')
+          archive = output / 'bundle.tar.gz'
+          seen = set()
+          with archive.open('xb') as stream:
+              with tarfile.open(fileobj=stream, mode='w:gz', format=tarfile.PAX_FORMAT) as bundle:
+                  for entry in manifest['files']:
+                      name = entry['path']
+                      parts = PurePosixPath(name).parts
+                      if (not parts or name != '/'.join(parts) or name.startswith('/') or
+                          '..' in parts or '\\' in name or name in seen):
+                          raise ValueError('Unsafe or duplicate bundle path: ' + name)
+                      seen.add(name)
+                      path = root.joinpath(*parts)
+                      if (any(root.joinpath(*parts[:i]).is_symlink() for i in range(1, len(parts) + 1))
+                          or not path.is_file()):
+                          raise ValueError('Non-regular bundle entry: ' + name)
+                      data = path.read_bytes()
+                      if len(data) != entry['size'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
+                          raise ValueError('Bundle changed after verification: ' + name)
+                      info = tarfile.TarInfo(name)
+                      info.size = len(data)
+                      info.mode = 0o644
+                      bundle.addfile(info, io.BytesIO(data))
+          with archive.open('rb') as stream:
+              archive_digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          manifest['archive'] = {'name': archive.name, 'size': archive.stat().st_size, 'sha256': archive_digest}
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print('Fixture archive SHA-256: ' + archive_digest)
+          PY
+
       - name: Upload VK fixture bundle verification evidence
         uses: actions/upload-artifact@v4
         with:
@@ -300,6 +345,15 @@ jobs:
           path: ${{ runner.temp }}/pivnik-vk-evidence-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload VK fixture bundle bytes (not for publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-bundle-fixture-bytes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pivnik-vk-evidence-${{ github.run_id }}-${{ github.run_attempt }}/bundle.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
 
       - name: Verify existing production secrets without changing them
         if: >-
