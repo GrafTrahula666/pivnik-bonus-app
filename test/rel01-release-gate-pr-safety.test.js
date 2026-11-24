@@ -239,3 +239,28 @@ test('REL-02: actual preflight shell refuses absent or blank read token before i
   assert.equal((valid.stdout.match(/FIXTURE_NODE_CALLED/g) || []).length, 2);
   assert.doesNotMatch(valid.stdout + valid.stderr, /fixture-read/);
 });
+
+test('REL-01: effective main rules are mandatory before explicit production dispatch', () => {
+  const name = 'Verify effective main branch rules before production release';
+  const start = workflow.indexOf('      - name: ' + name + '\n');
+  const secret = workflow.indexOf('      - name: Verify existing production secrets without changing them\n');
+  const deploy = workflow.indexOf('      - name: Deploy exact commit and verify both production services\n');
+  assert.ok(start >= 0 && start < secret && secret < deploy);
+  const section = workflow.slice(start, secret);
+  assert.match(section, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(section, /run: node scripts\/check-effective-main-rules\.mjs --live/);
+  assert.doesNotMatch(section, /continue-on-error|secrets\.|RAILWAY_|\|\|\s*true/);
+  const expression = releaseStepCondition(name);
+  const sha = 'a'.repeat(40);
+  for (const [event, ref, releaseSha, confirm, expected] of [
+    ['pull_request', 'refs/pull/496/merge', sha, 'DEPLOY_PIVNIK_PRODUCTION', false],
+    ['push', 'refs/heads/main', sha, 'DEPLOY_PIVNIK_PRODUCTION', false],
+    ['workflow_dispatch', 'refs/heads/main', sha, 'CANCEL', false],
+    ['workflow_dispatch', 'refs/heads/main', 'b'.repeat(40), 'DEPLOY_PIVNIK_PRODUCTION', false],
+    ['workflow_dispatch', 'refs/heads/feature', sha, 'DEPLOY_PIVNIK_PRODUCTION', false],
+    ['workflow_dispatch', 'refs/heads/main', sha, 'DEPLOY_PIVNIK_PRODUCTION', true],
+  ]) {
+    assert.equal(conditionResult(expression, event, ref, sha, releaseSha, confirm), expected);
+  }
+  assert.equal(expression, releaseStepCondition('Deploy exact commit and verify both production services'));
+});

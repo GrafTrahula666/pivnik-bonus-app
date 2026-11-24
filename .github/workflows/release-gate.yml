@@ -355,6 +355,16 @@ jobs:
           retention-days: 30
           compression-level: 0
 
+      - name: Verify effective main branch rules before production release
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-effective-main-rules.mjs --live
+
       - name: Verify existing production secrets without changing them
         if: >-
           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
