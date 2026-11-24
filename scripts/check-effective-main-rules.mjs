@@ -15,6 +15,14 @@ export function evaluateEffectiveRules(rules) {
   const reviewCount = Math.max(0, ...reviews.map((rule) =>
     Number(rule?.parameters?.required_approving_review_count) || 0));
   if (reviewCount < 1) reasons.push('No effective rule requiring an approving review');
+  // Require an approving-review rule that also invalidates stale approvals.
+  // A different rule with zero required approvals is not sufficient evidence.
+  if (!reviews.some((rule) =>
+    Number.isInteger(rule?.parameters?.required_approving_review_count) &&
+    rule.parameters.required_approving_review_count >= 1 &&
+    rule.parameters.dismiss_stale_reviews_on_push === true)) {
+    reasons.push('No effective approving-review rule dismisses stale approvals on push');
+  }
 
   const checks = rules.filter((rule) => rule?.type === 'required_status_checks');
   const contexts = checks.flatMap((rule) => Array.isArray(rule?.parameters?.required_status_checks)

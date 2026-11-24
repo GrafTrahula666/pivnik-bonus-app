@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { evaluateEffectiveRules, fetchEffectiveRules } from '../scripts/check-effective-main-rules.mjs';
 
 const protectedMain = [
-  { type: 'pull_request', parameters: { required_approving_review_count: 1 } },
+  { type: 'pull_request', parameters: {
+    required_approving_review_count: 1,
+    dismiss_stale_reviews_on_push: true,
+  } },
   { type: 'required_status_checks', parameters: {
     strict_required_status_checks_policy: true,
     required_status_checks: [{ context: 'Syntax, tests and dependency audit' }],
@@ -20,6 +23,7 @@ test('effective rules: empty ruleset includes cannot masquerade as branch protec
   assert.equal(result.ok, false);
   assert.deepEqual(result.reasons, [
     'No effective rule requiring an approving review',
+    'No effective approving-review rule dismisses stale approvals on push',
     'Release gate job is not an effective required status check',
     'Release gate is not protected by strict up-to-date status checks',
     'No effective branch deletion protection',
@@ -30,6 +34,50 @@ test('effective rules: COMMENT review does not meet required approval count', ()
   const rules = protectedMain.map((r) => r.type === 'pull_request'
     ? { ...r, parameters: { required_approving_review_count: 0 } } : r);
   assert.equal(evaluateEffectiveRules(rules).ok, false);
+});
+
+test('effective rules: stale approval dismissal explicitly disabled fails closed', () => {
+  const rules = protectedMain.map((rule) => rule.type === 'pull_request'
+    ? { ...rule, parameters: { ...rule.parameters, dismiss_stale_reviews_on_push: false } }
+    : rule);
+  const result = evaluateEffectiveRules(rules);
+  assert.equal(result.ok, false);
+  assert.match(result.reasons.join(' '), /dismisses stale approvals/);
+});
+
+test('effective rules: missing or non-boolean stale dismissal fails closed', () => {
+  for (const value of [undefined, null, 'true', 1]) {
+    const rules = protectedMain.map((rule) => rule.type === 'pull_request'
+      ? { ...rule, parameters: { ...rule.parameters, dismiss_stale_reviews_on_push: value } }
+      : rule);
+    assert.equal(evaluateEffectiveRules(rules).ok, false);
+  }
+});
+
+test('effective rules: dismissal on a zero-approval rule does not prove review freshness', () => {
+  const rules = protectedMain.map((rule) => rule.type === 'pull_request'
+    ? { ...rule, parameters: { ...rule.parameters, dismiss_stale_reviews_on_push: false } }
+    : rule);
+  rules.push({ type: 'pull_request', parameters: {
+    required_approving_review_count: 0,
+    dismiss_stale_reviews_on_push: true,
+  } });
+  assert.equal(evaluateEffectiveRules(rules).ok, false);
+});
+
+test('effective rules: malformed approving review count cannot establish freshness', () => {
+  const rules = protectedMain.map((rule) => rule.type === 'pull_request'
+    ? { ...rule, parameters: { ...rule.parameters, required_approving_review_count: '1' } }
+    : rule);
+  assert.equal(evaluateEffectiveRules(rules).ok, false);
+});
+
+test('effective rules: valid freshness policy remains sufficient with unrelated review rules', () => {
+  const rules = [...protectedMain, { type: 'pull_request', parameters: {
+    required_approving_review_count: 0,
+    dismiss_stale_reviews_on_push: false,
+  } }];
+  assert.equal(evaluateEffectiveRules(rules).ok, true);
 });
 
 test('effective rules: unrelated successful status is not a required release gate', () => {
