@@ -9,7 +9,7 @@ const protectedMain = [
   } },
   { type: 'required_status_checks', parameters: {
     strict_required_status_checks_policy: true,
-    required_status_checks: [{ context: 'Syntax, tests and dependency audit' }],
+    required_status_checks: [{ context: 'Syntax, tests and dependency audit', integration_id: 15368 }],
   } },
   { type: 'deletion' },
 ];
@@ -25,6 +25,7 @@ test('effective rules: empty ruleset includes cannot masquerade as branch protec
     'No effective rule requiring an approving review',
     'No effective approving-review rule dismisses stale approvals on push',
     'Release gate job is not an effective required status check',
+    'Release gate required check is not bound to GitHub Actions integration 15368',
     'Release gate is not protected by strict up-to-date status checks',
     'No effective branch deletion protection',
   ]);
@@ -131,4 +132,51 @@ test('live request: uses branch effective rules endpoint', async () => {
   });
   assert.match(requestedUrl, /\/rules\/branches\/main$/);
   assert.equal(evaluateEffectiveRules(rules).ok, true);
+});
+
+const withStatusChecks = (checks, strict = true) => protectedMain.map((rule) =>
+  rule.type === 'required_status_checks' ? { ...rule, parameters: {
+    strict_required_status_checks_policy: strict, required_status_checks: checks,
+  } } : rule);
+
+test('effective rules: matching name from another integration fails closed', () => {
+  const result = evaluateEffectiveRules(withStatusChecks([
+    { context: 'Syntax, tests and dependency audit', integration_id: 99999 },
+  ]));
+  assert.equal(result.ok, false);
+  assert.match(result.reasons.join(' '), /not bound to GitHub Actions/);
+});
+
+test('effective rules: missing, unrestricted or malformed integration ID fails closed', () => {
+  for (const integration_id of [undefined, null, -1, 0, '15368', true, 15368.5]) {
+    assert.equal(evaluateEffectiveRules(withStatusChecks([
+      { context: 'Syntax, tests and dependency audit', integration_id },
+    ])).ok, false);
+  }
+});
+
+test('effective rules: trusted integration on an unrelated context cannot prove release check', () => {
+  assert.equal(evaluateEffectiveRules(withStatusChecks([
+    { context: 'Other CI', integration_id: 15368 },
+    { context: 'Syntax, tests and dependency audit', integration_id: 99999 },
+  ])).ok, false);
+});
+
+test('effective rules: strict policy must belong to the trusted release check', () => {
+  const rules = withStatusChecks([
+    { context: 'Syntax, tests and dependency audit', integration_id: 15368 },
+  ], false);
+  rules.push({ type: 'required_status_checks', parameters: {
+    strict_required_status_checks_policy: true,
+    required_status_checks: [{ context: 'Syntax, tests and dependency audit', integration_id: 99999 }],
+  } });
+  const result = evaluateEffectiveRules(rules);
+  assert.equal(result.ok, false);
+  assert.match(result.reasons.join(' '), /strict up-to-date/);
+});
+
+test('effective rules: malformed strict check list fails closed without throwing', () => {
+  for (const checks of [null, {}, 'Syntax, tests and dependency audit']) {
+    assert.equal(evaluateEffectiveRules(withStatusChecks(checks)).ok, false);
+  }
 });

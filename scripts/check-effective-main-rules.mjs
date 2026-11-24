@@ -7,6 +7,10 @@ import { pathToFileURL } from 'node:url';
 const REPO = 'GrafTrahula666/pivnik-bonus-app';
 const BRANCH = 'main';
 const REQUIRED_CHECK = 'Syntax, tests and dependency audit';
+// Verified check-run app.id for GitHub Actions, not an installation ID.
+const REQUIRED_CHECK_INTEGRATION_ID = 15368;
+const isTrustedReleaseCheck = (check) => check?.context === REQUIRED_CHECK &&
+  check.integration_id === REQUIRED_CHECK_INTEGRATION_ID;
 
 export function evaluateEffectiveRules(rules) {
   if (!Array.isArray(rules)) return { ok: false, reasons: ['Effective rules response is not an array'] };
@@ -31,10 +35,15 @@ export function evaluateEffectiveRules(rules) {
   if (!contexts.includes(REQUIRED_CHECK)) {
     reasons.push('Release gate job is not an effective required status check');
   }
+  if (!checks.some((rule) => Array.isArray(rule?.parameters?.required_status_checks) &&
+    rule.parameters.required_status_checks.some(isTrustedReleaseCheck))) {
+    reasons.push('Release gate required check is not bound to GitHub Actions integration 15368');
+  }
   // Without strict checks, GitHub may accept a green check from an outdated branch tip.
   // An exact-SHA release gate must be revalidated against current main before merge.
   if (!checks.some((rule) => rule?.parameters?.strict_required_status_checks_policy === true &&
-    rule.parameters.required_status_checks?.some((check) => check?.context === REQUIRED_CHECK))) {
+    Array.isArray(rule.parameters.required_status_checks) &&
+    rule.parameters.required_status_checks.some(isTrustedReleaseCheck))) {
     reasons.push('Release gate is not protected by strict up-to-date status checks');
   }
   if (!rules.some((rule) => rule?.type === 'deletion')) {
