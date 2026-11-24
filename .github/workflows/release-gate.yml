@@ -191,6 +191,8 @@ jobs:
         env:
           # Reserved fixture origin: this build never contacts a live gateway.
           PIVNIK_VK_API_BASE: https://vk-gateway.example.invalid
+          VK_EVIDENCE_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          VK_EVIDENCE_PR_BASE: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -220,6 +222,84 @@ jobs:
           node --check vk-hosting-build/app.js
           node --check vk-hosting-build/vk-platform.js
           node --check vk-hosting-build/account-link.js
+          # Record the fixture build, not a production publication or approval.
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const env = process.env;
+          const sha = value => /^[0-9a-f]{40}$/.test(value || '');
+          const positiveId = value => /^[1-9][0-9]*$/.test(value || '');
+          const digest = value => createHash('sha256').update(value).digest('hex');
+          const checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          assert.ok(sha(checkoutSha) && checkoutSha === env.GITHUB_SHA, 'Checkout SHA mismatch');
+          assert.ok(positiveId(env.GITHUB_RUN_ID) && positiveId(env.GITHUB_RUN_ATTEMPT));
+          assert.equal(env.GITHUB_REPOSITORY, 'GrafTrahula666/pivnik-bonus-app');
+          assert.equal(env.PIVNIK_VK_API_BASE, 'https://vk-gateway.example.invalid');
+          assert.ok(['pull_request', 'push', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME));
+          const isPr = env.GITHUB_EVENT_NAME === 'pull_request';
+          const headSha = isPr ? env.VK_EVIDENCE_PR_HEAD : checkoutSha;
+          const baseSha = isPr ? env.VK_EVIDENCE_PR_BASE : null;
+          assert.ok(sha(headSha) && (!isPr || sha(baseSha)), 'Missing PR identity');
+          if (isPr) {
+            // A shallow checkout still retains the merge commit's parent headers.
+            const headers = execFileSync('git', ['cat-file', '-p', checkoutSha], { encoding: 'utf8' }).split('\n\n')[0];
+            const parents = headers.split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
+            assert.deepEqual(parents, [baseSha, headSha], 'PR merge parents do not match event');
+          }
+
+          const root = 'vk-hosting-build';
+          assert.ok(lstatSync(root).isDirectory(), 'Bundle root must be a real directory');
+          const files = [];
+          function visit(relative = '') {
+            for (const name of readdirSync(join(root, relative)).sort()) {
+              const path = relative ? relative + '/' + name : name;
+              const full = join(root, path);
+              const stat = lstatSync(full);
+              if (stat.isDirectory()) visit(path);
+              else {
+                assert.ok(stat.isFile(), 'Non-regular bundle entry: ' + path);
+                const bytes = readFileSync(full);
+                files.push({ path, size: bytes.length, sha256: digest(bytes) });
+              }
+            }
+          }
+          visit();
+          files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+          assert.ok(files.length > 0, 'Empty bundle');
+          const manifest = {
+            schemaVersion: 1,
+            kind: 'vk-fixture-bundle-verification',
+            productionArtifact: false,
+            repository: env.GITHUB_REPOSITORY,
+            event: env.GITHUB_EVENT_NAME,
+            runId: env.GITHUB_RUN_ID,
+            runAttempt: env.GITHUB_RUN_ATTEMPT,
+            checkoutSha,
+            headSha,
+            baseSha,
+            fixtureApiBase: env.PIVNIK_VK_API_BASE,
+            fileCount: files.length,
+            // Digest of the ordered JSON array of relative paths, sizes and SHA-256 hashes.
+            bundleManifestSha256: digest(JSON.stringify(files)),
+            files,
+          };
+          const output = join(env.RUNNER_TEMP, 'pivnik-vk-evidence-' + env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT);
+          mkdirSync(output);
+          writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
+          console.log('VK fixture evidence: ' + manifest.fileCount + ' files; manifest SHA-256 ' + manifest.bundleManifestSha256);
+          NODE
+
+      - name: Upload VK fixture bundle verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-bundle-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pivnik-vk-evidence-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Verify existing production secrets without changing them
         if: >-
