@@ -195,3 +195,47 @@ test('REL-01: snapshot fails closed when Git fails inside checksum pipeline', as
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('REL-02: production preflight uses only the dedicated read credential on main', () => {
+  const name = 'Verify existing production secrets without changing them';
+  const start = workflow.indexOf('      - name: ' + name + '\n');
+  assert.notEqual(start, -1);
+  const tail = workflow.slice(start);
+  const end = tail.indexOf('\n      - name: ', 1);
+  assert.notEqual(end, -1);
+  const step = tail.slice(0, end);
+  assert.match(step, /RAILWAY_PRODUCTION_READ_TOKEN: \$\{\{ secrets\.RAILWAY_PRODUCTION_READ_TOKEN \}\}/);
+  assert.doesNotMatch(step, /RAILWAY_API_TOKEN|RAILWAY_TOKEN/);
+  assert.match(step, /shell: bash/);
+  const sha = 'a'.repeat(40);
+  const expression = releaseStepCondition(name);
+  assert.equal(conditionResult(expression, 'push', 'refs/heads/audit/final-release-gate-20260804', sha, '', ''), false);
+  assert.equal(conditionResult(expression, 'push', 'refs/heads/main', sha, '', ''), true);
+});
+
+test('REL-02: actual preflight shell refuses absent or blank read token before invoking Node', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const start = workflow.indexOf('      - name: Verify existing production secrets without changing them\n');
+  assert.notEqual(start, -1);
+  const tail = workflow.slice(start);
+  const end = tail.indexOf('\n      - name: ', 1);
+  const step = tail.slice(0, end);
+  const run = step.match(/\n        run: \|\n([\s\S]*)$/);
+  assert.ok(run);
+  const body = run[1].split('\n').map(line => line.slice(10)).join('\n');
+  const fixture = 'node() { printf "FIXTURE_NODE_CALLED\\n"; }\n';
+  for (const token of ['', '  \t ']) {
+    const result = spawnSync('bash', ['-e', '-c', fixture + body], {
+      encoding: 'utf8', env: { PATH: process.env.PATH, RAILWAY_PRODUCTION_READ_TOKEN: token, RAILWAY_API_TOKEN: 'fixture-operator' }
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stdout, /Missing Railway production read credential/);
+    assert.doesNotMatch(result.stdout + result.stderr, /FIXTURE_NODE_CALLED|fixture-operator/);
+  }
+  const valid = spawnSync('bash', ['-e', '-c', fixture + body], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, RAILWAY_PRODUCTION_READ_TOKEN: 'fixture-read' }
+  });
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.equal((valid.stdout.match(/FIXTURE_NODE_CALLED/g) || []).length, 2);
+  assert.doesNotMatch(valid.stdout + valid.stderr, /fixture-read/);
+});

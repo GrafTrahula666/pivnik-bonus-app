@@ -189,16 +189,21 @@ jobs:
 
       - name: Verify existing production secrets without changing them
         if: >-
-          (github.event_name == 'push' &&
-           (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
           (github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' &&
           inputs.release_sha == github.sha &&
           inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION')
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PRODUCTION_READ_TOKEN: ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_PRODUCTION_READ_TOKEN || '' }}
+          RAILWAY_PRODUCTION_READ_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_READ_TOKEN }}
+        shell: bash
         run: |
+          # The CI read credential must be explicitly provisioned; do not fall back
+          # to the broader deployment/operator credential when it is missing.
+          if [[ -z "${RAILWAY_PRODUCTION_READ_TOKEN//[[:space:]]/}" ]]; then
+            echo "::error title=Missing Railway production read credential::Configure RAILWAY_PRODUCTION_READ_TOKEN through the authorized operator; no production read attempted."
+            exit 1
+          fi
           node --check scripts/railway-ensure-production-secrets.mjs
           node scripts/railway-ensure-production-secrets.mjs --check
 
