@@ -187,6 +187,39 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
+      - name: Build and verify static VK bundle
+        env:
+          # Reserved fixture origin: this build never contacts a live gateway.
+          PIVNIK_VK_API_BASE: https://vk-gateway.example.invalid
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The builder replaces its output directory. Refuse pre-existing output.
+          test ! -e vk-hosting-build && test ! -L vk-hosting-build
+          trap 'rm -rf -- vk-hosting-build' EXIT
+          node scripts/build-vk-hosting.mjs
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const read = name => readFileSync('vk-hosting-build/' + name, 'utf8');
+          const html = read('index.html');
+          const runHtml = read('run/index.html');
+          for (const name of ['app.js', 'vk-platform.js', 'account-link.js',
+            'vendor/vk-bridge.js', 'styles.css', 'loader-fix.css']) {
+            assert.ok(read(name).trim(), 'Missing or empty VK asset: ' + name);
+          }
+          assert.ok(html.includes('window.__PIVNIK_VK_API_BASE__=' +
+            JSON.stringify(process.env.PIVNIK_VK_API_BASE) + ';'), 'Incorrect VK gateway config');
+          assert.match(read('vk-platform.js'), /resolveGatewayInput/);
+          for (const page of [html, runHtml]) {
+            assert.doesNotMatch(page, /up\.railway\.app|vercel\.app|telegram\.org\/js\/telegram-web-app\.js/i);
+          }
+          console.log('Static VK bundle boundary checks passed.');
+          NODE
+          node --check vk-hosting-build/app.js
+          node --check vk-hosting-build/vk-platform.js
+          node --check vk-hosting-build/account-link.js
+
       - name: Verify existing production secrets without changing them
         if: >-
           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
