@@ -41,7 +41,7 @@ function approvedJobs(overrides = {}) {
   }];
 }
 
-async function evaluate({ run = approvedRun(), runs = run ? [run] : [], jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0, redirectCall = 0 } = {}) {
+async function evaluate({ run = approvedRun(), runs = run ? [run] : [], currentRuns = runs, jobs = approvedJobs(), totalJobs = jobs.length, rejectCall = 0, httpStatus = 403, invalidJsonCall = 0, redirectCall = 0 } = {}) {
   const { execute } = await readGuard();
   const calls = [];
   const logs = [];
@@ -55,7 +55,8 @@ async function evaluate({ run = approvedRun(), runs = run ? [run] : [], jobs = a
     if (calls.length === invalidJsonCall) throw Error('Invalid JSON');
     if (calls.length === 1) return { ok: true, json: async () => ({ workflow_runs: runs }) };
     if (calls.length === 2) return { ok: true, json: async () => ({ jobs, total_count: totalJobs }) };
-    throw Error('Unexpected third API call');
+    if (calls.length === 3) return { ok: true, json: async () => ({ workflow_runs: currentRuns }) };
+    throw Error('Unexpected fourth API call');
   };
   let error;
   try {
@@ -90,7 +91,8 @@ test('VK production publishing is manual only and requires an exact SHA approval
 test('approved common release succeeds and verifies the exact run attempt', async () => {
   const result = await evaluate();
   assert.equal(result.error, undefined);
-  assert.equal(result.calls.length, 2);
+  assert.equal(result.calls.length, 3);
+  assert.equal(result.calls[2].url, result.calls[0].url);
   const lookup = new URL(result.calls[0].url);
   assert.match(lookup.pathname, /\/actions\/workflows\/release-gate\.yml\/runs$/);
   assert.equal(lookup.searchParams.get('head_sha'), SHA);
@@ -248,10 +250,11 @@ test('unfinished mandatory production steps deny VK publication despite a succes
   }
 });
 
-test('GitHub API denial and invalid response fail closed at either lookup stage', async () => {
+test('GitHub API denial and invalid response fail closed at every lookup stage', async () => {
   for (const arg of [
     { rejectCall: 1, httpStatus: 401 }, { rejectCall: 2, httpStatus: 503 },
     { invalidJsonCall: 1 }, { invalidJsonCall: 2 },
+    { rejectCall: 3, httpStatus: 503 }, { invalidJsonCall: 3 },
   ]) {
     const result = await evaluate(arg);
     assert.ok(result.error instanceof Error);
@@ -260,8 +263,8 @@ test('GitHub API denial and invalid response fail closed at either lookup stage'
 });
 
 
-test('redirected GitHub API evidence fails closed at either approval lookup', async () => {
-  for (const redirectCall of [1, 2]) {
+test('redirected GitHub API evidence fails closed at every approval lookup', async () => {
+  for (const redirectCall of [1, 2, 3]) {
     const result = await evaluate({ redirectCall });
     assert.ok(result.error instanceof Error, 'redirect must deny VK publication');
     assert.match(result.error.message, /Redirected GitHub release evidence was refused/);
@@ -271,7 +274,7 @@ test('redirected GitHub API evidence fails closed at either approval lookup', as
   }
   const valid = await evaluate();
   assert.equal(valid.error, undefined);
-  assert.deepEqual(valid.calls.map(call => call.redirect), ['error', 'error']);
+  assert.deepEqual(valid.calls.map(call => call.redirect), ['error', 'error', 'error']);
 });
 
 test('release run must expose a valid positive attempt number', async () => {
@@ -326,4 +329,24 @@ test('common production release gate cannot execute deploy or smoke without exac
     assert.doesNotMatch(step, /\n\s*continue-on-error:\s*true\b/, 'Production evidence must not be allowed to fail: ' + name);
     assert.doesNotMatch(condition[1], /\|\|/, 'Production gate must require all approval conditions: ' + name);
   }
+});
+
+test('a superseded or rerun approval cannot publish using an earlier successful job attempt', async () => {
+  for (const currentRuns of [
+    [], null, [approvedRun({ id: 42002 })],
+    [approvedRun({ run_attempt: 4 })],
+    [approvedRun({ status: 'in_progress' })],
+    [approvedRun({ conclusion: 'failure' })],
+    [approvedRun({ head_sha: 'b'.repeat(40) })],
+    [approvedRun({ path: '.github/workflows/unrelated.yml' })],
+  ]) {
+    const result = await evaluate({ currentRuns });
+    assert.ok(result.error instanceof Error, 'changed or unavailable latest dispatch must deny');
+    assert.equal(result.calls.length, 3);
+    assert.equal(result.calls[2].url, result.calls[0].url);
+    assert.equal(result.logs.length, 0);
+  }
+  const stable = await evaluate();
+  assert.equal(stable.error, undefined);
+  assert.equal(stable.calls.length, 3);
 });
