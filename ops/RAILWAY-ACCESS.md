@@ -45,6 +45,91 @@ rotation, environment configuration, live query, or release is authorized by
 this candidate. The following older setup and release description is historical;
 it is not authorization to change credentials, migrate production data or deploy.
 
+
+## Operator environment policy readback (read-only, no credential provisioning)
+
+Complement [the ruleset readback](release-evidence/OPERATOR-RULESET-READBACK.md)
+with the environment-specific observation below. A protected branch alone
+does not restrict an environment secret to that branch. Use a separately
+authorized human operator session on a trusted workstation, not CI or
+unreviewed Draft code. Confirm the account with `gh auth status --hostname github.com`.
+The documented [environment GET](https://docs.github.com/en/rest/deployments/environments)
+and [branch-policy list GET](https://docs.github.com/en/rest/deployments/branch-policies)
+are the only environment calls in this procedure.
+
+Copy the reviewed block to a private file outside the checkout; invoke with the
+separately agreed full main SHA. Bash, jq and a trusted GitHub CLI with
+`--paginate --slurp` support are required. No shell tracing or token printing.
+
+```bash
+set -euo pipefail
+umask 077
+repo=GrafTrahula666/pivnik-bonus-app
+envname=railway-ci-read-diagnostic
+expected=${1:?Supply independently reviewed main SHA}
+[[ "$expected" =~ ^[0-9a-f]{40}$ ]]
+work=$(mktemp -d)
+printf 'Private evidence directory: %s\n' "$work" >&2
+api() { gh api --hostname github.com --method GET "$@"; }
+check_main() {
+  api "repos/$repo/git/ref/heads/main" | jq -e --arg sha "$expected" \
+    '.ref == "refs/heads/main" and .object.type == "commit" and .object.sha == $sha' >/dev/null
+}
+sweep() {
+  local dir="$1"
+  mkdir "$dir"
+  check_main
+  api "repos/$repo/environments/$envname" | jq -eS '
+    select(.name == "railway-ci-read-diagnostic" and
+      .deployment_branch_policy.protected_branches == false and
+      .deployment_branch_policy.custom_branch_policies == true and
+      ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
+      ([.protection_rules[] | select(.type == "required_reviewers")][0] |
+        .prevent_self_review == true and (.reviewers | type == "array" and length > 0 and
+          all(.[]; (.type == "User" or .type == "Team") and
+            (.reviewer.id | type == "number" and . > 0 and floor == .)))))
+    | {id,name,updated_at,deployment_branch_policy,protection_rules}' > "$dir/environment.json"
+  api --paginate --slurp "repos/$repo/environments/$envname/deployment-branch-policies?per_page=100" | jq -eS '
+    select(type == "array" and length > 0 and
+      all(.[]; .total_count == 1 and (.branch_policies | type == "array")))
+    | map(.branch_policies) | add
+    | select(length == 1 and .[0].name == "main" and .[0].type == "branch")' > "$dir/branch-policies.json"
+  check_main
+}
+sweep "$work/first"
+sweep "$work/second"
+diff -qr "$work/first" "$work/second"
+check_main
+printf '%s\n' "$expected" > "$work/main.sha"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$work/observed-at.utc"
+(cd "$work" && sha256sum main.sha observed-at.utc second/* > SHA256SUMS && sha256sum -c SHA256SUMS)
+printf 'Partial environment observation only; manual checks remain: %s\n' "$work"
+```
+
+Nonzero exit, missing fields (including a missing branch/tag type), extra policies,
+or an incomplete response is not a pass. Keep partial files private. A tag
+named main is not the main branch. The API predicates alone do not prove
+reviewer independence or absence of administrator bypass. The two observations
+are not atomic and do not establish future policy stability.
+
+Before adding any credential, the owner and independent reviewer must also
+inspect the actual environment Settings UI, confirm administrator bypass is
+disabled (do not infer this from a missing REST field), verify the reviewers'
+identity, eligibility and independence, and confirm there is no repository-
+or organization-scoped secret with the same name available to this repository.
+Check names/visibility only, never secret values. Save restricted, redacted
+evidence of those settings and the readback hashes, then perform the no-secret
+negative branch/tag and positive independent-approval trials described above
+in a separate safe test context. No credential is to be provisioned by this
+procedure. If a required feature or readback is unavailable, stop.
+
+Record the exact SHA, environment ID, observation time, hashes and independent
+review result in #483; do not publish raw reviewer records, tokens or secret
+values. A successful collection is a partial operator observation, not a
+release approval or a substitute for the live release gate. Recollect after
+any policy or SHA change. No workflow dispatch, environment mutation, secret
+write, Railway mutation or release is performed by this procedure.
+
 ## One-time setup
 
 1. In Railway click the profile photo in the top-right corner.
