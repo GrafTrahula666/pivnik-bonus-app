@@ -86,3 +86,72 @@ test('read-only production secret gate supports exact-scoped Railway project tok
     await fs.rm(temporary, { recursive: true, force: true });
   }
 });
+
+test('read-only variable reads reject malformed and partial responses on either credential header', async () => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'railway-variable-envelope-'));
+  const fixture = path.join(temporary, 'fixture.mjs');
+  await fs.writeFile(fixture, [
+    "let requests = 0;",
+    "const mode = process.env.FIXTURE_MODE;",
+    "const project = process.env.FIXTURE_HEADER === 'project';",
+    "const second = process.env.FIXTURE_STAGE === 'second';",
+    "const valid = { data: { variables: { SESSION_SECRET: 's'.repeat(48), IDENTITY_TOMBSTONE_SECRET: 't'.repeat(48), NODE_ENV: 'production', ALLOW_DEMO: 'false' } } };",
+    "const respond = (body, status = 200) => new Response(JSON.stringify(body), { status });",
+    "let reads = 0;",
+    "globalThis.fetch = async (_url, options) => {",
+    "  requests++;",
+    "  const { query } = JSON.parse(options.body);",
+    "  if (/mutation/i.test(query)) throw new Error('UNEXPECTED_MUTATION');",
+    "  if (project && options.headers.authorization) return respond({ errors: [{ message: 'Not Authorized' }] });",
+    "  if (query.includes('projectToken')) return respond({ data: { projectToken: { projectId: process.env.EXPECTED_PROJECT, environmentId: process.env.EXPECTED_ENVIRONMENT } } });",
+    "  reads++;",
+    "  if (mode === 'valid' || (second && reads === 1)) return respond(valid);",
+    "  if (mode === 'network') throw new Error('PRIVATE_PROVIDER_BODY');",
+    "  if (mode === '503') return respond({ message: 'PRIVATE_PROVIDER_BODY' }, 503);",
+    "  if (mode === 'null') return respond(null);",
+    "  if (mode === 'errors_object') return respond({ ...valid, errors: { message: 'PRIVATE_PROVIDER_BODY' } });",
+    "  if (mode === 'errors_null') return respond({ ...valid, errors: null });",
+    "  if (mode === 'partial') return respond({ ...valid, errors: [{ message: 'PRIVATE_PROVIDER_BODY' }] });",
+    "  throw new Error('UNEXPECTED_MODE');",
+    "};",
+    "process.on('exit', () => {",
+    "  const expected = (project ? 2 : 0) + ((mode === 'valid' || second) ? 2 : 1);",
+    "  if (requests !== expected) throw new Error('Unexpected request count: ' + requests);",
+    "});"
+  ].join('\n'));
+  const run = (mode, header, stage = 'first') => execFileSync(process.execPath, [
+    '--import', pathToFileURL(fixture).href,
+    path.join(root, 'scripts/railway-ensure-production-secrets.mjs'), '--check'
+  ], {
+    encoding: 'utf8', stdio: 'pipe', timeout: 6000,
+    env: {
+      PATH: process.env.PATH,
+      RAILWAY_PRODUCTION_READ_TOKEN: 'fixture-read-token',
+      EXPECTED_PROJECT: RAILWAY_PRODUCTION.projectId,
+      EXPECTED_ENVIRONMENT: RAILWAY_PRODUCTION.environmentId,
+      FIXTURE_MODE: mode, FIXTURE_HEADER: header, FIXTURE_STAGE: stage
+    }
+  });
+  try {
+    for (const header of ['bearer', 'project']) {
+      assert.equal(JSON.parse(run('valid', header)).mutations, 0);
+      for (const stage of ['first', 'second']) {
+        for (const [mode, code] of [
+          ['network', 'transport_unavailable'], ['503', 'transport_unavailable'],
+          ['null', 'api_response_unexpected'], ['errors_object', 'api_response_unexpected'],
+          ['errors_null', 'api_response_unexpected'], ['partial', 'api_response_unexpected']
+        ]) {
+          const scenario = [header, stage, mode].join('/');
+          assert.throws(() => run(mode, header, stage), error => {
+            assert.equal(error.status, 1, scenario);
+            assert.match(error.stderr, new RegExp(code), scenario);
+            assert.doesNotMatch(error.stderr, /PRIVATE_PROVIDER_BODY|fixture-read-token|UNEXPECTED_MUTATION|Unexpected request count|UNEXPECTED_MODE/, scenario);
+            return true;
+          });
+        }
+      }
+    }
+  } finally {
+    await fs.rm(temporary, { recursive: true, force: true });
+  }
+});
