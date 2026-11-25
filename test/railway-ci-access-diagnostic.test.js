@@ -218,7 +218,7 @@ test('operator diagnostic uses only dedicated read credential; legacy token neve
   assert.equal(child.stderr, '');
   const workflow = await readFile(new URL('../.github/workflows/railway-operator.yml', import.meta.url), 'utf8');
   const diagnose = workflow.split('- name: Diagnose CI Railway token scope without printing secrets')[1].split('- name: Discover')[0];
-  assert.match(diagnose, /RAILWAY_PRODUCTION_READ_TOKEN: \$\{\{ secrets\.RAILWAY_PRODUCTION_READ_TOKEN \}\}/);
+  assert.match(diagnose, /RAILWAY_PRODUCTION_READ_TOKEN: \$\{\{ secrets\.RAILWAY_OPERATOR_READ_TOKEN \}\}/);
   assert.doesNotMatch(diagnose, /RAILWAY_API_TOKEN|RAILWAY_TOKEN/);
 });
 
@@ -226,11 +226,31 @@ test('operator modes execute only the two dependency-free Node entrypoints', asy
   const {readFile} = await import('node:fs/promises');
   const workflow = await readFile(new URL('../.github/workflows/railway-operator.yml', import.meta.url), 'utf8');
   const actions = [...workflow.matchAll(/^\s+uses:\s*(\S+)\s*$/gm)].map(match => match[1]);
-  assert.deepEqual(actions, ['actions/checkout@v4', 'actions/setup-node@v4']);
+  assert.deepEqual(actions, ['actions/checkout@v4', 'actions/setup-node@v4', 'actions/checkout@v4', 'actions/setup-node@v4']);
   const commands = [...workflow.matchAll(/^\s+run:\s*([^\r\n]+)$/gm)].map(match => match[1].trim());
   assert.deepEqual(commands, [
+    'exit 1',
     'node scripts/railway-ci-access-diagnostic.mjs --check',
     'node scripts/railway-discover.mjs'
   ]);
   assert.doesNotMatch(workflow, /^\s+cache(?:-dependency-path)?:/m);
+});
+
+test('live operator credential is confined to the protected-main diagnostic job', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const workflow = await readFile(new URL('../.github/workflows/railway-operator.yml', import.meta.url), 'utf8');
+  const [reject, diagnose, discover] = ['reject-untrusted-diagnose', 'diagnose', 'discover'].map(name =>
+    workflow.split(new RegExp('^  ' + name + ':\\s*$', 'm'))[1].split(/^  [a-z-]+:\s*$/m)[0]);
+  assert.match(reject, /if: inputs\.mode == 'diagnose' && \(github\.event_name != 'workflow_dispatch' \|\| github\.ref != 'refs\/heads\/main' \|\| !github\.ref_protected\)/);
+  assert.match(reject, /run: exit 1/);
+  assert.doesNotMatch(reject, /secrets\.|environment:|uses:/);
+  assert.match(diagnose, /if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main' && github\.ref_protected && inputs\.mode == 'diagnose'/);
+  assert.match(diagnose, /^    environment: railway-ci-read-diagnostic$/m);
+  assert.match(diagnose, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(diagnose, /persist-credentials: false/);
+  assert.match(diagnose, /RAILWAY_PRODUCTION_READ_TOKEN: \$\{\{ secrets\.RAILWAY_OPERATOR_READ_TOKEN \}\}/);
+  assert.doesNotMatch(diagnose, /secrets\.RAILWAY_(?:API_TOKEN|TOKEN|PRODUCTION_READ_TOKEN)\b/);
+  assert.doesNotMatch(discover, /environment:|RAILWAY_OPERATOR_READ_TOKEN|RAILWAY_PRODUCTION_READ_TOKEN/);
+  assert.equal((workflow.match(/secrets\.RAILWAY_OPERATOR_READ_TOKEN\b/g) || []).length, 1);
+  assert.equal((workflow.match(/^    environment:/gm) || []).length, 1);
 });
