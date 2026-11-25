@@ -23,18 +23,26 @@ test('read-only production secret gate supports exact-scoped Railway project tok
     "    return new Response(JSON.stringify({ errors: [{ message: 'Not Authorized' }] }), { status: 200 });",
     "  }",
     "  if (options.headers['Project-Access-Token'] !== 'fixture-project-token') throw new Error('BAD_PROJECT_HEADER');",
-    "  if (query.includes('projectToken')) return new Response(JSON.stringify({",
+    "  if (query.includes('projectToken')) {",
+    "    const mode = process.env.FIXTURE_MODE;",
+    "    if (mode === 'network') throw new Error('PRIVATE_PROVIDER_BODY');",
+    "    if (mode === 'malformed') return new Response('PRIVATE_PROVIDER_BODY', { status: 200 });",
+    "    if (mode === 'graphql_denial') return new Response(JSON.stringify({ errors: [{ message: 'Not Authorized' }] }), { status: 200 });",
+    "    if (mode === 'schema_error') return new Response(JSON.stringify({ errors: [{ message: 'PRIVATE_PROVIDER_BODY' }] }), { status: 200 });",
+    "    if (['401', '403', '429', '503', '400'].includes(mode)) return new Response('PRIVATE_PROVIDER_BODY', { status: Number(mode) });",
+    "    return new Response(JSON.stringify({",
     "    data: { projectToken: {",
     "      projectId: process.env.FIXTURE_MODE === 'wrong_scope' ? 'another-project' : process.env.EXPECTED_PROJECT,",
-    "      environmentId: process.env.EXPECTED_ENVIRONMENT",
+    "      environmentId: process.env.FIXTURE_MODE === 'wrong_environment' ? 'another-environment' : process.env.EXPECTED_ENVIRONMENT",
     "    } }",
     "  }), { status: 200 });",
+    "  }",
     "  if (!query.includes('unrendered: false')) throw new Error('UNRENDERED_SECRETS_PROHIBITED');",
     "  const values = { SESSION_SECRET: 's'.repeat(48), IDENTITY_TOMBSTONE_SECRET: 't'.repeat(48), NODE_ENV: 'production', ALLOW_DEMO: 'false' };",
     "  return new Response(JSON.stringify({ data: { variables: values } }), { status: 200 });",
     "};",
     "process.on('exit', () => {",
-    "  const expected = process.env.FIXTURE_MODE === 'wrong_scope' ? 2 : 4;",
+    "  const expected = process.env.FIXTURE_MODE === 'authorized' ? 4 : 2;",
     "  if (requests !== expected) throw new Error('Expected ' + expected + ' safe reads, got ' + requests);",
     "});"
   ].join('\n'));
@@ -58,11 +66,22 @@ test('read-only production secret gate supports exact-scoped Railway project tok
     assert.equal(output.mutations, 0);
     assert.deepEqual(output.checkedServices, ['telegram', 'vk']);
     assert.equal(JSON.parse(run('authorized', false)).ok, true, 'legacy secret fallback remains supported');
-    assert.throws(() => run('wrong_scope'), error => {
-      assert.match(error.stderr, /operator review required/);
-      assert.doesNotMatch(error.stderr, /fixture-project-token|another-project|UNEXPECTED_MUTATION/);
-      return true;
-    });
+    for (const [mode, code] of [
+      ['wrong_scope', 'scope_mismatch'], ['wrong_environment', 'scope_mismatch'],
+      ['401', 'authorization_unresolved'], ['403', 'authorization_unresolved'],
+      ['graphql_denial', 'authorization_unresolved'],
+      ['429', 'transport_unavailable'], ['503', 'transport_unavailable'],
+      ['network', 'transport_unavailable'], ['400', 'api_response_unexpected'],
+      ['malformed', 'api_response_unexpected'], ['schema_error', 'api_response_unexpected']
+    ]) {
+      assert.throws(() => run(mode), error => {
+        assert.equal(error.status, 1, mode);
+        assert.match(error.stderr, new RegExp(code), mode);
+        assert.match(error.stderr, /operator review required/, mode);
+        assert.doesNotMatch(error.stderr, /fixture-project-token|another-project|another-environment|UNEXPECTED_MUTATION|PRIVATE_PROVIDER_BODY|safe reads, got/, mode);
+        return true;
+      });
+    }
   } finally {
     await fs.rm(temporary, { recursive: true, force: true });
   }

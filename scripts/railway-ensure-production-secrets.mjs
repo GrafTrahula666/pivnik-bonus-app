@@ -50,11 +50,32 @@ async function graphql(query, variables = {}) {
   const denial = result.response.status === 401 || result.response.status === 403
     || (result.response.ok && result.payload.errors?.some(error => error?.message === 'Not Authorized'));
   if (checkOnly && variableReadHeader === 'authorization' && denial && /^\s*query\b/i.test(query)) {
-    const probe = await railwayRequest(PROJECT_TOKEN_SCOPE_QUERY, {}, 'Project-Access-Token');
-    const scope = probe.payload.data?.projectToken;
-    if (!probe.response.ok || probe.payload.errors?.length
-        || scope?.projectId !== PROJECT_ID || scope?.environmentId !== ENVIRONMENT_ID) {
-      throw new Error('Railway CI token lacks verified production project/environment scope; operator review required.');
+    // Classify the fallback read without exposing a provider response or claiming
+    // that a rejected credential is necessarily invalid rather than under-scoped.
+    let probe;
+    try {
+      probe = await railwayRequest(PROJECT_TOKEN_SCOPE_QUERY, {}, 'Project-Access-Token');
+    } catch {
+      throw new Error('Railway CI project-token scope probe transport_unavailable; operator review required.');
+    }
+    const status = probe.response.status;
+    if (status === 429 || status >= 500) {
+      throw new Error('Railway CI project-token scope probe transport_unavailable; operator review required.');
+    }
+    const errors = probe.payload?.errors;
+    if (status === 401 || status === 403
+        || (probe.response.ok && Array.isArray(errors)
+          && errors.some(error => error?.message === 'Not Authorized'))) {
+      throw new Error('Railway CI project-token scope probe authorization_unresolved; operator review required.');
+    }
+    const scope = probe.payload?.data?.projectToken;
+    if (!probe.response.ok || (errors !== undefined && (!Array.isArray(errors) || errors.length))
+        || typeof scope?.projectId !== 'string' || !scope.projectId
+        || typeof scope?.environmentId !== 'string' || !scope.environmentId) {
+      throw new Error('Railway CI project-token scope probe api_response_unexpected; operator review required.');
+    }
+    if (scope.projectId !== PROJECT_ID || scope.environmentId !== ENVIRONMENT_ID) {
+      throw new Error('Railway CI token lacks verified production project/environment scope (scope_mismatch); operator review required.');
     }
     variableReadHeader = 'Project-Access-Token';
     result = await railwayRequest(query, variables, variableReadHeader);
