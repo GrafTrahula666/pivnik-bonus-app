@@ -625,6 +625,19 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         Number.isSafeInteger(preflight.number) &&
         preflight.number > 0,
         'GitHub production secret preflight not verified');
+      // The integrated gate also requires authenticated effective main rules.
+      // A successful deploy with a skipped/missing rules check cannot serve
+      // as evidence that branch protection was checked before the secret read.
+      const rulesSteps = releaseJob.steps.filter(step =>
+        step.name === 'Verify effective main branch rules before production release');
+      const rules = rulesSteps[0];
+      demand(rulesSteps.length === 1 &&
+        rules.status === 'completed' &&
+        rules.conclusion === 'success' &&
+        Number.isSafeInteger(rules.number) &&
+        rules.number > 0 &&
+        rules.number < preflight.number,
+        'GitHub effective main rules preflight not verified');
       // The mandatory order is owned by this validator, not by the JSON object's
       // caller-controlled key insertion order. Reordering the manifest must not
       // conceal smoke steps executed before deployment.

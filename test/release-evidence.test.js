@@ -508,6 +508,8 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
         jobs: [{ name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
           completed_at: '2026-11-09T14:45:00Z', steps: [
+            { name: 'Verify effective main branch rules before production release',
+              number: 21, status: 'completed', conclusion: 'success' },
             { name: 'Verify existing production secrets without changing them',
               number: 22, status: 'completed', conclusion: 'success' },
             ...Object.keys(valid().checks[0].productionSteps).map((name, i) =>
@@ -933,6 +935,8 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     jobStatus = 'completed', stepStatus = 'completed', jobRunId = 12345,
     preflightConclusion = 'success', preflightStatus = 'completed',
     preflightNumber = 22, omitPreflight = false, duplicatePreflight = false,
+    rulesNumber = 21, rulesStatus = 'completed', rulesConclusion = 'success',
+    omitRules = false, duplicateRules = false,
     jobName = 'Syntax, tests and dependency audit', jobHeadSha = SHA,
     duplicateCanonicalJob = false,
     jobCompletedAt = '2026-11-09T14:45:00Z', artifacts = [dispatchArtifact()],
@@ -964,6 +968,14 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
         jobs: [{ name: jobName, head_sha: jobHeadSha,
           run_id: jobRunId, run_attempt: jobAttempt, status: jobStatus,
           conclusion: jobConclusion, completed_at: jobCompletedAt, steps: [
+          ...(!omitRules ? [{
+            name: 'Verify effective main branch rules before production release',
+            number: rulesNumber, status: rulesStatus, conclusion: rulesConclusion,
+          }] : []),
+          ...(duplicateRules ? [{
+            name: 'Verify effective main branch rules before production release',
+            number: rulesNumber, status: 'completed', conclusion: 'success',
+          }] : []),
           ...(!omitPreflight ? [{
             name: 'Verify existing production secrets without changing them',
             number: preflightNumber, status: preflightStatus, conclusion: preflightConclusion,
@@ -1022,6 +1034,16 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     { preflightNumber: null },
     { preflightNumber: 25 },
     { preflightNumber: 26 },
+    // Effective branch rules must be proven before Railway credential preflight.
+    { omitRules: true },
+    { duplicateRules: true },
+    { rulesConclusion: 'skipped' },
+    { rulesConclusion: 'failure' },
+    { rulesStatus: 'in_progress' },
+    { rulesNumber: null },
+    { rulesNumber: 0 },
+    { rulesNumber: 22 },
+    { rulesNumber: 23 },
     // Passing statuses alone do not prove that smoke ran after deployment.
     { stepNumbers: [26, 25, 27, 28] },
     { stepNumbers: [25, 26, 26, 28] },
@@ -1035,7 +1057,7 @@ test('GitHub Jobs API must prove all mandatory production steps completed succes
     { jobCompletedAt: '2026-11-09T14:04:00Z' },
   ]) {
     await assert.rejects(verifyGithubRuns(valid(), opts(makeFetch(changed))),
-      /GitHub (production secret preflight not verified|mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch|canonical release job missing or ambiguous|canonical release job identity mismatch)/);
+      /GitHub (effective main rules preflight not verified|production secret preflight not verified|mandatory production step not verified|production jobs listing incomplete|production job completion chronology mismatch|canonical release job missing or ambiguous|canonical release job identity mismatch)/);
   }
   // Both the manifest and workflow run attest attempt 2, but the Jobs API
   // returns successful steps from attempt 1. A rerun must not inherit them.
@@ -1097,6 +1119,8 @@ test('live GitHub approval is independent, current, exact-SHA and fail-closed', 
           name: 'Syntax, tests and dependency audit', head_sha: SHA,
           run_id: 12345, run_attempt: 1, status: 'completed', conclusion: 'success',
           completed_at: '2026-11-09T14:45:00Z', steps: [
+            { name: 'Verify effective main branch rules before production release',
+              number: 21, status: 'completed', conclusion: 'success' },
             { name: 'Verify existing production secrets without changing them',
               number: 22, status: 'completed', conclusion: 'success' },
             ...Object.keys(valid().checks[0].productionSteps).map((name, i) =>
