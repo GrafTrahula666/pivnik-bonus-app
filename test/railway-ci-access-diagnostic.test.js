@@ -221,3 +221,16 @@ test('operator diagnostic uses only dedicated read credential; legacy token neve
   assert.match(diagnose, /RAILWAY_PRODUCTION_READ_TOKEN: \$\{\{ secrets\.RAILWAY_PRODUCTION_READ_TOKEN \}\}/);
   assert.doesNotMatch(diagnose, /RAILWAY_API_TOKEN|RAILWAY_TOKEN/);
 });
+
+test('operator modes execute only the two dependency-free Node entrypoints', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const workflow = await readFile(new URL('../.github/workflows/railway-operator.yml', import.meta.url), 'utf8');
+  const actions = [...workflow.matchAll(/^\s+uses:\s*(\S+)\s*$/gm)].map(match => match[1]);
+  assert.deepEqual(actions, ['actions/checkout@v4', 'actions/setup-node@v4']);
+  const commands = [...workflow.matchAll(/^\s+run:\s*([^\r\n]+)$/gm)].map(match => match[1].trim());
+  assert.deepEqual(commands, [
+    'node scripts/railway-ci-access-diagnostic.mjs --check',
+    'node scripts/railway-discover.mjs'
+  ]);
+  assert.doesNotMatch(workflow, /^\s+cache(?:-dependency-path)?:/m);
+});
