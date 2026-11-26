@@ -1,3 +1,4 @@
+import { writeSync } from 'node:fs';
 import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
@@ -229,9 +230,43 @@ const schema = await deployMutationSchema();
 const serviceUrls = Object.fromEntries(await Promise.all(
   Object.entries(SERVICES).map(async ([name, service]) => [name, await servicePublicUrl(name, service)])
 ));
+// Recovery evidence in the CI job log, not an atomic transaction or rollback approval.
+function dispatchJournal(event, fields) {
+  const line = 'PIVNIK_DISPATCH_JOURNAL ' + JSON.stringify({
+    event, releaseCommit: COMMIT_SHA, projectId: PROJECT_ID,
+    environmentId: ENVIRONMENT_ID, ...fields
+  }) + '\n';
+  if (writeSync(1, line) !== Buffer.byteLength(line)) {
+    throw new Error('Incomplete dispatch journal write; stop and reconcile in Railway.');
+  }
+}
+
+// Capture scoped historical successes BEFORE either mutation.
+// SUCCESS alone does not establish active traffic, retention or rehearsed rollback.
+for (const [name, service] of Object.entries(SERVICES)) {
+  const candidates = (await recentDeployments(service.id))
+    .filter(item => item.status === 'SUCCESS' && typeof item.id === 'string' && item.id.trim())
+    .map(item => ({ deploymentId: item.id, createdAt: item.createdAt }));
+  dispatchJournal('rollback_candidates_unverified', {
+    service: name, serviceId: service.id, candidates
+  });
+  if (!candidates.length) throw new Error(name + ': no historical SUCCESS candidate; no dispatch attempted.');
+}
+
 const deploymentIds = {};
 for (const [name, service] of Object.entries(SERVICES)) {
-  deploymentIds[name] = await deployService(name, service, schema);
+  const scope = { service: name, serviceId: service.id };
+  dispatchJournal('dispatch_started', { ...scope, acceptedDeployments: { ...deploymentIds } });
+  let deploymentId;
+  try {
+    deploymentId = await deployService(name, service, schema);
+  } catch {
+    // A timeout or failed response can hide an accepted mutation. Do not retry.
+    dispatchJournal('dispatch_outcome_unknown', { ...scope, acceptedDeployments: { ...deploymentIds } });
+    throw new Error(name + ': dispatch outcome unknown; reconcile Railway before any retry or rollback.');
+  }
+  deploymentIds[name] = deploymentId;
+  dispatchJournal('dispatch_accepted', { ...scope, deploymentId, acceptedDeployments: { ...deploymentIds } });
 }
 for (const [name, service] of Object.entries(SERVICES)) {
   await waitForDeployment(name, service.id, deploymentIds[name]);
