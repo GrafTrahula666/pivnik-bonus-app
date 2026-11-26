@@ -134,6 +134,8 @@ jobs:
             job.status === 'completed' && job.conclusion === 'success' && job.head_sha === RELEASE_SHA &&
             job.run_id === run.id && job.run_attempt === run.run_attempt);
           const requiredSteps = [
+            'Verify effective main branch rules before production release',
+            'Verify existing production secrets without changing them',
             'Deploy exact commit and verify both production services',
             'Probe production documents and public endpoints',
             'Verify separate Telegram and VK production accounts',

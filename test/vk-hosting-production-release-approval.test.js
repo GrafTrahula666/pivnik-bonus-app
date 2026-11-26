@@ -32,6 +32,8 @@ function approvedJobs(overrides = {}) {
     name: 'Syntax, tests and dependency audit', status: 'completed', conclusion: 'success',
     head_sha: SHA, run_id: 42001, run_attempt: 3,
     steps: [
+      { number: 21, name: 'Verify effective main branch rules before production release', status: 'completed', conclusion: 'success' },
+      { number: 22, name: 'Verify existing production secrets without changing them', status: 'completed', conclusion: 'success' },
       { number: 23, name: 'Deploy exact commit and verify both production services', status: 'completed', conclusion: 'success' },
       { number: 24, name: 'Probe production documents and public endpoints', status: 'completed', conclusion: 'success' },
       { number: 25, name: 'Verify separate Telegram and VK production accounts', status: 'completed', conclusion: 'success' },
@@ -189,9 +191,9 @@ test('a release job still running cannot authorize VK even with a reported succe
   }
 });
 
-test('all four common production checks are mandatory even if the workflow reports success', async () => {
+test('both preflights and all four common production checks are mandatory even if the workflow reports success', async () => {
   const valid = approvedJobs()[0].steps;
-  assert.equal(valid.length, 4);
+  assert.equal(valid.length, 6);
   for (const step of valid) {
     for (const steps of [
       valid.filter(item => item.name !== step.name),
@@ -219,6 +221,10 @@ test('duplicate mandatory production steps deny VK even when one succeeds', asyn
 test('production approval denies smoke evidence recorded before deploy or with invalid step order', async () => {
   const valid = approvedJobs()[0].steps;
   const cases = [
+    valid.map((step, i) => ({ ...step, number: i === 0 ? 22 : i === 1 ? 21 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 1 ? 23 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 1 ? 24 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 2 ? 24 : i === 3 ? 23 : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 0 ? 24 : i === 1 ? 23 : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 1 ? 23 : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 2 ? 24 : step.number })),
