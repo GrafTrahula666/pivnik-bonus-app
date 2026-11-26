@@ -454,6 +454,15 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   }
   demand(outstandingChangeRequests.size === 0,
     'GitHub outstanding change request blocks independent release approval');
+  // A rerun can start after the first run read while jobs/artifacts are being
+  // verified. Re-read every required run before returning attested evidence.
+  // This detects observed drift, not an atomic snapshot or release approval.
+  const runSnapshots = [];
+  const runFingerprint = run => JSON.stringify([
+    run?.id, run?.head_sha, run?.head_branch, run?.event, run?.status,
+    run?.conclusion, run?.run_attempt, run?.path, run?.created_at,
+    run?.updated_at, run?.repository?.full_name, run?.html_url,
+  ]);
   for (const check of data.checks.filter(item => item.required)) {
     const url = 'https://api.github.com/repos/GrafTrahula666/pivnik-bonus-app/actions/runs/' + check.runId;
     const response = await fetchImpl(url, {
@@ -469,6 +478,9 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
       run.repository?.full_name === 'GrafTrahula666/pivnik-bonus-app' &&
       run.html_url === check.evidenceUrl,
       'GitHub run attestation mismatch for runId ' + check.runId);
+    demand(Number.isSafeInteger(run.run_attempt) && run.run_attempt > 0,
+      'GitHub run attempt missing or invalid for runId ' + check.runId);
+    runSnapshots.push({ url, id: check.runId, fingerprint: runFingerprint(run) });
     if (check.name === 'VK native hosting main parity') {
       // A successful unrelated workflow at this SHA is not VK parity evidence.
       // The real parity workflow is push-triggered on main.
@@ -656,6 +668,13 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
         lastProductionStepNumber = step.number;
       }
     }
+  }
+  for (const snapshot of runSnapshots) {
+    const response = await fetchImpl(snapshot.url, { headers, redirect: 'error' });
+    demand(response?.ok, 'GitHub final run read failed for runId ' + snapshot.id);
+    const current = await response.json();
+    demand(runFingerprint(current) === snapshot.fingerprint,
+      'GitHub run changed during evidence verification for runId ' + snapshot.id);
   }
   return { verifiedRunIds: data.checks.filter(item => item.required).map(item => item.runId) };
 }

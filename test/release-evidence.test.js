@@ -554,9 +554,39 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       token: 'test-token', fetchImpl: lateOrInvalidParity,
     }), /GitHub VK parity must complete before first production deployment/);
   }
-  // The initial pass and all six rejection cases must each attest the real VK parity run.
-  // Do not pin the total HTTP request count: each new negative scenario adds a full read.
-  assert.equal(calls.filter(({ url }) => url.endsWith('/actions/runs/12346')).length, 7);
+  // A successful pass reads parity twice; each of six early rejections reads it once.
+  assert.equal(calls.filter(({ url }) => url.endsWith('/actions/runs/12346')).length, 8);
+  // A run initially green can change during the intervening evidence reads.
+  for (const id of [12345, 12346]) {
+    for (const change of [
+      { run_attempt: 2 },
+      { status: 'in_progress', conclusion: null },
+      { conclusion: 'failure' },
+      { updated_at: '2026-11-09T14:59:00Z' },
+      { head_sha: ROLLBACK_SHA },
+      { id: 99999 },
+    ]) {
+      let reads = 0;
+      const changingRun = async (url, opts) => {
+        const result = responseFor(url, opts);
+        if (!url.endsWith('/actions/runs/' + id) || ++reads !== 2) return result;
+        return { ...result, json: async () => ({ ...await result.json(), ...change }) };
+      };
+      await assert.rejects(verifyGithubRuns(valid(), {
+        token: 'test-token', fetchImpl: changingRun,
+      }), /GitHub run changed during evidence verification/);
+      assert.equal(reads, 2);
+    }
+    let reads = 0;
+    const unavailableFinalRead = async (url, opts) => {
+      const result = responseFor(url, opts);
+      if (url.endsWith('/actions/runs/' + id) && ++reads === 2) return { ok: false, status: 503 };
+      return result;
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: unavailableFinalRead,
+    }), /GitHub final run read failed/);
+  }
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
   // The manifest is not a trusted clock. A green run completed at 14:50
