@@ -587,6 +587,48 @@ test('authenticated GitHub read verifies required exact-SHA runs and rejects sta
       token: 'test-token', fetchImpl: unavailableFinalRead,
     }), /GitHub final run read failed/);
   }
+  // A valid initial approval must not survive a revocation or new change
+  // request observed after the mandatory workflow and artifact reads.
+  for (const [suffix, mutate, message] of [
+    ['/pulls/123/reviews?per_page=100',
+      reviews => [{ ...reviews[0], state: 'DISMISSED' }], /GitHub approval reviews changed/],
+    ['/pulls/123/reviews?per_page=100',
+      reviews => [...reviews, { ...reviews[0], id: 999, state: 'CHANGES_REQUESTED',
+        user: { login: 'other-reviewer', type: 'User' } }], /GitHub approval reviews changed/],
+    ['/pulls/123/reviews?per_page=100',
+      () => [], /GitHub approval reviews changed/],
+    ['/pulls/123/reviews?per_page=100',
+      reviews => Array.from({ length: 100 }, () => reviews[0]), /GitHub approval reviews changed/],
+    ['/collaborators/independent-release-reviewer/permission',
+      permission => ({ ...permission, permission: 'read' }), /GitHub reviewer permission changed/],
+    ['/collaborators/independent-release-reviewer/permission',
+      permission => ({ ...permission, user: { login: 'another-user' } }), /GitHub reviewer permission changed/],
+  ]) {
+    let reads = 0;
+    const changingApproval = async (url, opts) => {
+      const response = responseFor(url, opts);
+      if (!url.endsWith(suffix) || ++reads !== 2) return response;
+      return { ...response, json: async () => mutate(await response.json()) };
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: changingApproval,
+    }), message);
+    assert.equal(reads, 2);
+  }
+  for (const [suffix, message] of [
+    ['/pulls/123/reviews?per_page=100', /GitHub final approval reviews lookup failed/],
+    ['/collaborators/independent-release-reviewer/permission', /GitHub final reviewer permission lookup failed/],
+  ]) {
+    let reads = 0;
+    const failedFinalApproval = async (url, opts) => {
+      const response = responseFor(url, opts);
+      return url.endsWith(suffix) && ++reads === 2 ? { ok: false, status: 503 } : response;
+    };
+    await assert.rejects(verifyGithubRuns(valid(), {
+      token: 'test-token', fetchImpl: failedFinalApproval,
+    }), message);
+    assert.equal(reads, 2);
+  }
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
   // The manifest is not a trusted clock. A green run completed at 14:50

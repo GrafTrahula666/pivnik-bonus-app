@@ -454,6 +454,13 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
   }
   demand(outstandingChangeRequests.size === 0,
     'GitHub outstanding change request blocks independent release approval');
+  // Capture only approval-relevant fields. Array ordering is not evidence
+  // of a review change; preserve duplicates and compare the sorted tuples.
+  const reviewFingerprint = items => JSON.stringify(items.map(review => JSON.stringify([
+    review?.id, review?.user?.login, review?.user?.type, review?.state,
+    review?.commit_id, review?.submitted_at, review?.html_url,
+  ])).sort());
+  const initialReviewFingerprint = reviewFingerprint(reviews);
   // A rerun can start after the first run read while jobs/artifacts are being
   // verified. Re-read every required run before returning attested evidence.
   // This detects observed drift, not an atomic snapshot or release approval.
@@ -676,6 +683,22 @@ export async function verifyGithubRuns(data, { fetchImpl, token } = {}) {
     demand(runFingerprint(current) === snapshot.fingerprint,
       'GitHub run changed during evidence verification for runId ' + snapshot.id);
   }
+  // Approval and reviewer authorization can also change during artifact reads.
+  // Recheck both before reporting success; this is not an atomic snapshot.
+  const finalReviewsResponse = await fetchImpl(api + '/pulls/' + data.approval.prNumber + '/reviews?per_page=100',
+    { headers, redirect: 'error' });
+  demand(finalReviewsResponse?.ok, 'GitHub final approval reviews lookup failed');
+  const finalReviews = await finalReviewsResponse.json();
+  demand(Array.isArray(finalReviews) && finalReviews.length < 100 &&
+    reviewFingerprint(finalReviews) === initialReviewFingerprint,
+    'GitHub approval reviews changed during evidence verification');
+  const finalPermissionResponse = await fetchImpl(api + '/collaborators/' +
+    encodeURIComponent(data.approval.actor) + '/permission', { headers, redirect: 'error' });
+  demand(finalPermissionResponse?.ok, 'GitHub final reviewer permission lookup failed');
+  const finalPermission = await finalPermissionResponse.json();
+  demand(finalPermission?.user?.login === data.approval.actor &&
+    finalPermission?.permission === reviewerPermission.permission,
+    'GitHub reviewer permission changed during evidence verification');
   return { verifiedRunIds: data.checks.filter(item => item.required).map(item => item.runId) };
 }
 
