@@ -168,7 +168,15 @@ async function waitForDeployment(serviceName, serviceId, deploymentId) {
     const deployment = (await recentDeployments(serviceId)).find((item) => item.id === deploymentId);
     lastStatus = deployment?.status || 'NOT_LISTED';
     console.log(`${serviceName}: deployment ${deploymentId} status=${lastStatus}`);
-    if (lastStatus === 'SUCCESS') return deployment;
+    if (lastStatus === 'SUCCESS') {
+      // A returned ID and SUCCESS status alone do not attest the dispatched SHA.
+      if (deployment.serviceId !== serviceId || deployment.environmentId !== ENVIRONMENT_ID ||
+          typeof deployment.meta?.commitHash !== 'string' ||
+          deployment.meta.commitHash.toLowerCase() !== COMMIT_SHA.toLowerCase()) {
+        throw new Error(`${serviceName}: successful deployment identity or exact commit SHA mismatch; reconcile Railway before any retry or rollback.`);
+      }
+      return deployment;
+    }
     if (TERMINAL_FAILURES.has(lastStatus)) {
       throw new Error(`${serviceName}: deployment ended with ${lastStatus}.`);
     }

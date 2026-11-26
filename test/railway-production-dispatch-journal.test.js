@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -48,7 +48,11 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
           return ok({ deployments: { edges: nodes.map(node => ({ node })) } });
         }
         polls++;
-        return ok({ deployments: { edges: [{ node: { id: 'new-' + name, status: 'SUCCESS' } }] } });
+        const node = { id: 'new-' + name, status: 'SUCCESS',
+          serviceId: variables.input.serviceId, environmentId: variables.input.environmentId,
+          meta: { commitHash: sha } };
+        if (name === 'vk' && pollOverride) Object.assign(node, pollOverride);
+        return ok({ deployments: { edges: [{ node }] } });
       }
       if (query.includes('mutation DeployExactCommit')) {
         dispatches++;
@@ -158,6 +162,24 @@ test('historical SUCCESS without scoped provider rollback eligibility cannot sta
     assert.equal(result.events.at(-1).service, 'vk');
     assert.deepEqual(result.events.at(-1).candidates, []);
   }
+});
+
+test('successful deployment must attest its exact SHA and service/environment before readiness', async () => {
+  for (const pollOverride of [
+    { serviceId: RAILWAY_PRODUCTION.services.telegram }, { environmentId: 'foreign-environment' },
+    { meta: { commitHash: 'b'.repeat(40) } }, { meta: {} }, { meta: undefined },
+    { meta: { commitHash: 123 } }, { serviceId: undefined }, { environmentId: undefined }
+  ]) {
+    const result = await scenario({ pollOverride });
+    assert.match(result.error?.message, /successful deployment identity or exact commit SHA mismatch/);
+    assert.equal(result.dispatches, 2);
+    assert.equal(result.polls, 2);
+    assert.equal(result.readiness, 0);
+    assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram', vk: 'new-vk' });
+  }
+  const positive = await scenario({ pollOverride: { meta: { commitHash: sha.toUpperCase() } } });
+  assert.equal(positive.error, undefined);
+  assert.equal(positive.readiness, 2);
 });
 
 test('failed journal write stops before dispatch or further mutation', async () => {
