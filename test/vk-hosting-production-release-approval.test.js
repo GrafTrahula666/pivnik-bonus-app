@@ -228,7 +228,7 @@ test('production approval denies smoke evidence recorded before deploy or with i
     valid.map((step, i) => ({ ...step, number: i === 0 ? 24 : i === 1 ? 23 : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 1 ? 23 : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 2 ? 24 : step.number })),
-    valid.map((step, i) => ({ ...step, number: i === 3 ? 24 : step.number })),
+    valid.map((step, i) => ({ ...step, number: i === 3 ? 25 : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 0 ? undefined : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 1 ? '24' : step.number })),
     valid.map((step, i) => ({ ...step, number: i === 2 ? 0 : step.number })),
