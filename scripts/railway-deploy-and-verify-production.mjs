@@ -153,7 +153,7 @@ async function recentDeployments(serviceId) {
     query RecentDeployments($input: DeploymentListInput!) {
       deployments(input: $input, first: 20) {
         edges {
-          node { id status createdAt }
+          node { id status createdAt serviceId environmentId canRollback meta }
         }
       }
     }
@@ -247,16 +247,23 @@ function dispatchJournal(event, fields) {
   }
 }
 
-// Capture scoped historical successes BEFORE either mutation.
-// SUCCESS alone does not establish active traffic, retention or rehearsed rollback.
+// Capture provider-reported rollback eligibility BEFORE either mutation.
+// A historical SUCCESS alone does not establish current eligibility. Even
+// canRollback=true is only an observation, not a rehearsed/approved rollback.
 for (const [name, service] of Object.entries(SERVICES)) {
   const candidates = (await recentDeployments(service.id))
-    .filter(item => item.status === 'SUCCESS' && typeof item.id === 'string' && item.id.trim())
-    .map(item => ({ deploymentId: item.id, createdAt: item.createdAt }));
+    .filter(item => item?.status === 'SUCCESS' && item.canRollback === true &&
+      item.serviceId === service.id && item.environmentId === ENVIRONMENT_ID &&
+      typeof item.id === 'string' && item.id.trim() &&
+      typeof item.meta?.commitHash === 'string' &&
+      /^[0-9a-f]{40}$/i.test(item.meta.commitHash) &&
+      typeof item.createdAt === 'string' && Number.isFinite(Date.parse(item.createdAt)))
+    .map(item => ({ deploymentId: item.id, createdAt: item.createdAt,
+      sha: item.meta.commitHash.toLowerCase(), canRollback: true }));
   dispatchJournal('rollback_candidates_unverified', {
     service: name, serviceId: service.id, candidates
   });
-  if (!candidates.length) throw new Error(name + ': no historical SUCCESS candidate; no dispatch attempted.');
+  if (!candidates.length) throw new Error(name + ': no scoped SUCCESS candidate with provider canRollback=true; no dispatch attempted.');
 }
 
 const deploymentIds = {};

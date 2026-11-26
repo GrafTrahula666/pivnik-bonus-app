@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '' } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -37,9 +37,14 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
           snapshots++;
           calls.push('snapshot:' + name);
           if (snapshots === failSnapshot) throw Error('snapshot failure');
-          const nodes = snapshots === emptySnapshot ? [] : [
-            { id: 'old-' + name, status: 'SUCCESS', createdAt: '2026-11-09T00:00:00Z' }
-          ];
+          assert.match(query, /canRollback/);
+          assert.match(query, /serviceId environmentId canRollback meta/);
+          const candidate = { id: 'old-' + name, status: 'SUCCESS',
+            createdAt: '2026-11-09T00:00:00Z', serviceId: variables.input.serviceId,
+            environmentId: variables.input.environmentId, canRollback: true,
+            meta: { commitHash: 'b'.repeat(40) } };
+          if (name === 'vk' && invalidRollback) Object.assign(candidate, invalidRollback);
+          const nodes = snapshots === emptySnapshot ? [] : [candidate];
           return ok({ deployments: { edges: nodes.map(node => ({ node })) } });
         }
         polls++;
@@ -121,6 +126,10 @@ test('both rollback candidate snapshots precede dispatch and success preserves b
   assert.deepEqual(result.events.slice(0, 2).map(x => [x.event, x.candidates[0].deploymentId]), [
     ['rollback_candidates_unverified', 'old-telegram'], ['rollback_candidates_unverified', 'old-vk']
   ]);
+  for (const snapshot of result.events.slice(0, 2)) {
+    assert.equal(snapshot.candidates[0].sha, 'b'.repeat(40));
+    assert.equal(snapshot.candidates[0].canRollback, true);
+  }
   assert.ok(result.calls.indexOf('rollback_candidates_unverified:vk') < result.calls.indexOf('mutation:telegram'));
   assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram', vk: 'new-vk' });
 });
@@ -130,6 +139,24 @@ test('missing or inaccessible rollback candidates prevent every mutation', async
     const result = await scenario(options);
     assert.ok(result.error);
     assert.equal(result.dispatches, 0);
+  }
+});
+
+test('historical SUCCESS without scoped provider rollback eligibility cannot start either deploy', async () => {
+  for (const invalidRollback of [
+    { canRollback: false }, { canRollback: undefined }, { canRollback: 'true' },
+    { serviceId: RAILWAY_PRODUCTION.services.telegram },
+    { environmentId: 'foreign-environment' },
+    { meta: {} }, { meta: { commitHash: 'not-a-sha' } },
+    { createdAt: 'invalid' }, { status: 'REMOVED' }
+  ]) {
+    const result = await scenario({ invalidRollback });
+    assert.match(result.error?.message, /no scoped SUCCESS candidate with provider canRollback=true/);
+    assert.equal(result.dispatches, 0);
+    assert.equal(result.polls, 0);
+    assert.equal(result.readiness, 0);
+    assert.equal(result.events.at(-1).service, 'vk');
+    assert.deepEqual(result.events.at(-1).candidates, []);
   }
 });
 
