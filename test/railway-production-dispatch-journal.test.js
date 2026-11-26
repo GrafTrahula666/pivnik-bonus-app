@@ -1,17 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { RAILWAY_PRODUCTION } from '../scripts/railway-production-config.mjs';
 
 const source = readFileSync(new URL('../scripts/railway-deploy-and-verify-production.mjs', import.meta.url), 'utf8');
-const body = source.replace("import { writeSync } from 'node:fs';\n", '')
+const body = source.replace("import { writeSync, appendFileSync } from 'node:fs';\n", '')
   .replace("import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';\n", '');
 assert.doesNotMatch(body, /^import /m);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
+const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '' } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '' } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -73,13 +76,21 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
     calls.push(record.event + ':' + record.service);
     return Buffer.byteLength(line);
   };
+  const persist = (path, line, options) => {
+    assert.equal(path, journalPath);
+    assert.equal(options.flush, true);
+    const record = JSON.parse(line);
+    if (record.event + ':' + record.service === failPersist) throw Error('fixture disk write failure');
+    appendFileSync(path, line, options);
+  };
   let error;
   try {
     await run(RAILWAY_PRODUCTION, { env: {
       RAILWAY_TOKEN: 'fixture-only', RELEASE_COMMIT_SHA: sha,
+      PIVNIK_DISPATCH_JOURNAL_PATH: journalPath,
       TELEGRAM_SERVICE_VERIFY_URL: 'https://telegram.invalid',
       VK_SERVICE_VERIFY_URL: 'https://vk.invalid'
-    } }, fetch, { log() {} }, write, () => assert.fail('unexpected retry'), { timeout: () => ({}) }, Buffer);
+    } }, fetch, { log() {} }, write, persist, () => assert.fail('unexpected retry'), { timeout: () => ({}) }, Buffer);
   } catch (e) { error = e; }
   return { events, calls, dispatches, polls, readiness, error };
 }
@@ -128,4 +139,59 @@ test('failed journal write stops before dispatch or further mutation', async () 
     assert.match(result.error?.message, /Incomplete dispatch journal write/);
     assert.equal(result.dispatches, count);
   }
+});
+
+
+test('recovery JSONL survives second dispatch failure and contains only structured records', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pivnik-dispatch-journal-'));
+  try {
+    const journalPath = join(dir, 'journal.jsonl');
+    const result = await scenario({ failDispatch: 2, journalPath });
+    assert.match(result.error?.message, /dispatch outcome unknown/);
+    const raw = readFileSync(journalPath, 'utf8');
+    const records = raw.trimEnd().split('\n').map(JSON.parse);
+    assert.deepEqual(records, result.events);
+    assert.deepEqual(records.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+    assert.equal(records.at(-1).event, 'dispatch_outcome_unknown');
+    assert.doesNotMatch(raw, /fixture-only|authorization|Project-Access-Token/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('failed recovery file write prevents further mutations and preserves earlier records', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pivnik-dispatch-persist-'));
+  try {
+    const before = await scenario({ journalPath: join(dir, 'missing', 'journal.jsonl') });
+    assert.ok(before.error);
+    assert.equal(before.dispatches, 0);
+    const journalPath = join(dir, 'journal.jsonl');
+    const after = await scenario({ journalPath, failPersist: 'dispatch_started:vk' });
+    assert.match(after.error?.message, /fixture disk write failure/);
+    assert.equal(after.dispatches, 1);
+    const records = readFileSync(journalPath, 'utf8').trimEnd().split('\n').map(JSON.parse);
+    assert.equal(records.at(-1).event, 'dispatch_accepted');
+    assert.equal(records.at(-1).deploymentId, 'new-telegram');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('workflow uploads recovery JSONL on ordinary deploy failure, never on skipped or cancelled deploy', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/release-gate.yml', import.meta.url), 'utf8');
+  const deploy = workflow.split('      - name: Deploy exact commit and verify both production services\n')[1].split('\n      - name: Upload production dispatch recovery journal')[0];
+  assert.match(deploy, /id: production_deploy/);
+  assert.match(deploy, /umask 077/);
+  assert.ok(deploy.includes('(set -o noclobber; : > "$PIVNIK_DISPATCH_JOURNAL_PATH")'));
+  const upload = workflow.split('      - name: Upload production dispatch recovery journal\n')[1].split('\n      - name: ')[0];
+  const expression = upload.split('if: ${{ ')[1].split(' }}')[0];
+  for (const outcome of ['success', 'failure', 'skipped', 'cancelled', '']) {
+    for (const cancelled of [false, true]) {
+      assert.equal(runInNewContext(expression, { cancelled: () => cancelled, steps: { production_deploy: { outcome } } }),
+        !cancelled && ['success', 'failure'].includes(outcome));
+    }
+  }
+  const path = '${{ runner.temp }}/pivnik-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl';
+  assert.ok(deploy.includes('PIVNIK_DISPATCH_JOURNAL_PATH: ' + path));
+  assert.ok(upload.includes('path: ' + path));
+  assert.ok(upload.includes('name: production-dispatch-journal-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}'));
+  assert.match(upload, /if-no-files-found: error/);
+  assert.match(upload, /retention-days: 30/);
+  assert.doesNotMatch(upload, /secrets\.|continue-on-error/);
 });

@@ -1,4 +1,4 @@
-import { writeSync } from 'node:fs';
+import { writeSync, appendFileSync } from 'node:fs';
 import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
@@ -230,12 +230,18 @@ const schema = await deployMutationSchema();
 const serviceUrls = Object.fromEntries(await Promise.all(
   Object.entries(SERVICES).map(async ([name, service]) => [name, await servicePublicUrl(name, service)])
 ));
-// Recovery evidence in the CI job log, not an atomic transaction or rollback approval.
+// Recovery evidence in the CI job log and (when configured) per-attempt JSONL.
+// Neither is an atomic transaction or rollback approval.
 function dispatchJournal(event, fields) {
-  const line = 'PIVNIK_DISPATCH_JOURNAL ' + JSON.stringify({
+  const record = JSON.stringify({
     event, releaseCommit: COMMIT_SHA, projectId: PROJECT_ID,
     environmentId: ENVIRONMENT_ID, ...fields
   }) + '\n';
+  // Persist only structured recovery records, never arbitrary API/stdout output.
+  // Fail closed before further mutations if the local journal cannot be written.
+  const journalPath = process.env.PIVNIK_DISPATCH_JOURNAL_PATH;
+  if (journalPath) appendFileSync(journalPath, record, { encoding: 'utf8', mode: 0o600, flush: true });
+  const line = 'PIVNIK_DISPATCH_JOURNAL ' + record;
   if (writeSync(1, line) !== Buffer.byteLength(line)) {
     throw new Error('Incomplete dispatch journal write; stop and reconcile in Railway.');
   }

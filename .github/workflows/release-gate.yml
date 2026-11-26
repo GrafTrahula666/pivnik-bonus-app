@@ -391,12 +391,16 @@ jobs:
           github.ref == 'refs/heads/main' &&
           inputs.release_sha == github.sha &&
           inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
+        id: production_deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RELEASE_COMMIT_SHA: ${{ github.sha }}
+          PIVNIK_DISPATCH_JOURNAL_PATH: ${{ runner.temp }}/pivnik-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
         shell: bash
         run: |
+          umask 077
+          (set -o noclobber; : > "$PIVNIK_DISPATCH_JOURNAL_PATH")
           # Fail closed if main moved while a manually approved release waited.
           current_main="$(git ls-remote --heads origin main | cut -f1)"
           if [ -z "$current_main" ] || [ "$current_main" != "$RELEASE_COMMIT_SHA" ]; then
@@ -404,6 +408,17 @@ jobs:
             exit 1
           fi
           node scripts/railway-deploy-and-verify-production.mjs
+
+      # Ordinary step failures must not suppress recovery evidence. A cancelled
+      # or lost runner may still lose the file: reconcile in Railway, never retry blindly.
+      - name: Upload production dispatch recovery journal
+        if: ${{ !cancelled() && (steps.production_deploy.outcome == 'success' || steps.production_deploy.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dispatch-journal-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/pivnik-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Probe production documents and public endpoints
         if: >-
