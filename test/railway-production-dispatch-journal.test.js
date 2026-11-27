@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {} } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {} } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -23,7 +23,13 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
   const ok = data => ({ ok: true, json: async () => ({ data }) });
   const fetch = async (url, options) => {
     if (url === 'https://backboard.railway.com/graphql/v2') {
+      assert.equal(options.redirect, 'error');
       const { query, variables } = JSON.parse(options.body);
+      const rejectRedirect = () => {
+        if (graphqlRedirect.mode === 'reject') throw Error('fixture redirect rejected');
+        return { ok: true, redirected: true, json: async () => assert.fail('redirected GraphQL body must not be read') };
+      };
+      if (graphqlRedirect?.at === 'schema' && query.includes('DeployMutationSchema')) return rejectRedirect();
       if (query.includes('DeployMutationSchema')) return ok({ __type: { fields: [{
         name: 'serviceInstanceDeployV2',
         args: ['serviceId', 'environmentId', 'commitSha'].map(name => ({ name, type })),
@@ -69,6 +75,7 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
         calls.push('mutation:' + name);
         assert.equal(variables.commitSha, sha);
         assert.equal(variables.environmentId, RAILWAY_PRODUCTION.environmentId);
+        if (graphqlRedirect?.at === 'mutation:' + name) return rejectRedirect();
         if (dispatches === failDispatch) return { ok: false, status: 503, json: async () => ({}) };
         return ok({ serviceInstanceDeployV2: 'new-' + name });
       }
@@ -267,6 +274,27 @@ test('readiness origins must be registered to distinct scoped Railway services b
       assert.ok(result.calls.indexOf('domains:' + name) < result.calls.indexOf('mutation:telegram'));
     }
   }
+});
+
+test('authenticated Railway GraphQL redirects fail closed without retry or parsing redirected data', async () => {
+  for (const mode of ['reject', 'followed']) {
+    const preflight = await scenario({ graphqlRedirect: { at: 'schema', mode } });
+    assert.match(preflight.error?.message, /redirect/i);
+    assert.equal(preflight.dispatches, 0);
+    assert.equal(preflight.events.length, 0);
+    assert.equal(preflight.readiness, 0);
+
+    const dispatch = await scenario({ graphqlRedirect: { at: 'mutation:vk', mode } });
+    assert.match(dispatch.error?.message, /dispatch outcome unknown/);
+    assert.equal(dispatch.dispatches, 2);
+    assert.equal(dispatch.polls, 0);
+    assert.equal(dispatch.readiness, 0);
+    assert.equal(dispatch.events.at(-1).event, 'dispatch_outcome_unknown');
+    assert.deepEqual(dispatch.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+  }
+  const direct = await scenario();
+  assert.equal(direct.error, undefined);
+  assert.equal(direct.readiness, 2);
 });
 
 test('failed journal write stops before dispatch or further mutation', async () => {
