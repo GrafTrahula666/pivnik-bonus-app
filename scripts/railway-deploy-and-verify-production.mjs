@@ -198,15 +198,16 @@ async function fetchReadiness(serviceName, baseUrl) {
 function readinessFailures(telegram, vk) {
   const failures = [];
   for (const [name, value] of [['Telegram', telegram], ['VK', vk]]) {
-    if (!value?.ok) failures.push(`${name}: readiness endpoint is not ready`);
+    if (value?.ok !== true) failures.push(`${name}: readiness endpoint is not ready`);
     if (value?.environment !== 'production') failures.push(`${name}: environment is not production`);
-    if (!value?.databaseFingerprint) failures.push(`${name}: database fingerprint is missing`);
-    if (!value?.legalConfigured) failures.push(`${name}: legal configuration is incomplete`);
-    if (!value?.identityTombstoneSecretConfigured) failures.push(`${name}: tombstone secret is missing`);
+    if (typeof value?.databaseFingerprint !== 'string' || !value.databaseFingerprint.trim()) failures.push(`${name}: database fingerprint is missing`);
+    if (value?.legalConfigured !== true) failures.push(`${name}: legal configuration is incomplete`);
+    if (value?.identityTombstoneSecretConfigured !== true) failures.push(`${name}: tombstone secret is missing`);
     if (value?.releaseCommit !== COMMIT_SHA) failures.push(`${name}: release commit is ${value?.releaseCommit || 'missing'}`);
     if (value?.accountMode !== 'separate') failures.push(`${name}: account mode is not separate`);
     if (value?.unifiedAccounts !== false) failures.push(`${name}: unified accounts are still enabled`);
     if (value?.linkCodes !== false) failures.push(`${name}: account link codes are still enabled`);
+    if (typeof value?.termsVersion !== 'string' || !value.termsVersion.trim()) failures.push(`${name}: terms version is missing or invalid`);
   }
   if (telegram?.databaseFingerprint !== vk?.databaseFingerprint) failures.push('VK and Telegram use different databases');
   if (telegram?.termsVersion !== vk?.termsVersion) failures.push('VK and Telegram expose different terms versions');
