@@ -51,8 +51,19 @@ async function graphql(query, variables = {}) {
   return payload.data;
 }
 
+function readinessOrigin(value, serviceName) {
+  // Only a canonical HTTPS origin, never a path, query, credentials or alternate port.
+  let url;
+  try { url = new URL(value); } catch { throw new Error(serviceName + ': invalid readiness HTTPS origin.'); }
+  if (typeof value !== 'string' || !/^https:\/\/[^/?#\\]+\/?$/i.test(value) ||
+      url.protocol !== 'https:' || url.username || url.password || url.port ||
+      url.href !== url.origin + '/') {
+    throw new Error(serviceName + ': invalid readiness HTTPS origin.');
+  }
+  return url.origin;
+}
+
 async function servicePublicUrl(serviceName, service) {
-  if (service.verifyUrl) return service.verifyUrl;
   const data = await graphql(`
     query ProductionServiceDomains($projectId: String!, $environmentId: String!, $serviceId: String!) {
       domains(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) {
@@ -62,9 +73,22 @@ async function servicePublicUrl(serviceName, service) {
     }
   `, { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id });
   const domains = data?.domains;
-  const domain = domains?.serviceDomains?.[0]?.domain || domains?.customDomains?.[0]?.domain;
-  if (!domain) throw new Error(`${serviceName}: Railway returned no public domain.`);
-  return `https://${domain}`;
+  if (!Array.isArray(domains?.serviceDomains) || !Array.isArray(domains?.customDomains)) {
+    throw new Error(serviceName + ': Railway domain inventory is missing or malformed.');
+  }
+  const registered = [...domains.serviceDomains, ...domains.customDomains].map(item => {
+    if (typeof item?.domain !== 'string' || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i.test(item.domain)) {
+      throw new Error(serviceName + ': Railway returned an invalid public domain.');
+    }
+    return readinessOrigin('https://' + item.domain, serviceName);
+  });
+  if (!registered.length) throw new Error(serviceName + ': Railway returned no public domain.');
+  if (!service.verifyUrl) return registered[0];
+  const requested = readinessOrigin(service.verifyUrl, serviceName);
+  if (!registered.includes(requested)) {
+    throw new Error(serviceName + ': readiness origin is not registered to this Railway service.');
+  }
+  return requested;
 }
 
 function renderType(type) {
@@ -241,6 +265,9 @@ const schema = await deployMutationSchema();
 const serviceUrls = Object.fromEntries(await Promise.all(
   Object.entries(SERVICES).map(async ([name, service]) => [name, await servicePublicUrl(name, service)])
 ));
+if (new Set(Object.values(serviceUrls)).size !== Object.keys(SERVICES).length) {
+  throw new Error('Production readiness origins must be distinct for Telegram and VK.');
+}
 // Recovery evidence in the CI job log and (when configured) per-attempt JSONL.
 // Neither is an atomic transaction or rollback approval.
 function dispatchJournal(event, fields) {

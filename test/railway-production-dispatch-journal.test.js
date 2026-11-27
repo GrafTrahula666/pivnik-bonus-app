@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {} } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -29,6 +29,15 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
         args: ['serviceId', 'environmentId', 'commitSha'].map(name => ({ name, type })),
         type
       }] } });
+      if (query.includes('ProductionServiceDomains')) {
+        const name = scopeName(variables.serviceId);
+        assert.equal(variables.projectId, RAILWAY_PRODUCTION.projectId);
+        assert.equal(variables.environmentId, RAILWAY_PRODUCTION.environmentId);
+        calls.push('domains:' + name);
+        const domains = Object.hasOwn(domainOverrides, name) ? domainOverrides[name] :
+          { serviceDomains: [{ domain: name + '.invalid' }], customDomains: [] };
+        return ok({ domains });
+      }
       if (query.includes('RecentDeployments')) {
         const name = scopeName(variables.input.serviceId);
         assert.equal(variables.input.projectId, RAILWAY_PRODUCTION.projectId);
@@ -100,8 +109,8 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
     await run(RAILWAY_PRODUCTION, { env: {
       RAILWAY_TOKEN: 'fixture-only', RELEASE_COMMIT_SHA: sha,
       PIVNIK_DISPATCH_JOURNAL_PATH: journalPath,
-      TELEGRAM_SERVICE_VERIFY_URL: 'https://telegram.invalid',
-      VK_SERVICE_VERIFY_URL: 'https://vk.invalid'
+      TELEGRAM_SERVICE_VERIFY_URL: verifyUrls.telegram,
+      VK_SERVICE_VERIFY_URL: verifyUrls.vk
     } }, fetch, { log() {} }, write, persist, () => assert.fail('unexpected retry'), { timeout: () => ({}) }, Buffer);
   } catch (e) { error = e; }
   return { events, calls, dispatches, polls, readiness, error };
@@ -215,6 +224,49 @@ test('readiness cannot use a redirected VK response as independent service evide
   }
   const positive = await scenario();
   assert.equal(positive.error, undefined);
+});
+
+test('readiness origins must be registered to distinct scoped Railway services before dispatch', async () => {
+  const domain = value => ({ serviceDomains: [{ domain: value }], customDomains: [] });
+  for (const options of [
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://telegram.invalid' } },
+    { verifyUrls: { telegram: 'https://vk.invalid', vk: 'https://telegram.invalid' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://foreign.invalid' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'http://vk.invalid' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid:8443' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://user@vk.invalid' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid/path' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid?x=1' } },
+    { verifyUrls: { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid#fragment' } },
+    { domainOverrides: { vk: null } },
+    { domainOverrides: { vk: { serviceDomains: [], customDomains: [] } } },
+    { domainOverrides: { vk: domain('vk.invalid/path') } },
+    { domainOverrides: { vk: domain('telegram.invalid') }, verifyUrls: {
+      telegram: 'https://TELEGRAM.invalid:443/', vk: 'https://telegram.invalid'
+    } }
+  ]) {
+    const result = await scenario(options);
+    assert.match(result.error?.message, /invalid readiness HTTPS origin|not registered|domain inventory|no public domain|invalid public domain|origins must be distinct/);
+    assert.equal(result.dispatches, 0);
+    assert.equal(result.readiness, 0);
+    assert.equal(result.events.length, 0);
+    assert.ok(result.calls.includes('domains:telegram'));
+    assert.ok(result.calls.includes('domains:vk'));
+  }
+  for (const options of [
+    {},
+    { verifyUrls: {} },
+    { verifyUrls: { telegram: 'https://TELEGRAM.invalid:443/', vk: 'https://vk.invalid/' } },
+    { domainOverrides: { vk: { serviceDomains: [{ domain: 'other.invalid' }], customDomains: [{ domain: 'vk.invalid' }] } } }
+  ]) {
+    const result = await scenario(options);
+    assert.equal(result.error, undefined);
+    assert.equal(result.dispatches, 2);
+    assert.equal(result.readiness, 2);
+    for (const name of ['telegram', 'vk']) {
+      assert.ok(result.calls.indexOf('domains:' + name) < result.calls.indexOf('mutation:telegram'));
+    }
+  }
 });
 
 test('failed journal write stops before dispatch or further mutation', async () => {
