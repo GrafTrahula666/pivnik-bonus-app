@@ -318,6 +318,7 @@ function dispatchJournal(event, fields) {
 // Capture provider-reported rollback eligibility BEFORE either mutation.
 // A historical SUCCESS alone does not establish current eligibility. Even
 // canRollback=true is only an observation, not a rehearsed/approved rollback.
+const rollbackCandidates = {};
 for (const [name, service] of Object.entries(SERVICES)) {
   const candidates = (await recentDeployments(service.id))
     .filter(item => item?.status === 'SUCCESS' && item.canRollback === true &&
@@ -332,6 +333,16 @@ for (const [name, service] of Object.entries(SERVICES)) {
     service: name, serviceId: service.id, candidates
   });
   if (!candidates.length) throw new Error(name + ': no scoped SUCCESS candidate with provider canRollback=true; no dispatch attempted.');
+  rollbackCandidates[name] = candidates;
+}
+// Two individually eligible records are not a coherent rollback target.
+// Require an observed shared prior SHA; never select the candidate release
+// itself as its own rollback. This is eligibility only, not approval/rehearsal.
+const sharedRollbackShas = new Set(rollbackCandidates.telegram
+  .filter(item => item.sha !== COMMIT_SHA.toLowerCase())
+  .map(item => item.sha));
+if (!rollbackCandidates.vk.some(item => sharedRollbackShas.has(item.sha))) {
+  throw new Error('No common prior rollback SHA for both Railway services; no dispatch attempted.');
 }
 
 const deploymentIds = {};

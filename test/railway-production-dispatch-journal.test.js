@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '' } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '' } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0, statusReads = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -71,7 +71,7 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
           const candidate = { id: 'old-' + name, status: 'SUCCESS',
             createdAt: '2026-11-09T00:00:00Z', serviceId: variables.input.serviceId,
             environmentId: variables.input.environmentId, canRollback: true,
-            meta: { commitHash: 'b'.repeat(40) } };
+            meta: { commitHash: rollbackSha } };
           if (name === 'vk' && invalidRollback) Object.assign(candidate, invalidRollback);
           const nodes = snapshots === emptySnapshot ? [] : [candidate];
           return ok({ deployments: { edges: nodes.map(node => ({ node })) } });
@@ -195,6 +195,26 @@ test('historical SUCCESS without scoped provider rollback eligibility cannot sta
     assert.equal(result.events.at(-1).service, 'vk');
     assert.deepEqual(result.events.at(-1).candidates, []);
   }
+});
+
+test('both services require a shared rollback SHA distinct from the release before any mutation', async () => {
+  for (const rollbackSha of ['c'.repeat(40), sha]) {
+    const result = await scenario({ invalidRollback: { meta: { commitHash: rollbackSha } } });
+    assert.match(result.error?.message, /No common prior rollback SHA/);
+    assert.equal(result.dispatches, 0);
+    assert.equal(result.polls, 0);
+    assert.equal(result.readiness, 0);
+    assert.deepEqual(result.events.map(event => event.event), [
+      'rollback_candidates_unverified', 'rollback_candidates_unverified'
+    ]);
+  }
+  const sameRelease = await scenario({ rollbackSha: sha });
+  assert.match(sameRelease.error?.message, /No common prior rollback SHA/);
+  assert.equal(sameRelease.dispatches, 0);
+  assert.equal(sameRelease.readiness, 0);
+  const valid = await scenario({ invalidRollback: { meta: { commitHash: 'B'.repeat(40) } } });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.dispatches, 2);
 });
 
 test('successful deployment must attest its exact SHA and service/environment before readiness', async () => {
