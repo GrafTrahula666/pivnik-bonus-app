@@ -8,13 +8,14 @@ import { RAILWAY_PRODUCTION } from '../scripts/railway-production-config.mjs';
 
 const source = readFileSync(new URL('../scripts/railway-deploy-and-verify-production.mjs', import.meta.url), 'utf8');
 const body = source.replace("import { writeSync, appendFileSync } from 'node:fs';\n", '')
-  .replace("import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';\n", '');
+  .replace("import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';\n", '')
+  .replace("import { execFileSync } from 'node:child_process';\n", '');
 assert.doesNotMatch(body, /^import /m);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
+const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', 'execFileSync', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '', mutationResponses = {} } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '', mutationResponses = {}, mainOutputs = [], mainReadErrorAt = 0 } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0, statusReads = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -126,6 +127,17 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
     if (record.event + ':' + record.service === failPersist) throw Error('fixture disk write failure');
     appendFileSync(path, line, options);
   };
+  let mainReads = 0;
+  const git = (command, args, options) => {
+    assert.equal(command, 'git');
+    assert.deepEqual(args, ['ls-remote', '--heads', 'origin', 'refs/heads/main']);
+    assert.equal(options.encoding, 'utf8');
+    assert.ok(options.timeout > 0);
+    mainReads++;
+    calls.push('main:' + mainReads);
+    if (mainReads === mainReadErrorAt) throw Error('fixture remote unavailable');
+    return mainOutputs[mainReads - 1] ?? sha + '\trefs/heads/main\n';
+  };
   let error;
   try {
     await run(RAILWAY_PRODUCTION, { env: {
@@ -133,9 +145,9 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
       PIVNIK_DISPATCH_JOURNAL_PATH: journalPath,
       TELEGRAM_SERVICE_VERIFY_URL: verifyUrls.telegram,
       VK_SERVICE_VERIFY_URL: verifyUrls.vk
-    } }, fetch, { log() {} }, write, persist, () => assert.fail('unexpected retry'), { timeout: () => ({}) }, Buffer);
+    } }, fetch, { log() {} }, write, persist, () => assert.fail('unexpected retry'), { timeout: () => ({}) }, Buffer, git);
   } catch (e) { error = e; }
-  return { events, calls, dispatches, polls, readiness, error };
+  return { events, calls, dispatches, polls, readiness, mainReads, error };
 }
 
 test('first and second dispatch failures record ambiguous outcome and all known accepted IDs', async () => {
@@ -450,4 +462,36 @@ test('malformed Railway acceptance ID is ambiguous and stops further dispatch', 
   const valid = await scenario({ mutationResponses: { telegram: { id: 'new-telegram' } } });
   assert.equal(valid.error, undefined);
   assert.equal(valid.readiness, 2);
+});
+
+test('REL-01 re-verifies current main before each mutation and preserves partial acceptance', async () => {
+  const valid = sha + '\trefs/heads/main\n';
+  const moved = 'c'.repeat(40) + '\trefs/heads/main\n';
+  for (const [options, count] of [
+    [{ mainOutputs: [moved] }, 0],
+    [{ mainOutputs: [''] }, 0],
+    [{ mainOutputs: [sha + '\trefs/heads/other\n'] }, 0],
+    [{ mainOutputs: [valid + valid] }, 0],
+    [{ mainReadErrorAt: 1 }, 0],
+    [{ mainOutputs: [valid, moved] }, 1],
+    [{ mainReadErrorAt: 2 }, 1]
+  ]) {
+    const result = await scenario(options);
+    assert.match(result.error?.message, /Current origin\/main/);
+    assert.equal(result.dispatches, count);
+    assert.equal(result.mainReads, count + 1);
+    assert.equal(result.polls, 0);
+    assert.equal(result.readiness, 0);
+    assert.equal(result.events.filter(e => e.event === 'dispatch_started').length, count);
+    if (count === 1) {
+      assert.equal(result.events.at(-1).event, 'dispatch_accepted');
+      assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+    }
+  }
+  const result = await scenario({ mainOutputs: [valid, valid] });
+  assert.equal(result.error, undefined);
+  assert.equal(result.mainReads, 2);
+  assert.equal(result.dispatches, 2);
+  assert.deepEqual(result.calls.filter(c => c.startsWith('main:') || c.startsWith('mutation:')),
+    ['main:1', 'mutation:telegram', 'main:2', 'mutation:vk']);
 });

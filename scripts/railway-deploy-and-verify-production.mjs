@@ -1,4 +1,5 @@
 import { writeSync, appendFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
@@ -79,6 +80,24 @@ async function verifyAutoDeployDisabled() {
     }
   }
   console.log('Railway reports auto-deploy disabled for both scoped production services.');
+}
+
+// The workflow's initial main check is not sufficient after network preflight
+// or a partially accepted release. Re-read the exact remote ref before EACH
+// mutation. This narrows the race; it is not an atomic lock on GitHub main.
+function verifyCurrentMain() {
+  let output;
+  try {
+    output = execFileSync('git', ['ls-remote', '--heads', 'origin', 'refs/heads/main'], {
+      encoding: 'utf8', timeout: 15_000, maxBuffer: 4096, stdio: ['ignore', 'pipe', 'ignore']
+    });
+  } catch {
+    throw new Error('Current origin/main could not be verified; stop and reconcile before dispatch.');
+  }
+  const expected = COMMIT_SHA.toLowerCase() + '\trefs/heads/main';
+  if (output !== expected + '\n' && output !== expected + '\r\n') {
+    throw new Error('Current origin/main changed or returned invalid evidence; stop and reconcile before dispatch.');
+  }
 }
 
 function readinessOrigin(value, serviceName) {
@@ -354,6 +373,7 @@ for (const [name, service] of Object.entries(SERVICES)) {
   // Re-read both sources immediately before each mutation. If isolation is
   // lost after the first acceptance, its journal ID remains for reconciliation.
   await verifyAutoDeployDisabled();
+  verifyCurrentMain();
   const scope = { service: name, serviceId: service.id };
   dispatchJournal('dispatch_started', { ...scope, acceptedDeployments: { ...deploymentIds } });
   let deploymentId;
