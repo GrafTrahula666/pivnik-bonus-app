@@ -14,9 +14,9 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {} } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '' } = {}) {
   const events = [], calls = [];
-  let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
+  let snapshots = 0, dispatches = 0, polls = 0, readiness = 0, statusReads = 0;
   const services = RAILWAY_PRODUCTION.services;
   const scopeName = id => id === services.telegram ? 'telegram' : id === services.vk ? 'vk' : assert.fail('foreign service');
   const type = { kind: 'SCALAR', name: 'String' };
@@ -43,6 +43,20 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
         const domains = Object.hasOwn(domainOverrides, name) ? domainOverrides[name] :
           { serviceDomains: [{ domain: name + '.invalid' }], customDomains: [] };
         return ok({ domains });
+      }
+      if (query.includes('ProductionAutoDeployStatus')) {
+        const name = scopeName(variables.serviceId);
+        assert.equal(variables.projectId, RAILWAY_PRODUCTION.projectId);
+        assert.equal(variables.environmentId, RAILWAY_PRODUCTION.environmentId);
+        assert.match(query, /serviceInstanceAutoDeployStatus\(projectId: \$projectId, environmentId: \$environmentId, serviceId: \$serviceId\)/);
+        statusReads++;
+        calls.push('autodeploy:' + name);
+        if (graphqlRedirect?.at === 'autodeploy:' + name) return rejectRedirect();
+        if (autoDeployErrorAt === name) return { ok: true, json: async () => ({ errors: [{ message: 'Not Authorized' }], data: null }) };
+        const status = autoDeployChangedAt === name && statusReads > 2
+          ? { enabled: true, canEnable: true }
+          : Object.hasOwn(autoDeployStatuses, name) ? autoDeployStatuses[name] : { enabled: false, canEnable: true };
+        return ok({ serviceInstanceAutoDeployStatus: status });
       }
       if (query.includes('RecentDeployments')) {
         const name = scopeName(variables.input.serviceId);
@@ -295,6 +309,44 @@ test('authenticated Railway GraphQL redirects fail closed without retry or parsi
   const direct = await scenario();
   assert.equal(direct.error, undefined);
   assert.equal(direct.readiness, 2);
+});
+
+test('REL-01 requires live disabled auto-deploy status for both exact services before any dispatch', async () => {
+  for (const name of ['telegram', 'vk']) {
+    for (const status of [null, {}, { enabled: true, canEnable: true },
+      { enabled: 'false', canEnable: true }, { enabled: false },
+      { enabled: false, canEnable: false }, { enabled: false, canEnable: 'true' }]) {
+      const result = await scenario({ autoDeployStatuses: { [name]: status } });
+      assert.match(result.error?.message, /auto-deploy isolation not confirmed/);
+      assert.equal(result.dispatches, 0);
+      assert.equal(result.readiness, 0);
+    }
+    for (const options of [{ autoDeployErrorAt: name },
+      { graphqlRedirect: { at: 'autodeploy:' + name, mode: 'reject' } },
+      { graphqlRedirect: { at: 'autodeploy:' + name, mode: 'followed' } }]) {
+      const result = await scenario(options);
+      assert.match(result.error?.message, /auto-deploy status unavailable/);
+      assert.equal(result.dispatches, 0);
+      assert.equal(result.readiness, 0);
+    }
+  }
+  const valid = await scenario();
+  assert.equal(valid.error, undefined);
+  assert.deepEqual(valid.calls.filter(call => call.startsWith('autodeploy:') || call.startsWith('mutation:')),
+    ['autodeploy:telegram', 'autodeploy:vk', 'mutation:telegram',
+      'autodeploy:telegram', 'autodeploy:vk', 'mutation:vk']);
+});
+
+test('REL-01 loss of isolation after first dispatch stops second mutation and preserves accepted ID', async () => {
+  for (const name of ['telegram', 'vk']) {
+    const result = await scenario({ autoDeployChangedAt: name });
+    assert.match(result.error?.message, /auto-deploy isolation not confirmed/);
+    assert.equal(result.dispatches, 1);
+    assert.equal(result.polls, 0);
+    assert.equal(result.readiness, 0);
+    assert.equal(result.events.at(-1).event, 'dispatch_accepted');
+    assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+  }
 });
 
 test('failed journal write stops before dispatch or further mutation', async () => {

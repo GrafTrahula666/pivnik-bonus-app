@@ -54,6 +54,33 @@ async function graphql(query, variables = {}) {
   return payload.data;
 }
 
+// REL-01: an exact-SHA manual dispatch must not run while either source can
+// also deploy on push. This is a read-only provider query, not a settings
+// change or proof of a staging rehearsal. Unknown/denied schema or status
+// blocks dispatch. canEnable=true excludes an unavailable GitHub source.
+async function verifyAutoDeployDisabled() {
+  for (const [name, service] of Object.entries(SERVICES)) {
+    let status;
+    try {
+      const data = await graphql(`
+        query ProductionAutoDeployStatus($projectId: String!, $environmentId: String!, $serviceId: String!) {
+          serviceInstanceAutoDeployStatus(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) {
+            enabled
+            canEnable
+          }
+        }
+      `, { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id });
+      status = data?.serviceInstanceAutoDeployStatus;
+    } catch {
+      throw new Error(name + ': Railway auto-deploy status unavailable; stop and reconcile Railway before dispatch.');
+    }
+    if (status?.enabled !== false || status?.canEnable !== true) {
+      throw new Error(name + ': Railway auto-deploy isolation not confirmed; stop and reconcile Railway before dispatch.');
+    }
+  }
+  console.log('Railway reports auto-deploy disabled for both scoped production services.');
+}
+
 function readinessOrigin(value, serviceName) {
   // Only a canonical HTTPS origin, never a path, query, credentials or alternate port.
   let url;
@@ -309,6 +336,9 @@ for (const [name, service] of Object.entries(SERVICES)) {
 
 const deploymentIds = {};
 for (const [name, service] of Object.entries(SERVICES)) {
+  // Re-read both sources immediately before each mutation. If isolation is
+  // lost after the first acceptance, its journal ID remains for reconciliation.
+  await verifyAutoDeployDisabled();
   const scope = { service: name, serviceId: service.id };
   dispatchJournal('dispatch_started', { ...scope, acceptedDeployments: { ...deploymentIds } });
   let deploymentId;
