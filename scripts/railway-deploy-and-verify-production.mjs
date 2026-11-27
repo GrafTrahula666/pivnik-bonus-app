@@ -198,7 +198,11 @@ async function deployService(serviceName, service, schema) {
   );
   const result = data?.serviceInstanceDeployV2;
   const deploymentId = typeof result === 'string' ? result : result?.id;
-  if (!deploymentId) throw new Error(`${serviceName}: Railway returned no deployment ID.`);
+  // A malformed acceptance cannot establish which operation was accepted.
+  // Treat it as ambiguous; the caller must journal and stop, never dispatch onward.
+  if (typeof deploymentId !== 'string' || !deploymentId || deploymentId.length > 128 || /[^A-Za-z0-9_-]/.test(deploymentId)) {
+    throw new Error(`${serviceName}: Railway returned an invalid deployment ID.`);
+  }
   return deploymentId;
 }
 

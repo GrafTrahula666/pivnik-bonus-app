@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '' } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '', mutationResponses = {} } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0, statusReads = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -91,7 +91,8 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
         assert.equal(variables.environmentId, RAILWAY_PRODUCTION.environmentId);
         if (graphqlRedirect?.at === 'mutation:' + name) return rejectRedirect();
         if (dispatches === failDispatch) return { ok: false, status: 503, json: async () => ({}) };
-        return ok({ serviceInstanceDeployV2: 'new-' + name });
+        const value = Object.hasOwn(mutationResponses, name) ? mutationResponses[name] : 'new-' + name;
+        return ok({ serviceInstanceDeployV2: value });
       }
       assert.fail('unexpected GraphQL operation');
     }
@@ -430,4 +431,23 @@ test('workflow uploads recovery JSONL on ordinary deploy failure, never on skipp
   assert.match(upload, /if-no-files-found: error/);
   assert.match(upload, /retention-days: 30/);
   assert.doesNotMatch(upload, /secrets\.|continue-on-error/);
+});
+
+
+test('malformed Railway acceptance ID is ambiguous and stops further dispatch', async () => {
+  for (const [name, count] of [['telegram', 1], ['vk', 2]]) {
+    for (const value of [null, '', ' ', 'new-telegram\n', { id: 123 }, { id: {} }, true, 'x'.repeat(129), 'bad/id']) {
+      const result = await scenario({ mutationResponses: { [name]: value } });
+      assert.match(result.error?.message, /dispatch outcome unknown/);
+      assert.equal(result.dispatches, count);
+      assert.equal(result.polls, 0);
+      assert.equal(result.readiness, 0);
+      assert.equal(result.events.at(-1).event, 'dispatch_outcome_unknown');
+      assert.deepEqual(result.events.at(-1).acceptedDeployments, count === 1 ? {} : { telegram: 'new-telegram' });
+      assert.equal(result.events.filter(e => e.event === 'dispatch_accepted').length, count - 1);
+    }
+  }
+  const valid = await scenario({ mutationResponses: { telegram: { id: 'new-telegram' } } });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.readiness, 2);
 });
