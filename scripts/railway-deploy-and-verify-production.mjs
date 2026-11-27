@@ -35,6 +35,8 @@ const railwayAuthHeaders = API_TOKEN
 async function graphql(query, variables = {}) {
   const response = await fetch(ENDPOINT, {
     method: 'POST',
+    // Never forward the project-token header or an exact-SHA mutation to a redirect target.
+    redirect: 'error',
     headers: {
       ...railwayAuthHeaders,
       'content-type': 'application/json',
@@ -43,6 +45,7 @@ async function graphql(query, variables = {}) {
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(30_000)
   });
+  if (response.redirected) throw new Error('Railway GraphQL redirect is not allowed.');
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.errors?.length) {
     throw new Error(payload.errors?.map((item) => item.message).join('; ')
