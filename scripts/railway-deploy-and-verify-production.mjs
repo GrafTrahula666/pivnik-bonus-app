@@ -187,9 +187,11 @@ async function waitForDeployment(serviceName, serviceId, deploymentId) {
 
 async function fetchReadiness(serviceName, baseUrl) {
   const response = await fetch(`${baseUrl}/api/release-readiness`, {
+    redirect: 'error',
     headers: { accept: 'application/json', 'user-agent': 'pivnik-production-verifier/1.0' },
     signal: AbortSignal.timeout(15_000)
   });
+  if (response.redirected) throw new Error(`${serviceName}: readiness redirect is not allowed.`);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`${serviceName}: readiness HTTP ${response.status}.`);
   return body;

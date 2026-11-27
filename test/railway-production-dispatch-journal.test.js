@@ -14,7 +14,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, pollOverride = null, readinessOverride = null, readinessRedirect = false } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -67,7 +67,10 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
     }
     assert.match(url, /^https:\/\/(?:telegram|vk)\.invalid\/api\/release-readiness$/);
     readiness++;
-    return { ok: true, json: async () => ({
+    assert.equal(options.redirect, 'error');
+    const redirect = readinessRedirect && url.startsWith('https://vk.invalid/');
+    if (redirect && readinessRedirect === 'reject') throw Error('fixture redirect rejected');
+    return { ok: true, redirected: Boolean(redirect), json: async () => ({
       ok: true, environment: 'production', databaseFingerprint: 'fixture', legalConfigured: true,
       identityTombstoneSecretConfigured: true, releaseCommit: sha, accountMode: 'separate',
       unifiedAccounts: false, linkCodes: false, termsVersion: 'fixture', ...readinessOverride
@@ -191,6 +194,19 @@ test('readiness rejects malformed success flags and absent or invalid shared met
     const result = await scenario({ readinessOverride });
     // The fixture refuses to sleep/retry, so a malformed readiness response
     // must fail instead of returning success; neither dispatch may be retried.
+    assert.match(result.error?.message, /unexpected retry/);
+    assert.equal(result.dispatches, 2);
+    assert.equal(result.polls, 2);
+    assert.equal(result.readiness, 2);
+    assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram', vk: 'new-vk' });
+  }
+  const positive = await scenario();
+  assert.equal(positive.error, undefined);
+});
+
+test('readiness cannot use a redirected VK response as independent service evidence', async () => {
+  for (const readinessRedirect of ['reject', 'followed']) {
+    const result = await scenario({ readinessRedirect });
     assert.match(result.error?.message, /unexpected retry/);
     assert.equal(result.dispatches, 2);
     assert.equal(result.polls, 2);
