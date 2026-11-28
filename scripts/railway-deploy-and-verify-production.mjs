@@ -1,3 +1,5 @@
+import { writeSync, appendFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { RAILWAY_PRODUCTION } from './railway-production-config.mjs';
 
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
@@ -34,6 +36,8 @@ const railwayAuthHeaders = API_TOKEN
 async function graphql(query, variables = {}) {
   const response = await fetch(ENDPOINT, {
     method: 'POST',
+    // Never forward the project-token header or an exact-SHA mutation to a redirect target.
+    redirect: 'error',
     headers: {
       ...railwayAuthHeaders,
       'content-type': 'application/json',
@@ -42,6 +46,7 @@ async function graphql(query, variables = {}) {
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(30_000)
   });
+  if (response.redirected) throw new Error('Railway GraphQL redirect is not allowed.');
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.errors?.length) {
     throw new Error(payload.errors?.map((item) => item.message).join('; ')
@@ -50,8 +55,64 @@ async function graphql(query, variables = {}) {
   return payload.data;
 }
 
+// REL-01: an exact-SHA manual dispatch must not run while either source can
+// also deploy on push. This is a read-only provider query, not a settings
+// change or proof of a staging rehearsal. Unknown/denied schema or status
+// blocks dispatch. canEnable=true excludes an unavailable GitHub source.
+async function verifyAutoDeployDisabled() {
+  for (const [name, service] of Object.entries(SERVICES)) {
+    let status;
+    try {
+      const data = await graphql(`
+        query ProductionAutoDeployStatus($projectId: String!, $environmentId: String!, $serviceId: String!) {
+          serviceInstanceAutoDeployStatus(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) {
+            enabled
+            canEnable
+          }
+        }
+      `, { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id });
+      status = data?.serviceInstanceAutoDeployStatus;
+    } catch {
+      throw new Error(name + ': Railway auto-deploy status unavailable; stop and reconcile Railway before dispatch.');
+    }
+    if (status?.enabled !== false || status?.canEnable !== true) {
+      throw new Error(name + ': Railway auto-deploy isolation not confirmed; stop and reconcile Railway before dispatch.');
+    }
+  }
+  console.log('Railway reports auto-deploy disabled for both scoped production services.');
+}
+
+// The workflow's initial main check is not sufficient after network preflight
+// or a partially accepted release. Re-read the exact remote ref before EACH
+// mutation. This narrows the race; it is not an atomic lock on GitHub main.
+function verifyCurrentMain() {
+  let output;
+  try {
+    output = execFileSync('git', ['ls-remote', '--heads', 'origin', 'refs/heads/main'], {
+      encoding: 'utf8', timeout: 15_000, maxBuffer: 4096, stdio: ['ignore', 'pipe', 'ignore']
+    });
+  } catch {
+    throw new Error('Current origin/main could not be verified; stop and reconcile before dispatch.');
+  }
+  const expected = COMMIT_SHA.toLowerCase() + '\trefs/heads/main';
+  if (output !== expected + '\n' && output !== expected + '\r\n') {
+    throw new Error('Current origin/main changed or returned invalid evidence; stop and reconcile before dispatch.');
+  }
+}
+
+function readinessOrigin(value, serviceName) {
+  // Only a canonical HTTPS origin, never a path, query, credentials or alternate port.
+  let url;
+  try { url = new URL(value); } catch { throw new Error(serviceName + ': invalid readiness HTTPS origin.'); }
+  if (typeof value !== 'string' || !/^https:\/\/[^/?#\\]+\/?$/i.test(value) ||
+      url.protocol !== 'https:' || url.username || url.password || url.port ||
+      url.href !== url.origin + '/') {
+    throw new Error(serviceName + ': invalid readiness HTTPS origin.');
+  }
+  return url.origin;
+}
+
 async function servicePublicUrl(serviceName, service) {
-  if (service.verifyUrl) return service.verifyUrl;
   const data = await graphql(`
     query ProductionServiceDomains($projectId: String!, $environmentId: String!, $serviceId: String!) {
       domains(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) {
@@ -61,9 +122,22 @@ async function servicePublicUrl(serviceName, service) {
     }
   `, { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id });
   const domains = data?.domains;
-  const domain = domains?.serviceDomains?.[0]?.domain || domains?.customDomains?.[0]?.domain;
-  if (!domain) throw new Error(`${serviceName}: Railway returned no public domain.`);
-  return `https://${domain}`;
+  if (!Array.isArray(domains?.serviceDomains) || !Array.isArray(domains?.customDomains)) {
+    throw new Error(serviceName + ': Railway domain inventory is missing or malformed.');
+  }
+  const registered = [...domains.serviceDomains, ...domains.customDomains].map(item => {
+    if (typeof item?.domain !== 'string' || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i.test(item.domain)) {
+      throw new Error(serviceName + ': Railway returned an invalid public domain.');
+    }
+    return readinessOrigin('https://' + item.domain, serviceName);
+  });
+  if (!registered.length) throw new Error(serviceName + ': Railway returned no public domain.');
+  if (!service.verifyUrl) return registered[0];
+  const requested = readinessOrigin(service.verifyUrl, serviceName);
+  if (!registered.includes(requested)) {
+    throw new Error(serviceName + ': readiness origin is not registered to this Railway service.');
+  }
+  return requested;
 }
 
 function renderType(type) {
@@ -143,7 +217,11 @@ async function deployService(serviceName, service, schema) {
   );
   const result = data?.serviceInstanceDeployV2;
   const deploymentId = typeof result === 'string' ? result : result?.id;
-  if (!deploymentId) throw new Error(`${serviceName}: Railway returned no deployment ID.`);
+  // A malformed acceptance cannot establish which operation was accepted.
+  // Treat it as ambiguous; the caller must journal and stop, never dispatch onward.
+  if (typeof deploymentId !== 'string' || !deploymentId || deploymentId.length > 128 || /[^A-Za-z0-9_-]/.test(deploymentId)) {
+    throw new Error(`${serviceName}: Railway returned an invalid deployment ID.`);
+  }
   return deploymentId;
 }
 
@@ -152,12 +230,68 @@ async function recentDeployments(serviceId) {
     query RecentDeployments($input: DeploymentListInput!) {
       deployments(input: $input, first: 20) {
         edges {
-          node { id status createdAt }
+          node { id status createdAt serviceId environmentId canRollback meta }
         }
       }
     }
   `, { input: { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId } });
   return data?.deployments?.edges?.map((edge) => edge.node) || [];
+}
+
+// A disabled auto-deploy switch does not cancel already queued deployments.
+// Recheck the latest provider records before each mutation. This bounded read
+// is not a lock or proof that no older deployment outside this page exists.
+async function verifyNoCompetingDeployments(acceptedDeployments, previousInventory = null, requireSuccess = false) {
+  const inventory = {};
+  const settled = new Set(['SUCCESS', 'FAILED', 'CRASHED', 'REMOVED', 'SKIPPED', 'SLEEPING']);
+  const ownProgress = new Set(['SUCCESS', 'WAITING', 'QUEUED', 'INITIALIZING', 'BUILDING', 'DEPLOYING']);
+  for (const [name, service] of Object.entries(SERVICES)) {
+    const data = await graphql(`
+      query CompetingDeployments($input: DeploymentListInput!) {
+        deployments(input: $input, first: 20) {
+          edges { node { id status serviceId environmentId meta } }
+        }
+      }
+    `, { input: { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id } });
+    const edges = data?.deployments?.edges;
+    if (!Array.isArray(edges) || !edges.length) {
+      throw new Error(name + ': competing deployment inventory missing; stop and reconcile Railway.');
+    }
+    const acceptedId = acceptedDeployments[name];
+    let acceptedSeen = false;
+    const ids = new Set();
+    for (const edge of edges) {
+      const item = edge?.node;
+      if (typeof item?.id !== 'string' || !item.id || ids.has(item.id) ||
+          item.serviceId !== service.id || item.environmentId !== ENVIRONMENT_ID ||
+          typeof item.status !== 'string') {
+        throw new Error(name + ': competing deployment inventory invalid; stop and reconcile Railway.');
+      }
+      ids.add(item.id);
+      if (acceptedId && item.id === acceptedId) {
+        if (!ownProgress.has(item.status) || (requireSuccess && item.status !== 'SUCCESS') ||
+            typeof item.meta?.commitHash !== 'string' ||
+            item.meta.commitHash.toLowerCase() !== COMMIT_SHA.toLowerCase()) {
+          throw new Error(name + ': accepted deployment state or SHA not confirmed; stop and reconcile Railway.');
+        }
+        acceptedSeen = true;
+        continue;
+      }
+      if (!settled.has(item.status)) {
+        throw new Error(name + ': competing or unknown deployment state; stop and reconcile Railway.');
+      }
+      // A new foreign ID can already be terminal by the next read. Historical
+      // terminal records from the first inventory are allowed, new ones are not.
+      if (previousInventory && !previousInventory[name].has(item.id)) {
+        throw new Error(name + ': new competing deployment observed between dispatches; stop and reconcile Railway.');
+      }
+    }
+    if (acceptedId && !acceptedSeen) {
+      throw new Error(name + ': accepted deployment not listed; stop and reconcile Railway.');
+    }
+    inventory[name] = ids;
+  }
+  return inventory;
 }
 
 async function waitForDeployment(serviceName, serviceId, deploymentId) {
@@ -167,7 +301,15 @@ async function waitForDeployment(serviceName, serviceId, deploymentId) {
     const deployment = (await recentDeployments(serviceId)).find((item) => item.id === deploymentId);
     lastStatus = deployment?.status || 'NOT_LISTED';
     console.log(`${serviceName}: deployment ${deploymentId} status=${lastStatus}`);
-    if (lastStatus === 'SUCCESS') return deployment;
+    if (lastStatus === 'SUCCESS') {
+      // A returned ID and SUCCESS status alone do not attest the dispatched SHA.
+      if (deployment.serviceId !== serviceId || deployment.environmentId !== ENVIRONMENT_ID ||
+          typeof deployment.meta?.commitHash !== 'string' ||
+          deployment.meta.commitHash.toLowerCase() !== COMMIT_SHA.toLowerCase()) {
+        throw new Error(`${serviceName}: successful deployment identity or exact commit SHA mismatch; reconcile Railway before any retry or rollback.`);
+      }
+      return deployment;
+    }
     if (TERMINAL_FAILURES.has(lastStatus)) {
       throw new Error(`${serviceName}: deployment ended with ${lastStatus}.`);
     }
@@ -178,9 +320,11 @@ async function waitForDeployment(serviceName, serviceId, deploymentId) {
 
 async function fetchReadiness(serviceName, baseUrl) {
   const response = await fetch(`${baseUrl}/api/release-readiness`, {
+    redirect: 'error',
     headers: { accept: 'application/json', 'user-agent': 'pivnik-production-verifier/1.0' },
     signal: AbortSignal.timeout(15_000)
   });
+  if (response.redirected) throw new Error(`${serviceName}: readiness redirect is not allowed.`);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`${serviceName}: readiness HTTP ${response.status}.`);
   return body;
@@ -189,15 +333,16 @@ async function fetchReadiness(serviceName, baseUrl) {
 function readinessFailures(telegram, vk) {
   const failures = [];
   for (const [name, value] of [['Telegram', telegram], ['VK', vk]]) {
-    if (!value?.ok) failures.push(`${name}: readiness endpoint is not ready`);
+    if (value?.ok !== true) failures.push(`${name}: readiness endpoint is not ready`);
     if (value?.environment !== 'production') failures.push(`${name}: environment is not production`);
-    if (!value?.databaseFingerprint) failures.push(`${name}: database fingerprint is missing`);
-    if (!value?.legalConfigured) failures.push(`${name}: legal configuration is incomplete`);
-    if (!value?.identityTombstoneSecretConfigured) failures.push(`${name}: tombstone secret is missing`);
+    if (typeof value?.databaseFingerprint !== 'string' || !value.databaseFingerprint.trim()) failures.push(`${name}: database fingerprint is missing`);
+    if (value?.legalConfigured !== true) failures.push(`${name}: legal configuration is incomplete`);
+    if (value?.identityTombstoneSecretConfigured !== true) failures.push(`${name}: tombstone secret is missing`);
     if (value?.releaseCommit !== COMMIT_SHA) failures.push(`${name}: release commit is ${value?.releaseCommit || 'missing'}`);
     if (value?.accountMode !== 'separate') failures.push(`${name}: account mode is not separate`);
     if (value?.unifiedAccounts !== false) failures.push(`${name}: unified accounts are still enabled`);
     if (value?.linkCodes !== false) failures.push(`${name}: account link codes are still enabled`);
+    if (typeof value?.termsVersion !== 'string' || !value.termsVersion.trim()) failures.push(`${name}: terms version is missing or invalid`);
   }
   if (telegram?.databaseFingerprint !== vk?.databaseFingerprint) failures.push('VK and Telegram use different databases');
   if (telegram?.termsVersion !== vk?.termsVersion) failures.push('VK and Telegram expose different terms versions');
@@ -229,14 +374,85 @@ const schema = await deployMutationSchema();
 const serviceUrls = Object.fromEntries(await Promise.all(
   Object.entries(SERVICES).map(async ([name, service]) => [name, await servicePublicUrl(name, service)])
 ));
-const deploymentIds = {};
+if (new Set(Object.values(serviceUrls)).size !== Object.keys(SERVICES).length) {
+  throw new Error('Production readiness origins must be distinct for Telegram and VK.');
+}
+// Recovery evidence in the CI job log and (when configured) per-attempt JSONL.
+// Neither is an atomic transaction or rollback approval.
+function dispatchJournal(event, fields) {
+  const record = JSON.stringify({
+    event, releaseCommit: COMMIT_SHA, projectId: PROJECT_ID,
+    environmentId: ENVIRONMENT_ID, ...fields
+  }) + '\n';
+  // Persist only structured recovery records, never arbitrary API/stdout output.
+  // Fail closed before further mutations if the local journal cannot be written.
+  const journalPath = process.env.PIVNIK_DISPATCH_JOURNAL_PATH;
+  if (journalPath) appendFileSync(journalPath, record, { encoding: 'utf8', mode: 0o600, flush: true });
+  const line = 'PIVNIK_DISPATCH_JOURNAL ' + record;
+  if (writeSync(1, line) !== Buffer.byteLength(line)) {
+    throw new Error('Incomplete dispatch journal write; stop and reconcile in Railway.');
+  }
+}
+
+// Capture provider-reported rollback eligibility BEFORE either mutation.
+// A historical SUCCESS alone does not establish current eligibility. Even
+// canRollback=true is only an observation, not a rehearsed/approved rollback.
+const rollbackCandidates = {};
 for (const [name, service] of Object.entries(SERVICES)) {
-  deploymentIds[name] = await deployService(name, service, schema);
+  const candidates = (await recentDeployments(service.id))
+    .filter(item => item?.status === 'SUCCESS' && item.canRollback === true &&
+      item.serviceId === service.id && item.environmentId === ENVIRONMENT_ID &&
+      typeof item.id === 'string' && item.id.trim() &&
+      typeof item.meta?.commitHash === 'string' &&
+      /^[0-9a-f]{40}$/i.test(item.meta.commitHash) &&
+      typeof item.createdAt === 'string' && Number.isFinite(Date.parse(item.createdAt)))
+    .map(item => ({ deploymentId: item.id, createdAt: item.createdAt,
+      sha: item.meta.commitHash.toLowerCase(), canRollback: true }));
+  dispatchJournal('rollback_candidates_unverified', {
+    service: name, serviceId: service.id, candidates
+  });
+  if (!candidates.length) throw new Error(name + ': no scoped SUCCESS candidate with provider canRollback=true; no dispatch attempted.');
+  rollbackCandidates[name] = candidates;
+}
+// Two individually eligible records are not a coherent rollback target.
+// Require an observed shared prior SHA; never select the candidate release
+// itself as its own rollback. This is eligibility only, not approval/rehearsal.
+const sharedRollbackShas = new Set(rollbackCandidates.telegram
+  .filter(item => item.sha !== COMMIT_SHA.toLowerCase())
+  .map(item => item.sha));
+if (!rollbackCandidates.vk.some(item => sharedRollbackShas.has(item.sha))) {
+  throw new Error('No common prior rollback SHA for both Railway services; no dispatch attempted.');
+}
+
+const deploymentIds = {};
+let previousInventory = null;
+for (const [name, service] of Object.entries(SERVICES)) {
+  // Re-read both sources immediately before each mutation. If isolation is
+  // lost after the first acceptance, its journal ID remains for reconciliation.
+  previousInventory = await verifyNoCompetingDeployments(deploymentIds, previousInventory);
+  await verifyAutoDeployDisabled();
+  verifyCurrentMain();
+  const scope = { service: name, serviceId: service.id };
+  dispatchJournal('dispatch_started', { ...scope, acceptedDeployments: { ...deploymentIds } });
+  let deploymentId;
+  try {
+    deploymentId = await deployService(name, service, schema);
+  } catch {
+    // A timeout or failed response can hide an accepted mutation. Do not retry.
+    dispatchJournal('dispatch_outcome_unknown', { ...scope, acceptedDeployments: { ...deploymentIds } });
+    throw new Error(name + ': dispatch outcome unknown; reconcile Railway before any retry or rollback.');
+  }
+  deploymentIds[name] = deploymentId;
+  dispatchJournal('dispatch_accepted', { ...scope, deploymentId, acceptedDeployments: { ...deploymentIds } });
 }
 for (const [name, service] of Object.entries(SERVICES)) {
   await waitForDeployment(name, service.id, deploymentIds[name]);
 }
 const readiness = await waitForSeparatedReadiness(serviceUrls);
+// Readiness and individual SUCCESS polls are not a common final inventory.
+// A foreign operation may have arrived after the second dispatch. Recheck
+// both exact accepted IDs and scoped terminal state before reporting success.
+await verifyNoCompetingDeployments(deploymentIds, previousInventory, true);
 
 console.log(JSON.stringify({
   ok: true,

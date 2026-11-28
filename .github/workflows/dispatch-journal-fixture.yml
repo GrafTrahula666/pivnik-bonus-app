@@ -1,0 +1,106 @@
+name: Dispatch journal failure fixture
+
+# Exercises Actions failure/upload semantics, not a production release.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  exercise:
+    name: Intentional failure and recovery upload (fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Job-level only: the step must really fail so the upload condition is
+    # evaluated after failure, without a step-level success override.
+    continue-on-error: true
+    outputs:
+      failed_step: ${{ steps.observe.outputs.failed_step }}
+      upload_step: ${{ steps.observe.outputs.upload_step }}
+    steps:
+      - name: Write synthetic journal and fail
+        id: production_deploy
+        shell: bash
+        env:
+          JOURNAL: ${{ runner.temp }}/fixture-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
+        run: |
+          set -euo pipefail
+          umask 077
+          (set -o noclobber; : > "$JOURNAL")
+          python3 - <<'PY'
+          import json, os
+          with open(os.environ['JOURNAL'], 'a', encoding='utf-8') as f:
+              for event in ('dispatch_accepted', 'dispatch_outcome_unknown'):
+                  f.write(json.dumps({'fixtureOnly': True, 'event': event,
+                      'checkoutSha': os.environ['GITHUB_SHA'],
+                      'runId': os.environ['GITHUB_RUN_ID'],
+                      'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                      'acceptedDeployments': {'telegram': 'fixture-telegram'}}) + '\n')
+              f.flush()
+              os.fsync(f.fileno())
+          PY
+          exit 42
+
+      - name: Upload fixture recovery journal
+        if: ${{ !cancelled() && (steps.production_deploy.outcome == 'success' || steps.production_deploy.outcome == 'failure') }}
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-dispatch-journal-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/fixture-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Observe actual step outcomes
+        if: ${{ !cancelled() }}
+        id: observe
+        env:
+          FAILED_STEP: ${{ steps.production_deploy.outcome }}
+          UPLOAD_STEP: ${{ steps.upload.outcome }}
+        run: |
+          printf 'failed_step=%s\nupload_step=%s\n' "$FAILED_STEP" "$UPLOAD_STEP" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify downloaded recovery fixture
+    needs: exercise
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require real failure and successful upload
+        env:
+          FAILED_STEP: ${{ needs.exercise.outputs.failed_step }}
+          UPLOAD_STEP: ${{ needs.exercise.outputs.upload_step }}
+        run: |
+          test "$FAILED_STEP" = failure
+          test "$UPLOAD_STEP" = success
+
+      - name: Download fixture into a fresh runner
+        uses: actions/download-artifact@v4
+        with:
+          name: fixture-dispatch-journal-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/downloaded-journal
+
+      - name: Verify exact synthetic records and run identity
+        env:
+          JOURNAL_DIR: ${{ runner.temp }}/downloaded-journal
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['JOURNAL_DIR'])
+          files = list(root.rglob('*'))
+          expected = root / ('fixture-dispatch-' + os.environ['GITHUB_RUN_ID'] +
+              '-' + os.environ['GITHUB_RUN_ATTEMPT'] + '.jsonl')
+          assert files == [expected] and expected.is_file() and not expected.is_symlink()
+          records = [json.loads(line) for line in expected.read_text(encoding='utf-8').splitlines()]
+          assert records == [{'fixtureOnly': True, 'event': event,
+              'checkoutSha': os.environ['GITHUB_SHA'],
+              'runId': os.environ['GITHUB_RUN_ID'],
+              'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'acceptedDeployments': {'telegram': 'fixture-telegram'}}
+              for event in ('dispatch_accepted', 'dispatch_outcome_unknown')]
+          print('Verified fixture recovery journal after actual failed step on another runner.')
+          PY

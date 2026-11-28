@@ -45,19 +45,74 @@ async function railwayRequest(query, variables, headerName) {
   return { response, payload };
 }
 
+// The read-only gate must reject malformed or partial GraphQL envelopes even
+// when a provider also supplies seemingly valid variables. Never echo its body.
+function readFailure({ response, payload }) {
+  if (response.status === 429 || response.status >= 500) return 'transport_unavailable';
+  if (response.status === 401 || response.status === 403) return 'authorization_unresolved';
+  if (!response.ok || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return 'api_response_unexpected';
+  }
+  const errors = payload.errors;
+  if (errors !== undefined && !Array.isArray(errors)) return 'api_response_unexpected';
+  if (errors?.length) {
+    return errors.every(error => error?.message === 'Not Authorized')
+      ? 'authorization_unresolved' : 'api_response_unexpected';
+  }
+  if (!payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) {
+    return 'api_response_unexpected';
+  }
+  return null;
+}
+
+async function readRequest(query, variables, header) {
+  try {
+    return await railwayRequest(query, variables, header);
+  } catch {
+    throw new Error('Railway CI variable read transport_unavailable; operator review required.');
+  }
+}
+
 async function graphql(query, variables = {}) {
-  let result = await railwayRequest(query, variables, variableReadHeader);
-  const denial = result.response.status === 401 || result.response.status === 403
-    || (result.response.ok && result.payload.errors?.some(error => error?.message === 'Not Authorized'));
+  let result = checkOnly
+    ? await readRequest(query, variables, variableReadHeader)
+    : await railwayRequest(query, variables, variableReadHeader);
+  const denial = checkOnly && readFailure(result) === 'authorization_unresolved';
   if (checkOnly && variableReadHeader === 'authorization' && denial && /^\s*query\b/i.test(query)) {
-    const probe = await railwayRequest(PROJECT_TOKEN_SCOPE_QUERY, {}, 'Project-Access-Token');
-    const scope = probe.payload.data?.projectToken;
-    if (!probe.response.ok || probe.payload.errors?.length
-        || scope?.projectId !== PROJECT_ID || scope?.environmentId !== ENVIRONMENT_ID) {
-      throw new Error('Railway CI token lacks verified production project/environment scope; operator review required.');
+    // Classify the fallback read without exposing a provider response or claiming
+    // that a rejected credential is necessarily invalid rather than under-scoped.
+    let probe;
+    try {
+      probe = await railwayRequest(PROJECT_TOKEN_SCOPE_QUERY, {}, 'Project-Access-Token');
+    } catch {
+      throw new Error('Railway CI project-token scope probe transport_unavailable; operator review required.');
+    }
+    const status = probe.response.status;
+    if (status === 429 || status >= 500) {
+      throw new Error('Railway CI project-token scope probe transport_unavailable; operator review required.');
+    }
+    const errors = probe.payload?.errors;
+    if (status === 401 || status === 403
+        || (probe.response.ok && Array.isArray(errors)
+          && errors.some(error => error?.message === 'Not Authorized'))) {
+      throw new Error('Railway CI project-token scope probe authorization_unresolved; operator review required.');
+    }
+    const scope = probe.payload?.data?.projectToken;
+    if (!probe.response.ok || (errors !== undefined && (!Array.isArray(errors) || errors.length))
+        || typeof scope?.projectId !== 'string' || !scope.projectId
+        || typeof scope?.environmentId !== 'string' || !scope.environmentId) {
+      throw new Error('Railway CI project-token scope probe api_response_unexpected; operator review required.');
+    }
+    if (scope.projectId !== PROJECT_ID || scope.environmentId !== ENVIRONMENT_ID) {
+      throw new Error('Railway CI token lacks verified production project/environment scope (scope_mismatch); operator review required.');
     }
     variableReadHeader = 'Project-Access-Token';
-    result = await railwayRequest(query, variables, variableReadHeader);
+    result = await readRequest(query, variables, variableReadHeader);
+  }
+  if (checkOnly) {
+    const failure = readFailure(result);
+    if (failure) throw new Error(`Railway CI variable read ${failure}; operator review required.`);
+    return result.payload.data;
   }
   if (!result.response.ok || result.payload.errors?.length) {
     // Never reflect provider GraphQL errors, environment values, or token material.

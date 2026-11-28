@@ -14,6 +14,7 @@ async function queryRailway(fetchImpl, token, headerName, query, variables) {
   try {
     response = await fetchImpl(ENDPOINT, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         [headerName]: headerName === 'Authorization' ? `Bearer ${token}` : token,
         'content-type': 'application/json',
@@ -34,14 +35,16 @@ async function queryRailway(fetchImpl, token, headerName, query, variables) {
   } catch {
     return { kind: 'invalid_response' };
   }
-  if (!response.ok || !body || typeof body !== 'object') {
+  if (!response.ok || !body || typeof body !== 'object' || Array.isArray(body)) {
     return { kind: 'request_rejected' };
   }
+  if (body.errors !== undefined && !Array.isArray(body.errors)) return { kind: 'request_rejected' };
   if (Array.isArray(body.errors) && body.errors.length) {
     // Railway sometimes uses HTTP 200 for authorization denials.
-    const denied = body.errors.some(error => error?.message === 'Not Authorized');
+    const denied = body.errors.every(error => error?.message === 'Not Authorized');
     return { kind: denied ? 'not_authorized' : 'graphql_rejected' };
   }
+  if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data)) return { kind: 'request_rejected' };
   return { kind: 'ok', data: body.data };
 }
 
@@ -55,12 +58,17 @@ export async function diagnoseRailwayCiAccess({ token, fetchImpl, production = R
     ['telegram', production.services.telegram],
     ['vk', production.services.vk]
   ];
+  let header = 'Authorization';
   for (const [service, serviceId] of targets) {
-    const read = await queryRailway(fetchImpl, scopedToken, 'Authorization', VARIABLE_READ, {
+    const variables = {
       projectId: production.projectId,
       environmentId: production.environmentId,
       serviceId
-    });
+    };
+    let read = await queryRailway(fetchImpl, scopedToken, header, VARIABLE_READ, variables);
+    if (read.kind === 'not_authorized' && header === 'Project-Access-Token') {
+      return { status: 'project_token_read_denied', stage: service, mutations: 0 };
+    }
     if (read.kind === 'rate_limited' || read.kind === 'network_error' || read.kind === 'invalid_response' || read.kind === 'server_unavailable') {
       return { status: 'transport_unavailable', stage: service, mutations: 0 };
     }
@@ -83,11 +91,18 @@ export async function diagnoseRailwayCiAccess({ token, fetchImpl, production = R
     if (project.kind === 'ok' && project.data?.projectToken?.projectId && project.data?.projectToken?.environmentId) {
       const exactScope = project.data.projectToken.projectId === production.projectId &&
         project.data.projectToken.environmentId === production.environmentId;
-      return {
-        status: exactScope ? 'project_token_wrong_header' : 'project_token_wrong_scope',
-        stage: service,
-        mutations: 0
-      };
+      if (!exactScope) return { status: 'project_token_wrong_scope', stage: service, mutations: 0 };
+      header = 'Project-Access-Token';
+      // Metadata alone is not evidence of actual variable read access.
+      read = await queryRailway(fetchImpl, scopedToken, header, VARIABLE_READ, variables);
+      if (['rate_limited', 'network_error', 'invalid_response', 'server_unavailable'].includes(read.kind)) {
+        return { status: 'transport_unavailable', stage: service, mutations: 0 };
+      }
+      if (read.kind === 'not_authorized') return { status: 'project_token_read_denied', stage: service, mutations: 0 };
+      if (read.kind !== 'ok' || !read.data?.variables || typeof read.data.variables !== 'object' || Array.isArray(read.data.variables)) {
+        return { status: 'api_response_unexpected', stage: service, mutations: 0 };
+      }
+      continue;
     }
     // A broken project-token query is not evidence that Bearer credentials were revoked.
     // Only an actual alternate-header authorization denial leaves Bearer scope unresolved.
@@ -104,7 +119,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     console.error('Only explicit --check (read-only) is supported.');
     process.exitCode = 2;
   } else {
-    const result = await diagnoseRailwayCiAccess({ token: process.env.RAILWAY_API_TOKEN, fetchImpl: fetch });
+    const result = await diagnoseRailwayCiAccess({ token: process.env.RAILWAY_PRODUCTION_READ_TOKEN, fetchImpl: fetch });
     console.log(JSON.stringify(result));
     if (result.status !== 'variable_read_authorized') process.exitCode = 2;
   }

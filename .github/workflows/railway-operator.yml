@@ -16,31 +16,56 @@ permissions:
   contents: read
 
 jobs:
-  discover:
-    name: Check Railway CI access (manual, main only)
-    # Secrets must not be used from an unreviewed dispatch branch.
-    if: github.ref == 'refs/heads/main'
+  reject-untrusted-diagnose:
+    name: Reject untrusted Railway diagnostic dispatch
+    if: inputs.mode == 'diagnose' && (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/main' || !github.ref_protected)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reject without accessing credentials
+        run: exit 1
+
+  diagnose:
+    name: Check Railway CI read access (protected main only)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.mode == 'diagnose'
+    # Owner must configure exact main branch restriction and independent review before adding the environment-only secret.
+    environment: railway-ci-read-diagnostic
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
-      - name: Checkout repository
+      - name: Checkout exact dispatched commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-
-      - name: Install exact dependencies
-        run: npm ci
 
       - name: Diagnose CI Railway token scope without printing secrets
         if: inputs.mode == 'diagnose'
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PRODUCTION_READ_TOKEN: ${{ secrets.RAILWAY_OPERATOR_READ_TOKEN }}
         run: node scripts/railway-ci-access-diagnostic.mjs --check
+
+  discover:
+    name: Discover Railway service metadata (manual, main only)
+    if: github.ref == 'refs/heads/main' && inputs.mode == 'discover'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Discover Pivnik Railway services (prints resource metadata)
         if: inputs.mode == 'discover'

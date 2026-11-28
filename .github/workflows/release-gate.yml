@@ -42,6 +42,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Immutable per-attempt dispatch inputs for later authenticated artifact
+      # verification. This is evidence, NOT release authorization by itself.
+      - name: Record manual dispatch inputs for release evidence
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          ATTEST_RUN_ID: ${{ github.run_id }}
+          ATTEST_RUN_ATTEMPT: ${{ github.run_attempt }}
+          ATTEST_SHA: ${{ github.sha }}
+          ATTEST_REF: ${{ github.ref }}
+          ATTEST_RELEASE_SHA: ${{ inputs.release_sha }}
+          ATTEST_RELEASE_CONFIRM: ${{ inputs.release_confirm }}
+        run: |
+          node --input-type=module -e '
+            import { mkdirSync, writeFileSync } from "node:fs";
+            const env = process.env;
+            if (!/^[0-9a-f]{40}$/i.test(env.ATTEST_SHA)) process.exit(1);
+            if (!/^[0-9a-f]{40}$/i.test(env.ATTEST_RELEASE_SHA)) process.exit(1);
+            if (!/^[1-9][0-9]*$/.test(env.ATTEST_RUN_ID) ||
+                !/^[1-9][0-9]*$/.test(env.ATTEST_RUN_ATTEMPT)) process.exit(1);
+            if (!["CANCEL", "DEPLOY_PIVNIK_PRODUCTION"].includes(env.ATTEST_RELEASE_CONFIRM)) process.exit(1);
+            mkdirSync("artifacts/release-dispatch", { recursive: true });
+            writeFileSync("artifacts/release-dispatch/dispatch.json", JSON.stringify({
+              schemaVersion: 1,
+              repository: "GrafTrahula666/pivnik-bonus-app",
+              event: "workflow_dispatch",
+              runId: Number(env.ATTEST_RUN_ID),
+              runAttempt: Number(env.ATTEST_RUN_ATTEMPT),
+              sha: env.ATTEST_SHA.toLowerCase(),
+              ref: env.ATTEST_REF,
+              releaseSha: env.ATTEST_RELEASE_SHA.toLowerCase(),
+              releaseConfirm: env.ATTEST_RELEASE_CONFIRM,
+            }) + String.fromCharCode(10));
+          '
+
+      - name: Upload manual dispatch evidence
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dispatch-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.release_confirm }}-${{ inputs.release_sha }}
+          path: artifacts/release-dispatch/dispatch.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -72,9 +116,20 @@ jobs:
       - name: Verify release materialization is idempotent
         shell: bash
         run: |
-          before="$(git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' | sha256sum | cut -d' ' -f1)"
+          set -euo pipefail
+          # Include untracked, non-ignored release sources as well as tracked diffs.
+          # NUL-delimited paths avoid whitespace/newline ambiguity during traversal.
+          release_snapshot() {
+            {
+              git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' || return 1
+              git diff --cached --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' || return 1
+              git ls-files --others --exclude-standard -z -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' |
+                xargs -0 -r sha256sum || return 1
+            } | sha256sum | cut -d' ' -f1
+          }
+          before="$(release_snapshot)"
           npm run materialize
-          after="$(git diff --binary -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement' | sha256sum | cut -d' ' -f1)"
+          after="$(release_snapshot)"
           if [ "$before" != "$after" ]; then
             echo "::error title=Non-idempotent release materialization::A second materialization changed the prepared release sources."
             git diff --stat -- . ':(exclude).pivnik-materialized' ':(exclude)artifacts/runtime-retirement'
@@ -132,47 +187,203 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
+      - name: Build and verify static VK bundle
+        env:
+          # Reserved fixture origin: this build never contacts a live gateway.
+          PIVNIK_VK_API_BASE: https://vk-gateway.example.invalid
+          VK_EVIDENCE_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          VK_EVIDENCE_PR_BASE: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The builder replaces its output directory. Refuse pre-existing output.
+          test ! -e vk-hosting-build
+          test ! -L vk-hosting-build
+          trap 'rm -rf -- vk-hosting-build' EXIT
+          node scripts/build-vk-hosting.mjs
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const read = name => readFileSync('vk-hosting-build/' + name, 'utf8');
+          const html = read('index.html');
+          const runHtml = read('run/index.html');
+          for (const name of ['app.js', 'vk-platform.js', 'account-link.js',
+            'vendor/vk-bridge.js', 'styles.css', 'loader-fix.css']) {
+            assert.ok(read(name).trim(), 'Missing or empty VK asset: ' + name);
+          }
+          assert.ok(html.includes('window.__PIVNIK_VK_API_BASE__=' +
+            JSON.stringify(process.env.PIVNIK_VK_API_BASE) + ';'), 'Incorrect VK gateway config');
+          assert.match(read('vk-platform.js'), /resolveGatewayInput/);
+          for (const page of [html, runHtml]) {
+            assert.doesNotMatch(page, /up\.railway\.app|vercel\.app|telegram\.org\/js\/telegram-web-app\.js/i);
+          }
+          console.log('Static VK bundle boundary checks passed.');
+          NODE
+          node --check vk-hosting-build/app.js
+          node --check vk-hosting-build/vk-platform.js
+          node --check vk-hosting-build/account-link.js
+          # Record the fixture build, not a production publication or approval.
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const env = process.env;
+          const sha = value => /^[0-9a-f]{40}$/.test(value || '');
+          const positiveId = value => /^[1-9][0-9]*$/.test(value || '');
+          const digest = value => createHash('sha256').update(value).digest('hex');
+          const checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          assert.ok(sha(checkoutSha) && checkoutSha === env.GITHUB_SHA, 'Checkout SHA mismatch');
+          assert.ok(positiveId(env.GITHUB_RUN_ID) && positiveId(env.GITHUB_RUN_ATTEMPT));
+          assert.equal(env.GITHUB_REPOSITORY, 'GrafTrahula666/pivnik-bonus-app');
+          assert.equal(env.PIVNIK_VK_API_BASE, 'https://vk-gateway.example.invalid');
+          assert.ok(['pull_request', 'push', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME));
+          const isPr = env.GITHUB_EVENT_NAME === 'pull_request';
+          const headSha = isPr ? env.VK_EVIDENCE_PR_HEAD : checkoutSha;
+          const baseSha = isPr ? env.VK_EVIDENCE_PR_BASE : null;
+          assert.ok(sha(headSha) && (!isPr || sha(baseSha)), 'Missing PR identity');
+          if (isPr) {
+            // A shallow checkout still retains the merge commit's parent headers.
+            const headers = execFileSync('git', ['cat-file', '-p', checkoutSha], { encoding: 'utf8' }).split('\n\n')[0];
+            const parents = headers.split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
+            assert.deepEqual(parents, [baseSha, headSha], 'PR merge parents do not match event');
+          }
+
+          const root = 'vk-hosting-build';
+          assert.ok(lstatSync(root).isDirectory(), 'Bundle root must be a real directory');
+          const files = [];
+          function visit(relative = '') {
+            for (const name of readdirSync(join(root, relative)).sort()) {
+              const path = relative ? relative + '/' + name : name;
+              const full = join(root, path);
+              const stat = lstatSync(full);
+              if (stat.isDirectory()) visit(path);
+              else {
+                assert.ok(stat.isFile(), 'Non-regular bundle entry: ' + path);
+                const bytes = readFileSync(full);
+                files.push({ path, size: bytes.length, sha256: digest(bytes) });
+              }
+            }
+          }
+          visit();
+          files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+          assert.ok(files.length > 0, 'Empty bundle');
+          const manifest = {
+            schemaVersion: 1,
+            kind: 'vk-fixture-bundle-verification',
+            productionArtifact: false,
+            repository: env.GITHUB_REPOSITORY,
+            event: env.GITHUB_EVENT_NAME,
+            runId: env.GITHUB_RUN_ID,
+            runAttempt: env.GITHUB_RUN_ATTEMPT,
+            checkoutSha,
+            headSha,
+            baseSha,
+            fixtureApiBase: env.PIVNIK_VK_API_BASE,
+            fileCount: files.length,
+            // Digest of the ordered JSON array of relative paths, sizes and SHA-256 hashes.
+            bundleManifestSha256: digest(JSON.stringify(files)),
+            files,
+          };
+          const output = join(env.RUNNER_TEMP, 'pivnik-vk-evidence-' + env.GITHUB_RUN_ID + '-' + env.GITHUB_RUN_ATTEMPT);
+          mkdirSync(output);
+          writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
+          console.log('VK fixture evidence: ' + manifest.fileCount + ' files; manifest SHA-256 ' + manifest.bundleManifestSha256);
+          NODE
+
+          # Archive only manifest-listed fixture bytes, rechecking every digest before upload.
+          python3 - <<'PY'
+          import hashlib, io, json, os, tarfile
+          from pathlib import Path, PurePosixPath
+
+          output = Path(os.environ['RUNNER_TEMP']) / (
+              'pivnik-vk-evidence-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          manifest_path = output / 'manifest.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          if (manifest['productionArtifact'] is not False or
+              manifest['fixtureApiBase'] != 'https://vk-gateway.example.invalid' or
+              not manifest['files'] or manifest['fileCount'] != len(manifest['files'])):
+              raise ValueError('Not a complete fixture manifest')
+          root = Path('vk-hosting-build')
+          if root.is_symlink() or not root.is_dir():
+              raise ValueError('Invalid bundle root')
+          archive = output / 'bundle.tar.gz'
+          seen = set()
+          with archive.open('xb') as stream:
+              with tarfile.open(fileobj=stream, mode='w:gz', format=tarfile.PAX_FORMAT) as bundle:
+                  for entry in manifest['files']:
+                      name = entry['path']
+                      parts = PurePosixPath(name).parts
+                      if (not parts or name != '/'.join(parts) or name.startswith('/') or
+                          '..' in parts or '\\' in name or name in seen):
+                          raise ValueError('Unsafe or duplicate bundle path: ' + name)
+                      seen.add(name)
+                      path = root.joinpath(*parts)
+                      if (any(root.joinpath(*parts[:i]).is_symlink() for i in range(1, len(parts) + 1))
+                          or not path.is_file()):
+                          raise ValueError('Non-regular bundle entry: ' + name)
+                      data = path.read_bytes()
+                      if len(data) != entry['size'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
+                          raise ValueError('Bundle changed after verification: ' + name)
+                      info = tarfile.TarInfo(name)
+                      info.size = len(data)
+                      info.mode = 0o644
+                      bundle.addfile(info, io.BytesIO(data))
+          with archive.open('rb') as stream:
+              archive_digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          manifest['archive'] = {'name': archive.name, 'size': archive.stat().st_size, 'sha256': archive_digest}
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print('Fixture archive SHA-256: ' + archive_digest)
+          PY
+
+      - name: Upload VK fixture bundle verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-bundle-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pivnik-vk-evidence-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload VK fixture bundle bytes (not for publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-bundle-fixture-bytes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pivnik-vk-evidence-${{ github.run_id }}-${{ github.run_attempt }}/bundle.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Verify effective main branch rules before production release
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.release_sha == github.sha &&
+          inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-effective-main-rules.mjs --live
+
       - name: Verify existing production secrets without changing them
         if: >-
-          (github.event_name == 'push' &&
-           (github.ref == 'refs/heads/audit/final-release-gate-20260804' || github.ref == 'refs/heads/main')) ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804') ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
           (github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' &&
           inputs.release_sha == github.sha &&
           inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION')
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PRODUCTION_READ_TOKEN: ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_PRODUCTION_READ_TOKEN || '' }}
+          RAILWAY_PRODUCTION_READ_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_READ_TOKEN }}
+        shell: bash
         run: |
+          # The CI read credential must be explicitly provisioned; do not fall back
+          # to the broader deployment/operator credential when it is missing.
+          if [[ -z "${RAILWAY_PRODUCTION_READ_TOKEN//[[:space:]]/}" ]]; then
+            echo "::error title=Missing Railway production read credential::Configure RAILWAY_PRODUCTION_READ_TOKEN through the authorized operator; no production read attempted."
+            exit 1
+          fi
           node --check scripts/railway-ensure-production-secrets.mjs
           node scripts/railway-ensure-production-secrets.mjs --check
-
-      - name: Unify VK legacy database into canonical production
-        if: >-
-          (github.event_name == 'push' &&
-           github.ref == 'refs/heads/audit/final-release-gate-20260804') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'audit/final-release-gate-20260804')
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_UNIFY_CONFIRM: UNIFY_PIVNIK_20260804
-        run: |
-          node --check scripts/railway-unify-production-databases.mjs
-          node scripts/railway-unify-production-databases.mjs
-
-      - name: Restore Anna frame and reconcile existing linked consent
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.head_ref == 'hotfix/anna-frame-consent-persistence-20260806'
-        env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PIVNIK_ANNA_CONSENT_REPAIR_CONFIRM: REPAIR_ANNA_FRAME_AND_CONSENT_20260806
-        run: node scripts/railway-repair-anna-frame-and-consent.mjs
 
       - name: Deploy exact commit and verify both production services
         if: >-
@@ -180,12 +391,16 @@ jobs:
           github.ref == 'refs/heads/main' &&
           inputs.release_sha == github.sha &&
           inputs.release_confirm == 'DEPLOY_PIVNIK_PRODUCTION'
+        id: production_deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RELEASE_COMMIT_SHA: ${{ github.sha }}
+          PIVNIK_DISPATCH_JOURNAL_PATH: ${{ runner.temp }}/pivnik-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
         shell: bash
         run: |
+          umask 077
+          (set -o noclobber; : > "$PIVNIK_DISPATCH_JOURNAL_PATH")
           # Fail closed if main moved while a manually approved release waited.
           current_main="$(git ls-remote --heads origin main | cut -f1)"
           if [ -z "$current_main" ] || [ "$current_main" != "$RELEASE_COMMIT_SHA" ]; then
@@ -193,6 +408,17 @@ jobs:
             exit 1
           fi
           node scripts/railway-deploy-and-verify-production.mjs
+
+      # Ordinary step failures must not suppress recovery evidence. A cancelled
+      # or lost runner may still lose the file: reconcile in Railway, never retry blindly.
+      - name: Upload production dispatch recovery journal
+        if: ${{ !cancelled() && (steps.production_deploy.outcome == 'success' || steps.production_deploy.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dispatch-journal-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/pivnik-dispatch-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Probe production documents and public endpoints
         if: >-
