@@ -13,7 +13,9 @@ permissions:
   actions: read
 
 concurrency:
-  group: vk-hosting-production
+  # Share the main release-gate lock: Railway release and VK publish must not overlap.
+  group: release-gate-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 jobs:

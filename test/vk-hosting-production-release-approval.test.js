@@ -356,3 +356,27 @@ test('a superseded or rerun approval cannot publish using an earlier successful 
   assert.equal(stable.error, undefined);
   assert.equal(stable.calls.length, 3);
 });
+
+// A shared workflow-level lock covers the entire release, including the final
+// approval read and publication. A per-workflow lock leaves a cross-run race.
+test('VK production and the common release gate share a non-cancelling per-ref queue', async () => {
+  const vk = await readFile(workflowUrl, 'utf8');
+  const common = await readFile(new URL('../.github/workflows/release-gate.yml', import.meta.url), 'utf8');
+  function concurrencyBlock(source) {
+    const matches = [...source.matchAll(/^concurrency:\r?\n((?:[ \t]+[^\r\n]*\r?\n)+)/gm)];
+    assert.equal(matches.length, 1, 'require one workflow-level concurrency block');
+    const lines = matches[0][1].split(/\r?\n/);
+    function value(key) {
+      const entries = lines.filter(line => line.startsWith('  ' + key + ':'));
+      assert.equal(entries.length, 1, key + ' must be explicit and unique');
+      return entries[0].slice(key.length + 3).trim();
+    }
+    return { group: value('group'), queue: value('queue'), cancel: value('cancel-in-progress') };
+  }
+  const a = concurrencyBlock(common);
+  const b = concurrencyBlock(vk);
+  assert.equal(a.group, 'release-gate-$' + '{{ github.ref }}');
+  assert.deepEqual(b, a, 'production workflows must share the same queue');
+  assert.equal(a.queue, 'max');
+  assert.equal(a.cancel, 'false');
+});
