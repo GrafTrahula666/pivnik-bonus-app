@@ -241,7 +241,7 @@ async function recentDeployments(serviceId) {
 // A disabled auto-deploy switch does not cancel already queued deployments.
 // Recheck the latest provider records before each mutation. This bounded read
 // is not a lock or proof that no older deployment outside this page exists.
-async function verifyNoCompetingDeployments(acceptedDeployments, previousInventory = null) {
+async function verifyNoCompetingDeployments(acceptedDeployments, previousInventory = null, requireSuccess = false) {
   const inventory = {};
   const settled = new Set(['SUCCESS', 'FAILED', 'CRASHED', 'REMOVED', 'SKIPPED', 'SLEEPING']);
   const ownProgress = new Set(['SUCCESS', 'WAITING', 'QUEUED', 'INITIALIZING', 'BUILDING', 'DEPLOYING']);
@@ -269,7 +269,7 @@ async function verifyNoCompetingDeployments(acceptedDeployments, previousInvento
       }
       ids.add(item.id);
       if (acceptedId && item.id === acceptedId) {
-        if (!ownProgress.has(item.status) ||
+        if (!ownProgress.has(item.status) || (requireSuccess && item.status !== 'SUCCESS') ||
             typeof item.meta?.commitHash !== 'string' ||
             item.meta.commitHash.toLowerCase() !== COMMIT_SHA.toLowerCase()) {
           throw new Error(name + ': accepted deployment state or SHA not confirmed; stop and reconcile Railway.');
@@ -449,6 +449,10 @@ for (const [name, service] of Object.entries(SERVICES)) {
   await waitForDeployment(name, service.id, deploymentIds[name]);
 }
 const readiness = await waitForSeparatedReadiness(serviceUrls);
+// Readiness and individual SUCCESS polls are not a common final inventory.
+// A foreign operation may have arrived after the second dispatch. Recheck
+// both exact accepted IDs and scoped terminal state before reporting success.
+await verifyNoCompetingDeployments(deploymentIds, previousInventory, true);
 
 console.log(JSON.stringify({
   ok: true,

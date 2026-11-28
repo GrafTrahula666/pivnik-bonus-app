@@ -66,8 +66,9 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
         const scope = { serviceId: variables.input.serviceId, environmentId: variables.input.environmentId };
         calls.push('competing:' + dispatches + ':' + name);
         const nodes = [{ id: 'old-' + name, status: 'SUCCESS', ...scope }];
-        if (dispatches && name === 'telegram') nodes.push({
-          id: 'new-telegram', status: 'BUILDING', ...scope, meta: { commitHash: sha }
+        if ((dispatches >= 1 && name === 'telegram') || dispatches >= 2) nodes.push({
+          id: 'new-' + name, status: dispatches >= 2 ? 'SUCCESS' : 'BUILDING',
+          ...scope, meta: { commitHash: sha }
         });
         const override = guardOverrides[dispatches + ':' + name];
         const rows = override ? override(nodes, scope) : nodes;
@@ -532,7 +533,8 @@ test('REL-01 blocks already pending or unknown competing deployments before eith
   assert.equal(clean.dispatches, 2);
   assert.deepEqual(clean.calls.filter(c => c.startsWith('competing:') || c.startsWith('mutation:')),
     ['competing:0:telegram', 'competing:0:vk', 'mutation:telegram',
-      'competing:1:telegram', 'competing:1:vk', 'mutation:vk']);
+      'competing:1:telegram', 'competing:1:vk', 'mutation:vk',
+      'competing:2:telegram', 'competing:2:vk']);
 });
 
 test('REL-01 competing deployment readback fails closed on malformed or unconfirmed records', async () => {
@@ -580,4 +582,30 @@ test('REL-01 blocks newly observed competing terminal IDs between dispatches', a
   assert.equal(ownSettled.error, undefined);
   assert.equal(ownSettled.dispatches, 2);
   assert.equal(ownSettled.readiness, 2);
+});
+
+test('REL-01 final inventory blocks late competing deployments and lost exact SUCCESS after readiness', async () => {
+  for (const name of ['telegram', 'vk']) {
+    for (const [override, message] of [
+      [(nodes, scope) => [{ id: 'late-foreign', status: 'SUCCESS', ...scope }, ...nodes], /new competing deployment/],
+      [(nodes, scope) => [{ id: 'late-foreign', status: 'DEPLOYING', ...scope }, ...nodes], /competing or unknown deployment/],
+      [nodes => nodes.filter(node => node.id !== 'new-' + name), /accepted deployment not listed/],
+      [nodes => nodes.map(node => node.id === 'new-' + name ? { ...node, status: 'BUILDING' } : node), /accepted deployment state or SHA/],
+      [nodes => nodes.map(node => node.id === 'new-' + name ? { ...node, status: 'FAILED' } : node), /accepted deployment state or SHA/],
+      [nodes => nodes.map(node => node.id === 'new-' + name ? { ...node, meta: { commitHash: 'b'.repeat(40) } } : node), /accepted deployment state or SHA/],
+      [() => null, /competing deployment inventory missing/]
+    ]) {
+      const result = await scenario({ guardOverrides: { ['2:' + name]: override } });
+      assert.match(result.error?.message, message);
+      assert.equal(result.dispatches, 2);
+      assert.equal(result.polls, 2);
+      assert.equal(result.readiness, 2);
+      assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram', vk: 'new-vk' });
+    }
+  }
+  const clean = await scenario();
+  assert.equal(clean.error, undefined);
+  assert.equal(clean.dispatches, 2);
+  assert.equal(clean.readiness, 2);
+  assert.deepEqual(clean.calls.slice(-2), ['competing:2:telegram', 'competing:2:vk']);
 });
