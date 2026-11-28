@@ -238,6 +238,54 @@ async function recentDeployments(serviceId) {
   return data?.deployments?.edges?.map((edge) => edge.node) || [];
 }
 
+// A disabled auto-deploy switch does not cancel already queued deployments.
+// Recheck the latest provider records before each mutation. This bounded read
+// is not a lock or proof that no older deployment outside this page exists.
+async function verifyNoCompetingDeployments(acceptedDeployments) {
+  const settled = new Set(['SUCCESS', 'FAILED', 'CRASHED', 'REMOVED', 'SKIPPED', 'SLEEPING']);
+  const ownProgress = new Set(['SUCCESS', 'WAITING', 'QUEUED', 'INITIALIZING', 'BUILDING', 'DEPLOYING']);
+  for (const [name, service] of Object.entries(SERVICES)) {
+    const data = await graphql(`
+      query CompetingDeployments($input: DeploymentListInput!) {
+        deployments(input: $input, first: 20) {
+          edges { node { id status serviceId environmentId meta } }
+        }
+      }
+    `, { input: { projectId: PROJECT_ID, environmentId: ENVIRONMENT_ID, serviceId: service.id } });
+    const edges = data?.deployments?.edges;
+    if (!Array.isArray(edges) || !edges.length) {
+      throw new Error(name + ': competing deployment inventory missing; stop and reconcile Railway.');
+    }
+    const acceptedId = acceptedDeployments[name];
+    let acceptedSeen = false;
+    const ids = new Set();
+    for (const edge of edges) {
+      const item = edge?.node;
+      if (typeof item?.id !== 'string' || !item.id || ids.has(item.id) ||
+          item.serviceId !== service.id || item.environmentId !== ENVIRONMENT_ID ||
+          typeof item.status !== 'string') {
+        throw new Error(name + ': competing deployment inventory invalid; stop and reconcile Railway.');
+      }
+      ids.add(item.id);
+      if (acceptedId && item.id === acceptedId) {
+        if (!ownProgress.has(item.status) ||
+            typeof item.meta?.commitHash !== 'string' ||
+            item.meta.commitHash.toLowerCase() !== COMMIT_SHA.toLowerCase()) {
+          throw new Error(name + ': accepted deployment state or SHA not confirmed; stop and reconcile Railway.');
+        }
+        acceptedSeen = true;
+        continue;
+      }
+      if (!settled.has(item.status)) {
+        throw new Error(name + ': competing or unknown deployment state; stop and reconcile Railway.');
+      }
+    }
+    if (acceptedId && !acceptedSeen) {
+      throw new Error(name + ': accepted deployment not listed; stop and reconcile Railway.');
+    }
+  }
+}
+
 async function waitForDeployment(serviceName, serviceId, deploymentId) {
   const deadline = Date.now() + DEPLOY_TIMEOUT_MS;
   let lastStatus = 'UNKNOWN';
@@ -372,6 +420,7 @@ const deploymentIds = {};
 for (const [name, service] of Object.entries(SERVICES)) {
   // Re-read both sources immediately before each mutation. If isolation is
   // lost after the first acceptance, its journal ID remains for reconciliation.
+  await verifyNoCompetingDeployments(deploymentIds);
   await verifyAutoDeployDisabled();
   verifyCurrentMain();
   const scope = { service: name, serviceId: service.id };

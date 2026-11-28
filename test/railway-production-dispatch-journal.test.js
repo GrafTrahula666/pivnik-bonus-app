@@ -15,7 +15,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = new AsyncFunction('RAILWAY_PRODUCTION', 'process', 'fetch', 'console', 'writeSync', 'appendFileSync', 'setTimeout', 'AbortSignal', 'Buffer', 'execFileSync', body);
 const sha = 'a'.repeat(40);
 
-async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '', mutationResponses = {}, mainOutputs = [], mainReadErrorAt = 0 } = {}) {
+async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0, failJournal = '', journalPath = '', failPersist = '', invalidRollback = null, rollbackSha = 'b'.repeat(40), pollOverride = null, readinessOverride = null, readinessRedirect = false, graphqlRedirect = null, verifyUrls = { telegram: 'https://telegram.invalid', vk: 'https://vk.invalid' }, domainOverrides = {}, autoDeployStatuses = {}, autoDeployErrorAt = '', autoDeployChangedAt = '', mutationResponses = {}, mainOutputs = [], mainReadErrorAt = 0, guardOverrides = {} } = {}) {
   const events = [], calls = [];
   let snapshots = 0, dispatches = 0, polls = 0, readiness = 0, statusReads = 0;
   const services = RAILWAY_PRODUCTION.services;
@@ -58,6 +58,20 @@ async function scenario({ failDispatch = 0, failSnapshot = 0, emptySnapshot = 0,
           ? { enabled: true, canEnable: true }
           : Object.hasOwn(autoDeployStatuses, name) ? autoDeployStatuses[name] : { enabled: false, canEnable: true };
         return ok({ serviceInstanceAutoDeployStatus: status });
+      }
+      if (query.includes('CompetingDeployments')) {
+        const name = scopeName(variables.input.serviceId);
+        assert.equal(variables.input.projectId, RAILWAY_PRODUCTION.projectId);
+        assert.equal(variables.input.environmentId, RAILWAY_PRODUCTION.environmentId);
+        const scope = { serviceId: variables.input.serviceId, environmentId: variables.input.environmentId };
+        calls.push('competing:' + dispatches + ':' + name);
+        const nodes = [{ id: 'old-' + name, status: 'SUCCESS', ...scope }];
+        if (dispatches && name === 'telegram') nodes.push({
+          id: 'new-telegram', status: 'BUILDING', ...scope, meta: { commitHash: sha }
+        });
+        const override = guardOverrides[dispatches + ':' + name];
+        const rows = override ? override(nodes, scope) : nodes;
+        return ok({ deployments: rows === null ? null : { edges: rows.map(node => ({ node })) } });
       }
       if (query.includes('RecentDeployments')) {
         const name = scopeName(variables.input.serviceId);
@@ -494,4 +508,53 @@ test('REL-01 re-verifies current main before each mutation and preserves partial
   assert.equal(result.dispatches, 2);
   assert.deepEqual(result.calls.filter(c => c.startsWith('main:') || c.startsWith('mutation:')),
     ['main:1', 'mutation:telegram', 'main:2', 'mutation:vk']);
+});
+
+test('REL-01 blocks already pending or unknown competing deployments before either mutation', async () => {
+  for (const count of [0, 1]) {
+    for (const name of ['telegram', 'vk']) {
+      for (const status of ['QUEUED', 'BUILDING', 'DEPLOYING', 'NEEDS_APPROVAL', 'INITIALIZING', 'WAITING', 'REMOVING', 'UNKNOWN']) {
+        const result = await scenario({ guardOverrides: {
+          [count + ':' + name]: (nodes, scope) => [...nodes, {
+            id: 'competing', status, ...scope, meta: { commitHash: sha }
+          }]
+        } });
+        assert.match(result.error?.message, /competing or unknown deployment state/);
+        assert.equal(result.dispatches, count);
+        assert.equal(result.polls, 0);
+        assert.equal(result.readiness, 0);
+        if (count === 1) assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+      }
+    }
+  }
+  const clean = await scenario();
+  assert.equal(clean.error, undefined);
+  assert.equal(clean.dispatches, 2);
+  assert.deepEqual(clean.calls.filter(c => c.startsWith('competing:') || c.startsWith('mutation:')),
+    ['competing:0:telegram', 'competing:0:vk', 'mutation:telegram',
+      'competing:1:telegram', 'competing:1:vk', 'mutation:vk']);
+});
+
+test('REL-01 competing deployment readback fails closed on malformed or unconfirmed records', async () => {
+  for (const override of [
+    () => null, () => [], () => [null],
+    (nodes) => [{ ...nodes[0], serviceId: 'foreign' }],
+    (nodes) => [{ ...nodes[0], environmentId: 'foreign' }],
+    (nodes) => [nodes[0], nodes[0]]
+  ]) {
+    const result = await scenario({ guardOverrides: { '0:vk': override } });
+    assert.match(result.error?.message, /competing deployment inventory/);
+    assert.equal(result.dispatches, 0);
+  }
+  for (const override of [
+    nodes => nodes.slice(0, 1),
+    nodes => [nodes[0], { ...nodes[1], meta: { commitHash: 'b'.repeat(40) } }],
+    nodes => [nodes[0], { ...nodes[1], status: 'FAILED' }],
+    nodes => [nodes[0], { ...nodes[1], meta: null }]
+  ]) {
+    const result = await scenario({ guardOverrides: { '1:telegram': override } });
+    assert.match(result.error?.message, /accepted deployment/);
+    assert.equal(result.dispatches, 1);
+    assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+  }
 });
