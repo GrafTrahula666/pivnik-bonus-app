@@ -125,7 +125,7 @@ test('rollback attestation fails closed on absent scope, foreign service, wrong 
   }), /known-good rollback deployment/);
 });
 
-test('two-service rollback records attest distinct historical Railway identities', async () => {
+test('two-service rollback records attest distinct historical identities for one known-good SHA', async () => {
   const release = manifest();
   // The legacy single-target field must name a genuine member of the
   // separate two-service rollback map, not an unrelated third deployment.
@@ -133,7 +133,7 @@ test('two-service rollback records attest distinct historical Railway identities
   release.rollback.railwayTargets = {
     'pivnik-bonus-app': { sha: 'b'.repeat(40), deploymentId: 'rollback-pivnik',
       verifiedAt: '2026-11-09T13:50:00Z', evidenceUrl: url },
-    'vk-native-hosting': { sha: 'c'.repeat(40), deploymentId: 'rollback-vk',
+    'vk-native-hosting': { sha: 'b'.repeat(40), deploymentId: 'rollback-vk',
       verifiedAt: '2026-11-09T13:51:00Z', evidenceUrl: url },
   };
   const observed = [];
@@ -150,6 +150,23 @@ test('two-service rollback records attest distinct historical Railway identities
   assert.deepEqual(verified.map(x => x.target), ['pivnik-bonus-app', 'vk-native-hosting']);
   assert.deepEqual(observed.map(x => x.serviceId), Object.values(RAILWAY_RELEASE_TARGETS));
   assert.deepEqual(observed.map(x => x.deploymentId), ['rollback-pivnik', 'rollback-vk']);
+  assert.deepEqual(verified.map(x => x.sha), [release.rollback.sha, release.rollback.sha]);
+  const mixed = structuredClone(release);
+  mixed.rollback.railwayTargets['vk-native-hosting'].sha = 'c'.repeat(40);
+  let mixedLookups = 0;
+  await assert.rejects(verifyBothRailwayRollbackDeployments(mixed, {
+    lookupDeployment: async args => {
+      mixedLookups++;
+      const record = await good(args);
+      return { ...record, meta: { commitHash: args.serviceId === RAILWAY_RELEASE_TARGETS['vk-native-hosting']
+        ? mixed.rollback.railwayTargets['vk-native-hosting'].sha : mixed.rollback.sha } };
+    },
+  }), /same known-good SHA/);
+  assert.equal(mixedLookups, 0, 'reject incoherent rollback before any provider lookup');
+  const upper = structuredClone(release);
+  upper.rollback.railwayTargets['vk-native-hosting'].sha = release.rollback.sha.toUpperCase();
+  assert.deepEqual((await verifyBothRailwayRollbackDeployments(upper, { lookupDeployment: good }))
+    .map(x => x.sha), [release.rollback.sha, release.rollback.sha]);
   await assert.rejects(verifyBothRailwayRollbackDeployments(manifest(), {
     lookupDeployment: good,
   }), /separate rollback records/);

@@ -134,6 +134,12 @@ export async function verifyBothRailwayRollbackDeployments(manifest,
       ['sha', 'deploymentId', 'verifiedAt', 'evidenceUrl']
         .every(field => record[field] === legacy[field]);
   }), 'legacy rollback record is not bound to either verified Railway service target');
+  // The deployer requires one coherent known-good commit for both services.
+  // Distinct deployment IDs do not authorize a mixed-version rollback pair.
+  requireEvidence(targets.every(target =>
+    typeof records[target]?.sha === 'string' &&
+    records[target].sha.toLowerCase() === legacy.sha.toLowerCase()),
+    'both Railway rollback records must identify the same known-good SHA');
   const ids = new Set(manifest.deployments.map(entry => entry.deploymentId));
   const verified = [];
   for (const target of targets) {
