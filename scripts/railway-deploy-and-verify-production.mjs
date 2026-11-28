@@ -241,7 +241,8 @@ async function recentDeployments(serviceId) {
 // A disabled auto-deploy switch does not cancel already queued deployments.
 // Recheck the latest provider records before each mutation. This bounded read
 // is not a lock or proof that no older deployment outside this page exists.
-async function verifyNoCompetingDeployments(acceptedDeployments) {
+async function verifyNoCompetingDeployments(acceptedDeployments, previousInventory = null) {
+  const inventory = {};
   const settled = new Set(['SUCCESS', 'FAILED', 'CRASHED', 'REMOVED', 'SKIPPED', 'SLEEPING']);
   const ownProgress = new Set(['SUCCESS', 'WAITING', 'QUEUED', 'INITIALIZING', 'BUILDING', 'DEPLOYING']);
   for (const [name, service] of Object.entries(SERVICES)) {
@@ -279,11 +280,18 @@ async function verifyNoCompetingDeployments(acceptedDeployments) {
       if (!settled.has(item.status)) {
         throw new Error(name + ': competing or unknown deployment state; stop and reconcile Railway.');
       }
+      // A new foreign ID can already be terminal by the next read. Historical
+      // terminal records from the first inventory are allowed, new ones are not.
+      if (previousInventory && !previousInventory[name].has(item.id)) {
+        throw new Error(name + ': new competing deployment observed between dispatches; stop and reconcile Railway.');
+      }
     }
     if (acceptedId && !acceptedSeen) {
       throw new Error(name + ': accepted deployment not listed; stop and reconcile Railway.');
     }
+    inventory[name] = ids;
   }
+  return inventory;
 }
 
 async function waitForDeployment(serviceName, serviceId, deploymentId) {
@@ -417,10 +425,11 @@ if (!rollbackCandidates.vk.some(item => sharedRollbackShas.has(item.sha))) {
 }
 
 const deploymentIds = {};
+let previousInventory = null;
 for (const [name, service] of Object.entries(SERVICES)) {
   // Re-read both sources immediately before each mutation. If isolation is
   // lost after the first acceptance, its journal ID remains for reconciliation.
-  await verifyNoCompetingDeployments(deploymentIds);
+  previousInventory = await verifyNoCompetingDeployments(deploymentIds, previousInventory);
   await verifyAutoDeployDisabled();
   verifyCurrentMain();
   const scope = { service: name, serviceId: service.id };

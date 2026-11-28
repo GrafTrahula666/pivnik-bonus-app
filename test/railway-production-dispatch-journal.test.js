@@ -558,3 +558,26 @@ test('REL-01 competing deployment readback fails closed on malformed or unconfir
     assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
   }
 });
+
+test('REL-01 blocks newly observed competing terminal IDs between dispatches', async () => {
+  for (const name of ['telegram', 'vk']) {
+    for (const status of ['SUCCESS', 'FAILED', 'CRASHED', 'REMOVED', 'SKIPPED', 'SLEEPING']) {
+      const result = await scenario({ guardOverrides: {
+        ['1:' + name]: (nodes, scope) => [{
+          id: 'new-foreign-terminal', status, ...scope, meta: { commitHash: 'c'.repeat(40) }
+        }, ...nodes]
+      } });
+      assert.match(result.error?.message, /new competing deployment observed between dispatches/);
+      assert.equal(result.dispatches, 1);
+      assert.equal(result.polls, 0);
+      assert.equal(result.readiness, 0);
+      assert.deepEqual(result.events.at(-1).acceptedDeployments, { telegram: 'new-telegram' });
+    }
+  }
+  const ownSettled = await scenario({ guardOverrides: {
+    '1:telegram': nodes => nodes.map(node => node.id === 'new-telegram' ? { ...node, status: 'SUCCESS' } : node).reverse()
+  } });
+  assert.equal(ownSettled.error, undefined);
+  assert.equal(ownSettled.dispatches, 2);
+  assert.equal(ownSettled.readiness, 2);
+});
